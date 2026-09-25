@@ -17,7 +17,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
-    time::SystemTime,
+    time::{Duration, Instant, SystemTime},
     usize,
 };
 
@@ -40,6 +40,9 @@ lazy_static::lazy_static! {
 const MAX_RETIRED_CLIP_FILES: usize = 4;
 // Source of `ClipFiles::last_used`.
 static RETIRED_USE_SEQ: AtomicU64 = AtomicU64::new(0);
+// A retired list nobody has read for this long is dropped: its transfer is over, or its peer is
+// gone. The current list is kept, as before.
+const RETIRED_CLIP_FILES_TTL: Duration = Duration::from_secs(5 * 60);
 
 // The first descriptor's `clsid`, inside the 32 reserved bytes every peer skips. A random
 // nonce there makes each copy's list id distinct, even when two copies have identical
@@ -100,6 +103,8 @@ struct ClipFiles {
     // When a retired list was retired or last read; the lowest is evicted first. Kept apart
     // from the queue order, which is the order lists were sent and picks a peer's list.
     last_used: u64,
+    // When a retired list was retired or last read, for `RETIRED_CLIP_FILES_TTL`.
+    last_used_at: Option<Instant>,
 }
 
 impl ClipFiles {
@@ -352,7 +357,17 @@ fn select_clip_files<'a>(
         },
     };
     files.last_used = RETIRED_USE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    files.last_used_at = Some(Instant::now());
     Some(files)
+}
+
+// `retain` keeps the queue in the order lists were sent.
+fn expire_retired(retired: &mut VecDeque<ClipFiles>) {
+    retired.retain(|files| {
+        files
+            .last_used_at
+            .map_or(true, |at| at.elapsed() < RETIRED_CLIP_FILES_TTL)
+    });
 }
 
 // Keep a list a peer was sent, so its streams do not read the new copy at the same indexes.
@@ -362,7 +377,9 @@ fn retire_if_served(mut replaced: ClipFiles) {
     }
     replaced.release_handles();
     replaced.last_used = RETIRED_USE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    replaced.last_used_at = Some(Instant::now());
     let mut retired = RETIRED_CLIP_FILES.lock();
+    expire_retired(&mut retired);
     if retired.len() == MAX_RETIRED_CLIP_FILES {
         // The list retired or read longest ago, so a transfer still reading keeps its list.
         let oldest = (0..retired.len()).min_by_key(|&i| retired[i].last_used);
@@ -409,6 +426,7 @@ pub fn read_file_contents(
 
     let mut current = CLIP_FILES.lock();
     let mut retired = RETIRED_CLIP_FILES.lock();
+    expire_retired(&mut retired);
     let Some(clip_files) = select_clip_files(&mut current, &mut retired, conn_id, clip_data_id)
     else {
         return vec![Err(CliprdrError::InvalidRequest {
@@ -966,6 +984,35 @@ mod sig_test {
         assert_eq!(read(1, 0), b"BBBB");
         assert_eq!(read(2, 0), b"AAAA");
         assert_eq!(read(1, 4), b"BBBB");
+
+        clear_files();
+    }
+
+    #[test]
+    fn an_idle_retired_list_expires() {
+        let tmp = TmpDir::new("idle_list");
+        let first = tmp.join("first.bin");
+        fs::write(&first, b"AAAAAAAA").unwrap();
+        let second = tmp.join("second.bin");
+        fs::write(&second, b"BBBBBBBB").unwrap();
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&first)]).unwrap();
+        let id = file_list_id(&get_file_list_pdu(1));
+        let idx = CLIP_FILES.lock().first_file_index as i32;
+        let read = |id| read_file_contents(1, 7, idx, 0x2, 0, 0, 4, id);
+        assert_eq!(range_data(read(Some(id))), b"AAAA");
+        sync_files(&[path_str(&second)]).unwrap();
+
+        // Unread for longer than the TTL: dropped, with its open file, before the next lookup.
+        RETIRED_CLIP_FILES.lock()[0].last_used_at =
+            Instant::now().checked_sub(RETIRED_CLIP_FILES_TTL + Duration::from_secs(1));
+        assert!(matches!(
+            read(Some(id)).last(),
+            Some(Err(CliprdrError::InvalidRequest { .. }))
+        ));
+        assert!(RETIRED_CLIP_FILES.lock().is_empty());
 
         clear_files();
     }
