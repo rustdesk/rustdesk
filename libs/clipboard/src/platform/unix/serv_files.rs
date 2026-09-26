@@ -324,7 +324,10 @@ impl ClipFiles {
         // hot reload next file
         for next_file in self.file_list.iter_mut().skip(file_idx + 1) {
             if !next_file.is_dir {
-                next_file.load_handle()?;
+                // Best-effort: if it still cannot be opened, its own request reports that.
+                if let Err(e) = next_file.load_handle() {
+                    log::trace!("failed to preload the next file: {:?}", e);
+                }
                 break;
             }
         }
@@ -917,5 +920,96 @@ mod sig_test {
         assert_eq!(range_data(read(first_idx, 4)), b"AAAA");
 
         clear_files();
+    }
+
+    fn list_files(selection: &[&PathBuf]) -> ClipFiles {
+        let files: Vec<String> = selection.iter().map(|p| path_str(p)).collect();
+        let mut clip = ClipFiles::default();
+        clip.sync_files(&files, fingerprint(&files)).unwrap();
+        clip
+    }
+
+    fn read_head(clip: &mut ClipFiles, file_idx: usize) -> Result<Vec<u8>, CliprdrError> {
+        let request = FileContentsRequest::Range {
+            stream_id: 0,
+            file_idx,
+            offset: 0,
+            length: 4,
+        };
+        match clip.serve_file_contents(0, request)? {
+            ClipboardFile::FileContentsResponse { requested_data, .. } => Ok(requested_data),
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    // Preloading the file after the requested one is best-effort: a file that can no longer
+    // be opened fails its own requests, not those of the file before it.
+    fn assert_only_its_own_requests_fail(clip: &mut ClipFiles, broken: &PathBuf) {
+        let first_idx = clip.first_file_index;
+        let broken_idx = clip
+            .file_list
+            .iter()
+            .position(|f| &f.path == broken)
+            .unwrap();
+        let size = FileContentsRequest::Size {
+            stream_id: 0,
+            file_idx: first_idx,
+        };
+        clip.serve_file_contents(0, size).unwrap();
+        assert_eq!(read_head(clip, first_idx).unwrap(), b"AAAA");
+        assert!(matches!(
+            read_head(clip, broken_idx),
+            Err(CliprdrError::FileError { .. })
+        ));
+    }
+
+    #[test]
+    fn a_deleted_next_file_fails_only_its_own_requests() {
+        let tmp = TmpDir::new("next_deleted");
+        let (first, second) = (tmp.join("first.bin"), tmp.join("second.bin"));
+        fs::write(&first, b"AAAAAAAA").unwrap();
+        fs::write(&second, b"BBBBBBBB").unwrap();
+        let mut clip = list_files(&[&first, &second]);
+
+        fs::remove_file(&second).unwrap();
+        assert_only_its_own_requests_fail(&mut clip, &second);
+    }
+
+    #[test]
+    fn an_unreadable_next_file_fails_only_its_own_requests() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TmpDir::new("next_unreadable");
+        let (first, second) = (tmp.join("first.bin"), tmp.join("second.bin"));
+        fs::write(&first, b"AAAAAAAA").unwrap();
+        fs::write(&second, b"BBBBBBBB").unwrap();
+        let mut clip = list_files(&[&first, &second]);
+
+        fs::set_permissions(&second, fs::Permissions::from_mode(0o000)).unwrap();
+        // Root opens it regardless of its mode.
+        if fs::File::open(&second).is_ok() {
+            return;
+        }
+        assert_only_its_own_requests_fail(&mut clip, &second);
+    }
+
+    #[test]
+    fn the_next_file_is_preloaded_past_a_directory() {
+        let tmp = TmpDir::new("next_preloaded");
+        let first = tmp.join("first.bin");
+        fs::write(&first, b"AAAAAAAA").unwrap();
+        let dir = tmp.join("dir");
+        fs::create_dir(&dir).unwrap();
+        let inner = dir.join("inner.bin");
+        fs::write(&inner, b"BBBBBBBB").unwrap();
+        // Listed as first.bin, dir, dir/inner.bin.
+        let mut clip = list_files(&[&first, &dir]);
+        let first_idx = clip.first_file_index;
+        let inner_idx = clip.file_list.len() - 1;
+        assert_eq!(clip.file_list[inner_idx].path, inner);
+
+        assert_eq!(read_head(&mut clip, first_idx).unwrap(), b"AAAA");
+        assert!(clip.file_list[inner_idx].handle.is_some());
+        // The last file has no next file to preload.
+        assert_eq!(read_head(&mut clip, inner_idx).unwrap(), b"BBBB");
     }
 }
