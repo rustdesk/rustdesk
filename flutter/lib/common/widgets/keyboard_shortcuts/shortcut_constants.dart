@@ -18,7 +18,7 @@ const kShortcutActionResetCanvas = 'reset_canvas';
 const kShortcutActionSwitchTabNext = 'switch_tab_next';
 const kShortcutActionSwitchTabPrev = 'switch_tab_prev';
 
-/// Actions that move keyboard focus to another session. They run when the
+/// Actions that move keyboard focus to another session or a dialog. They run when the
 /// key that fired them is released, not when it is pressed, so the matcher
 /// that consumed the press also sees its repeats and its release. On Linux a
 /// legacy-mode session matches in Dart while a map-mode session matches in
@@ -29,6 +29,9 @@ const kShortcutActionsRunOnKeyUp = {
   kShortcutActionCloseTab,
   kShortcutActionSwitchTabNext,
   kShortcutActionSwitchTabPrev,
+  kShortcutActionRestartRemote,
+  kShortcutActionSwitchSides,
+  kShortcutActionToggleChat,
 };
 const kShortcutActionToggleMute = 'toggle_mute';
 const kShortcutActionPinToolbar = 'pin_toolbar';

@@ -1,5 +1,8 @@
 [
   "close_tab",
   "switch_tab_next",
-  "switch_tab_prev"
+  "switch_tab_prev",
+  "restart_remote",
+  "switch_sides",
+  "toggle_chat"
 ]

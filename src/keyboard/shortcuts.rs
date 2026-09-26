@@ -338,7 +338,7 @@ lazy_static::lazy_static! {
     > = Default::default();
 }
 
-/// Actions that move keyboard focus to another session. They run when the
+/// Actions that move keyboard focus to another session or a dialog. They run when the
 /// key that fired them is released, not when it is pressed, so the matcher
 /// that consumed the press also sees its repeats and its release. The next
 /// session may route its keys through the other matcher (Flutter's legacy
@@ -349,6 +349,9 @@ const RELEASE_ACTION_IDS: &[&str] = &[
     action_id::CLOSE_TAB,
     action_id::SWITCH_TAB_NEXT,
     action_id::SWITCH_TAB_PREV,
+    action_id::RESTART_REMOTE,
+    action_id::SWITCH_SIDES,
+    action_id::TOGGLE_CHAT,
 ];
 
 pub fn runs_on_release(action_id: &str) -> bool {
@@ -538,9 +541,9 @@ fn release_remote_keys(
     };
     for (key, mut event) in to_release {
         let mut types = vec![EventType::KeyRelease(key)];
-        // Same as `keyboard::release_remote_keys_for_events`: a lone Alt
-        // release can leave Alt held on the controlled side.
-        if key == Key::Alt || key == Key::AltGr {
+        // Keep the focus-loss workaround for other peers. Tapping Alt on
+        // Windows activates its system menu and consumes the next character.
+        if peer != "windows" && (key == Key::Alt || key == Key::AltGr) {
             types.push(EventType::KeyPress(key));
             types.push(EventType::KeyRelease(key));
         }
