@@ -41,6 +41,7 @@ pub const OPTION_ENABLE_FILE_TRANSFER: &str = "enable-file-transfer";
 pub const OPTION_ENABLE_CAMERA: &str = "enable-camera";
 pub const OPTION_ENABLE_TERMINAL: &str = "enable-terminal";
 pub const OPTION_TERMINAL_PERSISTENT: &str = "terminal-persistent";
+pub const OPTION_ALLOW_USBIP: &str = "allow-usbip";
 pub const OPTION_ENABLE_AUDIO: &str = "enable-audio";
 pub const OPTION_ENABLE_TUNNEL: &str = "enable-tunnel";
 pub const OPTION_ENABLE_REMOTE_RESTART: &str = "enable-remote-restart";
@@ -276,6 +277,7 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_ENABLE_FILE_TRANSFER,
     OPTION_ENABLE_CAMERA,
     OPTION_ENABLE_TERMINAL,
+    OPTION_ALLOW_USBIP,
     OPTION_ENABLE_REMOTE_PRINTER,
     OPTION_ENABLE_AUDIO,
     OPTION_ENABLE_TUNNEL,

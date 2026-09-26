@@ -1,0 +1,480 @@
+// Controller side of a `RemoteUsb` session: attaching a remote device means
+// running the system `usbip attach`, which makes its own local TCP
+// connection that has to land somewhere -- so we stand up a local listener
+// that plays the role of the (otherwise unreachable) remote `usbipd`, and
+// relay everything it sees through `UsbChannel` frames.
+use crate::{
+    client::{usbip_state::UsbClientState, Data, Interface},
+    flutter::FlutterHandler,
+    ui_session_interface::Session,
+    usbip_flow::{self, Flow},
+};
+use hbb_common::{
+    bytes::Bytes, log, regex::Regex, timeout,
+    tokio::{
+        self,
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::{TcpListener, TcpStream},
+        runtime::Handle,
+        sync::mpsc,
+    },
+};
+use serde_json::json;
+
+pub enum Inbound {
+    Opened { success: bool, message: String },
+    Data(Bytes),
+    Closed,
+}
+
+pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
+    let listener = match TcpListener::bind("127.0.0.1:0").await {
+        Ok(l) => l,
+        Err(err) => {
+            log::error!("usb attach: failed to bind local listener: {}", err);
+            return;
+        }
+    };
+    let port = match listener.local_addr() {
+        Ok(addr) => addr.port(),
+        Err(err) => {
+            log::error!("usb attach: failed to read local listener port: {}", err);
+            return;
+        }
+    };
+
+    let relay_session = session.clone();
+    let relay_bus_id = bus_id.clone();
+    // Kept so a failed attach can abort it instead of leaving it parked on
+    // an `accept()` that no `usbip attach` process will ever make.
+    let accept_task = tokio::spawn(async move {
+        match listener.accept().await {
+            Ok((socket, _)) => run_channel(relay_session, relay_bus_id, socket).await,
+            Err(err) => log::error!("usb attach: accept failed: {}", err),
+        }
+    });
+
+    let attach_bus_id = bus_id.clone();
+    let local_port = match tokio::task::spawn_blocking(move || {
+        usb_attach_privileged(port, &attach_bus_id)
+    })
+    .await
+    {
+        Ok(local_port) => local_port,
+        Err(err) => {
+            log::error!("usb attach: blocking task failed: {}", err);
+            None
+        }
+    };
+    match local_port {
+        Some(local_port) if !session.ui_handler.usb.attached_port_add(local_port) => {
+            log::info!(
+                "usb attach: session closed while attaching {}, detaching port {}",
+                bus_id, local_port
+            );
+            accept_task.abort();
+            tokio::task::spawn_blocking(move || detach_blocking(local_port));
+        }
+        Some(local_port) => {
+            session.ui_handler.push_event_(
+                "usb_attached",
+                &[
+                    ("bus_id", json!(bus_id)),
+                    ("success", json!(true)),
+                    ("port", json!(local_port)),
+                    ("message", json!("")),
+                ],
+                &[],
+                &[],
+            );
+        }
+        None => {
+            accept_task.abort();
+            let message = format!("Failed to attach {}", bus_id);
+            log::error!("usb attach: `usbip attach` failed: {}", message);
+            session.ui_handler.push_event_(
+                "usb_attached",
+                &[
+                    ("bus_id", json!(bus_id)),
+                    ("success", json!(false)),
+                    ("port", json!(-1)),
+                    ("message", json!(message)),
+                ],
+                &[],
+                &[],
+            );
+        }
+    }
+}
+
+// USB/IP `OP_REQ_IMPORT`: 2-byte version + 2-byte command code (0x8003) +
+// 4-byte status, followed by a 32-byte NUL-padded busid -- see the identical
+// constants/comment in `client/usbip_share.rs`.
+const USBIP_OP_REQ_IMPORT_LEN: usize = 2 + 2 + 4 + 32;
+const USBIP_OP_REQ_IMPORT_CODE: u16 = 0x8003;
+// A local process that raced the real `usbip attach` for the loopback port
+// and then went silent (or never sent a well-formed import request) would
+// otherwise leak the relay task and channel registration until session end.
+const IMPORT_REQUEST_TIMEOUT_MS: u64 = 5000;
+
+/// The busid the connection on our local listener actually asked to import,
+/// parsed from the start of the raw protocol bytes -- see the identical
+/// function in `client/usbip_share.rs`.
+fn parse_import_request_busid(prefix: &[u8]) -> Option<String> {
+    if prefix.len() < USBIP_OP_REQ_IMPORT_LEN {
+        return None;
+    }
+    let code = u16::from_be_bytes([prefix[2], prefix[3]]);
+    if code != USBIP_OP_REQ_IMPORT_CODE {
+        return None;
+    }
+    let busid = &prefix[8..USBIP_OP_REQ_IMPORT_LEN];
+    let end = busid.iter().position(|&b| b == 0).unwrap_or(busid.len());
+    std::str::from_utf8(&busid[..end]).ok().map(str::to_string)
+}
+
+// `Option`, not `Regex` directly: these patterns are fixed string literals
+// that can never actually fail to compile, but `Regex::new(...).unwrap()`
+// would still be an unwrap on a production path -- log and fall back to "no
+// match" instead.
+lazy_static::lazy_static! {
+    static ref USB_PORT_RE: Option<Regex> =
+        Regex::new(r"^Port (\d+):")
+            .map_err(|err| log::error!("usb attach: invalid USB_PORT_RE: {}", err))
+            .ok();
+}
+// The `usbip://host:port/busid` URL: its bus id is the remote one, not the
+// token before the arrow (that's some other local identifier, e.g. "5-1" for
+// a remote busid of "18-1"), and host:port is our own loopback listener.
+lazy_static::lazy_static! {
+    static ref USB_PORT_BUS_ID_RE: Option<Regex> =
+        Regex::new(r"->\s+usbip://([^/\s]+)/(\S+)")
+            .map_err(|err| log::error!("usb attach: invalid USB_PORT_BUS_ID_RE: {}", err))
+            .ok();
+}
+
+/// Linux USB bus ids are `<bus>-<port>[.<port>...]` (e.g. "1-2.3"), shorter
+/// than the kernel's 32-byte `SYSFS_BUS_ID_SIZE`. Every bus id this side
+/// passes to a privileged `usbip` command either comes from the peer or can
+/// be named by it, so it must pass this check first.
+pub(crate) fn is_valid_bus_id(bus_id: &str) -> bool {
+    if bus_id.len() >= 32 {
+        return false;
+    }
+    let Some((bus, ports)) = bus_id.split_once('-') else {
+        return false;
+    };
+    let is_number = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    is_number(bus) && ports.split('.').all(is_number)
+}
+
+/// Blocking; call via `spawn_blocking`. Attaches through
+/// `platform::run_usbip_attach_privileged` and finds the resulting vhci port.
+fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
+    if !is_valid_bus_id(bus_id) {
+        log::error!("usb attach: rejected malformed bus id {:?}", bus_id);
+        return None;
+    }
+    let output = crate::platform::run_usbip_attach_privileged(port, bus_id)?;
+    log::info!("usb attach: `usbip port` output for {}:\n{}", bus_id, output);
+    parse_attached_port(&output, port, bus_id)
+}
+
+/// The vhci port importing `bus_id` through our listener on `listener_port`.
+/// The bus id alone is ambiguous: two peers can both export e.g. "1-2".
+fn parse_attached_port(output: &str, listener_port: u16, bus_id: &str) -> Option<i32> {
+    let port_re = USB_PORT_RE.as_ref()?;
+    let bus_id_re = USB_PORT_BUS_ID_RE.as_ref()?;
+    let mut current_port: Option<i32> = None;
+    for line in output.lines() {
+        if let Some(caps) = port_re.captures(line) {
+            current_port = caps[1].parse().ok();
+            continue;
+        }
+        if let Some(caps) = bus_id_re.captures(line) {
+            if caps[1] == format!("127.0.0.1:{listener_port}") && &caps[2] == bus_id {
+                return current_port;
+            }
+        }
+    }
+    None
+}
+
+pub fn detach(rt: &Handle, port: i32) {
+    rt.spawn_blocking(move || detach_blocking(port));
+}
+
+pub(crate) fn detach_blocking(port: i32) {
+    if !crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]) {
+        log::error!("usb detach: failed to detach port {}", port);
+    }
+}
+
+async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: TcpStream) {
+    let id = UsbClientState::next_channel_id();
+    let (tx, mut rx) = mpsc::channel::<Inbound>(usbip_flow::QUEUE_FRAMES);
+    let flow = Flow::new();
+    session.ui_handler.usb.register_forward_channel(id, tx, flow.clone());
+    session.usb_open_forward(id, bus_id.clone());
+
+    let success = loop {
+        match rx.recv().await {
+            Some(Inbound::Opened { success, message }) => {
+                if !success {
+                    log::error!("usb attach: remote refused channel {}: {}", id, message);
+                }
+                break success;
+            }
+            Some(_) => continue,
+            None => {
+                session.ui_handler.usb.unregister_forward_channel(id);
+                return;
+            }
+        }
+    };
+    if !success {
+        session.ui_handler.usb.unregister_forward_channel(id);
+        return;
+    }
+
+    let (mut reader, mut writer) = socket.into_split();
+
+    // The local listener this connected to has no peer-credential check
+    // (loopback TCP on Linux has none), so another local process could
+    // race the real `usbip attach` for this ephemeral port and get a raw
+    // pipe into the remote session. Require the first bytes to be a
+    // legitimate `OP_REQ_IMPORT` for the exact bus_id we're attaching
+    // before relaying anything onward -- raises the bar (an attacker would
+    // also need to guess/know that bus_id and speak the wire format), even
+    // though it can't fully close the race on its own.
+    let mut prefix = Vec::with_capacity(USBIP_OP_REQ_IMPORT_LEN);
+    while prefix.len() < USBIP_OP_REQ_IMPORT_LEN {
+        let mut buf = [0u8; 4096];
+        match timeout(IMPORT_REQUEST_TIMEOUT_MS, reader.read(&mut buf)).await {
+            Ok(Ok(0)) | Ok(Err(_)) => {
+                log::warn!("usb attach: local connection on channel {} closed before import request", id);
+                session.ui_handler.usb.unregister_forward_channel(id);
+                session.usb_close_forward(id);
+                return;
+            }
+            Ok(Ok(n)) => prefix.extend_from_slice(&buf[..n]),
+            Err(_) => {
+                log::warn!("usb attach: local connection on channel {} import request timed out", id);
+                session.ui_handler.usb.unregister_forward_channel(id);
+                session.usb_close_forward(id);
+                return;
+            }
+        }
+    }
+    match parse_import_request_busid(&prefix) {
+        Some(requested) if requested == bus_id => {}
+        other => {
+            log::warn!(
+                "usb attach: local connection on channel {} sent an import request for {:?}, not the authorized {:?} -- refusing (possible loopback hijack attempt)",
+                id, other, bus_id
+            );
+            session.ui_handler.usb.unregister_forward_channel(id);
+            session.usb_close_forward(id);
+            return;
+        }
+    }
+
+    let session_read = session.clone();
+    let flow_read = flow.clone();
+    let mut to_tunnel = tokio::spawn(async move {
+        // The validated prefix is the head of the stream and costs credit
+        // like the rest of it.
+        let reader = std::io::Cursor::new(prefix).chain(reader);
+        flow_read
+            .socket_to_peer(reader, |chunk| {
+                session_read.usb_forward_data(id, chunk);
+                true
+            })
+            .await;
+    });
+
+    // Whichever half ends first ends the other; only an end on our side
+    // (local EOF or write error) needs a Close, the peer knows about its own.
+    let local_ended = loop {
+        tokio::select! {
+            _ = &mut to_tunnel => break true,
+            msg = rx.recv() => match msg {
+                Some(Inbound::Data(data)) => {
+                    if writer.write_all(&data).await.is_err() {
+                        break true;
+                    }
+                    if let Some(add) = flow.drained(data.len()) {
+                        session.send(Data::Message(usbip_flow::window_update_msg(id, add)));
+                    }
+                }
+                Some(Inbound::Closed) | Some(Inbound::Opened { .. }) | None => break false,
+            },
+        }
+    };
+    to_tunnel.abort();
+    if local_ended {
+        session.usb_close_forward(id);
+    }
+    session.ui_handler.usb.unregister_forward_channel(id);
+}
+
+impl Session<FlutterHandler> {
+    pub fn usb_attach(&self, bus_id: String) {
+        let session = self.clone();
+        if let Some(rt) = self.ui_handler.usb.session_runtime() {
+            rt.spawn(attach(session, bus_id));
+        }
+    }
+
+    pub fn usb_detach(&self, port: i32) {
+        if !self.ui_handler.usb.attached_port_take(port) {
+            log::warn!("usb detach: port {} was not attached by this session", port);
+            return;
+        }
+        if let Some(rt) = self.ui_handler.usb.session_runtime() {
+            detach(&rt, port);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn import_request(busid: &str) -> Vec<u8> {
+        let mut req = vec![0x01, 0x11, 0x80, 0x03, 0x00, 0x00, 0x00, 0x00];
+        let mut busid_field = vec![0u8; 32];
+        busid_field[..busid.len()].copy_from_slice(busid.as_bytes());
+        req.extend_from_slice(&busid_field);
+        req
+    }
+
+    #[test]
+    fn parse_import_request_busid_extracts_busid_from_well_formed_request() {
+        assert_eq!(
+            parse_import_request_busid(&import_request("1-2.3")),
+            Some("1-2.3".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_import_request_busid_rejects_wrong_command_code() {
+        let mut req = import_request("1-2.3");
+        req[2] = 0x80;
+        req[3] = 0x05; // OP_REQ_DEVLIST, not OP_REQ_IMPORT
+        assert_eq!(parse_import_request_busid(&req), None);
+    }
+
+    #[test]
+    fn parse_import_request_busid_none_when_too_short() {
+        let req = import_request("1-2.3");
+        assert_eq!(parse_import_request_busid(&req[..10]), None);
+    }
+
+    const USBIP_PORT_OUTPUT: &str = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       Transcend Information, Inc. : JetFlash (8564:1000)
+       5-1 -> usbip://127.0.0.1:38963/18-1
+           -> remote bus/dev 018/002
+";
+
+    #[test]
+    fn parse_attached_port_matches_by_trailing_url_segment() {
+        // The token right after "Port NN:" before the arrow ("5-1" here) is
+        // some other local identifier, not the remote bus id -- only the
+        // last path segment of the usbip:// URL ("18-1") is.
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, 38963, "18-1"), Some(0));
+    }
+
+    #[test]
+    fn parse_attached_port_no_match_for_unrelated_bus_id() {
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, 38963, "3-2"), None);
+    }
+
+    #[test]
+    fn parse_attached_port_empty_output() {
+        assert_eq!(parse_attached_port("", 38963, "18-1"), None);
+    }
+
+    #[test]
+    fn parse_attached_port_picks_the_right_port_among_several() {
+        let output = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       Transcend Information, Inc. : JetFlash (8564:1000)
+       5-1 -> usbip://127.0.0.1:38963/2-2
+           -> remote bus/dev 018/002
+Port 01: <Port in Use> at High Speed(480Mbps)
+       unknown vendor : unknown product (1a86:7523)
+       3-1 -> usbip://127.0.0.1:38963/18-1
+           -> remote bus/dev 003/007
+";
+        assert_eq!(parse_attached_port(output, 38963, "18-1"), Some(1));
+        assert_eq!(parse_attached_port(output, 38963, "2-2"), Some(0));
+    }
+
+    #[test]
+    fn is_valid_bus_id_accepts_normal_bus_ids() {
+        assert!(is_valid_bus_id("18-1"));
+        assert!(is_valid_bus_id("1-2.3"));
+    }
+
+    #[test]
+    fn is_valid_bus_id_rejects_shell_metacharacters() {
+        assert!(!is_valid_bus_id(""));
+        assert!(!is_valid_bus_id("1-1; touch /etc/x"));
+        assert!(!is_valid_bus_id("1-1 && rm -rf /"));
+        assert!(!is_valid_bus_id("$(id)"));
+        assert!(!is_valid_bus_id("../etc/passwd"));
+    }
+
+    #[test]
+    fn is_valid_bus_id_rejects_malformed_and_overlong() {
+        assert!(!is_valid_bus_id("1"));
+        assert!(!is_valid_bus_id("1-"));
+        assert!(!is_valid_bus_id("-1"));
+        assert!(!is_valid_bus_id("1-2..3"));
+        assert!(!is_valid_bus_id("1-2."));
+        assert!(!is_valid_bus_id("1.2-3"));
+        assert!(!is_valid_bus_id("1-2-3"));
+        assert!(!is_valid_bus_id(&format!("1-{}", "1.".repeat(15) + "1")));
+    }
+
+    #[test]
+    fn parse_attached_port_tells_apart_same_bus_id_on_different_listeners() {
+        let output = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       unknown vendor : unknown product (0bda:8153)
+       5-1 -> usbip://127.0.0.1:30001/1-2
+           -> remote bus/dev 001/002
+Port 01: <Port in Use> at High Speed(480Mbps)
+       unknown vendor : unknown product (1a86:7523)
+       3-1 -> usbip://127.0.0.1:30002/1-2
+           -> remote bus/dev 001/002
+";
+        assert_eq!(parse_attached_port(output, 30001, "1-2"), Some(0));
+        assert_eq!(parse_attached_port(output, 30002, "1-2"), Some(1));
+        assert_eq!(parse_attached_port(output, 30003, "1-2"), None);
+    }
+
+    #[test]
+    fn parse_attached_port_ignores_unreadable_record_fallback_line() {
+        // When the attach record can't be read (permissions, or queried too
+        // soon after attach), `usbip port` falls back to a line with no
+        // "-> usbip://..." at all -- must not spuriously match.
+        let output = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       Transcend Information, Inc. : JetFlash (8564:1000)
+       5-1 -> unknown host, remote port and remote busid
+           -> remote bus/dev 018/002
+";
+        assert_eq!(parse_attached_port(output, 38963, "18-1"), None);
+    }
+}
