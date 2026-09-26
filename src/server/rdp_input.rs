@@ -1,6 +1,6 @@
 use super::input_service::set_clipboard_for_paste_sync;
 use crate::uinput::service::{can_input_via_keysym, char_to_keysym, map_key};
-use dbus::{blocking::SyncConnection, Path};
+use dbus::{arg, blocking::SyncConnection, Path};
 use enigo::{Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{log, ResultType};
 use scrap::wayland::pipewire::{get_portal, PwStreamInfo};
@@ -308,11 +308,35 @@ pub mod client {
             .any(|name| name.eq_ignore_ascii_case("niri"))
     }
 
+    fn portal_supports_scroll_finish(desktop: &str) -> bool {
+        for name in desktop.split(':') {
+            if name.eq_ignore_ascii_case(DISPLAY_DESKTOP_KDE)
+                || name.eq_ignore_ascii_case("kwin_wayland")
+                || name.eq_ignore_ascii_case("COSMIC")
+            {
+                // KDE (also LXQt/KWin) and COSMIC Portal do not forward finger completion.
+                return false;
+            }
+            if name.eq_ignore_ascii_case("GNOME") {
+                return true;
+            }
+        }
+        true
+    }
+
     lazy_static::lazy_static! {
         static ref SHOULD_SCALE_POINTER_COORDINATES: bool =
             std::env::var(XDG_CURRENT_DESKTOP)
                 .map(|desktop| desktop == DISPLAY_DESKTOP_KDE || desktop_is_niri(&desktop))
                 .unwrap_or(false);
+        static ref PORTAL_SUPPORTS_SCROLL_FINISH: bool = {
+            let desktop = std::env::var(XDG_CURRENT_DESKTOP).unwrap_or_default();
+            let supported = portal_supports_scroll_finish(&desktop);
+            if !supported {
+                log::info!("Portal backend for desktop {desktop:?} does not forward scroll finish; using high-resolution wheel scrolling with client inertia");
+            }
+            supported
+        };
     }
 
     pub struct RdpInputMouse {
@@ -361,9 +385,75 @@ pub mod client {
         }
     }
 
+    fn high_resolution_axis_delta(length: i32) -> f64 {
+        length as f64 / enigo::HIGH_RESOLUTION_SCROLL_UNITS_PER_STEP as f64
+    }
+
+    fn smooth_axis_delta(length: i32) -> f64 {
+        length as f64 / enigo::SMOOTH_SCROLL_UNITS_PER_POINT as f64
+    }
+
+    fn scroll_axis_options(x: i32, y: i32) -> arg::PropMap {
+        let mut options = arg::PropMap::new();
+        if x == 0 && y == 0 {
+            options.insert("finish".into(), arg::Variant(Box::new(true)));
+        }
+        options
+    }
+
     #[cfg(test)]
     mod tests {
-        use super::desktop_is_niri;
+        use super::{
+            desktop_is_niri, high_resolution_axis_delta, portal_supports_scroll_finish,
+            scroll_axis_options,
+        };
+
+        #[test]
+        fn kde_portal_keeps_client_inertia_without_scroll_finish() {
+            for desktop in ["KDE", "kde", "plasma:KDE", "KDE:GNOME"] {
+                assert!(!portal_supports_scroll_finish(desktop), "{desktop}");
+            }
+        }
+
+        #[test]
+        fn kwin_portal_keeps_client_inertia_outside_plasma() {
+            for desktop in [
+                "kwin_wayland",
+                "LXQt:kwin_wayland",
+                "lxqt:KWIN_WAYLAND",
+                "LXQt:kwin_wayland:GNOME",
+            ] {
+                assert!(!portal_supports_scroll_finish(desktop), "{desktop}");
+            }
+        }
+
+        #[test]
+        fn cosmic_portal_keeps_client_inertia_without_scroll_finish() {
+            for desktop in ["COSMIC", "cosmic", "COSMIC:GNOME"] {
+                assert!(!portal_supports_scroll_finish(desktop), "{desktop}");
+            }
+        }
+
+        #[test]
+        fn other_desktops_preserve_the_portal_finish_contract() {
+            for desktop in [
+                "GNOME",
+                "gnome",
+                "ubuntu:GNOME",
+                "GNOME:KDE",
+                "GNOME:kwin_wayland",
+                "GNOME:COSMIC",
+                "",
+                "niri",
+                "X-KDE",
+                "LXQt:labwc",
+                "X-kwin_wayland",
+                "kwin_wayland-extra",
+                "X-COSMIC",
+            ] {
+                assert!(portal_supports_scroll_finish(desktop), "{desktop}");
+            }
+        }
 
         #[test]
         fn detects_niri_in_desktop_list() {
@@ -371,6 +461,26 @@ pub mod client {
             assert!(desktop_is_niri("NIRI"));
             assert!(desktop_is_niri("GNOME:niri"));
             assert!(!desktop_is_niri("GNOME"));
+        }
+
+        #[test]
+        fn converts_high_resolution_units_to_fractional_axis_delta() {
+            let step = enigo::HIGH_RESOLUTION_SCROLL_UNITS_PER_STEP;
+
+            assert_eq!(high_resolution_axis_delta(step), 1.0);
+            assert_eq!(high_resolution_axis_delta(-(step / 4)), -0.25);
+        }
+
+        #[test]
+        fn marks_zero_delta_as_scroll_sequence_end() {
+            let finish_options = scroll_axis_options(0, 0);
+            let scroll_options = scroll_axis_options(1, 0);
+
+            assert_eq!(
+                dbus::arg::prop_cast::<bool>(&finish_options, "finish"),
+                Some(&true)
+            );
+            assert!(dbus::arg::prop_cast::<bool>(&scroll_options, "finish").is_none());
         }
     }
 
@@ -456,6 +566,34 @@ pub mod client {
                 0 as f64,
                 length as f64,
             );
+        }
+        fn supports_high_resolution_scroll(&self) -> bool {
+            true
+        }
+        fn mouse_scroll_high_resolution(&mut self, x: i32, y: i32) -> enigo::ResultType {
+            let portal = get_portal(&self.conn);
+            remote_desktop_portal::notify_pointer_axis(
+                &portal,
+                &self.session,
+                scroll_axis_options(x, y),
+                high_resolution_axis_delta(x),
+                high_resolution_axis_delta(y),
+            )?;
+            Ok(())
+        }
+        fn supports_smooth_scroll(&self) -> bool {
+            *PORTAL_SUPPORTS_SCROLL_FINISH
+        }
+        fn mouse_scroll_smooth(&mut self, x: i32, y: i32) -> enigo::ResultType {
+            let portal = get_portal(&self.conn);
+            remote_desktop_portal::notify_pointer_axis(
+                &portal,
+                &self.session,
+                scroll_axis_options(x, y),
+                smooth_axis_delta(x),
+                smooth_axis_delta(y),
+            )?;
+            Ok(())
         }
     }
 
