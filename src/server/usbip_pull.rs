@@ -15,7 +15,7 @@ use hbb_common::{
         self,
         io::AsyncWriteExt,
         net::{TcpListener, TcpStream},
-        sync::mpsc,
+        sync::{mpsc, OwnedSemaphorePermit, Semaphore},
     },
     tokio_util::sync::CancellationToken,
 };
@@ -78,6 +78,7 @@ enum Inbound {
 }
 
 struct Entry {
+    bus_id: String,
     inbound: mpsc::Sender<Inbound>,
     flow: Flow,
     /// Local vhci port, once `usbip attach` reports it -- needed to run
@@ -96,14 +97,17 @@ pub struct UsbPullState {
     channels: HashMap<i32, Entry>,
     next_id: i32,
     tx: Sender,
+    /// Shared with `usbip_mux` (`UsbSession::new`).
+    privileged: Arc<Semaphore>,
 }
 
 impl UsbPullState {
-    pub fn new(tx: Sender) -> Self {
+    pub fn new(tx: Sender, privileged: Arc<Semaphore>) -> Self {
         Self {
             channels: HashMap::new(),
             next_id: -1,
             tx,
+            privileged,
         }
     }
 
@@ -133,6 +137,20 @@ impl UsbPullState {
             send(&self.tx, push_result_msg(bus_id, "Too many pending USB pushes".into()));
             return;
         }
+        if self.channels.values().any(|e| e.bus_id == bus_id) {
+            send(
+                &self.tx,
+                push_result_msg(bus_id, "This USB device is already pushed".into()),
+            );
+            return;
+        }
+        let Ok(permit) = self.privileged.clone().try_acquire_owned() else {
+            send(
+                &self.tx,
+                push_result_msg(bus_id, "Another USB operation is in progress".into()),
+            );
+            return;
+        };
         let tx = self.tx.clone();
         let id = self.next_channel_id();
         log::info!("usb push: peer offered {} on channel {}", bus_id, id);
@@ -144,6 +162,7 @@ impl UsbPullState {
         self.channels.insert(
             id,
             Entry {
+                bus_id: bus_id.clone(),
                 inbound: inbound_tx,
                 flow: flow.clone(),
                 attached_port: attached_port.clone(),
@@ -151,7 +170,18 @@ impl UsbPullState {
             },
         );
 
-        tokio::spawn(pull(id, bus_id, tx, inbound_rx, attached_port, cancel, flow));
+        let privileged = self.privileged.clone();
+        tokio::spawn(pull(
+            id,
+            bus_id,
+            tx,
+            inbound_rx,
+            attached_port,
+            cancel,
+            flow,
+            permit,
+            privileged,
+        ));
     }
 
     /// Routes `Opened`/`Data`/`Close` frames whose `channel_id` belongs to
@@ -189,7 +219,7 @@ impl UsbPullState {
         let port = *entry.attached_port.lock().unwrap();
         if let Some(port) = port {
             log::info!("usb push: peer unpushed channel {}, detaching port {}", c.channel_id, port);
-            detach_port(port);
+            detach_port(port, self.privileged.clone());
         } else {
             log::info!(
                 "usb push: peer unpushed channel {} before it finished attaching",
@@ -239,7 +269,7 @@ impl UsbPullState {
         if let Some(entry) = self.channels.remove(&channel_id) {
             entry.cancel.cancel();
             if let Some(port) = *entry.attached_port.lock().unwrap() {
-                detach_port(port);
+                detach_port(port, self.privileged.clone());
             }
         }
         send(&self.tx, close_msg(channel_id));
@@ -255,21 +285,27 @@ impl UsbPullState {
         for (_, entry) in self.channels.drain() {
             entry.cancel.cancel();
             if let Some(port) = *entry.attached_port.lock().unwrap() {
-                detach_port(port);
+                detach_port(port, self.privileged.clone());
             }
         }
     }
 }
 
 /// Fire-and-forget (spawns its own blocking task) so callers don't need to
-/// already be inside one.
-fn detach_port(port: i32) {
-    tokio::task::spawn_blocking(move || {
-        if crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]) {
-            log::info!("usb push: detached port {}", port);
-        } else {
-            log::error!("usb push: failed to detach port {}", port);
-        }
+/// already be inside one. Waits for `privileged` rather than giving up: a
+/// port left attached stays attached.
+fn detach_port(port: i32, privileged: Arc<Semaphore>) {
+    tokio::spawn(async move {
+        let permit = privileged.acquire_owned().await;
+        let _ = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            if crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]) {
+                log::info!("usb push: detached port {}", port);
+            } else {
+                log::error!("usb push: failed to detach port {}", port);
+            }
+        })
+        .await;
     });
 }
 
@@ -285,6 +321,8 @@ async fn pull(
     attached_port: Arc<Mutex<Option<i32>>>,
     cancel: CancellationToken,
     flow: Flow,
+    permit: OwnedSemaphorePermit,
+    privileged: Arc<Semaphore>,
 ) {
     let listener = match TcpListener::bind("127.0.0.1:0").await {
         Ok(l) => l,
@@ -306,6 +344,7 @@ async fn pull(
     let relay_tx = tx.clone();
     let relay_bus_id = bus_id.clone();
     let relay_attached_port = attached_port.clone();
+    let relay_privileged = privileged.clone();
     // Kept so a failed/cancelled attach can abort it below instead of
     // leaving it parked on an `accept()` that the peer's real `usbip
     // attach` process -- which only exists if our own attach succeeded --
@@ -313,15 +352,29 @@ async fn pull(
     let accept_task = tokio::spawn(async move {
         match listener.accept().await {
             Ok((socket, _)) => {
-                run_channel(id, relay_bus_id, socket, relay_tx, inbound, relay_attached_port, flow)
-                    .await
+                run_channel(
+                    id,
+                    relay_bus_id,
+                    socket,
+                    relay_tx,
+                    inbound,
+                    relay_attached_port,
+                    flow,
+                    relay_privileged,
+                )
+                .await
             }
             Err(err) => log::error!("usb push: accept failed: {}", err),
         }
     });
 
+    if cancel.is_cancelled() {
+        accept_task.abort();
+        return;
+    }
     let attach_bus_id = bus_id.clone();
     let local_port = match tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         usb_attach_privileged(port, &attach_bus_id)
     })
     .await
@@ -344,7 +397,7 @@ async fn pull(
                 "usb push: {} attached on local port {} after channel {} was closed, detaching",
                 bus_id, local_port, id
             );
-            detach_port(local_port);
+            detach_port(local_port, privileged);
         }
         return;
     }
@@ -424,6 +477,7 @@ async fn run_channel(
     mut inbound: mpsc::Receiver<Inbound>,
     attached_port: Arc<Mutex<Option<i32>>>,
     flow: Flow,
+    privileged: Arc<Semaphore>,
 ) {
     send(&tx, open_msg(id, bus_id.clone()));
 
@@ -487,7 +541,7 @@ async fn run_channel(
         // once this task returns.
         if let Some(port) = attached_port.lock().unwrap().take() {
             log::info!("usb push: channel {} relay ended, detaching port {}", id, port);
-            detach_port(port);
+            detach_port(port, privileged);
         }
     }
 }
@@ -498,7 +552,7 @@ mod tests {
 
     fn test_state() -> UsbPullState {
         let (tx, _rx) = mpsc::unbounded_channel();
-        UsbPullState::new(tx)
+        UsbPullState::new(tx, Arc::new(Semaphore::new(1)))
     }
 
     fn fake_entry() -> (Entry, CancellationToken) {
@@ -506,6 +560,7 @@ mod tests {
         let cancel = CancellationToken::new();
         (
             Entry {
+                bus_id: String::new(),
                 inbound,
                 flow: Flow::new(),
                 attached_port: Arc::new(Mutex::new(None)),
@@ -570,6 +625,52 @@ mod tests {
         // The stale entries were pruned, so this push was accepted (one live
         // entry) instead of being wrongly rejected as "too many pending".
         assert_eq!(state.channels.len(), 1);
+    }
+
+    fn push_reply(
+        rx: &mut mpsc::UnboundedReceiver<(tokio::time::Instant, Arc<Message>)>,
+    ) -> UsbPushResult {
+        let (_, msg) = rx.try_recv().unwrap();
+        match &msg.union {
+            Some(message::Union::UsbChannel(ch)) => match &ch.union {
+                Some(usb_channel::Union::PushResult(r)) => r.clone(),
+                _ => panic!("expected a PushResult"),
+            },
+            _ => panic!("expected a UsbChannel message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn push_while_another_privileged_step_runs_is_refused() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let privileged = Arc::new(Semaphore::new(1));
+        let mut state = UsbPullState::new(tx, privileged.clone());
+        let _busy = privileged.try_acquire_owned().unwrap();
+        state.handle_push_request("1-1".into());
+        assert!(state.channels.is_empty());
+        assert!(!push_reply(&mut rx).error.is_empty());
+    }
+
+    #[tokio::test]
+    async fn second_push_of_the_same_device_is_refused() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let privileged = Arc::new(Semaphore::new(1));
+        let mut state = UsbPullState::new(tx, privileged.clone());
+        let (inbound, _inbound_rx) = mpsc::channel(1);
+        state.channels.insert(
+            -1,
+            Entry {
+                bus_id: "1-1".into(),
+                inbound,
+                flow: Flow::new(),
+                attached_port: Arc::new(Mutex::new(None)),
+                cancel: CancellationToken::new(),
+            },
+        );
+        state.handle_push_request("1-1".into());
+        assert_eq!(state.channels.len(), 1);
+        assert!(!push_reply(&mut rx).error.is_empty());
+        assert_eq!(privileged.available_permits(), 1);
     }
 
     #[test]
@@ -680,6 +781,7 @@ Port 00: <Port in Use> at High Speed(480Mbps)
             inbound_rx,
             Arc::new(Mutex::new(None)),
             Flow::new(),
+            Arc::new(Semaphore::new(1)),
         ));
         (relay, inbound_tx, rx)
     }
