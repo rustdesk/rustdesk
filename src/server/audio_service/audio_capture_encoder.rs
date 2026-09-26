@@ -124,5 +124,5 @@ pub(super) fn run_capture_encoder(context: CaptureEncoderContext, config: Captur
 }
 
 #[cfg(test)]
-#[path = "audio_capture_encoder_tests.rs"]
+#[path = "tests/audio_capture_encoder_tests.rs"]
 mod tests;

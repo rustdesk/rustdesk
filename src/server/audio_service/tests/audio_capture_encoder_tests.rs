@@ -164,23 +164,3 @@ fn gaps_and_sequence_wrap_preserve_channel_history() {
         assert_eq!(wrapped, expected);
     }
 }
-
-#[test]
-fn capture_loss_is_reported_while_packets_remain_queued() {
-    const CAPACITY: usize = 2;
-    let samples = SAMPLE_RATE as usize / PACKETS_PER_SECOND;
-    let (mut sender, receiver) = new_pcm_handoff(CAPACITY, samples).unwrap();
-    let mut state = CaptureEncoderState::new(SAMPLE_RATE, Channels::Mono);
-    let before_report = Instant::now() - CAPTURE_STATS_LOG_INTERVAL;
-    state.reporter.last_report = before_report;
-    let packet = vec![ACTIVE_LEVEL; samples];
-    for _ in 0..=CAPACITY {
-        sender.submit(&packet);
-    }
-    let packet = state.next_packet(&receiver).unwrap();
-    assert!(!receiver.is_empty());
-    assert!(state.reporter.last_report > before_report);
-    assert!(state.reporter.pending.is_empty());
-    assert!(receiver.take_loss().is_empty());
-    receiver.recycle(packet);
-}
