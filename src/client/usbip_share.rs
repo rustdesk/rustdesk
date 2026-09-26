@@ -10,7 +10,9 @@ use crate::{
     client::{Data, Interface},
     flutter::{FlutterHandler, FlutterSession},
     ui_session_interface::Session,
-    usbip_flow::{self, Flow},
+    usbip_flow::{
+        self, parse_import_request_busid, Flow, IMPORT_REQUEST_TIMEOUT_MS, USBIP_OP_REQ_IMPORT_LEN,
+    },
 };
 use base::message_proto::*;
 use hbb_common::{
@@ -27,10 +29,6 @@ use std::process::Command;
 
 const USBIPD_ADDR: &str = "127.0.0.1:3240";
 const CONNECT_TIMEOUT_MS: u64 = 3000;
-// A peer that opens a channel and then goes silent (never finishing the
-// 40-byte `OP_REQ_IMPORT` prefix) would otherwise leak this relay task and
-// its `usbipd` connection until the whole session ends.
-const IMPORT_REQUEST_TIMEOUT_MS: u64 = 5000;
 const USBIP_HOST_DRIVER_DIR: &str = "/sys/bus/usb/drivers/usbip-host";
 
 // `Option`, not `Regex` directly -- see the identical comment in
@@ -126,29 +124,6 @@ pub fn unbind_device_retrying(bus_id: &str) -> bool {
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
     false
-}
-
-// USB/IP `OP_REQ_IMPORT`: 2-byte version + 2-byte command code (0x8003) +
-// 4-byte status, followed by a 32-byte NUL-padded busid -- see the Linux
-// kernel's `drivers/usb/usbip/usbip_common.h` (`op_common`) and userspace
-// `usbip`'s `src/usbip_network.h` (`SYSFS_BUS_ID_SIZE` = 32).
-const USBIP_OP_REQ_IMPORT_LEN: usize = 2 + 2 + 4 + 32;
-const USBIP_OP_REQ_IMPORT_CODE: u16 = 0x8003;
-
-/// The busid the peer's real USB/IP client actually asked to import, parsed
-/// from the start of the raw protocol bytes it sends once the channel opens.
-/// `None` if `prefix` isn't (yet, or ever) a well-formed import request.
-fn parse_import_request_busid(prefix: &[u8]) -> Option<String> {
-    if prefix.len() < USBIP_OP_REQ_IMPORT_LEN {
-        return None;
-    }
-    let code = u16::from_be_bytes([prefix[2], prefix[3]]);
-    if code != USBIP_OP_REQ_IMPORT_CODE {
-        return None;
-    }
-    let busid = &prefix[8..USBIP_OP_REQ_IMPORT_LEN];
-    let end = busid.iter().position(|&b| b == 0).unwrap_or(busid.len());
-    std::str::from_utf8(&busid[..end]).ok().map(str::to_string)
 }
 
 /// The peer pulling one of our shared devices: dial our own local `usbipd`,
@@ -499,35 +474,5 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
     #[test]
     fn parse_local_devices_empty_output() {
         assert!(parse_local_devices("", &HashSet::new()).is_empty());
-    }
-
-    fn import_request(busid: &str) -> Vec<u8> {
-        let mut req = vec![0x01, 0x11, 0x80, 0x03, 0x00, 0x00, 0x00, 0x00];
-        let mut busid_field = vec![0u8; 32];
-        busid_field[..busid.len()].copy_from_slice(busid.as_bytes());
-        req.extend_from_slice(&busid_field);
-        req
-    }
-
-    #[test]
-    fn parse_import_request_busid_extracts_busid_from_well_formed_request() {
-        assert_eq!(
-            parse_import_request_busid(&import_request("1-2.3")),
-            Some("1-2.3".to_string())
-        );
-    }
-
-    #[test]
-    fn parse_import_request_busid_rejects_wrong_command_code() {
-        let mut req = import_request("1-2.3");
-        req[2] = 0x80;
-        req[3] = 0x05; // OP_REQ_DEVLIST, not OP_REQ_IMPORT
-        assert_eq!(parse_import_request_busid(&req), None);
-    }
-
-    #[test]
-    fn parse_import_request_busid_none_when_too_short() {
-        let req = import_request("1-2.3");
-        assert_eq!(parse_import_request_busid(&req[..10]), None);
     }
 }
