@@ -42,6 +42,9 @@ use crate::{
     ui_interface::{get_api_server as ui_get_api_server, get_option, is_installed, set_option},
 };
 
+pub const CUSTOM_RENDEZVOUS_SERVER: &str = "115.73.216.231";
+pub const CUSTOM_SERVER_PUB_KEY: &str = "05sFW4xyJ6gDMwQ99HCPHVoj5ALXzWj2p1kUttraEz0=";
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum GrabState {
     Ready,
@@ -1094,6 +1097,9 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
     if !custom.is_empty() {
         return custom;
     }
+    if !CUSTOM_RENDEZVOUS_SERVER.is_empty() {
+        return CUSTOM_RENDEZVOUS_SERVER.to_owned();
+    }
     if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
         return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
     }
@@ -1951,7 +1957,7 @@ pub async fn get_key(sync: bool) -> String {
         options.remove("key").unwrap_or_default()
     };
     if key.is_empty() {
-        key = config::RS_PUB_KEY.to_owned();
+        key = CUSTOM_SERVER_PUB_KEY.to_owned();
     }
     key
 }
