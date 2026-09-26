@@ -116,7 +116,7 @@ const String kOptionEnableFileTransfer = "enable-file-transfer";
 const String kOptionEnableAudio = "enable-audio";
 const String kOptionEnableCamera = "enable-camera";
 const String kOptionEnableTerminal = "enable-terminal";
-const String kOptionEnableUsbip = "enable-usbip";
+const String kOptionAllowUsbip = "allow-usbip";
 const String kOptionTerminalPersistent = "terminal-persistent";
 const String kOptionAllowTerminalClipboardWrite =
     "allow-terminal-clipboard-write";
