@@ -209,11 +209,15 @@ class FfiModel with ChangeNotifier {
     return Rect.fromLTRB(l, t, r, b);
   }
 
-  toggleTouchMode() {
-    if (!isPeerAndroid) {
-      _touchMode = !_touchMode;
+  void setTouchMode(bool val) {
+    if (!isPeerAndroid && _touchMode != val) {
+      _touchMode = val;
       notifyListeners();
     }
+  }
+
+  toggleTouchMode() {
+    setTouchMode(!_touchMode);
   }
 
   updatePermission(Map<String, dynamic> evt, String id) {
@@ -1400,6 +1404,7 @@ class FfiModel with ChangeNotifier {
             sessionId: sessionId, arg: kOptionTouchMode);
         _touchMode = optSession != '';
       }
+      notifyListeners();
     }
     if (isMobile) {
       virtualMouseMode.loadOptions();
