@@ -14,7 +14,13 @@ use hbb_common::{
 };
 use std::sync::{Arc, Mutex};
 
-pub(crate) use crate::port_forward_mux::{cap_packet_size, CHANNEL_WINDOW, MAX_FRAME as MAX_DATA};
+pub(crate) use crate::port_forward_mux::{CHANNEL_WINDOW, MAX_FRAME as MAX_DATA};
+
+/// For a RemoteUsb connection's stream, on both sides, before the first USB
+/// frame: every transport, since the post-login `usize::MAX` lifted them all.
+pub fn cap_packet_size(stream: &mut hbb_common::Stream) {
+    stream.set_max_packet_length(crate::port_forward_mux::MAX_PACKET);
+}
 
 /// Enough queue slots for a whole window of minimum-charge frames, so a
 /// channel's inbound queue can only fill up if the peer overran its window,
