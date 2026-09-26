@@ -86,6 +86,34 @@ impl Flow {
     }
 }
 
+// A peer that opens a channel and then goes silent (never finishing the
+// 40-byte `OP_REQ_IMPORT` prefix) would otherwise leak the relay task and
+// its `usbipd` connection until the whole session ends.
+pub const IMPORT_REQUEST_TIMEOUT_MS: u64 = 5000;
+
+// USB/IP `OP_REQ_IMPORT`: 2-byte version + 2-byte command code (0x8003) +
+// 4-byte status, followed by a 32-byte NUL-padded busid -- see the Linux
+// kernel's `drivers/usb/usbip/usbip_common.h` (`op_common`) and userspace
+// `usbip`'s `src/usbip_network.h` (`SYSFS_BUS_ID_SIZE` = 32).
+pub const USBIP_OP_REQ_IMPORT_LEN: usize = 2 + 2 + 4 + 32;
+const USBIP_OP_REQ_IMPORT_CODE: u16 = 0x8003;
+
+/// The busid the peer's real USB/IP client actually asked to import, parsed
+/// from the start of the raw protocol bytes it sends once the channel opens.
+/// `None` if `prefix` isn't (yet, or ever) a well-formed import request.
+pub fn parse_import_request_busid(prefix: &[u8]) -> Option<String> {
+    if prefix.len() < USBIP_OP_REQ_IMPORT_LEN {
+        return None;
+    }
+    let code = u16::from_be_bytes([prefix[2], prefix[3]]);
+    if code != USBIP_OP_REQ_IMPORT_CODE {
+        return None;
+    }
+    let busid = &prefix[8..USBIP_OP_REQ_IMPORT_LEN];
+    let end = busid.iter().position(|&b| b == 0).unwrap_or(busid.len());
+    std::str::from_utf8(&busid[..end]).ok().map(str::to_string)
+}
+
 pub fn window_update_msg(channel_id: i32, add: u32) -> Message {
     let mut ch = UsbChannel::new();
     ch.set_window_update(UsbForwardWindowUpdate {
@@ -101,6 +129,36 @@ pub fn window_update_msg(channel_id: i32, add: u32) -> Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn import_request(busid: &str) -> Vec<u8> {
+        let mut req = vec![0x01, 0x11, 0x80, 0x03, 0x00, 0x00, 0x00, 0x00];
+        let mut busid_field = vec![0u8; 32];
+        busid_field[..busid.len()].copy_from_slice(busid.as_bytes());
+        req.extend_from_slice(&busid_field);
+        req
+    }
+
+    #[test]
+    fn parse_import_request_busid_extracts_busid_from_well_formed_request() {
+        assert_eq!(
+            parse_import_request_busid(&import_request("1-2.3")),
+            Some("1-2.3".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_import_request_busid_rejects_wrong_command_code() {
+        let mut req = import_request("1-2.3");
+        req[2] = 0x80;
+        req[3] = 0x05; // OP_REQ_DEVLIST, not OP_REQ_IMPORT
+        assert_eq!(parse_import_request_busid(&req), None);
+    }
+
+    #[test]
+    fn parse_import_request_busid_none_when_too_short() {
+        let req = import_request("1-2.3");
+        assert_eq!(parse_import_request_busid(&req[..10]), None);
+    }
 
     #[test]
     fn admit_rejects_oversized_frames_and_window_overrun() {
