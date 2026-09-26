@@ -1126,6 +1126,16 @@ pub(crate) fn note_pointer_moved_without_absolute_sample() {
     *LATEST_PEER_ABS_POS.lock().unwrap() = None;
 }
 
+/// A move this process makes on its own. The forget runs once `lock` returned the guard the peer
+/// move records its sample under, so no peer move lands between the forget and this move and
+/// leaves its sample describing a pointer that has moved since.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn forget_sample_and_move<G>(lock: impl FnOnce() -> G, move_to: impl FnOnce(G)) {
+    let guard = lock();
+    note_pointer_moved_without_absolute_sample();
+    move_to(guard);
+}
+
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) fn last_peer_abs_sample() -> Option<PeerAbsSample> {
     let (pos, at, seq, gen, map_epoch) = (*LATEST_PEER_ABS_POS.lock().unwrap())?;
@@ -2570,7 +2580,8 @@ impl TemporaryMouseMoveHandle {
             for (x, y) in rx {
                 // Not the peer's position: the calibration must not subtract from it.
                 #[cfg(feature = "drm")]
-                note_pointer_moved_without_absolute_sample();
+                forget_sample_and_move(|| ENIGO.lock().unwrap(), |mut en| en.mouse_move_to(x, y));
+                #[cfg(not(feature = "drm"))]
                 ENIGO.lock().unwrap().mouse_move_to(x, y);
             }
             log::debug!("TemporaryMouseMoveHandle thread exiting");
@@ -2827,5 +2838,29 @@ mod peer_abs_sample_tests {
         let b = last_peer_abs_sample().unwrap().seq;
         assert!(b > a, "same point, distinct sample");
         note_pointer_moved_without_absolute_sample();
+    }
+
+    #[test]
+    fn a_move_of_this_process_forgets_the_sample_of_a_peer_move_it_waited_for() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let mouse = std::sync::Arc::new(std::sync::Mutex::new(()));
+        note_peer_absolute_move(5, 5);
+        // The peer holds the mouse lock when the move of this process starts.
+        let peer = mouse.lock().unwrap();
+        let (asked, asking) = std::sync::mpsc::channel();
+        let m = mouse.clone();
+        let mover = std::thread::spawn(move || {
+            let lock = || {
+                asked.send(()).unwrap();
+                m.lock().unwrap()
+            };
+            forget_sample_and_move(lock, |_| {})
+        });
+        asking.recv().unwrap();
+        assert!(last_peer_abs_sample().is_some(), "nothing forgotten before the lock");
+        note_peer_absolute_move(50, 50);
+        drop(peer);
+        mover.join().unwrap();
+        assert_eq!(last_peer_abs_sample(), None, "the move of this process came last");
     }
 }
