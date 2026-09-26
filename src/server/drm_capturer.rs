@@ -1906,8 +1906,8 @@ const HEADLESS_HOLD_POLL: Duration = Duration::from_millis(500);
 pub(super) const HEADLESS_VIDEO_HOLD: Duration = EMPTY_TOPOLOGY_DEMOTE_AFTER;
 /// The login door's hold. The display list is part of the login answer, and the client shows
 /// nothing until it arrives, so this door gets less than the settle window: enough for the
-/// 9.5 s sysfs half of the force with room for the modeset. A slower box gets the portal on
-/// that first login and DRM on the next connection.
+/// 9.5 s sysfs half of the force with room for the modeset. A slower box refuses that first
+/// login instead of starting the portal, and gets DRM on the next connection.
 #[cfg(feature = "headless-display")]
 pub(super) const HEADLESS_LOGIN_HOLD: Duration = Duration::from_secs(12);
 /// One hold episode per `--server` lifetime: set on the first entry, cleared only when
@@ -2006,14 +2006,21 @@ pub(super) async fn wait_for_headless_scanout(bound: Duration) {
     .await
 }
 
-/// The hold episode, for the door tests in `wayland` and here: they share the static and run
-/// in parallel, so each takes the lock for its whole body.
+/// DRM_STATE, the probe failure count and the hold episode are process-wide and tests run in
+/// parallel: every test that drives any of them, here or in `wayland`, takes this one lock, and
+/// through `into_inner`, so one failing inside it does not take the others down on the lock.
+#[cfg(test)]
+pub(super) fn serial_probe_state() -> std::sync::MutexGuard<'static, ()> {
+    static PROBE_STATE_TESTS: Mutex<()> = Mutex::new(());
+    PROBE_STATE_TESTS.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// The hold episode, for the door tests in `wayland` and here.
 #[cfg(all(test, feature = "headless-display"))]
 pub(super) mod hold_test_support {
     use super::*;
-    static HOLD_TESTS: Mutex<()> = Mutex::new(());
     pub fn serial() -> std::sync::MutexGuard<'static, ()> {
-        HOLD_TESTS.lock().unwrap_or_else(|p| p.into_inner())
+        super::serial_probe_state()
     }
     pub fn set_episode(deadline: Option<Instant>) {
         *HOLD_DEADLINE.lock().unwrap() = deadline;
@@ -4335,14 +4342,8 @@ mod drm_capturer_tests {
         assert!(empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
     }
 
-    /// DRM_STATE is process-wide and tests run in parallel: every test that DRIVES it takes this,
-    /// so two of them cannot interleave a publish with another's assertion. Taken through
-    /// `into_inner`, because a test that fails INSIDE the lock poisons it and every other test
-    /// then dies on the lock rather than on its own assertion -- which turns one broken decision
-    /// into a screenful of unrelated failures and hides which one actually moved.
-    static DRM_STATE_TESTS: Mutex<()> = Mutex::new(());
     fn serial_drm_state() -> std::sync::MutexGuard<'static, ()> {
-        DRM_STATE_TESTS.lock().unwrap_or_else(|p| p.into_inner())
+        super::serial_probe_state()
     }
 
     /// Every door from the video service into the portal, and what decides each one. The test below

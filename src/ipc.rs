@@ -851,8 +851,8 @@ fn service_option_allowed(key: &str, value: &str) -> bool {
 }
 
 /// Apply one option and echo it only if it reads back as sent. `set` and `get` are injected so
-/// the decision is testable without the process config; in production they are
-/// `Config::set_option` (which stores) and `Config::get_option`.
+/// the decision is testable without the process config; in production they are the in-memory
+/// `push_switch` and `switch_value` of the headless watcher, and nothing is stored.
 #[cfg(all(target_os = "linux", feature = "headless-display"))]
 fn service_option_reply_with(
     key: &str,

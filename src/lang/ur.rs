@@ -764,6 +764,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "جاری رکھیں"),
         ("Browser didn't open? Use the url below to sign in.", "براؤزر نہیں کھلا؟ سائن اِن کرنے کے لیے نیچے دیا گیا URL استعمال کریں۔"),
         ("Lock canvas", "کینوس مقفل کریں"),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "سیشنز کے درمیان کلپ بورڈ ہم آہنگ کریں"),
         ("sync-clipboard-between-sessions-tip", "ایک ریموٹ سیشن میں کاپی کیا گیا متن یا تصاویر آپ کے دیگر منسلک سیشنز کے کلپ بورڈ پر بھی بھیجی جاتی ہیں۔"),
         ("Reuse one connection for port forwarding", "پورٹ فارورڈنگ کے لیے ایک ہی کنکشن دوبارہ استعمال کریں"),
