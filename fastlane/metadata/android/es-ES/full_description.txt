@@ -1,0 +1,11 @@
+Aplicación de escritorio remoto de código abierto, la alternativa open source a TeamViewer.
+Código fuente: https://github.com/rustdesk/rustdesk
+Documentación: https://rustdesk.com/docs/en/manual/mobile/
+
+Para que un dispositivo remoto controle tu Android mediante el ratón o el tacto, debes permitir que RustDesk utilice el servicio de "Accesibilidad". RustDesk utiliza la API AccessibilityService para implementar el control remoto en Android.
+
+Además del control remoto, también puedes transferir archivos fácilmente entre dispositivos Android y ordenadores mediante RustDesk.
+
+Tienes control total de tus datos, sin preocupaciones de seguridad. Puedes utilizar nuestro servidor rendezvous/relay, optar por el autoalojamiento o escribir tu propio servidor rendezvous/relay. El servidor autoalojado es gratuito y de código abierto: https://github.com/rustdesk/rustdesk-server
+
+Descarga e instala la versión de escritorio desde: https://rustdesk.com — entonces podrás acceder y controlar tu ordenador desde tu teléfono, o controlar tu teléfono desde tu ordenador.

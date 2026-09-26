@@ -1005,8 +1005,8 @@ class _RemotePageState extends State<RemotePage>
   bool get wantKeepAlive => true;
 }
 
-/// A widget that tracks the view size and updates CanvasModel.updateViewStyle()
-/// and InputModel.updateImageWidgetSize() only when size actually changes.
+/// Tracks view size and DPR to update CanvasModel.updateViewStyle()
+/// and InputModel.updateImageWidgetSize() only when either changes.
 /// This avoids scheduling post-frame callbacks on every LayoutBuilder rebuild.
 class _ViewStyleUpdater extends StatefulWidget {
   final CanvasModel canvasModel;
@@ -1026,10 +1026,12 @@ class _ViewStyleUpdater extends StatefulWidget {
 
 class _ViewStyleUpdaterState extends State<_ViewStyleUpdater> {
   Size? _lastSize;
+  double? _lastDevicePixelRatio;
   bool _callbackScheduled = false;
 
   @override
   Widget build(BuildContext context) {
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
@@ -1039,8 +1041,9 @@ class _ViewStyleUpdaterState extends State<_ViewStyleUpdater> {
           return widget.child;
         }
         final newSize = Size(maxWidth, maxHeight);
-        if (_lastSize != newSize) {
+        if (_lastSize != newSize || _lastDevicePixelRatio != devicePixelRatio) {
           _lastSize = newSize;
+          _lastDevicePixelRatio = devicePixelRatio;
           // Schedule the update for after the current frame to avoid setState during build.
           // Use _callbackScheduled flag to prevent accumulating multiple callbacks
           // when size changes rapidly before any callback executes.
@@ -1088,6 +1091,7 @@ class ImagePaint extends StatefulWidget {
 
 class _ImagePaintState extends State<ImagePaint> {
   bool _lastRemoteCursorMoved = false;
+  final _cursorDisplayScale = 1.0.obs;
 
   String get id => widget.id;
   RxBool get zoomCursor => widget.zoomCursor;
@@ -1101,25 +1105,19 @@ class _ImagePaintState extends State<ImagePaint> {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
     final s = c.scale;
+    // Read the live DPR while the canvas's post-frame update is pending.
+    final dpr = MediaQuery.devicePixelRatioOf(context);
 
-    bool isViewAdaptive() => c.viewStyle.style == kRemoteViewStyleAdaptive;
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
 
     mouseRegion({child}) => Obx(() {
           double getCursorScale() {
             var c = Provider.of<CanvasModel>(context);
-            var cursorScale = 1.0;
-            if (isWindows) {
-              // debug win10
-              if (zoomCursor.value && isViewAdaptive()) {
-                cursorScale = s * c.devicePixelRatio;
-              }
+            if (isDesktop) {
+              return _getDesktopCursorScale(c, dpr);
             } else {
-              if (zoomCursor.value || isViewOriginal()) {
-                cursorScale = s;
-              }
+              return zoomCursor.value || isViewOriginal() ? s : 1.0;
             }
-            return cursorScale;
           }
 
           return MouseRegion(
@@ -1193,11 +1191,70 @@ class _ImagePaintState extends State<ImagePaint> {
     }
   }
 
+  /// Matches desktop cursors to the rendered image and native pixel units.
+  ///
+  /// Windows cursor pixels are physical; NSCursor/GdkCursor use logical pixels.
+  /// Unzoomed Adaptive/Custom views preserve macOS cursors' point dimensions.
+  double _getDesktopCursorScale(CanvasModel c, double dpr) {
+    final peer = widget.ffi.ffiModel;
+    if (!zoomCursor.value &&
+        peer.pi.platform == kPeerPlatformMacOS &&
+        (c.viewStyle.style == kRemoteViewStyleAdaptive ||
+            c.viewStyle.style == kRemoteViewStyleCustom)) {
+      return isWindows ? dpr : 1.0;
+    }
+    if (peer.isPeerLinux && peer.pi.currentDisplay == kAllDisplayValue) {
+      if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
+        // Remove the host output's density without applying canvas zoom.
+        final scale = 1.0 / _cursorDisplayScale.value;
+        return isWindows ? scale : scale / dpr;
+      }
+      final scale = c.scale / _cursorDisplayScale.value;
+      return isWindows ? scale * dpr : scale;
+    }
+    if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
+      // Original and unzoomed views do not apply canvas zoom.
+      final scale = _getCursorScaleForDisplay(1.0);
+      return isWindows ? scale : scale / dpr;
+    }
+    final scale = _getCursorScaleForDisplay(c.scale);
+    return isWindows ? scale * dpr : scale;
+  }
+
+  double _getCursorScaleForDisplay(double scale) {
+    final peer = widget.ffi.ffiModel;
+    // All Displays can mix densities; no single display scale applies.
+    if (peer.pi.currentDisplay == kAllDisplayValue) return scale;
+    final displays = peer.pi.getCurDisplays();
+    if (displays.isEmpty) return scale;
+    if (peer.pi.platform == kPeerPlatformMacOS) {
+      // macOS sends NSImage.size in points (src/platform/macos.rs:640,682),
+      // while HiDPI screen frames use backing pixels (libs/scrap/src/quartz/display.rs:37).
+      return scale * displays.first.scale;
+    }
+    if (!peer.isPeerLinux) return scale;
+    // Match rendering when a Wayland host
+    // with multiple outputs reports a display scale > 1.
+    // A single-output host keeps scale at 1.0 to preserve physical uinput
+    // coordinates, even with OS scaling enabled. This counts host outputs,
+    // not the selected displays.length.
+    // See src/server/display_service.rs:650 (update_sync_displays) and
+    // src/server/drm_capturer.rs:1523 (DRM's matching convention).
+    return scale / displays.first.scale;
+  }
+
   Widget _buildScrollbarNonTextureRender(
       ImageModel m, Size imageSize, double s) {
+    double sizeScale = s;
+    if (widget.ffi.ffiModel.isPeerLinux) {
+      final displays = widget.ffi.ffiModel.pi.getCurDisplays();
+      if (displays.isNotEmpty) {
+        sizeScale = s / displays[0].scale;
+      }
+    }
     return CustomPaint(
       size: imageSize,
-      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: sizeScale),
     );
   }
 
@@ -1242,11 +1299,14 @@ class _ImagePaintState extends State<ImagePaint> {
           top: (displays[i].y - rect.top) * s + offset.dy,
           width: displays[i].width * sizeScale,
           height: displays[i].height * sizeScale,
-          child: Obx(() => Texture(
-                textureId: textureId.value,
-                filterQuality:
-                    isViewOriginal ? FilterQuality.none : FilterQuality.low,
-              )),
+          child: _trackCursorDisplay(
+            Obx(() => Texture(
+                  textureId: textureId.value,
+                  filterQuality:
+                      isViewOriginal ? FilterQuality.none : FilterQuality.low,
+                )),
+            displays[i],
+          ),
         ));
       }
     }
@@ -1254,6 +1314,20 @@ class _ImagePaintState extends State<ImagePaint> {
       width: size.width,
       height: size.height,
       child: Stack(children: children),
+    );
+  }
+
+  Widget _trackCursorDisplay(Widget child, Display display) {
+    final peer = widget.ffi.ffiModel;
+    if (!isDesktop ||
+        !peer.isPeerLinux ||
+        peer.pi.currentDisplay != kAllDisplayValue) {
+      return child;
+    }
+    return MouseRegion(
+      onEnter: (_) => _cursorDisplayScale.value = display.scale,
+      onHover: (_) => _cursorDisplayScale.value = display.scale,
+      child: child,
     );
   }
 

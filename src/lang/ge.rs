@@ -772,5 +772,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "ერთი პორტის გადამისამართების ყველა კავშირი გადის მეორე კომპიუტერთან დამყარებული ერთი კავშირით, ნაცვლად იმისა, რომ თითოეულისთვის თავიდან დაუკავშირდეს და შევიდეს სისტემაში."),
         ("Enable WebRTC P2P connection", "WebRTC P2P კავშირის ჩართვა"),
         ("Enable TCP hole punching", "TCP hole punching-ის ჩართვა"),
+        ("The screen sharing request was declined on the remote device", "ეკრანის გაზიარების მოთხოვნა უარყოფილია დისტანციურ მოწყობილობაზე"),
+        ("The screen sharing request timed out on the remote device", "ეკრანის გაზიარების მოთხოვნას ვადა გაუვიდა დისტანციურ მოწყობილობაზე"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk-ს არ შეუძლია დისტანციური მოწყობილობის სამუშაო მაგიდის სესიასთან წვდომა, შეამოწმეთ, რომ სესია გაშვებულია და RustDesk-ს შეუძლია მისი გამოყენება"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "დისტანციური მოწყობილობის სამუშაო მაგიდის პორტალს აკლია ეკრანის გაზიარებისთვის ან დისტანციური მართვისთვის საჭირო შესაძლებლობა, შესაძლოა მისი ბექენდი დაინსტალირებული არ არის"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "ეკრანის გაზიარება დამტკიცდა დისტანციურ მოწყობილობაზე, მაგრამ PipeWire-ის კავშირის გახსნა ვერ მოხერხდა"),
+        ("The screen sharing request ended without completing on the remote device", "ეკრანის გაზიარების მოთხოვნა დისტანციურ მოწყობილობაზე დასრულდა შეუსრულებლად"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk-მა ვერ მიიღო გამოსადეგი ეკრანი XDG Desktop Portal-იდან, PipeWire-ის ბიბლიოთეკა შესაძლოა ძალიან ძველია"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk-მა ვერ ჩატვირთა ეკრანის ჩაწერისთვის საჭირო GStreamer-ის კომპონენტი ({})"),
+        ("Relay fallback delay in seconds", "რელეზე გადასვლის დაყოვნება წამებში"),
+        ("relay-fallback-delay-tip", "რამდენ ხანს ელოდება უკვე დამყარებული რელე-კავშირი პირდაპირ WebRTC კავშირს, სანამ მის ნაცვლად გამოიყენება. გაზარდეთ, რომ ნელ პირდაპირ კავშირს მეტი დრო მისცეთ; შეამცირეთ, რომ ქსელებში, სადაც პირდაპირი კავშირი შეუძლებელია, უფრო სწრაფად გადავიდეს რელეზე. დატოვეთ ცარიელი ნაგულისხმევი 2.5 წამისთვის."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

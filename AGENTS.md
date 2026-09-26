@@ -48,6 +48,20 @@ workspace member. `base::config::keys` re-exports the handful of keys
 * Do not add dependencies unless needed.
 * Keep code simple and idiomatic.
 
+### Logging
+
+* `debug` and above are written to the log file. A log call that can fire
+  repeatedly (per packet, frame, input event, or loop iteration, or at a rate a
+  peer controls) must not use `debug` or higher unthrottled.
+* For such a site, pick one:
+
+  * `log::trace!` when the event is expected and the line only helps while
+    actively debugging;
+  * `hbb_common::throttled_log!(interval, level, ...)` when it signals a fault
+    that should still show up in a user's log. It keeps one line per interval
+    with a count of the rest. Use `hbb_common::log_throttle::LogThrottle`
+    directly only when the decision drives more than one log call.
+
 ## Tokio Rules
 
 * Assume a Tokio runtime already exists.
@@ -126,6 +140,15 @@ Before considering any implementation complete, perform a minimization pass over
 * For submodule bumps, inspect the exact commit range and ensure unrelated changes are not being pulled into the parent PR.
 * Before finalizing, explicitly report the regression surface: list the existing files and existing runtime paths whose behavior changed, and explain why each change is unavoidable.
 * During review, treat an unnecessarily modified legacy path as a review finding even if tests pass and the rewritten behavior appears equivalent.
+
+### Corner cases raised in review
+
+A refactor added to cover a corner case rarely converges. Each new counter, timestamp, cache or eviction/expiry rule interacts with state that existing code relies on, and the next review round finds the problems it introduced.
+
+* A corner case is still worth fixing when the fix is easy and low-risk: a local change of a few lines that adds no state and changes no existing lookup, such as moving a check or refusing bad input earlier.
+* When the only fix needs new state, a new lifecycle rule or a restructure, and the code already fails cleanly there or behaves as master does, document it as a known limit in the PR instead. Anything beyond the easy fix needs the maintainer's explicit go-ahead first.
+* Before adding state that reorders, expires or reuses existing data, list every lookup that reads that data and check each one still holds.
+* Prefer a clean failure, where the operation reports an error, over machinery that tries to make a rare case succeed.
 
 ## Reviewing a PR
 

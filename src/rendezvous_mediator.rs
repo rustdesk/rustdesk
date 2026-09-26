@@ -3,7 +3,7 @@ use std::{
     hash::BuildHasher,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, RwLock,
     },
     time::{Duration, Instant},
@@ -63,10 +63,103 @@ const MAX_PENDING_REMOTE_ICE: usize = 64;
 /// Queued candidates remembered so the controller's re-send is skipped instead of taking a slot
 /// of its own. Far more than an honest peer gathers, at eight bytes each.
 const ICE_DEDUP_WINDOW: usize = 256;
+/// Answerers between an offer and an open data channel. An offer arrives before any password or
+/// accept prompt, and each one builds a peer connection that binds a socket per interface and
+/// runs ICE for up to `CONNECT_TIMEOUT`, where a forged TCP punch costs one connect. Past this
+/// many the offer is declined, and the controller carries on over punch and relay as it does
+/// for a peer without WebRTC. A guard against pathological setup concurrency, above what
+/// legitimate controllers reach at once in the seconds ICE takes; once the channel is open the
+/// connection is one like any other, and the connection layer bounds unauthenticated
+/// connections in number and in time for every transport alike.
+const MAX_WEBRTC_ANSWERERS: usize = 16;
+static WEBRTC_ANSWERERS: AtomicUsize = AtomicUsize::new(0);
+
+/// One of the `MAX_WEBRTC_ANSWERERS` slots, given back on drop.
+struct AnswererSlot;
+
+impl AnswererSlot {
+    fn take() -> Option<Self> {
+        WEBRTC_ANSWERERS
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < MAX_WEBRTC_ANSWERERS).then(|| n + 1)
+            })
+            .ok()
+            .map(|_| Self)
+    }
+}
+
+impl Drop for AnswererSlot {
+    fn drop(&mut self) {
+        WEBRTC_ANSWERERS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+/// Punches in flight: each holds a socket of its own and waits up to `CONNECT_TIMEOUT` for the
+/// peer, and neither request behind them needs authentication, anyone who knows this id can ask
+/// hbbs to have us open one. A place is given up the moment the peer's session is up, so it
+/// stands for that wait and nothing past it: the places turn over on their own, within
+/// `CONNECT_TIMEOUT` and the few seconds a punch's phases add to it, and at the limit an arrival
+/// is declined rather than an older punch cut short. Declined is the listen alone, never the
+/// reply: that carries the WebRTC answer and the v6 address as well, and those go on without a
+/// v4 punch.
+///
+/// Two pools, so that neither transport pays for the other's crowd: a connection costs a place in
+/// each, the controller's preferred request punching UDP and its TCP fallback request punching
+/// TCP, and the transports that lose the race hold theirs for the whole wait.
+struct PunchPool {
+    places: AtomicUsize,
+    max: usize,
+}
+
+/// UDP over v4 and v6. A request that carries a v6 address costs two, until the one the peer
+/// does not use times out.
+static UDP_PUNCHES: PunchPool = PunchPool::new(32);
+/// The TCP punch's listener, and the LAN listen a FetchLocalAddr opens, which is that listener
+/// again.
+static TCP_PUNCHES: PunchPool = PunchPool::new(32);
+
+impl PunchPool {
+    const fn new(max: usize) -> Self {
+        Self {
+            places: AtomicUsize::new(0),
+            max,
+        }
+    }
+
+    fn take(&'static self) -> Option<PunchSlot> {
+        self.places
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < self.max).then(|| n + 1)
+            })
+            .ok()
+            .map(|_| PunchSlot(self))
+    }
+
+    /// For a request that punches over both, v4 first: at the last place it is then the v6
+    /// punch that goes without, whatever order the two listens start in - v4 is the one the
+    /// peer can count on, v6 the one it may have no route for.
+    fn take_pair(&'static self, v4: bool, v6: bool) -> (Option<PunchSlot>, Option<PunchSlot>) {
+        let v4 = v4.then(|| self.take()).flatten();
+        let v6 = v6.then(|| self.take()).flatten();
+        (v4, v6)
+    }
+}
+
+/// One of a pool's places, given back on drop.
+pub(crate) struct PunchSlot(&'static PunchPool);
+
+impl Drop for PunchSlot {
+    fn drop(&mut self) {
+        self.0.places.fetch_sub(1, Ordering::AcqRel);
+    }
+}
 // The rendezvous ICE route is reachable without a prior punch and the peer decides how many
 // candidates it sends, so these sites would let someone else set how much this machine writes to
 // its log file. One line a minute each, carrying the suppressed count.
 const ICE_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+/// A declined punch is one line a minute, carrying the number it stands for, for the same
+/// reason: the peer decides how often it asks.
+const PUNCH_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 static UNKNOWN_ICE_SESSION_LOG: hbb_common::log_throttle::LogThrottle =
     hbb_common::log_throttle::LogThrottle::new(ICE_LOG_INTERVAL);
 static REJECTED_REMOTE_ICE_LOG: hbb_common::log_throttle::LogThrottle =
@@ -625,6 +718,20 @@ impl RendezvousMediator {
         );
 
         let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+        // A relay response carrying an answer carries this machine's ICE candidates with it, so
+        // that half goes out only on an encrypted channel. A server that does not complete the
+        // exchange loses the answer, not the relay: the response goes without it, on a fresh
+        // socket since the failed exchange may have consumed a message on this one, and the
+        // controller falls back to its other transports.
+        let mut webrtc_sdp_answer = webrtc_sdp_answer;
+        if !webrtc_sdp_answer.is_empty() {
+            let key = crate::get_key(true).await;
+            if let Err(err) = crate::secure_tcp_required(&mut socket, &key).await {
+                log::warn!("relaying without the WebRTC answer, it cannot be encrypted: {err}");
+                webrtc_sdp_answer = String::new();
+                socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+            }
+        }
 
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
@@ -671,7 +778,14 @@ impl RendezvousMediator {
             fla.controlled_context.clone().into_option(),
         );
         if peer_addr_v6.port() > 0 && !relay {
-            socket_addr_v6 = start_ipv6(peer_addr_v6, addr, server.clone(), meta.clone()).await;
+            socket_addr_v6 = start_ipv6(
+                peer_addr_v6,
+                addr,
+                server.clone(),
+                meta.clone(),
+                UDP_PUNCHES.take(),
+            )
+            .await;
         }
         if is_ipv4(&self.addr) && !relay && !config::is_disable_tcp_listen() {
             if let Err(err) = self
@@ -714,6 +828,17 @@ impl RendezvousMediator {
     ) -> ResultType<()> {
         let peer_addr = AddrMangle::decode(&fla.socket_addr);
         log::debug!("Handle intranet from {:?}", peer_addr);
+        // The listen this opens waits for the peer like a TCP punch and is declined like one; the
+        // caller then relays, as it does when the listen fails for any other reason.
+        let Some(slot) = TCP_PUNCHES.take() else {
+            hbb_common::throttled_log!(
+                PUNCH_LOG_INTERVAL,
+                warn,
+                "declined a LAN listen: {} TCP punches already in flight",
+                TCP_PUNCHES.max
+            );
+            bail!("no place among the punches in flight");
+        };
         let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
         let local_addr = socket.local_addr();
         // we saw invalid local_addr while using proxy, local_addr.ip() == "::1"
@@ -731,7 +856,7 @@ impl RendezvousMediator {
         });
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, true, meta).await;
+        crate::accept_connection(server.clone(), socket, peer_addr, true, meta, slot).await;
         Ok(())
     }
 
@@ -749,6 +874,15 @@ impl RendezvousMediator {
         peer_addr: SocketAddr,
         meta: ConnectionMeta,
     ) -> ResultType<String> {
+        let Some(slot) = AnswererSlot::take() else {
+            hbb_common::throttled_log!(
+                ICE_LOG_INTERVAL,
+                warn,
+                "declined a WebRTC offer: {} answerers already in flight",
+                MAX_WEBRTC_ANSWERERS
+            );
+            return Ok(String::new());
+        };
         let mut stream =
             WebRTCStream::new(&ph.webrtc_sdp_offer, relay_only_ice, CONNECT_TIMEOUT).await?;
         let answer = stream.local_endpoint().to_owned();
@@ -806,6 +940,7 @@ impl RendezvousMediator {
                 // trickle, and TCP reliability replaces the old 400ms duplicate re-send
                 // (the controller keeps its own re-send for the server->peer UDP downlink).
                 let mut conn = None;
+                let key = crate::get_key(true).await;
                 while let Some(candidate) = local_ice_rx.recv().await {
                     let mut msg = Message::new();
                     msg.set_ice_candidate(IceCandidate {
@@ -819,7 +954,20 @@ impl RendezvousMediator {
                     for _ in 0..2 {
                         if conn.is_none() {
                             match connect_tcp(&*host, CONNECT_TIMEOUT).await {
-                                Ok(s) => conn = Some(s),
+                                Ok(mut s) => {
+                                    // Candidates are every interface address of this machine:
+                                    // sent only on a channel that is actually encrypted, else
+                                    // this WebRTC attempt goes without them.
+                                    if let Err(err) = crate::secure_tcp_required(&mut s, &key).await
+                                    {
+                                        log::warn!(
+                                            "failed to secure the WebRTC ICE candidate connection: {}",
+                                            err
+                                        );
+                                        break;
+                                    }
+                                    conn = Some(s);
+                                }
                                 Err(err) => {
                                     log::warn!(
                                         "failed to connect for WebRTC ICE candidate: {}",
@@ -865,10 +1013,20 @@ impl RendezvousMediator {
             if let Err(err) = result {
                 log::warn!("webrtc wait_connected failed: {}", err);
                 // Release the pc now rather than waiting for the ICE agent to time out into a
-                // terminal state (~30s); this also drops the SESSIONS entry promptly.
-                stream.close().await;
+                // terminal state (~30s); this also drops the SESSIONS entry promptly. The slot
+                // goes with it and comes back when the teardown has finished, not when this task
+                // gives up on the offer: what it stands for is a peer connection built for an
+                // unauthenticated offer, and one that will not die still costs what it costs.
+                // `pc.close()` has no timeout of its own, so were the slot freed here a teardown
+                // that never finished would leave the pcs to pile up unbounded, with the count
+                // reading zero. Detached, the wait is on WEBRTC_RT, which owns the pc, and not on
+                // this task.
+                stream.close_detached_with(slot);
                 return;
             }
+            // The channel is open: from here the session is a connection like any other, and the
+            // connection layer's own limits apply to it.
+            drop(slot);
             // create_tcp_connection takes ownership of the stream; keep a handle to close the pc
             // once the session returns. It runs the whole session and returns Ok on normal end,
             // Err on setup failure — either way the pc must be closed, else it lingers forever in
@@ -936,9 +1094,29 @@ impl RendezvousMediator {
         } else {
             String::new()
         };
-        if peer_addr_v6.port() > 0 && !relay {
-            socket_addr_v6 =
-                start_ipv6(peer_addr_v6, peer_addr, server.clone(), meta.clone()).await;
+        // Whether the v4 legs relay is known here, and decides whether a v4 place is taken at
+        // all: the relay branch below runs the whole session, and a place held across it would
+        // let ordinary relay traffic use the pool up. The v6 punch is not relayed with them - a
+        // symmetric NAT on v4 says nothing about v6 - and its place is taken after the v4 one,
+        // or it could be the last and leave the punch the peer counts on with none.
+        let relay_v4 = ph.nat_type.enum_value() == Ok(NatType::SYMMETRIC)
+            || Config::get_nat_type() == NatType::SYMMETRIC as i32
+            || relay
+            || (config::is_disable_tcp_listen() && ph.udp_port <= 0);
+        let punch_udp = !relay_v4 && ph.udp_port > 0;
+        let punch_tcp = !relay_v4 && ph.udp_port <= 0 && ph.webrtc_sdp_offer.is_empty();
+        let punch_v6 = peer_addr_v6.port() > 0 && !relay;
+        let (slot_udp, slot_v6) = UDP_PUNCHES.take_pair(punch_udp, punch_v6);
+        let slot_tcp = punch_tcp.then(|| TCP_PUNCHES.take()).flatten();
+        if punch_v6 {
+            socket_addr_v6 = start_ipv6(
+                peer_addr_v6,
+                peer_addr,
+                server.clone(),
+                meta.clone(),
+                slot_v6,
+            )
+            .await;
         }
         let relay_server = self.get_relay_server(ph.relay_server);
         // for ensure, websocket go relay directly
@@ -947,11 +1125,7 @@ impl RendezvousMediator {
         // than trusting this classification, so a direct WebRTC pair can still form on a
         // connection this branch has already called relay-only. Do not gate the answerer on
         // nat_type to make the two agree.
-        if ph.nat_type.enum_value() == Ok(NatType::SYMMETRIC)
-            || Config::get_nat_type() == NatType::SYMMETRIC as i32
-            || relay
-            || (config::is_disable_tcp_listen() && ph.udp_port <= 0)
-        {
+        if relay_v4 {
             let uuid = Uuid::new_v4().to_string();
             return self
                 .create_relay(
@@ -981,7 +1155,7 @@ impl RendezvousMediator {
         };
         if ph.udp_port > 0 {
             peer_addr.set_port(ph.udp_port as u16);
-            self.punch_udp_hole(peer_addr, server, msg_punch, meta)
+            self.punch_udp_hole(peer_addr, server, msg_punch, meta, slot_udp)
                 .await?;
             return Ok(());
         }
@@ -993,6 +1167,9 @@ impl RendezvousMediator {
             let mut msg_out = Message::new();
             msg_out.set_punch_hole_sent(msg_punch);
             let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+            // The answer goes out only on a channel that is actually encrypted; otherwise this
+            // WebRTC attempt is abandoned and the controller falls back to its other transports.
+            crate::secure_tcp_required(&mut socket, &crate::get_key(true).await).await?;
             socket.send(&msg_out).await?;
             return Ok(());
         }
@@ -1014,7 +1191,18 @@ impl RendezvousMediator {
         let local_addr = socket.local_addr();
         // The listener inside takes this address over, so the mediator's socket goes first.
         drop(socket);
-        punch_tcp_until_connected(server, peer_addr, local_addr, meta).await;
+        // The reply went out above: declined is the listen alone, so the controller's TCP attempt
+        // meets nothing and its v6 one goes on.
+        let Some(slot) = slot_tcp else {
+            hbb_common::throttled_log!(
+                PUNCH_LOG_INTERVAL,
+                warn,
+                "declined a TCP punch: {} TCP punches already in flight",
+                TCP_PUNCHES.max
+            );
+            return Ok(());
+        };
+        punch_tcp_until_connected(server, peer_addr, local_addr, meta, slot).await;
         Ok(())
     }
 
@@ -1024,12 +1212,26 @@ impl RendezvousMediator {
         server: ServerPtr,
         msg_punch: PunchHoleSent,
         meta: ConnectionMeta,
+        slot: Option<PunchSlot>,
     ) -> ResultType<()> {
         let mut msg_out = Message::new();
         msg_out.set_punch_hole_sent(msg_punch);
         let (socket, addr) = new_direct_udp_for(&self.host).await?;
         let data = msg_out.write_to_bytes()?;
         socket.send_to(&data, addr).await?;
+        // The reply is out, and with it the answer and the v6 address: declined is the listen
+        // alone, and the socket goes at once - a declined request is not worth one kept for its
+        // resends, and the controller re-asks on its own. Its v4 attempt at a mapping that no
+        // longer answers fails on its own while its other transports go on.
+        let Some(slot) = slot else {
+            hbb_common::throttled_log!(
+                PUNCH_LOG_INTERVAL,
+                warn,
+                "declined a UDP punch: {} UDP punches already in flight",
+                UDP_PUNCHES.max
+            );
+            return Ok(());
+        };
         let socket_cloned = socket.clone();
         tokio::spawn(async move {
             for _ in 0..2 {
@@ -1038,7 +1240,15 @@ impl RendezvousMediator {
                 socket.send_to(&data, addr).await.ok();
             }
         });
-        udp_nat_listen(socket_cloned.clone(), peer_addr, peer_addr, server, meta).await?;
+        udp_nat_listen(
+            socket_cloned.clone(),
+            peer_addr,
+            peer_addr,
+            server,
+            meta,
+            slot,
+        )
+        .await?;
         Ok(())
     }
 
@@ -1228,13 +1438,33 @@ async fn start_ipv6(
     peer_addr_v4: SocketAddr,
     server: ServerPtr,
     meta: ConnectionMeta,
+    slot: Option<PunchSlot>,
 ) -> bytes::Bytes {
+    // Declining leaves the v4 path to carry the connection, as it already does wherever this
+    // machine has no public IPv6 address.
+    let Some(slot) = slot else {
+        hbb_common::throttled_log!(
+            PUNCH_LOG_INTERVAL,
+            warn,
+            "declined an IPv6 punch: {} UDP punches already in flight",
+            UDP_PUNCHES.max
+        );
+        return Default::default();
+    };
     crate::test_ipv6().await;
     if let Some((socket, local_addr_v6)) = crate::get_ipv6_socket().await {
         let server = server.clone();
         tokio::spawn(async move {
             allow_err!(
-                udp_nat_listen(socket.clone(), peer_addr_v6, peer_addr_v4, server, meta).await
+                udp_nat_listen(
+                    socket.clone(),
+                    peer_addr_v6,
+                    peer_addr_v4,
+                    server,
+                    meta,
+                    slot
+                )
+                .await
             );
         });
         return local_addr_v6;
@@ -1248,6 +1478,7 @@ async fn udp_nat_listen(
     peer_addr_v4: SocketAddr,
     server: ServerPtr,
     meta: ConnectionMeta,
+    slot: PunchSlot,
 ) -> ResultType<()> {
     let tm = Instant::now();
     let socket_cloned = socket.clone();
@@ -1260,6 +1491,9 @@ async fn udp_nat_listen(
             init_packet,
         )
         .await?;
+        // The KCP session is up: from here it is a connection like any other and the connection
+        // layer's own limits apply to it, so the place goes back for the next punch.
+        drop(slot);
         crate::server::create_tcp_connection(server, stream.1, peer_addr_v4, true, meta).await?;
         Ok(())
     };
@@ -1303,11 +1537,15 @@ const PUNCH_GRACE: u64 = 3000;
 /// a hole that no longer exists. Punching again across the window in which the controller dials
 /// rebuilds it, and once the controller sits in SYN_SENT one of those punches meets its SYN and
 /// completes as a simultaneous open: a second way in, which a single punch never had.
+///
+/// `slot` is this punch's place among `TCP_PUNCHES`, given back the moment a connection is in
+/// hand and before the session runs on it: from there the connection layer's own limits apply.
 async fn punch_tcp_until_connected(
     server: ServerPtr,
     peer_addr: SocketAddr,
     local_addr: SocketAddr,
     meta: ConnectionMeta,
+    slot: PunchSlot,
 ) {
     use hbb_common::tcp::new_listener;
     // Shadows the module's `std::time::Instant`: the deadline is held against tokio's sleeps and
@@ -1334,6 +1572,7 @@ async fn punch_tcp_until_connected(
     });
     let Some(listener) = listener else {
         if let Some(stream) = punch.await {
+            drop(slot);
             serve_punched(server, stream, peer_addr, meta).await;
         }
         return;
@@ -1378,10 +1617,12 @@ async fn punch_tcp_until_connected(
         biased;
         Some(stream) = punch => stream,
         Some((stream, addr)) = accept => {
+            drop(slot);
             return accept_punched_connection(server, stream, addr, meta).await;
         }
         else => return,
     };
+    drop(slot);
     serve_punched(server, punched, peer_addr, meta).await;
 }
 
@@ -1488,9 +1729,137 @@ impl Drop for CheckIfResendPk {
 
 #[cfg(test)]
 mod tests {
-    use super::{mpsc, socket_client, tokio, IceRoute, ICE_DEDUP_WINDOW, MAX_PENDING_REMOTE_ICE};
-    use hbb_common::tcp::new_listener;
+    use super::{
+        connection_meta, mpsc, socket_client, tokio, udp_nat_listen, AnswererSlot, Arc, IceRoute,
+        IntoTargetAddr, Ordering, PunchHoleSent, RendezvousMediator, RendezvousMessage,
+        ICE_DEDUP_WINDOW, MAX_PENDING_REMOTE_ICE, MAX_WEBRTC_ANSWERERS, TCP_PUNCHES, UDP_PUNCHES,
+    };
+    use hbb_common::{protobuf::Message as _, tcp::new_listener};
     use std::net::SocketAddr;
+
+    // The pools are statics and the tests run in parallel: the ones that count them take turns.
+    static POOLS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn pools() -> std::sync::MutexGuard<'static, ()> {
+        POOLS.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    // The places are the bound and they come back on drop: a punch past the limit is declined
+    // while the ones in flight are left alone, and the next one in is admitted only once a
+    // place has actually been given back.
+    #[test]
+    fn test_punch_slots_cap_and_release() {
+        let _pools = pools();
+        for pool in [&UDP_PUNCHES, &TCP_PUNCHES] {
+            let held: Vec<_> = (0..pool.max)
+                .map(|_| pool.take().expect("a place up to the limit"))
+                .collect();
+            assert!(pool.take().is_none(), "the limit is the limit");
+            drop(held);
+            assert!(pool.take().is_some(), "a place comes back on drop");
+        }
+    }
+
+    // Neither transport pays for the other's crowd: a full UDP pool leaves the TCP places alone.
+    #[test]
+    fn a_full_udp_pool_leaves_the_tcp_places_alone() {
+        let _pools = pools();
+        let held: Vec<_> = (0..UDP_PUNCHES.max)
+            .map(|_| UDP_PUNCHES.take().expect("a place up to the limit"))
+            .collect();
+        assert!(UDP_PUNCHES.take().is_none(), "the UDP pool is full");
+        assert!(
+            TCP_PUNCHES.take().is_some(),
+            "a TCP punch must not wait on the UDP pool"
+        );
+        drop(held);
+    }
+
+    // At the last place it is the v6 punch that goes without, never the v4 one the peer counts on.
+    #[test]
+    fn the_last_place_goes_to_the_v4_punch() {
+        let _pools = pools();
+        let held: Vec<_> = (0..UDP_PUNCHES.max - 1)
+            .map(|_| UDP_PUNCHES.take().expect("a place up to the last"))
+            .collect();
+        let (v4, v6) = UDP_PUNCHES.take_pair(true, true);
+        assert!(v4.is_some(), "the last place goes to the v4 punch");
+        assert!(v6.is_none(), "and the v6 punch goes without");
+        drop(held);
+    }
+
+    // Declined is the listen, never the reply: with no place the PunchHoleSent still goes out,
+    // carrying the answer and the v6 address the controller's other transports run on, and the
+    // call returns at once - a listen would have waited for the peer's probe and failed without.
+    #[tokio::test]
+    async fn a_declined_udp_punch_still_replies() {
+        let hbbs = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let host = hbbs.local_addr().unwrap();
+        let mediator = RendezvousMediator {
+            addr: host.into_target_addr().unwrap(),
+            host: host.to_string(),
+            host_prefix: String::new(),
+            keep_alive: 0,
+        };
+        let msg_punch = PunchHoleSent {
+            webrtc_sdp_answer: "answer".to_owned(),
+            socket_addr_v6: bytes::Bytes::from_static(b"v6"),
+            ..Default::default()
+        };
+        mediator
+            .punch_udp_hole(
+                host,
+                crate::server::new_for_test(),
+                msg_punch,
+                connection_meta(None, None),
+                None,
+            )
+            .await
+            .expect("declined is not an error, and not a listen");
+        let mut buf = [0u8; 4096];
+        let (n, _) = hbb_common::timeout(3000, hbbs.recv_from(&mut buf))
+            .await
+            .expect("the reply must reach hbbs")
+            .unwrap();
+        let sent = RendezvousMessage::parse_from_bytes(&buf[..n]).unwrap();
+        let sent = sent.punch_hole_sent();
+        assert_eq!(sent.webrtc_sdp_answer, "answer");
+        assert_eq!(&sent.socket_addr_v6[..], b"v6");
+    }
+
+    // The place is the wait: a listen that ends without a peer gives it back on its own. The end
+    // a test can reach is the peer's probe never coming, which `punch_udp` gives up on.
+    #[test]
+    fn a_listen_that_finds_no_peer_gives_its_place_back() {
+        let _pools = pools();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let silent = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let peer = silent.local_addr().unwrap();
+            let before = UDP_PUNCHES.places.load(Ordering::Acquire);
+            let slot = UDP_PUNCHES.take().expect("a place");
+            assert_eq!(UDP_PUNCHES.places.load(Ordering::Acquire), before + 1);
+            let listened = udp_nat_listen(
+                Arc::new(socket),
+                peer,
+                peer,
+                crate::server::new_for_test(),
+                connection_meta(None, None),
+                slot,
+            )
+            .await;
+            assert!(listened.is_err(), "no peer, no session");
+            assert_eq!(
+                UDP_PUNCHES.places.load(Ordering::Acquire),
+                before,
+                "the place must come back with the wait"
+            );
+        });
+    }
 
     // A SOCKS proxy makes `connect_tcp_local` dial the proxy and ignore the local address, so
     // nothing these two assert can hold. Read once, from the same global config production reads.
@@ -1735,5 +2104,15 @@ mod tests {
             until + Duration::from_millis(PUNCH_GRACE),
             "must return when the grace runs out, not a backoff later"
         );
+    }
+
+    #[test]
+    fn test_answerer_slots_cap_and_release() {
+        let held: Vec<_> = (0..MAX_WEBRTC_ANSWERERS)
+            .map(|_| AnswererSlot::take().unwrap())
+            .collect();
+        assert!(AnswererSlot::take().is_none());
+        drop(held);
+        assert!(AnswererSlot::take().is_some());
     }
 }

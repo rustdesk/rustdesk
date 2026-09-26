@@ -542,6 +542,26 @@ extern "C"
         SHAddToRecentDocs(SHARD_PATHW, path);
     }
 
+    // Hyper-V Enhanced Session names do not have the usual "rdp" prefix.
+    static bool is_rdp_session_by_protocol(DWORD session_id)
+    {
+        LPSTR buffer = nullptr;
+        DWORD bytes = 0;
+        if (!WTSQuerySessionInformationA(
+                WTS_CURRENT_SERVER_HANDLE, session_id, WTSClientProtocolType, &buffer, &bytes)) {
+            flog("Failed to query protocol for session %lu: Windows error %lu\n",
+                session_id, GetLastError());
+            return false;
+        }
+        std::unique_ptr<char, decltype(&WTSFreeMemory)> protocol_info(buffer, WTSFreeMemory);
+        if (!buffer || bytes < sizeof(USHORT)) {
+            flog("Failed to query protocol for session %lu: Windows error %lu\n",
+                session_id, static_cast<DWORD>(ERROR_INVALID_DATA));
+            return false;
+        }
+        return *reinterpret_cast<const USHORT *>(buffer) == WTS_PROTOCOL_TYPE_RDP;
+    }
+
     DWORD get_current_session(BOOL include_rdp)
     {
         auto rdp_or_console = WTSGetActiveConsoleSessionId();
@@ -570,6 +590,10 @@ extern "C"
                         return id;
                     }
                     if (!strnicmp(info.pWinStationName, rdp, nrdp) || !strnicmp(info.pWinStationName, ica, nica))
+                    {
+                        rdp_or_console = info.SessionId;
+                    }
+                    else if (is_rdp_session_by_protocol(info.SessionId))
                     {
                         rdp_or_console = info.SessionId;
                     }
@@ -665,6 +689,9 @@ extern "C"
                     }
                     else if (include_rdp && !strnicmp(info.pWinStationName, ica, nica)) {
                         sessionIds.push_back(std::wstring(L"ICA:") + std::to_wstring(info.SessionId));
+                    }
+                    else if (include_rdp && is_rdp_session_by_protocol(info.SessionId)) {
+                        sessionIds.push_back(std::wstring(L"RDP:") + std::to_wstring(info.SessionId));
                     }
                 }
             }

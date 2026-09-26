@@ -24,7 +24,7 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 use base::platform::linux::CMD_SH;
-use hbb_common::{bail, config, serde_json, tokio, ResultType};
+use hbb_common::{anyhow::anyhow, bail, config, serde_json, tokio, ResultType};
 
 use super::capturable::PixelProvider;
 use super::capturable::{Capturable, Recorder};
@@ -264,11 +264,21 @@ pub struct PipeWireRecorder {
     saved_raw_data: Vec<u8>, // for faster compare and copy
 }
 
+// Element creation fails the same way for a plugin that is not installed as for one that is
+// broken, so the tag does not claim which. Only the name travels to the peer -- it is what
+// says which package to look at -- and the factory's own error stays here in the log.
+fn gst_element(name: &str) -> ResultType<gst::Element> {
+    gst::ElementFactory::make(name, None).map_err(|e| {
+        error!("Failed to create GStreamer element {}: {}", name, e);
+        anyhow!(stage_err("gst-plugin", "unavailable", name))
+    })
+}
+
 impl PipeWireRecorder {
     pub fn new(capturable: PipeWireCapturable) -> ResultType<Self> {
         let pipeline = gst::Pipeline::new(None);
 
-        let src = gst::ElementFactory::make("pipewiresrc", None)?;
+        let src = gst_element("pipewiresrc")?;
         src.set_property("fd", &capturable.fd.as_raw_fd())?;
         src.set_property("path", &format!("{}", capturable.path))?;
         src.set_property("keepalive_time", &1_000.as_raw_fd())?;
@@ -283,9 +293,9 @@ impl PipeWireRecorder {
         // "no more output formats" / not-negotiated (-4). videoconvert accepts any
         // system-memory video/x-raw format, widening negotiation so the portal can
         // settle on a format it can deliver via its SHM path.
-        let convert = gst::ElementFactory::make("videoconvert", None)?;
+        let convert = gst_element("videoconvert")?;
 
-        let sink = gst::ElementFactory::make("appsink", None)?;
+        let sink = gst_element("appsink")?;
         sink.set_property("drop", &true)?;
         sink.set_property("max-buffers", &1u32)?;
 
@@ -464,11 +474,125 @@ impl Drop for PipeWireRecorder {
     }
 }
 
+// The portal handshake is four sequential requests whose outcomes arrive as asynchronous
+// `Response` signals, so where and why it failed is known only inside the signal handler.
+// Recording it here, instead of collapsing every outcome into one `failed` flag, is what lets
+// the app side name the real cause rather than guess it from the error text.
+#[derive(Clone, Copy)]
+enum PortalStage {
+    CreateSession = 1,
+    SelectDevices = 2,
+    SelectSources = 3,
+    Start = 4,
+    OpenPipeWireRemote = 5,
+}
+
+impl PortalStage {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::CreateSession => "create-session",
+            Self::SelectDevices => "select-devices",
+            Self::SelectSources => "select-sources",
+            Self::Start => "start",
+            Self::OpenPipeWireRemote => "open-pipewire-remote",
+        }
+    }
+
+    fn from_u8(v: u8) -> Self {
+        match v {
+            2 => Self::SelectDevices,
+            3 => Self::SelectSources,
+            4 => Self::Start,
+            5 => Self::OpenPipeWireRemote,
+            _ => Self::CreateSession,
+        }
+    }
+}
+
+// `wl-stage:<stage>:<kind>:<detail>`, parsed by `map_err_scrap` on the app side. The detail
+// reaches the user through a `{}` placeholder in a translated string, so it must not bring
+// braces, control characters or unbounded length of its own.
+const STAGE_TAG: &str = "wl-stage:";
+
+fn stage_err(stage: &str, kind: &str, detail: &str) -> String {
+    let detail: String = detail
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .filter(|c| *c != '{' && *c != '}')
+        .take(200)
+        .collect();
+    format!("{}{}:{}:{}", STAGE_TAG, stage, kind, detail.trim())
+}
+
+// The name alone is usually the generic `org.freedesktop.DBus.Error.Failed`; the message is
+// where a backend says what it objected to. This ends up in the log, so carry both.
+fn dbus_stage_err(stage: &str, err: &dbus::Error) -> String {
+    let detail = match (err.name(), err.message()) {
+        (Some(name), Some(message)) if !name.is_empty() && !message.is_empty() => {
+            format!("{}: {}", name, message)
+        }
+        (Some(name), _) if !name.is_empty() => name.to_owned(),
+        (_, message) => message.unwrap_or_default().to_owned(),
+    };
+    let kind = match err.name().unwrap_or_default() {
+        "org.freedesktop.DBus.Error.UnknownMethod"
+        | "org.freedesktop.DBus.Error.UnknownInterface" => "unsupported",
+        _ => "dbus",
+    };
+    stage_err(stage, kind, &detail)
+}
+
+#[derive(Clone)]
+struct PortalTrace {
+    failed: Arc<AtomicBool>,
+    reason: Arc<Mutex<Option<String>>>,
+    // The stage whose `Response` we are still waiting for, so the polling loop can tell a
+    // non-interactive step apart from the one that waits for a human.
+    waiting_for: Arc<AtomicU8>,
+}
+
+impl PortalTrace {
+    fn new() -> Self {
+        Self {
+            failed: Arc::new(AtomicBool::new(false)),
+            reason: Arc::new(Mutex::new(None)),
+            waiting_for: Arc::new(AtomicU8::new(PortalStage::CreateSession as u8)),
+        }
+    }
+
+    fn fail(&self, stage: PortalStage, kind: &str, detail: &str) {
+        self.record(stage_err(stage.as_str(), kind, detail));
+        self.failed.store(true, Ordering::SeqCst);
+    }
+
+    // The first failure is the cause; whatever follows it is a consequence.
+    fn record(&self, tag: String) {
+        if let Ok(mut reason) = self.reason.lock() {
+            if reason.is_none() {
+                *reason = Some(tag);
+            }
+        }
+    }
+
+    fn waiting(&self, stage: PortalStage) {
+        self.waiting_for.store(stage as u8, Ordering::SeqCst);
+    }
+
+    fn waiting_stage(&self) -> PortalStage {
+        PortalStage::from_u8(self.waiting_for.load(Ordering::SeqCst))
+    }
+
+    fn take_reason(&self) -> Option<String> {
+        self.reason.lock().ok().and_then(|mut r| r.take())
+    }
+}
+
 fn handle_response<F>(
     conn: &SyncConnection,
     path: dbus::Path<'static>,
     mut f: F,
-    failure_out: Arc<AtomicBool>,
+    trace: PortalTrace,
+    stage: PortalStage,
 ) -> Result<dbus::channel::Token, dbus::Error>
 where
     F: FnMut(
@@ -491,18 +615,29 @@ where
             0 => {}
             1 => {
                 warn!("DBus response: User cancelled interaction.");
-                failure_out.store(true, Ordering::SeqCst);
+                trace.fail(stage, "declined", "");
+                return true;
+            }
+            2 => {
+                warn!("DBus response: User interaction ended in some other way.");
+                trace.fail(stage, "ended", "");
                 return true;
             }
             c => {
                 warn!("DBus response: Unknown error, code: {}.", c);
-                failure_out.store(true, Ordering::SeqCst);
+                trace.fail(stage, "portal-error", &c.to_string());
                 return true;
             }
         }
         if let Err(err) = f(r, c, m) {
-            warn!("Error requesting screen capture via dbus: {}", err);
-            failure_out.store(true, Ordering::SeqCst);
+            let text = err.to_string();
+            warn!("Error requesting screen capture via dbus: {}", text);
+            if text.starts_with(STAGE_TAG) {
+                trace.record(text);
+                trace.failed.store(true, Ordering::SeqCst);
+            } else {
+                trace.fail(trace.waiting_stage(), "internal", &text);
+            }
         }
         true
     })
@@ -638,15 +773,16 @@ pub fn request_remote_desktop(
             INIT = true;
         }
     }
-    let conn = SyncConnection::new_session()?;
+    let conn =
+        SyncConnection::new_session().map_err(|e| anyhow!(dbus_stage_err("session-bus", &e)))?;
     let portal = get_portal(&conn);
     let mut args: PropMap = HashMap::new();
     let fd: Arc<Mutex<Option<OwnedFd>>> = Arc::new(Mutex::new(None));
     let fd_res = fd.clone();
     let streams: Arc<Mutex<Vec<PwStreamInfo>>> = Arc::new(Mutex::new(Vec::new()));
     let streams_res = streams.clone();
-    let failure = Arc::new(AtomicBool::new(false));
-    let failure_res = failure.clone();
+    let trace = PortalTrace::new();
+    let trace_res = trace.clone();
     let session: Arc<Mutex<Option<dbus::Path>>> = Arc::new(Mutex::new(None));
     let session_res = session.clone();
     let create_session_handle_token = "u1";
@@ -674,38 +810,45 @@ pub fn request_remote_desktop(
     // the caller to subscribe to the signal before making the method call.
     handle_response(
         &conn,
-        get_request_path(&conn, create_session_handle_token)?,
+        get_request_path(&conn, create_session_handle_token)
+            .map_err(|e| anyhow!(dbus_stage_err("create-session", &e)))?,
         on_create_session_response(
             fd.clone(),
             streams.clone(),
             session.clone(),
-            failure.clone(),
+            trace.clone(),
             is_support_restore_token,
             capture_cursor,
         ),
-        failure_res.clone(),
-    )?;
+        trace.clone(),
+        PortalStage::CreateSession,
+    )
+    .map_err(|e| anyhow!(dbus_stage_err("create-session", &e)))?;
     if is_server_running() {
-        let _ = screencast_portal::create_session(&portal, args)?;
+        let _ = screencast_portal::create_session(&portal, args)
+            .map_err(|e| anyhow!(dbus_stage_err("create-session", &e)))?;
     } else {
-        let _ = remote_desktop_portal::create_session(&portal, args)?;
+        let _ = remote_desktop_portal::create_session(&portal, args)
+            .map_err(|e| anyhow!(dbus_stage_err("create-session", &e)))?;
     }
 
     // wait 3 minutes for user interaction
     for _ in 0..1800 {
-        conn.process(Duration::from_millis(100))?;
+        conn.process(Duration::from_millis(100))
+            .map_err(|e| anyhow!(dbus_stage_err(trace_res.waiting_stage().as_str(), &e)))?;
         // Once we got a file descriptor we are done!
         if fd_res.lock().unwrap().is_some() {
             break;
         }
 
-        if failure_res.load(Ordering::SeqCst) {
+        if trace_res.failed.load(Ordering::SeqCst) {
             break;
         }
     }
     let fd_res = fd_res.lock().unwrap();
     let streams_res = streams_res.lock().unwrap();
     let session_res = session_res.lock().unwrap();
+    let have_fd = fd_res.is_some();
 
     if let Some(fd_res) = fd_res.clone() {
         if let Some(session) = session_res.clone() {
@@ -720,14 +863,20 @@ pub fn request_remote_desktop(
             }
         }
     }
-    bail!("Failed to obtain screen capture. You may need to upgrade the PipeWire library for better compatibility. Please check https://github.com/rustdesk/rustdesk/issues/8600#issuecomment-2254720954 for more details.")
+    bail!(trace_res.take_reason().unwrap_or_else(|| {
+        if have_fd {
+            stage_err("streams", "empty", "")
+        } else {
+            stage_err(trace_res.waiting_stage().as_str(), "no-response", "")
+        }
+    }))
 }
 
 fn on_create_session_response(
     fd: Arc<Mutex<Option<OwnedFd>>>,
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     session: Arc<Mutex<Option<dbus::Path<'static>>>>,
-    failure: Arc<AtomicBool>,
+    trace: PortalTrace,
     is_support_restore_token: bool,
     capture_cursor: bool,
 ) -> impl Fn(
@@ -787,19 +936,23 @@ fn on_create_session_response(
                 });
             }
 
+            trace.waiting(PortalStage::SelectSources);
             handle_response(
                 c,
                 get_request_path(c, select_sources_handle_token)?,
                 on_select_sources_response(
                     fd.clone(),
                     streams.clone(),
-                    failure.clone(),
+                    trace.clone(),
                     ses.clone(),
                     is_support_restore_token,
                 ),
-                failure.clone(),
+                trace.clone(),
+                PortalStage::SelectSources,
             )?;
-            let _ = portal.select_sources(ses.clone(), args)?;
+            let _ = portal
+                .select_sources(ses.clone(), args)
+                .map_err(|e| DBusError(dbus_stage_err("select-sources", &e)))?;
         } else {
             // TODO: support persist_mode for remote_desktop_portal
             // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html
@@ -811,19 +964,23 @@ fn on_create_session_response(
             );
             args.insert("types".to_string(), Variant(Box::new(7u32)));
 
+            trace.waiting(PortalStage::SelectDevices);
             handle_response(
                 c,
                 get_request_path(c, select_devices_handle_token)?,
                 on_select_devices_response(
                     fd.clone(),
                     streams.clone(),
-                    failure.clone(),
+                    trace.clone(),
                     ses.clone(),
                     is_support_restore_token,
                 ),
-                failure.clone(),
+                trace.clone(),
+                PortalStage::SelectDevices,
             )?;
-            let _ = portal.select_devices(ses.clone(), args)?;
+            let _ = portal
+                .select_devices(ses.clone(), args)
+                .map_err(|e| DBusError(dbus_stage_err("select-devices", &e)))?;
         }
 
         Ok(())
@@ -833,7 +990,7 @@ fn on_create_session_response(
 fn on_select_devices_response(
     fd: Arc<Mutex<Option<OwnedFd>>>,
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
-    failure: Arc<AtomicBool>,
+    trace: PortalTrace,
     session: dbus::Path<'static>,
     is_support_restore_token: bool,
 ) -> impl Fn(
@@ -856,19 +1013,23 @@ fn on_select_devices_response(
         args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
 
         let session = session.clone();
+        trace.waiting(PortalStage::SelectSources);
         handle_response(
             c,
             get_request_path(c, select_sources_handle_token)?,
             on_select_sources_response(
                 fd.clone(),
                 streams.clone(),
-                failure.clone(),
+                trace.clone(),
                 session.clone(),
                 is_support_restore_token,
             ),
-            failure.clone(),
+            trace.clone(),
+            PortalStage::SelectSources,
         )?;
-        let _ = portal.select_sources(session.clone(), args)?;
+        let _ = portal
+            .select_sources(session.clone(), args)
+            .map_err(|e| DBusError(dbus_stage_err("select-sources", &e)))?;
 
         Ok(())
     }
@@ -877,7 +1038,7 @@ fn on_select_devices_response(
 fn on_select_sources_response(
     fd: Arc<Mutex<Option<OwnedFd>>>,
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
-    failure: Arc<AtomicBool>,
+    trace: PortalTrace,
     session: dbus::Path<'static>,
     is_support_restore_token: bool,
 ) -> impl Fn(
@@ -893,6 +1054,7 @@ fn on_select_sources_response(
             "handle_token".to_string(),
             Variant(Box::new(start_handle_token.to_string())),
         );
+        trace.waiting(PortalStage::Start);
         handle_response(
             c,
             get_request_path(c, start_handle_token)?,
@@ -900,14 +1062,18 @@ fn on_select_sources_response(
                 fd.clone(),
                 streams.clone(),
                 session.clone(),
+                trace.clone(),
                 is_support_restore_token,
             ),
-            failure.clone(),
+            trace.clone(),
+            PortalStage::Start,
         )?;
         if is_server_running() {
-            let _ = screencast_portal::start(&portal, session.clone(), "", args)?;
+            let _ = screencast_portal::start(&portal, session.clone(), "", args)
+                .map_err(|e| DBusError(dbus_stage_err("start", &e)))?;
         } else {
-            let _ = remote_desktop_portal::start(&portal, session.clone(), "", args)?;
+            let _ = remote_desktop_portal::start(&portal, session.clone(), "", args)
+                .map_err(|e| DBusError(dbus_stage_err("start", &e)))?;
         }
 
         Ok(())
@@ -918,6 +1084,7 @@ fn on_start_response(
     fd: Arc<Mutex<Option<OwnedFd>>>,
     streams: Arc<Mutex<Vec<PwStreamInfo>>>,
     session: dbus::Path<'static>,
+    trace: PortalTrace,
     is_support_restore_token: bool,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
@@ -945,10 +1112,14 @@ fn on_start_response(
             .lock()
             .unwrap()
             .append(&mut streams_from_response(r));
-        fd.clone()
-            .lock()
-            .unwrap()
-            .replace(portal.open_pipe_wire_remote(session.clone(), HashMap::new())?);
+        // Past this point the user has granted the request; anything that fails now is the
+        // hand-over of the PipeWire fd, which is a different thing to go looking at.
+        trace.waiting(PortalStage::OpenPipeWireRemote);
+        fd.clone().lock().unwrap().replace(
+            portal
+                .open_pipe_wire_remote(session.clone(), HashMap::new())
+                .map_err(|e| DBusError(dbus_stage_err("open-pipewire-remote", &e)))?,
+        );
 
         Ok(())
     }
@@ -1554,4 +1725,30 @@ fn sort_streams(
     }
     *streams = sorted_streams;
     *shared_displays = sorted_shared_displays;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::stage_err;
+
+    #[test]
+    fn stage_err_keeps_the_detail_safe_for_a_placeholder() {
+        assert_eq!(
+            stage_err("start", "declined", ""),
+            "wl-stage:start:declined:"
+        );
+        // Braces of its own would break the placeholder lookup on the peer.
+        assert_eq!(
+            stage_err("create-session", "dbus", "org.freedesktop.{Error}"),
+            "wl-stage:create-session:dbus:org.freedesktop.Error"
+        );
+        assert_eq!(
+            stage_err("select-sources", "internal", "one\ntwo"),
+            "wl-stage:select-sources:internal:one two"
+        );
+        assert_eq!(
+            stage_err("start", "internal", &"x".repeat(300)),
+            format!("wl-stage:start:internal:{}", "x".repeat(200))
+        );
+    }
 }

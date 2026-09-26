@@ -48,6 +48,19 @@ pub struct FileDescription {
     pub creation_time: SystemTime,
     pub size: u64,
     pub perm: u16,
+    /// `file_list_id()` of the list this file came from, sent back in file contents requests
+    #[serde(default)]
+    pub clip_data_id: i32,
+}
+
+/// Identifies a file list by its descriptor PDU, which both peers hold, so file contents
+/// requests can name the list they read from. FNV-1a, same as `wf_cliprdr_file_list_id()`.
+pub fn file_list_id(file_descriptor_pdu: &[u8]) -> i32 {
+    file_descriptor_pdu
+        .iter()
+        .fold(0x811c_9dc5_u32, |id, byte| {
+            (id ^ *byte as u32).wrapping_mul(0x0100_0193)
+        }) as i32
 }
 
 pub(super) fn validate_file_name(name: &str) -> Result<(), CliprdrError> {
@@ -69,6 +82,7 @@ impl FileDescription {
     fn parse_file_descriptor(
         bytes: &mut Bytes,
         conn_id: i32,
+        clip_data_id: i32,
     ) -> Result<FileDescription, CliprdrError> {
         let flags = bytes.get_u32_le();
         // skip reserved 32 bytes
@@ -175,6 +189,7 @@ impl FileDescription {
             creation_time: last_modified,
             size,
             perm,
+            clip_data_id,
         };
 
         Ok(desc)
@@ -186,6 +201,7 @@ impl FileDescription {
         file_descriptor_pdu: Vec<u8>,
         conn_id: i32,
     ) -> Result<Vec<Self>, CliprdrError> {
+        let clip_data_id = file_list_id(&file_descriptor_pdu);
         let mut data = Bytes::from(file_descriptor_pdu);
         if data.remaining() < 4 {
             return Err(CliprdrError::InvalidRequest {
@@ -206,7 +222,7 @@ impl FileDescription {
 
         let mut files = Vec::with_capacity(count);
         for _ in 0..count {
-            let desc = Self::parse_file_descriptor(&mut data, conn_id)?;
+            let desc = Self::parse_file_descriptor(&mut data, conn_id, clip_data_id)?;
             files.push(desc);
         }
 
@@ -280,6 +296,22 @@ mod tests {
 
         let files = FileDescription::parse_file_descriptors(pdu, 0).unwrap();
         assert_eq!(files[0].name, PathBuf::from("file.txt"));
+    }
+
+    #[test]
+    fn file_list_id_is_fnv1a() {
+        // Reference vectors; the Windows side computes the same id in C.
+        assert_eq!(file_list_id(b"") as u32, 0x811c_9dc5);
+        assert_eq!(file_list_id(b"a") as u32, 0xe40c_292c);
+        assert_eq!(file_list_id(b"foobar") as u32, 0xbf9c_f968);
+    }
+
+    #[test]
+    fn parsed_files_carry_their_list_id() {
+        let pdu = descriptor_pdu("file.txt");
+        let id = file_list_id(&pdu);
+        let files = FileDescription::parse_file_descriptors(pdu, 0).unwrap();
+        assert_eq!(files[0].clip_data_id, id);
     }
 
     #[test]

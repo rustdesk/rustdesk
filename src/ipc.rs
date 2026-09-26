@@ -551,7 +551,14 @@ pub enum Data {
     /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
     /// CPU-fallback path (no render node, or no transferable dma-buf): pixels cross the wire.
     #[cfg(all(target_os = "linux", feature = "drm"))]
-    DrmFrame { width: u32, height: u32 },
+    DrmFrame {
+        width: u32,
+        height: u32,
+        /// See `DmabufDesc::cursor_pos`: the cursor plane position read right after this frame,
+        /// or `None` when the cursor is hidden, the read failed or the producer predates the field.
+        #[serde(default)]
+        cursor_pos: Option<(i32, i32)>,
+    },
     /// Service -> client: a zero-copy dma-buf frame descriptor. The scanout fd is NOT a field; when
     /// `desc.has_fd` it rides an SCM_RIGHTS ancillary message on the same `DrmConn::send_msg`, and
     /// there is NO trailing `send_raw()` body. The unprivileged `--server` imports the fd and does
@@ -566,7 +573,27 @@ pub enum Data {
         height: u32,
         hotx: i32,
         hoty: i32,
+        /// Whether the hotspot came from the driver, or was inferred from the bitmap.
+        ///
+        /// Absent means the producer predates the field, and the default must then be TRUE, not
+        /// `bool::default()`. These messages are JSON over a unix socket between two processes
+        /// that are upgraded separately: an old root service can be streaming to a freshly
+        /// started `--server`, and its `{"hotx": 12, "hoty": 11}` carries no provenance. Read as
+        /// `false`, the new consumer would throw that hotspot away and re-infer one from the
+        /// upright bitmap, moving the cursor on a rotated display for the length of the upgrade.
+        /// Defaulting to true means "no provenance available, so behave as the old protocol did"
+        /// -- use the point the producer sent. It is not a claim that the value was measured; a
+        /// new producer that wants re-inference says `hot_measured: false` explicitly, which
+        /// serializes, so new-to-new is unaffected.
+        #[serde(default = "legacy_hot_measured")]
+        hot_measured: bool,
     },
+}
+
+/// The default for a `hot_measured` that is not on the wire at all; see the field's docs.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn legacy_hot_measured() -> bool {
+    true
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -1585,7 +1612,13 @@ pub async fn start_pa() {
                                 None, // Use default buffering attributes
                             ) {
                                 Ok(s) => loop {
-                                    if let Ok(_) = s.read(&mut buf) {
+                                    // A dead pulse handle fails every read at once, so ignoring the
+                                    // error left nothing pacing this loop and it burned a core.
+                                    if let Err(err) = s.read(&mut buf) {
+                                        log::error!("Failed to read audio data:{}", err);
+                                        break;
+                                    }
+                                    {
                                         let out =
                                             if buf.iter().filter(|x| **x != 0).next().is_none() {
                                                 vec![]
@@ -2488,5 +2521,69 @@ mod test {
     #[test]
     fn test_select_server_uid_fails_when_multiple_servers_are_ambiguous() {
         assert!(select_server_uid_for_user_main_ipc(&[501, 502], None, false).is_err());
+    }
+
+    /// The upgrade window: an old root service is still streaming when a new `--server` starts,
+    /// and its DrmCursor carries no `hot_measured` at all. Read as `false` the consumer would
+    /// discard a hotspot the producer did measure and re-infer one from the bitmap, which moves
+    /// the cursor on a rotated display until the old process is replaced. `bool::default()` is
+    /// the wrong default here; the right one preserves what the old protocol meant.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[test]
+    fn a_drm_cursor_without_provenance_keeps_the_hotspot_the_producer_sent() {
+        // `Data` is adjacently tagged (`tag = "t", content = "c"`), so this is the real shape on
+        // the socket, not a simplified one.
+        let legacy =
+            r#"{"t":"DrmCursor","c":{"id":7,"width":24,"height":24,"hotx":12,"hoty":11}}"#;
+        let msg: Data = serde_json::from_str(legacy).expect("legacy DrmCursor must deserialize");
+        match msg {
+            Data::DrmCursor {
+                hotx,
+                hoty,
+                hot_measured,
+                ..
+            } => {
+                assert_eq!((hotx, hoty), (12, 11));
+                assert!(
+                    hot_measured,
+                    "a message with no provenance field must be treated as the old protocol did, \
+                     i.e. use the hotspot as sent, not re-infer it"
+                );
+            }
+            other => panic!("expected DrmCursor, got {other:?}"),
+        }
+
+        // And a NEW producer that really wants re-inference says so, which serializes: the
+        // default must not swallow an explicit false.
+        let modern = r#"{"t":"DrmCursor","c":{"id":7,"width":24,"height":24,"hotx":0,"hoty":0,"hot_measured":false}}"#;
+        match serde_json::from_str::<Data>(modern).expect("modern DrmCursor must deserialize") {
+            Data::DrmCursor { hot_measured, .. } => assert!(!hot_measured),
+            other => panic!("expected DrmCursor, got {other:?}"),
+        }
+    }
+
+    /// A frame header from a producer that predates the cursor plane position reads as `None`;
+    /// a producer that sends one is read back exactly. A pin, not a gate: the consumer only ever
+    /// measures against `Some`.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[test]
+    fn a_drm_frame_without_a_cursor_position_reads_as_none() {
+        let legacy = r#"{"t":"DrmFrame","c":{"width":8,"height":8}}"#;
+        match serde_json::from_str::<Data>(legacy).expect("legacy DrmFrame must deserialize") {
+            Data::DrmFrame {
+                width,
+                height,
+                cursor_pos,
+            } => {
+                assert_eq!((width, height), (8, 8));
+                assert_eq!(cursor_pos, None);
+            }
+            other => panic!("expected DrmFrame, got {other:?}"),
+        }
+        let modern = r#"{"t":"DrmFrame","c":{"width":8,"height":8,"cursor_pos":[3,4]}}"#;
+        match serde_json::from_str::<Data>(modern).expect("modern DrmFrame must deserialize") {
+            Data::DrmFrame { cursor_pos, .. } => assert_eq!(cursor_pos, Some((3, 4))),
+            other => panic!("expected DrmFrame, got {other:?}"),
+        }
     }
 }

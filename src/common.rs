@@ -59,6 +59,7 @@ pub const PLATFORM_MACOS: &str = "Mac OS";
 pub const PLATFORM_ANDROID: &str = "Android";
 
 pub const TIMER_OUT: Duration = Duration::from_secs(1);
+pub(crate) const API_LOG_INTERVAL: Duration = Duration::from_secs(600);
 pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
 const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
@@ -146,6 +147,24 @@ pub fn is_support_multi_ui_session(ver: &str) -> bool {
 #[inline]
 pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number(MIN_VER_MULTI_UI_SESSION)
+}
+
+/// Peers from the 1.5.0 release name a cursor by `cursor_content_id`; older ones by the
+/// platform handle, which apps mint anew for the same shape.
+#[inline]
+pub fn is_peer_naming_cursors_by_content(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.5.0")
+}
+
+/// One id per cursor look, however many handles a platform gives it. Held to 53 bits: the web
+/// client decodes a u64 into a JS number and drops the whole message when it does not fit.
+pub fn cursor_content_id(width: i32, height: i32, hotx: i32, hoty: i32, colors: &[u8]) -> u64 {
+    let mut hasher = xxhash_rust::xxh3::Xxh3::new();
+    for v in [width, height, hotx, hoty] {
+        hasher.update(&v.to_le_bytes());
+    }
+    hasher.update(colors);
+    hasher.digest() & ((1 << 53) - 1)
 }
 
 #[inline]
@@ -408,6 +427,11 @@ pub fn resample_channels(
     }
 }
 
+#[cfg(all(feature = "use_dasp", feature = "use_samplerate"))]
+compile_error!(
+    "features `use_dasp` and `use_samplerate` are mutually exclusive; disable default features before selecting `use_samplerate`"
+);
+
 #[cfg(feature = "use_dasp")]
 pub fn audio_resample(
     data: &[f32],
@@ -444,7 +468,7 @@ pub fn audio_resample(
     }
 }
 
-#[cfg(feature = "use_samplerate")]
+#[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
 pub fn audio_resample(
     data: &[f32],
     sample_rate0: u32,
@@ -1191,6 +1215,9 @@ pub fn get_local_option(key: &str) -> String {
             }
         }
     }
+    if key == "lang" && (v == "pt" || v == "br") {
+        return "pt-br".to_owned();
+    }
     v
 }
 
@@ -1237,6 +1264,23 @@ fn should_use_tcp_proxy_for_api_url(url: &str, api_url: &str) -> bool {
 #[inline]
 fn is_tcp_proxy_api_target(url: &str) -> bool {
     should_use_tcp_proxy_for_api_url(url, &ui_get_api_server())
+}
+
+#[inline]
+fn should_throttle_log(url: &str) -> bool {
+    url::Url::parse(url)
+        .map(|parsed| parsed.path().ends_with("/api/heartbeat"))
+        .unwrap_or(false)
+}
+
+macro_rules! api_log {
+    ($level:ident, $url:expr, $interval:expr, $($arg:tt)+) => {{
+        if should_throttle_log($url) {
+            hbb_common::throttled_log!($interval, $level, $($arg)+);
+        } else {
+            log::$level!($($arg)+);
+        }
+    }};
 }
 
 fn tcp_proxy_log_target(url: &str) -> String {
@@ -1288,7 +1332,10 @@ async fn tcp_proxy_request(
         parsed.path().to_string()
     };
 
-    log::debug!(
+    api_log!(
+        debug,
+        url,
+        API_LOG_INTERVAL,
         "Sending {} {} via TCP proxy to {}",
         method,
         parsed.path(),
@@ -1448,7 +1495,10 @@ where
     };
 
     if should_fallback && can_fallback_to_raw_tcp(url) {
-        log::warn!(
+        api_log!(
+            warn,
+            url,
+            API_LOG_INTERVAL,
             "HTTP {} to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
             method,
             tcp_proxy_log_target(url),
@@ -1460,7 +1510,13 @@ where
         match tcp_fn.await {
             Ok(resp) => return Ok(resp),
             Err(tcp_err) => {
-                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+                api_log!(
+                    warn,
+                    url,
+                    API_LOG_INTERVAL,
+                    "TCP proxy fallback also failed: {:?}",
+                    tcp_err
+                );
             }
         }
     }
@@ -1518,7 +1574,10 @@ pub async fn post_request_with_status(
         Ok((status, _)) => *status >= 500,
     };
     if should_fallback && can_fallback_to_raw_tcp(&url) {
-        log::warn!(
+        api_log!(
+            warn,
+            &url,
+            API_LOG_INTERVAL,
             "HTTP POST to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
             tcp_proxy_log_target(&url),
             http_result
@@ -1529,7 +1588,13 @@ pub async fn post_request_with_status(
         match post_request_via_tcp_proxy_status(&url, &body, header).await {
             Ok(resp) => return Ok(resp),
             Err(tcp_err) => {
-                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+                api_log!(
+                    warn,
+                    &url,
+                    API_LOG_INTERVAL,
+                    "TCP proxy fallback also failed: {:?}",
+                    tcp_err
+                );
             }
         }
     }
@@ -1586,7 +1651,10 @@ async fn post_request_(
             Err(e) => {
                 if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
                     if danger_accept_invalid_cert.is_none() {
-                        log::warn!(
+                        api_log!(
+                            warn,
+                            url,
+                            API_LOG_INTERVAL,
                             "HTTP request failed: {:?}, try again, danger accept invalid cert",
                             e
                         );
@@ -1601,7 +1669,13 @@ async fn post_request_(
                         )
                         .await
                     } else {
-                        log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
+                        api_log!(
+                            warn,
+                            url,
+                            API_LOG_INTERVAL,
+                            "HTTP request failed: {:?}, try again with native-tls",
+                            e
+                        );
                         post_request_(
                             url,
                             tls_url,
@@ -2074,6 +2148,13 @@ async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> 
     if use_ws() {
         return Ok(());
     }
+    key_exchange(conn, key, log_on_success).await.map(|_| ())
+}
+
+/// The server's key exchange on `conn`. `Ok(true)` once the stream is encrypted. `Ok(false)`
+/// when the server sent something else first, nothing parseable, or closed: `secure_tcp`
+/// tolerates that for servers from before the exchange, `secure_tcp_required` does not.
+async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> ResultType<bool> {
     let rs_pk = get_rs_pk(key);
     let Some(rs_pk) = rs_pk else {
         bail!("Handshake failed: invalid public key from rendezvous server");
@@ -2088,20 +2169,50 @@ async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> 
                         }
                         let their_pk_b = sign::verify(&ex.keys[0], &rs_pk)
                             .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
-                        let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(
-                            get_pk(&their_pk_b)
-                                .context("Wrong their public length in key exchange")?,
-                        );
+                        let their_pk_b = get_pk(&their_pk_b)
+                            .context("Wrong their public length in key exchange")?;
+                        // The signed X25519 high bit marks servers that sign their parameters.
+                        // X25519 ignores that bit, so old clients use the key unchanged; keep
+                        // the bytes as signed, since the transcript and KxParams carry them so.
+                        if their_pk_b[31] & 0x80 != 0 || !ex.signed_params.is_empty() {
+                            let params = sign::verify(&ex.signed_params, &rs_pk)
+                                .ok()
+                                .and_then(|signed| {
+                                    let params =
+                                        signed.strip_prefix(hbb_common::tcp::KX_PARAMS_DOMAIN)?;
+                                    KxParams::parse_from_bytes(params).ok()
+                                })
+                                .ok_or_else(|| {
+                                    anyhow!("Missing or invalid signed key exchange parameters")
+                                })?;
+                            if params.pk[..] != their_pk_b[..] || params.version != ex.version {
+                                bail!("Key exchange version or public key does not match its signature");
+                            }
+                        }
+                        let (asymmetric_value, symmetric_value, key) =
+                            create_symmetric_key_msg(their_pk_b);
+                        let picked = hbb_common::tcp::kx_version_for(ex.version);
                         let mut msg_out = RendezvousMessage::new();
                         msg_out.set_key_exchange(KeyExchange {
-                            keys: vec![asymmetric_value, symmetric_value],
+                            keys: vec![asymmetric_value.clone(), symmetric_value],
+                            version: picked,
                             ..Default::default()
                         });
                         timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                        conn.set_key(key);
+                        conn.set_negotiated_key(
+                            key,
+                            true,
+                            &hbb_common::tcp::KxTranscript {
+                                initiator_pk: &asymmetric_value,
+                                responder_pk: &their_pk_b,
+                                advertised: ex.version,
+                                picked,
+                            },
+                        )?;
                         if log_on_success {
                             log::info!("Connection secured");
                         }
+                        return Ok(true);
                     }
                     _ => {}
                 }
@@ -2109,7 +2220,7 @@ async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> 
         }
         _ => {}
     }
-    Ok(())
+    Ok(false)
 }
 
 pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
@@ -2118,6 +2229,22 @@ pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
 
 async fn secure_tcp_silent(conn: &mut Stream, key: &str) -> ResultType<()> {
     secure_tcp_impl(conn, key, false).await
+}
+
+/// Like [`secure_tcp`], but returns only once the server's key exchange has actually encrypted
+/// the stream; a server that answers with anything else, or with nothing, is an error, so the
+/// caller can withhold what it was about to send instead of sending it in the clear.
+/// `secure_tcp` keeps tolerating such a server, which the paths from before the exchange depend
+/// on. WebSocket is treated as `secure_tcp` treats it, as a transport that is encrypted already.
+pub async fn secure_tcp_required(conn: &mut Stream, key: &str) -> ResultType<()> {
+    if use_ws() {
+        return Ok(());
+    }
+    if key_exchange(conn, key, true).await? {
+        Ok(())
+    } else {
+        bail!("the rendezvous server did not complete the key exchange");
+    }
 }
 
 #[inline]
@@ -2141,24 +2268,33 @@ pub fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
 }
 
 pub fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8; 32])> {
-    let (id, pk, _) = decode_id_pk_dtls(signed, key)?;
+    let (id, pk, _, _) = decode_id_pk_dtls(signed, key)?;
     Ok((id, pk))
 }
 
 /// Like [`decode_id_pk`] but also returns the signed DTLS certificate fingerprint (empty string
-/// for non-WebRTC peers), used to bind a WebRTC DTLS channel to the verified peer identity.
+/// for non-WebRTC peers), used to bind a WebRTC DTLS channel to the verified peer identity, and
+/// the newest key exchange version the peer speaks (0, the original scheme, for a peer from
+/// before versions).
 pub fn decode_id_pk_dtls(
     signed: &[u8],
     key: &sign::PublicKey,
-) -> ResultType<(String, [u8; 32], String)> {
+) -> ResultType<(String, [u8; 32], String, u32)> {
     let res = IdPk::parse_from_bytes(
         &sign::verify(signed, key).map_err(|_| anyhow!("Signature mismatch"))?,
     )?;
     if let Some(pk) = get_pk(&res.pk) {
-        Ok((res.id, pk, res.dtls_fingerprint))
+        Ok((res.id, pk, res.dtls_fingerprint, res.kx_version))
     } else {
         bail!("Wrong their public length");
     }
+}
+
+/// Whether the DTLS fingerprint a WebRTC peer signed into its identity is the one of the channel
+/// actually negotiated. An empty signed value binds nothing: on a WebRTC channel it is either a
+/// peer that could not sign one or a rendezvous/relay that stripped it, and both fail closed.
+pub fn dtls_fingerprint_bound(signed_fp: &str, actual_fp: &str) -> bool {
+    !signed_fp.is_empty() && signed_fp == actual_fp
 }
 
 pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbox::Key) {
@@ -2492,45 +2628,42 @@ async fn stun_ipv6_test(stun_server: String) -> ResultType<(SocketAddr, String)>
     })
 }
 
+/// A global address to ask the kernel for a route to; libwebrtc's QueryDefaultLocalAddress asks
+/// for the same one. Nothing is ever sent to it.
+const IPV6_ROUTE_PROBE: std::net::Ipv6Addr =
+    std::net::Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888);
+/// The public IPv6 address the STUN servers report is looked for in the background, and for no
+/// longer than this: a probe that outlived the minute could write an earlier network's address
+/// over a later probe's.
+const STUN_IPV6_TIMEOUT_MS: u64 = 5_000;
+
 async fn test_bind_ipv6() -> ResultType<SocketAddr> {
-    use hbb_common::futures::future::FutureExt;
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(local_addr).await?;
-    // Nothing is sent - `connect` only makes the kernel pick a route and a source address - so any
-    // resolvable target answers equally and the whole cost is DNS. Race the lookups rather than
-    // walk them: this is awaited inline on the connection path, not every STUN host publishes a
-    // AAAA, and one resolver that hangs must not decide whether this host has v6.
-    let lookups = hbb_common::webrtc::WebRTCStream::default_stun_servers()
-        .into_iter()
-        .map(|stun| {
-            (async move {
-                let addr = tokio::net::lookup_host(&stun)
-                    .await?
-                    .find(|x| x.is_ipv6())
-                    .ok_or_else(|| {
-                        anyhow!("Failed to resolve STUN ipv6 server address: {}", stun)
-                    })?;
-                Ok::<SocketAddr, hbb_common::anyhow::Error>(addr)
-            })
-            .boxed()
-        })
-        .collect::<Vec<_>>();
-    let (addr, _) = hbb_common::futures::future::select_ok(lookups).await?;
-    socket.connect(addr).await?;
+    // Nothing is sent - `connect` only makes the kernel pick a route and a source address - so
+    // the target can be any global address, and given as a number it is: this is awaited on the
+    // connection path, and resolving a STUN host's name first was the one thing on it that
+    // could wait on the network - for as long as the resolver takes, when there is none.
+    socket
+        .connect(SocketAddr::from((IPV6_ROUTE_PROBE, 53)))
+        .await?;
     Ok(socket.local_addr()?)
 }
 
 pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
-    if PUBLIC_IPV6_ADDR
-        .lock()
-        .unwrap()
-        .1
-        .map(|x| x.elapsed().as_secs() < 60)
-        .unwrap_or(false)
     {
-        return None;
+        // One look and one claim of the minute, under one lock: two connections arriving
+        // together would otherwise both find it over and both probe.
+        let mut cached = PUBLIC_IPV6_ADDR.lock().unwrap();
+        if cached
+            .1
+            .map(|x| x.elapsed().as_secs() < 60)
+            .unwrap_or(false)
+        {
+            return None;
+        }
+        cached.1 = Some(Instant::now());
     }
-    PUBLIC_IPV6_ADDR.lock().unwrap().1 = Some(Instant::now());
 
     match test_bind_ipv6().await {
         Ok(mut addr) => {
@@ -2587,8 +2720,8 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
             .map(|stun| stun_ipv6_test(stun).boxed())
             .collect::<Vec<_>>();
 
-        match select_ok(tests).await {
-            Ok(res) => {
+        match hbb_common::timeout(STUN_IPV6_TIMEOUT_MS, select_ok(tests)).await {
+            Ok(Ok(res)) => {
                 let mut addr = res.0 .0;
                 addr.set_port(0); // Set port to 0 to avoid conflicts
                 PUBLIC_IPV6_ADDR.lock().unwrap().0 = Some(addr);
@@ -2598,8 +2731,11 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
                     addr
                 );
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 log::error!("Failed to get public IPv6 address: {}", e);
+            }
+            Err(_) => {
+                log::warn!("No STUN server answered for IPv6 within {STUN_IPV6_TIMEOUT_MS}ms");
             }
         };
     }))
@@ -2817,6 +2953,16 @@ mod tests {
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
     use std::collections::HashSet;
+
+    #[test]
+    fn a_cursor_content_id_fits_a_web_client_number() {
+        const MAX_SAFE_INTEGER: u64 = (1 << 53) - 1;
+        for colors in [&b"arrow"[..], b"beam", b"hand", b""] {
+            for hotx in 0..64 {
+                assert!(cursor_content_id(32, 32, hotx, 0, colors) <= MAX_SAFE_INTEGER);
+            }
+        }
+    }
 
     #[inline]
     fn get_timestamp_secs() -> u128 {
@@ -3069,6 +3215,21 @@ mod tests {
     }
 
     #[test]
+    fn test_should_throttle_log() {
+        assert!(should_throttle_log("https://example.com/api/heartbeat"));
+        assert!(should_throttle_log(
+            "https://example.com/api/heartbeat?token=secret"
+        ));
+        assert!(should_throttle_log("https://example.com/prefix/api/heartbeat"));
+        assert!(!should_throttle_log("https://example.com/api/heartbeat2"));
+        assert!(!should_throttle_log("https://example.com/api/sysinfo"));
+        assert!(!should_throttle_log(
+            "https://example.com/api/sysinfo?next=/api/heartbeat"
+        ));
+        assert!(!should_throttle_log("not a url"));
+    }
+
+    #[test]
     fn test_get_tcp_proxy_addr_normalizes_bare_ipv6_host() {
         struct RestoreCustomRendezvousServer(String);
 
@@ -3257,5 +3418,396 @@ mod tests {
         let combined_mask = MOUSE_TYPE_DOWN | ((MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT) << 3);
         assert_eq!(combined_mask & MOUSE_TYPE_MASK, MOUSE_TYPE_DOWN);
         assert_eq!(combined_mask >> 3, MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT);
+    }
+
+    /// A stand-in rendezvous server on loopback: accepts one connection and hands it to `serve`.
+    async fn rendezvous_stub<F, Fut>(serve: F) -> String
+    where
+        F: FnOnce(hbb_common::tcp::FramedStream) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let listener = hbb_common::tcp::new_listener("127.0.0.1:0", false)
+            .await
+            .unwrap();
+        let host = listener.local_addr().unwrap().to_string();
+        tokio::spawn(async move {
+            if let Ok((stream, addr)) = listener.accept().await {
+                serve(hbb_common::tcp::FramedStream::from(stream, addr)).await;
+            }
+        });
+        host
+    }
+
+    fn server_key() -> (String, sign::SecretKey) {
+        let (pk, sk) = sign::gen_keypair();
+        (encode64(pk.0), sk)
+    }
+
+    fn signed_key_exchange(
+        pk: &box_::PublicKey,
+        sk: &sign::SecretKey,
+        version: u32,
+    ) -> KeyExchange {
+        let params = KxParams {
+            pk: pk.0.to_vec().into(),
+            version,
+            ..Default::default()
+        };
+        let mut payload = hbb_common::tcp::KX_PARAMS_DOMAIN.to_vec();
+        payload.extend_from_slice(&params.write_to_bytes().unwrap());
+        KeyExchange {
+            keys: vec![sign::sign(&pk.0, sk).into()],
+            version,
+            signed_params: sign::sign(&payload, sk).into(),
+            ..Default::default()
+        }
+    }
+
+    async fn connect(host: &str) -> Stream {
+        hbb_common::socket_client::connect_tcp(host.to_owned(), 3000)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_required_refuses_a_server_without_the_exchange() {
+        let (key, _) = server_key();
+        // A server from before the exchange answers the first message with something else.
+        let serve = |mut s: hbb_common::tcp::FramedStream| async move {
+            let mut msg = RendezvousMessage::new();
+            msg.set_register_peer_response(RegisterPeerResponse::new());
+            s.send(&msg).await.unwrap();
+            sleep(Duration::from_secs(2)).await;
+        };
+        let host = rendezvous_stub(serve).await;
+        let mut conn = connect(&host).await;
+        assert!(secure_tcp_required(&mut conn, &key).await.is_err());
+        assert!(!conn.is_secured());
+        // The legacy call tolerates the same server, and the stream stays in the clear.
+        let host = rendezvous_stub(serve).await;
+        let mut conn = connect(&host).await;
+        secure_tcp(&mut conn, &key).await.unwrap();
+        assert!(!conn.is_secured());
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_required_refuses_a_closed_connection() {
+        let (key, _) = server_key();
+        let host = rendezvous_stub(|s| async move { drop(s) }).await;
+        let mut conn = connect(&host).await;
+        assert!(secure_tcp_required(&mut conn, &key).await.is_err());
+        assert!(!conn.is_secured());
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_required_accepts_a_completed_exchange() {
+        let (key, sk) = server_key();
+        let host = rendezvous_stub(move |mut s| async move {
+            let (eph_pk, eph_sk) = box_::gen_keypair();
+            let mut msg = RendezvousMessage::new();
+            msg.set_key_exchange(KeyExchange {
+                keys: vec![sign::sign(&eph_pk.0, &sk).into()],
+                ..Default::default()
+            });
+            s.send(&msg).await.unwrap();
+            // The client's reply must decode to a key with the ephemeral secret half.
+            let reply = s.next_timeout(3000).await.unwrap().unwrap();
+            let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+            let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
+                panic!("expected the client's key exchange");
+            };
+            hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk).unwrap();
+        })
+        .await;
+        let mut conn = connect(&host).await;
+        secure_tcp_required(&mut conn, &key).await.unwrap();
+        assert!(conn.is_secured());
+    }
+
+    // The stand-in does what hbbs does at version 1: advertises it and splits the exchanged key
+    // over the same transcript. Neither side's unit tests can catch a client that puts a
+    // different byte string into the transcript than the server does; only a frame crossing
+    // between the two can.
+    #[tokio::test]
+    async fn test_secure_tcp_version_1_keys_match_the_server_both_ways() {
+        let (key, sk) = server_key();
+        let host = rendezvous_stub(move |mut s| async move {
+            let (eph_pk, eph_sk) = box_::gen_keypair();
+            let mut msg = RendezvousMessage::new();
+            msg.set_key_exchange(KeyExchange {
+                keys: vec![sign::sign(&eph_pk.0, &sk).into()],
+                version: 1,
+                ..Default::default()
+            });
+            s.send(&msg).await.unwrap();
+            let reply = s.next_timeout(3000).await.unwrap().unwrap();
+            let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+            let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
+                panic!("expected the client's key exchange");
+            };
+            let shared =
+                hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk).unwrap();
+            s.set_key_split(
+                shared,
+                false,
+                &hbb_common::tcp::KxTranscript {
+                    initiator_pk: &ex.keys[0],
+                    responder_pk: &eph_pk.0,
+                    advertised: 1,
+                    picked: ex.version,
+                },
+            )
+            .unwrap();
+            // Answers with the request's serial, so the client learns from its own reply that
+            // the request was read under the right key.
+            let request = s.next_timeout(3000).await.unwrap().unwrap();
+            let request = RendezvousMessage::parse_from_bytes(&request).unwrap();
+            let Some(rendezvous_message::Union::TestNatRequest(nat)) = request.union else {
+                panic!("expected the client's nat request");
+            };
+            let mut msg = RendezvousMessage::new();
+            msg.set_test_nat_response(TestNatResponse {
+                port: nat.serial,
+                ..Default::default()
+            });
+            s.send(&msg).await.unwrap();
+        })
+        .await;
+        let mut conn = connect(&host).await;
+        secure_tcp_required(&mut conn, &key).await.unwrap();
+        let mut msg = RendezvousMessage::new();
+        msg.set_test_nat_request(TestNatRequest {
+            serial: 7,
+            ..Default::default()
+        });
+        conn.send(&msg).await.unwrap();
+        let reply = conn.next_timeout(3000).await.unwrap().unwrap();
+        let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+        let Some(rendezvous_message::Union::TestNatResponse(nat)) = reply.union else {
+            panic!("expected the server's nat response");
+        };
+        assert_eq!(nat.port, 7);
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_legacy_and_signed_servers_exchange_application_data() {
+        for (advertised, signed) in [(0, false), (1, true), (3, true)] {
+            for required in [false, true] {
+                let (key, sk) = server_key();
+                let host = rendezvous_stub(move |mut s| async move {
+                    let (mut eph_pk, eph_sk) = box_::gen_keypair();
+                    let mut msg = RendezvousMessage::new();
+                    let ex = if signed {
+                        eph_pk.0[31] |= 0x80;
+                        signed_key_exchange(&eph_pk, &sk, advertised)
+                    } else {
+                        KeyExchange {
+                            keys: vec![sign::sign(&eph_pk.0, &sk).into()],
+                            ..Default::default()
+                        }
+                    };
+                    msg.set_key_exchange(ex);
+                    s.send(&msg).await.unwrap();
+                    let reply = s.next_timeout(3000).await.unwrap().unwrap();
+                    let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+                    let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
+                        panic!("expected the client's key exchange");
+                    };
+                    assert_eq!(ex.keys.len(), 2);
+                    assert_eq!(ex.version, hbb_common::tcp::kx_version_for(advertised));
+                    let shared =
+                        hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk)
+                            .unwrap();
+                    if ex.version >= 1 {
+                        s.set_key_split(
+                            shared,
+                            false,
+                            &hbb_common::tcp::KxTranscript {
+                                initiator_pk: &ex.keys[0],
+                                responder_pk: &eph_pk.0,
+                                advertised,
+                                picked: ex.version,
+                            },
+                        )
+                        .unwrap();
+                    } else {
+                        s.set_key(shared);
+                    }
+                    let request = s.next_timeout(3000).await.unwrap().unwrap();
+                    let request = RendezvousMessage::parse_from_bytes(&request).unwrap();
+                    let Some(rendezvous_message::Union::TestNatRequest(nat)) = request.union else {
+                        panic!("expected the client's nat request");
+                    };
+                    let mut msg = RendezvousMessage::new();
+                    msg.set_test_nat_response(TestNatResponse {
+                        port: nat.serial,
+                        ..Default::default()
+                    });
+                    s.send(&msg).await.unwrap();
+                })
+                .await;
+                let mut conn = connect(&host).await;
+                if required {
+                    secure_tcp_required(&mut conn, &key).await.unwrap();
+                } else {
+                    secure_tcp(&mut conn, &key).await.unwrap();
+                }
+                assert!(conn.is_secured());
+                let mut msg = RendezvousMessage::new();
+                msg.set_test_nat_request(TestNatRequest {
+                    serial: 7,
+                    ..Default::default()
+                });
+                conn.send(&msg).await.unwrap();
+                let reply = conn.next_timeout(3000).await.unwrap().unwrap();
+                let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+                let Some(rendezvous_message::Union::TestNatResponse(nat)) = reply.union else {
+                    panic!("expected the server's nat response");
+                };
+                assert_eq!(nat.port, 7);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_rejects_unverified_versions_before_reply() {
+        let (key, sk) = server_key();
+        let (mut eph_pk, _) = box_::gen_keypair();
+        eph_pk.0[31] |= 0x80;
+        let (other_pk, _) = box_::gen_keypair();
+        let (_, other_sk) = sign::gen_keypair();
+        for case in [
+            "missing_signature",
+            "stripped_version_and_signature",
+            "cleared_marker_and_stripped_fields",
+            "lowered_version",
+            "raised_version",
+            "replaced_public_key",
+            "invalid_signature",
+            "wrong_signer",
+            "unstructured_payload",
+            "undomained_params",
+            "signed_id_pk_as_params",
+        ] {
+            let mut ex = signed_key_exchange(&eph_pk, &sk, 1);
+            match case {
+                "missing_signature" => ex.signed_params = Bytes::new(),
+                "stripped_version_and_signature" => {
+                    ex.signed_params = Bytes::new();
+                    ex.version = 0;
+                }
+                "cleared_marker_and_stripped_fields" => {
+                    let mut signed_pk = ex.keys[0].to_vec();
+                    *signed_pk.last_mut().unwrap() &= 0x7f;
+                    ex.keys[0] = signed_pk.into();
+                    ex.signed_params = Bytes::new();
+                    ex.version = 0;
+                }
+                "lowered_version" => ex.version = 0,
+                "raised_version" => ex.version = 2,
+                "replaced_public_key" => ex.keys[0] = sign::sign(&other_pk.0, &sk).into(),
+                "invalid_signature" => {
+                    let mut signed = ex.signed_params.to_vec();
+                    signed[0] ^= 1;
+                    ex.signed_params = signed.into();
+                }
+                "wrong_signer" => {
+                    ex.signed_params = signed_key_exchange(&eph_pk, &other_sk, 1).signed_params;
+                }
+                "unstructured_payload" => {
+                    let mut payload = eph_pk.0.to_vec();
+                    payload.extend_from_slice(&1u32.to_le_bytes());
+                    ex.signed_params = sign::sign(&payload, &sk).into();
+                }
+                "undomained_params" => {
+                    let params = KxParams {
+                        pk: eph_pk.0.to_vec().into(),
+                        version: 1,
+                        ..Default::default()
+                    };
+                    ex.signed_params = sign::sign(&params.write_to_bytes().unwrap(), &sk).into();
+                }
+                "signed_id_pk_as_params" => {
+                    // The server signs IdPk with the same key; its `id` sits where `pk` does.
+                    let mut pk = [0x2au8; box_::PUBLICKEYBYTES];
+                    pk[30] = 0xc2;
+                    pk[31] = 0xaa;
+                    let id_pk = IdPk {
+                        id: String::from_utf8(pk.to_vec()).unwrap(),
+                        pk: vec![7u8; box_::PUBLICKEYBYTES].into(),
+                        ..Default::default()
+                    };
+                    ex.keys[0] = sign::sign(&pk, &sk).into();
+                    ex.version = 0;
+                    ex.signed_params = sign::sign(&id_pk.write_to_bytes().unwrap(), &sk).into();
+                }
+                _ => unreachable!(),
+            }
+            for required in [false, true] {
+                let mut msg = RendezvousMessage::new();
+                msg.set_key_exchange(ex.clone());
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                let host = rendezvous_stub(move |mut s| async move {
+                    s.send(&msg).await.unwrap();
+                    tx.send(s.next_timeout(3000).await.is_none()).unwrap();
+                })
+                .await;
+                let mut conn = connect(&host).await;
+                let result = if required {
+                    secure_tcp_required(&mut conn, &key).await
+                } else {
+                    secure_tcp(&mut conn, &key).await
+                };
+                assert!(result.is_err(), "accepted {case}, required={required}");
+                assert!(!conn.is_secured());
+                drop(conn);
+                assert!(rx.await.unwrap(), "replied to {case}, required={required}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_dtls_fingerprint_travels_signed_and_binds() {
+        let (pk, sk) = sign::gen_keypair();
+        let fp = "sha-256 0A:1B:2C";
+        let signed = sign::sign(
+            &IdPk {
+                id: "123456789".to_owned(),
+                pk: Bytes::from(vec![7u8; 32]),
+                dtls_fingerprint: fp.to_owned(),
+                ..Default::default()
+            }
+            .write_to_bytes()
+            .unwrap(),
+            &sk,
+        );
+
+        let (id, their_pk, signed_fp, _) = decode_id_pk_dtls(&signed, &pk).unwrap();
+        assert_eq!(id, "123456789");
+        assert_eq!(their_pk, [7u8; 32]);
+        assert_eq!(signed_fp, fp);
+        assert!(dtls_fingerprint_bound(&signed_fp, fp));
+        assert!(!dtls_fingerprint_bound(&signed_fp, "sha-256 0A:1B:2D"));
+        assert!(!dtls_fingerprint_bound("", ""));
+
+        // The fingerprint is under the signature: a blob verified with another key yields
+        // nothing, and one whose payload was edited in transit fails verification.
+        let (other_pk, _) = sign::gen_keypair();
+        assert!(decode_id_pk_dtls(&signed, &other_pk).is_err());
+        let mut tampered = signed.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 1;
+        assert!(decode_id_pk_dtls(&tampered, &pk).is_err());
+
+        // `decode_id_pk` is the same blob minus the fingerprint, so the field is invisible to
+        // non-WebRTC handshakes.
+        assert_eq!(decode_id_pk(&signed, &pk).unwrap(), (id, their_pk));
+    }
+
+    // The route probe is awaited on the connection path, so whatever it finds - an address, or
+    // no IPv6 route on this machine - it finds without waiting on the network.
+    #[tokio::test]
+    async fn test_ipv6_route_probe_does_not_wait_on_the_network() {
+        assert!(hbb_common::timeout(1_000, test_bind_ipv6()).await.is_ok());
     }
 }
