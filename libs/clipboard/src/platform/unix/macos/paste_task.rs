@@ -617,6 +617,7 @@ impl PasteTaskHandle {
         };
         let cb_requested = min(BLOCK_SIZE as u64, file.size - self.progress.offset);
         let conn_id = file.conn_id;
+        let clip_data_id = file.clip_data_id;
 
         let (n_position_high, n_position_low) = (
             (self.progress.offset >> 32) as i32,
@@ -629,8 +630,8 @@ impl PasteTaskHandle {
             n_position_low,
             n_position_high,
             cb_requested: cb_requested as _,
-            have_clip_data_id: false,
-            clip_data_id: 0,
+            have_clip_data_id: true,
+            clip_data_id,
         };
         allow_err!(send_data(conn_id, request));
         self.progress.last_sent_time = Instant::now();
@@ -703,6 +704,7 @@ mod tests {
             creation_time: SystemTime::UNIX_EPOCH,
             size,
             perm: 0,
+            clip_data_id: 0,
         }
     }
 
