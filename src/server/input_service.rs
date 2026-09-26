@@ -1077,6 +1077,77 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
     }
 }
 
+/// The last ABSOLUTE peer-injected pointer position, in the post-remap uinput layout space, with
+/// when it was injected, a sequence number and the wayland snapshot generation it was mapped
+/// against. Deliberately NOT `LATEST_PEER_INPUT_CURSOR`: its relative arm stores
+/// `get_cursor_pos()`, an X-server coordinate that never went through the layout remap, and the
+/// DRM cursor calibration subtracts a cursor-plane position from this, so the two spaces must
+/// match. Only the uinput absolute path writes here.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+static LATEST_PEER_ABS_POS: std::sync::Mutex<
+    Option<((i32, i32), std::time::Instant, u64, u64, u64)>,
+> = std::sync::Mutex::new(None);
+#[cfg(all(target_os = "linux", feature = "drm"))]
+static PEER_ABS_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// One absolute peer sample, as the calibration reads it.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PeerAbsSample {
+    pub pos: (i32, i32),
+    pub age_ms: u64,
+    /// Distinct per injected move. Two measurements taken against the same sample are not
+    /// independent, whatever the cursor plane did in between.
+    pub seq: u64,
+    /// The layout generation the point was mapped against.
+    pub gen: u64,
+    /// The input-mapping epoch at injection: a sample from before a range adoption was mapped by
+    /// the old range. See `display_service::input_map_epoch`.
+    pub map_epoch: u64,
+}
+
+/// The peer moved the pointer to an absolute, post-remap position. Called under the ENIGO guard
+/// of the move, which an adoption also needs for its refresh: a move stamped with the count of an
+/// adoption was injected after that adoption's refresh.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) fn note_peer_absolute_move(x: i32, y: i32) {
+    let seq = PEER_ABS_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    let gen = scrap::wayland::display::wayland_snapshot_generation();
+    let map_epoch = super::display_service::input_map_epoch();
+    *LATEST_PEER_ABS_POS.lock().unwrap() =
+        Some(((x, y), std::time::Instant::now(), seq, gen, map_epoch));
+}
+
+/// The pointer moved by a path that has no post-remap absolute position to offer: a relative
+/// delta from the peer, or a move this process made on its own. The last sample no longer says
+/// where the pointer is; forget it, the next absolute move restores it.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) fn note_pointer_moved_without_absolute_sample() {
+    *LATEST_PEER_ABS_POS.lock().unwrap() = None;
+}
+
+/// A move this process makes on its own. The forget runs once `lock` returned the guard the peer
+/// move records its sample under, so no peer move lands between the forget and this move and
+/// leaves its sample describing a pointer that has moved since.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn forget_sample_and_move<G>(lock: impl FnOnce() -> G, move_to: impl FnOnce(G)) {
+    let guard = lock();
+    note_pointer_moved_without_absolute_sample();
+    move_to(guard);
+}
+
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) fn last_peer_abs_sample() -> Option<PeerAbsSample> {
+    let (pos, at, seq, gen, map_epoch) = (*LATEST_PEER_ABS_POS.lock().unwrap())?;
+    Some(PeerAbsSample {
+        pos,
+        age_ms: at.elapsed().as_millis() as u64,
+        seq,
+        gen,
+        map_epoch,
+    })
+}
+
 // Update time to avoid send cursor position event to the peer.
 // See `run_pos` --> `set_cursor_position` --> `exclude`
 #[inline]
@@ -1249,7 +1320,9 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             // told at session init. If the compositor has since moved a monitor, correct
             // them onto the current layout. https://github.com/rustdesk/rustdesk/issues/15601
             #[cfg(target_os = "linux")]
-            let (mx, my) = if wayland_use_uinput() {
+            let uinput = wayland_use_uinput();
+            #[cfg(target_os = "linux")]
+            let (mx, my) = if uinput {
                 super::display_service::remap_wayland_uinput_coord(evt.x, evt.y)
             } else {
                 (evt.x, evt.y)
@@ -1257,6 +1330,11 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             #[cfg(not(target_os = "linux"))]
             let (mx, my) = (evt.x, evt.y);
             en.mouse_move_to(mx, my);
+            // Only the uinput point is in the layout space the calibration measures in.
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            if uinput {
+                note_peer_absolute_move(mx, my);
+            }
             *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
                 conn,
                 time: get_time(),
@@ -1279,6 +1357,10 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             let dy = evt
                 .y
                 .clamp(-MAX_RELATIVE_MOUSE_DELTA, MAX_RELATIVE_MOUSE_DELTA);
+            // The absolute sample stops describing the pointer the moment a delta lands. Drop it
+            // BEFORE the move, so no frame in between can measure the plane against it.
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            note_pointer_moved_without_absolute_sample();
             en.mouse_move_relative(dx, dy);
             // Get actual cursor position after relative movement for tracking
             if let Some((x, y)) = crate::get_cursor_pos() {
@@ -2496,6 +2578,10 @@ impl TemporaryMouseMoveHandle {
         let thread_handle = std::thread::spawn(move || {
             log::debug!("TemporaryMouseMoveHandle thread started");
             for (x, y) in rx {
+                // Not the peer's position: the calibration must not subtract from it.
+                #[cfg(feature = "drm")]
+                forget_sample_and_move(|| ENIGO.lock().unwrap(), |mut en| en.mouse_move_to(x, y));
+                #[cfg(not(feature = "drm"))]
                 ENIGO.lock().unwrap().mouse_move_to(x, y);
             }
             log::debug!("TemporaryMouseMoveHandle thread exiting");
@@ -2722,5 +2808,59 @@ mod cursor_shape_tests {
             cursor_data_message(u64::MAX - 1).is_none(),
             "a reset forgets them"
         );
+    }
+}
+
+#[cfg(all(test, target_os = "linux", feature = "drm"))]
+mod peer_abs_sample_tests {
+    use super::*;
+
+    // The two writers share one static and libtest runs tests concurrently.
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn a_move_without_an_absolute_sample_forgets_the_last_one() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        note_peer_absolute_move(20, 30);
+        let s = last_peer_abs_sample().expect("an absolute move leaves a sample");
+        assert_eq!(s.pos, (20, 30));
+        assert!(s.age_ms < 1_000);
+        note_pointer_moved_without_absolute_sample();
+        assert_eq!(last_peer_abs_sample(), None);
+    }
+
+    #[test]
+    fn every_absolute_move_is_a_new_sample() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        note_peer_absolute_move(1, 1);
+        let a = last_peer_abs_sample().unwrap().seq;
+        note_peer_absolute_move(1, 1);
+        let b = last_peer_abs_sample().unwrap().seq;
+        assert!(b > a, "same point, distinct sample");
+        note_pointer_moved_without_absolute_sample();
+    }
+
+    #[test]
+    fn a_move_of_this_process_forgets_the_sample_of_a_peer_move_it_waited_for() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let mouse = std::sync::Arc::new(std::sync::Mutex::new(()));
+        note_peer_absolute_move(5, 5);
+        // The peer holds the mouse lock when the move of this process starts.
+        let peer = mouse.lock().unwrap();
+        let (asked, asking) = std::sync::mpsc::channel();
+        let m = mouse.clone();
+        let mover = std::thread::spawn(move || {
+            let lock = || {
+                asked.send(()).unwrap();
+                m.lock().unwrap()
+            };
+            forget_sample_and_move(lock, |_| {})
+        });
+        asking.recv().unwrap();
+        assert!(last_peer_abs_sample().is_some(), "nothing forgotten before the lock");
+        note_peer_absolute_move(50, 50);
+        drop(peer);
+        mover.join().unwrap();
+        assert_eq!(last_peer_abs_sample(), None, "the move of this process came last");
     }
 }
