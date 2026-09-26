@@ -196,10 +196,64 @@ pub(super) fn note_input_map_unknown() {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = None;
     note_input_map_adopted(u64::MAX);
 }
-/// The uinput range checks, applies and what they record run under this on the DRM paths: the
-/// layout poll and `update_uinput_resolution` run on different threads.
+/// Runs `job` on the one thread that checks, applies and records uinput ranges on the DRM paths,
+/// after every job asked for before it. Two applies must not overlap: the uinput service keeps the
+/// range of whichever request reached it last, and that must be the one recorded. The caller waits
+/// for the answer holding no lock; the job gets the runtime of that thread for its IPC.
 #[cfg(all(target_os = "linux", feature = "drm"))]
-pub(super) static UINPUT_APPLY: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+pub(super) fn run_uinput_apply<R: Send + 'static>(
+    job: impl FnOnce(&tokio::runtime::Runtime) -> R + Send + 'static,
+) -> tokio::sync::oneshot::Receiver<R> {
+    type Job = Box<dyn FnOnce(&tokio::runtime::Runtime) + Send>;
+    static JOBS: Mutex<Option<std::sync::mpsc::Sender<Job>>> = Mutex::new(None);
+    fn start() -> Option<std::sync::mpsc::Sender<Job>> {
+        let (tx, rx) = std::sync::mpsc::channel::<Job>();
+        let spawned = std::thread::Builder::new()
+            .name("uinput-apply".to_owned())
+            .spawn(move || {
+                let rt = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => rt,
+                    Err(err) => {
+                        log::error!("uinput apply thread: failed to build a runtime: {err}");
+                        return;
+                    }
+                };
+                for job in rx {
+                    job(&rt);
+                }
+            });
+        match spawned {
+            Ok(_) => Some(tx),
+            Err(err) => {
+                log::error!("failed to start the uinput apply thread: {err}");
+                None
+            }
+        }
+    }
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let job: Job = Box::new(move |rt| {
+        let _ = tx.send(job(rt));
+    });
+    // A thread that never started or is gone is started again when a job finds it gone, so one
+    // failure does not stop every later apply. A job that cannot be sent, or that was queued as the
+    // thread went away, is dropped with its `tx`, and the caller reads an error.
+    let mut jobs = JOBS.lock().unwrap();
+    let job = match jobs.as_ref() {
+        Some(sender) => match sender.send(job) {
+            Ok(()) => return rx,
+            Err(std::sync::mpsc::SendError(job)) => job,
+        },
+        None => job,
+    };
+    *jobs = start();
+    if let Some(tx) = jobs.as_ref() {
+        let _ = tx.send(job);
+    }
+    rx
+}
 /// The generation a range is recorded under: none for the raw DRM union, which is not a compositor
 /// layout any stream was built from.
 #[cfg(all(target_os = "linux", feature = "drm"))]
@@ -323,67 +377,101 @@ fn refresh_wayland_uinput_rect_if_changed() {
     // the overall bounding box. Only enable the remap once the range matches the live
     // layout, otherwise moves would be remapped into a range the device is not yet using.
     // A drift with no bbox change (origins swapped) needs no range update and enables now.
+    // The check, the apply, what they record and the flag below run on the uinput apply thread,
+    // in turn with the other paths; this loop waits for its answer.
     #[cfg(feature = "drm")]
-    let _apply = UINPUT_APPLY.blocking_lock();
-    let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
-    // The device already runs a range that fits this layout: the DRM calibration may measure.
-    #[cfg(feature = "drm")]
-    if range_ok {
-        note_input_map_ready(scrap::wayland::display::wayland_snapshot_generation());
-    }
-    // At a login screen the DRM path owns the rect; only the range/remap update is skipped,
-    // the snapshot invalidation above must still run (a greeter session has no other trigger).
-    #[cfg(feature = "drm")]
-    if crate::platform::linux::is_login_screen_wayland_cached() {
-        return;
-    }
-    if !range_ok {
-        let (minx, maxx, miny, maxy) = rect;
-        log::info!(
-            "desktop layout changed, update mouse resolution: ({}, {}), ({}, {})",
-            minx,
-            maxx,
-            miny,
-            maxy
-        );
-        #[cfg(feature = "drm")]
-        note_input_map_unknown();
-        match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => {
-                // Bound the IPC wait, this runs on the display service loop and
-                // `set_resolution()` has no timeout on the response read.
-                // timeout must be built inside the runtime, or it panics
-                // "there is no reactor running". See clipboard_service.rs.
-                match rt.block_on(async {
-                    timeout(
-                        3_000,
-                        crate::input_service::update_mouse_resolution(minx, maxx, miny, maxy),
-                    )
-                    .await
-                }) {
-                    // Record the rect only after a successful apply, so a transient
-                    // failure is retried on the next check.
-                    Ok(Ok(())) => {
-                        WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
-                        #[cfg(feature = "drm")]
-                        note_input_map_adopted(scrap::wayland::display::wayland_snapshot_generation());
-                        range_ok = true;
-                    }
-                    Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
-                    Err(err) => log::error!("Failed to update mouse resolution: {}", err),
+    let _ = run_uinput_apply(move |rt| {
+        let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
+        // The device already runs a range that fits this layout: the DRM calibration may measure.
+        if range_ok {
+            note_input_map_ready(scrap::wayland::display::wayland_snapshot_generation());
+        }
+        // At a login screen the DRM path owns the rect; only the range/remap update is skipped,
+        // the snapshot invalidation above must still run (a greeter session has no other trigger).
+        if crate::platform::linux::is_login_screen_wayland_cached() {
+            return;
+        }
+        if !range_ok {
+            let (minx, maxx, miny, maxy) = rect;
+            log::info!(
+                "desktop layout changed, update mouse resolution: ({}, {}), ({}, {})",
+                minx,
+                maxx,
+                miny,
+                maxy
+            );
+            note_input_map_unknown();
+            // Bound the IPC wait: `set_resolution()` has no timeout on the response read.
+            match rt.block_on(async {
+                timeout(
+                    3_000,
+                    crate::input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+                )
+                .await
+            }) {
+                // Record the rect only after a successful apply, so a transient
+                // failure is retried on the next check.
+                Ok(Ok(())) => {
+                    WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
+                    note_input_map_adopted(scrap::wayland::display::wayland_snapshot_generation());
+                    range_ok = true;
                 }
-            }
-            Err(err) => {
-                log::error!("Failed to build tokio runtime: {}", err);
+                Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
+                Err(err) => log::error!("Failed to update mouse resolution: {}", err),
             }
         }
+        // Publish the flag last: a `true` read is always backed by a current `live` and a
+        // matching uinput range. A failed range apply leaves this false and retries next poll.
+        WAYLAND_LAYOUT_DRIFTED.store(drifted && range_ok, Ordering::Relaxed);
+    })
+    .blocking_recv();
+    #[cfg(not(feature = "drm"))]
+    {
+        let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
+        if !range_ok {
+            let (minx, maxx, miny, maxy) = rect;
+            log::info!(
+                "desktop layout changed, update mouse resolution: ({}, {}), ({}, {})",
+                minx,
+                maxx,
+                miny,
+                maxy
+            );
+            match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => {
+                    // Bound the IPC wait, this runs on the display service loop and
+                    // `set_resolution()` has no timeout on the response read.
+                    // timeout must be built inside the runtime, or it panics
+                    // "there is no reactor running". See clipboard_service.rs.
+                    match rt.block_on(async {
+                        timeout(
+                            3_000,
+                            crate::input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+                        )
+                        .await
+                    }) {
+                        // Record the rect only after a successful apply, so a transient
+                        // failure is retried on the next check.
+                        Ok(Ok(())) => {
+                            WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
+                            range_ok = true;
+                        }
+                        Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
+                        Err(err) => log::error!("Failed to update mouse resolution: {}", err),
+                    }
+                }
+                Err(err) => {
+                    log::error!("Failed to build tokio runtime: {}", err);
+                }
+            }
+        }
+        // Publish the flag last: a `true` read is always backed by a current `live` and a
+        // matching uinput range. A failed range apply leaves this false and retries next poll.
+        WAYLAND_LAYOUT_DRIFTED.store(drifted && range_ok, Ordering::Relaxed);
     }
-    // Publish the flag last: a `true` read is always backed by a current `live` and a
-    // matching uinput range. A failed range apply leaves this false and retries next poll.
-    WAYLAND_LAYOUT_DRIFTED.store(drifted && range_ok, Ordering::Relaxed);
 }
 
 // https://github.com/rustdesk/rustdesk/pull/8537
@@ -934,7 +1022,7 @@ mod tests {
 mod input_map_tests {
     use super::{
         input_map_epoch, input_map_gen, input_map_label, note_input_map_adopted,
-        note_input_map_ready, note_input_map_unknown, set_wayland_uinput_rect,
+        note_input_map_ready, note_input_map_unknown, run_uinput_apply, set_wayland_uinput_rect,
         wayland_uinput_rect,
     };
 
@@ -971,6 +1059,62 @@ mod input_map_tests {
             (42, before + 1),
             "a range that already fits is not an adoption"
         );
+    }
+
+    // The apply thread is process-wide, and one test kills it on purpose.
+    static WORKER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn uinput_applies_run_one_at_a_time_in_the_order_asked() {
+        let _worker = WORKER.lock().unwrap_or_else(|p| p.into_inner());
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let answers: Vec<_> = (0..4)
+            .map(|i| {
+                let log = log.clone();
+                run_uinput_apply(move |_| {
+                    log.lock().unwrap().push(("start", i));
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    log.lock().unwrap().push(("end", i));
+                    i * 10
+                })
+            })
+            .collect();
+        let got: Vec<i32> = answers
+            .into_iter()
+            .map(|a| a.blocking_recv().unwrap())
+            .collect();
+        assert_eq!(got, vec![0, 10, 20, 30]);
+        let want: Vec<_> = (0..4).flat_map(|i| [("start", i), ("end", i)]).collect();
+        assert_eq!(*log.lock().unwrap(), want, "one job at a time, in order");
+    }
+
+    #[test]
+    fn a_uinput_apply_job_can_bound_its_ipc_with_a_timeout() {
+        let _worker = WORKER.lock().unwrap_or_else(|p| p.into_inner());
+        let timed_out = run_uinput_apply(|rt| {
+            rt.block_on(async {
+                hbb_common::timeout(10, std::future::pending::<()>())
+                    .await
+                    .is_err()
+            })
+        });
+        assert!(timed_out.blocking_recv().unwrap());
+    }
+
+    #[test]
+    fn a_uinput_apply_thread_that_died_is_started_again() {
+        let _worker = WORKER.lock().unwrap_or_else(|p| p.into_inner());
+        let died = run_uinput_apply(|_| panic!("the apply thread dies here"));
+        assert!(died.blocking_recv().is_err(), "the job that killed it has no answer");
+        // A job asked while the dying thread still unwinds is lost with it; a later one runs.
+        let answered = (0..50).find_map(|_| {
+            let answer = run_uinput_apply(|_| 7).blocking_recv().ok();
+            if answer.is_none() {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            answer
+        });
+        assert_eq!(answered, Some(7));
     }
 }
 
