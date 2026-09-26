@@ -13,6 +13,8 @@ import 'package:flutter_hbb/models/input_model.dart';
 
 import './gestures.dart';
 
+export './gestures.dart' show isSpecialHoldDragActive;
+
 class RawKeyFocusScope extends StatelessWidget {
   final FocusNode? focusNode;
   final ValueChanged<bool>? onFocusChange;
@@ -51,10 +53,6 @@ class RawKeyFocusScope extends StatelessWidget {
   }
 }
 
-// For virtual mouse when using the mouse mode on mobile.
-// Special hold-drag mode: one finger holds a button (left/right button), another finger pans.
-// This flag is to override the scale gesture to a pan gesture.
-bool isSpecialHoldDragActive = false;
 // Cache the last focal point to calculate deltas in special hold-drag mode.
 Offset _lastSpecialHoldDragFocalPoint = Offset.zero;
 
