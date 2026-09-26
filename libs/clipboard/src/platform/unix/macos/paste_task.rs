@@ -4,6 +4,8 @@ use crate::{
 };
 use base::fs::join_validated_path;
 use hbb_common::{allow_err, log, tokio::time::Instant};
+use objc2::rc::Id;
+use objc2_foundation::NSProgress;
 use std::{
     cmp::min,
     fs::{File, FileTimes, OpenOptions},
@@ -15,7 +17,7 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 const RECV_RETRY_TIMES: usize = 3;
@@ -23,13 +25,14 @@ const RECV_RETRY_TIMES: usize = 3;
 const DOWNLOAD_EXTENSION: &str = "rddownload";
 const RECEIVE_WAIT_TIMEOUT: Duration = Duration::from_millis(5_000);
 
-// https://stackoverflow.com/a/15112784/1926020
-// "1984-01-24 08:00:00 +0000"
-const TIMESTAMP_FOR_FILE_PROGRESS_COMPLETED: u64 = 443779200;
-const ATTR_PROGRESS_FRACTION_COMPLETED: &str = "com.apple.progress.fractionCompleted";
-
 fn create_new_file(path: impl AsRef<Path>) -> std::io::Result<File> {
     OpenOptions::new().write(true).create_new(true).open(path)
+}
+
+fn finder_progress_byte_count(bytes: u64) -> Result<i64, CliprdrError> {
+    i64::try_from(bytes).map_err(|_| CliprdrError::InvalidRequest {
+        description: format!("File progress byte count exceeds i64::MAX: {bytes}"),
+    })
 }
 
 pub struct FileContentsResponse {
@@ -53,6 +56,7 @@ struct PasteTaskProgress {
     download_file_path: String,
     download_file_current_size: u64,
     file_handle: Option<BufWriter<File>>,
+    finder_progress: Option<Id<NSProgress>>,
     error: Option<CliprdrError>,
     is_canceled: bool,
 }
@@ -116,6 +120,7 @@ impl PasteTask {
                 download_file_path: "".to_owned(),
                 download_file_current_size: 0,
                 file_handle: None,
+                finder_progress: None,
                 error: None,
                 is_canceled: false,
             },
@@ -318,7 +323,7 @@ impl PasteTaskHandle {
         } else {
             self.progress.offset += size;
             self.progress.download_file_current_size += size;
-            self.update_progress_completed(None);
+            self.update_progress_completed(None)?;
         }
         if self.progress.file_handle.is_none() {
             self.progress.list_index = self.files.len() as i32;
@@ -329,44 +334,52 @@ impl PasteTaskHandle {
         Ok(())
     }
 
-    fn start_progress_completed(&self) {
-        if let Some(file) = self.progress.file_handle.as_ref() {
-            let creation_time =
-                SystemTime::UNIX_EPOCH + Duration::from_secs(TIMESTAMP_FOR_FILE_PROGRESS_COMPLETED);
-            file.get_ref()
-                .set_times(FileTimes::new().set_created(creation_time))
-                .ok();
-            xattr::set(
-                &self.progress.download_file_path,
-                ATTR_PROGRESS_FRACTION_COMPLETED,
-                "0.0".as_bytes(),
-            )
-            .ok();
-        }
+    fn start_progress_completed(&mut self) -> Result<(), CliprdrError> {
+        use objc2::rc::autoreleasepool;
+        use objc2_foundation::{
+            NSProgressFileOperationKindDownloading, NSProgressKindFile, NSString, NSURL,
+        };
+
+        let total_bytes = finder_progress_byte_count(self.progress.download_file_size)?;
+        // Finder can retain the legacy timestamp/xattr indicator after a single-chunk transfer.
+        autoreleasepool(|_| unsafe {
+            let progress = NSProgress::discreteProgressWithTotalUnitCount(total_bytes);
+            let url =
+                NSURL::fileURLWithPath(&NSString::from_str(&self.progress.download_file_path));
+            progress.setKind(Some(NSProgressKindFile));
+            progress.setFileOperationKind(Some(NSProgressFileOperationKindDownloading));
+            progress.setFileURL(Some(&url));
+            progress.setCancellable(false);
+            progress.setPausable(false);
+            progress.publish();
+            self.progress.finder_progress = Some(progress);
+        });
+        Ok(())
     }
 
-    fn update_progress_completed(&mut self, fraction_completed: Option<f64>) {
-        let fraction_completed = fraction_completed.unwrap_or_else(|| {
-            let current_size = self.progress.download_file_current_size as f64;
-            let total_size = self.progress.download_file_size as f64;
-            if total_size > 0.0 {
-                current_size / total_size
-            } else {
-                1.0
-            }
-        });
-        xattr::set(
-            &self.progress.download_file_path,
-            ATTR_PROGRESS_FRACTION_COMPLETED,
-            &fraction_completed.to_string().as_bytes(),
-        )
-        .ok();
+    fn update_progress_completed(
+        &mut self,
+        completed_bytes: Option<u64>,
+    ) -> Result<(), CliprdrError> {
+        use objc2::rc::autoreleasepool;
+
+        let completed_bytes = finder_progress_byte_count(
+            completed_bytes.unwrap_or(self.progress.download_file_current_size),
+        )?;
+        if let Some(progress) = self.progress.finder_progress.as_ref() {
+            autoreleasepool(|_| unsafe {
+                progress.setCompletedUnitCount(completed_bytes);
+            });
+        }
+        Ok(())
     }
 
     #[inline]
-    fn remove_progress_completed(path: &str) {
-        if !path.is_empty() {
-            xattr::remove(path, ATTR_PROGRESS_FRACTION_COMPLETED).ok();
+    fn remove_progress_completed(&mut self) {
+        use objc2::rc::autoreleasepool;
+
+        if let Some(progress) = self.progress.finder_progress.take() {
+            autoreleasepool(|_| unsafe { progress.unpublish() });
         }
     }
 
@@ -416,7 +429,7 @@ impl PasteTaskHandle {
                 self.progress.download_file_path = download_file_path;
                 self.progress.download_file_current_size = 0;
                 self.progress.file_handle = Some(writer);
-                self.start_progress_completed();
+                self.start_progress_completed()?;
             }
             Err(e) => {
                 self.progress.error = Some(CliprdrError::FileError {
@@ -522,14 +535,12 @@ impl PasteTaskHandle {
     }
 
     fn on_cancelled(&mut self) {
+        self.remove_progress_completed();
         self.progress.file_handle = None;
         std::fs::remove_file(&self.progress.download_file_path).ok();
     }
 
     fn on_done(&mut self) -> Result<(), CliprdrError> {
-        self.update_progress_completed(Some(1.0));
-        Self::remove_progress_completed(&self.progress.download_file_path);
-
         let Some(file) = self.progress.file_handle.as_mut() else {
             return Ok(());
         };
@@ -542,6 +553,11 @@ impl PasteTaskHandle {
             log::error!("Failed to flush file: {:?}", e);
         }
         self.progress.file_handle = None;
+        // Updating or unpublishing after rename can leave stale Finder/Dock progress.
+        // https://crbug.com/40217637
+        // https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/download/download_status_updater_mac.mm
+        self.update_progress_completed(Some(self.progress.download_file_size))?;
+        self.remove_progress_completed();
 
         let Some(file_desc) = self.files.get(self.progress.download_file_index as usize) else {
             // unreachable
@@ -670,10 +686,16 @@ impl PasteTaskHandle {
     }
 }
 
+impl Drop for PasteTaskHandle {
+    fn drop(&mut self) {
+        self.remove_progress_completed();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::symlink;
+    use std::{os::unix::fs::symlink, time::SystemTime};
 
     struct TestDirectory(PathBuf);
 
@@ -721,12 +743,82 @@ mod tests {
                 download_file_path: String::new(),
                 download_file_current_size: 0,
                 file_handle: None,
+                finder_progress: None,
                 error: None,
                 is_canceled: false,
             },
             target_dir,
             files,
         }
+    }
+
+    #[test]
+    fn finder_progress_completes_single_response_transfer() {
+        let (_temp, target, _) = test_directories();
+        let data = b"single response";
+        let file = file_description("small.txt", FileType::File, data.len() as u64);
+        let mut task = paste_task_handle(target.clone(), vec![file]);
+        task.update_next(0).unwrap();
+        let download_path = PathBuf::from(&task.progress.download_file_path);
+        let progress = task.progress.finder_progress.as_ref().unwrap().clone();
+        assert_eq!(unsafe { progress.completedUnitCount() }, 0);
+
+        task.handle_file_contents_response(FileContentsResponse {
+            conn_id: 0,
+            msg_flags: 1,
+            stream_id: 0,
+            requested_data: data.to_vec(),
+        })
+        .unwrap();
+
+        unsafe {
+            assert_eq!(progress.totalUnitCount(), data.len() as i64);
+            assert_eq!(progress.completedUnitCount(), progress.totalUnitCount());
+            assert!(progress.isFinished());
+        }
+        assert!(task.progress.finder_progress.is_none());
+        assert!(task.progress.file_handle.is_none());
+        assert!(task.is_finished());
+        assert!(task.progress.error.is_none());
+        assert!(!download_path.exists());
+        assert_eq!(std::fs::read(target.join("small.txt")).unwrap(), data);
+    }
+
+    #[test]
+    fn finder_progress_reports_bytes_below_one_percent() {
+        let (_temp, target, _) = test_directories();
+        let size = u32::MAX as u64 + 1;
+        let file = file_description("large.bin", FileType::File, size);
+        let mut task = paste_task_handle(target, vec![file]);
+        task.update_next(0).unwrap();
+        task.handle_file_contents_response(FileContentsResponse {
+            conn_id: 0,
+            msg_flags: 1,
+            stream_id: 0,
+            requested_data: vec![1],
+        })
+        .unwrap();
+
+        let progress = task.progress.finder_progress.as_ref().unwrap();
+        unsafe {
+            assert_eq!(progress.totalUnitCount(), size as i64);
+            assert_eq!(progress.completedUnitCount(), 1);
+        }
+        task.on_cancelled();
+        assert!(task.progress.finder_progress.is_none());
+        assert!(!Path::new(&task.progress.download_file_path).exists());
+    }
+
+    #[test]
+    fn finder_progress_rejects_unrepresentable_byte_count() {
+        let (_temp, target, _) = test_directories();
+        let file = file_description("large.bin", FileType::File, i64::MAX as u64 + 1);
+        let mut task = paste_task_handle(target.clone(), vec![file]);
+        let error = task.update_next(0).expect_err("byte count must not wrap");
+        assert!(matches!(&error, CliprdrError::InvalidRequest { .. }));
+        task.on_error(error);
+        assert!(task.progress.finder_progress.is_none());
+        assert!(std::fs::read_dir(target).unwrap().next().is_none());
     }
 
     #[test]
