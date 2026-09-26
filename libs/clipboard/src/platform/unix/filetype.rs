@@ -238,6 +238,7 @@ mod tests {
     const PDU_HEADER_SIZE: usize = size_of::<u32>();
     const DESCRIPTOR_SIZE: usize = 592;
     const ATTRIBUTES_OFFSET: usize = PDU_HEADER_SIZE + 36;
+    const LAST_WRITE_TIME_OFFSET: usize = PDU_HEADER_SIZE + 56;
     const NAME_OFFSET: usize = PDU_HEADER_SIZE + 72;
     const FILE_NAME_CODE_UNITS: usize = 260;
     const INVALID_UTF16_UNIT: u16 = 0xdc00;
@@ -321,5 +322,28 @@ mod tests {
             parse_name(&name),
             Err(CliprdrError::InvalidRequest { .. })
         ));
+    }
+
+    fn parse_last_write_time(filetime: u64) -> SystemTime {
+        let mut pdu = descriptor_pdu("file.txt");
+        pdu[PDU_HEADER_SIZE..PDU_HEADER_SIZE + size_of::<u32>()]
+            .copy_from_slice(&(FLAGS_FD_ATTRIBUTES | FLAGS_FD_LAST_WRITE).to_le_bytes());
+        pdu[LAST_WRITE_TIME_OFFSET..LAST_WRITE_TIME_OFFSET + size_of::<u64>()]
+            .copy_from_slice(&filetime.to_le_bytes());
+        FileDescription::parse_file_descriptors(pdu, 0).unwrap()[0].last_modified
+    }
+
+    #[test]
+    fn decodes_last_write_time_from_windows_filetime() {
+        // 2023-11-14 22:13:20 UTC
+        assert_eq!(
+            parse_last_write_time(133_444_736_000_000_000),
+            SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000)
+        );
+        // 1969-12-31 23:59:59 UTC falls back to the Unix epoch.
+        assert_eq!(
+            parse_last_write_time(116_444_736_000_000_000 - 10_000_000),
+            SystemTime::UNIX_EPOCH
+        );
     }
 }
