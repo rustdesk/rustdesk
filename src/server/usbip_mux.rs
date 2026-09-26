@@ -150,18 +150,20 @@ impl UsbipMux {
                     ));
                     return;
                 }
-                // A device the CLI or another session shared stays as it is:
-                // a share request for it succeeds without `usbip bind` (which
-                // would fail on it) and without this session owning it, and
-                // an unshare request leaves it shared.
-                let foreign = if b.bind {
-                    shared_bus_ids().contains(&b.bus_id)
-                } else {
-                    !is_bound(&self.bound, &b.bus_id)
-                };
-                if foreign {
-                    log::info!("usbip: {} is shared outside this session, leaving it as is", b.bus_id);
+                // The peer may only pull what this session shared (`on_open`),
+                // so a device the CLI or another session shared is refused
+                // rather than adopted, and an unshare request leaves it shared.
+                if is_bound(&self.bound, &b.bus_id) == b.bind {
                     self.reply(bind_result_msg(b.bus_id, b.bind, String::new()));
+                    return;
+                }
+                if b.bind && shared_bus_ids().contains(&b.bus_id) {
+                    log::info!("usbip: {} is shared outside this session, refusing", b.bus_id);
+                    self.reply(bind_result_msg(
+                        b.bus_id,
+                        b.bind,
+                        "The USB device is already shared outside this session".into(),
+                    ));
                     return;
                 }
                 if self.bound.lock().unwrap().is_none() {
@@ -270,6 +272,18 @@ impl UsbipMux {
             self.reply(opened_msg(id, false, "No permission of USB forwarding".into()));
             return;
         }
+        if !is_bound(&self.bound, &open.bus_id) {
+            log::warn!(
+                "usb forward: rejecting open of {:?}, not shared by this session",
+                open.bus_id
+            );
+            self.reply(opened_msg(
+                id,
+                false,
+                "USB device not shared by this session".into(),
+            ));
+            return;
+        }
         if self.channels.contains_key(&id) {
             log::debug!("ignoring open for live usb channel {}", id);
             return;
@@ -288,7 +302,7 @@ impl UsbipMux {
                 flow: flow.clone(),
             },
         );
-        tokio::spawn(run_channel(id, inbound_rx, self.tx.clone(), flow));
+        tokio::spawn(run_channel(id, open.bus_id, inbound_rx, self.tx.clone(), flow));
     }
 
     fn reply(&self, msg: Message) {
@@ -326,7 +340,15 @@ fn send(tx: &Sender, msg: Message) {
 
 /// One forwarded USB/IP TCP connection: dial the local `usbipd`, relay bytes
 /// both ways until either side closes.
-async fn run_channel(id: i32, mut inbound: mpsc::Receiver<Bytes>, tx: Sender, flow: Flow) {
+/// `bus_id` is the device `on_open` authorized; the `OP_REQ_IMPORT` the peer
+/// sends must name it, or nothing reaches `usbipd`.
+async fn run_channel(
+    id: i32,
+    bus_id: String,
+    mut inbound: mpsc::Receiver<Bytes>,
+    tx: Sender,
+    flow: Flow,
+) {
     let socket = match timeout(CONNECT_TIMEOUT_MS, TcpStream::connect(USBIPD_ADDR)).await {
         Ok(Ok(s)) => s,
         Ok(Err(e)) => {
@@ -342,6 +364,42 @@ async fn run_channel(id: i32, mut inbound: mpsc::Receiver<Bytes>, tx: Sender, fl
         return;
     }
     let (reader, mut writer) = socket.into_split();
+    let mut prefix = Vec::with_capacity(usbip_flow::USBIP_OP_REQ_IMPORT_LEN);
+    // Each frame was charged separately against the peer's window, so its
+    // credit is returned per frame too.
+    let mut prefix_frames = Vec::new();
+    while prefix.len() < usbip_flow::USBIP_OP_REQ_IMPORT_LEN {
+        match timeout(usbip_flow::IMPORT_REQUEST_TIMEOUT_MS, inbound.recv()).await {
+            Ok(Some(chunk)) => {
+                prefix_frames.push(chunk.len());
+                prefix.extend_from_slice(&chunk);
+            }
+            Ok(None) => return,
+            Err(_) => {
+                log::warn!("usb forward: channel {} import request timed out, closing", id);
+                send(&tx, close_msg(id));
+                return;
+            }
+        }
+    }
+    let requested = usbip_flow::parse_import_request_busid(&prefix);
+    if requested.as_deref() != Some(bus_id.as_str()) {
+        log::error!(
+            "usb forward: channel {} import request {:?} does not match authorized {:?}, refusing",
+            id, requested, bus_id
+        );
+        send(&tx, close_msg(id));
+        return;
+    }
+    if writer.write_all(&prefix).await.is_err() {
+        send(&tx, close_msg(id));
+        return;
+    }
+    for len in prefix_frames {
+        if let Some(add) = flow.drained(len) {
+            send(&tx, usbip_flow::window_update_msg(id, add));
+        }
+    }
     let tx_read = tx.clone();
     let flow_read = flow.clone();
     let mut to_tunnel = tokio::spawn(async move {
@@ -670,6 +728,29 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
         mux.handle(bind_frame("99-9"), || true);
         assert!(!bind_reply(&mut rx).error.is_empty());
         assert_eq!(privileged.available_permits(), 1);
+    }
+
+    #[test]
+    fn on_open_rejects_device_not_shared_by_this_session() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut mux = UsbipMux::new(tx, Arc::new(Semaphore::new(1)));
+        mux.on_open(
+            UsbForwardOpen {
+                channel_id: 1,
+                bus_id: "1-1".into(),
+                ..Default::default()
+            },
+            true,
+        );
+        assert!(mux.channels.is_empty());
+        let (_, msg) = rx.try_recv().unwrap();
+        match &msg.union {
+            Some(message::Union::UsbChannel(ch)) => match &ch.union {
+                Some(usb_channel::Union::Opened(o)) => assert!(!o.success),
+                _ => panic!("expected an Opened"),
+            },
+            _ => panic!("expected a UsbChannel message"),
+        }
     }
 
     #[test]
