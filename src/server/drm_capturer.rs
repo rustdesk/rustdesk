@@ -26,8 +26,9 @@ const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + DISPLAY_LIST_TIMEOUT_MS 
 const BODY_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct FrameSlot {
-    // Row stride is `pixels.len() / height`, possibly padded; the format is per frame.
-    latest: Option<(usize, usize, Pixfmt, Vec<u8>)>,
+    // Row stride is `pixels.len() / height`, possibly padded; the format and the plane rotation
+    // the producer read for this frame (`DmabufDesc::plane_rotation`) are per frame.
+    latest: Option<(usize, usize, Pixfmt, Option<u32>, Vec<u8>)>,
     // TWO slots: two buffers can be idle at once -- the receive path takes one and publishes in two
     // SEPARATE acquisitions, so the encoder can hand its borrow back in between.
     free: [Option<Vec<u8>>; 2],
@@ -35,11 +36,18 @@ struct FrameSlot {
 }
 
 impl FrameSlot {
-    fn publish(&mut self, w: usize, h: usize, fmt: Pixfmt, buf: Vec<u8>) {
+    fn publish(
+        &mut self,
+        w: usize,
+        h: usize,
+        fmt: Pixfmt,
+        plane_rotation: Option<u32>,
+        buf: Vec<u8>,
+    ) {
         if let Some((.., old)) = self.latest.take() {
             self.recycle(old);
         }
-        self.latest = Some((w, h, fmt, buf));
+        self.latest = Some((w, h, fmt, plane_rotation, buf));
     }
 
     fn recycle(&mut self, buf: Vec<u8>) {
@@ -65,9 +73,9 @@ struct Shared {
     // the cursor needs it across threads: it differs from the angle the FRAME is turned by on a
     // hardware-rotated 180 output, where the primary plane scans out upright but the compositor
     // still pre-rotates the sprite (measured on i915 + mutter: the frame arrived upright and the
-    // sprite upside down). The frame's own angle is not shared - it is fixed for the session and
-    // lives on the capturer that uses it. The receive thread defers any cursor that races the
-    // store.
+    // sprite upside down). The frame's own angle is not shared: `frame()` computes it per frame
+    // from the output transform and the plane rotation stamped on the frame. The receive thread
+    // defers any cursor that races the store.
     cursor_transform: std::sync::atomic::AtomicI32,
     // The cursor calibration geometry, from the same snapshot as the transform and stored before
     // it: a receive thread that has seen the transform sees this too. `None` means this stream
@@ -83,8 +91,9 @@ pub struct IpcDrmCapturer {
     // What the encoder was sized from: CapturerInfo{width,height} is read once, at build time.
     // With a rotated output these are the ROTATED dimensions, matching the frames delivered.
     session_size: Option<(usize, usize)>,
-    // Output rotation in degrees: a rotated scanout holds the desktop drawn sideways, so frames
-    // are turned back before delivery. Fixed per session; a rotation rebuilds the capturer.
+    // Output transform in degrees, from the wayland snapshot; each frame is turned back by it
+    // unless the plane rotated the scanout (`frame_transform`). Fixed per session; a rotation
+    // rebuilds the capturer.
     transform: i32,
     // The wayland snapshot generation this session was built from: a later invalidation means
     // the layout (a rotation included) may have changed, and frame() asks for a rebuild.
@@ -193,15 +202,34 @@ fn transform_and_origin(
     (transform, origin)
 }
 
-/// The angle the FRAME has to be turned back by. Hardware-rotated 180 scans out already upright
-/// (i915 advertises rotate-180 and mutter uses it), and wl_output cannot tell hardware from
-/// software rotation, so 180 keeps master behavior until the plane rotation property travels
-/// the wire. The cursor does not go through this: see `Shared::cursor_transform`.
-fn frame_transform(wl_transform: i32) -> i32 {
-    if wl_transform == 90 || wl_transform == 270 {
-        wl_transform
-    } else {
-        0
+/// The DRM `rotation` value of a plane that did not rotate or reflect anything.
+const PLANE_ROTATE_0: u32 = 0x1;
+
+/// The angle the FRAME has to be turned back by.
+///
+/// A compositor rotates an output either in hardware, setting the primary plane's `rotation`
+/// (i915 + mutter at 180, measured: the scanout is upright and the plane reports rotate-180), or
+/// in software, drawing the scanout already turned (virtio-gpu and vmwgfx have no such property,
+/// KWin leaves the amdgpu plane at rotate-0; measured: 180 comes out upside down and 90/270
+/// sideways inside the native mode). `wl_output` cannot tell the two apart; `plane_rotation` can.
+/// A plane that rotated scans out the logical desktop whatever the output transform says: the
+/// compositor programs it from the CRTC transform, which also folds in the connector's panel
+/// orientation that `wl_output` never carries, so the two are not subtracted. A plane at rotate-0
+/// (a plane without the property arrives as rotate-0, see `DrmReader::plane_rotation`) scanned
+/// out what the compositor drew, and the frame is turned by the whole transform. `None` (a
+/// libdrmtap before 0.5.8, or nothing the library could read) keeps the pre-0.5.8 rule: 90/270
+/// turned, 180 left alone. The cursor does not go through this: see `Shared::cursor_transform`.
+fn frame_transform(wl_transform: i32, plane_rotation: Option<u32>) -> i32 {
+    match plane_rotation {
+        Some(mask) if mask != PLANE_ROTATE_0 => 0,
+        Some(_) => wl_transform,
+        None => {
+            if wl_transform == 90 || wl_transform == 270 {
+                wl_transform
+            } else {
+                0
+            }
+        }
     }
 }
 
@@ -369,7 +397,6 @@ impl IpcDrmCapturer {
         let snapshot_gen = scrap::wayland::display::wayland_snapshot_generation();
         let wl = scrap::wayland::display::get_displays();
         let (wl_transform, origin) = transform_and_origin(&displays, wire_idx, &wl);
-        let transform = frame_transform(wl_transform);
         // Same snapshot as the transform, stored BEFORE the transform's Release store below.
         let cal = calibration_context(&displays, wire_idx, &wl, snapshot_gen);
         log::info!(
@@ -391,8 +418,8 @@ impl IpcDrmCapturer {
                 connector: displays.get(wire_idx).map(connector_key),
                 session_size: displays
                     .get(wire_idx)
-                    .map(|d| rotated_dims(transform, d.width as usize, d.height as usize)),
-                transform,
+                    .map(|d| rotated_dims(wl_transform, d.width as usize, d.height as usize)),
+                transform: wl_transform,
                 snapshot_gen,
                 cur: Vec::new(),
                 cur_w: 0,
@@ -458,7 +485,7 @@ impl TraitCapturer for IpcDrmCapturer {
                     self.shared.cv.wait_timeout(slot, deadline - now).unwrap();
                 slot = guard;
             }
-            if let Some((w, h, fmt, buf)) = slot.latest.take() {
+            if let Some((w, h, fmt, plane_rotation, buf)) = slot.latest.take() {
                 drop(slot);
                 // A layout change bumps the generation and is otherwise invisible here (mode
                 // and framebuffer keep their size). Rebuild for the new transform; not counted
@@ -470,10 +497,16 @@ impl TraitCapturer for IpcDrmCapturer {
                         format!("drm: display {} layout changed; rebuilding", self.display),
                     ));
                 }
-                // Frames arrive in scanout orientation, the session was sized rotated, so the
-                // guard compares rotated dims. convert_to_yuv only refuses a LARGER source (a
-                // smaller one leaves stale edges); first frame: CRTC mode vs scanout fb.
-                let (fw, fh) = rotated_dims(self.transform, w, h);
+                // The angle this frame still has to be turned by: the output transform, unless
+                // the plane rotated the scanout itself (per frame, since only the producer can
+                // see the plane). Frames arrive in scanout orientation, the session was
+                // sized rotated, so the guard compares rotated dims: a plane that rotated 90 in
+                // hardware hands over a portrait scanout and `t` is 0, a plane that did not hands
+                // over the landscape mode and `t` is 90; both land on the session size.
+                // convert_to_yuv only refuses a LARGER source (a smaller one leaves stale edges);
+                // first frame: CRTC mode vs scanout fb.
+                let t = frame_transform(self.transform, plane_rotation);
+                let (fw, fh) = rotated_dims(t, w, h);
                 if self.session_size.is_some_and(|(sw, sh)| (fw, fh) != (sw, sh)) {
                     self.shared.slot.lock().unwrap().recycle(buf);
                     if !self.got_frame {
@@ -493,7 +526,7 @@ impl TraitCapturer for IpcDrmCapturer {
                         ),
                     ));
                 }
-                if self.transform == 0 {
+                if t == 0 {
                     let previous = std::mem::replace(&mut self.cur, buf);
                     self.shared.slot.lock().unwrap().recycle(previous);
                 } else if !matches!(fmt, Pixfmt::BGRA | Pixfmt::RGBA) {
@@ -512,7 +545,7 @@ impl TraitCapturer for IpcDrmCapturer {
                         ),
                     ));
                 } else {
-                    unrotate_bgra(&buf, w, h, self.transform, &mut self.cur);
+                    unrotate_bgra(&buf, w, h, t, &mut self.cur);
                     self.shared.slot.lock().unwrap().recycle(buf);
                 }
                 self.cur_w = fw;
@@ -737,7 +770,7 @@ async fn recv_thread(
                         buf.clear();
                         buf.extend_from_slice(data);
                         let mut slot = shared.slot.lock().unwrap();
-                        slot.publish(w as usize, h as usize, fmt, buf);
+                        slot.publish(w as usize, h as usize, fmt, desc.plane_rotation, buf);
                         shared.cv.notify_one();
                     }
                     Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
@@ -756,6 +789,7 @@ async fn recv_thread(
             Data::DrmFrame {
                 width,
                 height,
+                plane_rotation,
                 cursor_pos,
             } => {
                 if cal.is_some() {
@@ -790,7 +824,13 @@ async fn recv_thread(
                             );
                         }
                         let mut slot = shared.slot.lock().unwrap();
-                        slot.publish(width as usize, height as usize, Pixfmt::BGRA, buf);
+                        slot.publish(
+                            width as usize,
+                            height as usize,
+                            Pixfmt::BGRA,
+                            plane_rotation,
+                            buf,
+                        );
                         shared.cv.notify_one();
                     }
                     Ok(Err(err)) => break format!("frame body: {err}"),
@@ -1379,8 +1419,7 @@ fn deliver_drm_cursor(
     // Every non-zero angle, 180 included. Measured on i915 + mutter with the output at 180: the
     // frame arrived upright and the sprite upside down, so the compositor had pre-rotated the
     // sprite by the full transform while the plane scanned out already turned. wl_output cannot
-    // say which of the two happened - the same blindness `frame_transform` defers to - so the
-    // sprite is treated as pre-rotated at every angle.
+    // say which of the two happened, so the sprite is treated as pre-rotated at every angle.
     let (width, height, hotx, hoty, colors) = if t != 0 {
         let mut turned = Vec::new();
         unrotate_bgra(&raw, width as usize, height as usize, t, &mut turned);
@@ -2747,19 +2786,17 @@ mod drm_capturer_tests {
         assert_eq!(infer_hotspot(&arrow_px, aw, ah), (0, 0));
     }
 
-    /// NOT a general DRM/Wayland contract, and should not be read as one. This pins the behaviour
-    /// MEASURED on i915 advertising rotate-180 with mutter: the primary plane scans out already
-    /// upright while the compositor pre-rotates the cursor sprite, and `wl_output` cannot tell
-    /// hardware rotation from compositor rotation, so the frame is left alone and the sprite is
-    /// turned. Arch with KDE Plasma is still wrong at 180, which is exactly why this is scoped to
-    /// what was measured rather than stated as a rule. The robust fix is to propagate the actual
-    /// KMS plane rotation instead of inferring both from the `wl_output` transform; until then,
-    /// changing this test means re-measuring on the compositor in question, not reasoning from it.
+    /// The pre-0.5.8 rule, kept for `None` (a library that cannot say): it pins what was MEASURED
+    /// on i915 advertising rotate-180 with mutter, the primary plane scanning out upright while
+    /// the compositor pre-rotates the cursor sprite, so the frame is left alone and the sprite is
+    /// turned. With a plane answer the rule below decides the frame; the sprite rule stays.
     #[test]
     fn a_180_output_turns_the_cursor_but_not_the_frame_on_i915_plus_mutter() {
-        assert_eq!(frame_transform(180), 0);
-        assert_eq!(frame_transform(90), 90);
-        assert_eq!(frame_transform(270), 270);
+        assert_eq!(frame_transform(180, None), 0);
+        assert_eq!(frame_transform(90, None), 90);
+        assert_eq!(frame_transform(270, None), 270);
+        // The plane says so: rotate-180 in hardware, the scanout is already upright.
+        assert_eq!(frame_transform(180, Some(0x4)), 0);
         let (up, w, h) = arrow();
         let (scan, sw, sh) = as_scanned_out(&up, w, h, 180);
         let mut turned = Vec::new();
@@ -2788,6 +2825,129 @@ mod drm_capturer_tests {
             );
             assert_eq!(c.colors, up, "the published sprite is upright at {t}");
             assert_eq!((c.hotx, c.hoty), (0, 0), "the tip is the hotspot at {t}");
+        }
+    }
+
+    /// Measured on virtio-gpu (no `rotation` property, mutter draws the scanout turned): the
+    /// dump at 180 is upside down and the dumps at 90/270 are the logical desktop turned inside
+    /// the native mode. A plane that reports rotate-0 did nothing, so the frame is turned by the
+    /// whole output transform, 180 included; a plane that reports a rotation did all of it.
+    #[test]
+    fn the_frame_is_turned_unless_the_plane_rotated_it() {
+        assert_eq!(frame_transform(180, Some(0x1)), 180);
+        assert_eq!(frame_transform(90, Some(0x1)), 90);
+        assert_eq!(frame_transform(270, Some(0x1)), 270);
+        assert_eq!(frame_transform(0, Some(0x1)), 0);
+        assert_eq!(frame_transform(90, Some(0x2)), 0);
+        assert_eq!(frame_transform(180, Some(0x4)), 0);
+        assert_eq!(frame_transform(270, Some(0x8)), 0);
+        // A reflection is the plane's work too: a reflected scanout is left alone.
+        assert_eq!(frame_transform(180, Some(0x1 | 0x10)), 0);
+        assert_eq!(frame_transform(180, Some(0x4 | 0x20)), 0);
+        // No rotate bit at all is not a kernel value and gets no special case.
+        assert_eq!(frame_transform(180, Some(0)), 0);
+        assert_eq!(frame_transform(90, Some(0)), 0);
+    }
+
+    /// The compositor programs the plane from the CRTC transform, which is the logical transform
+    /// composed with the connector's panel orientation (mutter: meta_output_logical_to_crtc_transform);
+    /// `wl_output` carries the logical part only. A panel mounted upside down at logical 0 has
+    /// the plane at rotate-180 and an upright framebuffer: subtracting would turn it over, and
+    /// master delivered it upright. So the plane answer is not measured against `wl_output`.
+    #[test]
+    fn a_plane_that_rotated_holds_the_logical_desktop_whatever_wl_output_says() {
+        assert_eq!(frame_transform(0, Some(0x4)), 0);
+        assert_eq!(frame_transform(90, Some(0x4)), 0);
+        assert_eq!(frame_transform(180, Some(0x2)), 0);
+        assert_eq!(frame_transform(90, Some(0x8)), 0);
+    }
+
+    #[test]
+    fn a_180_frame_is_turned_only_when_the_plane_did_not_turn_it() {
+        use scrap::TraitPixelBuffer;
+        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let mut c = capturer_with(Some((w, h)));
+        c.transform = 180;
+        // Software rotation (virtio-gpu): the scanout is upside down and comes back upright.
+        put_frame_with(&c, w, h, Some(0x1), &src);
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => {
+                assert_eq!((pb.width(), pb.height()), (w, h));
+                assert_eq!(labels_of(pb.data(), w, h), vec![vec![6, 5, 4], vec![3, 2, 1]]);
+            }
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
+        }
+        // Hardware rotation (i915 + mutter): the scanout is already upright and is left alone.
+        put_frame_with(&c, w, h, Some(0x4), &src);
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => {
+                assert_eq!(labels_of(pb.data(), w, h), vec![vec![1, 2, 3], vec![4, 5, 6]]);
+            }
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
+        }
+        // A producer that cannot say (pre-0.5.8 library) keeps the old rule: 180 left alone.
+        put_frame_with(&c, w, h, None, &src);
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => {
+                assert_eq!(labels_of(pb.data(), w, h), vec![vec![1, 2, 3], vec![4, 5, 6]]);
+            }
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
+        }
+    }
+
+    #[test]
+    fn a_plane_that_rotated_90_in_hardware_hands_over_a_portrait_scanout() {
+        use scrap::TraitPixelBuffer;
+        let mut c = capturer_with(Some((32, 64))); // rotated session of a 64x32 mode
+        c.transform = 90;
+        // The plane did the 90: the scanout is already 32x64 and upright, nothing to turn.
+        put_frame_rot(&c, 32, 64, Some(0x2));
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => assert_eq!((pb.width(), pb.height()), (32, 64)),
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
+        }
+        // The plane did nothing: the landscape mode arrives and is turned to 32x64.
+        put_frame_rot(&c, 64, 32, Some(0x1));
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => assert_eq!((pb.width(), pb.height()), (32, 64)),
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
+        }
+    }
+
+    #[test]
+    fn a_portrait_scanout_from_a_plane_that_rotated_90_is_left_alone() {
+        use scrap::TraitPixelBuffer;
+        // A 2x3 portrait scanout: the plane did the 90, so the pixels are already upright.
+        let (portrait, pw, ph) = px_frame(&[&[1, 2], &[3, 4], &[5, 6]], 0);
+        let mut c = capturer_with(Some((pw, ph)));
+        c.transform = 90;
+        put_frame_with(&c, pw, ph, Some(0x2), &portrait);
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => {
+                assert_eq!((pb.width(), pb.height()), (pw, ph));
+                assert_eq!(labels_of(pb.data(), pw, ph), vec![vec![1, 2], vec![3, 4], vec![5, 6]]);
+            }
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
+        }
+        // The same output with a plane that did nothing: the 3x2 landscape mode arrives and is
+        // turned exactly as `unrotate_bgra` turns a 90 frame.
+        let (landscape, lw, lh) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let mut expected = Vec::new();
+        unrotate_bgra(&landscape, lw, lh, 90, &mut expected);
+        put_frame_with(&c, lw, lh, Some(0x1), &landscape);
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => {
+                assert_eq!((pb.width(), pb.height()), (pw, ph));
+                assert_eq!(pb.data(), &expected[..]);
+            }
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
         }
     }
 
@@ -2845,12 +3005,34 @@ mod drm_capturer_tests {
     }
 
     fn put_frame(c: &IpcDrmCapturer, w: usize, h: usize) {
+        put_frame_rot(c, w, h, None);
+    }
+
+    fn put_frame_rot(c: &IpcDrmCapturer, w: usize, h: usize, plane_rotation: Option<u32>) {
         let mut buf = c.shared.slot.lock().unwrap().take_free().unwrap_or_default();
         buf.clear();
         buf.resize(w * h * 4, 0);
         let mut slot = c.shared.slot.lock().unwrap();
-        slot.publish(w, h, Pixfmt::BGRA, buf);
+        slot.publish(w, h, Pixfmt::BGRA, plane_rotation, buf);
+        c.shared.cv.notify_one();
     }
+
+    fn put_frame_with(
+        c: &IpcDrmCapturer,
+        w: usize,
+        h: usize,
+        plane_rotation: Option<u32>,
+        pixels: &[u8],
+    ) {
+        let mut buf = c.shared.slot.lock().unwrap().take_free().unwrap_or_default();
+        buf.clear();
+        buf.extend_from_slice(pixels);
+        assert_eq!(buf.len(), w * h * 4);
+        let mut slot = c.shared.slot.lock().unwrap();
+        slot.publish(w, h, Pixfmt::BGRA, plane_rotation, buf);
+        c.shared.cv.notify_one();
+    }
+
 
     #[test]
     fn a_delivered_frame_clears_the_streak_but_keeps_the_cadence_and_the_convert_verdict() {
@@ -3188,8 +3370,9 @@ mod drm_capturer_tests {
         for t in [90, 180, 270] {
             assert!(calibration_context(&drm, 0, &one(t), 7).is_err(), "transform {t}");
         }
-        // 180 is folded to 0 for the FRAME; that fold must never reach the calibration.
-        assert_eq!(frame_transform(transform_and_origin(&drm, 0, &one(180)).0), 0);
+        // A plane that rotated folds 180 to 0 for the FRAME; that fold must never reach the
+        // calibration.
+        assert_eq!(frame_transform(transform_and_origin(&drm, 0, &one(180)).0, Some(0x4)), 0);
         // Partial snapshot: two connectors, one output, even one with a matching name.
         let two = [
             drm_display("HDMI-A-1", 1920, 1080),

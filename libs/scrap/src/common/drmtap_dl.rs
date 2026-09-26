@@ -140,6 +140,12 @@ type FnGrabDesc =
 type FnOpenRender = unsafe extern "C" fn(*const c_char) -> *mut drmtap_ctx;
 // libdrmtap >= 0.4.15; returns a ctx-owned string, or NULL if it has none.
 type FnRenderNode = unsafe extern "C" fn(*mut drmtap_ctx) -> *const c_char;
+/// `drmtap_plane_rotation`, added in libdrmtap 0.5.8: the DRM `rotation` bitmask the primary
+/// plane scans out with, read now (0x1 = 0, 0x2 = 90, 0x4 = 180, 0x8 = 270, plus 0x10/0x20 for
+/// a reflection). 0 with `*rotation` set; `-ENOTSUP` when the plane has no such property, which
+/// means the compositor can only have rotated in software; `-ENOENT` with no plane bound;
+/// `-EINVAL` on a null argument.
+type FnPlaneRotation = unsafe extern "C" fn(*mut drmtap_ctx, *mut u32) -> c_int;
 type FnConvertDmabuf =
     unsafe extern "C" fn(*mut drmtap_ctx, *const drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
 
@@ -162,7 +168,62 @@ pub struct DrmtapLib {
     pub open_render: FnOpenRender,
     pub convert_dmabuf: FnConvertDmabuf,
     pub render_node: Option<FnRenderNode>,
+    /// Optional: it only exists from libdrmtap 0.5.8. Absent means the library cannot say whether
+    /// the plane rotated the scanout, and the consumer keeps the pre-0.5.8 rule for that case.
+    pub plane_rotation: Option<FnPlaneRotation>,
     pub version: (c_int, c_int, c_int),
+}
+
+/// A library whose capture entry points are the given fakes and whose others do nothing, for the
+/// tests of the reader.
+#[cfg(test)]
+impl DrmtapLib {
+    pub(crate) fn fake(
+        grab_mapped: FnGrabMapped,
+        frame_release: FnFrameRelease,
+        grab_desc: FnGrabDesc,
+        plane_rotation: FnPlaneRotation,
+    ) -> Self {
+        unsafe extern "C" fn open(_: *const drmtap_config) -> *mut drmtap_ctx {
+            std::ptr::null_mut()
+        }
+        unsafe extern "C" fn close(_: *mut drmtap_ctx) {}
+        unsafe extern "C" fn list_displays(_: *mut drmtap_ctx, _: *mut drmtap_display, _: c_int) -> c_int {
+            0
+        }
+        unsafe extern "C" fn get_cursor(_: *mut drmtap_ctx, _: *mut drmtap_cursor_info) -> c_int {
+            -1
+        }
+        unsafe extern "C" fn cursor_release(_: *mut drmtap_ctx, _: *mut drmtap_cursor_info) {}
+        unsafe extern "C" fn open_render(_: *const c_char) -> *mut drmtap_ctx {
+            std::ptr::null_mut()
+        }
+        unsafe extern "C" fn convert_dmabuf(
+            _: *mut drmtap_ctx,
+            _: *const drmtap_dmabuf_desc,
+            _: *mut drmtap_frame_info,
+        ) -> c_int {
+            -1
+        }
+        DrmtapLib {
+            _lib: hbb_common::libloading::os::unix::Library::this().into(),
+            open,
+            close,
+            list_displays,
+            list_devices: None,
+            grab_mapped,
+            frame_release,
+            get_cursor,
+            cursor_release,
+            cursor_hotspot_valid: None,
+            grab_desc,
+            open_render,
+            convert_dmabuf,
+            render_node: None,
+            plane_rotation: Some(plane_rotation),
+            version: (0, 5, 8),
+        }
+    }
 }
 
 // SAFETY: the resolved fn pointers are plain C entry points with no interior mutability;
@@ -290,6 +351,8 @@ impl DrmtapLib {
                 lib.get(b"drmtap_render_node").ok().map(|s| *s);
             let cursor_hotspot_valid: Option<FnCursorHotspotValid> =
                 lib.get(b"drmtap_cursor_hotspot_valid").ok().map(|s| *s);
+            let plane_rotation: Option<FnPlaneRotation> =
+                lib.get(b"drmtap_plane_rotation").ok().map(|s| *s);
             // Log the load only now that every required symbol resolved: this fn still returns None on a missing one.
             let loaded_from = real
                 .as_ref()
@@ -333,6 +396,14 @@ impl DrmtapLib {
                      a driver that really puts the hotspot at (0, 0)."
                 );
             }
+            if (minor, patch) >= (5, 8) && plane_rotation.is_none() {
+                log::warn!(
+                    "libdrmtap at {loaded_from} reports v{major}.{minor}.{patch} but is missing \
+                     drmtap_plane_rotation: it is a stale or pre-release build. Check what the \
+                     soname symlink points at. A 180-degree output rotated by the compositor in \
+                     software will be captured upside down."
+                );
+            }
             Some(DrmtapLib {
                 _lib: lib,
                 open,
@@ -348,6 +419,7 @@ impl DrmtapLib {
                 open_render,
                 convert_dmabuf,
                 render_node,
+                plane_rotation,
                 version: (major, minor, patch),
             })
         }
