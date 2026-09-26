@@ -16,13 +16,16 @@ use hbb_common::{
         self,
         io::AsyncWriteExt,
         net::TcpStream,
-        sync::mpsc,
+        sync::{mpsc, Semaphore},
     },
 };
 use std::{
     collections::{HashMap, HashSet},
     process::Command,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 const USBIPD_ADDR: &str = "127.0.0.1:3240";
@@ -95,14 +98,19 @@ pub struct UsbipMux {
     /// Bus ids this connection's `Bind` requests shared and have not been
     /// unshared yet; `None` once `close_all` has released them.
     bound: Arc<Mutex<Option<HashSet<String>>>>,
+    /// Shared with `usbip_pull` (`UsbSession::new`).
+    privileged: Arc<Semaphore>,
+    listing: Arc<AtomicBool>,
 }
 
 impl UsbipMux {
-    pub fn new(tx: Sender) -> Self {
+    pub fn new(tx: Sender, privileged: Arc<Semaphore>) -> Self {
         Self {
             channels: HashMap::new(),
             tx,
             bound: Arc::new(Mutex::new(Some(HashSet::new()))),
+            privileged,
+            listing: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -115,7 +123,12 @@ impl UsbipMux {
                     self.reply(device_list_msg(Vec::new()));
                     return;
                 }
+                // The listing already running answers this request too.
+                if self.listing.swap(true, Ordering::SeqCst) {
+                    return;
+                }
                 let tx = self.tx.clone();
+                let listing = self.listing.clone();
                 tokio::spawn(async move {
                     let devices = match tokio::task::spawn_blocking(list_local_devices).await {
                         Ok(devices) => devices,
@@ -124,6 +137,7 @@ impl UsbipMux {
                             Vec::new()
                         }
                     };
+                    listing.store(false, Ordering::SeqCst);
                     send(&tx, device_list_msg(devices));
                 });
             }
@@ -150,16 +164,32 @@ impl UsbipMux {
                     self.reply(bind_result_msg(b.bus_id, b.bind, String::new()));
                     return;
                 }
+                if self.bound.lock().unwrap().is_none() {
+                    self.reply(bind_result_msg(b.bus_id, b.bind, "Session is closing".into()));
+                    return;
+                }
+                let Ok(permit) = self.privileged.clone().try_acquire_owned() else {
+                    self.reply(bind_result_msg(
+                        b.bus_id,
+                        b.bind,
+                        "Another USB operation is in progress".into(),
+                    ));
+                    return;
+                };
                 let tx = self.tx.clone();
                 let bound = self.bound.clone();
                 tokio::spawn(async move {
                     let bus_id = b.bus_id.clone();
                     let bind = b.bind;
                     let ok = match tokio::task::spawn_blocking(move || {
-                        let ok = bind_device_retrying(&b.bus_id, b.bind);
+                        let _permit = permit;
+                        if bound.lock().unwrap().is_none() {
+                            return false;
+                        }
+                        let ok = bind_device_when_released(&b.bus_id, b.bind);
                         if ok && !record_binding(&bound, &b.bus_id, b.bind) {
                             log::info!("usbip: session closed while sharing {}, unsharing", b.bus_id);
-                            bind_device_retrying(&b.bus_id, false);
+                            bind_device_when_released(&b.bus_id, false);
                             return false;
                         }
                         ok
@@ -273,12 +303,19 @@ impl UsbipMux {
         if bound.is_empty() {
             return;
         }
-        tokio::task::spawn_blocking(move || {
-            for bus_id in bound {
-                if !bind_device_retrying(&bus_id, false) {
-                    log::error!("usbip: failed to unshare {} on session close", bus_id);
+        let privileged = self.privileged.clone();
+        tokio::spawn(async move {
+            // Waits rather than gives up: a binding left behind stays shared.
+            let permit = privileged.acquire_owned().await;
+            let _ = tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                for bus_id in bound {
+                    if !bind_device_when_released(&bus_id, false) {
+                        log::error!("usbip: failed to unshare {} on session close", bus_id);
+                    }
                 }
-            }
+            })
+            .await;
         });
     }
 }
@@ -447,23 +484,25 @@ fn bind_device(bus_id: &str, bind: bool) -> bool {
 /// unshare" sends its unshare request right after detaching, but the
 /// detach's own relay teardown here (`run_channel`'s reader noticing EOF
 /// once the puller's kernel-level detach closes things) happens
-/// asynchronously, not synchronously with the puller's detach call -- so an
-/// unbind request can legitimately race the relay that's still holding the
-/// device "in use" for a brief moment. Retry rather than surface a spurious
-/// error for that race; a share request isn't subject to the same race, so
-/// it fails fast.
-fn bind_device_retrying(bus_id: &str, bind: bool) -> bool {
-    for attempt in 1..=10 {
-        if bind_device(bus_id, bind) {
-            return true;
+/// asynchronously -- so an unbind request can race the relay that's still
+/// holding the device "in use" for a brief moment. Wait for `usbip-host` to
+/// release it (an unprivileged sysfs read) instead of retrying the
+/// privileged unbind, each attempt of which would be another password prompt.
+fn bind_device_when_released(bus_id: &str, bind: bool) -> bool {
+    if !bind && is_valid_bus_id(bus_id) {
+        let status = std::path::Path::new(USBIP_HOST_DRIVER_DIR)
+            .join(bus_id)
+            .join("usbip_status");
+        for attempt in 1..=10 {
+            // `SDEV_ST_USED`: a peer still has it imported.
+            if std::fs::read_to_string(&status).map_or(true, |s| s.trim() != "2") {
+                break;
+            }
+            log::debug!("usbip: {} still in use, waiting {}/10", bus_id, attempt);
+            std::thread::sleep(std::time::Duration::from_millis(200));
         }
-        if bind {
-            return false;
-        }
-        log::debug!("usbip: {} still busy unsharing, retry {}/10", bus_id, attempt);
-        std::thread::sleep(std::time::Duration::from_millis(200));
     }
-    false
+    bind_device(bus_id, bind)
 }
 
 fn is_bound(bound: &Mutex<Option<HashSet<String>>>, bus_id: &str) -> bool {
@@ -558,7 +597,7 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
     #[test]
     fn unbind_of_device_not_shared_here_leaves_it_shared() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut mux = UsbipMux::new(tx);
+        let mut mux = UsbipMux::new(tx, Arc::new(Semaphore::new(1)));
         let mut frame = UsbChannel::new();
         frame.union = Some(usb_channel::Union::Bind(UsbBind {
             bus_id: "1-2".into(),
@@ -589,10 +628,54 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
         assert!(record_binding(&bound, "1-2", false));
     }
 
+    fn bind_reply(
+        rx: &mut tokio::sync::mpsc::UnboundedReceiver<(tokio::time::Instant, Arc<Message>)>,
+    ) -> UsbBindResult {
+        let (_, msg) = rx.try_recv().unwrap();
+        match &msg.union {
+            Some(message::Union::UsbChannel(ch)) => match &ch.union {
+                Some(usb_channel::Union::BindResult(r)) => r.clone(),
+                _ => panic!("expected a BindResult"),
+            },
+            _ => panic!("expected a UsbChannel message"),
+        }
+    }
+
+    fn bind_frame(bus_id: &str) -> UsbChannel {
+        let mut frame = UsbChannel::new();
+        frame.union = Some(usb_channel::Union::Bind(UsbBind {
+            bus_id: bus_id.into(),
+            bind: true,
+            ..Default::default()
+        }));
+        frame
+    }
+
+    #[test]
+    fn bind_while_another_privileged_step_runs_is_refused() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let privileged = Arc::new(Semaphore::new(1));
+        let mut mux = UsbipMux::new(tx, privileged.clone());
+        let _busy = privileged.try_acquire_owned().unwrap();
+        mux.handle(bind_frame("99-9"), || true);
+        assert!(!bind_reply(&mut rx).error.is_empty());
+    }
+
+    #[test]
+    fn bind_after_close_is_refused() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let privileged = Arc::new(Semaphore::new(1));
+        let mut mux = UsbipMux::new(tx, privileged.clone());
+        mux.close_all();
+        mux.handle(bind_frame("99-9"), || true);
+        assert!(!bind_reply(&mut rx).error.is_empty());
+        assert_eq!(privileged.available_permits(), 1);
+    }
+
     #[test]
     fn on_open_rejects_negative_channel_id() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut mux = UsbipMux::new(tx);
+        let mut mux = UsbipMux::new(tx, Arc::new(Semaphore::new(1)));
         mux.on_open(
             UsbForwardOpen {
                 channel_id: -1,
