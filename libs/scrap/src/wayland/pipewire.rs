@@ -84,8 +84,9 @@ pub fn try_close_session() {
     let mut rdp_info = RDP_SESSION_INFO.lock().unwrap();
     let mut close = false;
     if let Some(rdp_info) = &*rdp_info {
-        // If is server running and restore token is supported, there's no need to keep the session.
-        if is_server_running() && rdp_info.is_support_restore_token {
+        // If restore token is supported, there's no need to keep the session.
+        // In non-server mode, the session does not survive disconnect, so it must also be closed.
+        if !is_server_running() || rdp_info.is_support_restore_token {
             close = true;
         }
     }
@@ -1176,7 +1177,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
 //
 // `screencast_portal` supports restore_token and persist_mode if the version is greater than or equal to 4.
 // `remote_desktop_portal` does not support restore_token and persist_mode.
-pub(crate) fn is_server_running() -> bool {
+pub fn is_server_running() -> bool {
     let v = IS_SERVER_RUNNING.load(Ordering::SeqCst);
     if v > 0 {
         return v == 1;

@@ -315,6 +315,31 @@ struct CapDisplayInfo {
     capturer: CapturerPtr,
 }
 
+fn cleanup_capturers(lock: &mut HashMap<usize, u64>) {
+    for (_, addr) in lock.drain() {
+        let cap_display_info: *mut CapDisplayInfo = addr as _;
+        unsafe {
+            if !cap_display_info.is_null() {
+                if !(*cap_display_info).capturer.0.is_null() {
+                    let _ = Box::from_raw((*cap_display_info).capturer.0);
+                }
+                let _ = Box::from_raw(cap_display_info);
+            }
+        }
+    }
+}
+
+fn reset_pipewire_capture_state(force_close_session: bool) {
+    let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
+    cleanup_capturers(&mut write_lock);
+    *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+    if force_close_session {
+        scrap::wayland::pipewire::close_session();
+    } else {
+        scrap::wayland::pipewire::try_close_session();
+    }
+}
+
 /// Uinput desktop rect from the DRM display list, for a login screen where no compositor can be
 /// asked. `(minx, maxx, miny, maxy)`, in delivered-orientation physical pixels (a rotated
 /// output counts transposed, matching its frames): no compositor here applied a scale, so
@@ -524,7 +549,6 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
                 log::debug!("Attempting to fix logical size with try_fix_logical_size()");
                 try_fix_logical_size(&mut all);
-                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 let mut displays = super::display_service::update_sync_displays(&all);
@@ -550,8 +574,14 @@ pub(super) async fn check_init() -> ResultType<()> {
                 for (idx, display) in all.into_iter().enumerate() {
                     // No `with_context` here: the peer is shown `format!("{}", err)`, which
                     // renders only the outermost layer, and the mapped reason is the inner one.
-                    let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
-                    let capturer = CapturerPtr(capturer);
+                    let capturer = match Capturer::new(display) {
+                        Ok(c) => CapturerPtr(Box::into_raw(Box::new(c))),
+                        Err(e) => {
+                            drop(lock);
+                            reset_pipewire_capture_state(true);
+                            return Err(e.into());
+                        }
+                    };
 
                     let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
                         rects: rects.clone(),
@@ -564,6 +594,8 @@ pub(super) async fn check_init() -> ResultType<()> {
 
                     lock.insert(idx, cap_display_info as u64);
                 }
+
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
             }
         }
     }
@@ -602,6 +634,8 @@ pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, 
             Ok((cap_display_info.displays.clone(), cap_display_info.primary))
         }
     } else {
+        drop(cap_map);
+        reset_pipewire_capture_state(true);
         bail!("Failed to get capturer display info");
     }
 }
@@ -623,18 +657,7 @@ pub fn clear() {
     // teardown (which happens on each video-service restart), and re-probing `_drm` from the async
     // enumeration path blocks the executor long enough to trip "deadline has elapsed" and spiral
     // into a restart loop. DRM availability is fixed at service start, so the cache stays valid.
-    let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
-    for (_, addr) in write_lock.iter() {
-        let cap_display_info: *mut CapDisplayInfo = *addr as _;
-        unsafe {
-            let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
-            let _box_cap_display_info = Box::from_raw(cap_display_info);
-        }
-    }
-    write_lock.clear();
-
-    // Reset PipeWire initialization flag to allow recreation on next init
-    *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+    reset_pipewire_capture_state(false);
 }
 
 /// Initialize the PipeWire/portal capture path from the plain (sync) video thread, so a DRM display
