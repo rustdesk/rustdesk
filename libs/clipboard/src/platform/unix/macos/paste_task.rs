@@ -555,6 +555,7 @@ impl PasteTaskHandle {
         self.progress.file_handle = None;
         // Updating or unpublishing after rename can leave stale Finder/Dock progress.
         // https://crbug.com/40217637
+        // https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/download/download_status_updater_mac.mm
         self.update_progress_completed(Some(self.progress.download_file_size))?;
         self.remove_progress_completed();
 
