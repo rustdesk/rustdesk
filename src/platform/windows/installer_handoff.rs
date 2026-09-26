@@ -4,7 +4,8 @@ use super::{
         run_elevated_and_wait, trusted_install_environment,
         BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE, CMD_RELATIVE_PATH,
     },
-    validate_install_app_name, ResultType,
+    validate_install_app_name, ResultType, UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE,
+    UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE,
 };
 use hbb_common::{
     bail, log,
@@ -168,6 +169,8 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
             "failed to create the installer output directory"
         }
         BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE => "failed to decode an embedded shortcut",
+        UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE => "timed out waiting for the app processes to exit",
+        UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE => "failed to query the app processes",
         _ => "installer command failed",
     }
 }
@@ -270,6 +273,74 @@ mod tests {
             Some(INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE as i32)
         );
         assert!(!marker.exists(), "replaced script must not execute");
+    }
+
+    #[test]
+    fn update_wait_for_app_exit_continues_only_after_a_clean_no_match() {
+        let app_name = format!("RustDeskWaitTest{}", uuid::Uuid::new_v4().simple());
+        let failed = Some(UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE as i32);
+        // No such process: the update goes on.
+        assert_eq!(run_update_wait_for_test(&app_name, "", None), (Some(0), false, true));
+        // None of the following may pass for "no process left". Each must
+        // restore the service, skip the copy and fail.
+        // The query fails without printing a match.
+        assert_eq!(
+            run_update_wait_for_test(&app_name, " /FI \"RUSTDESK_INVALID eq 1\"", None),
+            (failed, true, false)
+        );
+        // The query output cannot be written, which leaves ERRORLEVEL unchanged
+        // and would make `find` report no match.
+        assert_eq!(
+            run_update_wait_for_test(
+                &app_name,
+                "",
+                Some(("\\tasklist.csv", "\\missing\\tasklist.csv")),
+            ),
+            (failed, true, false)
+        );
+        // The search itself fails.
+        assert_eq!(
+            run_update_wait_for_test(
+                &app_name,
+                "",
+                Some(("\nfind /I ", "\nfind /RUSTDESK_INVALID /I ")),
+            ),
+            (failed, true, false)
+        );
+    }
+
+    // Runs the update's wait for the app to exit through the verified handoff,
+    // followed by a copy marker. Returns the exit code and whether the service
+    // restore and the copy were reached. `inject` replaces part of the lines.
+    fn run_update_wait_for_test(
+        app_name: &str,
+        filter: &str,
+        inject: Option<(&str, &str)>,
+    ) -> (Option<i32>, bool, bool) {
+        let dir = std::env::temp_dir().join(format!(
+            "rustdesk_update_wait_{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir(&dir).expect("test directory should be created");
+        let restored = dir.join("restored");
+        let copied = dir.join("copied");
+        let restore_service_cmd = format!("> \"{}\" echo restored", restored.display());
+        let mut wait = super::super::wait_for_app_exit_cmd(app_name, filter, &restore_service_cmd);
+        if let Some((from, to)) = inject {
+            assert!(wait.contains(from), "nothing to inject into");
+            wait = wait.replace(from, to);
+        }
+        let script = write_install_script(format!(
+            "{wait}\r\n> \"{}\" echo copied",
+            copied.display()
+        ))
+        .expect("install script should be created");
+        let bootstrap = verified_install_bootstrap(&script, &dir)
+            .expect("native verifier bootstrap should be generated");
+        let output = run_install_bootstrap_for_test(&bootstrap);
+        let result = (output.status.code(), restored.exists(), copied.exists());
+        std::fs::remove_dir_all(&dir).expect("test directory should be removed");
+        result
     }
 
     fn run_install_bootstrap_for_test(bootstrap: &str) -> std::process::Output {

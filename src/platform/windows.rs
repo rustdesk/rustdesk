@@ -125,6 +125,9 @@ const REG_NAME_WINDOWS_INSTALLER: &str = "WindowsInstaller";
 const MSI_WINDOWS_INSTALLER_VALUE: u32 = 1;
 const MSI_EXIT_SUCCESS_REBOOT_INITIATED: u32 = 1641;
 const MSI_EXIT_SUCCESS_REBOOT_REQUIRED: u32 = 3010;
+// Share the 0x5253_xxxx range of the elevated installer script exit codes.
+const UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE: u32 = 0x5253_0009;
+const UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE: u32 = 0x5253_000A;
 const HKLM_PREFIX: &str = "HKEY_LOCAL_MACHINE\\";
 
 fn validate_install_app_name(app_name: &str) -> ResultType<()> {
@@ -3400,6 +3403,65 @@ fn get_directory_size_kb(path: &str) -> u64 {
     total_size / 1024
 }
 
+/// Batch lines that wait, for about a minute at most, until no `{app_name}.exe`
+/// other than the updater itself is still running.
+///
+/// `sc stop` only requests the stop and returns at once, and `taskkill /F` does
+/// not wait for the killed processes to go away. The `XCOPY` that follows runs
+/// with `/C`, which skips files it cannot open instead of failing, so a file a
+/// still-exiting process holds - such as `librustdesk.dll`, which carries
+/// `crate::VERSION` - is silently left at the old version while the update
+/// reports success. The restarted service then still sees the release as newer
+/// and runs the update again.
+///
+/// Only `tasklist`, `find` and `ping` from the system directory are used: the
+/// script runs with `PATH` restricted to it, and like the rest of the elevated
+/// handoff it avoids script hosts. The check matches the image name, which is
+/// not localized. `/FO CSV` matters: the default table output cuts the image
+/// name to a 25 character column, so a longer custom client name would never
+/// match and the wait would end while the process still runs.
+///
+/// Only a successful query followed by `find` reporting no match counts as
+/// exited. The query writes to `%RUSTDESK_OUTPUT_DIR%`, the script's protected
+/// output directory, since a pipe would hide its exit code, and is checked with
+/// `||` because a failed redirection leaves `ERRORLEVEL` unchanged. `find`
+/// returns 0 on a match, 1 on none and 2 on errors. `if errorlevel N` means at
+/// least N, so negative codes, such as from a process that failed to start, are
+/// checked separately; unlike `%ERRORLEVEL%`, it cannot be shadowed by a
+/// variable of that name. `find` also returns 1 for a file it cannot open, which
+/// is why it only reads the file the query has just written.
+///
+/// The wait is bounded to 60 polls of roughly a second each. If a process is
+/// still running after that, or the query or the search fails, the update is
+/// aborted instead of copying over files a process may still hold. Only
+/// `sc stop` and `taskkill` have run by then, so the script runs
+/// `restore_service_cmd` to start the service again if it was running, and exits
+/// with `UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE` or
+/// `UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE`, which `run_cmds` reports as a
+/// failed update.
+fn wait_for_app_exit_cmd(app_name: &str, filter: &str, restore_service_cmd: &str) -> String {
+    format!(
+        "set /a RUSTDESK_EXIT_WAIT=0
+:rustdesk_wait_for_exit
+tasklist /NH /FO CSV /FI \"IMAGENAME eq {app_name}.exe\"{filter} > \"%RUSTDESK_OUTPUT_DIR%\\tasklist.csv\" || goto rustdesk_exit_query_failed
+find /I \"{app_name}.exe\" \"%RUSTDESK_OUTPUT_DIR%\\tasklist.csv\" >nul
+if errorlevel 2 goto rustdesk_exit_query_failed
+if errorlevel 1 goto rustdesk_exited
+if not errorlevel 0 goto rustdesk_exit_query_failed
+set /a RUSTDESK_EXIT_WAIT+=1
+if %RUSTDESK_EXIT_WAIT% geq 60 goto rustdesk_exit_timeout
+ping -n 2 127.0.0.1 >nul
+goto rustdesk_wait_for_exit
+:rustdesk_exit_query_failed
+{restore_service_cmd}
+exit /b {UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE}
+:rustdesk_exit_timeout
+{restore_service_cmd}
+exit /b {UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE}
+:rustdesk_exited"
+    )
+}
+
 pub fn update_me(debug: bool) -> ResultType<()> {
     let app_name = crate::get_app_name();
     let src_exe = std::env::current_exe()?.to_string_lossy().to_string();
@@ -3546,11 +3608,17 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
     // while I cannot find them by `tasklist` or the methods above.
     // There's should be 4 processes running: service, server, tray and main window.
     // But only 2 processes are shown in the tasklist.
+    //
+    // `sc stop` and `taskkill /F` do not wait for the processes to exit, see
+    // `wait_for_app_exit_cmd`. A tray or main window can hold the files too, so
+    // this is not limited to a running service.
+    let wait_exit_cmd = wait_for_app_exit_cmd(&app_name, &filter, &restore_service_cmd);
     let cmds = format!(
         "
 chcp 65001
 sc stop {app_name}
 taskkill /F /IM {app_name}.exe{filter}
+{wait_exit_cmd}
 {reg_cmd}
 {copy_exe}
 {rename_exe}
@@ -4782,6 +4850,103 @@ mod tests {
     #[test]
     fn test_is_process_running_as_system_invalid_pid_errors() {
         assert!(is_process_running_as_system(u32::MAX).is_err());
+    }
+
+    #[test]
+    fn test_wait_for_app_exit_cmd_uses_only_system_tools() {
+        let cmd = wait_for_app_exit_cmd("RustDesk", " /FI \"PID ne 42\"", "sc start RustDesk");
+        let lower = cmd.to_ascii_lowercase();
+        // The elevated script runs with PATH restricted to the system directory
+        // and, like the rest of the handoff, avoids script hosts.
+        assert!(!lower.contains("powershell"));
+        assert!(!lower.contains("cscript"));
+        // `timeout` refuses to run without a console.
+        assert!(!lower.contains("timeout "));
+    }
+
+    #[test]
+    fn test_wait_for_app_exit_cmd_matches_long_image_names() {
+        // The default table output truncates image names to 25 characters,
+        // which would make a long custom client name never match.
+        let name = "Very-Long-Custom-Client-Name";
+        assert!(name.len() + ".exe".len() > 25);
+        let cmd = wait_for_app_exit_cmd(name, "", "");
+        assert!(cmd.contains("/FO CSV"));
+        assert!(cmd.contains(&format!("find /I \"{name}.exe\"")));
+    }
+
+    #[test]
+    fn test_wait_for_app_exit_cmd_is_bounded_and_skips_the_updater() {
+        let cmd = wait_for_app_exit_cmd("RustDesk", " /FI \"PID ne 42\"", "sc start RustDesk");
+        // Matches on the image name, which is not localized, and never waits on
+        // the updater process itself.
+        assert!(cmd.contains("\"IMAGENAME eq RustDesk.exe\" /FI \"PID ne 42\" > "));
+        assert!(cmd.contains("find /I \"RustDesk.exe\""));
+        // Bounded, so a process that never exits cannot hang the update.
+        assert!(cmd.contains("geq 60 goto rustdesk_exit_timeout"));
+        // Every label that is jumped to exists.
+        for label in [
+            "rustdesk_wait_for_exit",
+            "rustdesk_exit_query_failed",
+            "rustdesk_exit_timeout",
+            "rustdesk_exited",
+        ] {
+            assert!(cmd.contains(&format!(":{label}\n")) || cmd.ends_with(&format!(":{label}")));
+        }
+    }
+
+    #[test]
+    fn test_wait_for_app_exit_cmd_only_a_clean_no_match_counts_as_exited() {
+        let cmd = wait_for_app_exit_cmd("RustDesk", "", "");
+        let lines: Vec<&str> = cmd.lines().collect();
+        let query = lines.iter().position(|l| l.starts_with("tasklist ")).unwrap();
+        // A pipe would hide the query's exit code, and a failed redirection
+        // leaves ERRORLEVEL unchanged, so the query is checked with `||`.
+        assert!(!cmd.contains(" | "));
+        assert!(lines[query].contains(" > \"%RUSTDESK_OUTPUT_DIR%\\tasklist.csv\" "));
+        assert!(lines[query].ends_with(" || goto rustdesk_exit_query_failed"));
+        // `find` returns 0 on a match, 1 on none and 2 on errors, and
+        // `if errorlevel N` means at least N.
+        assert_eq!(
+            lines[query + 1..query + 5],
+            [
+                "find /I \"RustDesk.exe\" \"%RUSTDESK_OUTPUT_DIR%\\tasklist.csv\" >nul",
+                "if errorlevel 2 goto rustdesk_exit_query_failed",
+                "if errorlevel 1 goto rustdesk_exited",
+                "if not errorlevel 0 goto rustdesk_exit_query_failed",
+            ]
+        );
+        // There is no other way to the success label.
+        assert_eq!(cmd.matches("goto rustdesk_exited").count(), 1);
+    }
+
+    #[test]
+    fn test_wait_for_app_exit_cmd_fails_closed() {
+        let cmd = wait_for_app_exit_cmd("RustDesk", "", "sc start RustDesk");
+        // A failed query or search and a timeout must not fall through to the
+        // copy: restore the service and abort with a distinct exit code before
+        // the success label.
+        let failed = cmd.find("\n:rustdesk_exit_query_failed\n").unwrap();
+        let exited = cmd.find("\n:rustdesk_exited").unwrap();
+        let expected = format!(
+            "\n:rustdesk_exit_query_failed\nsc start RustDesk\nexit /b {}\
+             \n:rustdesk_exit_timeout\nsc start RustDesk\nexit /b {}",
+            UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE, UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE
+        );
+        assert_eq!(&cmd[failed..exited], expected.as_str());
+        // The loop jumps back before it could run into these blocks, and the
+        // success label ends the command, so only a clean exit reaches what
+        // follows.
+        assert!(cmd[..failed].ends_with("\ngoto rustdesk_wait_for_exit"));
+        assert!(cmd.ends_with("\n:rustdesk_exited"));
+        // Without a service to restore, the update is still aborted.
+        let cmd = wait_for_app_exit_cmd("RustDesk", "", "");
+        assert!(cmd.contains(&format!(
+            "\n:rustdesk_exit_query_failed\n\nexit /b {UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE}\n"
+        )));
+        assert!(cmd.contains(&format!(
+            "\n:rustdesk_exit_timeout\n\nexit /b {UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE}\n"
+        )));
     }
 
     #[test]
