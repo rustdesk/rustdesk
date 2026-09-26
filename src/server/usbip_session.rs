@@ -5,7 +5,8 @@
 // channel_id sign convention or dispatch between them itself.
 use super::{connection::Sender, usbip_mux::UsbipMux, usbip_pull::UsbPullState};
 use base::message_proto::*;
-use hbb_common::log;
+use hbb_common::{log, tokio::sync::Semaphore};
+use std::sync::Arc;
 
 pub struct UsbSession {
     mux: UsbipMux,
@@ -14,9 +15,12 @@ pub struct UsbSession {
 
 impl UsbSession {
     pub fn new(tx: Sender) -> Self {
+        // One privileged `usbip` step (and its elevation dialog) at a time per
+        // session, for both directions.
+        let privileged = Arc::new(Semaphore::new(1));
         Self {
-            mux: UsbipMux::new(tx.clone()),
-            pull: UsbPullState::new(tx),
+            mux: UsbipMux::new(tx.clone(), privileged.clone()),
+            pull: UsbPullState::new(tx, privileged),
         }
     }
 
