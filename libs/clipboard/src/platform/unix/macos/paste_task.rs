@@ -553,6 +553,10 @@ impl PasteTaskHandle {
             log::error!("Failed to flush file: {:?}", e);
         }
         self.progress.file_handle = None;
+        // Updating or unpublishing after rename can leave stale Finder/Dock progress.
+        // https://crbug.com/40217637
+        self.update_progress_completed(Some(self.progress.download_file_size))?;
+        self.remove_progress_completed();
 
         let Some(file_desc) = self.files.get(self.progress.download_file_index as usize) else {
             // unreachable
@@ -573,8 +577,6 @@ impl PasteTaskHandle {
             }
         })?;
         Self::set_file_metadata2(&rename_to_path, file_desc);
-        self.update_progress_completed(Some(self.progress.download_file_size))?;
-        self.remove_progress_completed();
         self.progress.download_file_path = "".to_owned();
         self.progress.download_file_index = PasteTask::INVALID_FILE_INDEX;
         Ok(())
