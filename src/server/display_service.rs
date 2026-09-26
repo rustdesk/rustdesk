@@ -380,7 +380,7 @@ fn refresh_wayland_uinput_rect_if_changed() {
     // The check, the apply, what they record and the flag below run on the uinput apply thread,
     // in turn with the other paths; this loop waits for its answer.
     #[cfg(feature = "drm")]
-    let _ = run_uinput_apply(move |rt| {
+    if run_uinput_apply(move |rt| {
         let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
         // The device already runs a range that fits this layout: the DRM calibration may measure.
         if range_ok {
@@ -424,7 +424,11 @@ fn refresh_wayland_uinput_rect_if_changed() {
         // matching uinput range. A failed range apply leaves this false and retries next poll.
         WAYLAND_LAYOUT_DRIFTED.store(drifted && range_ok, Ordering::Relaxed);
     })
-    .blocking_recv();
+    .blocking_recv()
+    .is_err()
+    {
+        log::error!("Failed to check the uinput range: the uinput apply thread is gone");
+    }
     #[cfg(not(feature = "drm"))]
     {
         let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
