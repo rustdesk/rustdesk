@@ -1192,7 +1192,8 @@ fn drm_capture_worker(
                 Err(err) => Err(err),
             })
         } else {
-            // The mapped buffer borrows the reader: copy it out, then ask about the plane.
+            // The mapped buffer borrows the reader: copy it out, then take the rotation the grab
+            // recorded.
             let copied = reader
                 .grab()
                 .map(|(buf, w, h)| (Bytes::copy_from_slice(buf), w as u32, h as u32));

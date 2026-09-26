@@ -174,6 +174,58 @@ pub struct DrmtapLib {
     pub version: (c_int, c_int, c_int),
 }
 
+/// A library whose capture entry points are the given fakes and whose others do nothing, for the
+/// tests of the reader.
+#[cfg(test)]
+impl DrmtapLib {
+    pub(crate) fn fake(
+        grab_mapped: FnGrabMapped,
+        frame_release: FnFrameRelease,
+        grab_desc: FnGrabDesc,
+        plane_rotation: FnPlaneRotation,
+    ) -> Self {
+        unsafe extern "C" fn open(_: *const drmtap_config) -> *mut drmtap_ctx {
+            std::ptr::null_mut()
+        }
+        unsafe extern "C" fn close(_: *mut drmtap_ctx) {}
+        unsafe extern "C" fn list_displays(_: *mut drmtap_ctx, _: *mut drmtap_display, _: c_int) -> c_int {
+            0
+        }
+        unsafe extern "C" fn get_cursor(_: *mut drmtap_ctx, _: *mut drmtap_cursor_info) -> c_int {
+            -1
+        }
+        unsafe extern "C" fn cursor_release(_: *mut drmtap_ctx, _: *mut drmtap_cursor_info) {}
+        unsafe extern "C" fn open_render(_: *const c_char) -> *mut drmtap_ctx {
+            std::ptr::null_mut()
+        }
+        unsafe extern "C" fn convert_dmabuf(
+            _: *mut drmtap_ctx,
+            _: *const drmtap_dmabuf_desc,
+            _: *mut drmtap_frame_info,
+        ) -> c_int {
+            -1
+        }
+        DrmtapLib {
+            _lib: hbb_common::libloading::os::unix::Library::this().into(),
+            open,
+            close,
+            list_displays,
+            list_devices: None,
+            grab_mapped,
+            frame_release,
+            get_cursor,
+            cursor_release,
+            cursor_hotspot_valid: None,
+            grab_desc,
+            open_render,
+            convert_dmabuf,
+            render_node: None,
+            plane_rotation: Some(plane_rotation),
+            version: (0, 5, 8),
+        }
+    }
+}
+
 // SAFETY: the resolved fn pointers are plain C entry points with no interior mutability;
 // libdrmtap contexts are used single-threaded by the caller. The Library handle is never moved out.
 unsafe impl Send for DrmtapLib {}
