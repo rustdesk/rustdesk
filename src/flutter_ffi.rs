@@ -2676,6 +2676,14 @@ pub fn main_get_common(key: String) -> String {
         };
         #[cfg(not(target_os = "linux"))]
         return String::new();
+    } else if key == "wayland-uniform-output-scale" {
+        #[cfg(target_os = "linux")]
+        return match base::platform::linux::wayland_uniform_output_scale() {
+            Some(scale) => scale.to_string(),
+            None => String::new(),
+        };
+        #[cfg(not(target_os = "linux"))]
+        return String::new();
     } else if key == "permanent-password-set" {
         return ui_interface::is_permanent_password_set().to_string();
     } else if key == "local-permanent-password-set" {

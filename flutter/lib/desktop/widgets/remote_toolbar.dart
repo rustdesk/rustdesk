@@ -1523,14 +1523,22 @@ class ScreenAdjustor {
         horizontalEdges = CanvasModel.leftToEdge + CanvasModel.rightToEdge;
         verticalEdges = CanvasModel.topToEdge + CanvasModel.bottomToEdge;
       }
-      final width = (canvasModel.getDisplayWidth() * canvasModel.scale +
+      final targetWidth = (canvasModel.getDisplayWidth() * canvasModel.scale +
                   horizontalEdges) *
               scale +
           magicWidth;
-      final height =
+      final targetHeight =
           (canvasModel.getDisplayHeight() * canvasModel.scale + verticalEdges) *
                   scale +
               magicHeight;
+      // Same GDK-under-reported-scale gap `waylandCompensatedSize` corrects
+      // for the main window and sub-windows: the requested logical size must
+      // be inflated before setFrame(), or the window renders smaller than
+      // the remote content.
+      final compensatedSize =
+          await waylandCompensatedSize(Size(targetWidth, targetHeight));
+      final width = compensatedSize.width;
+      final height = compensatedSize.height;
       double left = wndRect.left + (wndRect.width - width) / 2;
       double top = wndRect.top + (wndRect.height - height) / 2;
 

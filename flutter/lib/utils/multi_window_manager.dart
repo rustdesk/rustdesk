@@ -157,9 +157,10 @@ class RustDeskMultiWindowManager {
     }
     final windowId = windowController.windowId;
     if (!withScreenRect) {
+      final size = await waylandCompensatedSize(
+          Size(1280 + windowId * 20, 720 + windowId * 20));
       windowController
-        ..setFrame(const Offset(0, 0) &
-            Size(1280 + windowId * 20, 720 + windowId * 20))
+        ..setFrame(const Offset(0, 0) & size)
         ..center()
         ..setTitle(getWindowNameWithId(
           remoteId,

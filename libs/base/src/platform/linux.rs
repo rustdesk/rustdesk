@@ -6,6 +6,8 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     process::Command,
+    sync::Mutex,
+    time::{Duration, Instant},
 };
 use users::{get_current_uid, get_user_by_uid, os::unix::UserExt};
 
@@ -20,6 +22,11 @@ use sctk::{
 
 lazy_static::lazy_static! {
     pub static ref DISTRO: Distro = Distro::new();
+    // Same 10s TTL convention as `gnome_monitor_layout_mode()`'s cache (src/platform/linux.rs):
+    // `wayland_uniform_output_scale()` opens a fresh Wayland connection and does a protocol
+    // round trip on every call, and it's on the hot path of every compensated window resize.
+    static ref WAYLAND_UNIFORM_OUTPUT_SCALE_CACHE: Mutex<Option<(Instant, Option<f64>)>> =
+        Default::default();
 }
 
 pub const DISPLAY_SERVER_WAYLAND: &str = "wayland";
@@ -459,6 +466,57 @@ fn collect_wayland_displays(conn: &Connection) -> ResultType<Vec<WaylandDisplayI
     }
 
     Ok(display_infos)
+}
+
+/// The compositor's true per-output scale, derived from Wayland protocol data (the output's
+/// physical mode size vs its `xdg-output` logical size) rather than from GDK/GTK3. GTK3 has no
+/// `wp-fractional-scale-v1` support, so under compositors that require that protocol for
+/// fractional scaling (e.g. KWin), GDK can end up applying a smaller scale to a window than the
+/// desktop actually uses, and the difference between this value and GDK's own scale is what the
+/// Flutter side needs to compensate for that gap. Desktop-agnostic and a safe no-op comparison
+/// target on compositors that already scale legacy clients correctly (e.g. GNOME/Mutter), since
+/// GDK's own scale matches this value there too.
+///
+/// Returns `None` when Wayland isn't in use, no output reports a usable logical size, or outputs
+/// disagree on scale - correlating a specific window to a specific output isn't attempted here,
+/// so a mixed-scale multi-monitor system is left alone rather than guessed at.
+pub fn wayland_uniform_output_scale() -> Option<f64> {
+    if let Ok(cache) = WAYLAND_UNIFORM_OUTPUT_SCALE_CACHE.lock() {
+        if let Some((updated_at, result)) = *cache {
+            if updated_at.elapsed() < Duration::from_secs(10) {
+                return result;
+            }
+        }
+    }
+
+    let result = (|| {
+        let displays = get_wayland_displays().ok()?;
+        let mut scales = displays.iter().filter_map(|d| {
+            let (logical_width, logical_height) = d.logical_size?;
+            if logical_width <= 0 || logical_height <= 0 {
+                return None;
+            }
+            // `logical_size` arrives already transform-swapped (see its doc comment above), while
+            // `width`/`height` are always the unrotated mode dimensions.
+            let physical_width = if d.transform == 90 || d.transform == 270 {
+                d.height
+            } else {
+                d.width
+            };
+            Some(physical_width as f64 / logical_width as f64)
+        });
+        let first = scales.next()?;
+        if scales.all(|scale| (scale - first).abs() < 0.02) {
+            Some(first)
+        } else {
+            None
+        }
+    })();
+
+    if let Ok(mut cache) = WAYLAND_UNIFORM_OUTPUT_SCALE_CACHE.lock() {
+        *cache = Some((Instant::now(), result));
+    }
+    result
 }
 
 /// Escape a string for safe use in shell commands by wrapping in single quotes.

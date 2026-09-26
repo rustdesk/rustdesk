@@ -851,7 +851,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     WidgetsBinding.instance.addObserver(this);
   }
 
-  _updateWindowSize() {
+  _updateWindowSize() async {
     RenderObject? renderObject = _childKey.currentContext?.findRenderObject();
     if (renderObject == null) {
       return;
@@ -860,7 +860,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       final size = renderObject.size;
       if (size != imcomingOnlyHomeSize) {
         imcomingOnlyHomeSize = size;
-        windowManager.setSize(getIncomingOnlyHomeSize());
+        final windowSize =
+            await waylandCompensatedSize(getIncomingOnlyHomeSize());
+        if (!isInHomePage()) return;
+        windowManager.setSize(windowSize);
       }
     }
   }

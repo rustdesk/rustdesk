@@ -1820,8 +1820,8 @@ Future<void> saveWindowPosition(WindowType type,
       } else {
         position = await windowManager.getPosition(
             ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
-        sz = await windowManager.getSize(
-            ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
+        sz = await waylandUncompensatedSize(await windowManager.getSize(
+            ignoreDevicePixelRatio: _ignoreDevicePixelRatio));
       }
       break;
     default:
@@ -1839,7 +1839,7 @@ Future<void> saveWindowPosition(WindowType type,
           return;
         }
         position = frame.topLeft;
-        sz = frame.size;
+        sz = await waylandUncompensatedSize(frame.size);
       }
       break;
   }
@@ -1956,6 +1956,45 @@ Future<Size> _adjustRestoreMainWindowSize(double? width, double? height) async {
     restoreHeight = defaultHeight;
   }
   return Size(restoreWidth, restoreHeight);
+}
+
+// GTK3 (which the Linux desktop build embeds, including the desktop_multi_window plugin's
+// sub-windows) has no `wp-fractional-scale-v1` support, so under compositors that require that
+// protocol for fractional scaling (e.g. KWin/KDE Plasma), GDK can under-report the scale it
+// applies to a window, and it ends up rendered smaller than the rest of a fractionally-scaled
+// desktop. This compares the compositor's true per-output scale (queried over the Wayland
+// protocol, see `wayland_uniform_output_scale` in base/linux.rs) against what GDK is actually
+// using. Used by both `waylandCompensatedSize` (inflate a size before handing it to a native
+// resize) and `waylandUncompensatedSize` (undo that inflation before persisting a size read back
+// from a native window, so save-then-restore doesn't compound). Returns null on any desktop where
+// GDK's own scale already matches (e.g. GNOME/Mutter, X11, or an integer KDE scale factor), which
+// both callers treat as a no-op.
+Future<double?> _waylandOutputScaleCompensationRatio() async {
+  if (!isLinux || !bind.mainCurrentIsWayland()) return null;
+  final trueScale = double.tryParse(
+      await bind.mainGetCommon(key: 'wayland-uniform-output-scale'));
+  if (trueScale == null || trueScale <= 0) return null;
+  final screens = await window_size.getScreenList();
+  final gdkScale = screens.isEmpty ? 0.0 : screens.first.scaleFactor;
+  if (gdkScale <= 0) return null;
+  // Dead-zone for xdg-output rounding noise and desktops that already compensate correctly, so
+  // this only kicks in for a real gap.
+  final ratio = trueScale / gdkScale;
+  return ratio > 1.03 ? ratio : null;
+}
+
+Future<Size> waylandCompensatedSize(Size size) async {
+  final ratio = await _waylandOutputScaleCompensationRatio();
+  return ratio == null ? size : Size(size.width * ratio, size.height * ratio);
+}
+
+// The inverse of `waylandCompensatedSize`. A size read back from a native window (e.g. via
+// `windowManager.getSize()` or `WindowController.getFrame()`) after a compensated resize is
+// already inflated by the ratio; persisting it as-is would have the next restore inflate it
+// again, compounding on every launch. Call this before saving a live-queried size.
+Future<Size> waylandUncompensatedSize(Size size) async {
+  final ratio = await _waylandOutputScaleCompensationRatio();
+  return ratio == null ? size : Size(size.width / ratio, size.height / ratio);
 }
 
 // Consider using Rect.contains() instead,
@@ -2112,6 +2151,7 @@ Future<bool> restoreWindowPosition(WindowType type,
               ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
         }
       }
+      final mainWindowSize = await waylandCompensatedSize(size);
       if (lpos.isMaximized == true) {
         await restorePos();
         if (!(bind.isIncomingOnly() || bind.isOutgoingOnly())) {
@@ -2126,17 +2166,17 @@ Future<bool> restoreWindowPosition(WindowType type,
             // The window belongs to the left monitor, but if it is moved a little to the right, it will belong to the right monitor.
             // After restoring, the size will be incorrect.
             // See known issue in https://github.com/rustdesk/rustdesk/pull/9840
-            await windowManager.setSize(size,
+            await windowManager.setSize(mainWindowSize,
                 ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
           }
           await restorePos();
           if (storeSize) {
-            await windowManager.setSize(size,
+            await windowManager.setSize(mainWindowSize,
                 ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
           }
         } else {
           if (storeSize) {
-            await windowManager.setSize(size,
+            await windowManager.setSize(mainWindowSize,
                 ignoreDevicePixelRatio: _ignoreDevicePixelRatio);
           }
           await restorePos();
@@ -2149,8 +2189,9 @@ Future<bool> restoreWindowPosition(WindowType type,
         if (offsetLeftTop == null) {
           await wc.center();
         } else {
-          final frame = Rect.fromLTWH(
-              offsetLeftTop.dx, offsetLeftTop.dy, size.width, size.height);
+          final subWindowSize = await waylandCompensatedSize(size);
+          final frame = Rect.fromLTWH(offsetLeftTop.dx, offsetLeftTop.dy,
+              subWindowSize.width, subWindowSize.height);
           await wc.setFrame(frame);
         }
       }
@@ -3459,8 +3500,9 @@ tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
   }
   final wc = WindowController.fromWindowId(stateGlobal.windowId);
   final curFrame = await wc.getFrame();
-  final frame =
-      Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
+  final size = await waylandCompensatedSize(const Size(600, 400));
+  final frame = Rect.fromLTWH(
+      screenRect.left + 30, screenRect.top + 30, size.width, size.height);
   if (stateGlobal.fullscreen.isTrue &&
       curFrame.left <= frame.left &&
       curFrame.top <= frame.top &&
