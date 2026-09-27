@@ -3754,6 +3754,19 @@ Widget loadPowered(BuildContext context) {
   ).marginOnly(top: 6);
 }
 
+Widget poweredByRustDesk(BuildContext context) {
+  return InkWell(
+    onTap: () => launchUrl(Uri.parse('https://rustdesk.com')),
+    child: Text(
+      'Powered by RustDesk',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontSize: 10,
+            decoration: TextDecoration.underline,
+          ),
+    ),
+  );
+}
+
 const _kDefaultLogoAsset = 'assets/logo.png';
 const _kLightLogoAsset = 'assets/logo_light.png';
 const _kDarkLogoAsset = 'assets/logo_dark.png';

@@ -142,7 +142,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     children: children,
                   ),
                 ),
-                Expanded(child: Container())
+                Expanded(child: Container()),
+                poweredByRustDesk(context).marginOnly(bottom: 8),
               ],
             ),
             if (isOutgoingOnly)

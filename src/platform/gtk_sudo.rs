@@ -592,7 +592,7 @@ fn password_prompt(
     show_edit: bool,
 ) -> Option<(String, String)> {
     let dialog = gtk::Dialog::builder()
-        .title(crate::get_app_name())
+        .title(crate::get_app_display_name())
         .modal(true)
         .build();
     // https://docs.gtk.org/gtk4/method.Dialog.set_default_response.html
@@ -744,7 +744,7 @@ fn error_dialog_and_exit(err_msg: &str, exit_code: i32) {
     log::error!("Error dialog: {err_msg}, exit code: {exit_code}");
     let dialog = gtk::MessageDialog::builder()
         .message_type(gtk::MessageType::Error)
-        .title(crate::get_app_name())
+        .title(crate::get_app_display_name())
         .text("Error")
         .secondary_text(err_msg)
         .modal(true)

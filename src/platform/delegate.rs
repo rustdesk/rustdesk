@@ -250,7 +250,7 @@ pub fn make_menubar(host: Rc<Host>, is_index: bool) {
         let separator = NSMenuItem::separatorItem(nil).autorelease();
         app_menu.addItem_(separator);
         let quit_item = make_menu_item(
-            &format!("Quit {}", crate::get_app_name()),
+            &format!("Quit {}", crate::get_app_display_name()),
             "q",
             TERMINATE_TAG,
         );
