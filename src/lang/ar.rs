@@ -770,5 +770,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "تمرير جميع اتصالات إعادة توجيه المنافذ عبر اتصال واحد بالجهاز الآخر، بدلاً من الاتصال وتسجيل الدخول من جديد لكل اتصال."),
         ("Enable WebRTC P2P connection", "تمكين اتصال نظير إلى نظير عبر WebRTC"),
         ("Enable TCP hole punching", "تمكين تقنية حفر الثغرات عبر TCP"),
+        ("The screen sharing request was declined on the remote device", "تم رفض طلب مشاركة الشاشة على الجهاز البعيد"),
+        ("The screen sharing request timed out on the remote device", "انتهت مهلة طلب مشاركة الشاشة على الجهاز البعيد"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "يتعذّر على RustDesk الوصول إلى جلسة سطح المكتب على الجهاز البعيد، تأكد من أن جلسة سطح المكتب تعمل وأن RustDesk يمكنه استخدامها"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "بوابة سطح المكتب على الجهاز البعيد تفتقر إلى إمكانية لازمة لمشاركة الشاشة أو التحكم عن بُعد، قد لا تكون واجهتها الخلفية مثبتة"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "تمت الموافقة على مشاركة الشاشة على الجهاز البعيد، لكن تعذّر فتح اتصال PipeWire"),
+        ("The screen sharing request ended without completing on the remote device", "انتهى طلب مشاركة الشاشة على الجهاز البعيد دون أن يكتمل"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "تعذّر على RustDesk الحصول على شاشة قابلة للاستخدام من XDG Desktop Portal، قد تكون مكتبة PipeWire قديمة جدًا"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "تعذّر على RustDesk تحميل مكوّن GStreamer اللازم لالتقاط الشاشة ({})"),
+        ("Relay fallback delay in seconds", "مهلة التراجع إلى الترحيل بالثواني"),
+        ("relay-fallback-delay-tip", "المدة التي ينتظرها اتصال الترحيل القائم بالفعل الاتصالَ المباشر عبر WebRTC قبل أن يُستخدم بدلًا منه. زِدها لمنح الاتصال المباشر البطيء فرصة أكبر للفوز؛ وقلّلها للاستقرار على الترحيل أسرع في الشبكات التي يتعذر فيها الاتصال المباشر. اتركها فارغة للقيمة الافتراضية 2.5 ثانية."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

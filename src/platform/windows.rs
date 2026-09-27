@@ -5,15 +5,14 @@ use crate::{
     ipc,
     privacy_mode::win_topmost_window::{self, WIN_TOPMOST_INJECTED_PROCESS_EXE},
 };
+use base::message_proto::{DisplayInfo, Resolution, WindowsSession};
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
     bail,
     config::{self, Config},
     libc::{c_int, wchar_t},
-    log,
-    message_proto::{DisplayInfo, Resolution, WindowsSession},
-    sleep,
+    log, sleep,
     sysinfo::{Pid, System},
     timeout, tokio,
 };
@@ -2482,7 +2481,7 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
 }
 
 pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
-    use hbb_common::platform::windows::RAIIHandle;
+    use base::platform::windows::RAIIHandle;
     unsafe {
         let handle: HANDLE = match process_id {
             Some(process_id) => OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id),
@@ -4754,7 +4753,7 @@ mod tests {
     // Test-only reusable Win32 HANDLE RAII helper.
     // If a future non-test path needs the same pattern, move it out of this test module.
     //
-    // This struct is similar to `hbb_common::platform::windows::RAIIHandle`,
+    // This struct is similar to `base::platform::windows::RAIIHandle`,
     // but `RAIIHandle` depends on `WinApi` crate, while this `HandleGuard` only depends on `windows` crate.
     struct HandleGuard(WinHANDLE);
 

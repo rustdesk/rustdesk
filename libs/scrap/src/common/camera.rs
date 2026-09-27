@@ -11,7 +11,7 @@ use nokhwa::{
     Camera,
 };
 
-use hbb_common::message_proto::{DisplayInfo, Resolution};
+use base::message_proto::{DisplayInfo, Resolution};
 
 #[cfg(feature = "vram")]
 use crate::AdapterDevice;

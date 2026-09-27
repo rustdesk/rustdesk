@@ -770,5 +770,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Όλες οι συνδέσεις μιας προώθησης θυρών περνούν από μία μόνο σύνδεση προς τον απομακρυσμένο υπολογιστή, αντί να πραγματοποιείται νέα σύνδεση και ταυτοποίηση για κάθε μία."),
         ("Enable WebRTC P2P connection", "Ενεργοποίηση σύνδεσης WebRTC P2P"),
         ("Enable TCP hole punching", "Ενεργοποίηση διάτρησης οπών TCP"),
+        ("The screen sharing request was declined on the remote device", "Το αίτημα κοινής χρήσης οθόνης απορρίφθηκε στην απομακρυσμένη συσκευή"),
+        ("The screen sharing request timed out on the remote device", "Το αίτημα κοινής χρήσης οθόνης έληξε στην απομακρυσμένη συσκευή"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "Το RustDesk δεν μπορεί να προσεγγίσει τη συνεδρία επιφάνειας εργασίας στην απομακρυσμένη συσκευή, ελέγξτε ότι μια συνεδρία εκτελείται και ότι το RustDesk μπορεί να τη χρησιμοποιήσει"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Στην πύλη επιφάνειας εργασίας της απομακρυσμένης συσκευής λείπει μια δυνατότητα που απαιτείται για κοινή χρήση οθόνης ή απομακρυσμένο έλεγχο, ίσως δεν είναι εγκατεστημένο το υποσύστημά της"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Η κοινή χρήση οθόνης εγκρίθηκε στην απομακρυσμένη συσκευή, αλλά δεν ήταν δυνατό το άνοιγμα της σύνδεσης PipeWire"),
+        ("The screen sharing request ended without completing on the remote device", "Το αίτημα κοινής χρήσης οθόνης στην απομακρυσμένη συσκευή έληξε χωρίς να ολοκληρωθεί"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "Το RustDesk δεν μπόρεσε να λάβει αξιοποιήσιμη οθόνη από το XDG Desktop Portal, η βιβλιοθήκη PipeWire ίσως είναι πολύ παλιά"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "Το RustDesk δεν μπόρεσε να φορτώσει ένα στοιχείο του GStreamer που απαιτείται για την καταγραφή οθόνης ({})"),
+        ("Relay fallback delay in seconds", "Καθυστέρηση πριν από τη χρήση αναμεταδότη σε δευτερόλεπτα"),
+        ("relay-fallback-delay-tip", "Πόσο χρόνο περιμένει μια ήδη ενεργή σύνδεση αναμεταδότη την απευθείας σύνδεση WebRTC πριν χρησιμοποιηθεί στη θέση της. Αυξήστε το για να δώσετε σε μια αργή απευθείας σύνδεση περισσότερο χρόνο. Μειώστε το για ταχύτερη επιστροφή στον αναμεταδότη σε δίκτυα όπου δεν είναι δυνατή η απευθείας σύνδεση. Αφήστε το κενό για την προεπιλογή των 2.5 δευτερολέπτων."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

@@ -7,7 +7,6 @@ use hbb_common::{
     config::READ_TIMEOUT,
     futures::{SinkExt, StreamExt},
     log,
-    message_proto::*,
     protobuf::Message as _,
     rendezvous_proto::ConnType,
     tcp, timeout,
@@ -15,6 +14,7 @@ use hbb_common::{
     tokio_util::codec::{BytesCodec, Framed},
     ResultType, Stream,
 };
+use base::message_proto::*;
 
 fn run_rdp(port: u16, name: &str) {
     std::process::Command::new("cmdkey")
@@ -551,7 +551,8 @@ fn take_socket(forward: Framed<TcpStream, BytesCodec>, mut prebuf: Vec<u8>) -> (
 
 /// The controlling side's `enable-port-forward-mux`: on unless set to `N`.
 pub fn mux_enabled() -> bool {
-    use hbb_common::config::{keys, option2bool, LocalConfig};
+    use hbb_common::config::{option2bool, LocalConfig};
+    use base::config::keys;
     option2bool(
         keys::OPTION_ENABLE_PORT_FORWARD_MUX,
         &LocalConfig::get_option(keys::OPTION_ENABLE_PORT_FORWARD_MUX),
@@ -816,7 +817,8 @@ mod tests {
 
     #[test]
     fn port_forward_mux_defaults_to_on() {
-        use hbb_common::config::{keys, option2bool};
+        use hbb_common::config::option2bool;
+        use base::config::keys;
         // option2bool's fallback branch is also "on unless N", so the value
         // assertions below would pass for a prefixless key too. The `enable-`
         // prefix is what actually guarantees the default, and renaming the key

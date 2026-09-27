@@ -770,5 +770,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Chuyển toàn bộ kết nối của một quy tắc chuyển tiếp cổng qua một kết nối duy nhất tới máy đối phương, thay vì kết nối và đăng nhập lại cho từng kết nối."),
         ("Enable WebRTC P2P connection", "Cho phép kết nối WebRTC P2P"),
         ("Enable TCP hole punching", "Bật TCP Hole Punching"),
+        ("The screen sharing request was declined on the remote device", "Yêu cầu chia sẻ màn hình đã bị từ chối trên thiết bị từ xa"),
+        ("The screen sharing request timed out on the remote device", "Yêu cầu chia sẻ màn hình đã hết thời gian chờ trên thiết bị từ xa"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk không thể truy cập phiên màn hình nền trên thiết bị từ xa, hãy kiểm tra rằng một phiên đang chạy và RustDesk có thể dùng nó"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Cổng màn hình nền trên thiết bị từ xa thiếu một khả năng cần cho chia sẻ màn hình hoặc điều khiển từ xa, phần nền của nó có thể chưa được cài đặt"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Chia sẻ màn hình đã được chấp thuận trên thiết bị từ xa, nhưng không thể mở kết nối PipeWire"),
+        ("The screen sharing request ended without completing on the remote device", "Yêu cầu chia sẻ màn hình trên thiết bị từ xa đã kết thúc mà chưa hoàn tất"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk không lấy được màn hình dùng được từ XDG Desktop Portal, thư viện PipeWire có thể quá cũ"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk không thể tải một thành phần GStreamer cần cho việc ghi màn hình ({})"),
+        ("Relay fallback delay in seconds", "Độ trễ trước khi chuyển sang trung chuyển (giây)"),
+        ("relay-fallback-delay-tip", "Kết nối trung chuyển đã thiết lập sẽ chờ kết nối WebRTC trực tiếp trong bao lâu trước khi được dùng thay thế. Tăng giá trị để cho kết nối trực tiếp chậm thêm thời gian; giảm để chuyển sang trung chuyển sớm hơn trên các mạng không thể kết nối trực tiếp. Để trống để dùng giá trị mặc định 2.5 giây."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

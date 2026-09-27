@@ -8,18 +8,24 @@
 * `src/platform/` platform-specific code
 * `src/ui/` legacy Sciter UI (deprecated)
 * `flutter/` current UI
-* `libs/hbb_common/` config / proto / shared utils
+* `libs/hbb_common/` shared with the server: rendezvous proto, sockets, `Config` core
+* `libs/base/` (crate `base`) client-only: option keys, message proto, file transfer, platform code
 * `libs/scrap/` screen capture
 * `libs/enigo/` input control
 * `libs/clipboard/` clipboard
-* `libs/hbb_common/src/config.rs` all options
+* `libs/base/src/config/keys.rs` the single import path for all options
 
 ### Key Components
 - **Remote Desktop Protocol**: Custom protocol implemented in `src/rendezvous_mediator.rs` for communicating with rustdesk-server
 - **Screen Capture**: Platform-specific screen capture in `libs/scrap/`
 - **Input Handling**: Cross-platform input simulation in `libs/enigo/`
 - **Audio/Video Services**: Real-time audio/video streaming in `src/server/`
-- **File Transfer**: Secure file transfer implementation in `libs/hbb_common/`
+- **File Transfer**: Secure file transfer implementation in `libs/base/src/fs.rs`
+
+`hbb_common` is a git submodule shared with the server, so changing it costs a
+round-trip. Put client-only code in `libs/base` instead; it is a normal
+workspace member. `base::config::keys` re-exports the handful of keys
+`hbb_common` still reads, so callers get the whole set from that one path.
 
 ### UI Architecture
 - **Legacy UI**: Sciter-based (deprecated) - files in `src/ui/`
@@ -42,6 +48,20 @@
 * Do not add dependencies unless needed.
 * Keep code simple and idiomatic.
 
+### Logging
+
+* `debug` and above are written to the log file. A log call that can fire
+  repeatedly (per packet, frame, input event, or loop iteration, or at a rate a
+  peer controls) must not use `debug` or higher unthrottled.
+* For such a site, pick one:
+
+  * `log::trace!` when the event is expected and the line only helps while
+    actively debugging;
+  * `hbb_common::throttled_log!(interval, level, ...)` when it signals a fault
+    that should still show up in a user's log. It keeps one line per interval
+    with a count of the rest. Use `hbb_common::log_throttle::LogThrottle`
+    directly only when the decision drives more than one log call.
+
 ## Tokio Rules
 
 * Assume a Tokio runtime already exists.
@@ -60,6 +80,34 @@
 * Do not refactor unrelated code.
 * Do not make formatting-only changes.
 * Keep naming/style consistent with nearby code.
+
+### Imports
+
+* One `use` per crate. Everything a file takes from the same crate goes in a
+  single braced block, not one statement per item:
+
+  ```rust
+  // no
+  use base::fs;
+  use base::message_proto::*;
+
+  // yes
+  use base::{fs, message_proto::*};
+  ```
+
+* The only reason to split is a `#[cfg(...)]` that does not apply to the whole
+  block -- an attribute binds to one item, so a differently-gated import has to
+  stand on its own. A `pub use` re-export likewise cannot join a plain `use`.
+
+  ```rust
+  #[cfg(not(feature = "flutter"))]
+  use base::fs;
+  use base::message_proto::*;
+  ```
+
+* When splitting an existing `use` because some of its items moved to another
+  crate, fold each side into that crate's existing block rather than leaving a
+  second statement behind.
 
 ### Comments
 
@@ -93,6 +141,15 @@ Before considering any implementation complete, perform a minimization pass over
 * Before finalizing, explicitly report the regression surface: list the existing files and existing runtime paths whose behavior changed, and explain why each change is unavoidable.
 * During review, treat an unnecessarily modified legacy path as a review finding even if tests pass and the rewritten behavior appears equivalent.
 
+### Corner cases raised in review
+
+A refactor added to cover a corner case rarely converges. Each new counter, timestamp, cache or eviction/expiry rule interacts with state that existing code relies on, and the next review round finds the problems it introduced.
+
+* A corner case is still worth fixing when the fix is easy and low-risk: a local change of a few lines that adds no state and changes no existing lookup, such as moving a check or refusing bad input earlier.
+* When the only fix needs new state, a new lifecycle rule or a restructure, and the code already fails cleanly there or behaves as master does, document it as a known limit in the PR instead. Anything beyond the easy fix needs the maintainer's explicit go-ahead first.
+* Before adding state that reorders, expires or reuses existing data, list every lookup that reads that data and check each one still holds.
+* Prefer a clean failure, where the operation reports an error, over machinery that tries to make a rare case succeed.
+
 ## Reviewing a PR
 
 * Review only what the diff introduces. Verify ownership with `gh pr diff` before reporting a finding — if the offending lines are untouched context, it is a pre-existing problem, not this PR's.
@@ -107,6 +164,7 @@ Each file is a `HashMap<key, translation>`. Layout:
 * `template.rs` is the master list of every key. **Never edit it** as part of translation work.
 * `en.rs` holds only the keys whose English display text differs from the key itself.
 * Every other file (`de.rs`, `fr.rs`, …) carries the full key set; an untranslated entry has an empty value: `("key", "")`.
+* `it.rs` is maintained by hand by its translator. Never fill or change its entries; when adding new keys, append them to it with `""` and leave the translation to the maintainer.
 
 ### Finding the English source for a key
 
@@ -128,4 +186,4 @@ Then translate that source into the file's target language (infer the language f
 
 * New English-text keys use sentence case, not Title Case: `Use ID whitelisting`, **not** `Use ID Whitelisting`. Acronyms (ID, IP, 2FA…) stay uppercase. Legacy Title-Case keys (e.g. `Use IP Whitelisting`) stay as-is — do not rename them.
 * Since the key itself is the English display text, a sentence-case key usually needs **no** `en.rs` entry; add one only when the display text must differ from the key (e.g. `*_tip` keys).
-* Append each new key to `template.rs` (with `""`) and to every `src/lang/*.rs` file (translated, or `""` if unsure), at the end of the list.
+* Append each new key to `template.rs` (with `""`) and to every `src/lang/*.rs` file (translated, or `""` if unsure; always `""` for `it.rs`), at the end of the list.

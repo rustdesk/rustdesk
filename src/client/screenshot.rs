@@ -1,6 +1,7 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::clipboard::{update_clipboard, ClipboardSide};
-use hbb_common::{message_proto::*, ResultType};
+use base::message_proto::*;
+use hbb_common::ResultType;
 use std::sync::Mutex;
 
 lazy_static::lazy_static! {
@@ -58,11 +59,14 @@ impl Screenshot {
     }
 
     fn handle_screenshot(&mut self, action: String) -> String {
-        let Some(data) = self.data.take() else {
+        let Some(data) = self.data.as_ref().cloned() else {
             return "No cached screenshot".to_owned();
         };
         match Self::handle_screenshot_(data, action) {
-            Ok(()) => "".to_owned(),
+            Ok(()) => {
+                self.data = None;
+                "".to_owned()
+            }
             Err(e) => e.to_string(),
         }
     }
@@ -96,4 +100,38 @@ pub fn set_screenshot(data: bytes::Bytes) {
 
 pub fn handle_screenshot(action: String) -> String {
     SCREENSHOT.lock().unwrap().handle_screenshot(action)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Screenshot;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn preserves_cached_screenshot_when_save_fails() {
+        let data = bytes::Bytes::from_static(b"screenshot data");
+        let mut screenshot = Screenshot {
+            data: Some(data.clone()),
+        };
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let missing_parent = std::env::temp_dir()
+            .join(format!("rustdesk-screenshot-missing-parent-{unique}"))
+            .join("screenshot.png");
+        let valid_path = std::env::temp_dir().join(format!("rustdesk-screenshot-{unique}.png"));
+
+        let error = screenshot.handle_screenshot(format!("0:{}", missing_parent.display()));
+
+        assert!(!error.is_empty());
+        assert_eq!(screenshot.data.as_deref(), Some(data.as_ref()));
+        assert_eq!(
+            screenshot.handle_screenshot(format!("0:{}", valid_path.display())),
+            ""
+        );
+        assert!(screenshot.data.is_none());
+        assert_eq!(std::fs::read(&valid_path).unwrap(), data.as_ref());
+        std::fs::remove_file(valid_path).unwrap();
+    }
 }

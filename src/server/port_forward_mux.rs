@@ -6,10 +6,10 @@ use crate::port_forward_mux::{
 use hbb_common::{
     bytes::Bytes,
     log,
-    message_proto::*,
     timeout,
     tokio::{self, net::TcpStream, sync::{mpsc, watch}},
 };
+use base::message_proto::*;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -262,7 +262,6 @@ mod tests {
     use super::*;
     use crate::port_forward_mux::{CHANNEL_WINDOW, INITIAL_WINDOW, MAX_CHANNELS, MIN_FRAME_CHARGE};
     use hbb_common::{
-        message_proto::{message, port_forward_channel},
         tokio::{
             self,
             io::{AsyncReadExt, AsyncWriteExt},
@@ -271,6 +270,7 @@ mod tests {
             time::Instant,
         },
     };
+    use base::message_proto::{message, port_forward_channel};
 
     fn rt() -> tokio::runtime::Runtime {
         tokio::runtime::Builder::new_current_thread()

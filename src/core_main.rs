@@ -3,9 +3,10 @@ use crate::client::translate;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::platform::breakdown_callback;
+use base::config::keys;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::platform::register_breakdown_handler;
+use base::platform::register_breakdown_handler;
 use hbb_common::{config, log};
 #[cfg(windows)]
 use tauri_winrt_notification::{Duration, Sound, Toast};
@@ -113,7 +114,7 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     #[cfg(windows)]
     if args.contains(&"--connect".to_string()) || args.contains(&"--view-camera".to_string()) {
-        hbb_common::platform::windows::start_cpu_performance_monitor();
+        base::platform::windows::start_cpu_performance_monitor();
     }
     #[cfg(feature = "flutter")]
     if _is_flutter_invoke_new_connection {
@@ -889,7 +890,7 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
 
 #[inline]
 fn is_cli_setting_change_disabled() -> bool {
-    let option = config::keys::OPTION_ALLOW_COMMAND_LINE_SETTINGS_WHEN_SETTINGS_DISABLED;
+    let option = keys::OPTION_ALLOW_COMMAND_LINE_SETTINGS_WHEN_SETTINGS_DISABLED;
     let allow_command_line_settings =
         config::option2bool(option, &crate::get_builtin_option(option));
     config::is_disable_settings() && !allow_command_line_settings

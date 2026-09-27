@@ -14,9 +14,13 @@ use crate::{
 use flutter_rust_bridge::{StreamSink, SyncReturn};
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
-    fs, lazy_static, log,
+    lazy_static, log,
     rendezvous_proto::ConnType,
     ResultType,
+};
+use base::{
+    config::keys,
+    fs,
 };
 use std::{
     collections::HashMap,
@@ -93,6 +97,16 @@ pub enum EventToUI {
     Event(String),
     Rgba(usize),
     Texture(usize, bool), // (display, gpu_texture)
+    // A shape's RGBA as bytes: as text it was four times the size and parsed on the UI thread.
+    // The id stays text, since the peer's ids can exceed Dart's int.
+    Cursor {
+        id: String,
+        hotx: i32,
+        hoty: i32,
+        width: i32,
+        height: i32,
+        colors: Vec<u8>,
+    },
 }
 
 pub fn host_stop_system_key_propagate(_stopped: bool) {
@@ -195,6 +209,34 @@ pub fn session_start_with_displays(
         }
     }
     Ok(())
+}
+
+// A cursor shape the core keeps, as RGBA, for a window that has to draw it again.
+pub struct CursorShape {
+    pub hotx: i32,
+    pub hoty: i32,
+    pub width: i32,
+    pub height: i32,
+    pub colors: Vec<u8>,
+}
+
+pub fn session_get_cursor_shape(session_id: SessionID, id: String) -> Option<CursorShape> {
+    let id = id.parse::<u64>().ok()?;
+    let session = sessions::get_session_by_session_id(&session_id)?;
+    let shape = session.cursor_shapes.read().unwrap().get(&id).cloned()?;
+    match crate::client::io_loop::kept_cursor_rgba(shape) {
+        Ok(cd) => Some(CursorShape {
+            hotx: cd.hotx,
+            hoty: cd.hoty,
+            width: cd.width,
+            height: cd.height,
+            colors: cd.colors.to_vec(),
+        }),
+        Err(err) => {
+            log::warn!("Kept cursor {id} failed to decode: {err}");
+            None
+        }
+    }
 }
 
 pub fn session_get_remember(session_id: SessionID) -> Option<bool> {
@@ -330,7 +372,7 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
     }
     #[cfg(feature = "unix-file-copy-paste")]
     if sessions::get_session_by_session_id(&session_id).is_some()
-        && (value == config::keys::OPTION_ENABLE_FILE_COPY_PASTE || value == "view-only")
+        && (value == keys::OPTION_ENABLE_FILE_COPY_PASTE || value == "view-only")
     {
         crate::flutter::update_file_clipboard_required();
     }
@@ -965,12 +1007,12 @@ pub fn main_get_error() -> String {
 pub fn main_set_option(key: String, value: String) {
     #[cfg(target_os = "android")]
     {
-        let is_permission_option = key.eq(config::keys::OPTION_ENABLE_CLIPBOARD)
-            || key.eq(config::keys::OPTION_ENABLE_FILE_TRANSFER)
-            || key.eq(config::keys::OPTION_ENABLE_AUDIO);
+        let is_permission_option = key.eq(keys::OPTION_ENABLE_CLIPBOARD)
+            || key.eq(keys::OPTION_ENABLE_FILE_TRANSFER)
+            || key.eq(keys::OPTION_ENABLE_AUDIO);
         let allow_perm_change_in_accept_window = config::option2bool(
-            config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
-            &crate::get_builtin_option(config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+            keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+            &crate::get_builtin_option(keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
         );
         if is_permission_option
             && !allow_perm_change_in_accept_window
@@ -985,14 +1027,14 @@ pub fn main_set_option(key: String, value: String) {
         }
     }
     #[cfg(target_os = "android")]
-    if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
+    if key.eq(keys::OPTION_ENABLE_KEYBOARD) {
         crate::ui_cm_interface::switch_permission_all(
             "keyboard".to_owned(),
             config::option2bool(&key, &value),
         );
     }
     #[cfg(target_os = "android")]
-    if key.eq(config::keys::OPTION_ENABLE_CLIPBOARD) {
+    if key.eq(keys::OPTION_ENABLE_CLIPBOARD) {
         crate::ui_cm_interface::switch_permission_all(
             "clipboard".to_owned(),
             config::option2bool(&key, &value),
@@ -1002,11 +1044,11 @@ pub fn main_set_option(key: String, value: String) {
     // If `is_allow_tls_fallback` and https proxy is used, we need to restart rendezvous mediator.
     // No need to check if https proxy is used, because this option does not change frequently
     // and restarting mediator is safe even https proxy is not used.
-    let is_allow_tls_fallback = key.eq(config::keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK);
+    let is_allow_tls_fallback = key.eq(keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK);
     if is_allow_tls_fallback
         || key.eq("custom-rendezvous-server")
-        || key.eq(config::keys::OPTION_ALLOW_WEBSOCKET)
-        || key.eq(config::keys::OPTION_DISABLE_UDP)
+        || key.eq(keys::OPTION_ALLOW_WEBSOCKET)
+        || key.eq(keys::OPTION_DISABLE_UDP)
         || key.eq("api-server")
     {
         if is_allow_tls_fallback {
@@ -1035,14 +1077,14 @@ pub fn main_set_options(json: String) {
     #[cfg(target_os = "android")]
     {
         let allow_perm_change_in_accept_window = config::option2bool(
-            config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
-            &crate::get_builtin_option(config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+            keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+            &crate::get_builtin_option(keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
         );
         if !allow_perm_change_in_accept_window && crate::ui_cm_interface::has_active_clients() {
             for key in [
-                config::keys::OPTION_ENABLE_CLIPBOARD,
-                config::keys::OPTION_ENABLE_FILE_TRANSFER,
-                config::keys::OPTION_ENABLE_AUDIO,
+                keys::OPTION_ENABLE_CLIPBOARD,
+                keys::OPTION_ENABLE_FILE_TRANSFER,
+                keys::OPTION_ENABLE_AUDIO,
             ] {
                 if let Some(value) = map.remove(key) {
                     log::info!(
@@ -1210,8 +1252,8 @@ pub fn main_set_env(key: String, value: Option<String>) -> SyncReturn<()> {
 }
 
 pub fn main_set_local_option(key: String, value: String) {
-    let is_texture_render_key = key.eq(config::keys::OPTION_TEXTURE_RENDER);
-    let is_d3d_render_key = key.eq(config::keys::OPTION_ALLOW_D3D_RENDER);
+    let is_texture_render_key = key.eq(keys::OPTION_TEXTURE_RENDER);
+    let is_d3d_render_key = key.eq(keys::OPTION_ALLOW_D3D_RENDER);
     set_local_option(key, value.clone());
     let is_render_target =
         |session: &crate::flutter::FlutterSession| session.is_default() || session.is_view_camera();
@@ -2651,7 +2693,7 @@ pub fn main_get_common(key: String) -> String {
         #[cfg(not(target_os = "windows"))]
         return false.to_string();
     } else if key == "transfer-job-id" {
-        return hbb_common::fs::get_next_job_id().to_string();
+        return base::fs::get_next_job_id().to_string();
     } else if key == "is-remote-modify-enabled-by-control-permissions" {
         return match is_remote_modify_enabled_by_control_permissions() {
             Some(true) => "true",

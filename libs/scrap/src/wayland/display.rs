@@ -8,7 +8,7 @@ use std::{
 };
 use tracing::warn;
 
-use hbb_common::platform::linux::{get_wayland_displays, WaylandDisplayInfo};
+use base::platform::linux::{get_wayland_displays, WaylandDisplayInfo};
 
 lazy_static! {
     static ref DISPLAYS: Mutex<Option<Arc<Displays>>> = Mutex::new(None);
@@ -105,7 +105,7 @@ fn try_xrandr_primary() -> Option<String> {
 }
 
 fn try_kscreen_primary() -> Option<String> {
-    if !hbb_common::platform::linux::is_kde_session() {
+    if !base::platform::linux::is_kde_session() {
         return None;
     }
 

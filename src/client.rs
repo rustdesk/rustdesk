@@ -1,9 +1,7 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::clipboard_listener;
+use crate::clipboard::clipboard_listener::{self, ClipboardEvent};
 use async_trait::async_trait;
 use bytes::Bytes;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use clipboard_master::CallbackResult;
 #[cfg(not(target_os = "linux"))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -30,9 +28,10 @@ use uuid::Uuid;
 use crate::{
     check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
-    create_symmetric_key_msg, decode_id_pk, decode_id_pk_dtls, get_rs_pk, is_keyboard_mode_supported,
+    create_symmetric_key_msg, decode_id_pk, decode_id_pk_dtls, dtls_fingerprint_bound, get_rs_pk,
+    is_keyboard_mode_supported,
     kcp_stream::KcpStream,
-    secure_tcp,
+    secure_tcp, secure_tcp_required,
     ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
     ui_session_interface::{InvokeUiSession, Session},
 };
@@ -47,18 +46,16 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        self, keys, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution,
+        self, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution,
         CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
     },
-    fs::JobType,
     futures::future::{select_ok, BoxFuture, FutureExt},
     get_version_number, log,
-    message_proto::{option_message::BoolOption, *},
     protobuf::{Message as _, MessageField},
     rand,
     rendezvous_proto::*,
     sha2::{Digest, Sha256},
-    socket_client::{connect_tcp, connect_tcp_local, ipv4_to_ipv6, new_direct_udp_for},
+    socket_client::{connect_tcp, connect_tcp_local, ipv4_to_ipv6, new_direct_udp_for_unverified},
     sodiumoxide::{base64, crypto::sign},
     timeout,
     tokio::{
@@ -72,6 +69,11 @@ use hbb_common::{
     },
     webrtc::WebRTCStream,
     AddrMangle, ResultType, Stream,
+};
+use base::{
+    config::keys,
+    fs::JobType,
+    message_proto::{option_message::BoolOption, *},
 };
 pub use helper::*;
 use scrap::{
@@ -90,6 +92,13 @@ use crate::ui_session_interface::SessionPermissionConfig;
 
 pub use super::lang::*;
 
+#[cfg(not(target_os = "linux"))]
+mod audio_playback;
+#[cfg(target_os = "windows")]
+mod audio_playback_recovery;
+#[cfg(all(test, not(target_os = "linux")))]
+#[path = "client/tests/audio_state_tests.rs"]
+mod audio_state_tests;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
@@ -479,7 +488,7 @@ impl Client {
         // no need to care about multiple rendezvous servers case, since it is acutally not used any more.
         // Shared state for UDP NAT test result
         if crate::get_udp_punch_enabled() && !interface.is_force_relay() {
-            if let Ok((socket, addr)) = new_direct_udp_for(&rendezvous_server).await {
+            if let Ok((socket, addr)) = new_direct_udp_for_unverified(&rendezvous_server).await {
                 let udp_port = Arc::new(Mutex::new(0));
                 let up_cloned = udp_port.clone();
                 let socket_cloned = socket.clone();
@@ -566,7 +575,7 @@ impl Client {
             return race_transports_prefer_webrtc(
                 preferred_fut,
                 vec![fallback_fut],
-                Self::WEBRTC_PREFER_WINDOW_MS,
+                Self::relay_fallback_delay_ms(),
                 |result| result.0 .1,
             )
             .await;
@@ -607,11 +616,27 @@ impl Client {
     /// ones that traverse NAT.
     const MAX_PENDING_WEBRTC_ICE: usize = 64;
 
-    /// Prefer-P2P window: how long a WebRTC attempt outranks an already-established relay
-    /// result, and the floor for a punch-path WebRTC attempt whose race timeout is tuned for a
-    /// raw TCP SYN. Long enough for candidate trickle + ICE checks + DTLS on high-latency
-    /// links; short enough that UDP-blocked networks settle on relay without a noticeable wait.
-    const WEBRTC_PREFER_WINDOW_MS: u64 = 2500;
+    /// Default relay fallback delay: how long an already-established relay result is held back
+    /// while a WebRTC attempt is still in flight, and the floor for a punch-path WebRTC attempt
+    /// whose race timeout is tuned for a raw TCP SYN. Long enough for candidate trickle + ICE
+    /// checks + DTLS on high-latency links; short enough that UDP-blocked networks settle on
+    /// relay without a noticeable wait. The same role RFC 8305 calls a connection attempt delay.
+    const RELAY_FALLBACK_DELAY_MS: u64 = 2500;
+
+    /// The delay as the user configured it, falling back to `RELAY_FALLBACK_DELAY_MS`. The
+    /// settings field holds seconds, which is what a user reasons about; everything here is
+    /// milliseconds. Unparseable, zero or negative all mean "unset", so clearing the field
+    /// restores the default instead of collapsing the delay and handing every race to the
+    /// relay.
+    fn relay_fallback_delay_ms() -> u64 {
+        match LocalConfig::get_option(keys::OPTION_RELAY_FALLBACK_DELAY)
+            .trim()
+            .parse::<f64>()
+        {
+            Ok(secs) if secs.is_finite() && secs > 0.0 => (secs * 1000.0).round() as u64,
+            _ => Self::RELAY_FALLBACK_DELAY_MS,
+        }
+    }
 
     /// UDP-NAT-test wait when the TCP clock is implausible (see TCP_RTT_PLAUSIBLE_MIN). The
     /// normal bound is `rtt / 2`: the test has been running since before the TCP connect, so on
@@ -806,7 +831,7 @@ impl Client {
         }
         log::info!("rendezvous server: {}", rendezvous_server);
         let mut socket = socket?;
-        let my_addr = socket.local_addr();
+        let mut my_addr = socket.local_addr();
         let mut signed_id_pk = Vec::new();
         let mut relay_server = "".to_owned();
         let mut peer_addr = Config::get_any_listen_addr(true);
@@ -822,12 +847,44 @@ impl Client {
         };
 
         let switch_code = interface.get_switch_code();
-        if !key.is_empty() && (!token.is_empty() || !switch_code.is_empty()) {
+        let legacy_secure = !key.is_empty() && (!token.is_empty() || !switch_code.is_empty());
+        let carries_offer = webrtc_offerer.as_ref().and_then(|g| g.stream()).is_some();
+        // Counted from before the key exchange, so the exchange spends the UDP NAT test's own
+        // wait rather than replacing it: the test runs beside both.
+        let udp_nat_wait_from = Instant::now();
+        let mut exchanged = false;
+        if carries_offer {
+            // An offer puts both sides' ICE candidates, every interface address of both
+            // machines, on this socket, so it goes out only once the server's key exchange has
+            // encrypted it. When the server does not complete one, an hbbs from before the
+            // exchange, the offer is dropped and this becomes a punch without WebRTC, on a fresh
+            // socket since the failed exchange may have consumed a message on this one. Degrade
+            // to no WebRTC, never to WebRTC signalling in the clear.
+            match secure_tcp_required(&mut socket, &key).await {
+                Ok(()) => exchanged = true,
+                Err(err) => {
+                    log::warn!(
+                        "WebRTC signalling to {} cannot be encrypted, punching without WebRTC: {}",
+                        rendezvous_server,
+                        err
+                    );
+                    webrtc_offerer = None;
+                    socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await?;
+                    my_addr = socket.local_addr();
+                }
+            }
+        }
+        if !exchanged && legacy_secure {
             secure_tcp(&mut socket, &key)
                 .await
                 .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
-        } else if let Some(udp) = udp.1.as_ref() {
-            let tm = Instant::now();
+        }
+        // A token or switch code has always taken this socket straight to the punch without
+        // waiting for the UDP NAT test. The WebRTC exchange does not replace that wait, it only
+        // spends part of the same budget, so what is left of it is waited out here and a result
+        // that has already arrived is taken at once.
+        if let Some(udp) = udp.1.as_ref().filter(|_| !legacy_secure) {
+            let tm = udp_nat_wait_from;
             // rtt is the TCP connect time. When it is too short to be a real WAN round trip it
             // says nothing about the UDP path (a TUN VPN or the LAN gateway answered the
             // handshake, not the server), so fall back to the flat grace; otherwise trust it.
@@ -1111,7 +1168,7 @@ impl Client {
                                 race_transports_prefer_webrtc(
                                     webrtc_fut,
                                     connect_futures,
-                                    Self::WEBRTC_PREFER_WINDOW_MS,
+                                    Self::relay_fallback_delay_ms(),
                                     |result| result.3,
                                 )
                                 .await
@@ -1439,7 +1496,7 @@ impl Client {
                 // so a viable P2P path is not abandoned before it can complete; TCP/UDP keep the
                 // tighter timeout, so a working direct connection still wins immediately, and the
                 // relay fallback only waits the extra time when direct attempts all failed.
-                let webrtc_timeout = connect_timeout.max(Self::WEBRTC_PREFER_WINDOW_MS);
+                let webrtc_timeout = connect_timeout.max(Self::relay_fallback_delay_ms());
                 async move {
                     raced.wait_connected(webrtc_timeout).await?;
                     // Resolve the pair here: a TURN win is relayed, not direct, and must be held
@@ -1457,7 +1514,7 @@ impl Client {
                 race_transports_prefer_webrtc(
                     webrtc_fut,
                     direct_futures,
-                    Self::WEBRTC_PREFER_WINDOW_MS,
+                    Self::relay_fallback_delay_ms(),
                     |r| r.3,
                 )
                 .await
@@ -1635,7 +1692,9 @@ impl Client {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::SignedId(si)) = msg_in.union {
-                        if let Ok((id, their_pk_b, signed_fp)) = decode_id_pk_dtls(&si.id, &sign_pk) {
+                        if let Ok((id, their_pk_b, signed_fp, kx_version)) =
+                            decode_id_pk_dtls(&si.id, &sign_pk)
+                        {
                             if id == peer_id {
                                 // WebRTC only: bind the DTLS channel to the verified peer identity.
                                 // webrtc-rs already bound the certificate to the remote SDP, so
@@ -1645,20 +1704,37 @@ impl Client {
                                     let actual_fp = conn.dtls_fingerprint(false).await.ok_or_else(
                                         || anyhow!("WebRTC DTLS fingerprint unavailable"),
                                     )?;
-                                    if signed_fp.is_empty() || signed_fp != actual_fp {
+                                    if !dtls_fingerprint_bound(&signed_fp, &actual_fp) {
                                         bail!("WebRTC DTLS fingerprint not bound to peer identity (possible MITM)");
                                     }
                                 }
                                 let (asymmetric_value, symmetric_value, key) =
                                     create_symmetric_key_msg(their_pk_b);
+                                // A WebRTC stream is encrypted by DTLS and takes no stream
+                                // key of its own, split or not, so the pick says what runs: 0.
+                                let picked = if is_webrtc {
+                                    0
+                                } else {
+                                    hbb_common::tcp::kx_version_for(kx_version)
+                                };
                                 let mut msg_out = Message::new();
                                 msg_out.set_public_key(PublicKey {
-                                    asymmetric_value,
+                                    asymmetric_value: asymmetric_value.clone(),
                                     symmetric_value,
+                                    kx_version: picked,
                                     ..Default::default()
                                 });
                                 timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                                conn.set_key(key);
+                                conn.set_negotiated_key(
+                                    key,
+                                    true,
+                                    &hbb_common::tcp::KxTranscript {
+                                        initiator_pk: &asymmetric_value,
+                                        responder_pk: &their_pk_b,
+                                        advertised: kx_version,
+                                        picked,
+                                    },
+                                )?;
                             } else {
                                 if is_webrtc {
                                     bail!("WebRTC handshake id mismatch (possible MITM)");
@@ -1864,14 +1940,19 @@ impl Client {
                     break;
                 }
                 match rx_cb_result.recv_timeout(Duration::from_millis(CLIPBOARD_INTERVAL)) {
-                    Ok(CallbackResult::Next) => {
-                        handler.check_clipboard();
+                    Ok(ClipboardEvent::Changed) => {
+                        handler.check_clipboard(true);
                     }
-                    Ok(CallbackResult::Stop) => {
+                    #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+                    Ok(ClipboardEvent::InitialSelection) => {
+                        // Preserve file startup sync without bypassing text initial-sync settings.
+                        handler.check_clipboard(false);
+                    }
+                    Ok(ClipboardEvent::Stop) => {
                         log::debug!("Clipboard listener stopped");
                         break;
                     }
-                    Ok(CallbackResult::StopWithError(err)) => {
+                    Ok(ClipboardEvent::StopWithError(err)) => {
                         log::error!("Clipboard listener stopped with error: {}", err);
                         break;
                     }
@@ -1973,16 +2054,16 @@ impl ClientClipboardHandler {
         }
     }
 
-    fn check_clipboard(&mut self) {
+    fn check_clipboard(&mut self, check_text: bool) {
         if CLIPBOARD_STATE.lock().unwrap().running {
             #[cfg(feature = "unix-file-copy-paste")]
-            if let Some(urls) = check_clipboard_files(&mut self.ctx, ClipboardSide::Client, false) {
-                if !urls.is_empty() {
-                    #[cfg(target_os = "macos")]
-                    if crate::clipboard::is_file_url_set_by_rustdesk(&urls) {
-                        return;
-                    }
-                    if self.is_file_required() {
+            if self.is_file_required() {
+                if let Some(urls) = check_clipboard_files(&mut self.ctx, ClipboardSide::Client, false) {
+                    if !urls.is_empty() {
+                        #[cfg(target_os = "macos")]
+                        if crate::clipboard::is_file_url_set_by_rustdesk(&urls) {
+                            return;
+                        }
                         match clipboard::platform::unix::serv_files::sync_files(&urls) {
                             Ok(()) => {
                                 let msg = crate::clipboard_file::clip_2_msg(
@@ -1999,8 +2080,8 @@ impl ClientClipboardHandler {
                 }
             }
 
-            if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Client, false) {
-                if self.is_text_required() {
+            if check_text && self.is_text_required() {
+                if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Client, false) {
                     self.send_msg(msg, false);
                 }
             }
@@ -2050,6 +2131,8 @@ pub struct AudioHandler {
     simple: Option<psimple::Simple>,
     #[cfg(not(target_os = "linux"))]
     audio_buffer: AudioBuffer,
+    #[cfg(not(target_os = "linux"))]
+    audio_resampler: Option<crate::audio_resampler::AudioResampler>,
     sample_rate: (u32, u32),
     #[cfg(not(target_os = "linux"))]
     audio_stream: Option<Box<dyn StreamTrait>>,
@@ -2057,7 +2140,57 @@ pub struct AudioHandler {
     #[cfg(not(target_os = "linux"))]
     device_channel: u16,
     #[cfg(not(target_os = "linux"))]
-    ready: Arc<std::sync::Mutex<bool>>,
+    playback_status: Arc<audio_playback::AudioPlaybackStatus>,
+    #[cfg(target_os = "windows")]
+    playback_recovery: audio_playback_recovery::PlaybackRecovery,
+}
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Clone, Copy)]
+struct DecodedAudioConfig {
+    sample_rate: u32,
+    input_channels: u16,
+    output_channels: u16,
+}
+
+#[cfg(not(target_os = "linux"))]
+fn create_audio_resampler(
+    input_rate: u32,
+    output_rate: u32,
+    channels: u16,
+) -> ResultType<Option<crate::audio_resampler::AudioResampler>> {
+    if input_rate == output_rate {
+        return Ok(None);
+    }
+    Ok(Some(crate::audio_resampler::AudioResampler::new(
+        crate::audio_resampler::AudioResamplerConfig {
+            input_rate,
+            output_rate,
+            channels,
+        },
+    )?))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn prepare_decoded_audio(
+    input: &[f32],
+    resampler: Option<&mut crate::audio_resampler::AudioResampler>,
+    config: DecodedAudioConfig,
+) -> Result<Vec<f32>, crate::audio_resampler::AudioResamplerError> {
+    let mut output = match resampler {
+        Some(resampler) => resampler.process(input)?,
+        None => input.to_owned(),
+    };
+    if config.input_channels != config.output_channels {
+        output = crate::audio_rechannel(
+            output,
+            config.sample_rate,
+            config.sample_rate,
+            config.input_channels,
+            config.output_channels,
+        );
+    }
+    Ok(output)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2065,6 +2198,7 @@ struct AudioBuffer(
     pub Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
     usize,
     [usize; 30],
+    Arc<std::sync::atomic::AtomicUsize>,
 );
 
 #[cfg(not(target_os = "linux"))]
@@ -2076,6 +2210,7 @@ impl Default for AudioBuffer {
             )),
             48000 * 2,
             [0; 30],
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         )
     }
 }
@@ -2150,8 +2285,17 @@ impl AudioBuffer {
         let skip = (cap * max / (30 * N) + 1) & (!1);
         if (having > skip * 3) && (skip > 0) {
             lock.skip(skip);
-            log::info!("skip {skip}, based {max} {zero}");
+            let generation = self.signal_discontinuity();
+            drop(lock);
+            log::info!("skip {skip}, based {max} {zero}, generation={generation}");
         }
+    }
+
+    /// The caller must hold the PCM buffer lock while signaling the discard.
+    fn signal_discontinuity(&self) -> usize {
+        self.3
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .wrapping_add(1)
     }
 
     /// append pcm to audio buffer, if buffered data
@@ -2160,17 +2304,19 @@ impl AudioBuffer {
     fn append_pcm2(&self, buffer: &[f32]) -> usize {
         let mut lock = self.0.lock().unwrap();
         let cap = lock.capacity();
-        if buffer.len() > cap {
-            lock.push_slice_overwrite(buffer);
-            return cap;
-        }
-
         let having = lock.occupied_len() + buffer.len();
-        if having > cap {
-            lock.skip(having - cap);
-        }
         lock.push_slice_overwrite(buffer);
-        lock.occupied_len()
+        let discard = (having > cap).then(|| (having - cap, self.signal_discontinuity()));
+        let occupied = lock.occupied_len();
+        drop(lock);
+        if let Some((discarded, generation)) = discard {
+            hbb_common::throttled_log!(
+                audio_playback::AUDIO_PLAYBACK_LOG_INTERVAL,
+                debug,
+                "Audio buffer capacity discard: samples={discarded}, generation={generation}"
+            );
+        }
+        occupied
     }
 
     /// append pcm to audio buffer, trying to drop data
@@ -2179,6 +2325,41 @@ impl AudioBuffer {
     pub fn append_pcm(&mut self, buffer: &[f32]) {
         let having = self.append_pcm2(buffer);
         self.try_shrink(having);
+    }
+}
+
+#[cfg(all(test, not(target_os = "linux")))]
+mod audio_buffer_discontinuity_tests {
+    use super::AudioBuffer;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    };
+
+    const BUFFER_CAPACITY: usize = 4;
+    const BUFFER_LEVELS: usize = 30;
+    const FIRST_INPUT: [f32; 2] = [0.1, 0.2];
+    const OVERFLOWING_INPUT: [f32; 3] = [0.3, 0.4, 0.5];
+    const OVERSIZED_INPUT: [f32; 5] = [0.6, 0.7, 0.8, 0.9, 1.0];
+
+    #[test]
+    fn capacity_discards_signal_discontinuities() {
+        let audio_buffer = AudioBuffer(
+            Arc::new(Mutex::new(ringbuf::HeapRb::new(BUFFER_CAPACITY))),
+            BUFFER_CAPACITY,
+            [0; BUFFER_LEVELS],
+            Arc::new(AtomicUsize::new(0)),
+        );
+
+        assert_eq!(audio_buffer.append_pcm2(&FIRST_INPUT), FIRST_INPUT.len());
+        assert_eq!(audio_buffer.3.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            audio_buffer.append_pcm2(&OVERFLOWING_INPUT),
+            BUFFER_CAPACITY
+        );
+        assert_eq!(audio_buffer.3.load(Ordering::Relaxed), 1);
+        assert_eq!(audio_buffer.append_pcm2(&OVERSIZED_INPUT), BUFFER_CAPACITY);
+        assert_eq!(audio_buffer.3.load(Ordering::Relaxed), 2);
     }
 }
 
@@ -2228,13 +2409,16 @@ impl AudioHandler {
         log::info!("Remote input format: {:?}", format0);
         #[allow(unused_mut)]
         let mut config: StreamConfig = config.into();
-        #[cfg(not(target_os = "ios"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
-            // this makes ios audio output not work
+            // this makes ios and android audio output not work
             config.buffer_size = cpal::BufferSize::Fixed(64);
         }
 
         self.sample_rate = (format0.sample_rate, config.sample_rate.0);
+        let audio_resampler = create_audio_resampler(
+            format0.sample_rate, config.sample_rate.0, format0.channels as _,
+        )?;
         let mut build_output_stream = |config: StreamConfig| match sample_format {
             cpal::SampleFormat::I8 => self.build_output_stream::<i8>(&config, &device),
             cpal::SampleFormat::I16 => self.build_output_stream::<i16>(&config, &device),
@@ -2259,25 +2443,77 @@ impl AudioHandler {
         } else {
             build_output_stream(config)?;
         }
+        self.audio_resampler = audio_resampler;
 
         Ok(())
     }
 
     /// Handle audio format and create an audio decoder.
     pub fn handle_format(&mut self, f: AudioFormat) {
+        self.handle_format_with_start(f, Self::start_audio);
+    }
+
+    fn handle_format_with_start(
+        &mut self,
+        f: AudioFormat,
+        start: impl FnOnce(&mut Self, AudioFormat) -> ResultType<()>,
+    ) {
         if !is_supported_audio_channel_count(f.channels) {
             log::error!("Unsupported audio channel count: {}", f.channels);
             return;
         }
         match AudioDecoder::new(f.sample_rate, if f.channels > 1 { Stereo } else { Mono }) {
             Ok(d) => {
+                #[cfg(target_os = "windows")]
+                let playback_failed = self.cancel_pending_playback();
+                #[cfg(target_os = "linux")]
+                let keep_existing_stream = self.simple.is_some()
+                    && self.sample_rate.0 == f.sample_rate
+                    && u32::from(self.channels) == f.channels;
+                #[cfg(not(target_os = "linux"))]
+                let keep_existing_stream = self.audio_stream.is_some()
+                    && self.sample_rate.0 == f.sample_rate
+                    && u32::from(self.channels) == f.channels;
                 let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
+                #[cfg(not(target_os = "linux"))]
+                let mut previous = std::mem::take(self);
+                #[cfg(target_os = "windows")]
+                self.prepare_playback(&f);
                 self.audio_decoder = Some((d, buffer));
                 self.channels = f.channels as _;
-                allow_err!(self.start_audio(f));
+                let result = start(self, f);
+                #[cfg(target_os = "windows")]
+                let keep_existing_stream = keep_existing_stream
+                    && !playback_failed
+                    && !previous.playback_recovery.report_pending();
+                #[cfg(not(target_os = "linux"))]
+                if result.is_err() && keep_existing_stream {
+                    // The restarted capture has new Opus history even when output startup fails.
+                    previous.audio_decoder = self.audio_decoder.take();
+                    *self = previous;
+                    self.handle_audio_start_result(result, true);
+                    return;
+                }
+                #[cfg(target_os = "windows")]
+                self.finish_playback_replacement(result, keep_existing_stream.then_some(previous));
+                #[cfg(not(target_os = "windows"))]
+                self.handle_audio_start_result(result, keep_existing_stream);
             }
             Err(err) => {
                 log::error!("Failed to create audio decoder: {}", err);
+            }
+        }
+    }
+
+    fn handle_audio_start_result(&mut self, result: ResultType<()>, keep_existing_stream: bool) {
+        if let Err(error) = result {
+            if keep_existing_stream {
+                log::error!(
+                    "Failed to replace audio playback stream; keeping the existing compatible stream: {error:#}"
+                );
+            } else {
+                *self = Self::default();
+                log::error!("Failed to start audio playback: {error:#}");
             }
         }
     }
@@ -2286,48 +2522,56 @@ impl AudioHandler {
     #[inline]
     pub fn handle_frame(&mut self, frame: AudioFrame) {
         #[cfg(not(target_os = "linux"))]
-        if self.audio_stream.is_none() || !self.ready.lock().unwrap().clone() {
+        self.playback_status.report_errors();
+        #[cfg(not(target_os = "linux"))]
+        if self.audio_stream.is_none()
+            || !self
+                .playback_status
+                .ready
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
             return;
         }
         #[cfg(target_os = "linux")]
         if self.simple.is_none() {
-            log::debug!("PulseAudio simple binding does not exists");
+            log::trace!("PulseAudio simple binding does not exists");
             return;
         }
         self.audio_decoder.as_mut().map(|(d, buffer)| {
-            if let Ok(n) = d.decode_float(&frame.data, buffer, false) {
-                let channels = self.channels;
-                let n = n * (channels as usize);
-                #[cfg(not(target_os = "linux"))]
-                {
-                    let sample_rate0 = self.sample_rate.0;
-                    let sample_rate = self.sample_rate.1;
-                    let mut buffer = buffer[0..n].to_owned();
-                    if sample_rate != sample_rate0 {
-                        buffer = crate::audio_resample(
-                            &buffer[0..n],
-                            sample_rate0,
-                            sample_rate,
-                            channels,
-                        );
-                    }
-                    if self.channels != self.device_channel {
-                        buffer = crate::audio_rechannel(
-                            buffer,
-                            sample_rate,
-                            sample_rate,
-                            self.channels,
-                            self.device_channel,
-                        );
-                    }
-                    self.audio_buffer.append_pcm(&buffer);
+            let decoded_frames = match d.decode_float(&frame.data, buffer, false) {
+                Ok(decoded_frames) => decoded_frames,
+                Err(error) => {
+                    log::warn!("Failed to decode audio frame: {error:?}");
+                    return;
                 }
-                #[cfg(target_os = "linux")]
-                {
-                    let data_u8 =
-                        unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
-                    self.simple.as_mut().map(|x| x.write(data_u8));
-                }
+            };
+            let channels = self.channels;
+            let n = decoded_frames * channels as usize;
+            #[cfg(not(target_os = "linux"))]
+            {
+                let config = DecodedAudioConfig {
+                    sample_rate: self.sample_rate.1,
+                    input_channels: self.channels,
+                    output_channels: self.device_channel,
+                };
+                let buffer = match prepare_decoded_audio(
+                    &buffer[0..n],
+                    self.audio_resampler.as_mut(),
+                    config,
+                ) {
+                    Ok(output) => output,
+                    Err(error) => {
+                        log::error!("Failed to resample decoded audio: {error:#}");
+                        return;
+                    }
+                };
+                self.audio_buffer.append_pcm(&buffer);
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let data_u8 =
+                    unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
+                self.simple.as_mut().map(|x| x.write(data_u8));
             }
         });
     }
@@ -2340,6 +2584,9 @@ impl AudioHandler {
         device: &Device,
     ) -> ResultType<()> {
         self.device_channel = config.channels;
+        #[cfg(target_os = "windows")]
+        let err_fn = self.playback_recovery.new_error_callback();
+        #[cfg(not(target_os = "windows"))]
         let err_fn = move |err| {
             // too many errors, will improve later
             log::trace!("an error occurred on stream: {}", err);
@@ -2347,63 +2594,28 @@ impl AudioHandler {
         self.audio_buffer
             .resize(config.sample_rate.0 as _, config.channels as _);
         let audio_buffer = self.audio_buffer.0.clone();
-        let ready = self.ready.clone();
+        let discontinuity_generation = self.audio_buffer.3.clone();
+        let mut playback_writer = audio_playback::AudioPlaybackWriter::new(
+            audio_playback::AudioPlaybackConfig {
+                sample_rate: config.sample_rate.0,
+                channels: config.channels as usize,
+            },
+            audio_buffer,
+            discontinuity_generation,
+        )?;
+        let playback_status = playback_writer.status.clone();
         let timeout = None;
         let stream = device.build_output_stream(
             config,
-            move |data: &mut [T], info: &cpal::OutputCallbackInfo| {
-                if !*ready.lock().unwrap() {
-                    *ready.lock().unwrap() = true;
-                }
-
-                let mut n = data.len();
-                let mut lock = audio_buffer.lock().unwrap();
-                let mut having = lock.occupied_len();
-                // android two timestamps, one from zero, another not
-                #[cfg(not(target_os = "android"))]
-                if having < n {
-                    let tms = info.timestamp();
-                    let how_long = tms
-                        .playback
-                        .duration_since(&tms.callback)
-                        .unwrap_or(Duration::from_millis(0));
-
-                    // must long enough to fight back scheuler delay
-                    if how_long > Duration::from_millis(6) && how_long < Duration::from_millis(3000)
-                    {
-                        drop(lock);
-                        std::thread::sleep(how_long.div_f32(1.2));
-                        lock = audio_buffer.lock().unwrap();
-                        having = lock.occupied_len();
-                    }
-
-                    if having < n {
-                        n = having;
-                    }
-                }
-                #[cfg(target_os = "android")]
-                if having < n {
-                    n = having;
-                }
-                let mut elems = vec![0.0f32; n];
-                if n > 0 {
-                    lock.pop_slice(&mut elems);
-                }
-                drop(lock);
-
-                let mut input = elems.into_iter();
-                for sample in data.iter_mut() {
-                    *sample = match input.next() {
-                        Some(x) => T::from_sample(x),
-                        _ => T::from_sample(0.),
-                    };
-                }
+            move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+                playback_writer.write_output(data);
             },
             err_fn,
             timeout,
         )?;
         stream.play()?;
         self.audio_stream = Some(Box::new(stream));
+        self.playback_status = playback_status;
         Ok(())
     }
 }
@@ -2422,6 +2634,27 @@ mod audio_format_tests {
         assert!(is_supported_audio_channel_count(2));
         assert!(!is_supported_audio_channel_count(0));
         assert!(!is_supported_audio_channel_count(u32::MAX));
+    }
+
+    #[test]
+    fn failed_audio_start_discards_format_state() {
+        use super::{anyhow, AudioDecoder, AudioHandler, Stereo};
+
+        const SAMPLE_RATE: u32 = 48_000;
+        const CHANNELS: u16 = 2;
+        let decoder = AudioDecoder::new(SAMPLE_RATE, Stereo).unwrap();
+        let mut handler = AudioHandler {
+            audio_decoder: Some((decoder, Vec::new())),
+            sample_rate: (SAMPLE_RATE, SAMPLE_RATE),
+            channels: CHANNELS,
+            ..Default::default()
+        };
+
+        handler.handle_audio_start_result(Err(anyhow!("Injected playback startup failure")), false);
+
+        assert!(handler.audio_decoder.is_none());
+        assert_eq!(handler.channels, 0);
+        assert_eq!(handler.sample_rate, (0, 0));
     }
 }
 
@@ -3926,7 +4159,11 @@ pub fn start_audio_thread() -> MediaSender {
     std::thread::spawn(move || {
         let mut audio_handler = AudioHandler::default();
         loop {
-            if let Ok(data) = audio_receiver.recv() {
+            #[cfg(target_os = "windows")]
+            let received = audio_handler.receive_audio(&audio_receiver);
+            #[cfg(not(target_os = "windows"))]
+            let received = audio_receiver.recv();
+            if let Ok(data) = received {
                 match data {
                     MediaData::AudioFrame(af) => {
                         audio_handler.handle_frame(*af);
@@ -4020,7 +4257,7 @@ async fn do_sync_cpu_usage() {
                 if let Ok(Some(data)) = conn.next_timeout(50).await {
                     match data {
                         Data::SyncWinCpuUsage(cpu_usage) => {
-                            hbb_common::platform::windows::sync_cpu_usage(cpu_usage);
+                            base::platform::windows::sync_cpu_usage(cpu_usage);
                         }
                         _ => {}
                     }
@@ -4680,7 +4917,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
         }
     }
 
-    fn swap_modifier_mouse(&self, _msg: &mut hbb_common::protos::message::MouseEvent) {}
+    fn swap_modifier_mouse(&self, _msg: &mut base::protos::message::MouseEvent) {}
 
     fn update_direct(&self, direct: Option<bool>) {
         self.get_lch().write().unwrap().direct = direct;
@@ -4739,6 +4976,8 @@ pub enum Data {
     RejectInsecureConnection,
     Login((String, String, String, bool)),
     Message(Message),
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    InitialClipboard(usize, Option<Message>),
     SendFiles((i32, JobType, String, String, i32, bool, bool)),
     RemoveDirAll((i32, String, bool, bool)),
     ConfirmDeleteFiles((i32, i32)),
@@ -5135,6 +5374,15 @@ pub mod peer_online {
                 match msg_in.union {
                     Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
                         let states = online_response.states;
+                        // One bit per ID, rounded up to whole bytes:
+                        // 0 IDs -> 0 bytes; 1..=8 -> 1; 9..=16 -> 2; 17..=24 -> 3.
+                        let required_len = ids.len().div_ceil(u8::BITS as usize);
+                        if states.len() < required_len {
+                            bail!(
+                                "Invalid online response: expected at least {required_len} state bytes, got {}",
+                                states.len()
+                            );
+                        }
                         let mut onlines = Vec::new();
                         let mut offlines = Vec::new();
                         for i in 0..ids.len() {
@@ -5578,5 +5826,144 @@ mod webrtc_race_tests {
         .unwrap_err()
         .to_string();
         assert!(err.contains("webrtc dead") && err.contains("relay dead"), "{}", err);
+    }
+}
+
+#[cfg(test)]
+mod kx_tests {
+    use super::*;
+    use hbb_common::{
+        sodiumoxide::crypto::box_,
+        tcp::{Encrypt, FramedStream, KxTranscript, KX_VERSION_LATEST},
+    };
+
+    const PEER_ID: &str = "123456789";
+
+    /// What the stand-in controlled peer saw: the version the controller picked, and whether the
+    /// controller's first application message decrypted.
+    struct Seen {
+        picked: u32,
+        decrypted: bool,
+    }
+
+    fn test_delay(time: i64) -> Message {
+        let mut msg = Message::new();
+        msg.set_test_delay(TestDelay {
+            time,
+            ..Default::default()
+        });
+        msg
+    }
+
+    fn delay_in(bytes: &[u8]) -> Option<i64> {
+        match Message::parse_from_bytes(bytes).ok()?.union? {
+            message::Union::TestDelay(t) => Some(t.time),
+            _ => None,
+        }
+    }
+
+    /// A stand-in controlled peer on loopback. It advertises `advertised` in its signed identity
+    /// and runs the key under `run`, or under the version the controller picked when `run` is
+    /// `None`, then sends one message and reads one. Returns the host, its identity as the
+    /// rendezvous server would sign it, and what it saw.
+    async fn controlled_stub(
+        advertised: u32,
+        run: Option<u32>,
+        rs_sk: sign::SecretKey,
+    ) -> (String, Vec<u8>, oneshot::Receiver<Seen>) {
+        let (sign_pk, sign_sk) = sign::gen_keypair();
+        let id_pk = |pk: &[u8], kx_version| {
+            IdPk {
+                id: PEER_ID.to_owned(),
+                pk: pk.to_vec().into(),
+                kx_version,
+                ..Default::default()
+            }
+            .write_to_bytes()
+            .unwrap()
+        };
+        let signed_id_pk = sign::sign(&id_pk(&sign_pk.0, 0), &rs_sk);
+        let listener = hbb_common::tcp::new_listener("127.0.0.1:0", false)
+            .await
+            .unwrap();
+        let host = listener.local_addr().unwrap().to_string();
+        let (tx, rx) = oneshot::channel();
+        tokio::spawn(async move {
+            let (stream, addr) = listener.accept().await.unwrap();
+            let mut s = FramedStream::from(stream, addr);
+            let (our_pk_b, our_sk_b) = box_::gen_keypair();
+            let mut msg = Message::new();
+            msg.set_signed_id(SignedId {
+                id: sign::sign(&id_pk(&our_pk_b.0, advertised), &sign_sk).into(),
+                ..Default::default()
+            });
+            s.send(&msg).await.unwrap();
+            let bytes = s.next().await.unwrap().unwrap();
+            let Some(message::Union::PublicKey(pk)) =
+                Message::parse_from_bytes(&bytes).unwrap().union
+            else {
+                panic!("expected the controller's public key");
+            };
+            let key =
+                Encrypt::decode(&pk.symmetric_value, &pk.asymmetric_value, &our_sk_b).unwrap();
+            let t = KxTranscript {
+                initiator_pk: &pk.asymmetric_value,
+                responder_pk: &our_pk_b.0,
+                advertised,
+                picked: run.unwrap_or(pk.kx_version),
+            };
+            if t.picked == 0 {
+                s.set_key(key);
+            } else {
+                s.set_key_split(key, false, &t).unwrap();
+            }
+            s.send(&test_delay(2)).await.unwrap();
+            let decrypted = matches!(s.next().await, Some(Ok(b)) if delay_in(&b) == Some(1));
+            tx.send(Seen {
+                picked: pk.kx_version,
+                decrypted,
+            })
+            .ok();
+        });
+        (host, signed_id_pk, rx)
+    }
+
+    /// The controller's handshake against the stub, then one application message each way.
+    /// Returns what the stub saw and whether the stub's message decrypted on this side.
+    async fn handshake(advertised: u32, run: Option<u32>) -> (Seen, bool) {
+        let (rs_pk, rs_sk) = sign::gen_keypair();
+        let (host, signed_id_pk, seen) = controlled_stub(advertised, run, rs_sk).await;
+        let mut conn = connect_tcp(host, 3000).await.unwrap();
+        let pk =
+            Client::secure_connection(PEER_ID, signed_id_pk, &crate::encode64(rs_pk.0), &mut conn)
+                .await
+                .unwrap();
+        assert!(pk.is_some() && conn.is_secured());
+        conn.send(&test_delay(1)).await.unwrap();
+        let decrypted = matches!(conn.next().await, Some(Ok(b)) if delay_in(&b) == Some(2));
+        (seen.await.unwrap(), decrypted)
+    }
+
+    #[tokio::test]
+    async fn test_new_peers_pick_version_1_and_exchange_application_data() {
+        let (seen, decrypted) = handshake(KX_VERSION_LATEST, None).await;
+        assert_eq!(seen.picked, 1);
+        assert!(seen.decrypted && decrypted);
+    }
+
+    #[tokio::test]
+    async fn test_a_peer_without_versions_gets_version_0() {
+        let (seen, decrypted) = handshake(0, Some(0)).await;
+        assert_eq!(seen.picked, 0);
+        assert!(seen.decrypted && decrypted);
+    }
+
+    #[tokio::test]
+    async fn test_a_pick_lowered_in_transit_decrypts_nothing() {
+        // The controlled side takes 0 from a controller without versions, so a lowered pick is
+        // caught by the keys disagreeing on the first application message, not before.
+        let (seen, decrypted) = handshake(KX_VERSION_LATEST, Some(0)).await;
+        assert_eq!(seen.picked, 1);
+        assert!(!seen.decrypted && !decrypted);
     }
 }

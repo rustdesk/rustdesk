@@ -23,13 +23,15 @@ pub mod linux;
 #[cfg(target_os = "linux")]
 pub mod gtk_sudo;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use base::message_proto::CursorData;
 #[cfg(all(
     not(all(target_os = "windows", not(target_pointer_width = "64"))),
     not(any(target_os = "android", target_os = "ios"))
 ))]
 use hbb_common::sysinfo::System;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::{message_proto::CursorData, sysinfo::Pid, ResultType};
+use hbb_common::{sysinfo::Pid, ResultType};
 use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 pub const SERVICE_INTERVAL: u64 = 300;
@@ -225,6 +227,14 @@ mod tests {
             }
             #[cfg(target_os = "macos")]
             macos::is_process_trusted(false);
+        }
+        // A macOS capture takes the cursor shown, whatever seed it is asked for.
+        #[cfg(target_os = "macos")]
+        {
+            macos::reset_input_cache();
+            if let Some(change) = get_cursor().unwrap() {
+                assert!(get_cursor_data(change.wrapping_add(1)).is_ok());
+            }
         }
     }
     #[test]

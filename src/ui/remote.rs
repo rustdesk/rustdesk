@@ -15,7 +15,10 @@ use sciter::{
 };
 
 use hbb_common::{
-    allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
+    allow_err, log, rendezvous_proto::ConnType,
+};
+use base::{
+    fs::TransferJobMeta, message_proto::*,
 };
 
 use crate::{
@@ -119,7 +122,7 @@ impl SciterHandler {
 
 impl InvokeUiSession for SciterHandler {
     fn set_cursor_data(&self, cd: CursorData) {
-        let mut colors = hbb_common::compress::decompress(&cd.colors);
+        let mut colors: Vec<u8> = cd.colors.into();
         if colors.iter().filter(|x| **x != 0).next().is_none() {
             log::info!("Fix transparent");
             // somehow all 0 images shows black rect, here is a workaround

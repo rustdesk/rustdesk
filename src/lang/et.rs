@@ -187,7 +187,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter your password", "Sisesta oma parool"),
         ("Logging in...", "Sisselogimine..."),
         ("Enable RDP session sharing", "Luba RDP-seansi jagamine"),
-        ("Auto Login", "Logi automaatselt sisse (Kehtib vaid valiku \"lukusta pärast seansi lõppu\" lubamisel)"),
+        ("Auto Login", "Logi automaatselt sisse (Kehtib vaid valiku \"Lukusta pärast seansi lõppu\" lubamisel)"),
         ("Enable direct IP access", "Luba otsene IP-juurdepääs"),
         ("Rename", "Nimeta ümber"),
         ("Space", "Ruum"),
@@ -770,5 +770,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Juhib ühe pordisuunamise kõik ühendused ühe teise arvutiga loodud ühenduse kaudu, selle asemel et iga ühenduse jaoks uuesti ühenduda ja sisse logida."),
         ("Enable WebRTC P2P connection", "Luba WebRTC P2P-ühendus"),
         ("Enable TCP hole punching", "Luba TCP-augustamine"),
+        ("The screen sharing request was declined on the remote device", "Ekraani jagamise taotlus lükati kaugseadmes tagasi"),
+        ("The screen sharing request timed out on the remote device", "Ekraani jagamise taotlus aegus kaugseadmes"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk ei pääse kaugseadmes töölauaseansini, kontrollige, kas seanss töötab ja kas RustDesk saab seda kasutada"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Kaugseadme töölauaportaalil puudub ekraani jagamiseks või kaugjuhtimiseks vajalik võimalus, selle taustarakendus ei pruugi olla paigaldatud"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Ekraani jagamine kiideti kaugseadmes heaks, kuid PipeWire'i ühendust ei õnnestunud avada"),
+        ("The screen sharing request ended without completing on the remote device", "Ekraani jagamise taotlus kaugseadmes lõppes ilma lõpule jõudmata"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk ei saanud XDG Desktop Portalilt kasutatavat ekraani, PipeWire'i teek võib olla liiga vana"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk ei suutnud laadida ekraani jäädvustamiseks vajalikku GStreameri komponenti ({})"),
+        ("Relay fallback delay in seconds", "Viivitus enne relee kasutamist sekundites"),
+        ("relay-fallback-delay-tip", "Kui kaua juba loodud releeühendus ootab otsest WebRTC-ühendust, enne kui seda selle asemel kasutatakse. Suurendage, et anda aeglasele otseühendusele rohkem aega; vähendage, et võrkudes, kus otseühendust luua ei saa, releele kiiremini üle minna. Jätke tühjaks vaikeväärtuse 2.5 sekundit kasutamiseks."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

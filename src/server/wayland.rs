@@ -1,5 +1,6 @@
 use super::*;
-use hbb_common::{allow_err, anyhow, platform::linux::DISTRO};
+use hbb_common::{allow_err, anyhow};
+use base::platform::linux::DISTRO;
 use scrap::{
     is_cursor_embedded, set_map_err,
     wayland::pipewire::{fill_displays, try_fix_logical_size},
@@ -20,6 +21,7 @@ lazy_static::lazy_static! {
     static ref CAP_DISPLAY_INFO: RwLock<HashMap<usize, u64>> = RwLock::new(HashMap::new());
     static ref PIPEWIRE_INITIALIZED: RwLock<bool> = RwLock::new(false);
     static ref LOG_SCRAP_COUNT: Mutex<u32> = Mutex::new(0);
+    static ref LAST_STAGE_ERR: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
     static ref ACTIVE_DISPLAY_COUNT: RwLock<usize> = RwLock::new(0);
 }
 
@@ -43,9 +45,21 @@ pub(super) fn decrement_active_display_count() -> usize {
 
 fn map_err_scrap(err: String) -> io::Error {
     // to-do: Handle error better, do not restart server
+    // Reached by the capture loop, which is what this crude self-heal was for. A no-reply
+    // during the portal handshake is tagged below and is reported instead of exiting: at
+    // login there is someone waiting to be told, and a portal that is slow to activate is
+    // not a reason to take the service down.
     if err.starts_with("Did not receive a reply") {
         log::error!("Fatal pipewire error, {}", &err);
         std::process::exit(-1);
+    }
+
+    if let Some(tag) = err.strip_prefix(WAYLAND_STAGE_TAG) {
+        log_staged_once(&err);
+        return io::Error::new(
+            io::ErrorKind::Other,
+            staged_message(tag, is_ubuntu_before_21()),
+        );
     }
 
     if DISTRO.name.to_uppercase() == "Ubuntu".to_uppercase() {
@@ -73,6 +87,38 @@ fn map_err_scrap(err: String) -> io::Error {
     }
 }
 
+/// `Display::all` and `Capturer::new` reach the peer through `map_err_scrap`, but
+/// `fill_displays` opens a portal session of its own and returns its error straight up, so a
+/// tag has to be resolved here or it lands in the login dialog verbatim.
+fn map_staged_err(err: anyhow::Error) -> anyhow::Error {
+    let text = err.to_string();
+    match text.strip_prefix(WAYLAND_STAGE_TAG) {
+        Some(tag) => {
+            log_staged_once(&text);
+            anyhow::anyhow!(staged_message(tag, is_ubuntu_before_21()))
+        }
+        None => err,
+    }
+}
+
+// The video service retries about once a second, so a wedged portal would otherwise write a
+// line a second forever. Repeat the message only when the cause changes, or after long
+// enough that a reader would want to see the fault is still there.
+const STAGE_ERR_REPEAT: std::time::Duration = std::time::Duration::from_secs(600);
+
+fn log_staged_once(err: &str) {
+    let now = std::time::Instant::now();
+    let mut last = LAST_STAGE_ERR.lock().unwrap();
+    let repeat = match last.as_ref() {
+        Some((seen, at)) => seen != err || now.duration_since(*at) >= STAGE_ERR_REPEAT,
+        None => true,
+    };
+    if repeat {
+        log::error!("Wayland portal handshake failed: {}", err);
+        *last = Some((err.to_owned(), now));
+    }
+}
+
 fn try_log(err: &String) {
     let mut lock_count = LOG_SCRAP_COUNT.lock().unwrap();
     if *lock_count >= 1000000 {
@@ -82,6 +128,168 @@ fn try_log(err: &String) {
         log::error!("Failed scrap {}", err);
     }
     *lock_count += 1;
+}
+
+// Translation keys, so the key itself is the English text: an older peer that has never heard
+// of them falls back to displaying the key and still reads as a sentence.
+const WAYLAND_DECLINED: &str = "The screen sharing request was declined on the remote device";
+const WAYLAND_TIMED_OUT: &str = "The screen sharing request timed out on the remote device";
+const WAYLAND_NO_SESSION: &str = "RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it";
+const WAYLAND_UNSUPPORTED: &str = "The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed";
+const WAYLAND_PIPEWIRE_HANDOVER: &str = "Screen sharing was approved on the remote device, but the PipeWire connection could not be opened";
+const WAYLAND_ENDED: &str =
+    "The screen sharing request ended without completing on the remote device";
+// The remedy the message it replaces used to carry, minus the link: this is the outcome
+// rustdesk/rustdesk#8600 is about.
+const WAYLAND_NO_USABLE_SCREEN: &str = "RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old";
+const WAYLAND_GST_UNAVAILABLE: &str =
+    "RustDesk could not load a GStreamer component needed for screen capture ({})";
+
+const WAYLAND_STAGE_TAG: &str = "wl-stage:";
+
+// `translate()` on the peer strips the braces itself, so what goes on the wire is the key
+// with the detail still *inside* the placeholder.
+fn with_detail(key: &str, detail: &str) -> String {
+    key.replace("{}", &format!("{{{}}}", detail))
+}
+
+fn is_ubuntu_before_21() -> bool {
+    DISTRO.name.to_uppercase() == "Ubuntu".to_uppercase() && DISTRO.version_id < "21".to_owned()
+}
+
+/// Maps a `<stage>:<kind>:<detail>` tag from the portal handshake, see
+/// `scrap::wayland::pipewire`, onto what to tell the peer. Everything the capture loop reports
+/// carries no tag and keeps the legacy substring heuristics above.
+fn staged_message(tag: &str, ubuntu_before_21: bool) -> String {
+    let mut parts = tag.splitn(3, ':');
+    let stage = parts.next().unwrap_or_default();
+    let kind = parts.next().unwrap_or_default();
+    let detail = parts.next().unwrap_or_default().trim();
+
+    // An outcome that says something about the machine is what the Ubuntu branch was written
+    // for, so that branch keeps it. An outcome that says what a person did is a fact no distro
+    // check can improve on.
+    let of_the_machine = |msg: &str| {
+        if ubuntu_before_21 {
+            SCRAP_UBUNTU_HIGHER_REQUIRED.to_owned()
+        } else {
+            msg.to_owned()
+        }
+    };
+
+    match (stage, kind) {
+        (_, "declined") => WAYLAND_DECLINED.to_owned(),
+        (_, "ended") => WAYLAND_ENDED.to_owned(),
+        (_, "no-response") => WAYLAND_TIMED_OUT.to_owned(),
+        ("streams", _) => of_the_machine(WAYLAND_NO_USABLE_SCREEN),
+        ("gst-plugin", _) => of_the_machine(&with_detail(WAYLAND_GST_UNAVAILABLE, detail)),
+        // The bus the portal lives on was never reached, so the portal has not been asked
+        // anything yet and telling anyone to restart it would be a guess.
+        ("session-bus", _) => of_the_machine(WAYLAND_NO_SESSION),
+        // The portal answered `Start`, so the request was granted and the only thing left
+        // was handing over the PipeWire connection. Whatever went wrong, it is not the
+        // portal being unavailable -- it had just answered.
+        ("open-pipewire-remote", _) => of_the_machine(WAYLAND_PIPEWIRE_HANDOVER),
+        // The portal is there and answering; it just does not implement what was called,
+        // which restarting it cannot fix.
+        (_, "unsupported") => of_the_machine(WAYLAND_UNSUPPORTED),
+        // Everything else is the portal not delivering, which is what this key already says --
+        // and unlike a message of our own it carries the `systemctl --user restart` remedy.
+        _ => of_the_machine(SCRAP_XDP_PORTAL_UNAVAILABLE),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn staged_message_names_the_outcome() {
+        let m = |tag| staged_message(tag, false);
+        assert_eq!(m("start:declined:"), WAYLAND_DECLINED);
+        assert_eq!(m("start:ended:"), WAYLAND_ENDED);
+        assert_eq!(m("start:no-response:"), WAYLAND_TIMED_OUT);
+        // A restored session shows no picker at all, so a timeout anywhere is a timeout and
+        // never a claim about someone not answering.
+        assert_eq!(m("create-session:no-response:"), WAYLAND_TIMED_OUT);
+        assert_eq!(m("streams:empty:"), WAYLAND_NO_USABLE_SCREEN);
+    }
+
+    #[test]
+    fn only_a_portal_that_may_be_dead_is_told_to_restart() {
+        let m = |tag| staged_message(tag, false);
+        // Not reached the bus at all: the portal has not been asked anything yet.
+        assert_eq!(
+            m("session-bus:dbus:org.freedesktop.DBus.Error.NotSupported"),
+            WAYLAND_NO_SESSION
+        );
+        // Answering, but without an implementation behind the interface that was called --
+        // at any stage, not just the first one.
+        assert_eq!(
+            m("create-session:unsupported:org.freedesktop.DBus.Error.UnknownMethod"),
+            WAYLAND_UNSUPPORTED
+        );
+        assert_eq!(
+            m("select-sources:unsupported:org.freedesktop.DBus.Error.UnknownMethod"),
+            WAYLAND_UNSUPPORTED
+        );
+        // Absent or silent, which is what the existing key's remedy is for.
+        assert_eq!(
+            m("create-session:dbus:org.freedesktop.DBus.Error.ServiceUnknown"),
+            SCRAP_XDP_PORTAL_UNAVAILABLE
+        );
+        // Not this one: `Start` had already been answered, so the portal was alive and the
+        // request granted. Saying it may have crashed would walk the diagnosis backwards.
+        assert_eq!(
+            m("open-pipewire-remote:dbus:org.freedesktop.DBus.Error.Failed"),
+            WAYLAND_PIPEWIRE_HANDOVER
+        );
+        // A tag this build does not know must never fall back to a guess.
+        assert_eq!(
+            m("some-new-stage:some-new-kind:x"),
+            SCRAP_XDP_PORTAL_UNAVAILABLE
+        );
+        assert_eq!(m(""), SCRAP_XDP_PORTAL_UNAVAILABLE);
+    }
+
+    // The peer resolves a message by replacing its first `{...}` with `{}` and looking that
+    // up, so a detail-carrying message has to reduce back to its key exactly.
+    #[test]
+    fn a_detail_carrying_message_reduces_back_to_its_key() {
+        let gst = staged_message("gst-plugin:unavailable:pipewiresrc", false);
+        assert_eq!(
+            gst,
+            "RustDesk could not load a GStreamer component needed for screen capture ({pipewiresrc})"
+        );
+        let open = gst.find('{').expect("no placeholder");
+        let close = gst[open..].find('}').expect("unclosed placeholder") + open;
+        assert_eq!(
+            format!("{}{{}}{}", &gst[..open], &gst[close + 1..]),
+            WAYLAND_GST_UNAVAILABLE
+        );
+    }
+
+    #[test]
+    fn legacy_ubuntu_keeps_its_message_for_machine_faults_only() {
+        let m = |tag| staged_message(tag, true);
+        assert_eq!(
+            m("create-session:dbus:org.freedesktop.DBus.Error.ServiceUnknown"),
+            SCRAP_UBUNTU_HIGHER_REQUIRED
+        );
+        assert_eq!(
+            m("create-session:unsupported:org.freedesktop.DBus.Error.UnknownMethod"),
+            SCRAP_UBUNTU_HIGHER_REQUIRED
+        );
+        assert_eq!(
+            m("gst-plugin:unavailable:pipewiresrc"),
+            SCRAP_UBUNTU_HIGHER_REQUIRED
+        );
+        assert_eq!(m("streams:empty:"), SCRAP_UBUNTU_HIGHER_REQUIRED);
+        assert_eq!(m("session-bus:dbus:"), SCRAP_UBUNTU_HIGHER_REQUIRED);
+        assert_eq!(m("start:declined:"), WAYLAND_DECLINED);
+        assert_eq!(m("start:ended:"), WAYLAND_ENDED);
+        assert_eq!(m("start:no-response:"), WAYLAND_TIMED_OUT);
+    }
 }
 
 struct CapturerPtr(*mut Capturer);
@@ -163,6 +371,10 @@ pub(super) async fn update_uinput_resolution() {
     // runs on current-thread runtimes (session init and the hotplug worker). The layout baseline
     // is computed in the SAME task: a failed lookup is not cached, so asking for the rects
     // afterwards would rerun the whole socket probe synchronously.
+    //
+    // The generation read before the rect is computed labels the range for the DRM cursor
+    // calibration; the raw DRM union below is no compositor layout and is labelled with none.
+    let gen = scrap::wayland::display::wayland_snapshot_generation();
     let (rect, layout) = match hbb_common::tokio::task::spawn_blocking(|| {
         scrap::wayland::display::clear_wayland_displays_cache();
         match scrap::wayland::display::get_desktop_rect_for_uinput() {
@@ -185,6 +397,7 @@ pub(super) async fn update_uinput_resolution() {
             return;
         }
     };
+    let gen = super::display_service::input_map_label(gen, !layout.is_empty());
     // Re-snapshot the baseline on every call: this runs at session init and after every hotplug, and
     // the baseline is what the client's coordinates are measured against.
     let snapshot_layout = || {
@@ -193,12 +406,15 @@ pub(super) async fn update_uinput_resolution() {
     // Reprogram the device only when the range actually changes. A display stuck in a rebuild loop
     // calls this about once a second, and reapplying an identical range is an IPC roundtrip plus a
     // uinput device reconfiguration under a user who may be at the console.
+    let _apply = super::display_service::UINPUT_APPLY.lock().await;
     if super::display_service::wayland_uinput_rect() == Some(rect) {
+        super::display_service::note_input_map_ready(gen);
         snapshot_layout();
         return;
     }
     let (minx, maxx, miny, maxy) = rect;
     log::info!("update mouse resolution: ({minx}, {maxx}), ({miny}, {maxy})");
+    super::display_service::note_input_map_unknown();
     match timeout(
         3_000,
         input_service::update_mouse_resolution(minx, maxx, miny, maxy),
@@ -209,6 +425,7 @@ pub(super) async fn update_uinput_resolution() {
         // next call instead of being remembered as applied.
         Ok(Ok(())) => {
             super::display_service::set_wayland_uinput_rect(rect);
+            super::display_service::note_input_map_adopted(gen);
             snapshot_layout();
         }
         Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
@@ -260,6 +477,10 @@ pub(super) async fn check_init() -> ResultType<()> {
             if crate::input_service::wayland_use_uinput() {
                 // The cached layout may predate compositor changes made while no session
                 // was active, https://github.com/rustdesk/rustdesk/issues/15601
+                // Read before the rect: an apply that races a layout move is recorded under the
+                // older generation, which only streams built before the move measure under.
+                #[cfg(feature = "drm")]
+                let gen = scrap::wayland::display::wayland_snapshot_generation();
                 scrap::wayland::display::clear_wayland_displays_cache();
                 if let Some((minx, maxx, miny, maxy)) =
                     scrap::wayland::display::get_desktop_rect_for_uinput()
@@ -271,6 +492,12 @@ pub(super) async fn check_init() -> ResultType<()> {
                         miny,
                         maxy
                     );
+                    // A display that falls back to PipeWire in a DRM session runs this apply
+                    // too: record it for the calibration the way the DRM paths do.
+                    #[cfg(feature = "drm")]
+                    let _apply = super::display_service::UINPUT_APPLY.lock().await;
+                    #[cfg(feature = "drm")]
+                    super::display_service::note_input_map_unknown();
                     // Bound the IPC wait like the periodic refresh does, so a hung
                     // response can't stall session init.
                     match timeout(
@@ -283,6 +510,8 @@ pub(super) async fn check_init() -> ResultType<()> {
                             super::display_service::set_wayland_uinput_rect((
                                 minx, maxx, miny, maxy,
                             ));
+                            #[cfg(feature = "drm")]
+                            super::display_service::note_input_map_adopted(gen);
                             // Snapshot the per-display layout the client's coordinates
                             // will be based on, so the mouse path can correct them if
                             // the compositor moves a monitor mid-session.
@@ -311,7 +540,8 @@ pub(super) async fn check_init() -> ResultType<()> {
                 {
                     let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
                     let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
-                    fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)?;
+                    fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)
+                        .map_err(map_staged_err)?;
                 }
                 log::debug!("Attempting to fix logical size with try_fix_logical_size()");
                 try_fix_logical_size(&mut all);
@@ -339,10 +569,9 @@ pub(super) async fn check_init() -> ResultType<()> {
 
                 // Create individual CapDisplayInfo for each display with its own capturer
                 for (idx, display) in all.into_iter().enumerate() {
-                    let capturer =
-                        Box::into_raw(Box::new(Capturer::new(display).with_context(|| {
-                            format!("Failed to create capturer for display {}", idx)
-                        })?));
+                    // No `with_context` here: the peer is shown `format!("{}", err)`, which
+                    // renders only the outermost layer, and the mapped reason is the inner one.
+                    let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
                     let capturer = CapturerPtr(capturer);
 
                     let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {

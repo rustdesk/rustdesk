@@ -770,6 +770,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "ایک پورٹ فارورڈنگ کے تمام کنکشن دوسرے کمپیوٹر کے ساتھ بنے ایک ہی کنکشن سے گزرتے ہیں، ہر ایک کے لیے دوبارہ منسلک ہو کر لاگ اِن کرنے کے بجائے۔"),
         ("Enable WebRTC P2P connection", "WebRTC P2P کنکشن کو فعال کریں"),
         ("Enable TCP hole punching", "TCP ہول پنچنگ کو فعال کریں"),
+        ("The screen sharing request was declined on the remote device", "ریموٹ ڈیوائس پر اسکرین شیئرنگ کی درخواست مسترد کر دی گئی"),
+        ("The screen sharing request timed out on the remote device", "ریموٹ ڈیوائس پر اسکرین شیئرنگ کی درخواست کا وقت ختم ہو گیا"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk ریموٹ ڈیوائس کے ڈیسک ٹاپ سیشن تک رسائی حاصل نہیں کر سکتا، تصدیق کریں کہ ڈیسک ٹاپ سیشن چل رہا ہے اور RustDesk اسے استعمال کر سکتا ہے"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "ریموٹ ڈیوائس کے ڈیسک ٹاپ پورٹل میں اسکرین شیئرنگ یا ریموٹ کنٹرول کے لیے درکار صلاحیت موجود نہیں، شاید اس کا بیک اینڈ نصب نہیں ہے"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "ریموٹ ڈیوائس پر اسکرین شیئرنگ کی منظوری مل گئی، لیکن PipeWire کنکشن نہیں کھولا جا سکا"),
+        ("The screen sharing request ended without completing on the remote device", "ریموٹ ڈیوائس پر اسکرین شیئرنگ کی درخواست مکمل ہوئے بغیر ختم ہو گئی"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk کو XDG Desktop Portal سے قابلِ استعمال اسکرین نہیں مل سکی، PipeWire لائبریری شاید بہت پرانی ہے"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk اسکرین ریکارڈنگ کے لیے درکار GStreamer جزو لوڈ نہیں کر سکا ({})"),
+        ("Relay fallback delay in seconds", "ریلے پر واپس جانے میں تاخیر سیکنڈ میں"),
+        ("relay-fallback-delay-tip", "پہلے سے قائم ریلے کنکشن براہ راست WebRTC کنکشن کا کتنی دیر انتظار کرتا ہے، اس کے بعد اس کی جگہ استعمال ہوتا ہے۔ سست براہ راست کنکشن کو مزید وقت دینے کے لیے بڑھائیں؛ ان نیٹ ورکس پر جہاں براہ راست کنکشن ممکن نہیں، جلد ریلے پر جانے کے لیے کم کریں۔ پہلے سے طے شدہ 2.5 سیکنڈ کے لیے خالی چھوڑ دیں۔"),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }
 
