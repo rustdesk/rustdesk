@@ -41,6 +41,26 @@ void _disableAndroidSoftKeyboard({bool? isKeyboardVisible}) {
   }
 }
 
+bool handleMobileChatKeyEvent(KeyEvent event,
+    {required bool chatFocused, required InputModel inputModel}) {
+  if (chatFocused &&
+      event is KeyUpEvent &&
+      const [
+        PhysicalKeyboardKey.controlLeft,
+        PhysicalKeyboardKey.controlRight,
+        PhysicalKeyboardKey.altLeft,
+        PhysicalKeyboardKey.altRight,
+        PhysicalKeyboardKey.shiftLeft,
+        PhysicalKeyboardKey.shiftRight,
+        PhysicalKeyboardKey.metaLeft,
+        PhysicalKeyboardKey.metaRight,
+      ].contains(event.physicalKey)) {
+    // Chat owns focus, but the remote input path still owns these modifiers.
+    inputModel.handleKeyEvent(event);
+  }
+  return false;
+}
+
 class RemotePage extends StatefulWidget {
   RemotePage(
       {Key? key,
@@ -108,6 +128,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     });
     WakelockManager.enable(_uniqueKey);
     _physicalFocusNode.requestFocus();
+    HardwareKeyboard.instance.addHandler(_handleChatKeyEvent);
     gFFI.inputModel.listenToMouse(true);
     gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     keyboardSubscription =
@@ -133,6 +154,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         // Mobile has no DesktopTabController, so tab-switch shortcuts will
         // log a no-handler debug line if a user binds one.
         registerSessionShortcutActions(gFFI);
+        _registerMobileChatShortcut();
         registerToolbarShortcuts(context, widget.id, gFFI);
       }
     });
@@ -155,6 +177,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   Future<void> dispose() async {
+    HardwareKeyboard.instance.removeHandler(_handleChatKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
     // after several awaits (canvas save, image update, the `enable_soft_keyboard`
@@ -266,10 +289,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       if (isIOS) {
         _iosKeyboardWorkaroundTimer?.cancel();
         _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 100), () {
-          if (!mounted) return;
+          if (!mounted || gFFI.chatModel.inputNode.hasFocus) return;
           _physicalFocusNode.unfocus();
           _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 50), () {
-            if (!mounted) return;
+            if (!mounted || gFFI.chatModel.inputNode.hasFocus) return;
             _physicalFocusNode.requestFocus();
           });
         });
@@ -547,6 +570,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
   }
 
+  bool _handleChatKeyEvent(KeyEvent event) => handleMobileChatKeyEvent(event,
+      chatFocused: gFFI.chatModel.inputNode.hasFocus, inputModel: inputModel);
+
   Widget getRawPointerAndKeyBody(Widget child) {
     final ffiModel = Provider.of<FfiModel>(context);
     return RawPointerMouseRegion(
@@ -668,7 +694,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       !gFFI.inputModel.relativeMouseMode.value;
 
   Widget getBodyForMobile() {
-    final keyboardIsVisible = keyboardVisibilityController.isVisible;
     return Container(
         color: MyTheme.canvasColor,
         child: Stack(children: () {
@@ -679,9 +704,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               right: 10,
               child: QualityMonitor(gFFI.qualityMonitorModel),
             ),
-            KeyHelpTools(
-                keyboardIsVisible: keyboardIsVisible,
-                showGestureHelp: _showGestureHelp),
+            Obx(() {
+              final chatKeyboardRequested =
+                  gFFI.chatModel.softKeyboardRequested.value;
+              return KeyHelpTools(
+                  keyboardIsVisible: keyboardVisibilityController.isVisible &&
+                      (_showEdit || chatKeyboardRequested),
+                  showGestureHelp: _showGestureHelp);
+            }),
             SizedBox(
               width: 0,
               height: 0,
@@ -818,9 +848,18 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     }();
   }
 
-  onPressedTextChat(String id) {
+  void _registerMobileChatShortcut() {
+    if (!isMobile) return;
+    gFFI.shortcutModel.register(kShortcutActionToggleChat,
+        () => onPressedTextChat(widget.id, requestSoftKeyboard: false));
+  }
+
+  onPressedTextChat(String id, {bool requestSoftKeyboard = true}) {
+    if (gFFI.chatModel.chatWindowOverlayEntry == null) {
+      setState(() => _showEdit = false);
+    }
     gFFI.chatModel.changeCurrentKey(MessageKey(id, ChatModel.clientModeID));
-    gFFI.chatModel.toggleChatOverlay();
+    gFFI.chatModel.toggleChatOverlay(requestSoftKeyboard: requestSoftKeyboard);
   }
 
   showChatOptions(String id) async {
@@ -951,6 +990,22 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
   InputModel get inputModel => gFFI.inputModel;
 
+  @override
+  void didUpdateWidget(KeyHelpTools oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_pin && oldWidget.requestShow && !widget.requestShow) {
+      _releaseVirtualModifiers();
+    }
+  }
+
+  void _releaseVirtualModifiers() {
+    final keyboard = HardwareKeyboard.instance;
+    inputModel.ctrl = inputModel.ctrl && keyboard.isControlPressed;
+    inputModel.alt = inputModel.alt && keyboard.isAltPressed;
+    inputModel.shift = inputModel.shift && keyboard.isShiftPressed;
+    inputModel.command = inputModel.command && keyboard.isMetaPressed;
+  }
+
   Widget wrap(String text, void Function() onPressed,
       {bool? active, IconData? icon}) {
     return TextButton(
@@ -988,12 +1043,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
   @override
   Widget build(BuildContext context) {
-    final hasModifierOn = inputModel.ctrl ||
-        inputModel.alt ||
-        inputModel.shift ||
-        inputModel.command;
-
-    if (!_pin && !hasModifierOn && !widget.requestShow) {
+    if (!_pin && !widget.requestShow) {
       gFFI.cursorModel
           .keyHelpToolsVisibilityChanged(null, widget.keyboardIsVisible);
       return Offstage();
@@ -1032,9 +1082,10 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
           active: _fn),
       wrap(
           '',
-          () => setState(
-                () => _pin = !_pin,
-              ),
+          () => setState(() {
+                _pin = !_pin;
+                if (!_pin && !widget.requestShow) _releaseVirtualModifiers();
+              }),
           active: _pin,
           icon: Icons.push_pin),
       wrap(
