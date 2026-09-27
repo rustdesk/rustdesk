@@ -225,12 +225,12 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         if let Some(value) = placeholder_value.as_ref() {
             s = s.replace("{}", &value);
         }
-        if !crate::is_rustdesk() {
-            if s.contains("RustDesk")
-                && !name.starts_with("upgrade_rustdesk_server_pro")
-                && name != "powered_by_me"
-            {
-                let app_name = crate::get_app_name();
+        if s.contains("RustDesk")
+            && !name.starts_with("upgrade_rustdesk_server_pro")
+            && name != "powered_by_me"
+        {
+            let app_name = crate::get_app_display_name();
+            if app_name != "RustDesk" {
                 if !app_name.contains("RustDesk") {
                     s = s.replace("RustDesk", &app_name);
                 } else {
@@ -239,7 +239,6 @@ pub fn translate_locale(name: String, locale: &str) -> String {
                     // replacing "RustDesk" within the already-substituted app_name, which would
                     // cause duplication like "RustDesk-Admin" -> "RustDesk-Admin-Admin".
                     //
-                    // app_name only contains alphanumeric and hyphen.
                     const PLACEHOLDER: &str = "#A-P-P-N-A-M-E#";
                     if !s.contains(PLACEHOLDER) {
                         s = s.replace(&app_name, PLACEHOLDER);

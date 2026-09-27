@@ -245,7 +245,7 @@ pub fn core_main() -> Option<Vec<String>> {
                     },
                 };
                 Toast::new(Toast::POWERSHELL_APP_ID)
-                    .title(&config::APP_NAME.read().unwrap())
+                    .title(&crate::get_app_display_name())
                     .text1(&translate(text))
                     .sound(Some(Sound::Default))
                     .duration(Duration::Short)
@@ -277,7 +277,7 @@ pub fn core_main() -> Option<Vec<String>> {
                     }
                 };
                 Toast::new(Toast::POWERSHELL_APP_ID)
-                    .title(&config::APP_NAME.read().unwrap())
+                    .title(&crate::get_app_display_name())
                     .text1(&text)
                     .sound(Some(Sound::Default))
                     .duration(Duration::Short)

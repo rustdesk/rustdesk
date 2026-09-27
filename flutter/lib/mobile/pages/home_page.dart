@@ -102,7 +102,14 @@ class HomePageState extends State<HomePage> {
               }
             }),
           ),
-          body: _pages.elementAt(_selectedIndex),
+          body: _selectedIndex == 0 && !bind.isIncomingOnly()
+              ? Column(
+                  children: [
+                    Expanded(child: _pages.elementAt(_selectedIndex)),
+                    poweredByRustDesk(context).marginOnly(bottom: 8),
+                  ],
+                )
+              : _pages.elementAt(_selectedIndex),
         ));
   }
 
@@ -169,7 +176,12 @@ class WebHomePage extends StatelessWidget {
         title: Text("${bind.mainGetAppNameSync()} (Preview)"),
         actions: connectionPage.appBarActions,
       ),
-      body: connectionPage,
+      body: Column(
+        children: [
+          Expanded(child: connectionPage),
+          poweredByRustDesk(context).marginOnly(bottom: 8),
+        ],
+      ),
     );
   }
 

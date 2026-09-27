@@ -808,7 +808,8 @@ class RustdeskImpl {
   }
 
   String mainGetAppNameSync({dynamic hint}) {
-    return js.context.callMethod('getByName', ['app-name']);
+    final appName = js.context.callMethod('getByName', ['app-name']);
+    return appName == "RustDesk" ? kAppDisplayName : appName;
   }
 
   String mainUriPrefixSync({dynamic hint}) {
@@ -1424,10 +1425,16 @@ class RustdeskImpl {
 
   String translate(
       {required String name, required String locale, dynamic hint}) {
-    return js.context.callMethod('getByName', [
+    final translated = js.context.callMethod('getByName', [
       'translate',
       jsonEncode({'locale': locale, 'text': name})
     ]);
+    if (mainGetAppNameSync(hint: hint) == kAppDisplayName &&
+        !name.startsWith("upgrade_rustdesk_server_pro") &&
+        name != "powered_by_me") {
+      return translated.replaceAll("RustDesk", kAppDisplayName);
+    }
+    return translated;
   }
 
   int sessionGetRgbaSize(
@@ -1608,8 +1615,7 @@ class RustdeskImpl {
   }
 
   bool isCustomClient({dynamic hint}) {
-    // is_custom_client() checks if app name is not "RustDesk"
-    return mainGetAppNameSync(hint: hint) != "RustDesk";
+    return js.context.callMethod('getByName', ['app-name']) != "RustDesk";
   }
 
   bool isDisableSettings({dynamic hint}) {

@@ -1,5 +1,6 @@
 <resources>
-    <string name="app_name">RustDesk</string>
-    <string name="accessibility_service_description">Allow other devices to control your phone using virtual touch, when RustDesk screen sharing is established</string>
-    <string name="foreground_service_special_use_subtype">Keeps the RustDesk remote desktop host available for authorized unattended connections and foreground notifications without starting screen capture before user approval.</string>
+    <string name="app_name">Trung Nguyen Remote Desktop</string>
+    <string name="input_service_label">Trung Nguyen Remote Desktop Input</string>
+    <string name="accessibility_service_description">Allow other devices to control your phone using virtual touch, when Trung Nguyen Remote Desktop screen sharing is established</string>
+    <string name="foreground_service_special_use_subtype">Keeps the Trung Nguyen Remote Desktop host available for authorized unattended connections and foreground notifications without starting screen capture before user approval.</string>
 </resources>
