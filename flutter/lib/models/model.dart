@@ -469,6 +469,26 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'exit_relative_mouse_mode') {
         // Handle exit shortcut from rdev grab loop (Ctrl+Alt on Win/Linux, Cmd+G on macOS)
         parent.target?.inputModel.exitRelativeMouseModeWithKeyRelease();
+      } else if (name == 'switch_display_hotkey') {
+        final target = parent.target;
+        final display = int.tryParse(evt['display'] ?? '');
+        if (target != null &&
+            display != null &&
+            display >= 0 &&
+            display < target.ffiModel.pi.displays.length &&
+            display != target.ffiModel.pi.currentDisplay) {
+          final pi = target.ffiModel.pi;
+          final separateWindows = pi.isSupportMultiDisplay &&
+              bind.sessionGetDisplaysAsIndividualWindows(
+                      sessionId: target.sessionId) ==
+                  'Y';
+          if (separateWindows) {
+            openMonitorInNewTabOrWindow(display, target.id, pi);
+          } else {
+            openMonitorInTheSameTab(display, target, pi,
+                updateCursorPos: false);
+          }
+        }
       } else {
         debugPrint('Event is not handled in the fixed branch: $name');
       }

@@ -609,6 +609,9 @@ fn should_block_relative_mouse_shortcut(key: Key, is_press: bool) -> bool {
     false
 }
 
+#[cfg(all(feature = "flutter", any(target_os = "macos", target_os = "windows")))]
+mod display_hotkey;
+
 fn start_grab_loop() {
     std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -669,6 +672,17 @@ fn start_grab_loop() {
 
             return res;
         };
+        #[cfg(all(feature = "flutter", any(target_os = "macos", target_os = "windows")))]
+        let display_hotkey_state = std::cell::RefCell::new(display_hotkey::State::default());
+        #[cfg(all(feature = "flutter", any(target_os = "macos", target_os = "windows")))]
+        let func = move |event: Event| {
+            display_hotkey::handle(
+                &mut display_hotkey_state.borrow_mut(),
+                event,
+                &try_handle_keyboard,
+            )
+        };
+        #[cfg(not(all(feature = "flutter", any(target_os = "macos", target_os = "windows"))))]
         let func = move |event: Event| match event.event_type {
             EventType::KeyPress(key) => try_handle_keyboard(event, key, true),
             EventType::KeyRelease(key) => try_handle_keyboard(event, key, false),

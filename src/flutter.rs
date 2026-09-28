@@ -1942,6 +1942,12 @@ pub fn get_cur_session() -> Option<FlutterSession> {
     sessions::get_session_by_session_id(&*CUR_SESSION_ID.read().unwrap())
 }
 
+pub fn get_cur_session_display_count() -> usize {
+    get_cur_session()
+        .map(|s| s.ui_handler.peer_info.read().unwrap().displays.len())
+        .unwrap_or(0)
+}
+
 #[inline]
 pub fn try_sync_peer_option(
     session: &FlutterSession,
