@@ -790,6 +790,10 @@ fn take_remote_keys() -> HashMap<Key, Event> {
 
 fn release_remote_keys_for_events(keyboard_mode: &str, to_release: HashMap<Key, Event>) {
     for (key, mut event) in to_release.into_iter() {
+        #[cfg(feature = "flutter")]
+        if get_peer_platform() == "Windows" && shortcuts::release_modifier_on_leave(key) {
+            continue;
+        }
         event.event_type = EventType::KeyRelease(key);
         client::process_event(keyboard_mode, &event, None);
         // If Alt or AltGr is pressed, we need to send another key stoke to release it.

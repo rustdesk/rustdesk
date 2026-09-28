@@ -379,6 +379,23 @@ pub fn clear_session_state(session_id: &hbb_common::SessionID) {
     }
 }
 
+/// Clear local state on focus loss when the shortcut already released the remote key.
+#[cfg(feature = "flutter")]
+pub(super) fn release_modifier_on_leave(key: rdev::Key) -> bool {
+    let sid = crate::flutter::get_cur_session_id();
+    let mut released = RELEASED_MODIFIERS.lock().unwrap();
+    let Some(held) = released.get_mut(&sid) else { return false };
+    if held.remove(&key).is_none() {
+        return false;
+    }
+    if held.is_empty() {
+        released.remove(&sid);
+    }
+    drop(released);
+    super::MODIFIERS_STATE.lock().unwrap().insert(key, false);
+    true
+}
+
 #[cfg(feature = "flutter")]
 pub fn enter_view_only(session_id: &hbb_common::SessionID) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -451,11 +468,7 @@ pub fn try_dispatch(
                 drop(fired);
                 let pending = RELEASE_ACTIONS.lock().unwrap().remove(&k);
                 if let Some((sid, action_id)) = pending {
-                    crate::flutter::push_session_event(
-                        &sid,
-                        "shortcut_triggered",
-                        vec![("action", &action_id)],
-                    );
+                    push_shortcut_event(&sid, &action_id);
                 }
                 return true;
             }
@@ -476,8 +489,19 @@ pub fn try_dispatch(
         }
         pending.remove(&k);
     }
-    crate::flutter::push_session_event(sid, "shortcut_triggered", vec![("action", &action_id)]);
+    push_shortcut_event(sid, &action_id);
     true
+}
+
+#[cfg(feature = "flutter")]
+fn push_shortcut_event(session_id: &hbb_common::SessionID, action_id: &str) {
+    if let Some(session) = crate::flutter::sessions::get_session_by_session_id(session_id) {
+        session.ui_handler.push_event_to(
+            "shortcut_triggered",
+            &[("action", action_id)],
+            &[session_id],
+        );
+    }
 }
 
 #[cfg(feature = "flutter")]
@@ -1118,6 +1142,10 @@ mod tests {
                 |event| {
                     let key = rdev::win_key_from_scancode(event.chr());
                     assert!(chord.contains(&key), "only held modifiers are released");
+                    assert!(
+                        key != Key::Alt || !event.down,
+                        "pressing Alt again activates the Windows system menu and eats the next character"
+                    );
                     if event.down {
                         remote_held.borrow_mut().insert(key);
                     } else {
