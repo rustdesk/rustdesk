@@ -97,6 +97,17 @@ mod pa_impl {
     pub async fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
         hbb_common::sleep(0.1).await; // one moment to wait for _pa ipc
         RESTARTING.store(false, Ordering::SeqCst);
+        // The `_pa` ipc is served by the cm, which is not started at a login
+        // screen, so connecting there fails and logs an error every second.
+        // Wait here instead; audio starts once a user logs in. Poll slowly,
+        // `is_prelogin` spawns a process on every call.
+        #[cfg(target_os = "linux")]
+        while crate::platform::is_prelogin() {
+            if !sp.ok() {
+                return Ok(());
+            }
+            hbb_common::sleep(3.).await;
+        }
         #[cfg(target_os = "linux")]
         let mut stream = crate::ipc::connect(1000, "_pa").await?;
         let mut encoder = AudioEncoder::new(Encoder::new(
