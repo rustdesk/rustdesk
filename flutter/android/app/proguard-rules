@@ -5,3 +5,9 @@
 
 # Keep rustls-platform-verifier classes for JNI
 -keep, includedescriptorclasses class org.rustls.platformverifier.** { *; }
+
+# Shizuku v3 wire format: the Shizuku server pushes its service binder inside
+# a parcelable of this fixed class name, which the framework then loads by
+# reflection (Bundle.setClassLoader + Parcel.readParcelable), so both the
+# class name and the CREATOR field must survive obfuscation.
+-keep class moe.shizuku.api.BinderContainer { *; }

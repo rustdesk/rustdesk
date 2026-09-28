@@ -74,6 +74,10 @@ class MainService : Service() {
             }
             Log.d(logTag,"Turn on Screen")
             wakeLock.acquire(5000)
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N && ShizukuLegacyInput.isLegacyBackendAvailable) {
+            // InputService injects with dispatchGesture(), which requires API 24.
+            // On legacy devices inject as the shell user through Shizuku instead.
+            ShizukuLegacyInput.onPointerInput(kind, mask, x, y)
         } else {
             when (kind) {
                 0 -> { // touch
@@ -91,6 +95,9 @@ class MainService : Service() {
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustKeyEventInput(input: ByteArray) {
+        if (ShizukuLegacyInput.isLegacyBackendAvailable && ShizukuLegacyInput.maybeHandleKeyEvent(input)) {
+            return
+        }
         InputService.ctx?.onKeyEvent(input)
     }
 

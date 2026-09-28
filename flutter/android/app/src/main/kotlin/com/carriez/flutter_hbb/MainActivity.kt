@@ -116,6 +116,10 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == ShizukuLegacyInput.REQ_AUTHORIZATION) {
+            ShizukuLegacyInput.onAuthorizationResult(resultCode, data)
+            return
+        }
         if (requestCode == REQ_IMPORT_FILES) {
             val pending = pendingPicker as? PendingPicker.ImportFiles ?: return
             pendingPicker = null
@@ -223,16 +227,34 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == ShizukuLegacyInput.REQ_AUTHORIZATION) {
+            ShizukuLegacyInput.onPermissionResult(grantResults)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ShizukuLegacyInput.attachAuthorizationHost(this)
         if (_rdClipboardManager == null) {
             _rdClipboardManager = RdClipboardManager(getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
             FFI.setClipboardManager(_rdClipboardManager!!)
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            // Pointer input on legacy devices goes through Shizuku; ask the
+            // Shizuku manager for authorization once per server start.
+            ShizukuLegacyInput.maybeRequestAuthorization(this)
         }
     }
 
     override fun onDestroy() {
         Log.e(logTag, "onDestroy")
+        ShizukuLegacyInput.detachAuthorizationHost(this)
         // The process can outlive the UI whenever something keeps it alive:
         // MainService, or the accessibility InputService on its own. Only the
         // former gets onTaskRemoved, so close outgoing sessions here too,

@@ -19,6 +19,15 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Shizuku (adb-activated input injection on Android < 7): the API
+         permission is normal and granted at install on API < 23; the dangerous
+         API_V23 is requested at runtime on API 23. Both are defined by the
+         Shizuku manager app. -->
+    <uses-permission
+        android:name="moe.shizuku.manager.permission.API"
+        android:maxSdkVersion="23" />
+    <uses-permission-sdk-23 android:name="moe.shizuku.manager.permission.API_V23" />
+
     <queries>
         <intent>
             <!-- https://developer.android.com/training/package-visibility/use-cases#open-urls-custom-tabs -->
@@ -101,6 +110,23 @@
         <service
             android:name=".FloatingWindowService"
             android:enabled="true" />
+
+        <!-- Receives the Shizuku server binder; the authority is the Shizuku v3
+             protocol convention and the permission restricts callers to the
+             shell uid the Shizuku server runs as. -->
+        <provider
+            android:name=".ShizukuBinderReceiver"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <!-- Tells the Shizuku manager this app speaks the v3 protocol and does
+             not need the deprecated legacy (v2) service. -->
+        <meta-data
+            android:name="moe.shizuku.client.V3_SUPPORT"
+            android:value="true" />
 
         <!--
  Don't delete the meta-data below.
