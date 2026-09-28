@@ -32,6 +32,10 @@ env:
   # support is restored after the upstream-wide Flutter bump. The arm64 job patches the few
   # 3.44-only source/pubspec changes on the fly (see "Patch RustDesk sources for Flutter 3.44").
   FLUTTER_WINDOWS_ARM_VERSION: "3.44.9"
+  # linux riscv64: Flutter publishes no riscv64 engine; meta-flutter builds one for this version.
+  FLUTTER_RISCV64_VERSION: "3.44.2"
+  FLUTTER_RISCV64_ENGINE: "77e2e94772b6eb43759e34ed1ad7da4674e19cab"
+  FLUTTER_RISCV64_ENGINE_SHA256: "5bfcab3e2e9a46729d52489118df2be86cfd4cb36865addcf2f6975d929e1296"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
@@ -1855,15 +1859,33 @@ jobs:
           files: |
             res/rustdesk-${{ env.VERSION }}*.zst
 
-  # Same build as build-rustdesk-linux x86_64 -- same vcpkg/ffmpeg, same ubuntu18.04 container, same
+  # Same build as build-rustdesk-linux (x86_64 and aarch64) -- same vcpkg/ffmpeg, same ubuntu18.04 container, same
   # rust and flutter -- only with the drm feature on, so it ships as the separate
   # rustdesk-unattended-wayland deb. libdrmtap is built on the runner because bionic's meson is too
   # old for it. A separate job rather than a matrix entry of build-rustdesk-linux: appimage and
   # flatpak need that job, and a failure here must not skip them.
   build-rustdesk-linux-drm:
     needs: [generate-bridge]
-    name: build rustdesk linux drm x86_64
-    runs-on: ubuntu-22.04
+    name: build rustdesk linux drm ${{ matrix.job.arch }}
+    runs-on: ${{ matrix.job.on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              arch: x86_64,
+              target: x86_64-unknown-linux-gnu,
+              on: ubuntu-22.04,
+              deb_arch: amd64,
+              vcpkg-triplet: x64-linux,
+            }
+          - {
+              arch: aarch64,
+              target: aarch64-unknown-linux-gnu,
+              on: ubuntu-22.04-arm,
+              deb_arch: arm64,
+              vcpkg-triplet: arm64-linux,
+            }
     steps:
       - name: Export GitHub Actions cache environment variables
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
@@ -1879,7 +1901,9 @@ jobs:
           sudo rm -rf /usr/share/dotnet
           sudo apt-get update -y
           sudo apt-get install -y nasm
-          sudo apt-get install -y qemu-user-static
+          if [[ "${{ matrix.job.arch }}" == "x86_64" ]]; then
+            sudo apt-get install -y qemu-user-static
+          fi
 
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -1900,7 +1924,7 @@ jobs:
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
-          targets: x86_64-unknown-linux-gnu
+          targets: ${{ matrix.job.target }}
           components: "rustfmt"
 
       - name: Save Rust toolchain version
@@ -1919,6 +1943,15 @@ jobs:
           name: bridge-artifact
           path: ./
 
+      # vcpkg 2026.07.29's SPDX scripts require CMake 4.3+, but this ARM64 runner selects CMake 3.31.
+      - name: Install CMake for vcpkg on Linux ARM64
+        if: matrix.job.arch == 'aarch64'
+        run: |
+          python3 -m pip install --user "cmake==${VCPKG_CMAKE_VERSION}"
+          user_base="$(python3 -m site --user-base)"
+          "${user_base}/bin/cmake" --version
+          echo "${user_base}/bin" >> "${GITHUB_PATH}"
+
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
@@ -1931,7 +1964,7 @@ jobs:
           sudo apt install -y libva-dev && apt show libva-dev
           if ! $VCPKG_ROOT/vcpkg \
             install \
-            --triplet x64-linux \
+            --triplet ${{ matrix.job.vcpkg-triplet }} \
             --x-install-root="$VCPKG_ROOT/installed"; then
             find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
               echo "$_1:"
@@ -1942,7 +1975,7 @@ jobs:
             done
             exit 1
           fi
-          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-x64-linux-rel-out.log" || true
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
       # The container's meson is too old to build libdrmtap, so build it here from the pin in
@@ -1965,7 +1998,7 @@ jobs:
         name: Build rustdesk
         id: vcpkg
         with:
-          arch: x86_64
+          arch: ${{ matrix.job.arch }}
           distro: ubuntu18.04
           githubToken: ${{ github.token }}
           setup: |
@@ -2021,10 +2054,10 @@ jobs:
             # rust
             pushd /opt
             # do not use rustup, because memory overflow in qemu
-            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-x86_64-unknown-linux-gnu.tar.gz
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}.tar.gz
             tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
-            cd rust-${{env.RUST_TOOLCHAIN_VERSION}}-x86_64-unknown-linux-gnu && ./install.sh
-            rm -rf rust-${{env.RUST_TOOLCHAIN_VERSION}}-x86_64-unknown-linux-gnu
+            cd rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }} && ./install.sh
+            rm -rf rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}
             # edit config
             mkdir -p ~/.cargo/
             echo """
@@ -2092,21 +2125,54 @@ jobs:
               cargo test --locked -p scrap --features drm hotspot_guess_tests
             run_drm_tests "scrap plane_rotation_tests" \
               cargo test --locked -p scrap --features drm plane_rotation_tests
-            cargo build --locked --lib --features "$FEATURES" --release
+            if [[ "${{ matrix.job.arch }}" == "aarch64" ]]; then
+              export JOBS="--jobs 3"
+            else
+              export JOBS=""
+            fi
+            cargo build --locked --lib $JOBS --features "$FEATURES" --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo
 
             # Setup Flutter
             # disable git safe.directory
             git config --global --add safe.directory "*"
-            export PATH=/opt/flutter/bin:$PATH
+            pushd /workspace
+            case ${{ matrix.job.arch }} in
+              aarch64)
+                export PATH=/opt/flutter-elinux/bin:$PATH
+                sed -i "s/flutter build linux --release/flutter-elinux build linux --verbose/g" ./build.py
+                sed -i "s/x64\/release/arm64\/release/g" ./build.py
+              ;;
+              x86_64)
+                export PATH=/opt/flutter/bin:$PATH
+              ;;
+            esac
+            popd
             pushd /opt
             wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
             tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
-            flutter doctor -v
+            case ${{ matrix.job.arch }} in
+              aarch64)
+                git clone https://github.com/sony/flutter-elinux.git || true
+                pushd flutter-elinux
+                  git fetch
+                  git reset --hard ${{ env.FLUTTER_VERSION }}
+                  bin/flutter-elinux doctor -v
+                  bin/flutter-elinux precache --linux
+                popd
+                cp -R flutter/bin/cache/artifacts/engine/linux-x64/shader_lib flutter-elinux/flutter/bin/cache/artifacts/engine/linux-arm64
+                rm -rf flutter
+                FLUTTER_DIR=/opt/flutter-elinux/flutter
+              ;;
+              x86_64)
+                flutter doctor -v
+                FLUTTER_DIR=/opt/flutter
+              ;;
+            esac
 
             if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
-              pushd /opt/flutter
+              pushd "$FLUTTER_DIR"
               git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
               popd
             fi
@@ -2114,10 +2180,10 @@ jobs:
             # build flutter
             pushd /workspace
             export CARGO_INCREMENTAL=0
-            export DEB_ARCH=amd64
+            export DEB_ARCH=${{ matrix.job.deb_arch }}
             python3 ./build.py --flutter --drm --hwcodec --unix-file-copy-paste --skip-cargo
             for name in rustdesk*??.deb; do
-              mv "$name" "${name%%.deb}-x86_64.deb"
+              mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
             done
 
       # build.py can exit 0 on some inner failures, so check the artifact rather than the status.
@@ -2129,9 +2195,9 @@ jobs:
           # Resolve by glob, not from env.VERSION: build.py names the deb from Cargo.toml, so a
           # hardcoded name fails with a bare exit 1 the first time those two drift.
           shopt -s nullglob
-          debs=(rustdesk-unattended-wayland-*-x86_64.deb)
+          debs=(rustdesk-unattended-wayland-*-${{ matrix.job.arch }}.deb)
           if [ "${#debs[@]}" -ne 1 ]; then
-            echo "::error::expected one rustdesk-unattended-wayland-*-x86_64.deb, found ${#debs[@]}: ${debs[*]-none}"
+            echo "::error::expected one rustdesk-unattended-wayland-*-${{ matrix.job.arch }}.deb, found ${#debs[@]}: ${debs[*]-none}"
             exit 1
           fi
           deb="${debs[0]}"
@@ -2169,6 +2235,241 @@ jobs:
         with:
           name: ${{ env.DRM_DEB }}
           path: ${{ env.DRM_DEB }}
+
+  # Cross-built on x86_64 against Ubuntu 24.04's riscv64 ports archive, with Flutter 3.44 (the
+  # Windows arm64 source patches and bridge) and meta-flutter's riscv64 engine. Codecs and
+  # libsodium come from the distribution (linux-pkg-config) rather than vcpkg.
+  build-rustdesk-linux-riscv64:
+    needs: [generate-bridge]
+    name: build rustdesk linux riscv64 ${{ matrix.job.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { name: flutter, build-args: "--flutter --unix-file-copy-paste" }
+          - { name: drm, build-args: "--flutter --drm --unix-file-copy-paste" }
+    env:
+      TARGET: riscv64gc-unknown-linux-gnu
+      FLUTTER_ROOT: /opt/flutter
+    steps:
+      - name: Maximize build space
+        run: sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: riscv64gc-unknown-linux-gnu
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bridge-artifact-flutter-3.44
+          path: ./
+
+      - name: Install cross toolchain and riscv64 libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo sed -i 's/^Types: deb$/Types: deb\nArchitectures: amd64/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo tee /etc/apt/sources.list.d/ports-riscv64.sources > /dev/null <<'EOF'
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports
+          Suites: noble noble-updates noble-security
+          Components: main restricted universe multiverse
+          Architectures: riscv64
+          EOF
+          sudo dpkg --add-architecture riscv64
+          sudo apt-get update -y
+          # qemu-user-static satisfies libglib2.0-dev:riscv64's `python3 | qemu-user-static`,
+          # which would otherwise replace the host's python3 with the riscv64 one.
+          sudo apt-get install -y --no-install-recommends gcc-riscv64-linux-gnu \
+            g++-riscv64-linux-gnu clang libclang-dev lld cmake ninja-build meson pkg-config \
+            make libssl-dev libsodium-dev qemu-user-static
+          sudo apt-get install -y --no-install-recommends \
+            libc6-dev:riscv64 libgtk-3-dev:riscv64 libxcb-randr0-dev:riscv64 \
+            libxcb-shape0-dev:riscv64 libxcb-xfixes0-dev:riscv64 libxdo-dev:riscv64 \
+            libxfixes-dev:riscv64 libasound2-dev:riscv64 libpulse-dev:riscv64 libva-dev:riscv64 \
+            libgstreamer1.0-dev:riscv64 libgstreamer-plugins-base1.0-dev:riscv64 \
+            libayatana-appindicator3-dev:riscv64 libpam0g-dev:riscv64 libssl-dev:riscv64 \
+            libvpx-dev:riscv64 libaom-dev:riscv64 libopus-dev:riscv64 libyuv-dev:riscv64 \
+            libsodium-dev:riscv64 libdrm-dev:riscv64 libegl-dev:riscv64 libgles-dev:riscv64 \
+            libseccomp-dev:riscv64 libcap-dev:riscv64
+          # libyuv-dev ships no pkg-config file.
+          sudo tee /usr/lib/riscv64-linux-gnu/pkgconfig/libyuv.pc > /dev/null <<'EOF'
+          prefix=/usr
+          libdir=${prefix}/lib/riscv64-linux-gnu
+          includedir=${prefix}/include
+          Name: libyuv
+          Description: YUV conversion and scaling
+          Version: 0.0
+          Libs: -L${libdir} -lyuv
+          Cflags: -I${includedir}
+          EOF
+
+      - name: Build libdrmtap
+        if: matrix.job.name == 'drm'
+        shell: bash
+        run: |
+          set -euo pipefail
+          read -r repo sha < <(python3 - <<'PY'
+          import importlib.util, sys
+          spec = importlib.util.spec_from_file_location("b", "build.py")
+          b = importlib.util.module_from_spec(spec)
+          sys.argv = ["build.py"]
+          spec.loader.exec_module(b)
+          print(b.LIBDRMTAP_REPO_PINNED, b.LIBDRMTAP_SHA_PINNED)
+          PY
+          )
+          mkdir -p third_party/libdrmtap && cd third_party/libdrmtap
+          git init -q && git remote add origin "$repo"
+          git fetch -q --depth 1 origin "$sha" && git checkout -q FETCH_HEAD
+          cat > riscv64.cross <<'EOF'
+          [binaries]
+          c = 'riscv64-linux-gnu-gcc'
+          cpp = 'riscv64-linux-gnu-g++'
+          ar = 'riscv64-linux-gnu-ar'
+          strip = 'riscv64-linux-gnu-strip'
+          pkg-config = 'pkg-config'
+          [properties]
+          pkg_config_libdir = '/usr/lib/riscv64-linux-gnu/pkgconfig:/usr/share/pkgconfig'
+          [host_machine]
+          system = 'linux'
+          cpu_family = 'riscv64'
+          cpu = 'riscv64'
+          endian = 'little'
+          EOF
+          meson setup build-pkg --buildtype=release -Dhelper=disabled --cross-file riscv64.cross
+          meson compile -C build-pkg drmtap:shared_library
+
+      - name: Install Flutter and the riscv64 engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo mkdir -p "$FLUTTER_ROOT" && sudo chown "$(id -u):$(id -g)" "$FLUTTER_ROOT"
+          curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_RISCV64_VERSION}-stable.tar.xz" |
+            tar -xJ -C "$FLUTTER_ROOT" --strip-components=1
+          git config --global --add safe.directory '*'
+          test "$(cat "$FLUTTER_ROOT/bin/internal/engine.version")" = "$FLUTTER_RISCV64_ENGINE"
+          export PATH="$FLUTTER_ROOT/bin:$PATH"
+          flutter config --no-analytics --enable-riscv64
+          flutter precache --linux
+          tag="linux-engine-sdk-release-riscv64-$FLUTTER_RISCV64_ENGINE"
+          curl -fsSL -o /tmp/engine.tar.gz "https://github.com/meta-flutter/flutter-engine/releases/download/$tag/$tag.tar.gz"
+          echo "$FLUTTER_RISCV64_ENGINE_SHA256  /tmp/engine.tar.gz" | sha256sum -c -
+          mkdir /tmp/engine && tar -xzf /tmp/engine.tar.gz -C /tmp/engine --wildcards \
+            '*/engine-sdk/lib/libflutter_linux_gtk.so' '*/engine-sdk/clang_x64/bin/gen_snapshot'
+          sdk=$(dirname "$(find /tmp/engine -type d -name clang_x64)")
+          # The tool only downloads the host's linux-x64 artifacts; these directories are ours.
+          cache="$FLUTTER_ROOT/bin/cache/artifacts/engine"
+          for d in linux-riscv64 linux-riscv64-release; do
+            mkdir -p "$cache/$d"
+            cp "$sdk/lib/libflutter_linux_gtk.so" "$cache/$d/"
+            cp "$sdk/clang_x64/bin/gen_snapshot" "$cache/$d/gen_snapshot"
+            cp "$sdk/clang_x64/bin/gen_snapshot" "$cache/$d/gen_snapshot_riscv64"
+            cp -r "$cache/linux-x64-release/flutter_linux" "$cache/$d/"
+            cp "$cache/linux-x64/icudtl.dat" "$cache/$d/"
+          done
+          rm -rf /tmp/engine /tmp/engine.tar.gz
+
+      - name: Build rustdesk library
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
+          export CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_LINKER=riscv64-linux-gnu-gcc
+          export CC_riscv64gc_unknown_linux_gnu=riscv64-linux-gnu-gcc
+          export CXX_riscv64gc_unknown_linux_gnu=riscv64-linux-gnu-g++
+          export AR_riscv64gc_unknown_linux_gnu=riscv64-linux-gnu-ar
+          export PKG_CONFIG_ALLOW_CROSS=1
+          export PKG_CONFIG_LIBDIR_riscv64gc_unknown_linux_gnu=/usr/lib/riscv64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+          export BINDGEN_EXTRA_CLANG_ARGS_riscv64gc_unknown_linux_gnu="--target=riscv64-linux-gnu -I/usr/include/riscv64-linux-gnu"
+          # libsodium-sys's configure does not know the riscv64gc triple; pkg-config is target-scoped.
+          export SODIUM_USE_PKG_CONFIG=1
+          # mozjpeg-sys enables SIMD on riscv64 without having any riscv64 SIMD code, and then
+          # leaves out jsimd_none.c; compile that fallback and link it in.
+          cargo build --locked --release --target "$TARGET" -p mozjpeg-sys
+          mzv=$(grep -A1 '^name = "mozjpeg-sys"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+          mzsrc=$(ls -d ~/.cargo/registry/src/*/mozjpeg-sys-"$mzv" | head -1)
+          mzout=$(ls -d target/"$TARGET"/release/build/mozjpeg-sys-*/out | head -1)
+          riscv64-linux-gnu-gcc -O2 -fPIC -c "$mzsrc/vendor/jsimd_none.c" \
+            -I"$mzout/include" -I"$mzsrc/vendor" -o "$PWD/target/jsimd_none.o"
+          export CARGO_TARGET_RISCV64GC_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=$PWD/target/jsimd_none.o"
+          FEATURES=$(python3 ./build.py ${{ matrix.job.build-args }} --print-features),linux-pkg-config
+          cargo build --locked --lib --release --target "$TARGET" --features "$FEATURES"
+          mkdir -p target/release
+          cp "target/$TARGET/release/liblibrustdesk.so" target/release/
+
+      - name: Build flutter and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/patches/apply_flutter_3.44_source_patches.sh
+          sed -i "s|flutter build linux --release|flutter build linux --release --target-platform linux-riscv64 --target-sysroot /|" build.py
+          sed -i "s|x64/release|riscv64/release|g" build.py
+          export PATH="$FLUTTER_ROOT/bin:$PATH"
+          export PKG_CONFIG_LIBDIR=/usr/lib/riscv64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+          export DEB_ARCH=riscv64
+          export DRMTAP_PREBUILT_DIR="$PWD/third_party/libdrmtap/build-pkg"
+          python3 ./build.py ${{ matrix.job.build-args }} --skip-cargo
+          for name in rustdesk*??.deb; do
+            mv "$name" "${name%%.deb}-riscv64.deb"
+          done
+
+      - name: Check the deb
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          debs=(rustdesk*-riscv64.deb)
+          [ "${#debs[@]}" -eq 1 ] || { echo "::error::expected one riscv64 deb, found: ${debs[*]-none}"; exit 1; }
+          deb="${debs[0]}"
+          echo "DEB=$deb" >> "$GITHUB_ENV"
+          [ "$(dpkg-deb -f "$deb" Architecture)" = riscv64 ]
+          rm -rf /tmp/deb && dpkg-deb -R "$deb" /tmp/deb
+          for f in rustdesk lib/librustdesk.so lib/libflutter_linux_gtk.so lib/libapp.so; do
+            [ -f "/tmp/deb/usr/share/rustdesk/$f" ] || { echo "::error::$deb has no $f"; exit 1; }
+          done
+          # Every ELF in the package, Flutter engine and plugins included, must be riscv64.
+          # Tab-separated so the test sees file's description, never the path.
+          elfs=$(find /tmp/deb/usr -type f -exec file -F $'\t' {} + | awk -F '\t' '$2 ~ /^ *ELF/')
+          echo "$elfs"
+          bad=$(awk -F '\t' '$2 !~ /RISC-V/' <<< "$elfs")
+          if [ -n "$bad" ]; then
+            echo "::error::$deb carries non-riscv64 ELF files:"
+            echo "$bad"
+            exit 1
+          fi
+          if [ "${{ matrix.job.name }}" = drm ]; then
+            [[ "$deb" == rustdesk-unattended-wayland-* ]]
+            grep -qF /usr/lib/rustdesk/libdrmtap.so.0 /tmp/deb/usr/share/rustdesk/lib/librustdesk.so
+            contents=$(dpkg -c "$deb")
+            grep -qE 'usr/lib/rustdesk/libdrmtap\.so\.0\.[0-9]+\.[0-9]+' <<< "$contents"
+            grep -qF 'usr/lib/rustdesk/libdrmtap.so.0 ->' <<< "$contents" ||
+              { echo "::error::$deb has no libdrmtap.so.0 soname symlink"; exit 1; }
+          fi
+
+      - name: Publish debian package
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ${{ env.DEB }}
+
+      - name: Upload deb
+        if: always() && env.DEB != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.DEB }}
+          path: ${{ env.DEB }}
 
   build-rustdesk-linux-sciter:
     if: ${{ inputs.upload-artifact }}
