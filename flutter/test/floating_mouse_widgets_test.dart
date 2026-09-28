@@ -259,298 +259,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
   });
 
-  testWidgets('saved button stays clear of wheel after viewport narrows',
+  testWidgets(
+      'a wheel collision resets both buttons until the viewport expands',
       (tester) async {
-    savedPositions['rl-mouse-btn-pos'] = '{"x":300.0,"y":180.0}';
-    tester.view.physicalSize = const Size(800, 400);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final rightButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    expect(tester.getRect(rightButton).left, 300);
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
-    final wheel = find.byType(FloatingWheel);
-    expect(
-        tester.getRect(rightButton).overlaps(tester.getRect(wheel)), isFalse);
-    await tester.tap(wheel);
-    expect((ffi.inputModel as _Input).pressedButtons, [MouseButtons.wheel]);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 60));
-  });
-
-  testWidgets('a safe saved button stays put when the other crosses the wheel',
-      (tester) async {
-    savedPositions['ll-mouse-btn-pos'] = '{"x":320.0,"y":120.0}';
-    savedPositions['rl-mouse-btn-pos'] = '{"x":300.0,"y":300.0}';
-    tester.view.physicalSize = const Size(800, 400);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
-
-    final wheel = tester.getRect(find.byType(FloatingWheel));
-    final rightButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    expect(tester.getRect(rightButton).topLeft, const Offset(300, 300));
-    expect(tester.getRect(rightButton).overlaps(wheel), isFalse);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 1));
-  });
-
-  testWidgets('active drag stays clear of wheel when viewport narrows',
-      (tester) async {
-    tester.view.physicalSize = const Size(800, 400);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final rightButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(rightButton));
-    try {
-      await gesture.moveBy(const Offset(230, -225));
-      await tester.pump();
-      expect(tester.getRect(rightButton).topLeft, const Offset(650, 120));
-
-      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
-      final buttonRect = tester.getRect(rightButton);
-      final wheelRect = tester.getRect(find.byType(FloatingWheel));
-      expect(buttonRect.top, 120);
-      expect(buttonRect.overlaps(wheelRect), isFalse);
-    } finally {
-      await gesture.up();
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 60));
-    }
-  });
-
-  testWidgets('resize keeps dragged right button clear of saved left button',
-      (tester) async {
-    savedPositions['ll-mouse-btn-pos'] = '{"x":270.0,"y":120.0}';
-    setViewSize(tester, const Size(800, 400));
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final leftButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
-    final rightButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(rightButton));
-    try {
-      await gesture.moveBy(const Offset(230, -225));
-      await tester.pump();
-      expect(tester.getRect(rightButton).topLeft, const Offset(650, 120));
-
-      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
-      final leftRect = tester.getRect(leftButton);
-      final rightRect = tester.getRect(rightButton);
-      expect(leftRect.topLeft, const Offset(270, 120));
-      expect(rightRect.overlaps(leftRect), isFalse);
-      expect(rightRect.overlaps(tester.getRect(find.byType(FloatingWheel))),
-          isFalse);
-    } finally {
-      await gesture.up();
-    }
-    await tester.tap(leftButton);
-    await tester.tap(rightButton);
-    expect((ffi.inputModel as _Input).pressedButtons,
-        [MouseButtons.left, MouseButtons.right]);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 60));
-  });
-
-  testWidgets('resize sees the other button still being dragged',
-      (tester) async {
-    setViewSize(tester, const Size(800, 400));
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final leftButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
-    final rightButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    final leftDrag = await tester.startGesture(tester.getCenter(leftButton));
-    final rightDrag = await tester.startGesture(tester.getCenter(rightButton));
-    try {
-      await leftDrag.moveBy(const Offset(-85, -225));
-      await rightDrag.moveBy(const Offset(230, -225));
-      await tester.pump();
-      expect(tester.getRect(leftButton).topLeft, const Offset(240, 120));
-      expect(tester.getRect(rightButton).topLeft, const Offset(650, 120));
-      expect(savedPositions.containsKey('ll-mouse-btn-pos'), isFalse);
-
-      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
-      final leftRect = tester.getRect(leftButton);
-      final rightRect = tester.getRect(rightButton);
-      expect(leftRect.topLeft, const Offset(240, 120));
-      expect(rightRect.overlaps(leftRect), isFalse);
-      expect(rightRect.overlaps(tester.getRect(find.byType(FloatingWheel))),
-          isFalse);
-    } finally {
-      await rightDrag.up();
-      await leftDrag.up();
-    }
-    final leftRect = tester.getRect(leftButton);
-    await tester.tapAt(Offset(leftRect.right - 10, leftRect.center.dy));
-    await tester.tap(rightButton);
-    expect((ffi.inputModel as _Input).pressedButtons,
-        [MouseButtons.left, MouseButtons.right]);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 60));
-  });
-
-  testWidgets('resize clears a drag after the other button moves',
-      (tester) async {
-    savedPositions['rl-mouse-btn-pos'] = '{"x":278.0,"y":125.0}';
-    setViewSize(tester, const Size(675, 375));
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final leftButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
-    final rightButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(leftButton));
-    try {
-      await gesture.moveBy(const Offset(98.5, -218));
-      await tester.pump();
-      expect(tester.getRect(leftButton).topLeft, const Offset(361, 102));
-
-      await pumpMouseWidgets(tester, ffi,
-          bottomBarHeight: 145, rightInset: 275);
-      final leftRect = tester.getRect(leftButton);
-      final rightRect = tester.getRect(rightButton);
-      final wheelRect = tester.getRect(find.byType(FloatingWheel));
-      expect(leftRect.overlaps(rightRect), isFalse);
-      expect(leftRect.overlaps(wheelRect), isFalse);
-      expect(rightRect.overlaps(wheelRect), isFalse);
-    } finally {
-      await gesture.up();
-    }
-    await tester.tap(leftButton);
-    await tester.tap(rightButton);
-    expect((ffi.inputModel as _Input).pressedButtons,
-        [MouseButtons.left, MouseButtons.right]);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 60));
-  });
-
-  testWidgets('resize does not avoid a button that moves away', (tester) async {
-    savedPositions['rl-mouse-btn-pos'] = '{"x":300.0,"y":125.0}';
-    setViewSize(tester, const Size(800, 400));
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final leftButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
-    final rightButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(leftButton));
-    try {
-      await gesture.moveBy(const Offset(325, -220));
-      await tester.pump();
-      expect(tester.getRect(leftButton).topLeft, const Offset(650, 125));
-
-      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
-      final leftRect = tester.getRect(leftButton);
-      final rightRect = tester.getRect(rightButton);
-      expect(rightRect.topLeft, const Offset(220, 345));
-      expect(leftRect.topLeft, const Offset(270, 125));
-      expect(leftRect.overlaps(rightRect), isFalse);
-      expect(leftRect.overlaps(tester.getRect(find.byType(FloatingWheel))),
-          isFalse);
-    } finally {
-      await gesture.up();
-    }
-    await tester.tap(leftButton);
-    await tester.tap(rightButton);
-    expect((ffi.inputModel as _Input).pressedButtons,
-        [MouseButtons.left, MouseButtons.right]);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 60));
-  });
-
-  testWidgets('passive button moves clear of unchanged active drag',
-      (tester) async {
-    setViewSize(tester, const Size(800, 400));
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final leftButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
-    final rightButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(leftButton));
-    try {
-      await gesture.moveBy(const Offset(-105, 0));
-      await tester.pump();
-      expect(tester.getRect(leftButton).topLeft, const Offset(220, 345));
-
-      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
-      final leftRect = tester.getRect(leftButton);
-      final rightRect = tester.getRect(rightButton);
-      expect(leftRect.topLeft, const Offset(220, 345));
-      expect(leftRect.overlaps(rightRect), isFalse);
-    } finally {
-      await gesture.up();
-    }
-    await tester.tap(leftButton);
-    await tester.tap(rightButton);
-    expect((ffi.inputModel as _Input).pressedButtons,
-        [MouseButtons.left, MouseButtons.right]);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 60));
-    expect(savedPositions.containsKey('rl-mouse-btn-pos'), isFalse);
-  });
-
-  testWidgets('passive left button moves clear of held right button',
-      (tester) async {
-    const savedLeft = '{"x":650.0,"y":345.0}';
+    const savedLeft = '{"x":320.0,"y":120.0}';
+    const savedRight = '{"x":300.0,"y":300.0}';
     savedPositions['ll-mouse-btn-pos'] = savedLeft;
-    setViewSize(tester, const Size(800, 400));
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final leftButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
-    final rightButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(rightButton));
-    try {
-      await gesture.moveBy(const Offset(-100, 0));
-      await tester.pump();
-      expect(tester.getRect(rightButton).topLeft, const Offset(320, 345));
-
-      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
-      final leftRect = tester.getRect(leftButton);
-      final rightRect = tester.getRect(rightButton);
-      expect(rightRect.topLeft, const Offset(320, 345));
-      expect(leftRect.overlaps(rightRect), isFalse);
-    } finally {
-      await gesture.up();
-    }
-    await tester.tap(leftButton);
-    await tester.tap(rightButton);
-    expect((ffi.inputModel as _Input).pressedButtons,
-        [MouseButtons.left, MouseButtons.right]);
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 60));
-    expect(savedPositions['ll-mouse-btn-pos'], savedLeft);
-  });
-
-  testWidgets('passive button moves first when both positions change',
-      (tester) async {
-    const savedRight = '{"x":700.0,"y":345.0}';
     savedPositions['rl-mouse-btn-pos'] = savedRight;
     setViewSize(tester, const Size(800, 400));
     final ffi = _FFI();
@@ -560,127 +274,32 @@ void main() {
         (widget) => widget is FloatingLeftRightButton && widget.isLeft);
     final rightButton = find.byWidgetPredicate(
         (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(leftButton));
-    try {
-      await gesture.moveBy(const Offset(275, 0));
-      await tester.pump();
-      expect(tester.getRect(leftButton).topLeft, const Offset(600, 345));
+    expect(tester.getRect(leftButton).topLeft, const Offset(320, 120));
+    expect(tester.getRect(rightButton).topLeft, const Offset(300, 300));
 
-      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
-      final leftRect = tester.getRect(leftButton);
-      final rightRect = tester.getRect(rightButton);
-      expect(leftRect.topLeft, const Offset(320, 345));
-      expect(leftRect.overlaps(rightRect), isFalse);
-    } finally {
-      await gesture.up();
-    }
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
+    final wheelRect = tester.getRect(find.byType(FloatingWheel));
+    final leftRect = tester.getRect(leftButton);
+    final rightRect = tester.getRect(rightButton);
+    expect(leftRect.topLeft, const Offset(125, 345));
+    expect(rightRect.topLeft, const Offset(220, 345));
+    expect(leftRect.overlaps(rightRect), isFalse);
+    expect(leftRect.overlaps(wheelRect), isFalse);
+    expect(rightRect.overlaps(wheelRect), isFalse);
     await tester.tap(leftButton);
     await tester.tap(rightButton);
     expect((ffi.inputModel as _Input).pressedButtons,
         [MouseButtons.left, MouseButtons.right]);
+    expect(savedPositions['ll-mouse-btn-pos'], savedLeft);
+    expect(savedPositions['rl-mouse-btn-pos'], savedRight);
+
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    expect(tester.getRect(leftButton).topLeft, const Offset(320, 120));
+    expect(tester.getRect(rightButton).topLeft, const Offset(300, 300));
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 60));
+    expect(savedPositions['ll-mouse-btn-pos'], savedLeft);
     expect(savedPositions['rl-mouse-btn-pos'], savedRight);
-  });
-
-  testWidgets('viewport shrink preserves an active button drag',
-      (tester) async {
-    tester.view.physicalSize = const Size(800, 400);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final leftButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(leftButton));
-    try {
-      await gesture.moveBy(const Offset(30, -40));
-      await tester.pump();
-      expect(tester.getRect(leftButton).left, 355);
-      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 100, rightInset: 0);
-      expect(tester.getRect(leftButton).left, 355);
-      expect(tester.getRect(leftButton).top, 245);
-    } finally {
-      await gesture.up();
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 60));
-    }
-  });
-
-  testWidgets('rotation during a drag preserves the landscape position',
-      (tester) async {
-    const original = '{"x":600.0,"y":120.0}';
-    savedPositions['ll-mouse-btn-pos'] = original;
-    tester.view.physicalSize = const Size(400, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final ffi = _FFI();
-
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final leftButton = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(leftButton));
-    try {
-      await gesture.moveBy(const Offset(30, -40));
-      await tester.pump();
-      tester.view.physicalSize = const Size(800, 400);
-      await tester.pump();
-      expect(tester.getRect(leftButton).topLeft, const Offset(600, 120));
-    } finally {
-      await gesture.up();
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 60));
-    }
-    expect(savedPositions['ll-mouse-btn-pos'], original);
-  });
-
-  testWidgets('orientation can change before the button viewport updates',
-      (tester) async {
-    const original = '{"x":600.0,"y":120.0}';
-    savedPositions['ll-mouse-btn-pos'] = original;
-    tester.view.physicalSize = const Size(400, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final ffi = _FFI();
-
-    Future<void> pumpButton(Size mediaSize, Size viewportSize) async {
-      await tester.pumpWidget(MaterialApp(
-        home: MediaQuery(
-          data: MediaQueryData(size: mediaSize),
-          child: Scaffold(
-            body: Stack(children: [
-              FloatingLeftRightButton(
-                isLeft: true,
-                inputModel: ffi.inputModel,
-                cursorModel: ffi.cursorModel,
-                viewportSize: viewportSize,
-              ),
-            ]),
-          ),
-        ),
-      ));
-      await tester.pump();
-    }
-
-    await pumpButton(const Size(400, 800), const Size(400, 800));
-    final button = find.byType(FloatingLeftRightButton);
-    final gesture = await tester.startGesture(tester.getCenter(button));
-    try {
-      await gesture.moveBy(const Offset(30, -40));
-      await tester.pump();
-      await pumpButton(const Size(800, 400), const Size(400, 800));
-      await pumpButton(const Size(800, 400), const Size(800, 400));
-      expect(tester.getRect(button).topLeft, const Offset(600, 120));
-    } finally {
-      await gesture.up();
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 60));
-    }
-    expect(savedPositions['ll-mouse-btn-pos'], original);
   });
 
   testWidgets('temporary viewport shrink preserves saved button positions',
