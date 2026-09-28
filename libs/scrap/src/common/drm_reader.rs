@@ -377,6 +377,9 @@ pub struct DrmReader {
     /// alternation and log on every sample, which is the per-frame logging this was written to
     /// avoid. -1 is "nothing reported yet".
     last_provenance: i8,
+    /// The plane rotation read right after the last successful grab, before any copy: libdrmtap
+    /// reads the property when asked, so a read after the copies could describe the next frame.
+    last_plane_rotation: Option<u32>,
 }
 
 impl DrmReader {
@@ -414,6 +417,7 @@ impl DrmReader {
             lib,
             ctx,
             buf: Vec::new(),
+            last_plane_rotation: None,
         })
     }
 
@@ -437,6 +441,7 @@ impl DrmReader {
                     format!("drmtap_grab_mapped failed: errno {errno}"),
                 ));
             }
+            self.last_plane_rotation = self.read_plane_rotation();
             if frame.data.is_null() || frame.width == 0 || frame.height == 0 {
                 (self.lib.frame_release)(self.ctx, &mut frame);
                 return Err(io::ErrorKind::WouldBlock.into());
@@ -531,6 +536,23 @@ impl DrmReader {
             .map(|s| s.to_owned())
     }
 
+    /// The DRM `rotation` bitmask of the plane the last successful grab read from, as it was right
+    /// after that grab. A plane without the property answers rotate-0: it cannot have turned
+    /// anything, so the compositor drew the scanout already turned and the whole output transform
+    /// is still to be undone. `None` only when the library cannot say: it predates the call
+    /// (0.5.8), no plane is bound, or the property set could not be read.
+    pub fn plane_rotation(&self) -> Option<u32> {
+        self.last_plane_rotation
+    }
+
+    fn read_plane_rotation(&mut self) -> Option<u32> {
+        let f = self.lib.plane_rotation?;
+        let mut rotation: u32 = 0;
+        // SAFETY: self.ctx is a live context and `rotation` outlives the call.
+        let rc = unsafe { f(self.ctx, &mut rotation) };
+        plane_rotation_answer(rc, rotation)
+    }
+
     /// Zero-copy EXPORT grab: fills a `drmtap_dmabuf_desc` (dma-buf fd, plane layout, HDR metadata) WITHOUT mapping, detiling or copying pixels, so on this
     /// path the root process never loads libEGL/libGLESv2. The exported fd is READ-ONLY (libdrmtap drops `DRM_RDWR` and `dup` shares that open file
     /// description), so the `--server` that receives it can map the scanout but never write the live framebuffer. Validation here is METADATA ONLY.
@@ -562,6 +584,7 @@ impl DrmReader {
                     format!("drmtap_grab_desc failed: errno {errno}"),
                 ));
             }
+            self.last_plane_rotation = self.read_plane_rotation();
             // `desc.dma_buf_fd` is the canonical fd (what split_capture.c sends); `frame` owns it too and `frame_release` closes the library's copy.
             let raw_fd = if desc.dma_buf_fd >= 0 {
                 desc.dma_buf_fd
@@ -983,5 +1006,99 @@ mod hotspot_guess_tests {
     fn a_blank_sprite_has_no_hotspot_to_guess() {
         let (px, w, h) = sprite(&["...", "...", "..."]);
         assert_eq!(infer_hotspot(&px, w, h), (0, 0));
+    }
+}
+
+/// DRM_MODE_ROTATE_0: the `rotation` bitmask of a plane that turned nothing.
+const DRM_MODE_ROTATE_0: u32 = 1 << 0;
+
+/// What a `drmtap_plane_rotation` return means to the consumer. Success is the mask. `-ENOTSUP`
+/// (the plane has no `rotation` property) is rotate-0, not "unknown": such a plane cannot have
+/// turned the scanout, so the frame arrives turned by the whole output transform, which is the
+/// virtio-gpu and vmwgfx case this exists for. Anything else (`-ENOENT` with no plane bound, a
+/// failed property read) is `None`, and the consumer keeps its pre-0.5.8 rule.
+fn plane_rotation_answer(rc: c_int, rotation: u32) -> Option<u32> {
+    if rc == 0 {
+        Some(rotation)
+    } else if rc == -hbb_common::libc::ENOTSUP {
+        Some(DRM_MODE_ROTATE_0)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod plane_rotation_tests {
+    use super::*;
+    use std::os::fd::AsRawFd;
+    use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
+
+    #[test]
+    fn a_plane_without_the_property_turned_nothing() {
+        assert_eq!(plane_rotation_answer(0, 0x4), Some(0x4));
+        assert_eq!(plane_rotation_answer(0, 0x1), Some(0x1));
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::ENOTSUP, 0), Some(0x1));
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::ENOENT, 0), None);
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::EINVAL, 0), None);
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::EIO, 7), None);
+    }
+
+    // What the plane answers whenever it is asked. The fake release turns it, the way a compositor
+    // may once the frame is out, so a read taken after the release or outside the grab sees 0x1.
+    static PLANE: AtomicU32 = AtomicU32::new(0x1);
+    static FD: AtomicI32 = AtomicI32::new(-1);
+    static PIXELS: [u8; 16] = [0; 16];
+
+    unsafe extern "C" fn plane_rotation(_: *mut drmtap_ctx, rotation: *mut u32) -> c_int {
+        *rotation = PLANE.load(Ordering::SeqCst);
+        0
+    }
+    unsafe extern "C" fn frame_release(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) {
+        PLANE.store(0x1, Ordering::SeqCst);
+    }
+    unsafe extern "C" fn grab_mapped(_: *mut drmtap_ctx, f: *mut drmtap_frame_info) -> c_int {
+        (*f).data = PIXELS.as_ptr() as *mut _;
+        (*f).width = 2;
+        (*f).height = 2;
+        (*f).stride = 8;
+        (*f).format = DRM_FORMAT_XRGB8888;
+        0
+    }
+    unsafe extern "C" fn grab_desc(
+        _: *mut drmtap_ctx,
+        d: *mut drmtap_dmabuf_desc,
+        _: *mut drmtap_frame_info,
+    ) -> c_int {
+        (*d).dma_buf_fd = FD.load(Ordering::SeqCst);
+        (*d).width = 2;
+        (*d).height = 2;
+        (*d).num_planes = 1;
+        (*d).pitches[0] = 8;
+        0
+    }
+
+    #[test]
+    fn a_frame_keeps_the_rotation_its_plane_had_when_it_was_grabbed() {
+        let lib: &'static DrmtapLib = Box::leak(Box::new(DrmtapLib::fake(
+            grab_mapped,
+            frame_release,
+            grab_desc,
+            plane_rotation,
+        )));
+        let mut r = DrmReader {
+            lib,
+            ctx: std::ptr::null_mut(),
+            buf: Vec::new(),
+            last_provenance: -1,
+            last_plane_rotation: None,
+        };
+        PLANE.store(0x4, Ordering::SeqCst);
+        r.grab().expect("the fake grab succeeds");
+        assert_eq!(r.plane_rotation(), Some(0x4), "cpu grab");
+        let (fd, _peer) = std::os::unix::net::UnixStream::pair().unwrap();
+        FD.store(fd.as_raw_fd(), Ordering::SeqCst);
+        PLANE.store(0x8, Ordering::SeqCst);
+        r.grab_desc().expect("the fake export succeeds");
+        assert_eq!(r.plane_rotation(), Some(0x8), "dma-buf export");
     }
 }

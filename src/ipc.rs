@@ -543,6 +543,9 @@ pub enum Data {
     DrmFrame {
         width: u32,
         height: u32,
+        /// See `DmabufDesc::plane_rotation`; absent from a producer older than this field.
+        #[serde(default)]
+        plane_rotation: Option<u32>,
         /// See `DmabufDesc::cursor_pos`: the cursor plane position read right after this frame,
         /// or `None` when the cursor is hidden, the read failed or the producer predates the field.
         #[serde(default)]
@@ -2377,6 +2380,45 @@ mod test {
         }
     }
 
+    /// A frame from a producer that predates the plane rotation reads as `None`, in the cpu frame
+    /// header and in the dma-buf descriptor: the root service and the `--server` are upgraded
+    /// separately, and `None` keeps the previous rule.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[test]
+    fn a_frame_without_a_plane_rotation_reads_as_none() {
+        let legacy = r#"{"t":"DrmFrame","c":{"width":8,"height":8}}"#;
+        match serde_json::from_str::<Data>(legacy).expect("legacy DrmFrame must deserialize") {
+            Data::DrmFrame { plane_rotation, .. } => assert_eq!(plane_rotation, None),
+            other => panic!("expected DrmFrame, got {other:?}"),
+        }
+        let modern = r#"{"t":"DrmFrame","c":{"width":8,"height":8,"plane_rotation":4}}"#;
+        match serde_json::from_str::<Data>(modern).expect("modern DrmFrame must deserialize") {
+            Data::DrmFrame { plane_rotation, .. } => assert_eq!(plane_rotation, Some(4)),
+            other => panic!("expected DrmFrame, got {other:?}"),
+        }
+        let desc = DmabufDesc {
+            buffer_id: 0,
+            width: 4,
+            height: 4,
+            format: 0,
+            modifier: 0,
+            fb_id: 0,
+            num_planes: 1,
+            offsets: [0; 4],
+            pitches: [16, 0, 0, 0],
+            hdr_eotf: 0,
+            hdr_max_nits: 0,
+            has_fd: false,
+            plane_rotation: Some(4),
+            cursor_pos: None,
+        };
+        let mut value = serde_json::to_value(&desc).unwrap();
+        assert!(value.as_object_mut().unwrap().remove("plane_rotation").is_some());
+        let legacy: DmabufDesc =
+            serde_json::from_value(value).expect("legacy DmabufDesc must deserialize");
+        assert_eq!(legacy.plane_rotation, None);
+    }
+
     /// A frame header from a producer that predates the cursor plane position reads as `None`;
     /// a producer that sends one is read back exactly. A pin, not a gate: the consumer only ever
     /// measures against `Some`.
@@ -2389,6 +2431,7 @@ mod test {
                 width,
                 height,
                 cursor_pos,
+                ..
             } => {
                 assert_eq!((width, height), (8, 8));
                 assert_eq!(cursor_pos, None);
