@@ -1069,7 +1069,13 @@ mod mouce {
     pub const BTN_TASK: c_int = 0x117;
     const SYN_REPORT: c_int = 0x00;
     const EV_SYN: c_int = 0x00;
-    const BUS_USB: c_ushort = 0x03;
+    // libinput's evdev_tag_external_mouse() tags any BUS_USB/BUS_BLUETOOTH
+    // pointer as an external mouse, which makes desktop environments'
+    // "disable touchpad when an external mouse is present" setting suspend
+    // the real touchpad whenever this virtual device is created, even
+    // though nothing is physically plugged in. BUS_VIRTUAL correctly
+    // identifies this as the software-only device it is.
+    const BUS_VIRTUAL: c_ushort = 0x06;
 
     /// uinput types
     #[repr(C)]
@@ -1208,7 +1214,7 @@ mod mouce {
 
             let mut usetup = UInputSetup {
                 id: InputId {
-                    bustype: BUS_USB,
+                    bustype: BUS_VIRTUAL,
                     // Random vendor and product
                     vendor: 0x2222,
                     product: 0x3333,
