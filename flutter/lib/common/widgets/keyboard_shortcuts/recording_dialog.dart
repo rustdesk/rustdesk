@@ -165,7 +165,6 @@ class _RecordingDialogState extends State<_RecordingDialog> {
     }
     if (event is! KeyDownEvent) return KeyEventResult.handled;
 
-    // Ignore modifier-only KeyDowns: don't lock in a partial combo.
     final logical = event.logicalKey;
     final keyName = shortcutKeyNameForEvent(event);
 
@@ -186,13 +185,16 @@ class _RecordingDialogState extends State<_RecordingDialog> {
 
     setState(() {
       _mods = mods;
-      // Only lock in the key when it's a non-modifier we recognize.
-      // Modifier-only KeyDowns (Shift, Ctrl, etc.) leave the captured key
-      // untouched, so the user can adjust modifiers after the fact.
-      if (keyName != null) {
-        _key = keyName;
-        _unsupportedKey = null;
-      } else if (!_modifierKeys.contains(logical)) {
+      final heldKeys = HardwareKeyboard.instance.physicalKeysPressed
+          .map(physicalKeyName)
+          .whereType<String>();
+      // A released letter must not join a later press.
+      _key = keyName ??
+          (heldKeys.contains(_key)
+              ? _key
+              : (heldKeys.isEmpty ? null : heldKeys.first));
+      _unsupportedKey = null;
+      if (keyName == null && !_modifierKeys.contains(logical)) {
         // Non-modifier key we don't recognize (e.g. F13, media keys, IME
         // compose keys). Surface a warning instead of silently dropping the
         // press — the dialog otherwise looks unresponsive.
@@ -277,9 +279,6 @@ class _RecordingDialogState extends State<_RecordingDialog> {
     final hasKey = _key != null;
     final conflictId = _conflictActionId;
     final hasConflict = conflictId != null;
-    // The Save button still fires for the previously-captured combo even if
-    // the user just hit an unsupported key — the captured state is what gets
-    // saved, the warning is just feedback that the latest press was rejected.
     final canSave = hasKey && _hasRequiredPrefix;
 
     Widget statusLine;
