@@ -3117,6 +3117,8 @@ class _CountDownButtonState extends State<_CountDownButton> {
 
 void changeSocks5Proxy() async {
   var socks = await bind.mainGetSocks();
+  final initialWsProxy = mainGetBoolOptionSync(kOptionAllowWebSocketProxy);
+  var wsProxy = initialWsProxy;
 
   String proxy = '';
   String proxyMsg = '';
@@ -3136,6 +3138,7 @@ void changeSocks5Proxy() async {
   // The following option is a not real key, it is just used for custom client advanced settings.
   const String optionProxyUrl = "proxy-url";
   final isOptFixed = isOptionFixed(optionProxyUrl);
+  final isWsProxyFixed = isOptionFixed(kOptionAllowWebSocketProxy);
 
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close, context) {
@@ -3153,8 +3156,11 @@ void changeSocks5Proxy() async {
       proxy = proxyController.text.trim();
       username = userController.text.trim();
       password = pwdController.text.trim();
+      final proxyChanged = socks.length == 3
+          ? proxy != socks[0] || username != socks[1] || password != socks[2]
+          : proxy.isNotEmpty || username.isNotEmpty || password.isNotEmpty;
 
-      if (proxy.isNotEmpty) {
+      if (!isOptFixed && proxyChanged && proxy.isNotEmpty) {
         String domainPort = proxy;
         if (domainPort.contains('://')) {
           domainPort = domainPort.split('://')[1];
@@ -3168,8 +3174,13 @@ void changeSocks5Proxy() async {
           return;
         }
       }
-      await bind.mainSetSocks(
-          proxy: proxy, username: username, password: password);
+      if (!isOptFixed && proxyChanged) {
+        await bind.mainSetSocks(
+            proxy: proxy, username: username, password: password);
+      }
+      if (!isWsProxyFixed && wsProxy != initialWsProxy) {
+        await mainSetBoolOption(kOptionAllowWebSocketProxy, wsProxy);
+      }
       close();
     }
 
@@ -3270,6 +3281,16 @@ void changeSocks5Proxy() async {
                 ),
               ],
             ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(translate('Use this proxy for WebSocket')),
+              subtitle: Text(translate('websocket-proxy-tip')),
+              value: wsProxy,
+              onChanged: isWsProxyFixed || isInProgress
+                  ? null
+                  : (value) => setState(() => wsProxy = value ?? false),
+            ),
             // NOT use Offstage to wrap LinearProgressIndicator
             if (isInProgress)
               const LinearProgressIndicator().marginOnly(top: 8),
@@ -3278,7 +3299,7 @@ void changeSocks5Proxy() async {
       ),
       actions: [
         dialogButton('Cancel', onPressed: close, isOutline: true),
-        if (!isOptFixed) dialogButton('OK', onPressed: submit),
+        if (!isOptFixed || !isWsProxyFixed) dialogButton('OK', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,

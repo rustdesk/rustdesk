@@ -68,6 +68,7 @@ use hbb_common::{
         time::{interval, Duration, Instant},
     },
     webrtc::WebRTCStream,
+    websocket::{check_ws, is_ws_endpoint},
     AddrMangle, ResultType, Stream,
 };
 use base::{
@@ -1848,8 +1849,12 @@ impl Client {
         conn_type: ConnType,
         ipv4: bool,
     ) -> ResultType<Stream> {
+        // The proxy's address family does not constrain the relay target.
+        let relay_server = check_port(relay_server, RELAY_PORT);
+        let use_proxy = Config::is_proxy()
+            && (!is_ws_endpoint(&check_ws(&relay_server)) || config::ws_use_proxy());
         let mut conn = connect_tcp(
-            ipv4_to_ipv6(check_port(relay_server, RELAY_PORT), ipv4),
+            ipv4_to_ipv6(relay_server, ipv4 || use_proxy),
             CONNECT_TIMEOUT,
         )
         .await
