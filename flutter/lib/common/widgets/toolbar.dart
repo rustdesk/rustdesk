@@ -1236,7 +1236,6 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
         child: Text(translate('swap-left-right-mouse'))));
   }
 
-  // immersive mode
   if (isMacOS && isDefaultConn) {
     final option = kOptionToggleImmersiveMode;
     final value =
