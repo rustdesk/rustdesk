@@ -160,12 +160,12 @@ impl LocalFile {
             | archive_flag
             | normal_flag;
 
-        let win32_time = self
+        let win32_time = (self
             .last_write_time
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_nanos() as u64
-            / 100
+            .as_nanos()
+            / 100) as u64
             + LDAP_EPOCH_DELTA;
 
         let size_high = (self.size >> 32) as u32;
@@ -511,6 +511,9 @@ mod file_list_test {
         // 2023-11-14 22:13:20 UTC
         let time = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
         assert_eq!(encoded_last_write_time(time)?, 133_444_736_000_000_000);
+        // 3000-01-01 00:00:00 UTC
+        let time = SystemTime::UNIX_EPOCH + Duration::from_secs(32_503_680_000);
+        assert_eq!(encoded_last_write_time(time)?, 441_481_536_000_000_000);
         // Times before 1970 are sent as 1970-01-01 00:00:00 UTC.
         let time = SystemTime::UNIX_EPOCH - Duration::from_secs(1);
         assert_eq!(encoded_last_write_time(time)?, 116_444_736_000_000_000);

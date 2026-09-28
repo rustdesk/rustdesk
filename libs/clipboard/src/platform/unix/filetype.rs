@@ -168,8 +168,11 @@ impl FileDescription {
 
         let valid_write_time = flags & FLAGS_FD_LAST_WRITE != 0;
         let last_modified = if valid_write_time && last_write_time >= LDAP_EPOCH_DELTA {
-            let last_write_time = (last_write_time - LDAP_EPOCH_DELTA) * 100;
-            let last_write_time = Duration::from_nanos(last_write_time);
+            let last_write_time = last_write_time - LDAP_EPOCH_DELTA;
+            let last_write_time = Duration::new(
+                last_write_time / 10_000_000,
+                (last_write_time % 10_000_000) as u32 * 100,
+            );
             SystemTime::UNIX_EPOCH + last_write_time
         } else {
             SystemTime::UNIX_EPOCH
@@ -339,6 +342,11 @@ mod tests {
         assert_eq!(
             parse_last_write_time(133_444_736_000_000_000),
             SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000)
+        );
+        // 3000-01-01 00:00:00 UTC
+        assert_eq!(
+            parse_last_write_time(441_481_536_000_000_000),
+            SystemTime::UNIX_EPOCH + Duration::from_secs(32_503_680_000)
         );
         // 1969-12-31 23:59:59 UTC falls back to the Unix epoch.
         assert_eq!(
