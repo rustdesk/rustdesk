@@ -149,6 +149,19 @@ A refactor added to cover a corner case rarely converges. Each new counter, time
 * When the only fix needs new state, a new lifecycle rule or a restructure, and the code already fails cleanly there or behaves as master does, document it as a known limit in the PR instead. Anything beyond the easy fix needs the maintainer's explicit go-ahead first.
 * Before adding state that reorders, expires or reuses existing data, list every lookup that reads that data and check each one still holds.
 * Prefer a clean failure, where the operation reports an error, over machinery that tries to make a rare case succeed.
+* A severity label from any reviewer (P1, Critical, Major) is not a triage result. Apply the next rule by consequence, not by label.
+* A corner case whose fix needs new state is fixed only when it crashes, loses data, weakens security, or a user has reported it. A rare cosmetic or layout glitch (e.g. rotation during an active drag, a feature that is off by default) is a known limit: reply once, list it under "Known limits" in the PR body, and leave the code alone.
+* When a finding is about behavior an earlier commit of this same PR introduced, fix it by removing or simplifying that commit, not by adding a layer on top.
+* Judge growth across all rounds, not per round. If review follow-ups have grown the non-test diff by more than half of the first fix, or added a new kind of state (handles into another component, cross-component references, deferred / post-frame callbacks, timers, caches, flags), stop and ask the maintainer before pushing.
+* When keeping the user's preferred state is hard in a rare case, fall back to a deterministic default computed from the current inputs. Do not coordinate mutable state across components or frames to preserve the preference.
+
+## Tests
+
+* A fix gets regression tests for the reported behavior only: they fail on master and pass with the fix. One to three tests is normal.
+* Assert what the user sees or what the API returns. Do not test private state, the order an algorithm runs its steps in, or each corner case raised in review.
+* Do not add test infrastructure (browser runners, golden/screenshot harnesses, new mock layers, test-only hooks in production code) for a bug fix unless the maintainer asks.
+* If the test diff is more than twice the fix, cut it back to the tests that pin the reported behavior. A state that needs long setup to reach is usually too rare to fix.
+* When the number of tests needed to describe the behavior keeps growing, the implementation is too complex: simplify it instead of adding tests.
 
 ## Reviewing a PR
 
@@ -156,6 +169,8 @@ A refactor added to cover a corner case rarely converges. Each new counter, time
 * List pre-existing problems in a separate section at the end, or leave out the ones that are not fatal. Never mix them into the findings the author has to fix.
 * Before re-reviewing, read the author's reply comments. Do not re-raise items they declined on scope grounds.
 * State a finding's consequence exactly: distinguish "the value is lost" from "the shortcut is inert but the value still saves".
+* Do not report a rare corner case as blocking when fixing it needs new state; mark it as a known limit the author may leave unfixed.
+* Treat growth across review rounds as a finding: if the latest commits add more state than the original fix, say so instead of asking for more handling.
 
 ## Localization (`src/lang/*.rs`)
 
