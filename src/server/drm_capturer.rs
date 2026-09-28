@@ -1901,6 +1901,8 @@ fn publish_probe_result(
 
 #[cfg(feature = "headless-display")]
 const HEADLESS_HOLD_POLL: Duration = Duration::from_millis(500);
+#[cfg(feature = "headless-display")]
+const HEADLESS_FIRST_LOOK: Duration = Duration::from_millis(50);
 /// The video service's hold: the settle window, the longest gap we produce ourselves.
 #[cfg(feature = "headless-display")]
 pub(super) const HEADLESS_VIDEO_HOLD: Duration = EMPTY_TOPOLOGY_DEMOTE_AFTER;
@@ -1961,10 +1963,10 @@ pub(super) async fn wait_for_headless_scanout_with<V, E, S, F>(
         .unwrap()
         .get_or_insert_with(|| Instant::now() + HEADLESS_VIDEO_HOLD);
     let deadline = episode.min(Instant::now() + bound);
-    log::info!(
-        "drm: holding the portal while the headless output comes up (up to {:?})",
-        deadline.saturating_duration_since(Instant::now())
-    );
+    // The first turn is a short look: an Unknown state answers Unsettled while the probe it has
+    // just started is out, and with the output already up that probe is usually back within it.
+    // A verdict still missing after the look is logged and waited out at the hold's pace.
+    let mut turn = 0u32;
     while hold_step(
         v,
         DRM_PROBE_FAILURES.load(Ordering::Relaxed),
@@ -1972,7 +1974,14 @@ pub(super) async fn wait_for_headless_scanout_with<V, E, S, F>(
         Instant::now(),
         deadline,
     ) {
-        sleep(HEADLESS_HOLD_POLL).await;
+        if turn == 1 {
+            log::info!(
+                "drm: holding the portal while the headless output comes up (up to {:?})",
+                deadline.saturating_duration_since(Instant::now())
+            );
+        }
+        sleep(if turn == 0 { HEADLESS_FIRST_LOOK } else { HEADLESS_HOLD_POLL }).await;
+        turn += 1;
         v = verdict();
     }
     if v == Availability::Available {
@@ -4450,6 +4459,46 @@ mod drm_capturer_tests {
         );
         assert!(EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none(), "no clock left against it");
         publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+    }
+
+    /// A verdict that lands during the first look costs only that look, not a 500 ms turn: an
+    /// Unknown state answers Unsettled while the probe it has just started is out.
+    #[cfg(feature = "headless-display")]
+    #[test]
+    fn a_verdict_that_lands_during_the_first_look_costs_only_that_look() {
+        let _serial = serial_drm_state();
+        DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
+        *HOLD_DEADLINE.lock().unwrap() = None;
+        let run = |answers: &[Availability]| -> Vec<Duration> {
+            let calls = std::cell::Cell::new(0usize);
+            let slept = std::cell::RefCell::new(Vec::new());
+            let rt = hbb_common::tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            rt.block_on(wait_for_headless_scanout_with(
+                || {
+                    let i = calls.get();
+                    calls.set(i + 1);
+                    answers[i.min(answers.len() - 1)]
+                },
+                || true,
+                |d| {
+                    slept.borrow_mut().push(d);
+                    std::future::ready(())
+                },
+                Duration::from_secs(20),
+            ));
+            slept.into_inner()
+        };
+        use Availability::{Available, Unsettled};
+        assert_eq!(run(&[Unsettled, Available]), vec![HEADLESS_FIRST_LOOK]);
+        assert!(HOLD_DEADLINE.lock().unwrap().is_none(), "Available clears the episode");
+        assert_eq!(
+            run(&[Unsettled, Unsettled, Available]),
+            vec![HEADLESS_FIRST_LOOK, HEADLESS_HOLD_POLL],
+            "a settle still under way after the look is waited out at the hold's pace"
+        );
+        *HOLD_DEADLINE.lock().unwrap() = None;
     }
 
     /// The hold ends when what is going on is not a settle: a probe error, the gate closing, a
