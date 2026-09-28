@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'shortcut_constants.dart';
@@ -141,6 +142,15 @@ List<Map<String, dynamic>> filterDefaultBindingsForPlatform(
   final filtered = <Map<String, dynamic>>[];
   for (final binding in shortcutBindingMapsFrom(bindings)) {
     final action = binding['action'] as String?;
+    // Compact Apple keyboards can label Backspace as Delete, making this
+    // default ambiguous. Using Backspace also conflicts with Finder's
+    // "Empty Trash without confirmation" shortcut on macOS.
+    // Leave it unbound; users can still record their own shortcut.
+    if ((defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.iOS) &&
+        action == kShortcutActionSendCtrlAltDel) {
+      continue;
+    }
     if (!cap.includeFullscreenShortcut &&
         action == kShortcutActionToggleFullscreen) {
       continue;
