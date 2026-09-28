@@ -42,4 +42,11 @@ class RdPlatformChannel {
     assert(isMacOS);
     return _hostMethodChannel.invokeMethod("terminate");
   }
+
+  /// Hide the menu bar and Dock completely while this window is fullscreen.
+  Future<void> setImmersiveMode(bool enabled) {
+    assert(isMacOS);
+    return _hostMethodChannel
+        .invokeMethod("setImmersiveMode", {"enabled": enabled});
+  }
 }

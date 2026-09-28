@@ -16,6 +16,7 @@ import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:bot_toast/bot_toast.dart';
@@ -70,6 +71,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         if (remotePage is RemotePage) {
           final ffi = remotePage.ffi;
           bind.setCurSessionId(sessionId: ffi.sessionId);
+          if (isMacOS) {
+            RdPlatformChannel.instance.setImmersiveMode(
+                bind.sessionGetToggleOptionSync(
+                    sessionId: ffi.sessionId, arg: kOptionToggleImmersiveMode));
+          }
         }
         WindowController.fromWindowId(params['windowId'])
             .setTitle(getWindowNameWithId(id));
