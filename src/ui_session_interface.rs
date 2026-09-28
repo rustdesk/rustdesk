@@ -1954,7 +1954,9 @@ impl<T: InvokeUiSession> Session<T> {
         self.send_key_event(&crate::keyboard::client::event_lock_screen());
     }
     pub fn ctrl_alt_del(&self) {
-        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
+        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del(
+            &self.peer_platform(),
+        ));
     }
 }
 

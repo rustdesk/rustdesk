@@ -484,9 +484,9 @@ pub mod client {
         send_key_event(&event_lock_screen());
     }
 
-    pub fn event_ctrl_alt_del() -> KeyEvent {
+    pub fn event_ctrl_alt_del(peer_platform: &str) -> KeyEvent {
         let mut key_event = KeyEvent::new();
-        if get_peer_platform() == "Windows" {
+        if peer_platform == "Windows" {
             key_event.set_control_key(ControlKey::CtrlAltDel);
             key_event.down = true;
         } else {
@@ -501,7 +501,7 @@ pub mod client {
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn ctrl_alt_del() {
-        send_key_event(&event_ctrl_alt_del());
+        send_key_event(&event_ctrl_alt_del(&get_peer_platform()));
     }
 }
 
