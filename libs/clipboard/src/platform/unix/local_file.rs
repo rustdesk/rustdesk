@@ -323,6 +323,7 @@ mod file_list_test {
     use std::{
         path::{Path, PathBuf},
         sync::atomic::{AtomicU64, Ordering},
+        time::{Duration, SystemTime},
     };
 
     use hbb_common::bytes::{BufMut, BytesMut};
@@ -488,6 +489,45 @@ mod file_list_test {
         assert!(file.handle.is_none());
 
         std::fs::remove_file(file_path)?;
+        Ok(())
+    }
+
+    const LAST_WRITE_TIME_OFFSET: usize = 56;
+
+    fn file_with_last_write_time(last_write_time: SystemTime) -> LocalFile {
+        let mut file = generate_tree("").remove(1);
+        file.last_write_time = last_write_time;
+        file
+    }
+
+    fn encoded_last_write_time(last_write_time: SystemTime) -> Result<u64, CliprdrError> {
+        let descriptor = file_with_last_write_time(last_write_time).as_bin()?;
+        let field = &descriptor[LAST_WRITE_TIME_OFFSET..LAST_WRITE_TIME_OFFSET + 8];
+        Ok(u64::from_le_bytes(field.try_into().unwrap()))
+    }
+
+    #[test]
+    fn encodes_last_write_time_as_windows_filetime() -> Result<(), CliprdrError> {
+        // 2023-11-14 22:13:20 UTC
+        let time = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        assert_eq!(encoded_last_write_time(time)?, 133_444_736_000_000_000);
+        // Times before 1970 are sent as 1970-01-01 00:00:00 UTC.
+        let time = SystemTime::UNIX_EPOCH - Duration::from_secs(1);
+        assert_eq!(encoded_last_write_time(time)?, 116_444_736_000_000_000);
+        Ok(())
+    }
+
+    #[test]
+    fn last_write_time_round_trips() -> Result<(), CliprdrError> {
+        let file = file_with_last_write_time(
+            SystemTime::UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_700),
+        );
+        let mut pdu = BytesMut::with_capacity(4 + FILE_DESCRIPTOR_SIZE);
+        pdu.put_u32_le(1);
+        pdu.put(file.as_bin()?.as_slice());
+
+        let parsed = FileDescription::parse_file_descriptors(pdu.to_vec(), 0)?;
+        assert_eq!(parsed[0].last_modified, file.last_write_time);
         Ok(())
     }
 }

@@ -40,7 +40,8 @@ pub(super) const FILE_NAME_FIELD_SIZE: usize = FILE_NAME_CODE_UNITS * std::mem::
 
 // begin of epoch used by microsoft
 // 1601-01-01 00:00:00 + LDAP_EPOCH_DELTA*(100 ns) = 1970-01-01 00:00:00
-const LDAP_EPOCH_DELTA: u64 = 116444772610000000;
+// 134_774 days (369 years, 89 leap days) * 86_400 s * 10_000_000 per s
+const LDAP_EPOCH_DELTA: u64 = 116_444_736_000_000_000;
 
 lazy_static! {
     static ref REMOTE_FORMAT_MAP: DashMap<i32, String> = DashMap::from_iter(
