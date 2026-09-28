@@ -196,6 +196,10 @@ pub(super) fn note_input_map_unknown() {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = None;
     note_input_map_adopted(u64::MAX);
 }
+/// The layout poll asks the apply thread for a job every check, so a thread that cannot start fails
+/// every one of them.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(super) const UINPUT_APPLY_LOG_INTERVAL: Duration = Duration::from_secs(600);
 /// Runs `job` on the one thread that checks, applies and records uinput ranges on the DRM paths,
 /// after every job asked for before it. Two applies must not overlap: the uinput service keeps the
 /// range of whichever request reached it last, and that must be the one recorded. The caller waits
@@ -217,7 +221,11 @@ pub(super) fn run_uinput_apply<R: Send + 'static>(
                 {
                     Ok(rt) => rt,
                     Err(err) => {
-                        log::error!("uinput apply thread: failed to build a runtime: {err}");
+                        hbb_common::throttled_log!(
+                            UINPUT_APPLY_LOG_INTERVAL,
+                            error,
+                            "uinput apply thread: failed to build a runtime: {err}"
+                        );
                         return;
                     }
                 };
@@ -228,7 +236,11 @@ pub(super) fn run_uinput_apply<R: Send + 'static>(
         match spawned {
             Ok(_) => Some(tx),
             Err(err) => {
-                log::error!("failed to start the uinput apply thread: {err}");
+                hbb_common::throttled_log!(
+                    UINPUT_APPLY_LOG_INTERVAL,
+                    error,
+                    "failed to start the uinput apply thread: {err}"
+                );
                 None
             }
         }
@@ -427,7 +439,11 @@ fn refresh_wayland_uinput_rect_if_changed() {
     .blocking_recv()
     .is_err()
     {
-        log::error!("Failed to check the uinput range: the uinput apply thread is gone");
+        hbb_common::throttled_log!(
+            UINPUT_APPLY_LOG_INTERVAL,
+            error,
+            "Failed to check the uinput range: the uinput apply thread is gone"
+        );
     }
     #[cfg(not(feature = "drm"))]
     {

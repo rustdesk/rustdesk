@@ -434,7 +434,11 @@ pub(super) async fn update_uinput_resolution() {
         }
     };
     if super::display_service::run_uinput_apply(job).await.is_err() {
-        log::error!("Failed to update mouse resolution: the uinput apply thread is gone");
+        hbb_common::throttled_log!(
+            super::display_service::UINPUT_APPLY_LOG_INTERVAL,
+            error,
+            "Failed to update mouse resolution: the uinput apply thread is gone"
+        );
     }
 }
 
@@ -529,7 +533,9 @@ pub(super) async fn check_init() -> ResultType<()> {
                             }
                         };
                         if super::display_service::run_uinput_apply(job).await.is_err() {
-                            log::error!(
+                            hbb_common::throttled_log!(
+                                super::display_service::UINPUT_APPLY_LOG_INTERVAL,
+                                error,
                                 "Failed to update mouse resolution: the uinput apply thread is gone"
                             );
                         }
