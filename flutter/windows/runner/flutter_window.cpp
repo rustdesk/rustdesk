@@ -67,6 +67,10 @@ void ForceChildRefresh(HWND child) {
   if (!child) {
     return;
   }
+  // FancyZones can queue a hide before the Flutter view is reparented.
+  if ((GetWindowLongPtr(child, GWL_STYLE) & WS_VISIBLE) == 0) {
+    ShowWindow(child, SW_SHOWNA);
+  }
   RECT rect;
   GetWindowRect(child, &rect);
   LONG width = rect.right - rect.left;
