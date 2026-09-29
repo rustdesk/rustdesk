@@ -227,7 +227,7 @@ List<KeyboardShortcutActionGroup> filterKeyboardShortcutActionGroupsForPlatform(
     if (!cap.includeScreenshotShortcut && id == kShortcutActionScreenshot) {
       return false;
     }
-    if (!cap.includeScreenshotShortcut &&
+    if (!cap.includeRelativeMouseModeShortcut &&
         id == kShortcutActionToggleRelativeMouseMode) {
       return false;
     }

@@ -202,6 +202,8 @@ class ShortcutModel {
     return ShortcutPlatformCapabilities(
       includeFullscreenShortcut: desktopLayout,
       includeScreenshotShortcut: isDesktop,
+      includeRelativeMouseModeShortcut:
+          isDesktop && !(isLinux && bind.mainCurrentIsWayland()),
       includeTabShortcuts: isDesktop,
       includeToolbarShortcut: desktopLayout,
       includeCloseTabShortcut: isDesktop,

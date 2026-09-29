@@ -110,6 +110,7 @@ String? shortcutKeyNameForEvent(KeyEvent e) => physicalKeyName(e.physicalKey);
 class ShortcutPlatformCapabilities {
   final bool includeFullscreenShortcut;
   final bool includeScreenshotShortcut;
+  final bool includeRelativeMouseModeShortcut;
   final bool includeTabShortcuts;
   final bool includeToolbarShortcut;
   final bool includeCloseTabShortcut;
@@ -123,6 +124,7 @@ class ShortcutPlatformCapabilities {
   const ShortcutPlatformCapabilities({
     required this.includeFullscreenShortcut,
     required this.includeScreenshotShortcut,
+    required this.includeRelativeMouseModeShortcut,
     required this.includeTabShortcuts,
     required this.includeToolbarShortcut,
     required this.includeCloseTabShortcut,
@@ -158,7 +160,7 @@ List<Map<String, dynamic>> filterDefaultBindingsForPlatform(
     if (!cap.includeScreenshotShortcut && action == kShortcutActionScreenshot) {
       continue;
     }
-    if (!cap.includeScreenshotShortcut &&
+    if (!cap.includeRelativeMouseModeShortcut &&
         action == kShortcutActionToggleRelativeMouseMode) {
       continue;
     }

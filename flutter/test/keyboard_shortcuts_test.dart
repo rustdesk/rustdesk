@@ -11,6 +11,7 @@ import 'package:flutter_hbb/models/shortcut_model.dart';
 ShortcutPlatformCapabilities capabilities({
   bool includeFullscreenShortcut = true,
   bool includeScreenshotShortcut = true,
+  bool includeRelativeMouseModeShortcut = true,
   bool includeTabShortcuts = true,
   bool includeToolbarShortcut = true,
   bool includeCloseTabShortcut = true,
@@ -24,6 +25,7 @@ ShortcutPlatformCapabilities capabilities({
   return ShortcutPlatformCapabilities(
     includeFullscreenShortcut: includeFullscreenShortcut,
     includeScreenshotShortcut: includeScreenshotShortcut,
+    includeRelativeMouseModeShortcut: includeRelativeMouseModeShortcut,
     includeTabShortcuts: includeTabShortcuts,
     includeToolbarShortcut: includeToolbarShortcut,
     includeCloseTabShortcut: includeCloseTabShortcut,
@@ -188,6 +190,7 @@ void main() {
       capabilities(
         includeFullscreenShortcut: false,
         includeScreenshotShortcut: false,
+        includeRelativeMouseModeShortcut: false,
         includeTabShortcuts: false,
         includeToolbarShortcut: false,
         includeCloseTabShortcut: false,
@@ -236,6 +239,7 @@ void main() {
       capabilities(
         includeFullscreenShortcut: false,
         includeScreenshotShortcut: false,
+        includeRelativeMouseModeShortcut: false,
         includeTabShortcuts: false,
         includeToolbarShortcut: false,
         includeCloseTabShortcut: false,
@@ -291,6 +295,14 @@ void main() {
     final groups =
         filterKeyboardShortcutActionGroupsForPlatform(capabilities());
     expect(idSet(groups), equals(idSet(kKeyboardShortcutActionGroups)));
+  });
+
+  test('Wayland hides relative mouse mode but keeps screenshot', () {
+    final ids = idSet(filterKeyboardShortcutActionGroupsForPlatform(
+      capabilities(includeRelativeMouseModeShortcut: false),
+    ));
+    expect(ids, isNot(contains(kShortcutActionToggleRelativeMouseMode)));
+    expect(ids, contains(kShortcutActionScreenshot));
   });
 
   test('shortcut action groups follow toolbar menu order', () {
@@ -382,6 +394,7 @@ void main() {
       capabilities(
         includeFullscreenShortcut: false,
         includeScreenshotShortcut: false,
+        includeRelativeMouseModeShortcut: false,
         includeTabShortcuts: false,
         includeToolbarShortcut: false,
         includeCloseTabShortcut: false,
