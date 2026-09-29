@@ -38,28 +38,33 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureDragEndCallback? onThreeFingerVerticalDragEnd;
 
   var _currentState = GestureState.none;
+  bool _ended = false;
   Timer? _debounceTimer;
+  Timer? _resetTimer;
 
   void _init() {
     debugPrint("CustomTouchGestureRecognizer init");
     // onStart = (d) {};
     onUpdate = (d) {
       _debounceTimer?.cancel();
-      if (d.pointerCount == 1 && _currentState != GestureState.oneFingerPan) {
+      if (d.pointerCount == 1 &&
+          (_currentState != GestureState.oneFingerPan || _ended)) {
         onOneFingerStartDebounce(d);
       } else if (d.pointerCount == 2 &&
-          _currentState != GestureState.twoFingerScale) {
+          (_currentState != GestureState.twoFingerScale || _ended)) {
         onTwoFingerStartDebounce(d);
       } else if (d.pointerCount == 3 &&
-          _currentState != GestureState.threeFingerVerticalDrag) {
+          (_currentState != GestureState.threeFingerVerticalDrag || _ended)) {
+        _resetTimer?.cancel();
         _currentState = GestureState.threeFingerVerticalDrag;
+        _ended = false;
         if (onThreeFingerVerticalDragStart != null) {
           onThreeFingerVerticalDragStart!(
               DragStartDetails(globalPosition: d.localFocalPoint));
         }
         debugPrint("start threeFingerScale");
       }
-      if (_currentState != GestureState.none) {
+      if (_currentState != GestureState.none && !_ended) {
         switch (_currentState) {
           case GestureState.oneFingerPan:
             if (onOneFingerPanUpdate != null) {
@@ -85,6 +90,9 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     onEnd = (d) {
       debugPrint("ScaleGestureRecognizer onEnd");
       _debounceTimer?.cancel();
+      if (_ended) {
+        return;
+      }
       // end
       switch (_currentState) {
         case GestureState.oneFingerPan:
@@ -114,7 +122,8 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         default:
           break;
       }
-      _debounceTimer = Timer(Duration(milliseconds: 200), () {
+      _ended = true;
+      _resetTimer = Timer(Duration(milliseconds: 200), () {
         _currentState = GestureState.none;
       });
     };
@@ -124,7 +133,9 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   // If we move our finger very fast, we won't be able to detect the "oneFingerPan" event sometimes.
   void onOneFingerStartDebounce(ScaleUpdateDetails d) {
     start(ScaleUpdateDetails d) {
+      _resetTimer?.cancel();
       _currentState = GestureState.oneFingerPan;
+      _ended = false;
       if (onOneFingerPanStart != null) {
         onOneFingerPanStart!(DragStartDetails(
             localPosition: d.localFocalPoint, globalPosition: d.focalPoint));
@@ -144,7 +155,9 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
 
   void onTwoFingerStartDebounce(ScaleUpdateDetails d) {
     start(ScaleUpdateDetails d) {
+      _resetTimer?.cancel();
       _currentState = GestureState.twoFingerScale;
+      _ended = false;
       if (onTwoFingerScaleStart != null) {
         onTwoFingerScaleStart!(ScaleStartDetails(
             localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
