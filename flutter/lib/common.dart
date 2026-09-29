@@ -1483,11 +1483,11 @@ class AccessibilityListener extends StatelessWidget {
   AccessibilityListener({this.child});
 
   // Only input injected by our own accessibility service needs mirroring,
-  // which requires a connected client allowed to control this device.
+  // which requires a connected client. Android forwards pointer input
+  // without checking the keyboard permission, so do not check it here.
   static bool get _mayBeInjected =>
       gFFI.serverModel.inputOk &&
-      gFFI.serverModel.clients
-          .any((c) => c.authorized && !c.disconnected && c.keyboard);
+      gFFI.serverModel.clients.any((c) => c.authorized && !c.disconnected);
 
   @override
   Widget build(BuildContext context) {
