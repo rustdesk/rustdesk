@@ -1177,7 +1177,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
 //
 // `screencast_portal` supports restore_token and persist_mode if the version is greater than or equal to 4.
 // `remote_desktop_portal` does not support restore_token and persist_mode.
-pub fn is_server_running() -> bool {
+pub(crate) fn is_server_running() -> bool {
     let v = IS_SERVER_RUNNING.load(Ordering::SeqCst);
     if v > 0 {
         return v == 1;
