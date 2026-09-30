@@ -120,6 +120,7 @@ class ShortcutPlatformCapabilities {
   final bool includePinToolbarShortcut;
   final bool includeViewModeShortcut;
   final bool includeVoiceCallShortcut;
+  final Set<String> excludedActions;
 
   const ShortcutPlatformCapabilities({
     required this.includeFullscreenShortcut,
@@ -134,6 +135,7 @@ class ShortcutPlatformCapabilities {
     required this.includePinToolbarShortcut,
     required this.includeViewModeShortcut,
     required this.includeVoiceCallShortcut,
+    this.excludedActions = const {},
   });
 }
 
@@ -144,6 +146,7 @@ List<Map<String, dynamic>> filterDefaultBindingsForPlatform(
   final filtered = <Map<String, dynamic>>[];
   for (final binding in shortcutBindingMapsFrom(bindings)) {
     final action = binding['action'] as String?;
+    if (cap.excludedActions.contains(action)) continue;
     // Compact Apple keyboards can label Backspace as Delete, making this
     // default ambiguous. Using Backspace also conflicts with Finder's
     // "Empty Trash without confirmation" shortcut on macOS.

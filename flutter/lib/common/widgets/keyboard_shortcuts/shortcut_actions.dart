@@ -220,6 +220,7 @@ List<KeyboardShortcutActionGroup> filterKeyboardShortcutActionGroupsForPlatform(
   ShortcutPlatformCapabilities cap,
 ) {
   bool allowed(String id) {
+    if (cap.excludedActions.contains(id)) return false;
     if (!cap.includeFullscreenShortcut &&
         id == kShortcutActionToggleFullscreen) {
       return false;

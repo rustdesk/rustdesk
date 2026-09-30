@@ -181,7 +181,7 @@ class ShortcutModel {
   /// action belongs to.
   ///
   /// Capability rationale:
-  ///   * Fullscreen / Toolbar / Pin / View Mode: rendered wherever the
+  ///   * Fullscreen / Toolbar / Pin: rendered wherever the
   ///     desktop layout applies (native desktop + Web). Native mobile is
   ///     permanently full-screen and doesn't have a desktop-style toolbar.
   ///   * Screenshot / Switch Sides: native desktop only. The Web bridge
@@ -195,8 +195,9 @@ class ShortcutModel {
   ///     `recordingModel.toggle()`; Web has no implementation.
   ///   * Reset Canvas: only the mobile toolbar builds the menu entry
   ///     (`isDefaultConn && isMobile` in `toolbarControls`).
-  ///   * Voice Call: Web bridge throws `UnimplementedError` for both
-  ///     `sessionRequestVoiceCall` and `sessionCloseVoiceCall`.
+  ///   * Voice Call: iOS has no audio capture implementation; Web bridge throws
+  ///     `UnimplementedError` for both `sessionRequestVoiceCall` and
+  ///     `sessionCloseVoiceCall`.
   static ShortcutPlatformCapabilities currentPlatformCapabilities() {
     final desktopLayout = isDesktop || isWeb;
     return ShortcutPlatformCapabilities(
@@ -211,8 +212,21 @@ class ShortcutModel {
       includeRecordingShortcut: !isWeb && !isIOS,
       includeResetCanvasShortcut: isMobile,
       includePinToolbarShortcut: desktopLayout,
-      includeViewModeShortcut: desktopLayout,
-      includeVoiceCallShortcut: !isWeb,
+      includeViewModeShortcut: true,
+      includeVoiceCallShortcut: !isWeb && !isIOS,
+      excludedActions: Set.unmodifiable({
+        if (!isDesktop) ...[
+          kShortcutActionSwitchDisplayAll,
+          kShortcutActionToggleEnableFileCopyPaste,
+        ],
+        if (isMobile) ...[
+          kShortcutActionKeyboardModeLegacy,
+          kShortcutActionKeyboardModeMap,
+          kShortcutActionKeyboardModeTranslate,
+          kShortcutActionToggleShowMyCursor,
+          kShortcutActionToggleZoomCursor,
+        ],
+      }),
     );
   }
 }
@@ -320,16 +334,7 @@ void registerSessionShortcutActions(
     } else {
       next = ((current + delta) % count + count) % count;
     }
-    bind.sessionSwitchDisplay(
-      isDesktop: isDesktop,
-      sessionId: sessionId,
-      value: Int32List.fromList([next]),
-    );
-    if (pi.isSupportMultiUiSession) {
-      // On multi-ui-session peers no switch-display message is sent back, so
-      // update the local state directly (mirrors `model.dart` handling).
-      ffi.ffiModel.switchToNewDisplay(next, sessionId, ffi.id);
-    }
+    openMonitorInTheSameTab(next, ffi, pi, updateCursorPos: isMobile);
   }
 
   ffi.shortcutModel.register(kShortcutActionSwitchDisplayNext, () {
@@ -421,8 +426,8 @@ void registerSessionShortcutActions(
   // Toggle Voice Call — start when idle, hang up when active. Mirrors the
   // toolbar's `_VoiceCallMenu` state-driven button. Web bridge throws
   // UnimplementedError on both sessionRequestVoiceCall and
-  // sessionCloseVoiceCall, so we don't register on web.
-  if (!isWeb) {
+  // sessionCloseVoiceCall; iOS has no audio capture implementation.
+  if (!isWeb && !isIOS) {
     ffi.shortcutModel.register(kShortcutActionToggleVoiceCall, () {
       final status = ffi.chatModel.voiceCallStatus.value;
       if (status == VoiceCallStatus.connected ||
