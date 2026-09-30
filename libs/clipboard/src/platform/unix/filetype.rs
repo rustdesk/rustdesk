@@ -140,12 +140,13 @@ impl FileDescription {
             // cannot set as is...
         } else if normal {
             PERM_RWX
+        } else if directory {
+            // Windows ignores read-only and hidden on a directory; without `x` it cannot be entered.
+            PERM_RWX
         } else if readonly {
             PERM_READ
         } else if hidden {
             PERM_SELF_RO
-        } else if directory {
-            PERM_RWX
         } else {
             PERM_RW
         };
@@ -325,6 +326,31 @@ mod tests {
             parse_name(&name),
             Err(CliprdrError::InvalidRequest { .. })
         ));
+    }
+
+    fn parse_perm(attributes: u32) -> u16 {
+        let mut pdu = descriptor_pdu("folder");
+        pdu[ATTRIBUTES_OFFSET..ATTRIBUTES_OFFSET + size_of::<u32>()]
+            .copy_from_slice(&attributes.to_le_bytes());
+        FileDescription::parse_file_descriptors(pdu, 0).unwrap()[0].perm
+    }
+
+    #[test]
+    fn windows_directories_stay_searchable() {
+        const FILE_ATTRIBUTE_READONLY: u32 = 0x01;
+        const FILE_ATTRIBUTE_HIDDEN: u32 = 0x02;
+        const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+        for attributes in [
+            FILE_ATTRIBUTE_DIRECTORY,
+            FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY,
+            FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_HIDDEN,
+        ] {
+            assert_eq!(
+                parse_perm(attributes),
+                PERM_RWX,
+                "attributes {attributes:#x}"
+            );
+        }
     }
 
     fn parse_last_write_time(filetime: u64) -> SystemTime {
