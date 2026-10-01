@@ -310,18 +310,23 @@ mod tests {
         );
     }
 
-    // Stands in for sc.exe: the service is still stopping for two queries, the
-    // start is refused until it has stopped, as the SCM does, and it runs once
-    // started.
+    // Stands in for sc.exe: the old instance still reports RUNNING, then the
+    // service is stopping, then stopped. The start is refused until it has
+    // stopped, as the SCM does, and the service runs once started.
     const FAKE_SC_STOPPING_SERVICE: &str = r#"@echo off
 if "%~1"=="start" goto start
-if exist "%~dp0running" (echo         STATE              : 4  RUNNING& exit /b 0)
-if exist "%~dp0stopping2" (echo         STATE              : 1  STOPPED& exit /b 0)
-if exist "%~dp0stopping1" (type nul > "%~dp0stopping2") else (type nul > "%~dp0stopping1")
+if exist "%~dp0running" goto running
+if exist "%~dp0query2" (echo         STATE              : 1  STOPPED& exit /b 0)
+if exist "%~dp0query1" (type nul > "%~dp0query2" & goto stopping)
+type nul > "%~dp0query1"
+:running
+echo         STATE              : 4  RUNNING
+exit /b 0
+:stopping
 echo         STATE              : 3  STOP_PENDING
 exit /b 0
 :start
-if not exist "%~dp0stopping2" (type nul > "%~dp0refused" & exit /b 1056)
+if not exist "%~dp0query2" (type nul > "%~dp0refused" & exit /b 1056)
 type nul > "%~dp0running"
 exit /b 0
 "#;
@@ -331,9 +336,11 @@ exit /b 0
 
     #[test]
     fn update_abort_restarts_the_service_only_once_it_has_stopped() {
-        // A failed process query aborts the update while the service is still
-        // stopping. It must be started once it has stopped and run again
-        // before the updater exits, which still reports the original failure.
+        // A failed process query aborts the update while the old instance still
+        // reports RUNNING and the service is then still stopping. It must not
+        // count as restored before it has stopped, must be started once it
+        // has, and must run again before the updater exits, which still
+        // reports the original failure.
         let (code, copied, dir) = run_update_abort_with_fake_sc_for_test(FAKE_SC_STOPPING_SERVICE);
         assert_eq!(code, Some(UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE as i32));
         assert!(!copied);

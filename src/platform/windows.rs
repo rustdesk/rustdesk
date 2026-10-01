@@ -3471,11 +3471,16 @@ exit /b %RUSTDESK_UPDATE_FAILURE%
 /// The update has already asked the service to stop, and while it is still
 /// stopping the SCM refuses to start it, so a single `sc start` can leave it
 /// stopped. These lines poll `sc query`, start the service only once it has
-/// stopped, and wait until it runs, for about a minute at most. The state is
-/// matched on its number and name, such as `4  RUNNING`; an app name cannot
-/// contain spaces, so the `SERVICE_NAME` line cannot match. As in the wait, the
-/// query goes to the protected output directory and is checked with `||`, and
-/// only an exact `find` result is trusted.
+/// stopped, and wait until it runs again, for about a minute at most. Until the
+/// service has been seen stopped, RUNNING may still be the old instance that
+/// `sc stop` and `taskkill` are taking down, so it only counts afterwards.
+///
+/// The state is matched with `findstr` on its number and name, such as
+/// `4  *RUNNING`. The names are part of sc.exe itself, while the labels and the
+/// layout around them come from its localized resources, hence any number of
+/// spaces. An app name cannot contain spaces, so the `SERVICE_NAME` line cannot
+/// match. As in the wait, the query goes to the protected output directory and
+/// is checked with `||`, and only an exact `findstr` result is trusted.
 ///
 /// If the service does not run in time, the script exits with
 /// `UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE` instead of the reason the update
@@ -3483,16 +3488,23 @@ exit /b %RUSTDESK_UPDATE_FAILURE%
 fn restore_service_after_abort_cmd(app_name: &str) -> String {
     format!(
         "set /a RUSTDESK_SERVICE_WAIT=0
+set \"RUSTDESK_SERVICE_STOPPED=\"
 :rustdesk_restore_service
 sc query {app_name} > \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" || goto rustdesk_restore_service_failed
-find \" 4  RUNNING\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul
+findstr /R /C:\"1  *STOPPED\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul
+if errorlevel 2 goto rustdesk_restore_service_failed
+if not errorlevel 0 goto rustdesk_restore_service_failed
+if errorlevel 1 goto rustdesk_restore_service_check_running
+set \"RUSTDESK_SERVICE_STOPPED=1\"
+sc start {app_name} >nul
+goto rustdesk_restore_service_next
+:rustdesk_restore_service_check_running
+if not defined RUSTDESK_SERVICE_STOPPED goto rustdesk_restore_service_next
+findstr /R /C:\"4  *RUNNING\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul
 if errorlevel 2 goto rustdesk_restore_service_failed
 if not errorlevel 0 goto rustdesk_restore_service_failed
 if not errorlevel 1 goto rustdesk_service_restored
-find \" 1  STOPPED\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul
-if errorlevel 2 goto rustdesk_restore_service_failed
-if not errorlevel 0 goto rustdesk_restore_service_failed
-if not errorlevel 1 sc start {app_name} >nul
+:rustdesk_restore_service_next
 set /a RUSTDESK_SERVICE_WAIT+=1
 if %RUSTDESK_SERVICE_WAIT% geq 60 goto rustdesk_restore_service_failed
 ping -n 2 127.0.0.1 >nul
@@ -5002,23 +5014,33 @@ mod tests {
         let cmd = restore_service_after_abort_cmd("RustDesk");
         let lines: Vec<&str> = cmd.lines().collect();
         let query = lines.iter().position(|l| l.starts_with("sc query ")).unwrap();
-        // As in the wait, the query is checked with `||` and only exact `find`
-        // results are trusted.
+        // The flag starts out cleared, whatever the environment holds.
+        assert!(cmd.starts_with(
+            "set /a RUSTDESK_SERVICE_WAIT=0\nset \"RUSTDESK_SERVICE_STOPPED=\"\n"
+        ));
+        // As in the wait, the query is checked with `||` and only exact
+        // `findstr` results are trusted.
         assert!(lines[query].starts_with("sc query RustDesk > "));
         assert!(lines[query].contains(" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" "));
         assert!(lines[query].ends_with(" || goto rustdesk_restore_service_failed"));
         assert_eq!(
-            lines[query + 1..query + 9],
+            lines[query + 1..query + 14],
             [
-                "find \" 4  RUNNING\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul",
+                "findstr /R /C:\"1  *STOPPED\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul",
+                "if errorlevel 2 goto rustdesk_restore_service_failed",
+                "if not errorlevel 0 goto rustdesk_restore_service_failed",
+                "if errorlevel 1 goto rustdesk_restore_service_check_running",
+                // The SCM refuses to start a service that is still stopping.
+                "set \"RUSTDESK_SERVICE_STOPPED=1\"",
+                "sc start RustDesk >nul",
+                "goto rustdesk_restore_service_next",
+                ":rustdesk_restore_service_check_running",
+                // Before that, RUNNING may still be the old instance.
+                "if not defined RUSTDESK_SERVICE_STOPPED goto rustdesk_restore_service_next",
+                "findstr /R /C:\"4  *RUNNING\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul",
                 "if errorlevel 2 goto rustdesk_restore_service_failed",
                 "if not errorlevel 0 goto rustdesk_restore_service_failed",
                 "if not errorlevel 1 goto rustdesk_service_restored",
-                "find \" 1  STOPPED\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul",
-                "if errorlevel 2 goto rustdesk_restore_service_failed",
-                "if not errorlevel 0 goto rustdesk_restore_service_failed",
-                // The SCM refuses to start a service that is still stopping.
-                "if not errorlevel 1 sc start RustDesk >nul",
             ]
         );
         // That is the only start, and only a running service counts as restored.
@@ -5033,6 +5055,8 @@ mod tests {
         assert!(cmd.ends_with("\n:rustdesk_service_restored"));
         for label in [
             "rustdesk_restore_service",
+            "rustdesk_restore_service_check_running",
+            "rustdesk_restore_service_next",
             "rustdesk_restore_service_failed",
             "rustdesk_service_restored",
         ] {
