@@ -128,6 +128,7 @@ const MSI_EXIT_SUCCESS_REBOOT_REQUIRED: u32 = 3010;
 // Share the 0x5253_xxxx range of the elevated installer script exit codes.
 const UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE: u32 = 0x5253_0009;
 const UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE: u32 = 0x5253_000A;
+const UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE: u32 = 0x5253_000B;
 const HKLM_PREFIX: &str = "HKEY_LOCAL_MACHINE\\";
 
 fn validate_install_app_name(app_name: &str) -> ResultType<()> {
@@ -3435,8 +3436,8 @@ fn get_directory_size_kb(path: &str) -> u64 {
 /// still running after that, or the query or the search fails, the update is
 /// aborted instead of copying over files a process may still hold. Only
 /// `sc stop` and `taskkill` have run by then, so the script runs
-/// `restore_service_cmd` to start the service again if it was running, and exits
-/// with `UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE` or
+/// `restore_service_cmd`, see `restore_service_after_abort_cmd`, and exits with
+/// `UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE` or
 /// `UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE`, which `run_cmds` reports as a
 /// failed update.
 fn wait_for_app_exit_cmd(app_name: &str, filter: &str, restore_service_cmd: &str) -> String {
@@ -3453,12 +3454,52 @@ if %RUSTDESK_EXIT_WAIT% geq 60 goto rustdesk_exit_timeout
 ping -n 2 127.0.0.1 >nul
 goto rustdesk_wait_for_exit
 :rustdesk_exit_query_failed
-{restore_service_cmd}
-exit /b {UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE}
+set \"RUSTDESK_UPDATE_FAILURE={UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE}\"
+goto rustdesk_abort_update
 :rustdesk_exit_timeout
+set \"RUSTDESK_UPDATE_FAILURE={UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE}\"
+:rustdesk_abort_update
 {restore_service_cmd}
-exit /b {UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE}
+exit /b %RUSTDESK_UPDATE_FAILURE%
 :rustdesk_exited"
+    )
+}
+
+/// Batch lines that start the service again after `wait_for_app_exit_cmd`
+/// aborted the update.
+///
+/// The update has already asked the service to stop, and while it is still
+/// stopping the SCM refuses to start it, so a single `sc start` can leave it
+/// stopped. These lines poll `sc query`, start the service only once it has
+/// stopped, and wait until it runs, for about a minute at most. The state is
+/// matched on its number and name, such as `4  RUNNING`; an app name cannot
+/// contain spaces, so the `SERVICE_NAME` line cannot match. As in the wait, the
+/// query goes to the protected output directory and is checked with `||`, and
+/// only an exact `find` result is trusted.
+///
+/// If the service does not run in time, the script exits with
+/// `UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE` instead of the reason the update
+/// was aborted, so that a stopped service is reported rather than hidden.
+fn restore_service_after_abort_cmd(app_name: &str) -> String {
+    format!(
+        "set /a RUSTDESK_SERVICE_WAIT=0
+:rustdesk_restore_service
+sc query {app_name} > \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" || goto rustdesk_restore_service_failed
+find \" 4  RUNNING\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul
+if errorlevel 2 goto rustdesk_restore_service_failed
+if not errorlevel 0 goto rustdesk_restore_service_failed
+if not errorlevel 1 goto rustdesk_service_restored
+find \" 1  STOPPED\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul
+if errorlevel 2 goto rustdesk_restore_service_failed
+if not errorlevel 0 goto rustdesk_restore_service_failed
+if not errorlevel 1 sc start {app_name} >nul
+set /a RUSTDESK_SERVICE_WAIT+=1
+if %RUSTDESK_SERVICE_WAIT% geq 60 goto rustdesk_restore_service_failed
+ping -n 2 127.0.0.1 >nul
+goto rustdesk_restore_service
+:rustdesk_restore_service_failed
+exit /b {UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE}
+:rustdesk_service_restored"
     )
 }
 
@@ -3612,7 +3653,12 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
     // `sc stop` and `taskkill /F` do not wait for the processes to exit, see
     // `wait_for_app_exit_cmd`. A tray or main window can hold the files too, so
     // this is not limited to a running service.
-    let wait_exit_cmd = wait_for_app_exit_cmd(&app_name, &filter, &restore_service_cmd);
+    let abort_restore_service_cmd = if is_service_running {
+        restore_service_after_abort_cmd(&app_name)
+    } else {
+        "".to_owned()
+    };
+    let wait_exit_cmd = wait_for_app_exit_cmd(&app_name, &filter, &abort_restore_service_cmd);
     let cmds = format!(
         "
 chcp 65001
@@ -4889,6 +4935,7 @@ mod tests {
             "rustdesk_wait_for_exit",
             "rustdesk_exit_query_failed",
             "rustdesk_exit_timeout",
+            "rustdesk_abort_update",
             "rustdesk_exited",
         ] {
             assert!(cmd.contains(&format!(":{label}\n")) || cmd.ends_with(&format!(":{label}")));
@@ -4922,15 +4969,21 @@ mod tests {
 
     #[test]
     fn test_wait_for_app_exit_cmd_fails_closed() {
-        let cmd = wait_for_app_exit_cmd("RustDesk", "", "sc start RustDesk");
+        let cmd = wait_for_app_exit_cmd("RustDesk", "", "RESTORE");
         // A failed query or search and a timeout must not fall through to the
         // copy: restore the service and abort with a distinct exit code before
         // the success label.
         let failed = cmd.find("\n:rustdesk_exit_query_failed\n").unwrap();
         let exited = cmd.find("\n:rustdesk_exited").unwrap();
         let expected = format!(
-            "\n:rustdesk_exit_query_failed\nsc start RustDesk\nexit /b {}\
-             \n:rustdesk_exit_timeout\nsc start RustDesk\nexit /b {}",
+            "\n:rustdesk_exit_query_failed\
+             \nset \"RUSTDESK_UPDATE_FAILURE={}\"\
+             \ngoto rustdesk_abort_update\
+             \n:rustdesk_exit_timeout\
+             \nset \"RUSTDESK_UPDATE_FAILURE={}\"\
+             \n:rustdesk_abort_update\
+             \nRESTORE\
+             \nexit /b %RUSTDESK_UPDATE_FAILURE%",
             UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE, UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE
         );
         assert_eq!(&cmd[failed..exited], expected.as_str());
@@ -4941,12 +4994,51 @@ mod tests {
         assert!(cmd.ends_with("\n:rustdesk_exited"));
         // Without a service to restore, the update is still aborted.
         let cmd = wait_for_app_exit_cmd("RustDesk", "", "");
+        assert!(cmd.contains("\n:rustdesk_abort_update\n\nexit /b %RUSTDESK_UPDATE_FAILURE%\n"));
+    }
+
+    #[test]
+    fn test_restore_service_after_abort_cmd_starts_only_a_stopped_service() {
+        let cmd = restore_service_after_abort_cmd("RustDesk");
+        let lines: Vec<&str> = cmd.lines().collect();
+        let query = lines.iter().position(|l| l.starts_with("sc query ")).unwrap();
+        // As in the wait, the query is checked with `||` and only exact `find`
+        // results are trusted.
+        assert!(lines[query].starts_with("sc query RustDesk > "));
+        assert!(lines[query].contains(" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" "));
+        assert!(lines[query].ends_with(" || goto rustdesk_restore_service_failed"));
+        assert_eq!(
+            lines[query + 1..query + 9],
+            [
+                "find \" 4  RUNNING\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul",
+                "if errorlevel 2 goto rustdesk_restore_service_failed",
+                "if not errorlevel 0 goto rustdesk_restore_service_failed",
+                "if not errorlevel 1 goto rustdesk_service_restored",
+                "find \" 1  STOPPED\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul",
+                "if errorlevel 2 goto rustdesk_restore_service_failed",
+                "if not errorlevel 0 goto rustdesk_restore_service_failed",
+                // The SCM refuses to start a service that is still stopping.
+                "if not errorlevel 1 sc start RustDesk >nul",
+            ]
+        );
+        // That is the only start, and only a running service counts as restored.
+        assert_eq!(cmd.matches("sc start ").count(), 1);
+        assert_eq!(cmd.matches("goto rustdesk_service_restored").count(), 1);
+        // Bounded, and a service that does not come back is reported as such.
+        assert!(cmd.contains("geq 60 goto rustdesk_restore_service_failed"));
         assert!(cmd.contains(&format!(
-            "\n:rustdesk_exit_query_failed\n\nexit /b {UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE}\n"
+            "\n:rustdesk_restore_service_failed\nexit /b {}\n",
+            UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE
         )));
-        assert!(cmd.contains(&format!(
-            "\n:rustdesk_exit_timeout\n\nexit /b {UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE}\n"
-        )));
+        assert!(cmd.ends_with("\n:rustdesk_service_restored"));
+        for label in [
+            "rustdesk_restore_service",
+            "rustdesk_restore_service_failed",
+            "rustdesk_service_restored",
+        ] {
+            assert!(cmd.contains(&format!(":{label}\n")) || cmd.ends_with(&format!(":{label}")));
+        }
+        assert!(!cmd.to_ascii_lowercase().contains("powershell"));
     }
 
     #[test]
