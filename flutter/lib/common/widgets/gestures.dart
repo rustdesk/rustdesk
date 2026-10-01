@@ -123,6 +123,10 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
           break;
       }
       _ended = true;
+      if (d.pointerCount == 0) {
+        _currentState = GestureState.none;
+        return;
+      }
       _resetTimer = Timer(Duration(milliseconds: 200), () {
         _currentState = GestureState.none;
       });
