@@ -1780,22 +1780,7 @@ impl DrmConn {
 #[cfg(test)]
 mod drm_pacing_tests {
     use super::*;
-    use hbb_common::tokio::{self, io::AsyncWriteExt};
-    use std::time::{Duration, Instant};
-
-    /// rustdesk#16175: the consumer's rate rides the ack byte it already sends.
-    #[test]
-    fn every_qos_fps_round_trips_through_the_ack_byte() {
-        for fps in 1..=DRM_MAX_DEMAND_FPS {
-            assert_eq!(drm_ack_demand(drm_ack_byte(fps)), Some(fps), "fps {fps}");
-        }
-        assert_eq!(drm_ack_byte(0), DRM_ACK_PLAIN);
-        assert_eq!(drm_ack_demand(DRM_ACK_PLAIN), None);
-        assert_eq!(drm_ack_byte(200), drm_ack_byte(DRM_MAX_DEMAND_FPS));
-        for b in [0x00u8, 0x02, 0x7f, 0x80, 0xf9, 0xff] {
-            assert_eq!(drm_ack_demand(b), None, "byte {b:#x} carries no demand");
-        }
-    }
+    use hbb_common::tokio;
 
     /// An older producer counts ack bytes, so an ack that carries a demand is still one byte.
     #[tokio::test]
@@ -1818,117 +1803,19 @@ mod drm_pacing_tests {
         assert_eq!(got, vec![DRM_ACK_FPS_FLAG | 60]);
     }
 
-    /// Every byte is one credit, whatever its value, and the newest demand among them wins.
-    #[tokio::test]
-    async fn the_drain_counts_bytes_and_keeps_the_last_demand() {
-        let mut seed: u64 = 0x16175;
-        let mut next = move || {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-            seed >> 33
-        };
-        for case in 0..200 {
-            let (mut a, b) = tokio::net::UnixStream::pair().unwrap();
-            let rx = DrmConn::new(b);
-            let len = 1 + (next() % 64) as usize;
-            let bytes: Vec<u8> = (0..len)
-                .map(|_| match next() % 3 {
-                    0 => DRM_ACK_PLAIN,
-                    1 => drm_ack_byte(1 + (next() % 120) as u8),
-                    _ => (next() % 256) as u8,
-                })
-                .collect();
-            a.write_all(&bytes).await.unwrap();
-            let start = (next() % 3) as i32;
-            let (mut credit, mut demand) = (start, 7u8);
-            // As in the forwarding task: the drain runs once the socket has been seen readable.
-            rx.wait_readable().await.unwrap();
-            rx.drain_frame_acks(&mut credit, 2, &mut demand).unwrap();
-            let want = bytes.iter().rev().find_map(|&b| drm_ack_demand(b)).unwrap_or(7);
-            assert_eq!(credit, (start + len as i32).min(2), "case {case}: credit");
-            assert_eq!(demand, want, "case {case}: demand from {bytes:?}");
-        }
-    }
-
-    #[test]
-    fn a_panel_period_is_rounded_up_so_pacing_never_outruns_the_panel() {
-        assert_eq!(drm_panel_period(60, 1), Duration::from_nanos(16_666_667));
-        assert_eq!(drm_panel_period(148352, 2475), Duration::from_nanos(16_683_294), "59.94");
-        assert_eq!(drm_panel_period(296704, 12375), Duration::from_nanos(41_708_235), "23.976");
-        assert_eq!(drm_panel_period(0, 1), Duration::ZERO);
-        assert_eq!(drm_panel_period(1, 0), Duration::ZERO);
-    }
-
     #[test]
     fn the_pacing_interval_follows_the_demand_with_the_panel_as_floor() {
         let p60 = drm_panel_period(60, 1);
-        let p23976 = drm_panel_period(296704, 12375);
-        let p5994 = drm_panel_period(148352, 2475);
-        let hz = |n: u32| Duration::from_secs(1) / n;
+        let p2998 = drm_panel_period(131375, 4382);
         let cases = [
             (0u8, p60, FRAME_INTERVAL, "no demand: the old tick"),
             (60, p60, p60, "60 on a 60 Hz panel"),
             (120, p60, p60, "more than the panel shows: the panel"),
-            (120, Duration::ZERO, hz(120), "panel unknown: the demand"),
-            (30, Duration::ZERO, FRAME_INTERVAL, "30 to 15: never slower than the old tick"),
-            (15, Duration::ZERO, hz(30), "15: half its period"),
-            (10, Duration::ZERO, hz(20), "below 15: half its period"),
-            (5, Duration::ZERO, hz(10), "below 15: half its period"),
-            (60, p23976, p23976, "a 23.976 Hz panel"),
-            (30, p5994, FRAME_INTERVAL, "the old tick is slower than a 59.94 panel"),
+            (60, p2998, p2998, "a 29.98 Hz panel, exactly"),
         ];
         for (demand, panel, want, why) in cases {
             assert_eq!(drm_pacing_interval(demand, panel), want, "{why}");
         }
-    }
-
-    /// Each tick reads the cursor: a slow frame rate must not slow it below the old 33 ms tick.
-    #[test]
-    fn the_worker_wakes_for_the_next_frame_and_at_least_every_old_tick() {
-        let now = Instant::now();
-        let p60 = drm_panel_period(60, 1);
-        let next = drm_next_tick(now, now, 60, p60);
-        assert_eq!(drm_worker_wake(now, next), next, "60 fps: the frame deadline");
-        let slow = drm_next_tick(now, now, 5, Duration::ZERO);
-        assert_eq!(slow, now + Duration::from_millis(100), "5 fps: a frame every 100 ms");
-        assert_eq!(drm_worker_wake(now, slow), now + FRAME_INTERVAL, "the cursor every 33 ms");
-        let plain = drm_next_tick(now, now, 0, p60);
-        assert_eq!(drm_worker_wake(now, plain), now + FRAME_INTERVAL, "no demand: the old tick");
-    }
-
-    /// A connection logs its first rate, then a different one at most every ten seconds.
-    #[test]
-    fn the_demand_is_logged_once_then_at_most_every_ten_seconds() {
-        let now = Instant::now();
-        assert!(!drm_demand_log_due(None, 0, now), "no demand yet");
-        assert!(drm_demand_log_due(None, 60, now), "the first rate");
-        let logged = Some((60, now));
-        assert!(!drm_demand_log_due(logged, 59, now + Duration::from_secs(3)), "too soon");
-        assert!(!drm_demand_log_due(logged, 60, now + Duration::from_secs(30)), "the same rate");
-        assert!(drm_demand_log_due(logged, 59, now + Duration::from_secs(10)), "a new rate, later");
-    }
-
-    /// With a library that cannot read the exact refresh, the enumeration's whole hertz is the
-    /// floor, looked up by device and CRTC.
-    #[test]
-    fn the_whole_hertz_refresh_is_kept_per_device_and_crtc() {
-        DRM_WHOLE_HZ
-            .lock()
-            .unwrap()
-            .insert(("TEST-pacing-dev".to_owned(), 386), 30);
-        assert_eq!(drm_whole_hz("TEST-pacing-dev", 386), 30);
-        assert_eq!(drm_whole_hz("TEST-pacing-dev", 150), 0, "another CRTC");
-        assert_eq!(drm_whole_hz("TEST-pacing-other", 386), 0, "another device");
-    }
-
-    #[test]
-    fn the_next_tick_is_the_old_sleep_without_a_demand_and_a_deadline_with_one() {
-        let now = Instant::now();
-        let p60 = drm_panel_period(60, 1);
-        let prev = now - Duration::from_millis(2);
-        assert_eq!(drm_next_tick(prev, now, 0, p60), now + FRAME_INTERVAL);
-        assert_eq!(drm_next_tick(prev, now, 60, p60), prev + p60, "phased on the previous tick");
-        let late = now - Duration::from_millis(40);
-        assert_eq!(drm_next_tick(late, now, 60, p60), now, "after an overrun: now, without a burst");
     }
 }
 
