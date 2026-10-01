@@ -146,6 +146,10 @@ type FnRenderNode = unsafe extern "C" fn(*mut drmtap_ctx) -> *const c_char;
 /// means the compositor can only have rotated in software; `-ENOENT` with no plane bound;
 /// `-EINVAL` on a null argument.
 type FnPlaneRotation = unsafe extern "C" fn(*mut drmtap_ctx, *mut u32) -> c_int;
+/// `drmtap_crtc_refresh`, added in libdrmtap 0.5.9: the refresh of the captured CRTC in hertz as
+/// the reduced fraction `*num / *den` of its current mode. 0 on success; `-ENODATA` for a CRTC
+/// with no mode; `-ENOENT` with none to pick; `-EINVAL` on a null argument.
+type FnCrtcRefresh = unsafe extern "C" fn(*mut drmtap_ctx, *mut u64, *mut u64) -> c_int;
 type FnConvertDmabuf =
     unsafe extern "C" fn(*mut drmtap_ctx, *const drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
 
@@ -171,6 +175,9 @@ pub struct DrmtapLib {
     /// Optional: it only exists from libdrmtap 0.5.8. Absent means the library cannot say whether
     /// the plane rotated the scanout, and the consumer keeps the pre-0.5.8 rule for that case.
     pub plane_rotation: Option<FnPlaneRotation>,
+    /// Optional: it only exists from libdrmtap 0.5.9. Absent means the producer takes the
+    /// whole-hertz refresh of the enumeration as its pacing floor.
+    pub crtc_refresh: Option<FnCrtcRefresh>,
     pub version: (c_int, c_int, c_int),
 }
 
@@ -221,6 +228,7 @@ impl DrmtapLib {
             convert_dmabuf,
             render_node: None,
             plane_rotation: Some(plane_rotation),
+            crtc_refresh: None,
             version: (0, 5, 8),
         }
     }
@@ -353,6 +361,8 @@ impl DrmtapLib {
                 lib.get(b"drmtap_cursor_hotspot_valid").ok().map(|s| *s);
             let plane_rotation: Option<FnPlaneRotation> =
                 lib.get(b"drmtap_plane_rotation").ok().map(|s| *s);
+            let crtc_refresh: Option<FnCrtcRefresh> =
+                lib.get(b"drmtap_crtc_refresh").ok().map(|s| *s);
             // Log the load only now that every required symbol resolved: this fn still returns None on a missing one.
             let loaded_from = real
                 .as_ref()
@@ -404,6 +414,14 @@ impl DrmtapLib {
                      software will be captured upside down."
                 );
             }
+            if (minor, patch) >= (5, 9) && crtc_refresh.is_none() {
+                log::warn!(
+                    "libdrmtap at {loaded_from} reports v{major}.{minor}.{patch} but is missing \
+                     drmtap_crtc_refresh: it is a stale or pre-release build. Check what the \
+                     soname symlink points at. Capture paces to the whole-hertz refresh, so a \
+                     59.94 Hz panel is sampled as if it were 60."
+                );
+            }
             Some(DrmtapLib {
                 _lib: lib,
                 open,
@@ -420,6 +438,7 @@ impl DrmtapLib {
                 convert_dmabuf,
                 render_node,
                 plane_rotation,
+                crtc_refresh,
                 version: (major, minor, patch),
             })
         }
