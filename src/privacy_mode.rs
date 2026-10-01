@@ -190,7 +190,7 @@ pub fn switch(impl_key: &str) {
     }
 }
 
-fn get_supported_impl(impl_key: &str) -> String {
+pub fn get_supported_impl(impl_key: &str) -> String {
     let supported_impls = get_supported_privacy_mode_impl();
     if supported_impls.iter().any(|(k, _)| k == &impl_key) {
         return impl_key.to_owned();
