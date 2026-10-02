@@ -185,14 +185,9 @@ class _RecordingDialogState extends State<_RecordingDialog> {
 
     setState(() {
       _mods = mods;
-      final heldKeys = HardwareKeyboard.instance.physicalKeysPressed
-          .map(physicalKeyName)
-          .whereType<String>();
-      // A released letter must not join a later press.
-      _key = keyName ??
-          (heldKeys.contains(_key)
-              ? _key
-              : (heldKeys.isEmpty ? null : heldKeys.first));
+      // Match runtime dispatch: modifiers added after a held letter do not
+      // produce a new shortcut key-down event.
+      _key = keyName;
       _unsupportedKey = null;
       if (keyName == null && !_modifierKeys.contains(logical)) {
         // Non-modifier key we don't recognize (e.g. F13, media keys, IME
