@@ -30,6 +30,8 @@ pub mod macos;
 mod win_virtual_display;
 #[cfg(windows)]
 pub use win_virtual_display::restore_reg_connectivity;
+#[cfg(windows)]
+pub mod win_wait_unlock;
 
 pub const INVALID_PRIVACY_MODE_CONN_ID: i32 = 0;
 pub const OCCUPIED: &'static str = "Privacy occupied by another one.";
@@ -190,7 +192,7 @@ pub fn switch(impl_key: &str) {
     }
 }
 
-pub fn get_supported_impl(impl_key: &str) -> String {
+fn get_supported_impl(impl_key: &str) -> String {
     let supported_impls = get_supported_privacy_mode_impl();
     if supported_impls.iter().any(|(k, _)| k == &impl_key) {
         return impl_key.to_owned();

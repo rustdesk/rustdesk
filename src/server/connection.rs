@@ -383,7 +383,7 @@ pub struct Connection {
     block_input: bool,
     privacy_mode: bool,
     #[cfg(windows)]
-    privacy_mode_deferred: Option<crate::platform::PrivacyModeDeferredRequest>,
+    privacy_mode_waiting: Option<crate::privacy_mode::win_wait_unlock::WaitingTurnOn>,
     control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
@@ -599,7 +599,7 @@ impl Connection {
             block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &control_permissions),
             privacy_mode: Self::permission(keys::OPTION_ENABLE_PRIVACY_MODE, &control_permissions),
             #[cfg(windows)]
-            privacy_mode_deferred: None,
+            privacy_mode_waiting: None,
             control_permissions,
             last_test_delay: None,
             network_delay: 0,
@@ -869,6 +869,10 @@ impl Connection {
                                 conn.block_input = enabled;
                                 conn.send_permission(Permission::BlockInput, enabled).await;
                             } else if &name == "privacy_mode" {
+                                #[cfg(windows)]
+                                if !enabled {
+                                    conn.privacy_mode_waiting = None;
+                                }
                                 // Keep permission state and runtime state consistent:
                                 // when revoking the permission, try to leave privacy mode first.
                                 // Otherwise we could end up in an inconsistent state where
@@ -907,10 +911,6 @@ impl Connection {
                                     }
                                 }
                                 conn.privacy_mode = enabled;
-                                #[cfg(windows)]
-                                if !enabled {
-                                    conn.privacy_mode_deferred = None;
-                                }
                                 conn.send_permission(Permission::PrivacyMode, enabled).await;
                             }
                         }
@@ -1168,7 +1168,10 @@ impl Connection {
                     #[cfg(windows)]
                     conn.portable_check();
                     #[cfg(windows)]
-                    conn.turn_on_privacy_after_unlocked().await;
+                    if let Some(msg) = conn.privacy_mode_waiting.as_ref().and_then(|w| w.reply()) {
+                        conn.privacy_mode_waiting = None;
+                        conn.send(msg).await;
+                    }
                     raii::AuthedConnID::check_wake_lock_on_setting_changed();
                     if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
                         if instant.elapsed().as_secs() > minute * 60 {
@@ -1223,6 +1226,10 @@ impl Connection {
             conn.try_empty_file_clipboard();
         }
 
+        #[cfg(windows)]
+        {
+            conn.privacy_mode_waiting = None;
+        }
         if let Some(video_privacy_conn_id) = privacy_mode::get_privacy_mode_conn_id() {
             if video_privacy_conn_id == id {
                 let _ = Self::turn_off_privacy_to_msg(id, String::new());
@@ -4761,10 +4768,6 @@ impl Connection {
 
     async fn toggle_privacy_mode(&mut self, t: TogglePrivacyMode) {
         if t.on {
-            #[cfg(windows)]
-            {
-                self.privacy_mode_deferred = None;
-            }
             self.turn_on_privacy(t.impl_key).await;
         } else {
             self.turn_off_privacy(t.impl_key).await;
@@ -5024,10 +5027,6 @@ impl Connection {
                 if self.keyboard {
                     match q {
                         BoolOption::Yes => {
-                            #[cfg(windows)]
-                            {
-                                self.privacy_mode_deferred = None;
-                            }
                             self.turn_on_privacy("".to_owned()).await;
                         }
                         BoolOption::No => {
@@ -5125,14 +5124,12 @@ impl Connection {
         }
 
         #[cfg(windows)]
-        {
-            let effective_impl_key = privacy_mode::get_supported_impl(&impl_key);
-            if crate::platform::privacy_mode_defer_while_locked(
-                &effective_impl_key,
-                &mut self.privacy_mode_deferred,
-            ) {
-                return;
-            }
+        if privacy_mode::win_wait_unlock::wait_for_unlock(
+            &impl_key,
+            self.inner.id,
+            &mut self.privacy_mode_waiting,
+        ) {
+            return;
         }
 
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
@@ -5211,41 +5208,13 @@ impl Connection {
                 ),
             }
         };
-        #[cfg(windows)]
-        if self.keep_privacy_mode_retry() {
-            return;
-        }
         self.send(msg_out).await;
-    }
-
-    #[cfg(windows)]
-    fn keep_privacy_mode_retry(&mut self) -> bool {
-        let Some(expired) = self.privacy_mode_deferred.as_ref().map(|p| p.expired()) else {
-            return false;
-        };
-        let turned_on = privacy_mode::get_privacy_mode_conn_id() == Some(self.inner.id);
-        if turned_on || expired {
-            self.privacy_mode_deferred = None;
-            return false;
-        }
-        true
-    }
-
-    #[cfg(windows)]
-    async fn turn_on_privacy_after_unlocked(&mut self) {
-        if let Some(impl_key) = self
-            .privacy_mode_deferred
-            .as_ref()
-            .map(|p| p.impl_key().to_owned())
-        {
-            self.turn_on_privacy(impl_key).await;
-        }
     }
 
     async fn turn_off_privacy(&mut self, impl_key: String) {
         #[cfg(windows)]
         {
-            self.privacy_mode_deferred = None;
+            self.privacy_mode_waiting = None;
         }
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
