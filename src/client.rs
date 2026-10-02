@@ -3622,6 +3622,7 @@ impl LoginConfigHandler {
             self.save_config(config);
         }
         *self.custom_fps.lock().unwrap() = Some(fps as _);
+        self.last_auto_fps = None;
         msg_out
     }
 
@@ -3679,6 +3680,7 @@ impl LoginConfigHandler {
     /// * `username` - The name of the peer.
     /// * `pi` - The peer info.
     pub fn handle_peer_info(&mut self, pi: &PeerInfo) {
+        self.last_auto_fps = None;
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
