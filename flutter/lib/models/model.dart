@@ -1143,8 +1143,28 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
+    dialogManager.dismissByTag('$sessionId-$type');
+    final retrySeconds = type == 'relay-hint' ? 5.obs : null;
+    Timer? retryTimer;
     dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
+      if (retrySeconds != null) {
+        retryTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (!context.mounted ||
+              parent.target?.closed != false ||
+              !dialogManager.existing('$sessionId-$type')) {
+            timer.cancel();
+            return;
+          }
+          retrySeconds.value--;
+          if (retrySeconds.value <= 0) {
+            timer.cancel();
+            reconnect(dialogManager, sessionId, false);
+          }
+        });
+      }
+
       onClose() {
+        retryTimer?.cancel();
         closeConnection();
         close();
       }
@@ -1159,19 +1179,33 @@ class FfiModel with ChangeNotifier {
           dialogButton('Close', onPressed: onClose, isOutline: true),
           if (type == 'relay-hint')
             dialogButton('Connect via relay',
-                onPressed: () => reconnect(dialogManager, sessionId, true),
+                onPressed: () {
+                  retryTimer?.cancel();
+                  reconnect(dialogManager, sessionId, true);
+                },
                 buttonStyle: style,
                 isOutline: true),
-          dialogButton('Retry',
-              onPressed: () => reconnect(dialogManager, sessionId, false)),
+          if (retrySeconds != null)
+            Obx(() => dialogButton(
+                '${translate('Retry')} (${retrySeconds.value}s)',
+                onPressed: () {
+                  retryTimer?.cancel();
+                  reconnect(dialogManager, sessionId, false);
+                }))
+          else
+            dialogButton('Retry',
+                onPressed: () => reconnect(dialogManager, sessionId, false)),
           if (type == 'relay-hint2')
             dialogButton('Connect via relay',
-                onPressed: () => reconnect(dialogManager, sessionId, true),
+                onPressed: () {
+                  retryTimer?.cancel();
+                  reconnect(dialogManager, sessionId, true);
+                },
                 buttonStyle: style),
         ],
         onCancel: onClose,
       );
-    });
+    }).whenComplete(() => retryTimer?.cancel());
   }
 
   void showConnectedWaitingForImage(OverlayDialogManager dialogManager,
