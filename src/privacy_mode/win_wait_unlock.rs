@@ -50,9 +50,7 @@ struct State {
 pub fn wait_for_unlock(impl_key: &str, conn_id: i32, waiting: &mut Option<WaitingTurnOn>) -> bool {
     let effective_key = get_supported_impl(impl_key);
     let must_wait = effective_key == PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
-        && get_supported_privacy_mode_impl()
-            .iter()
-            .any(|(k, _)| *k == effective_key)
+        && is_supported(&effective_key)
         && get_privacy_mode_conn_id() != Some(conn_id)
         && is_locked();
     // A new request replaces a waiting one.
@@ -88,7 +86,15 @@ impl WaitingTurnOn {
             let res = turn_on_when_ready(
                 input_desktop,
                 || {
-                    log::info!("Privacy mode: the session is unlocked, turning it on");
+                    // `turn_on_privacy_sync` would fall back to another implementation.
+                    if !is_supported(&effective_key) {
+                        return Err(anyhow!("Unsupported privacy mode: {}", effective_key));
+                    }
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(60),
+                        info,
+                        "Privacy mode: the session is unlocked, turning it on"
+                    );
                     turn_on_privacy_sync(&effective_key, conn_id)
                         .unwrap_or_else(|| Err(anyhow!("Not supported")))
                 },
@@ -143,6 +149,12 @@ impl Drop for WaitingTurnOn {
         lock.lock().unwrap_or_else(PoisonError::into_inner).cancelled = true;
         wake.notify_one();
     }
+}
+
+fn is_supported(impl_key: &str) -> bool {
+    get_supported_privacy_mode_impl()
+        .iter()
+        .any(|(k, _)| *k == impl_key)
 }
 
 // Only meaningful on the waiting thread: a new thread starts on the user's desktop
