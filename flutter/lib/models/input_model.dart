@@ -468,6 +468,19 @@ class InputModel {
   // Disposer for the relativeMouseMode observer (to prevent memory leaks).
   Worker? _relativeMouseModeDisposer;
 
+  final enableHardwareTouchpad = false.obs;
+
+  void loadHardwareTouchpadOption() {
+    enableHardwareTouchpad.value =
+        bind.mainGetLocalOption(key: kOptionHardwareTouchpad) == 'Y';
+  }
+
+  Future<void> setEnableHardwareTouchpad(bool value) async {
+    enableHardwareTouchpad.value = value;
+    await bind.mainSetLocalOption(
+        key: kOptionHardwareTouchpad, value: value ? 'Y' : 'N');
+  }
+
   bool _queryOtherWindowCoords = false;
   Rect? _windowRect;
   List<RemoteWindowCoords> _remoteWindowCoords = [];
@@ -494,6 +507,7 @@ class InputModel {
   bool get isRelativeMouseModeSupported => _relativeMouse.isSupported;
 
   InputModel(this.parent) {
+    loadHardwareTouchpadOption();
     initSideButtonChannel();
     sessionId = parent.target!.sessionId;
     _relativeMouse = RelativeMouseModel(
@@ -568,14 +582,15 @@ class InputModel {
       if (iosCapsLock) {
         lockModes |= (1 << capslock);
       }
-      // Ignore "NumLock/ScrollLock" on iOS for now.
+      lockModes |= (1 << numlock);
     } else {
       if (HardwareKeyboard.instance.lockModesEnabled
           .contains(KeyboardLockMode.capsLock)) {
         lockModes |= (1 << capslock);
       }
       if (HardwareKeyboard.instance.lockModesEnabled
-          .contains(KeyboardLockMode.numLock)) {
+          .contains(KeyboardLockMode.numLock) ||
+          isMobile) {
         lockModes |= (1 << numlock);
       }
       if (HardwareKeyboard.instance.lockModesEnabled
@@ -1105,9 +1120,17 @@ class InputModel {
             .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
 
+  void resetPointerDevices() {
+    _physicalPointerDevices.clear();
+    _activeMousePointers.clear();
+    _ignoredTouchPointers.clear();
+    isPhysicalMouse.value = false;
+  }
+
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   void resetModifiers() {
     shift = ctrl = alt = command = false;
+    resetPointerDevices();
   }
 
   /// Modify the given modifier map [evt] based on current modifier key status.
@@ -1283,10 +1306,38 @@ class InputModel {
     _relativeMouse.onWindowFocus();
   }
 
+  final Set<int> _physicalPointerDevices = {};
+
+  bool _isMouseOrTrackpad(ui.PointerDeviceKind kind) {
+    return kind == ui.PointerDeviceKind.mouse ||
+        kind == ui.PointerDeviceKind.trackpad;
+  }
+
+  bool _isPhysicalPointerDevice(PointerEvent e) {
+    if (e.kind == ui.PointerDeviceKind.stylus ||
+        e.kind == ui.PointerDeviceKind.invertedStylus ||
+        e.kind == ui.PointerDeviceKind.touch) {
+      return false;
+    }
+    if (isMobile && !enableHardwareTouchpad.value) {
+      return false;
+    }
+    return _isMouseOrTrackpad(e.kind);
+  }
+
+  bool isPhysicalPointerEvent(PointerDownEvent e) =>
+      _isPhysicalPointerDevice(e);
+  bool isPhysicalPointerDeviceId(int device) => false;
+
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
     if (isViewOnly && !showMyCursor) return;
-    if (e.kind != ui.PointerDeviceKind.mouse) return;
+    if (e.kind == ui.PointerDeviceKind.stylus ||
+        e.kind == ui.PointerDeviceKind.invertedStylus) {
+      return;
+    }
+    if (isMobile && !enableHardwareTouchpad.value) return;
+    if (!isMobile && !_isMouseOrTrackpad(e.kind)) return;
 
     // May fix https://github.com/rustdesk/rustdesk/issues/13009
     if (isIOS && e.synthesized && e.position == Offset.zero && e.buttons == 0) {
@@ -1510,6 +1561,9 @@ class InputModel {
     return dt >= 0 && dt < kTouchAfterMouseWindowMs;
   }
 
+  final Set<int> _activeMousePointers = {};
+  final Set<int> _ignoredTouchPointers = {};
+
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
@@ -1521,28 +1575,31 @@ class InputModel {
 
     // Track mouse down events for duplicate detection on iOS.
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (e.kind == ui.PointerDeviceKind.mouse) {
+    final isPhysical = _isPhysicalPointerDevice(e);
+
+    if (isPhysical) {
+      _activeMousePointers.add(e.pointer);
       if (!isPhysicalMouse.value) {
         isPhysicalMouse.value = true;
       }
       _lastMouseDownTimeMs = nowMs;
       _lastMouseDownPos = e.position;
-    }
-
-    if (_relativeMouse.enabled.value) {
-      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
-    }
-
-    if (e.kind != ui.PointerDeviceKind.mouse) {
+    } else {
       // Ignore duplicate touch events that follow a recent mouse click (iOS Magic Mouse issue).
       if (isPhysicalMouse.value && _shouldIgnoreTouchAfterMouse(nowMs)) {
+        _ignoredTouchPointers.add(e.pointer);
         return;
       }
       if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;
       }
     }
-    if (isPhysicalMouse.value) {
+
+    if (_relativeMouse.enabled.value) {
+      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
+    }
+
+    if (isPhysical) {
       // In relative mouse mode, send button events without position.
       // Use _relativeMouse.enabled.value consistently with the guard above.
       if (_relativeMouse.enabled.value) {
@@ -1556,6 +1613,8 @@ class InputModel {
   }
 
   void onPointUpImage(PointerUpEvent e) {
+    if (_ignoredTouchPointers.remove(e.pointer)) return;
+    final isTrackedMouse = _activeMousePointers.remove(e.pointer);
     if (isDesktop) _queryOtherWindowCoords = false;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
@@ -1564,24 +1623,48 @@ class InputModel {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
     }
 
-    if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (isPhysicalMouse.value) {
-      // In relative mouse mode, send button events without position.
-      // Use _relativeMouse.enabled.value consistently with the guard above.
-      if (_relativeMouse.enabled.value) {
-        _relativeMouse
-            .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventUp));
-      } else {
-        final canvasPosition = _pointerPositionForRemoteCanvas(e);
-        handleMouse(_getMouseEvent(e, _kMouseEventUp), canvasPosition);
+    final isPhysical = _isPhysicalPointerDevice(e) || isTrackedMouse;
+    if (!isPhysical) return;
+
+    // Send mouse up unconditionally for mouse/trackpad pointers so buttons never get stuck.
+    if (_relativeMouse.enabled.value) {
+      _relativeMouse
+          .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventUp));
+    } else {
+      final canvasPosition = _pointerPositionForRemoteCanvas(e);
+      handleMouse(_getMouseEvent(e, _kMouseEventUp), canvasPosition);
+    }
+  }
+
+  void onPointCancelImage(PointerCancelEvent e) {
+    _ignoredTouchPointers.remove(e.pointer);
+    final isTrackedMouse = _activeMousePointers.remove(e.pointer);
+    final isPhysical = _isPhysicalPointerDevice(e) || isTrackedMouse;
+    if (isPhysical) {
+      if (_lastButtons != 0) {
+        if (_relativeMouse.enabled.value) {
+          _relativeMouse
+              .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventUp));
+        } else {
+          final canvasPosition = _pointerPositionForRemoteCanvas(e);
+          handleMouse(_getMouseEvent(e, _kMouseEventUp), canvasPosition);
+        }
       }
     }
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
+    if (_ignoredTouchPointers.contains(e.pointer)) return;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
-    if (e.kind != ui.PointerDeviceKind.mouse) return;
+
+    final isPhysical =
+        _isPhysicalPointerDevice(e) || _activeMousePointers.contains(e.pointer);
+    if (!isPhysical) return;
+
+    if (!isPhysicalMouse.value) {
+      isPhysicalMouse.value = true;
+    }
 
     if (_relativeMouse.enabled.value) {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
