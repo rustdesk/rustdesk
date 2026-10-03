@@ -54,6 +54,8 @@ typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
 final _constSessionId = Uuid().v4obj();
 // Empirical restart reconnect cadence: keep the last frame briefly and retry quickly.
 const _restartReconnectSilentDelaySecs = 5;
+// How often a held automatic reconnect checks again whether a display is awake.
+const _displayAsleepRecheckSecs = 5;
 
 class CachedPeerData {
   Map<String, dynamic> updatePrivacyMode = {};
@@ -119,6 +121,7 @@ class FfiModel with ChangeNotifier {
   late VirtualMouseMode virtualMouseMode;
   Timer? _timer;
   Timer? _restartReconnectDelayTimer;
+  Timer? _displayAsleepTimer;
   var _reconnects = 1;
   DateTime? _offlineReconnectStartTime;
   bool _androidDocumentPickerActive = false;
@@ -255,6 +258,8 @@ class FfiModel with ChangeNotifier {
     _inputBlocked = false;
     _timer?.cancel();
     _timer = null;
+    _displayAsleepTimer?.cancel();
+    _displayAsleepTimer = null;
     _androidDocumentPickerActive = false;
     _androidDocumentPickerInterruptedConnection = false;
     resetRestartReconnectState();
@@ -937,13 +942,13 @@ class FfiModel with ChangeNotifier {
           if (parent.target?.closed == true) {
             return;
           }
-          reconnect(dialogManager, sessionId, false);
+          _autoReconnect(dialogManager, sessionId);
         });
       }
     } else if (type == 'restarting-show') {
       _restartReconnectDelayTimer?.cancel();
       _restartReconnectDelayTimer = null;
-      reconnect(dialogManager, sessionId, false);
+      _autoReconnect(dialogManager, sessionId);
     } else if (type == 'wait-remote-accept-nook') {
       showWaitAcceptDialog(sessionId, type, title, text, dialogManager);
     } else if (type == 'on-uac' || type == 'on-foreground-elevated') {
@@ -1087,7 +1092,7 @@ class FfiModel with ChangeNotifier {
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
-        reconnect(dialogManager, sessionId, false);
+        _autoReconnect(dialogManager, sessionId);
       });
       _reconnects *= 2;
     } else {
@@ -1107,8 +1112,29 @@ class FfiModel with ChangeNotifier {
     _pendingRestoreTimer = null;
   }
 
+  /// Reconnect that no user asked for: a retry timer or a lost peer. On macOS,
+  /// with "allow-skip-auto-reconnect-display-asleep" on, it waits while no display
+  /// is awake and checks again later. A user's Reconnect click calls [reconnect].
+  void _autoReconnect(OverlayDialogManager dialogManager, SessionID sessionId) {
+    if (isMacOS && bind.mainShouldDeferAutoReconnect()) {
+      _displayAsleepTimer?.cancel();
+      _displayAsleepTimer =
+          Timer(const Duration(seconds: _displayAsleepRecheckSecs), () {
+        _displayAsleepTimer = null;
+        if (parent.target?.closed == true) {
+          return;
+        }
+        _autoReconnect(dialogManager, sessionId);
+      });
+      return;
+    }
+    reconnect(dialogManager, sessionId, false);
+  }
+
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
+    _displayAsleepTimer?.cancel();
+    _displayAsleepTimer = null;
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
     _cancelPendingMonitorRestore();

@@ -612,6 +612,17 @@ class _GeneralState extends State<_General> {
         kOptionKeepAwakeDuringOutgoingSessions,
         isServer: false,
       ));
+      if (isMacOS) {
+        children.add(Tooltip(
+          message: translate('allow-skip-auto-reconnect-display-asleep-tip'),
+          child: _OptionCheckBox(
+            context,
+            'allow-skip-auto-reconnect-display-asleep',
+            kOptionAllowSkipAutoReconnectDisplayAsleep,
+            isServer: false,
+          ),
+        ));
+      }
     }
 
     if (!bind.isDisableAccount()) {

@@ -179,6 +179,10 @@ pub const OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS: &str = "keep-awake-during-
 // Client-side: keep client system awake during outgoing sessions (General setting)
 pub const OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS: &str = "keep-awake-during-outgoing-sessions";
 
+// Client-side, macOS only: hold automatic reconnects while no display is awake (General setting)
+pub const OPTION_ALLOW_SKIP_AUTO_RECONNECT_DISPLAY_ASLEEP: &str =
+    "allow-skip-auto-reconnect-display-asleep";
+
 pub const OPTION_DISABLE_GROUP_PANEL: &str = "disable-group-panel";
 pub const OPTION_DISABLE_DISCOVERY_PANEL: &str = "disable-discovery-panel";
 pub const OPTION_PRE_ELEVATE_SERVICE: &str = "pre-elevate-service";
@@ -244,6 +248,7 @@ pub const KEYS_LOCAL_SETTINGS: &[&str] = &[
     OPTION_KEEP_SCREEN_ON,
     // Client-side: keep client system awake during outgoing sessions (General setting)
     OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS,
+    OPTION_ALLOW_SKIP_AUTO_RECONNECT_DISPLAY_ASLEEP,
     OPTION_DISABLE_GROUP_PANEL,
     OPTION_DISABLE_DISCOVERY_PANEL,
     OPTION_PRE_ELEVATE_SERVICE,
