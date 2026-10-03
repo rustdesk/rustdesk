@@ -1,5 +1,4 @@
 use hbb_common::{log, log_throttle::LogThrottle, thiserror};
-use ringbuf::{ring_buffer::RbBase, Rb};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     TryLockError,
@@ -43,6 +42,7 @@ pub(super) struct AudioPlaybackStatus {
     contentions: AtomicUsize,
     contention_log_throttle: LogThrottle,
     buffer_poisoned: AtomicBool,
+    missing_samples: AtomicUsize,
 }
 
 impl Default for AudioPlaybackStatus {
@@ -52,17 +52,23 @@ impl Default for AudioPlaybackStatus {
             contentions: AtomicUsize::new(0),
             contention_log_throttle: LogThrottle::new(AUDIO_PLAYBACK_LOG_INTERVAL),
             buffer_poisoned: AtomicBool::new(false),
+            missing_samples: AtomicUsize::new(0),
         }
     }
 }
 
 impl AudioPlaybackStatus {
     pub(super) fn report_errors(&self) {
-        if self.contentions.load(Ordering::Relaxed) != 0
+        if (self.contentions.load(Ordering::Relaxed) != 0
+            || self.missing_samples.load(Ordering::Relaxed) != 0)
             && self.contention_log_throttle.due().is_some()
         {
             let contentions = self.contentions.swap(0, Ordering::Relaxed);
-            log::debug!("Audio playback PCM buffer contention: callbacks={contentions}");
+            let missing_samples = self.missing_samples.swap(0, Ordering::Relaxed);
+            // Missing input also includes startup and intentional source silence.
+            log::debug!(
+                "Audio playback missing input: samples={missing_samples}, buffer_contentions={contentions}"
+            );
         }
         if self.buffer_poisoned.swap(false, Ordering::Relaxed) {
             log::error!("Audio playback stopped reading a poisoned PCM buffer");
@@ -71,7 +77,7 @@ impl AudioPlaybackStatus {
 }
 
 pub(super) struct AudioPlaybackWriter {
-    audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
+    audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapConsumer<f32>>>,
     discontinuity_generation: std::sync::Arc<AtomicUsize>,
     observed_discontinuity_generation: usize,
     buffered_input: Vec<f32>,
@@ -83,7 +89,7 @@ pub(super) struct AudioPlaybackWriter {
 impl AudioPlaybackWriter {
     pub(super) fn new(
         config: AudioPlaybackConfig,
-        audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
+        audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapConsumer<f32>>>,
         discontinuity_generation: std::sync::Arc<AtomicUsize>,
     ) -> Result<Self, AudioPlaybackError> {
         let recovery = AudioPlaybackRecovery::new(config)?;
@@ -120,7 +126,7 @@ impl AudioPlaybackWriter {
         };
         let generation = self.discontinuity_generation.load(Ordering::Relaxed);
         let channels = self.recovery.channels;
-        let samples = buffer.occupied_len().min(requested_samples) / channels * channels;
+        let samples = buffer.len().min(requested_samples) / channels * channels;
         buffer.pop_slice(&mut self.buffered_input[..samples]);
         drop(buffer);
         if generation != self.observed_discontinuity_generation {
@@ -140,6 +146,11 @@ impl AudioPlaybackWriter {
         let requested_samples = output.len().min(self.buffered_input.len());
         let channel_count = self.recovery.channels;
         let available_samples = self.read_buffer(requested_samples);
+        if available_samples < output.len() {
+            self.status
+                .missing_samples
+                .fetch_add(output.len() - available_samples, Ordering::Relaxed);
+        }
         let available_frames = available_samples / channel_count;
         for (frame_index, output_frame) in output.chunks_mut(channel_count).enumerate() {
             let input = if frame_index < available_frames {
