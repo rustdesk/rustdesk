@@ -12,6 +12,7 @@ import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -1233,6 +1234,22 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
         value: value,
         onChanged: enabled ? onChanged : null,
         child: Text(translate('swap-left-right-mouse'))));
+  }
+
+  if (isMacOS && isDefaultConn) {
+    final option = kOptionToggleImmersiveMode;
+    final value =
+        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    onChanged(bool? value) {
+      if (value == null) return;
+      bind.sessionToggleOption(sessionId: sessionId, value: option);
+      RdPlatformChannel.instance.setImmersiveMode(value);
+    }
+
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: onChanged,
+        child: Text(translate('Immersive mode'))));
   }
   return v;
 }

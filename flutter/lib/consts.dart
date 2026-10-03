@@ -220,6 +220,7 @@ const String kOptionAllowDeepLinkServerSettings =
 
 const String kOptionToggleViewOnly = "view-only";
 const String kOptionToggleShowMyCursor = "show-my-cursor";
+const String kOptionToggleImmersiveMode = "immersive-mode";
 
 const String kOptionDisableFloatingWindow = "disable-floating-window";
 
