@@ -1249,6 +1249,11 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec
         return vec![evt];
     }
 
+    #[cfg(target_os = "macos")]
+    if let Some(evt) = crate::platform::macos::macos_unicode_key_event(event) {
+        return vec![evt];
+    }
+
     _map_keyboard_mode(_peer, event, key_event)
         .map(|e| vec![e])
         .unwrap_or_default()
