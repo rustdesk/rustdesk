@@ -314,12 +314,16 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
     // Delete the different part in the old value.
     for (i = 0; i < subOldValue.length - common; ++i) {
-      inputModel.inputKey('VK_BACK');
+      if (!inputModel.inputVmKeyboardText('\b')) {
+        inputModel.inputKey('VK_BACK');
+      }
     }
 
     // Input the new string.
     if (newStr.length > 1) {
-      bind.sessionInputString(sessionId: sessionId, value: newStr);
+      if (!inputModel.inputVmKeyboardText(newStr)) {
+        bind.sessionInputString(sessionId: sessionId, value: newStr);
+      }
     } else {
       inputChar(newStr);
     }
@@ -380,6 +384,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   void inputChar(String char) {
     if (!inputModel.keyboardInputAllowed) {
+      return;
+    }
+    if (inputModel.inputVmKeyboardText(char)) {
       return;
     }
     if (char == '\n') {
@@ -1006,6 +1013,12 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }, active: inputModel.command),
     ];
     final keys = <Widget>[
+      if (isIOS && isWin)
+        wrap('VM', () {
+          setState(() {
+            inputModel.vmKeyboardMode = !inputModel.vmKeyboardMode;
+          });
+        }, active: inputModel.vmKeyboardMode),
       wrap(
           ' Fn ',
           () => setState(
