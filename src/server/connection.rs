@@ -2027,6 +2027,14 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if self.is_remote() {
             let mut msg = "".to_string();
+            // A headless box boots to its greeter, and its output may still be coming up: give
+            // it the login door's hold before deciding, or the first login is refused for a
+            // scanout that lands seconds later.
+            #[cfg(feature = "headless-display")]
+            if crate::platform::linux::is_login_screen_wayland() {
+                super::drm_capturer::wait_for_headless_scanout(super::drm_capturer::HEADLESS_LOGIN_HOLD)
+                    .await;
+            }
             // Refuse only while nothing can capture a Wayland greeter: the DRM path can.
             if crate::platform::linux::is_login_screen_wayland() && !drm_can_serve_login_screen() {
                 msg = crate::client::LOGIN_SCREEN_WAYLAND.to_owned()

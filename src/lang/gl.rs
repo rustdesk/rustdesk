@@ -761,6 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Continuar"),
         ("Browser didn't open? Use the url below to sign in.", "Non se abriu o navegador? Usa o URL de abaixo para iniciar sesión."),
         ("Lock canvas", "Bloquear lenzo"),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "Sincronizar o portapapeis entre sesións"),
         ("sync-clipboard-between-sessions-tip", "O texto ou as imaxes copiadas nunha sesión remota tamén se envían ao portapapeis das túas outras sesións conectadas."),
         ("terminal-clipboard-write-tip", "Un aplicativo no terminal quere copiar texto no portapapeis deste dispositivo. Se se concede, este permiso aplicarase aos aplicativos de terminal en todas as conexións ata que o desactives en Axustes. O copiar e pegar manual non se ven afectados."),

@@ -761,6 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "继续"),
         ("Browser didn't open? Use the url below to sign in.", "浏览器未打开？请使用下方网址登录。"),
         ("Lock canvas", "锁定画布"),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "在会话间同步剪贴板"),
         ("sync-clipboard-between-sessions-tip", "在一个远程会话中复制的文本或图片也会发送到其他已连接会话的剪贴板。"),
         ("terminal-clipboard-write-tip", "终端中的一个应用希望将文本复制到此设备的剪贴板。如果授权，此权限将适用于所有连接中的终端应用，直到您在设置中关闭为止。手动复制和粘贴不受影响。"),

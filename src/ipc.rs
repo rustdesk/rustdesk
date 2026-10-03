@@ -15,6 +15,8 @@ mod ipc_drm;
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub use ipc_drm::{start_drm, DmabufDesc, DrmDisplayInfo};
 #[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) use ipc_drm::{begin_held_connector_probe, drm_capture_active};
+#[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) use ipc_drm::DrmConn;
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) use ipc_drm::connect_drm;
@@ -368,6 +370,15 @@ pub enum Data {
     FS(FS),
     Test,
     SyncConfig(Option<Box<(Config, Config2)>>),
+    /// CLI -> root service: ONE option, on the protected `_service` channel. A whole-config push
+    /// there lets a stale snapshot overwrite settings it never meant to touch; this carries the one
+    /// key the command changes, and the channel admits only the keys `service_option_allowed` names.
+    /// The service echoes it back once the value reads back as sent.
+    #[cfg(all(target_os = "linux", feature = "headless-display"))]
+    ServiceOption {
+        key: String,
+        value: String,
+    },
     #[cfg(target_os = "windows")]
     ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
@@ -621,8 +632,9 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     break;
                                 }
                                 Ok(Some(data)) => {
-                                    // On Linux/macOS, the protected `_service` channel is used only for
-                                    // syncing config between root service and the active user process.
+                                    // On Linux/macOS, the protected `_service` channel carries the config
+                                    // sync between the root service and the active user process, and one
+                                    // scoped option write (see `accepted_on_service_channel`).
                                     //
                                     // NOTE: `is_service_ipc_postfix()` also includes `_uinput_*`, but those
                                     // channels are handled by the dedicated uinput listener/protocol in
@@ -634,11 +646,11 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     // uinput IPC paths while still minimizing exposed message surface here.
                                     #[cfg(any(target_os = "linux", target_os = "macos"))]
                                     if postfix == crate::POSTFIX_SERVICE {
-                                        if matches!(&data, Data::SyncConfig(_)) {
+                                        if accepted_on_service_channel(&data) {
                                             handle(data, &mut stream).await;
                                         } else {
                                             log::warn!(
-                                                "Rejected non-sync data on protected _service IPC channel: postfix={}, data_kind={:?}, peer_uid={:?}",
+                                                "Rejected data not admitted on the protected _service IPC channel: postfix={}, data_kind={:?}, peer_uid={:?}",
                                                 postfix,
                                                 std::mem::discriminant(&data),
                                                 stream.peer_uid()
@@ -819,6 +831,64 @@ impl Drop for CheckIfRestart {
                 true,
             )
         }
+    }
+}
+
+/// What the protected `_service` channel admits. Everything else is refused and the connection is
+/// closed, so a refused message never keeps a protected channel open.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn accepted_on_service_channel(data: &Data) -> bool {
+    match data {
+        Data::SyncConfig(_) => true,
+        #[cfg(all(target_os = "linux", feature = "headless-display"))]
+        Data::ServiceOption { key, value } => service_option_allowed(key, value),
+        _ => false,
+    }
+}
+
+/// The one option a CLI may push to the service, and the only two values it takes.
+#[cfg(all(target_os = "linux", feature = "headless-display"))]
+fn service_option_allowed(key: &str, value: &str) -> bool {
+    key == crate::virtual_display_manager::linux::OPTION_ALLOW_HEADLESS_DISPLAY
+        && matches!(value, "Y" | "N")
+}
+
+/// Apply one option and echo it only if it reads back as sent. `set` and `get` are injected so
+/// the decision is testable without the process config; in production they are the in-memory
+/// `push_switch` and `switch_value` of the headless watcher, and nothing is stored.
+#[cfg(all(target_os = "linux", feature = "headless-display"))]
+fn service_option_reply_with(
+    key: &str,
+    value: &str,
+    set: impl FnOnce(String, String),
+    get: impl FnOnce(&str) -> String,
+) -> Option<Data> {
+    set(key.to_owned(), value.to_owned());
+    if get(key) == value {
+        Some(Data::ServiceOption {
+            key: key.to_owned(),
+            value: value.to_owned(),
+        })
+    } else {
+        log::warn!("service option {key}={value} did not apply");
+        None
+    }
+}
+
+/// The production pair: the option is applied in the service's memory and read back from it;
+/// nothing is stored from the service (see `push_switch`).
+#[cfg(all(target_os = "linux", feature = "headless-display"))]
+fn service_option_reply(key: &str, value: &str) -> Option<Data> {
+    use crate::virtual_display_manager::linux as headless;
+    service_option_reply_with(key, value, |_, v| headless::push_switch(&v), |_| headless::switch_value())
+}
+
+/// The reply a CLI accepts as "applied": the exact echo, nothing else.
+#[cfg(all(target_os = "linux", feature = "headless-display"))]
+fn service_option_acked(reply: Option<Data>, key: &str, value: &str) -> ResultType<()> {
+    match reply {
+        Some(Data::ServiceOption { key: k, value: v }) if k == key && v == value => Ok(()),
+        other => bail!("the service did not apply the option ({other:?})"),
     }
 }
 
@@ -1037,7 +1107,13 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if let Some(v) = value.get("privacy-mode-impl-key") {
                     crate::privacy_mode::switch(v);
                 }
+                #[cfg(all(target_os = "linux", feature = "headless-display"))]
+                let stored_switch = Config::get_option(
+                    crate::virtual_display_manager::linux::OPTION_ALLOW_HEADLESS_DISPLAY,
+                );
                 Config::set_options(value);
+                #[cfg(all(target_os = "linux", feature = "headless-display"))]
+                crate::virtual_display_manager::linux::note_stored_switch(&stored_switch);
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
         },
@@ -1048,8 +1124,14 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::SyncConfig(Some(configs)) => {
             let (config, config2) = *configs;
             let _chk = CheckIfRestart::new();
+            #[cfg(all(target_os = "linux", feature = "headless-display"))]
+            let stored_switch = Config::get_option(
+                crate::virtual_display_manager::linux::OPTION_ALLOW_HEADLESS_DISPLAY,
+            );
             Config::set(config);
             Config2::set(config2);
+            #[cfg(all(target_os = "linux", feature = "headless-display"))]
+            crate::virtual_display_manager::linux::note_stored_switch(&stored_switch);
             allow_err!(stream.send(&Data::SyncConfig(None)).await);
         }
         Data::SyncConfig(None) => {
@@ -1060,6 +1142,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                     )))
                     .await
             );
+        }
+        #[cfg(all(target_os = "linux", feature = "headless-display"))]
+        Data::ServiceOption { key, value } => {
+            if let Some(reply) = service_option_reply(&key, &value) {
+                allow_err!(stream.send(&reply).await);
+            }
         }
         #[cfg(windows)]
         Data::SyncWinCpuUsage(None) => {
@@ -1916,6 +2004,25 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     Ok(())
 }
 
+/// Push ONE option into the running root service, over the protected `_service` channel.
+///
+/// `set_options` reaches the user `--server`, which then syncs to root on its own. That leaves out
+/// the case where there is no `--server` at all: the root service keeps its config in memory from
+/// startup, so a change made by a root CLI would sit in the config file unread until a restart.
+/// Root is an allowed peer on `_service`. An older service does not know the message and closes
+/// the connection, which surfaces here as an error rather than as a silent no-op.
+#[cfg(all(target_os = "linux", feature = "headless-display"))]
+#[tokio::main(flavor = "current_thread")]
+pub async fn set_service_option(key: &str, value: &str) -> ResultType<()> {
+    let mut c = connect_service(1000).await?;
+    c.send(&Data::ServiceOption {
+        key: key.to_owned(),
+        value: value.to_owned(),
+    })
+    .await?;
+    service_option_acked(c.next_timeout(1000).await?, key, value)
+}
+
 #[inline]
 async fn get_nat_type_(ms_timeout: u64) -> ResultType<i32> {
     let mut c = connect(ms_timeout, "").await?;
@@ -2268,6 +2375,84 @@ mod test {
     fn verify_ffi_enum_data_size() {
         println!("{}", std::mem::size_of::<Data>());
         assert!(std::mem::size_of::<Data>() <= 120);
+    }
+
+    #[cfg(all(target_os = "linux", feature = "headless-display"))]
+    #[test]
+    fn a_service_option_is_one_key_on_the_wire_and_only_the_headless_switch_is_admitted() {
+        use crate::virtual_display_manager::linux::OPTION_ALLOW_HEADLESS_DISPLAY as KEY;
+        let msg = Data::ServiceOption {
+            key: KEY.to_owned(),
+            value: "Y".to_owned(),
+        };
+        let wire = serde_json::to_string(&msg).unwrap();
+        assert_eq!(
+            wire,
+            format!(r#"{{"t":"ServiceOption","c":{{"key":"{KEY}","value":"Y"}}}}"#)
+        );
+        assert!(matches!(
+            serde_json::from_str::<Data>(&wire).unwrap(),
+            Data::ServiceOption { key, value } if key == KEY && value == "Y"
+        ));
+        // The channel: the switch with its two values, and nothing else.
+        assert!(service_option_allowed(KEY, "Y"));
+        assert!(service_option_allowed(KEY, "N"));
+        assert!(!service_option_allowed(KEY, "1"));
+        assert!(!service_option_allowed("stop-service", "Y"));
+        assert!(!service_option_allowed("custom-rendezvous-server", "x"));
+        assert!(accepted_on_service_channel(&msg));
+        assert!(!accepted_on_service_channel(&Data::ServiceOption {
+            key: "x".to_owned(),
+            value: "Y".to_owned()
+        }));
+        assert!(accepted_on_service_channel(&Data::SyncConfig(None)));
+        assert!(!accepted_on_service_channel(&Data::Options(None)));
+        // An older service does not decode the variant: that is what closes its connection.
+        assert!(serde_json::from_str::<Data>(r#"{"t":"NoSuchVariant","c":null}"#).is_err());
+    }
+
+    #[cfg(all(target_os = "linux", feature = "headless-display"))]
+    #[test]
+    fn the_service_echoes_an_option_only_after_reading_it_back_and_the_cli_accepts_only_the_echo() {
+        use crate::virtual_display_manager::linux::OPTION_ALLOW_HEADLESS_DISPLAY as KEY;
+        let store = std::cell::RefCell::new(HashMap::<String, String>::new());
+        let reply = service_option_reply_with(
+            KEY,
+            "Y",
+            |k, v| {
+                store.borrow_mut().insert(k, v);
+            },
+            |k| store.borrow().get(k).cloned().unwrap_or_default(),
+        );
+        assert!(matches!(&reply, Some(Data::ServiceOption { key, value }) if key == KEY && value == "Y"));
+        assert_eq!(store.borrow().get(KEY).map(String::as_str), Some("Y"));
+        // A setter that does not take: no echo, so the CLI cannot report "Done".
+        let none = service_option_reply_with(KEY, "N", |_, _| {}, |_| "Y".to_owned());
+        assert!(none.is_none());
+        assert!(service_option_acked(reply, KEY, "Y").is_ok());
+        assert!(service_option_acked(None, KEY, "Y").is_err());
+        assert!(service_option_acked(Some(Data::SyncConfig(None)), KEY, "Y").is_err());
+        assert!(service_option_acked(
+            Some(Data::ServiceOption { key: "x".to_owned(), value: "Y".to_owned() }),
+            KEY,
+            "Y"
+        )
+        .is_err());
+        assert!(service_option_acked(
+            Some(Data::ServiceOption { key: KEY.to_owned(), value: "N".to_owned() }),
+            KEY,
+            "Y"
+        )
+        .is_err());
+        // The production pair: applied in memory, echoed from memory, and the config untouched.
+        let _serial = crate::virtual_display_manager::linux::switch_test_lock();
+        let stored = Config::get_option(KEY);
+        for v in ["Y", "N"] {
+            let reply = service_option_reply(KEY, v);
+            assert!(matches!(&reply, Some(Data::ServiceOption { key, value }) if key == KEY && value == v));
+            assert_eq!(Config::get_option(KEY), stored, "the service stores nothing");
+        }
+        crate::virtual_display_manager::linux::reset_pushed_switch();
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

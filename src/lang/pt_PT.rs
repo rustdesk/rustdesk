@@ -761,6 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Continuar"),
         ("Browser didn't open? Use the url below to sign in.", "O navegador não abriu? Utilize o URL abaixo para iniciar sessão."),
         ("Lock canvas", "Bloquear ecrã"),
+        ("Headless display", "Ecrã sem monitor"),
+        ("headless_display_tip", "Quando nenhum monitor está ligado, força uma saída de vídeo desconectada para que haja um ecrã a capturar. É liberada assim que um monitor for ligado noutra saída."),
         ("Sync clipboard between sessions", "Sincronizar área de transferência entre sessões"),
         ("sync-clipboard-between-sessions-tip", "O texto ou as imagens copiados numa sessão remota também são enviados para a área de transferência das suas outras sessões ligadas."),
         ("terminal-clipboard-write-tip", "Uma aplicação no terminal pretende copiar texto para a área de transferência deste dispositivo. Se autorizada, esta permissão aplica-se a aplicações de terminal em todas as ligações até a desativar nas Configurações. A cópia e colagem manuais não são afetadas."),

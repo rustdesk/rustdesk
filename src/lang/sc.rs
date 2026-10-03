@@ -761,6 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Sighi"),
         ("Browser didn't open? Use the url below to sign in.", "Non s'est abertu su navigadore? Imprea s'URL inoghe in suta pro intrare."),
         ("Lock canvas", "Bloca sa tela"),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "Sincroniza sa punta de billete intre is sessiones"),
         ("sync-clipboard-between-sessions-tip", "Su testu o is immàgines copiadas in una sessione remota sunt imbiadas fintzas a sa punta de billete de is àteras sessiones connètidas."),
         ("terminal-clipboard-write-tip", "Un’aplicatzione in su terminale bolet copiare testu in sa punta de billete de custu dispositivu. Si benit frunidu, custu permissu s’àplicat a sas aplicatziones de terminale in totu sas connessiones finas a cando non nche l’istudas in sas Impostatziones. Sas operatziones de còpia e incolla manuales non benint influentzadas."),

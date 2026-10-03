@@ -761,6 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "계속"),
         ("Browser didn't open? Use the url below to sign in.", "브라우저가 열리지 않았나요? 아래 URL을 사용하여 로그인하세요."),
         ("Lock canvas", "캔버스 잠금"),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "세션 간 클립보드 동기화"),
         ("sync-clipboard-between-sessions-tip", "원격 세션 하나에서 복사한 텍스트나 이미지는 다른 연결된 세션의 클립보드로도 전송됩니다."),
         ("terminal-clipboard-write-tip", "터미널의 앱이 이 장치의 클립보드에 텍스트를 복사하려고 합니다. 이 권한이 부여된 경우, 설정에서 이를 끌 때까지 모든 연결의 터미널 앱에 적용됩니다. 수동 복사 및 붙여넣기는 영향을 받지 않습니다."),

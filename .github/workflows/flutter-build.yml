@@ -2086,6 +2086,14 @@ jobs:
               cargo test --locked --lib --features drm peer_abs_sample_tests
             run_drm_tests "rustdesk input_map_tests" \
               cargo test --locked --lib --features drm input_map_tests
+            # headless-display is off in the lines above, so its tests are compiled out there. The
+            # next line's filter matches only tests behind it, so a zero count there still fails.
+            run_drm_tests "rustdesk virtual_display_manager::linux::tests" \
+              cargo test --locked --lib --features drm,drm-wake,headless-display \
+              virtual_display_manager::linux::tests
+            run_drm_tests "rustdesk headless-display drm_capturer drm_portal_tests ipc::test" \
+              cargo test --locked --lib --features drm,drm-wake,headless-display -- \
+              drm_capturer drm_portal_tests ipc::test
             run_drm_tests "scrap hotspot_provenance_tests" \
               cargo test --locked -p scrap --features drm hotspot_provenance_tests
             run_drm_tests "scrap hotspot_guess_tests" \

@@ -625,6 +625,18 @@ async fn recv_thread(
             {
                 Some(i) => i,
                 None => {
+                    // Publish what the service DOES have before failing, or the promise in the
+                    // message below is one the caller cannot keep. `DrmDisplaysChanged` only
+                    // travels inside a live stream (`ipc/drm.rs`, after DrmStart), so once this
+                    // stream is gone the only other publishers are the POSITIVE_TTL refresh --
+                    // which is not even spawned while the verdict is young -- and the one-shot
+                    // empty-topology recheck. Without this a rebuild would keep asking for the
+                    // connector the stale cache names, which is exactly what a transition that
+                    // comes back on a DIFFERENT connector produces: the headless force prefers
+                    // HDMI, so a pulled DP-1 returns as HDMI-A-1 and every retry fails on a
+                    // topology that is perfectly fine. An EMPTY list goes through too: that is
+                    // what arms the settle clock when there is no stream left to push it.
+                    adopt_handshake_topology(displays.clone());
                     let _ = tx.send(Err(anyhow!(
                         "display {display} ({}) is no longer in the service's list; \
                          the video service will rebuild against the fresh topology",
@@ -1535,6 +1547,127 @@ static DRM_STATE: Mutex<ProbeState> = Mutex::new(ProbeState::Unknown);
 const NEGATIVE_TTL: Duration = Duration::from_secs(30);
 const POSITIVE_TTL: Duration = Duration::from_secs(15);
 
+/// First moment a hotplug refresh reported an empty topology; None while displays exist.
+static EMPTY_TOPOLOGY_SINCE: Mutex<Option<Instant>> = Mutex::new(None);
+/// A monitor unplug opens a zero-display gap before the headless force (or the compositor) restores
+/// scanout; demoting inside it hands a live session to the PipeWire portal, whose consent wait is
+/// three minutes on an fd and which a headless box can never answer.
+///
+/// Sized against the headless transition, which is the longest gap we produce ourselves. Its sysfs
+/// half is bounded by constants and comes to 9.5 s (see
+/// `virtual_display_manager::linux`'s `the_force_lands_before_the_capture_side_gives_up_on_drm`);
+/// the other half, the compositor committing a mode on the forced connector and the producer then
+/// listing it as CRTC-bound, is not bounded by anything we own. Was 10 s, which the sysfs half
+/// alone came within half a second of. Ten seconds of retrying DRM on a topology that really is
+/// dead is a far smaller price than three minutes in front of a dialog with nobody to answer it.
+pub(crate) const EMPTY_TOPOLOGY_DEMOTE_AFTER: Duration = Duration::from_secs(20);
+/// What the sum above leaves out: the modeset and the enumeration that follow the sysfs force.
+/// Not measurable from a constant, so it is an allowance, of the order of the 9 s end-to-end
+/// transition measured on a 2018 MacBook Pro.
+#[cfg(feature = "headless-display")]
+pub(crate) const MODESET_ALLOWANCE: Duration = Duration::from_secs(10);
+
+/// The headless gates, both false without the feature. They read sysfs, so callers evaluate them
+/// BEFORE taking `DRM_STATE` or the clock.
+fn headless_transition_settles() -> bool {
+    #[cfg(feature = "headless-display")]
+    {
+        crate::virtual_display_manager::linux::transition_may_settle()
+    }
+    #[cfg(not(feature = "headless-display"))]
+    {
+        false
+    }
+}
+
+fn headless_scanout_expected() -> bool {
+    #[cfg(feature = "headless-display")]
+    {
+        crate::virtual_display_manager::linux::scanout_expectation().expected()
+    }
+    #[cfg(not(feature = "headless-display"))]
+    {
+        false
+    }
+}
+
+/// True once the empty topology has outlived the settle window; records the first sighting.
+fn empty_topology_ready(since: &mut Option<Instant>, window: Duration) -> bool {
+    match *since {
+        Some(t) => t.elapsed() >= window,
+        None => {
+            *since = Some(Instant::now());
+            false
+        }
+    }
+}
+
+/// A non-empty observation retires the debounce clock. Callers must hold no `DRM_STATE` guard:
+/// `swap_available_displays` takes that lock first, so the two must never nest.
+fn clear_empty_topology_clock() {
+    *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+}
+
+/// Whether the last enumeration found no outputs and the settle window has not run out yet, i.e.
+/// the cached `Available` verdict is being held over a topology that currently has nothing in it.
+///
+/// This is the difference between "DRM cannot capture this display" and "there is momentarily no
+/// display to capture", which a capture-build failure alone cannot tell apart: the handshake
+/// re-enumerates and simply finds our connector gone.
+///
+/// Takes the clock lock, so the rule `swap_available_displays` documents applies to it too: never
+/// call it while holding `DRM_STATE`. The one caller, the capture-build failure arm in
+/// `wayland::get_capturer_for_display`, holds no guard at all.
+pub(super) fn topology_settling() -> bool {
+    match *EMPTY_TOPOLOGY_SINCE.lock().unwrap() {
+        Some(t) => t.elapsed() < EMPTY_TOPOLOGY_DEMOTE_AFTER,
+        None => false,
+    }
+}
+
+/// What a handshake does when the service's fresh list does not carry the connector the cached list
+/// named: install what the service DOES have, so the next rebuild asks for something that exists
+/// and `build_failure_is_transient` can tell the caller this failure was the topology moving.
+/// An empty list goes through unchanged, which is what arms the settle clock when no stream is
+/// left to push one.
+fn adopt_handshake_topology(displays: Vec<DrmDisplayInfo>) {
+    adopt_handshake_topology_with(displays, headless_transition_settles())
+}
+
+/// Without the headless gate the handshake only reports the failure, as it did before the feature.
+fn adopt_handshake_topology_with(displays: Vec<DrmDisplayInfo>, headless: bool) {
+    if !headless {
+        return;
+    }
+    swap_available_displays_with(displays, true)
+}
+
+/// The verdict generation, for sampling either side of an operation that can race it.
+pub(super) fn state_generation() -> u64 {
+    DRM_STATE_GEN.load(Ordering::Acquire)
+}
+
+/// Whether a capture-build failure says the topology MOVED under the build rather than saying
+/// anything about DRM. Two ways, and both are needed:
+///
+/// - the empty-topology clock is armed and its window still open: there is momentarily nothing to
+///   capture, which the debounce is already holding the verdict across;
+/// - the verdict changed while the build was in flight. A build that finds its connector gone
+///   publishes what the service DOES have (see `recv_thread`), and a NON-EMPTY publish retires the
+///   clock -- so without this second arm the very build that discovered the new topology would be
+///   the one to fall into the portal, one retry short of succeeding against it. The same holds for
+///   a TTL refresh landing mid-build.
+///
+/// `gen_at_build_start` must be sampled BEFORE the build: `HANDSHAKE_WAIT_MS` alone outlasts the
+/// settle window.
+pub(super) fn build_failure_is_transient(gen_at_build_start: u64) -> bool {
+    build_failure_is_transient_with(gen_at_build_start, headless_transition_settles())
+}
+
+fn build_failure_is_transient_with(gen_at_build_start: u64, headless: bool) -> bool {
+    topology_settling() || (headless && state_generation() != gen_at_build_start)
+}
+
 /// Runs on a throwaway thread: a nested `#[tokio::main]` panics if called from inside a runtime.
 fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -1618,7 +1751,7 @@ pub(crate) fn is_available_cached() -> bool {
 
 /// A tri-state assessment of DRM capture availability.
 /// `Unsettled` means a probe is in flight or failures have not reached the disable threshold.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Availability {
     Available,
     Unavailable,
@@ -1626,8 +1759,9 @@ pub(crate) enum Availability {
 }
 
 /// MAY BLOCK for seconds: never a routing gate, and never on the login request path — that path
-/// reads `availability_cached`. This blocking form serves the capture-side callers through
-/// `is_available`, where waiting out a settle is acceptable.
+/// reads `availability_cached`, and the one wait it tolerates is the bounded headless hold at
+/// the login door (`wait_for_headless_scanout`). This blocking form serves the capture-side
+/// callers through `is_available`, where waiting out a settle is acceptable.
 fn availability() -> Availability {
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
@@ -1667,6 +1801,8 @@ fn availability() -> Availability {
 
 /// Non-blocking login-path assessment.
 /// Unknown starts a probe off-thread; callers require `Available` before admitting a session.
+/// On a box whose headless output is still coming up, the login door polls this through the
+/// bounded `wait_for_headless_scanout` instead of taking the first `Unsettled` to the portal.
 pub(crate) fn availability_cached() -> Availability {
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
@@ -1710,40 +1846,239 @@ pub(crate) fn availability_cached() -> Availability {
 fn probe_and_publish() -> Availability {
     let t = Instant::now();
     let result = query_displays();
+    // Reads sysfs and the config, so it is taken before any lock.
+    let expected = headless_scanout_expected();
+    publish_probe_result(result, expected, t)
+}
+
+/// Publish one probe's outcome. `expected` is the headless gate: this process sees a headless
+/// scanout held, or one about to be forced the way the watcher forces it. Under it an empty
+/// enumeration on a still-Unknown state is not a verdict yet: the state stays Unknown, the
+/// debounce clock is armed on the first sighting, and the answer is `Unsettled` until the clock
+/// runs out, when the empty arm demotes as before. A verdict that landed meanwhile stands (the
+/// detached `warm_availability` publishes outside the in-flight flag), and the clock this call
+/// may have armed against it is retired. With `expected` false every arm is the pre-feature one
+/// and the clock is never touched.
+fn publish_probe_result(
+    result: ResultType<Vec<DrmDisplayInfo>>,
+    expected: bool,
+    t: Instant,
+) -> Availability {
+    let cold = expected && matches!(&result, Ok(l) if l.is_empty());
+    // Resolved before DRM_STATE is taken, so the two locks never nest. It arms the clock on the
+    // first sighting.
+    let settling = cold
+        && !empty_topology_ready(
+            &mut EMPTY_TOPOLOGY_SINCE.lock().unwrap(),
+            EMPTY_TOPOLOGY_DEMOTE_AFTER,
+        );
     let mut st = DRM_STATE.lock().unwrap();
-    let answer = match result {
-        Ok(list) if !list.is_empty() => {
-            log::debug!(
-                "drm: availability probe -> available ({} displays) in {:?}",
-                list.len(),
-                t.elapsed()
-            );
-            DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
-            publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
-            Availability::Available
-        }
-        Ok(_) => {
-            log::info!("drm: availability probe -> no displays in {:?}", t.elapsed());
-            publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
-            Availability::Unavailable
-        }
-        Err(err) => {
-            let n = DRM_PROBE_FAILURES.fetch_add(1, Ordering::Relaxed) + 1;
-            if n >= DRM_PROBE_MAX_FAILURES {
-                log::info!("drm: availability probe failed {n}x ({err}); disabling DRM");
+    let answer = if cold {
+        match &*st {
+            ProbeState::Unknown if settling => {
+                log::info!(
+                    "drm: availability probe -> no displays yet in {:?}; a headless output is on \
+                     its way",
+                    t.elapsed()
+                );
+                Availability::Unsettled
+            }
+            ProbeState::Unknown => {
+                log::info!(
+                    "drm: availability probe -> no displays in {:?}, and none within {:?}",
+                    t.elapsed(),
+                    EMPTY_TOPOLOGY_DEMOTE_AFTER
+                );
                 publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
                 Availability::Unavailable
-            } else {
-                log::info!(
-                    "drm: availability probe failed ({err}), attempt {n}/{DRM_PROBE_MAX_FAILURES}; will retry"
+            }
+            ProbeState::Available(..) => Availability::Available,
+            ProbeState::Unavailable(_) => Availability::Unavailable,
+        }
+    } else {
+        match result {
+            Ok(list) if !list.is_empty() => {
+                log::debug!(
+                    "drm: availability probe -> available ({} displays) in {:?}",
+                    list.len(),
+                    t.elapsed()
                 );
-                // Deliberately still Unknown in DRM_STATE: this is a retry window, not a verdict.
-                Availability::Unsettled
+                DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
+                publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+                Availability::Available
+            }
+            Ok(_) => {
+                log::info!("drm: availability probe -> no displays in {:?}", t.elapsed());
+                publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                Availability::Unavailable
+            }
+            Err(err) => {
+                let n = DRM_PROBE_FAILURES.fetch_add(1, Ordering::Relaxed) + 1;
+                if n >= DRM_PROBE_MAX_FAILURES {
+                    log::info!("drm: availability probe failed {n}x ({err}); disabling DRM");
+                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                    Availability::Unavailable
+                } else {
+                    log::info!(
+                        "drm: availability probe failed ({err}), attempt {n}/{DRM_PROBE_MAX_FAILURES}; will retry"
+                    );
+                    // Deliberately still Unknown in DRM_STATE: this is a retry window, not a verdict.
+                    Availability::Unsettled
+                }
             }
         }
     };
     drop(st);
+    // A successful probe is a non-empty observation, so it retires any pending debounce clock.
+    // So does the cold path whenever it did not stay in the settle: the window ran out, or a
+    // verdict landed while this probe ran and the clock it armed must not outlive it.
+    if answer == Availability::Available || (cold && answer != Availability::Unsettled) {
+        clear_empty_topology_clock();
+    }
     answer
+}
+
+#[cfg(feature = "headless-display")]
+const HEADLESS_HOLD_POLL: Duration = Duration::from_millis(500);
+#[cfg(feature = "headless-display")]
+const HEADLESS_FIRST_LOOK: Duration = Duration::from_millis(50);
+/// The video service's hold: the settle window, the longest gap we produce ourselves.
+#[cfg(feature = "headless-display")]
+pub(super) const HEADLESS_VIDEO_HOLD: Duration = EMPTY_TOPOLOGY_DEMOTE_AFTER;
+/// The login door's hold. The display list is part of the login answer, and the client shows
+/// nothing until it arrives, so this door gets less than the settle window: enough for the
+/// 9.5 s sysfs half of the force with room for the modeset. A slower box refuses that first
+/// login instead of starting the portal, and gets DRM on the next connection.
+#[cfg(feature = "headless-display")]
+pub(super) const HEADLESS_LOGIN_HOLD: Duration = Duration::from_secs(12);
+/// One hold episode per `--server` lifetime: set on the first entry, cleared only when
+/// `Available` is seen. A box where the gate is a durable false positive pays one settle window,
+/// not one per door or per video-service run.
+#[cfg(feature = "headless-display")]
+static HOLD_DEADLINE: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// Keep a door shut only while a settle is really under way: no verdict yet, no probe error
+/// (that is not a settle), the gate still open, and the deadline not reached.
+#[cfg(feature = "headless-display")]
+fn hold_step(
+    verdict: Availability,
+    probe_failures: u32,
+    still_expected: bool,
+    now: Instant,
+    deadline: Instant,
+) -> bool {
+    verdict == Availability::Unsettled && probe_failures == 0 && still_expected && now < deadline
+}
+
+/// The bounded hold in front of a portal door, with the verdict, the gate and the sleep
+/// injected. `bound` is the door's own limit, capped by the episode deadline.
+#[cfg(feature = "headless-display")]
+pub(super) async fn wait_for_headless_scanout_with<V, E, S, F>(
+    mut verdict: V,
+    mut expected: E,
+    mut sleep: S,
+    bound: Duration,
+) where
+    V: FnMut() -> Availability,
+    E: FnMut() -> bool,
+    S: FnMut(Duration) -> F,
+    F: std::future::Future<Output = ()>,
+{
+    let mut v = verdict();
+    if v == Availability::Available {
+        *HOLD_DEADLINE.lock().unwrap() = None;
+        return;
+    }
+    if !expected() {
+        return;
+    }
+    // A verdict either way, or a probe error, is not a settle: nothing to wait out, so no
+    // episode is opened and nothing is logged.
+    if v != Availability::Unsettled || DRM_PROBE_FAILURES.load(Ordering::Relaxed) != 0 {
+        return;
+    }
+    let episode = *HOLD_DEADLINE
+        .lock()
+        .unwrap()
+        .get_or_insert_with(|| Instant::now() + HEADLESS_VIDEO_HOLD);
+    let deadline = episode.min(Instant::now() + bound);
+    // The first turn is a short look: an Unknown state answers Unsettled while the probe it has
+    // just started is out, and with the output already up that probe is usually back within it.
+    // A verdict still missing after the look is logged and waited out at the hold's pace.
+    let mut turn = 0u32;
+    while hold_step(
+        v,
+        DRM_PROBE_FAILURES.load(Ordering::Relaxed),
+        expected(),
+        Instant::now(),
+        deadline,
+    ) {
+        if turn == 1 {
+            log::info!(
+                "drm: holding the portal while the headless output comes up (up to {:?})",
+                deadline.saturating_duration_since(Instant::now())
+            );
+        }
+        sleep(if turn == 0 { HEADLESS_FIRST_LOOK } else { HEADLESS_HOLD_POLL }).await;
+        turn += 1;
+        v = verdict();
+    }
+    if v == Availability::Available {
+        *HOLD_DEADLINE.lock().unwrap() = None;
+    }
+}
+
+/// Whether a cold start is still being waited out: no verdict yet, and a headless scanout
+/// expected. While this holds a door does not start the portal, and the login-screen box that
+/// tells the peer to answer a portal dialog is not sent either.
+#[cfg(feature = "headless-display")]
+pub(super) fn cold_start_still_settling() -> bool {
+    availability_cached() == Availability::Unsettled && headless_scanout_expected()
+}
+
+/// The production hold: the cached verdict (an `Unknown` starts the probe off-thread, so no
+/// push is needed), the sysfs gate re-read on every turn, and the runtime's sleep. The gate's
+/// inputs are logged once at the door, so a log shows what this process saw.
+#[cfg(feature = "headless-display")]
+pub(super) async fn wait_for_headless_scanout(bound: Duration) {
+    if availability_cached() != Availability::Available {
+        let e = crate::virtual_display_manager::linux::scanout_expectation();
+        log::info!("drm: headless scanout expectation at the door: {e:?}");
+    }
+    wait_for_headless_scanout_with(
+        availability_cached,
+        || crate::virtual_display_manager::linux::scanout_expectation().expected(),
+        hbb_common::tokio::time::sleep,
+        bound,
+    )
+    .await
+}
+
+/// DRM_STATE, the probe failure count and the hold episode are process-wide and tests run in
+/// parallel: every test that drives any of them, here or in `wayland`, takes this one lock, and
+/// through `into_inner`, so one failing inside it does not take the others down on the lock.
+#[cfg(test)]
+pub(super) fn serial_probe_state() -> std::sync::MutexGuard<'static, ()> {
+    static PROBE_STATE_TESTS: Mutex<()> = Mutex::new(());
+    PROBE_STATE_TESTS.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// The hold episode, for the door tests in `wayland` and here.
+#[cfg(all(test, feature = "headless-display"))]
+pub(super) mod hold_test_support {
+    use super::*;
+    pub fn serial() -> std::sync::MutexGuard<'static, ()> {
+        super::serial_probe_state()
+    }
+    pub fn set_episode(deadline: Option<Instant>) {
+        *HOLD_DEADLINE.lock().unwrap() = deadline;
+    }
+    pub fn episode() -> Option<Instant> {
+        *HOLD_DEADLINE.lock().unwrap()
+    }
+    pub fn set_probe_failures(n: u32) {
+        DRM_PROBE_FAILURES.store(n, Ordering::Relaxed);
+    }
 }
 
 /// The boolean form for capture-path callers, where an unsettled probe and a definitive "no"
@@ -1786,6 +2121,7 @@ fn refresh_unavailable_async() {
                     DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
                     drop(st);
+                    clear_empty_topology_clock();
                     scrap::wayland::display::clear_wayland_displays_cache();
                 }
                 _ => {
@@ -1836,14 +2172,23 @@ fn refresh_available_async() {
                         _ => true,
                     };
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh));
+                    drop(st);
+                    // A restored list must also clear the empty-debounce clock, or the NEXT
+                    // empty push demotes instantly off a stale first-sighting. Racing a hotplug
+                    // empty push in the gap is benign (its recheck re-arms within a TTL) and the
+                    // gap is what keeps the two locks un-nested - do not move this under st.
+                    *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
                     if changed {
-                        drop(st);
                         scrap::wayland::display::clear_wayland_displays_cache();
                     }
                 }
                 RefreshOutcome::Unavailable => {
-                    log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
-                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                    // Through the shared debounce, DRM_STATE dropped first (the two locks never
+                    // nest): the refresh path must not demote faster than the hotplug path does.
+                    // A publish landing in the gap is re-read by swap under its own lock and the
+                    // worst case is one spurious first-sighting - benign, so no gen re-check.
+                    drop(st);
+                    swap_available_displays(Vec::new());
                 }
                 // Only the TTL stamp moves, so this does NOT go through publish_probe_state.
                 RefreshOutcome::Restamp => {
@@ -1888,6 +2233,11 @@ pub(super) fn warm_availability() {
             Ok(list) if !list.is_empty() => {
                 log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
                 publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), list));
+                // Warm-up runs detached, so an empty probe can have armed the clock while it was
+                // querying. Retiring it AFTER the publish is what covers that: an empty observation
+                // from before this Available cannot be allowed to time out against it. The guard
+                // above is a temporary, so no lock is held here.
+                clear_empty_topology_clock();
                 return;
             }
             _ => std::thread::sleep(Duration::from_millis(300)),
@@ -1931,6 +2281,7 @@ pub(super) async fn refresh_displays_for_login() {
                     _ => return,
                 }
             };
+            clear_empty_topology_clock();
             if changed {
                 scrap::wayland::display::clear_wayland_displays_cache();
             }
@@ -2217,16 +2568,137 @@ fn normalize_connector(name: &str) -> String {
     }
 }
 
+/// A debounce clock armed before the verdict it would demote belongs to a topology that has since
+/// been proven non-empty. Every publisher of a non-empty topology retires the clock, but that is
+/// four call sites remembering; this makes a missed one cost a settle window rather than an
+/// immediate demote.
+fn clock_predates_verdict(armed_at: Option<Instant>, available_since: Option<Instant>) -> bool {
+    match (armed_at, available_since) {
+        (Some(armed), Some(available)) => armed < available,
+        _ => false,
+    }
+}
+
 fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
-    let mut st = DRM_STATE.lock().unwrap();
-    if matches!(&*st, ProbeState::Available(..)) {
-        if list.is_empty() {
-            log::info!("drm: hotplug refresh -> 0 displays, marking DRM unavailable");
-            publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+    // Read and released before the clock lock is taken: the two must never nest, and the order
+    // everywhere else is clock first.
+    let (available_since, was_unavailable) = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(at, _) => (Some(*at), false),
+        ProbeState::Unavailable(_) => (None, true),
+        ProbeState::Unknown => (None, false),
+    };
+    // Only the arms below that the headless display changes read the gate, and it reads sysfs,
+    // so it is taken with no lock held.
+    let headless = (list.is_empty() || was_unavailable) && headless_transition_settles();
+    swap_available_displays_with_since(list, headless, available_since)
+}
+
+/// The gated form, for tests that inject the gate. Everything the headless display added to the
+/// settle path is behind `headless`: the clock and its recheck, and the recovery of a negative
+/// verdict by a non-empty push. With it false an empty push demotes at once and a negative
+/// verdict waits for its TTL re-probe, as before the feature.
+fn swap_available_displays_with(list: Vec<DrmDisplayInfo>, headless: bool) {
+    let available_since = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(at, _) => Some(*at),
+        _ => None,
+    };
+    swap_available_displays_with_since(list, headless, available_since)
+}
+
+fn swap_available_displays_with_since(
+    list: Vec<DrmDisplayInfo>,
+    headless: bool,
+    available_since: Option<Instant>,
+) {
+    // The empty debounce is resolved before DRM_STATE is taken so the two locks never nest.
+    let empty_outlived_window = if list.is_empty() {
+        if !headless {
+            // Not settling: an empty list is a verdict, and the clock is never armed.
+            true
         } else {
-            log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+            let mut since = EMPTY_TOPOLOGY_SINCE.lock().unwrap();
+            if clock_predates_verdict(*since, available_since) {
+                *since = None;
+            }
+            let was_first = since.is_none();
+            let ready = empty_topology_ready(&mut *since, EMPTY_TOPOLOGY_DEMOTE_AFTER);
+            if was_first {
+                // A single empty push may be the last event a dead topology ever sends, so
+                // re-ask after the window instead of waiting for a hotplug that may never come.
+                schedule_empty_topology_recheck();
+            }
+            ready
+        }
+    } else {
+        // A non-empty observation retires the clock on every build, gate or no gate, as it
+        // always did: the settle it was timing is over.
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+        false
+    };
+    let mut st = DRM_STATE.lock().unwrap();
+    let mut demoted = false;
+    match &*st {
+        ProbeState::Available(at, _) => {
+            // The verdict sampled above can have been replaced while the clock was being
+            // resolved: a non-empty publisher can install a newer Available in between, and an
+            // empty push that then acted on the OLD verdict's clock would demote the new one and
+            // clearing the clock afterwards would not bring it back. Only the verdict that was
+            // sampled may be demoted.
+            let same_verdict = available_since == Some(*at);
+            if list.is_empty() {
+                if empty_outlived_window && same_verdict {
+                    log::info!("drm: topology empty past the settle window, marking DRM unavailable");
+                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                    demoted = true;
+                } else if !same_verdict {
+                    log::info!("drm: hotplug refresh -> 0 displays; a newer verdict landed meanwhile, keeping it");
+                } else {
+                    log::info!("drm: hotplug refresh -> 0 displays; keeping the last list while the topology settles");
+                }
+            } else {
+                log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+                publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+            }
+        }
+        // A hotplug that finds displays lifts a negative verdict, which is the rule
+        // `refresh_unavailable_async` already documents: only a non-empty list flips it. Without this
+        // arm the verdict could only be revised by that TTL re-probe, so a topology that went empty
+        // for an instant and came back cost the session the whole NEGATIVE_TTL on the portal even
+        // though the correct list had already arrived. A modeset takes long enough after a connector
+        // reports itself that the enumeration in between genuinely sees nothing.
+        ProbeState::Unavailable(..) if !list.is_empty() && headless => {
+            log::info!(
+                "drm: hotplug refresh -> {} display(s), DRM is available again",
+                list.len()
+            );
             publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
         }
+        _ => {}
+    }
+    drop(st);
+    // A landed demote retires its clock (locks never nest, so after DRM_STATE drops): recovery
+    // can arrive through publishers that know nothing of the debounce, and a stale first-sighting
+    // would make the NEXT transient empty demote instantly.
+    if demoted {
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+    }
+}
+
+fn schedule_empty_topology_recheck() {
+    let spawned = std::thread::Builder::new()
+        .name("drm-empty-recheck".into())
+        .spawn(|| {
+            std::thread::sleep(EMPTY_TOPOLOGY_DEMOTE_AFTER + Duration::from_millis(200));
+            if EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none() {
+                return;
+            }
+            match query_displays() {
+                Ok(list) => swap_available_displays(list),
+                Err(err) => log::debug!("drm: empty-topology recheck failed: {err}"),
+            }
+        });
+    if let Err(err) = spawned {
+        log::warn!("drm: could not spawn the empty-topology recheck: {err}");
     }
 }
 
@@ -4035,6 +4507,381 @@ mod drm_capturer_tests {
         assert!(!h.demoted(), "past the cooldown the display must be retried");
         h.demotes = 4;
         assert!(h.demoted(), "the backoff must still be holding it at demotion 4");
+    }
+
+    #[test]
+    fn a_clock_armed_before_the_current_verdict_cannot_demote_it() {
+        let armed = Instant::now();
+        let available = armed + Duration::from_millis(1);
+        assert!(clock_predates_verdict(Some(armed), Some(available)));
+        // Armed while this verdict already stood: it is about the current topology.
+        assert!(!clock_predates_verdict(Some(available), Some(armed)));
+        assert!(!clock_predates_verdict(None, Some(available)));
+        // Nothing to be stale against.
+        assert!(!clock_predates_verdict(Some(armed), None));
+    }
+
+    #[test]
+    fn an_empty_topology_blip_does_not_demote() {
+        // The unplug-to-force gap, measured at 5-7 s on the RPi5: the first empty sighting only
+        // starts the clock, and inside the window the verdict must hold.
+        let mut since = None;
+        assert!(!empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+        assert!(since.is_some(), "the first sighting must start the clock");
+        assert!(!empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+        // Past the window the same state demotes.
+        since = Some(Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER - Duration::from_secs(1));
+        assert!(empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+    }
+
+    fn serial_drm_state() -> std::sync::MutexGuard<'static, ()> {
+        super::serial_probe_state()
+    }
+
+    /// Every door from the video service into the portal, and what decides each one. The test below
+    /// asserts on these rather than on `check_init` itself, which needs a compositor and a user
+    /// session: they are the conditions under which it is reached at all.
+    ///
+    /// - `wayland::ensure_inited` (start of every video-service run) -> `is_available_cached()`
+    /// - `wayland::get_displays` (client enumeration) -> the same cached `Available`, via
+    ///   `get_display_infos_and_primary`, whose `None` is what falls through to `check_init`;
+    ///   `refresh_displays_for_login` cannot disturb it, it only publishes a NON-empty list
+    /// - `wayland::get_capturer_for_display`, on a build failure -> `topology_settling()`
+    /// - `wayland::ensure_inited` and `wayland::get_displays_and_primary`, cold, with the
+    ///   headless-display feature -> the bounded `wait_for_headless_scanout` before either
+    fn portal_gates() -> (bool, bool) {
+        (is_available_cached(), topology_settling())
+    }
+
+    /// rustdesk#15908 review (zhou, 23-sep), finding 1, line by line: DRM_STATE Unknown, the
+    /// first enumeration empty while the force is in its window. No definitive Unavailable, the
+    /// doors stay shut, and a later non-empty enumeration is Available.
+    #[test]
+    fn a_cold_empty_probe_waits_for_the_headless_output_instead_of_the_portal() {
+        let _serial = serial_drm_state();
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        clear_empty_topology_clock();
+        let now = Instant::now();
+        assert_eq!(publish_probe_result(Ok(Vec::new()), true, now), Availability::Unsettled);
+        assert!(
+            matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Unknown),
+            "not a verdict: the state is still Unknown"
+        );
+        assert_eq!(portal_gates(), (false, true), "no DRM yet, and every door shut");
+        assert!(EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_some(), "the window is armed");
+        // Inside the window a second empty enumeration says the same.
+        assert_eq!(publish_probe_result(Ok(Vec::new()), true, now), Availability::Unsettled);
+        // The output comes up.
+        assert_eq!(
+            publish_probe_result(Ok(vec![drm_display("TEST-cold", 1920, 1080)]), true, now),
+            Availability::Available
+        );
+        assert_eq!(portal_gates(), (true, false));
+        assert!(EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none(), "retired by the observation");
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        clear_empty_topology_clock();
+    }
+
+    /// Without the gate an empty first enumeration is the verdict it always was, and the clock
+    /// is never touched. Runs on both builds.
+    #[test]
+    fn a_cold_empty_probe_is_a_verdict_where_no_headless_output_is_coming() {
+        let _serial = serial_drm_state();
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        clear_empty_topology_clock();
+        assert_eq!(
+            publish_probe_result(Ok(Vec::new()), false, Instant::now()),
+            Availability::Unavailable
+        );
+        assert!(matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Unavailable(_)));
+        assert!(EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none(), "the clock was never armed");
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+    }
+
+    /// The cold hold is bounded by the settle window: once the clock has run out, the empty
+    /// enumeration demotes, and the clock is retired with it.
+    #[test]
+    fn the_cold_start_hold_is_bounded_by_the_settle_window() {
+        let _serial = serial_drm_state();
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() =
+            Some(Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER - Duration::from_secs(1));
+        assert_eq!(
+            publish_probe_result(Ok(Vec::new()), true, Instant::now()),
+            Availability::Unavailable
+        );
+        assert!(matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Unavailable(_)));
+        assert!(EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none());
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+    }
+
+    /// An empty result that raced a verdict (`warm_availability` publishes outside the in-flight
+    /// flag) does not overwrite it, and leaves no clock armed against it.
+    #[test]
+    fn an_empty_probe_under_a_fresh_verdict_changes_nothing() {
+        let _serial = serial_drm_state();
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Available(Instant::now(), vec![drm_display("TEST-warm", 1920, 1080)]),
+        );
+        clear_empty_topology_clock();
+        assert_eq!(
+            publish_probe_result(Ok(Vec::new()), true, Instant::now()),
+            Availability::Available
+        );
+        assert!(is_available_cached(), "the verdict stands");
+        assert!(EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none(), "no clock left against it");
+        // The same under a negative verdict, where nothing else retires the clock.
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Unavailable(Instant::now()),
+        );
+        assert_eq!(
+            publish_probe_result(Ok(Vec::new()), true, Instant::now()),
+            Availability::Unavailable
+        );
+        assert!(EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none(), "no clock left against it");
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+    }
+
+    /// A verdict that lands during the first look costs only that look, not a 500 ms turn: an
+    /// Unknown state answers Unsettled while the probe it has just started is out.
+    #[cfg(feature = "headless-display")]
+    #[test]
+    fn a_verdict_that_lands_during_the_first_look_costs_only_that_look() {
+        let _serial = serial_drm_state();
+        DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
+        *HOLD_DEADLINE.lock().unwrap() = None;
+        let run = |answers: &[Availability]| -> Vec<Duration> {
+            let calls = std::cell::Cell::new(0usize);
+            let slept = std::cell::RefCell::new(Vec::new());
+            let rt = hbb_common::tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            rt.block_on(wait_for_headless_scanout_with(
+                || {
+                    let i = calls.get();
+                    calls.set(i + 1);
+                    answers[i.min(answers.len() - 1)]
+                },
+                || true,
+                |d| {
+                    slept.borrow_mut().push(d);
+                    std::future::ready(())
+                },
+                Duration::from_secs(20),
+            ));
+            slept.into_inner()
+        };
+        use Availability::{Available, Unsettled};
+        assert_eq!(run(&[Unsettled, Available]), vec![HEADLESS_FIRST_LOOK]);
+        assert!(HOLD_DEADLINE.lock().unwrap().is_none(), "Available clears the episode");
+        assert_eq!(
+            run(&[Unsettled, Unsettled, Available]),
+            vec![HEADLESS_FIRST_LOOK, HEADLESS_HOLD_POLL],
+            "a settle still under way after the look is waited out at the hold's pace"
+        );
+        *HOLD_DEADLINE.lock().unwrap() = None;
+    }
+
+    /// The hold ends when what is going on is not a settle: a probe error, the gate closing, a
+    /// verdict either way, or the deadline.
+    #[cfg(feature = "headless-display")]
+    #[test]
+    fn the_hold_ends_when_the_settle_is_not_one() {
+        let now = Instant::now();
+        let later = now + Duration::from_secs(5);
+        assert!(hold_step(Availability::Unsettled, 0, true, now, later));
+        assert!(!hold_step(Availability::Unsettled, 1, true, now, later), "a probe error");
+        assert!(!hold_step(Availability::Unsettled, 0, false, now, later), "the gate closed");
+        assert!(!hold_step(Availability::Unsettled, 0, true, later, later), "the deadline");
+        assert!(!hold_step(Availability::Available, 0, true, now, later));
+        assert!(!hold_step(Availability::Unavailable, 0, true, now, later));
+    }
+
+    #[test]
+    fn a_settling_topology_keeps_every_portal_door_shut_and_the_control_still_opens_them() {
+        let _serial = serial_drm_state();
+        // A display that has been streaming for a while: the verdict is older than the window, which
+        // is the ordering the clock is compared against below.
+        let was_available_at = Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER * 2;
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Available(was_available_at, vec![drm_display("TEST-settle", 1920, 1080)]),
+        );
+        clear_empty_topology_clock();
+
+        // The gap: the topology change the headless transition makes, as the service pushes it.
+        swap_available_displays_with(Vec::new(), true);
+        assert_eq!(
+            portal_gates(),
+            (true, true),
+            "while the topology settles NO door into the portal may open: the cached verdict holds \
+             for ensure_inited and the client enumeration, and a build failure is retryable"
+        );
+        // And the display is still the one a rebuild would ask for, which is what makes the
+        // handshake fail rather than the build being skipped.
+        assert!(
+            display_info_of(0).is_some(),
+            "the kept list is what get_capturer_info re-asks for"
+        );
+
+        // The control: the topology stays empty past the window. Backdated rather than slept, and
+        // to a time AFTER the verdict so `clock_predates_verdict` does not retire it as stale.
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() =
+            Some(Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER - Duration::from_secs(1));
+        swap_available_displays_with(Vec::new(), true);
+        assert_eq!(
+            portal_gates(),
+            (false, false),
+            "past the window the normal fallback must work: DRM is demoted, so the DRM branch is \
+             skipped entirely and ensure_inited runs check_init as it does on a PipeWire host"
+        );
+
+        // Leave nothing behind for whatever runs next.
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        clear_empty_topology_clock();
+    }
+
+    /// The hole the first version of this fix had: the clock alone cannot carry the transition,
+    /// because the headless force PREFERS HDMI and a pulled DP-1 therefore comes back as
+    /// HDMI-A-1. Every rebuild asks for the connector the cached list names, the handshake matches
+    /// on (device, name), and `DrmDisplaysChanged` only travels inside a live stream -- which this
+    /// one no longer has. So without adopting the handshake's own list nothing would ever update
+    /// the identity, and the retries would fail against a topology that is perfectly healthy until
+    /// the window ran out and dropped the session into the portal.
+    #[test]
+    fn a_transition_that_lands_on_another_connector_converges_instead_of_looping() {
+        let _serial = serial_drm_state();
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Available(Instant::now(), vec![drm_display("TEST-DP-1", 1920, 1080)]),
+        );
+        clear_empty_topology_clock();
+
+        // A rebuild starts here, so this is the generation it is judged against.
+        let gen_at_build_start = state_generation();
+        assert!(
+            !build_failure_is_transient_with(gen_at_build_start, true),
+            "nothing has moved yet: a failure now is a verdict about DRM, not a transition"
+        );
+
+        // The handshake finds TEST-DP-1 gone and the service holding another connector.
+        adopt_handshake_topology_with(vec![drm_display("TEST-HDMI-A-1", 1920, 1080)], true);
+        assert_eq!(
+            display_info_of(0).map(|d| d.name),
+            Some("TEST-HDMI-A-1".to_owned()),
+            "the next rebuild must ask for the connector that exists, not the one that went away"
+        );
+        assert!(
+            build_failure_is_transient_with(gen_at_build_start, true),
+            "and THIS build must be retried, not sent to the portal one attempt short of \
+             succeeding -- a non-empty publish retires the clock, so the clock cannot say this"
+        );
+        assert!(
+            !build_failure_is_transient_with(state_generation(), true),
+            "a build that starts after the move, and still fails, is a verdict about DRM"
+        );
+
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        clear_empty_topology_clock();
+    }
+
+    /// rustdesk#15908 review of 23-sep: with the headless display off (feature or option) the
+    /// settle path must be the one from before the feature. Injected gate, so this runs on
+    /// both builds.
+    #[test]
+    fn an_empty_topology_demotes_at_once_where_the_headless_display_is_off() {
+        let _serial = serial_drm_state();
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Available(Instant::now(), vec![drm_display("TEST-off", 1920, 1080)]),
+        );
+        clear_empty_topology_clock();
+        swap_available_displays_with(Vec::new(), false);
+        assert_eq!(portal_gates(), (false, false), "demoted at once, nothing settles");
+        assert!(EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none(), "the clock is never armed");
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        clear_empty_topology_clock();
+    }
+
+    /// Review of 24-sep: the gate must not keep the clock armed once displays are back. A
+    /// non-empty push retires it on every build, as the merge base did.
+    #[test]
+    fn a_non_empty_push_retires_the_clock_on_every_build() {
+        let _serial = serial_drm_state();
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Available(Instant::now(), vec![drm_display("TEST-back", 1920, 1080)]),
+        );
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = Some(Instant::now());
+        swap_available_displays_with(vec![drm_display("TEST-back", 1920, 1080)], false);
+        assert!(is_available_cached());
+        assert!(EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none(), "the clock is retired");
+        assert!(!topology_settling());
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+    }
+
+    #[test]
+    fn with_the_switch_off_the_verdict_moves_as_it_did_at_the_merge_base() {
+        let _serial = serial_drm_state();
+        // (i) a negative verdict is not lifted by a non-empty push; the TTL re-probe does that.
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Unavailable(Instant::now()),
+        );
+        clear_empty_topology_clock();
+        swap_available_displays_with(vec![drm_display("TEST-off-2", 1920, 1080)], false);
+        assert!(!is_available_cached(), "a hotplug push does not lift a negative verdict");
+        // (ii) a moved generation is not a transient failure.
+        let old_gen = state_generation();
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Available(Instant::now(), vec![drm_display("TEST-off-2", 1920, 1080)]),
+        );
+        assert!(!build_failure_is_transient_with(old_gen, false));
+        // (iii) the handshake does not adopt what the service has.
+        adopt_handshake_topology_with(vec![drm_display("TEST-off-3", 1920, 1080)], false);
+        assert_eq!(display_info_of(0).map(|d| d.name), Some("TEST-off-2".to_owned()));
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        clear_empty_topology_clock();
+    }
+
+    /// The wrappers the production code calls: without the feature they are constant, and with
+    /// it, on a host with the switch off and nothing of ours held, neither gate opens. The
+    /// precondition names the host state the second case needs.
+    #[test]
+    fn without_the_switch_neither_gate_opens() {
+        #[cfg(feature = "headless-display")]
+        let _serial = crate::virtual_display_manager::linux::switch_test_lock();
+        #[cfg(feature = "headless-display")]
+        assert!(
+            !hbb_common::config::Config::get_bool_option(
+                crate::virtual_display_manager::linux::OPTION_ALLOW_HEADLESS_DISPLAY
+            ),
+            "the test host has the headless switch on; this test needs it off and no held connector"
+        );
+        assert!(!headless_transition_settles());
+        assert!(!headless_scanout_expected());
+    }
+
+    #[test]
+    fn an_expired_clock_stops_holding_the_fallback_back() {
+        let _serial = serial_drm_state();
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = Some(Instant::now());
+        assert!(topology_settling(), "a fresh empty sighting is a settling topology");
+        // The bound has to hold on the clock ALONE, because nothing is guaranteed to retire it:
+        // a demote does, but the recheck that would produce one can fail to spawn or fail to
+        // reach the service, and the hotplug push that armed it may be the last event a dead
+        // topology ever sends. Without this the PipeWire fallback would stay held off for the
+        // rest of the boot.
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() =
+            Some(Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER - Duration::from_secs(1));
+        assert!(
+            !topology_settling(),
+            "past the window the topology is not settling any more, whatever the clock still says"
+        );
+        clear_empty_topology_clock();
     }
 
     #[test]

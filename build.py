@@ -346,6 +346,11 @@ def get_features(args):
         # this line builds the same capture backend with no wake code in the binary at all.
         # It is ALSO switchable at runtime; see OPTION_ENABLE_DRM_DISPLAY_WAKE.
         features.append('drm-wake')
+        # Same argument, same package: the headless display is the other writer in this backend, and
+        # a machine with no monitor plugged in is exactly what the unattended variant is for. Unlike
+        # the wake it is OFF at runtime until an operator turns it on, on every build; this flag only
+        # decides whether the code is in the binary at all.
+        features.append('headless-display')
     if osx:
         if args.screencapturekit:
             features.append('screencapturekit')

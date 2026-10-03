@@ -761,6 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Davam et"),
         ("Browser didn't open? Use the url below to sign in.", "Brauzer açılmadı? Daxil olmaq üçün aşağıdakı URL-dən istifadə edin."),
         ("Lock canvas", "Kətanı kilidlə"),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "Mübadilə buferini sessiyalar arasında sinxronlaşdır"),
         ("sync-clipboard-between-sessions-tip", "Bir uzaq sessiyada kopyalanan mətn və ya şəkillər qoşulu olduğunuz digər sessiyaların mübadilə buferinə də göndərilir."),
         ("terminal-clipboard-write-tip", "Terminaldakı tətbiq bu cihazın mübadilə buferinə mətn kopyalamaq istəyir. İcazə versəniz, bu icazə siz onu Parametrlərdə söndürənə qədər bütün əlaqələrdəki terminal tətbiqlərinə şamil olunur. Əl ilə kopyalama və yapışdırma buna daxil deyil."),
