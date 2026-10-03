@@ -1426,12 +1426,22 @@ fn check_qos(
 ) -> ResultType<()> {
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     *spf = video_qos.spf();
-    if *ratio != video_qos.ratio() {
-        *ratio = video_qos.ratio();
+    let requested_ratio = video_qos.ratio();
+    if *ratio != requested_ratio {
         if encoder.support_changing_quality() {
-            allow_err!(encoder.set_quality(*ratio));
-            video_qos.store_bitrate(encoder.bitrate());
+            match encoder.set_quality(requested_ratio) {
+                Ok(()) => {
+                    *ratio = requested_ratio;
+                    video_qos.store_bitrate(encoder.bitrate());
+                }
+                Err(err) => hbb_common::throttled_log!(
+                    Duration::from_secs(5),
+                    warn,
+                    "Failed to change encoder quality: {err:?}"
+                ),
+            }
         } else {
+            *ratio = requested_ratio;
             // Now only vaapi doesn't support changing quality
             if !video_qos.in_vbr_state() && !video_qos.latest_quality().is_custom() {
                 log::info!("switch to change quality");
@@ -1451,6 +1461,9 @@ fn check_qos(
     drop(video_qos);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
 
 pub fn set_take_screenshot(source: VideoSource, display_idx: usize, sid: String, tx: Sender) {
     SCREENSHOTS.lock().unwrap().insert(
