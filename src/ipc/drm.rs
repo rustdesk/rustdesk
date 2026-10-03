@@ -1782,31 +1782,28 @@ mod drm_pacing_tests {
     use super::*;
     use hbb_common::tokio;
 
-    /// An older producer counts ack bytes, so an ack that carries a demand is still one byte.
+    /// An ack is one credit, as an older producer counts it, and a new one reads the demand from it.
     #[tokio::test]
-    async fn a_demand_ack_is_still_exactly_one_byte() {
+    async fn a_demand_ack_is_one_credit_and_carries_the_demand() {
         let (a, b) = tokio::net::UnixStream::pair().unwrap();
         let tx = DrmConn::new(a);
+        let rx = DrmConn::new(b);
         tx.send_frame_ack(60).await.unwrap();
-        drop(tx);
-        let mut got = Vec::new();
-        let mut buf = [0u8; 8];
-        loop {
-            b.readable().await.unwrap();
-            match b.try_read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => got.extend_from_slice(&buf[..n]),
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-                Err(e) => panic!("{e}"),
-            }
-        }
-        assert_eq!(got, vec![DRM_ACK_FPS_FLAG | 60]);
+        rx.wait_readable().await.unwrap();
+        let (mut credit, mut demand) = (0, 0);
+        rx.drain_frame_acks(&mut credit, 2, &mut demand).unwrap();
+        assert_eq!((credit, demand), (1, 60));
     }
 
     #[test]
     fn the_pacing_interval_follows_the_demand_with_the_panel_as_floor() {
         let p60 = drm_panel_period(60, 1);
         let p2998 = drm_panel_period(131375, 4382);
+        assert_eq!(
+            drm_panel_period(148352, 2475),
+            std::time::Duration::from_nanos(16_683_294),
+            "59.94 Hz, rounded up"
+        );
         let cases = [
             (0u8, p60, FRAME_INTERVAL, "no demand: the old tick"),
             (60, p60, p60, "60 on a 60 Hz panel"),
