@@ -291,6 +291,7 @@ pub enum AuthConnType {
     PortForward,
     ViewCamera,
     Terminal,
+    RemoteUsb,
 }
 
 impl AuthConnType {
@@ -301,6 +302,7 @@ impl AuthConnType {
             AuthConnType::PortForward => "port_forward",
             AuthConnType::ViewCamera => "view_camera",
             AuthConnType::Terminal => "terminal",
+            AuthConnType::RemoteUsb => "remote_usb",
         }
     }
 }
@@ -365,6 +367,9 @@ pub struct Connection {
     file_transfer: Option<(String, bool)>,
     view_camera: bool,
     terminal: bool,
+    remote_usb: bool,
+    #[cfg(target_os = "linux")]
+    usbip: Option<super::usbip_session::UsbSession>,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
     port_forward_mux: Option<super::port_forward_mux::PortForwardMux>,
     port_forward_address: String,
@@ -581,6 +586,9 @@ impl Connection {
             file_transfer: None,
             view_camera: false,
             terminal: false,
+            remote_usb: false,
+            #[cfg(target_os = "linux")]
+            usbip: None,
             port_forward_socket: None,
             port_forward_mux: None,
             port_forward_address: "".to_owned(),
@@ -1787,6 +1795,13 @@ impl Connection {
         (format!("{}:{}", pf.host, pf.port), is_rdp)
     }
 
+    #[cfg(target_os = "linux")]
+    fn init_usbip(&mut self) {
+        crate::usbip_flow::cap_packet_size(&mut self.stream);
+        // `inner.tx` is set for the connection's whole life; `None` here is unreachable.
+        self.usbip = self.inner.tx.clone().map(super::usbip_session::UsbSession::new);
+    }
+
     async fn connect_port_forward_if_needed(&mut self) -> bool {
         if self.is_port_forward() {
             return true;
@@ -1905,6 +1920,8 @@ impl Connection {
             (3, AuthConnType::ViewCamera)
         } else if self.terminal {
             (4, AuthConnType::Terminal)
+        } else if self.remote_usb {
+            (5, AuthConnType::RemoteUsb)
         } else {
             (0, AuthConnType::Remote)
         };
@@ -2069,12 +2086,14 @@ impl Connection {
         {
             terminal = terminal && portable_pty::win::check_support().is_ok();
         }
+        let usbip = cfg!(target_os = "linux");
         pi.username = username;
         pi.sas_enabled = sas_enabled;
         pi.features = Some(Features {
             privacy_mode: privacy_mode::is_privacy_mode_supported(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             terminal,
+            usbip,
             ..Default::default()
         })
         .into();
@@ -2086,7 +2105,7 @@ impl Connection {
         if !self.terminal {
             self.handle_windows_specific_session(&mut pi, &mut wait_session_id_confirm);
         }
-        if self.file_transfer.is_some() || self.terminal {
+        if self.file_transfer.is_some() || self.terminal || self.remote_usb {
             res.set_peer_info(pi);
         } else if self.view_camera {
             let supported_encoding = scrap::codec::Encoder::supported_encoding();
@@ -2189,6 +2208,10 @@ impl Connection {
             self.keyboard = false;
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             self.init_terminal_service().await;
+        } else if self.remote_usb {
+            self.keyboard = false;
+            #[cfg(target_os = "linux")]
+            self.init_usbip();
         } else if self.view_camera {
             if !wait_session_id_confirm {
                 self.try_sub_camera_displays();
@@ -2218,6 +2241,7 @@ impl Connection {
             && !self.is_port_forward()
             && !self.view_camera
             && !self.terminal
+            && !self.remote_usb
     }
 
     #[inline]
@@ -2375,6 +2399,17 @@ impl Connection {
         };
         mux.handle(ch, || {
             Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions)
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    fn handle_usb_channel(&mut self, ch: UsbChannel) {
+        let Some(usbip) = self.usbip.as_mut() else {
+            log::debug!("usb channel frame on a connection without an active usbip session");
+            return;
+        };
+        usbip.handle(ch, || {
+            Self::permission(keys::OPTION_ALLOW_USBIP, &self.control_permissions)
         });
     }
 
@@ -2662,6 +2697,7 @@ impl Connection {
                 keys::OPTION_ENABLE_RECORD_SESSION => Some(Permission::recording),
                 keys::OPTION_ENABLE_BLOCK_INPUT => Some(Permission::block_input),
                 keys::OPTION_ENABLE_PRIVACY_MODE => Some(Permission::privacy_mode),
+                keys::OPTION_ALLOW_USBIP => Some(Permission::usb),
                 _ => None,
             };
             if let Some(permission) = permission {
@@ -2700,6 +2736,7 @@ impl Connection {
         self.file_transfer = None;
         self.view_camera = false;
         self.terminal = false;
+        self.remote_usb = false;
         self.port_forward_address.clear();
         self.terminal_persistent = false;
     }
@@ -2751,6 +2788,10 @@ impl Connection {
                 push(&port.to_le_bytes());
                 push(&[*multiplex as u8]);
             }
+            Some(login_request::Union::RemoteUsb(u)) => {
+                let RemoteUsb { special_fields: _ } = u;
+                push(b"remote_usb");
+            }
             // Variants this build does not know execute as remote, so they latch as remote.
             None | Some(_) => push(b"remote"),
         }
@@ -2764,6 +2805,7 @@ impl Connection {
             Some(login_request::Union::ViewCamera(_)) => "view_camera",
             Some(login_request::Union::Terminal(_)) => "terminal",
             Some(login_request::Union::PortForward(_)) => "port_forward",
+            Some(login_request::Union::RemoteUsb(_)) => "remote_usb",
             _ => "remote",
         }
     }
@@ -2924,6 +2966,25 @@ impl Connection {
                     let (addr, _is_rdp) = Self::normalize_port_forward_target(&mut pf);
                     self.port_forward_address = addr;
                 }
+                Some(login_request::Union::RemoteUsb(_)) => {
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        self.send_login_error("USB forwarding is only supported on Linux")
+                            .await;
+                        sleep(1.).await;
+                        return false;
+                    }
+                    #[cfg(target_os = "linux")]
+                    {
+                        if !Self::permission(keys::OPTION_ALLOW_USBIP, &self.control_permissions)
+                        {
+                            self.send_login_error("No permission of USB forwarding").await;
+                            sleep(1.).await;
+                            return false;
+                        }
+                        self.remote_usb = true;
+                    }
+                }
                 _ => {
                     if !self.check_privacy_mode_on().await {
                         return false;
@@ -2934,6 +2995,7 @@ impl Connection {
             self.stream.set_send_timeout(
                 if self.file_transfer.is_some()
                     || self.terminal
+                    || self.remote_usb
                     || matches!(self.lr.union, Some(login_request::Union::PortForward(_)))
                 {
                     SEND_TIMEOUT_OTHER
@@ -4052,6 +4114,12 @@ impl Connection {
                     }
                 }
                 Some(message::Union::PortForwardChannel(ch)) => self.handle_port_forward_channel(ch),
+                Some(message::Union::UsbChannel(ch)) => {
+                    #[cfg(target_os = "linux")]
+                    self.handle_usb_channel(ch);
+                    #[cfg(not(target_os = "linux"))]
+                    log::warn!("USB channel frame received but not supported on this platform");
+                }
                 Some(message::Union::TerminalAction(action)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     allow_err!(self.handle_terminal_action(action).await);
@@ -5268,6 +5336,10 @@ impl Connection {
         if let Some(mut mux) = self.port_forward_mux.take() {
             mux.close_all();
         }
+        #[cfg(target_os = "linux")]
+        if let Some(mut usbip) = self.usbip.take() {
+            usbip.close_all();
+        }
     }
 
     // The `reason` should be consistent with `check_if_retry` if not empty
@@ -5742,7 +5814,12 @@ impl Connection {
         match self.authed_conn_type() {
             Some(AuthConnType::ViewCamera) => Self::scoped_view_camera_option(option).0,
             Some(AuthConnType::Terminal) => Self::scoped_terminal_login_option(option).0,
-            Some(AuthConnType::Remote | AuthConnType::FileTransfer | AuthConnType::PortForward)
+            Some(
+                AuthConnType::Remote
+                | AuthConnType::FileTransfer
+                | AuthConnType::PortForward
+                | AuthConnType::RemoteUsb,
+            )
             | None => None,
         }
     }
@@ -5821,7 +5898,7 @@ impl Connection {
             AuthConnType::Remote => (Some(option.clone()), None),
             AuthConnType::ViewCamera => Self::scoped_view_camera_option(option),
             AuthConnType::Terminal => Self::scoped_terminal_login_option(option),
-            AuthConnType::FileTransfer | AuthConnType::PortForward => {
+            AuthConnType::FileTransfer | AuthConnType::PortForward | AuthConnType::RemoteUsb => {
                 let violation = Self::option_has_any_field(option).then_some("login.option");
                 (None, violation)
             }
@@ -5872,6 +5949,7 @@ impl Connection {
             AuthConnType::PortForward => Self::is_port_forward_scoped_message(msg),
             AuthConnType::ViewCamera => Self::is_view_camera_scoped_message(msg),
             AuthConnType::Terminal => Self::is_terminal_scoped_message(msg),
+            AuthConnType::RemoteUsb => Self::is_usb_scoped_message(msg),
         };
         (!allowed).then(|| Self::message_family(msg))
     }
@@ -5948,6 +6026,10 @@ impl Connection {
             msg.union.as_ref(),
             Some(message::Union::PortForwardChannel(_))
         )
+    }
+
+    fn is_usb_scoped_message(msg: &Message) -> bool {
+        matches!(msg.union.as_ref(), Some(message::Union::UsbChannel(_)))
     }
 
     fn is_terminal_scoped_message(msg: &Message) -> bool {
@@ -6101,6 +6183,7 @@ impl Connection {
             Some(message::Union::TerminalAction(_)) => "terminal_action",
             Some(message::Union::TerminalResponse(_)) => "terminal_response",
             Some(message::Union::PortForwardChannel(_)) => "port_forward_channel",
+            Some(message::Union::UsbChannel(_)) => "usb_channel",
             Some(message::Union::Misc(misc)) => Self::misc_message_family(misc),
             Some(_) => "message.other",
             None => "empty",

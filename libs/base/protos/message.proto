@@ -76,6 +76,7 @@ message LoginRequest {
     PortForward port_forward = 8;
     ViewCamera view_camera = 15;
     Terminal terminal = 16;
+    RemoteUsb remote_usb = 18;
   }
   bool video_ack_required = 9;
   uint64 session_id = 10;
@@ -90,6 +91,8 @@ message Terminal {
   string service_id = 1;  // Service ID for reconnecting to existing session
 }
 
+message RemoteUsb {}
+
 message Auth2FA {
   string code = 1;
   bytes hwid = 2;
@@ -101,6 +104,7 @@ message Features {
   bool privacy_mode = 1;
   bool terminal = 2;
   bool port_forward_mux = 3;
+  bool usbip = 4;
 }
 
 message CodecAbility {
@@ -997,6 +1001,92 @@ message PortForwardChannel {
   }
 }
 
+message UsbListDevicesRequest {}
+
+message UsbDevice {
+  string bus_id = 1;
+  string vendor = 2;
+  string product = 3;
+  // Controlled side only: whether the device is currently bound/shared.
+  bool shared = 4;
+  // Controller side only: local vhci port if attached, -1 otherwise.
+  int32 attached_port = 5;
+}
+
+message UsbDeviceList {
+  repeated UsbDevice devices = 1;
+}
+
+message UsbBind {
+  string bus_id = 1;
+  bool bind = 2; // true = bind/share, false = unbind/unshare
+}
+
+message UsbBindResult {
+  string bus_id = 1;
+  bool bind = 2;
+  string error = 3; // empty on success
+}
+
+message UsbForwardOpen {
+  int32 channel_id = 1;
+  string bus_id = 2;
+}
+
+message UsbForwardOpened {
+  int32 channel_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message UsbForwardData {
+  int32 channel_id = 1;
+  bytes data = 2;
+}
+
+message UsbForwardClose {
+  int32 channel_id = 1;
+}
+
+// Each side starts every channel with a fixed receive window
+// (usbip_flow::CHANNEL_WINDOW) and returns credit as it drains data to the
+// local socket.
+message UsbForwardWindowUpdate {
+  int32 channel_id = 1;
+  uint32 add = 2;
+}
+
+// Controller -> controlled: "attach the device I just bound locally." The
+// controlled side then opens a channel back (UsbForwardOpen, with a negative
+// channel_id) to pull it, mirroring the controller's own pull flow in
+// reverse.
+message UsbPushRequest {
+  string bus_id = 1;
+}
+
+message UsbPushResult {
+  string bus_id = 1;
+  string error = 2; // empty on success
+}
+
+// Same shape as PortForwardChannel: one symmetric message carrying both the
+// device-listing/bind control plane and the forwarded USB/IP byte stream.
+message UsbChannel {
+  oneof union {
+    UsbListDevicesRequest list_devices = 1;
+    UsbDeviceList device_list = 2;
+    UsbBind bind = 3;
+    UsbBindResult bind_result = 4;
+    UsbForwardOpen open = 5;
+    UsbForwardOpened opened = 6;
+    UsbForwardData data = 7;
+    UsbForwardClose close = 8;
+    UsbPushRequest push_request = 9;
+    UsbPushResult push_result = 10;
+    UsbForwardWindowUpdate window_update = 11;
+  }
+}
+
 message Message {
   oneof union {
     SignedId signed_id = 3;
@@ -1030,5 +1120,6 @@ message Message {
     TerminalAction terminal_action = 31;
     TerminalResponse terminal_response = 32;
     PortForwardChannel port_forward_channel = 33;
+    UsbChannel usb_channel = 34;
   }
 }
