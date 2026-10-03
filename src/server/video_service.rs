@@ -1079,6 +1079,7 @@ fn get_encoder_config(
     Encoder::update(scrap::codec::EncodingUpdate::Check);
     // https://www.wowza.com/community/t/the-correct-keyframe-interval-in-obs-studio/95162
     let keyframe_interval = if record { Some(240) } else { None };
+    let hw_fps = VIDEO_QOS.lock().unwrap().fps().clamp(1, 120) as i32;
     let negotiated_codec = Encoder::negotiated_codec();
     match negotiated_codec {
         CodecFormat::H264 | CodecFormat::H265 => {
@@ -1091,6 +1092,7 @@ fn get_encoder_config(
                     quality,
                     feature,
                     keyframe_interval,
+                    fps: hw_fps,
                 });
             }
             #[cfg(feature = "hwcodec")]
@@ -1102,6 +1104,7 @@ fn get_encoder_config(
                     height: c.height,
                     quality,
                     keyframe_interval,
+                    fps: hw_fps,
                 });
             }
             EncoderCfg::VPX(VpxEncoderConfig {
