@@ -55,33 +55,27 @@ fn failed_quality_update_preserves_feedback_and_retries_same_target() {
             *VIDEO_QOS.lock().unwrap_or_else(|p| p.into_inner()) = std::mem::take(&mut self.0);
         }
     }
-    let _restore = RestoreQos(std::mem::take(&mut *VIDEO_QOS.lock().unwrap()));
-    let requested_ratio = {
-        let mut qos = VIDEO_QOS.lock().unwrap();
-        qos.store_bitrate(1000);
-        qos.ratio()
-    };
+    let mut qos = VideoQoS::default();
+    qos.store_bitrate(1000);
+    let requested_ratio = qos.ratio();
+    let _restore = RestoreQos(std::mem::replace(&mut *VIDEO_QOS.lock().unwrap(), qos));
     let mut ratio = requested_ratio * 2.;
     let mut encoder = Encoder {
         codec: Box::new(RejectOnceEncoder(true)),
     };
     let mut spf = Duration::ZERO;
-    let mut check = |ratio: &mut f32| {
+    for expected in [(requested_ratio * 2., 1000), (requested_ratio, 2000)] {
         check_qos(
             &mut encoder,
-            ratio,
+            &mut ratio,
             &mut spf,
             false,
             &mut 0,
             &mut Instant::now(),
             "",
         )
-    };
-
-    check(&mut ratio).unwrap();
-    let bitrate = VIDEO_QOS.lock().unwrap().bitrate();
-    assert_eq!((ratio, bitrate), (requested_ratio * 2., 1000));
-    check(&mut ratio).unwrap();
-    let bitrate = VIDEO_QOS.lock().unwrap().bitrate();
-    assert_eq!((ratio, bitrate), (requested_ratio, 2000));
+        .unwrap();
+        let bitrate = VIDEO_QOS.lock().unwrap().bitrate();
+        assert_eq!((ratio, bitrate), expected);
+    }
 }
