@@ -35,6 +35,7 @@ enum Desktop {
 /// request.
 pub struct WaitingTurnOn {
     impl_key: String,
+    conn_id: i32,
     shared: Arc<(Mutex<State>, Condvar)>,
 }
 
@@ -117,28 +118,46 @@ impl WaitingTurnOn {
                 guard.result = Some(res);
             }
         });
-        Self { impl_key, shared }
+        Self {
+            impl_key,
+            conn_id,
+            shared,
+        }
     }
 
-    /// The reply for the peer once the request has been made, `None` until then. It never
-    /// blocks, even while the turn-on is under way.
+    /// The reply for the peer once the request has been made, `None` until then. It doesn't
+    /// wait for a turn-on under way.
     pub fn reply(&self) -> Option<Message> {
-        let mut state = match self.shared.0.try_lock() {
-            Ok(state) => state,
-            Err(TryLockError::Poisoned(e)) => e.into_inner(),
-            Err(TryLockError::WouldBlock) => return None,
+        let res = {
+            let mut state = match self.shared.0.try_lock() {
+                Ok(state) => state,
+                Err(TryLockError::Poisoned(e)) => e.into_inner(),
+                Err(TryLockError::WouldBlock) => return None,
+            };
+            state.result.take()?
         };
-        let impl_key = self.impl_key.clone();
-        Some(match state.result.take()? {
-            Ok(true) => make_privacy_mode_msg(PrivacyModeState::PrvOnSucceeded, impl_key),
-            Ok(false) => make_privacy_mode_msg(PrivacyModeState::PrvOnFailed, impl_key),
-            Err(e) => make_privacy_mode_msg_with_details(
-                PrivacyModeState::PrvOnFailed,
-                e.to_string(),
-                impl_key,
-            ),
-        })
+        reply_for(
+            res,
+            get_privacy_mode_conn_id() == Some(self.conn_id),
+            self.impl_key.clone(),
+        )
     }
+}
+
+// A success is reported only while privacy mode is still on for the connection. If something
+// turned it off since (Ctrl+P on the controlled side, say), that has been reported already, and a
+// late success would make the peer show privacy mode on.
+fn reply_for(res: ResultType<bool>, still_on: bool, impl_key: String) -> Option<Message> {
+    Some(match res {
+        Ok(true) if !still_on => return None,
+        Ok(true) => make_privacy_mode_msg(PrivacyModeState::PrvOnSucceeded, impl_key),
+        Ok(false) => make_privacy_mode_msg(PrivacyModeState::PrvOnFailed, impl_key),
+        Err(e) => make_privacy_mode_msg_with_details(
+            PrivacyModeState::PrvOnFailed,
+            e.to_string(),
+            impl_key,
+        ),
+    })
 }
 
 impl Drop for WaitingTurnOn {
@@ -268,6 +287,13 @@ mod tests {
         );
         assert!(matches!(res, Some(Err(_))));
         assert_eq!(attempts, 1);
+    }
+
+    #[test]
+    fn a_success_is_not_reported_once_privacy_mode_is_off_again() {
+        assert!(reply_for(Ok(true), false, String::new()).is_none());
+        assert!(reply_for(Ok(true), true, String::new()).is_some());
+        assert!(reply_for(refused_by_the_lock_screen(), false, String::new()).is_some());
     }
 
     #[test]
