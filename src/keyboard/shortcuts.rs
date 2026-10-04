@@ -256,10 +256,10 @@ pub fn reload_from_config() {
     let is_wayland = crate::platform::linux::current_is_wayland();
     #[cfg(not(target_os = "linux"))]
     let is_wayland = false;
-    reload_from_raw(&raw, is_wayland);
+    reload_from_raw(&raw, std::env::consts::OS, is_wayland);
 }
 
-fn reload_from_raw(raw: &str, is_wayland: bool) {
+fn reload_from_raw(raw: &str, platform: &str, is_wayland: bool) {
     let mut parsed: Bindings = if raw.is_empty() {
         Bindings::default()
     } else {
@@ -271,11 +271,9 @@ fn reload_from_raw(raw: &str, is_wayland: bool) {
             }
         }
     };
-    // Keep the saved binding for X11, but do not consume a chord whose action
-    // is hidden and unsupported on this controller.
-    if is_wayland {
-        parsed.bindings.retain(|b| b.action != action_id::TOGGLE_RELATIVE_MOUSE_MODE);
-    }
+    // Match the controller capabilities in ShortcutModel, preserving storage
+    // for a later return to another platform or display server.
+    parsed.bindings.retain(|b| action_available_on_platform(&b.action, platform, is_wayland));
     match CACHE.write() {
         Ok(mut w) => {
             *w = Arc::new(parsed);
@@ -284,6 +282,22 @@ fn reload_from_raw(raw: &str, is_wayland: bool) {
             log::error!("Keyboard shortcut cache write lock is poisoned");
             *poison.into_inner() = Arc::new(parsed);
         }
+    }
+}
+
+fn action_available_on_platform(action: &str, platform: &str, is_wayland: bool) -> bool {
+    let mobile = matches!(platform, "android" | "ios");
+    match action {
+        action_id::TOGGLE_RELATIVE_MOUSE_MODE => !mobile && !is_wayland,
+        action_id::TOGGLE_FULLSCREEN | action_id::SCREENSHOT | action_id::SWITCH_TAB_NEXT
+        | action_id::SWITCH_TAB_PREV | action_id::CLOSE_TAB | action_id::SWITCH_SIDES
+        | action_id::TOGGLE_TOOLBAR | action_id::PIN_TOOLBAR | action_id::SWITCH_DISPLAY_ALL
+        | action_id::TOGGLE_ENABLE_FILE_COPY_PASTE | action_id::KEYBOARD_MODE_MAP
+        | action_id::KEYBOARD_MODE_TRANSLATE | action_id::KEYBOARD_MODE_LEGACY
+        | action_id::TOGGLE_SHOW_MY_CURSOR | action_id::TOGGLE_ZOOM_CURSOR => !mobile,
+        action_id::RESET_CANVAS => mobile,
+        action_id::TOGGLE_RECORDING | action_id::TOGGLE_VOICE_CALL => platform != "ios",
+        _ => true,
     }
 }
 
@@ -1010,13 +1024,13 @@ mod tests {
     fn reload_handles_missing_and_invalid_json() {
         let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // empty (no value set) → defaults
-        reload_from_raw("", false);
+        reload_from_raw("", "windows", false);
         let b = current();
         assert!(!b.enabled);
         assert!(b.bindings.is_empty());
 
         // invalid JSON → defaults (no panic)
-        reload_from_raw("not json", false);
+        reload_from_raw("not json", "windows", false);
         let b = current();
         assert!(!b.enabled);
     }
@@ -1030,10 +1044,10 @@ mod tests {
                 {"action":"toggle_mute","mods":["primary"],"key":"m"}
             ]
         }"#;
-        reload_from_raw(raw, false);
+        reload_from_raw(raw, "linux", false);
         let original = current();
         for is_wayland in [true, false] {
-            reload_from_raw(raw, is_wayland);
+            reload_from_raw(raw, "linux", is_wayland);
             let active = current();
             assert!(active.enabled);
             assert!(!active.pass_through);
@@ -1044,6 +1058,31 @@ mod tests {
             assert_eq!(match_normalized("m", &[Modifier::Primary], &active), Some(action_id::TOGGLE_MUTE));
         }
         assert_eq!(match_normalized("r", &[Modifier::Primary], &original), Some(action_id::TOGGLE_RELATIVE_MOUSE_MODE));
+    }
+
+    #[test]
+    fn active_cache_omits_platform_hidden_saved_actions() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let actions = [action_id::SWITCH_DISPLAY_ALL, action_id::KEYBOARD_MODE_MAP,
+            action_id::TOGGLE_SHOW_MY_CURSOR, action_id::TOGGLE_ZOOM_CURSOR,
+            action_id::TOGGLE_RECORDING, action_id::TOGGLE_VOICE_CALL,
+            action_id::RESET_CANVAS, action_id::TOGGLE_MUTE, action_id::SEND_CTRL_ALT_DEL];
+        let saved = Bindings { enabled: true, pass_through: false,
+            bindings: actions.iter().map(|action| Binding {
+                action: (*action).into(), mods: vec![Modifier::Primary], key: "m".into(),
+            }).collect() };
+        let raw = serde_json::to_string(&saved).unwrap();
+        for (platform, expected) in [
+            ("android", vec![action_id::TOGGLE_RECORDING, action_id::TOGGLE_VOICE_CALL,
+                action_id::RESET_CANVAS, action_id::TOGGLE_MUTE, action_id::SEND_CTRL_ALT_DEL]),
+            ("ios", vec![action_id::RESET_CANVAS, action_id::TOGGLE_MUTE, action_id::SEND_CTRL_ALT_DEL]),
+            ("macos", actions.iter().copied().filter(|a| *a != action_id::RESET_CANVAS).collect()),
+        ] {
+            reload_from_raw(&raw, platform, false);
+            let active = current();
+            assert_eq!(active.bindings.iter().map(|b| b.action.as_str()).collect::<Vec<_>>(), expected, "{platform}");
+        }
+        assert_eq!(serde_json::from_str::<Bindings>(&raw).unwrap(), saved);
     }
 
     #[cfg(feature = "flutter")]
