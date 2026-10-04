@@ -252,11 +252,15 @@ pub fn event_to_key_name(event: &rdev::Event) -> Option<String> {
 /// written.
 pub fn reload_from_config() {
     let raw = hbb_common::config::LocalConfig::get_option(LOCAL_CONFIG_KEY);
-    reload_from_raw(&raw);
+    #[cfg(target_os = "linux")]
+    let is_wayland = crate::platform::linux::current_is_wayland();
+    #[cfg(not(target_os = "linux"))]
+    let is_wayland = false;
+    reload_from_raw(&raw, is_wayland);
 }
 
-fn reload_from_raw(raw: &str) {
-    let parsed = if raw.is_empty() {
+fn reload_from_raw(raw: &str, is_wayland: bool) {
+    let mut parsed: Bindings = if raw.is_empty() {
         Bindings::default()
     } else {
         match serde_json::from_str(&raw) {
@@ -267,6 +271,11 @@ fn reload_from_raw(raw: &str) {
             }
         }
     };
+    // Keep the saved binding for X11, but do not consume a chord whose action
+    // is hidden and unsupported on this controller.
+    if is_wayland {
+        parsed.bindings.retain(|b| b.action != action_id::TOGGLE_RELATIVE_MOUSE_MODE);
+    }
     match CACHE.write() {
         Ok(mut w) => {
             *w = Arc::new(parsed);
@@ -994,15 +1003,40 @@ mod tests {
     fn reload_handles_missing_and_invalid_json() {
         let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // empty (no value set) → defaults
-        reload_from_raw("");
+        reload_from_raw("", false);
         let b = current();
         assert!(!b.enabled);
         assert!(b.bindings.is_empty());
 
         // invalid JSON → defaults (no panic)
-        reload_from_raw("not json");
+        reload_from_raw("not json", false);
         let b = current();
         assert!(!b.enabled);
+    }
+
+    #[test]
+    fn wayland_binding_is_inactive_and_returns_on_x11() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let raw = r#"{
+            "enabled": true, "pass_through": false, "bindings": [
+                {"action":"toggle_relative_mouse_mode","mods":["primary"],"key":"r"},
+                {"action":"toggle_mute","mods":["primary"],"key":"m"}
+            ]
+        }"#;
+        reload_from_raw(raw, false);
+        let original = current();
+        for is_wayland in [true, false] {
+            reload_from_raw(raw, is_wayland);
+            let active = current();
+            assert!(active.enabled);
+            assert!(!active.pass_through);
+            assert_eq!(
+                match_normalized("r", &[Modifier::Primary], &active),
+                if is_wayland { None } else { Some(action_id::TOGGLE_RELATIVE_MOUSE_MODE) },
+            );
+            assert_eq!(match_normalized("m", &[Modifier::Primary], &active), Some(action_id::TOGGLE_MUTE));
+        }
+        assert_eq!(match_normalized("r", &[Modifier::Primary], &original), Some(action_id::TOGGLE_RELATIVE_MOUSE_MODE));
     }
 
     #[cfg(feature = "flutter")]
