@@ -260,6 +260,11 @@ static DRM_DISPLAY_CACHE: std::sync::Mutex<Vec<DrmDisplayInfo>> = std::sync::Mut
 /// Bumped only when a change altered `DRM_DISPLAY_CACHE`; Release orders it after the cache write.
 static DRM_DISPLAY_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// The whole-hertz refresh of every driven CRTC the last enumeration saw, by (device, crtc), for
+/// a producer whose library cannot read the exact one: it then needs no connector probe of its own.
+static DRM_WHOLE_HZ: std::sync::Mutex<std::collections::BTreeMap<(String, u32), u32>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
 /// Displays this reader serves, plus the identity (`device:connector`) of each undriven output.
 fn drm_displays_from_reader(
     reader: &mut scrap::drm_reader::DrmReader,
@@ -267,8 +272,13 @@ fn drm_displays_from_reader(
 ) -> (Vec<DrmDisplayInfo>, Vec<String>) {
     let render_node = reader.render_node().unwrap_or_default();
     let mut undriven = Vec::new();
-    let displays: Vec<DrmDisplayInfo> = reader
-        .displays()
+    let snapshots = reader.displays();
+    if let Ok(mut hz) = DRM_WHOLE_HZ.lock() {
+        for d in snapshots.iter().filter(|d| d.active && d.crtc_id != 0) {
+            hz.insert((device.to_owned(), d.crtc_id), d.refresh_hz);
+        }
+    }
+    let displays: Vec<DrmDisplayInfo> = snapshots
         .into_iter()
         // Only outputs bound to a CRTC: a CONNECTED-but-unbound connector enumerates with
         // `crtc_id == 0`, and `open(crtc=0)` auto-selects the FIRST ACTIVE CRTC and streams ITS frames.
@@ -921,9 +931,11 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let worker_stop = stop.clone();
     let frames_gated = Arc::new(AtomicBool::new(false));
     let worker_gate = frames_gated.clone();
+    let demand_fps = Arc::new(std::sync::atomic::AtomicU8::new(0));
+    let worker_demand = demand_fps.clone();
     std::thread::Builder::new()
         .name("drm-capture".into())
-        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate))
+        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate, worker_demand))
         .map_err(|err| anyhow::anyhow!("could not spawn the drm capture worker: {err}"))?;
 
     let displays = match frame_rx.recv().await {
@@ -963,10 +975,13 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let mut seen_gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
     const DRM_FRAME_CREDIT: i32 = 2;
     let mut credit: i32 = DRM_FRAME_CREDIT;
+    let mut demand: u8 = 0;
+    let mut demand_logged: Option<(u8, std::time::Instant)> = None;
     let mut credit_since = std::time::Instant::now();
     let mut held_frame: Option<DrmProducerMsg> = None;
     loop {
-        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
+        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT, &mut demand)?;
+        note_drm_demand(&demand_fps, demand, target_crtc, &mut demand_logged);
         // While gated the worker does not grab, so it cannot advance its own MAX_STALLED watchdog: a
         // consumer that stops acking without closing the socket would otherwise hold this connection,
         // its worker thread and the privileged DRM context open indefinitely.
@@ -1058,7 +1073,8 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             }
             msg = frame_rx.try_recv().ok();
         }
-        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
+        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT, &mut demand)?;
+        note_drm_demand(&demand_fps, demand, target_crtc, &mut demand_logged);
         if credit <= 0 {
             held_frame = latest_frame;
             continue;
@@ -1103,17 +1119,108 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     Ok(())
 }
 
+/// The producer's tick when the consumer has not said its rate, and the WouldBlock retry period.
+const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
+/// Bound continuous no-frame (WouldBlock) time so a wedged device ends the stream (~5 s).
+const MAX_STALLED: u32 = 150;
+const _: () = assert!(
+    FRAME_INTERVAL.as_millis() * MAX_STALLED as u128 >= 4_500
+        && FRAME_INTERVAL.as_millis() * MAX_STALLED as u128 <= 5_500
+);
+/// A frame ack is one byte and every producer counts bytes, never their value, so a byte that
+/// also carries the consumer's encode rate is still exactly one credit to an older producer.
+const DRM_ACK_PLAIN: u8 = 0x01;
+const DRM_ACK_FPS_FLAG: u8 = 0x80;
+/// video_qos's ceiling; it fits the seven low bits.
+const DRM_MAX_DEMAND_FPS: u8 = 120;
+
+fn drm_ack_byte(fps: u8) -> u8 {
+    if fps == 0 {
+        DRM_ACK_PLAIN
+    } else {
+        DRM_ACK_FPS_FLAG | fps.min(DRM_MAX_DEMAND_FPS)
+    }
+}
+
+fn drm_ack_demand(b: u8) -> Option<u8> {
+    let fps = b & !DRM_ACK_FPS_FLAG;
+    (b & DRM_ACK_FPS_FLAG != 0 && (1..=DRM_MAX_DEMAND_FPS).contains(&fps)).then_some(fps)
+}
+
+/// One period of a panel refreshing at `num/den` Hz, rounded up so pacing never outruns it.
+fn drm_panel_period(num: u64, den: u64) -> std::time::Duration {
+    if num == 0 || den == 0 {
+        return std::time::Duration::ZERO;
+    }
+    let nanos = (u128::from(den) * 1_000_000_000).div_ceil(u128::from(num));
+    std::time::Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
+}
+
+/// Grab period for a consumer encoding at `demand_fps`, never faster than the panel: its own
+/// period above 30 fps, the old 33 ms tick from 30 down to 15, and below 15 half its period, so a
+/// slow consumer's frame is at most half its period old.
+fn drm_pacing_interval(demand_fps: u8, panel: std::time::Duration) -> std::time::Duration {
+    if demand_fps == 0 {
+        return FRAME_INTERVAL;
+    }
+    let want = std::time::Duration::from_secs(1) / u32::from(demand_fps);
+    want.min((want / 2).max(FRAME_INTERVAL)).max(panel)
+}
+
+/// When the worker's next tick starts. Without a demand it is the old sleep after the work;
+/// with one it is a deadline phased on the previous tick, and `now` after an overrun.
+fn drm_next_tick(
+    prev: std::time::Instant,
+    now: std::time::Instant,
+    demand_fps: u8,
+    panel: std::time::Duration,
+) -> std::time::Instant {
+    if demand_fps == 0 {
+        return now + FRAME_INTERVAL;
+    }
+    (prev + drm_pacing_interval(demand_fps, panel)).max(now)
+}
+
+/// Hands the consumer's rate to the worker. The measured part of it moves with almost every frame:
+/// this connection logs its first rate, then a different one at most every ten seconds.
+fn note_drm_demand(
+    shared: &std::sync::atomic::AtomicU8,
+    demand: u8,
+    crtc: u32,
+    logged: &mut Option<(u8, std::time::Instant)>,
+) {
+    shared.store(demand, std::sync::atomic::Ordering::Relaxed);
+    if drm_demand_log_due(*logged, demand, std::time::Instant::now()) {
+        log::debug!("drm: crtc {crtc}: the consumer encodes at {demand} fps");
+        *logged = Some((demand, std::time::Instant::now()));
+    }
+}
+
+fn drm_demand_log_due(
+    logged: Option<(u8, std::time::Instant)>,
+    demand: u8,
+    now: std::time::Instant,
+) -> bool {
+    demand != 0
+        && logged.map_or(true, |(v, at)| {
+            v != demand && now.saturating_duration_since(at) >= std::time::Duration::from_secs(10)
+        })
+}
+
+/// When the worker wakes: for the next frame, and at least every FRAME_INTERVAL, because each
+/// tick also reads the cursor and a slow frame rate must not slow the cursor down.
+fn drm_worker_wake(now: std::time::Instant, next_frame: std::time::Instant) -> std::time::Instant {
+    next_frame.min(now + FRAME_INTERVAL)
+}
+
 fn drm_capture_worker(
     frame_tx: tokio::sync::mpsc::Sender<DrmProducerMsg>,
     crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    demand_fps: std::sync::Arc<std::sync::atomic::AtomicU8>,
 ) {
     use std::sync::atomic::Ordering;
-    use std::time::Duration;
-    const FRAME_INTERVAL: Duration = Duration::from_millis(33);
-    // Bound continuous no-frame (WouldBlock) time so a wedged device ends the stream (~5 s).
-    const MAX_STALLED: u32 = 150;
 
     let t_conn = std::time::Instant::now();
 
@@ -1152,6 +1259,8 @@ fn drm_capture_worker(
         "drm: capture reader for crtc {target_crtc} opened in {:?}",
         t_open.elapsed()
     );
+    let mut panel = drm_read_panel_period(&mut reader, &target_device, target_crtc, None);
+    let mut panel_read_at = std::time::Instant::now();
 
     static DRM_CONN_EPOCH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let conn_epoch = DRM_CONN_EPOCH.fetch_add(1, Ordering::Relaxed);
@@ -1161,8 +1270,11 @@ fn drm_capture_worker(
     let mut last_cursor_id: u64 = 0;
     let mut stalled: u32 = 0;
     let mut logged_first = false;
+    let mut next_frame = std::time::Instant::now();
     while !stop.load(Ordering::Relaxed) {
-        let mut grabbed: Option<std::io::Result<DrmProducerMsg>> = if frames_gated.load(Ordering::Relaxed)
+        let frame_due = std::time::Instant::now() >= next_frame;
+        let mut grabbed: Option<std::io::Result<DrmProducerMsg>> = if !frame_due
+            || frames_gated.load(Ordering::Relaxed)
         {
             // `stalled` is left untouched because the device is healthy -- the task bounds this
             // state itself (CREDIT_STALL) since our watchdog cannot advance.
@@ -1239,6 +1351,8 @@ fn drm_capture_worker(
                     break;
                 }
                 std::thread::sleep(FRAME_INTERVAL);
+                // Or the first good grab after the stall finds its deadline gone and grabs twice.
+                next_frame = std::time::Instant::now();
                 continue;
             }
             Some(Err(err)) if use_dmabuf && err.kind() == std::io::ErrorKind::Unsupported => {
@@ -1278,8 +1392,47 @@ fn drm_capture_worker(
             }
         }
 
-        std::thread::sleep(FRAME_INTERVAL);
+        if panel_read_at.elapsed() >= std::time::Duration::from_secs(1) {
+            panel = drm_read_panel_period(&mut reader, &target_device, target_crtc, Some(panel));
+            panel_read_at = std::time::Instant::now();
+        }
+        let now = std::time::Instant::now();
+        // A frame tick the credit held back is retried one pacing interval later.
+        if frame_due {
+            next_frame = drm_next_tick(next_frame, now, demand_fps.load(Ordering::Relaxed), panel);
+        }
+        std::thread::sleep(drm_worker_wake(now, next_frame).saturating_duration_since(now));
     }
+}
+
+/// The panel period of `crtc`, exact when the library can say (libdrmtap 0.5.9, one GETCRTC), else
+/// the whole-hertz refresh the last enumeration saw; zero when neither is known, which leaves the
+/// pacing to the demand.
+fn drm_read_panel_period(
+    reader: &mut scrap::drm_reader::DrmReader,
+    device: &str,
+    crtc: u32,
+    prev: Option<std::time::Duration>,
+) -> std::time::Duration {
+    let (period, how) = match reader.crtc_refresh() {
+        Some((num, den)) => (drm_panel_period(num, den), format!("{num}/{den} Hz")),
+        None => {
+            let hz = drm_whole_hz(device, crtc);
+            (drm_panel_period(u64::from(hz), 1), format!("{hz} Hz (whole hertz)"))
+        }
+    };
+    if prev != Some(period) {
+        log::debug!("drm: crtc {crtc} refreshes at {how}: grabs never outpace {period:?}");
+    }
+    period
+}
+
+fn drm_whole_hz(device: &str, crtc: u32) -> u32 {
+    DRM_WHOLE_HZ
+        .lock()
+        .ok()
+        .and_then(|hz| hz.get(&(device.to_owned(), crtc)).copied())
+        .unwrap_or(0)
 }
 
 /// Ancillary-fd transport for `_drm`: `Framed`/`BytesCodec` cannot carry an SCM_RIGHTS cmsg, so the
@@ -1510,7 +1663,7 @@ impl DrmConn {
         drm_send_frame(&self.stream, &payload, pass_fd).await
     }
 
-    pub async fn send_frame_ack(&self) -> ResultType<()> {
+    pub async fn send_frame_ack(&self, demand_fps: u8) -> ResultType<()> {
         let deadline =
             tokio::time::Instant::now() + std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS);
         loop {
@@ -1520,7 +1673,7 @@ impl DrmConn {
                     "drm: _drm frame-ack was not accepted within {DRM_SEND_TIMEOUT_MS}ms; closing"
                 ),
             }
-            match self.stream.try_write(&[1u8]) {
+            match self.stream.try_write(&[drm_ack_byte(demand_fps)]) {
                 Ok(n) if n > 0 => return Ok(()),
                 Ok(_) => bail!("drm: _drm frame-ack write returned 0 (peer closed)"),
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
@@ -1529,7 +1682,7 @@ impl DrmConn {
         }
     }
 
-    pub fn drain_frame_acks(&self, credit: &mut i32, max: i32) -> ResultType<()> {
+    pub fn drain_frame_acks(&self, credit: &mut i32, max: i32, demand: &mut u8) -> ResultType<()> {
         let mut buf = [0u8; 64];
         // BOUNDED: "until WouldBlock" is the peer's promise; a continuous writer would pin us.
         const MAX_ACK_READS: usize = 64;
@@ -1538,6 +1691,9 @@ impl DrmConn {
                 Ok(0) => bail!("drm: _drm frame-ack peer closed"),
                 Ok(n) => {
                     *credit = (*credit + n as i32).min(max);
+                    if let Some(d) = buf[..n].iter().rev().find_map(|&b| drm_ack_demand(b)) {
+                        *demand = d;
+                    }
                     if *credit >= max {
                         return Ok(());
                     }
@@ -1618,6 +1774,45 @@ impl DrmConn {
         out.resize(len, 0);
         drm_read_full(&self.stream, &mut out[..], false, &mut self.consumed).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod drm_pacing_tests {
+    use super::*;
+    use hbb_common::tokio;
+
+    /// An ack is one credit, as an older producer counts it, and a new one reads the demand from it.
+    #[tokio::test]
+    async fn a_demand_ack_is_one_credit_and_carries_the_demand() {
+        let (a, b) = tokio::net::UnixStream::pair().unwrap();
+        let tx = DrmConn::new(a);
+        let rx = DrmConn::new(b);
+        tx.send_frame_ack(60).await.unwrap();
+        rx.wait_readable().await.unwrap();
+        let (mut credit, mut demand) = (0, 0);
+        rx.drain_frame_acks(&mut credit, 2, &mut demand).unwrap();
+        assert_eq!((credit, demand), (1, 60));
+    }
+
+    #[test]
+    fn the_pacing_interval_follows_the_demand_with_the_panel_as_floor() {
+        let p60 = drm_panel_period(60, 1);
+        let p2998 = drm_panel_period(131375, 4382);
+        assert_eq!(
+            drm_panel_period(148352, 2475),
+            std::time::Duration::from_nanos(16_683_294),
+            "59.94 Hz, rounded up"
+        );
+        let cases = [
+            (0u8, p60, FRAME_INTERVAL, "no demand: the old tick"),
+            (60, p60, p60, "60 on a 60 Hz panel"),
+            (120, p60, p60, "more than the panel shows: the panel"),
+            (60, p2998, p2998, "a 29.98 Hz panel, exactly"),
+        ];
+        for (demand, panel, want, why) in cases {
+            assert_eq!(drm_pacing_interval(demand, panel), want, "{why}");
+        }
     }
 }
 

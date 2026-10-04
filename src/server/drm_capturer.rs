@@ -81,6 +81,62 @@ struct Shared {
     // it: a receive thread that has seen the transform sees this too. `None` means this stream
     // never measures. Read once per shape arrival, never on the frame path.
     cal_context: Mutex<Option<CalContext>>,
+    // The rate the encoder takes frames at, carried on every ack so the producer grabs no faster.
+    // 0 until the first frame() call, which keeps the producer on its old 33 ms tick.
+    demand_fps: std::sync::atomic::AtomicU8,
+    pace: Mutex<EncoderPace>,
+}
+
+/// The encoder's own time per frame: from one frame() call to the next, less what the call spent
+/// waiting for a frame, smoothed. Work inside frame() (a rotation) counts; the wait does not, so a
+/// late producer cannot talk its own demand down.
+#[derive(Default)]
+struct EncoderPace {
+    last_call: Option<Instant>,
+    last_wait: Duration,
+    busy: Option<Duration>,
+}
+
+impl EncoderPace {
+    fn on_call(&mut self, now: Instant) {
+        if let Some(prev) = self.last_call {
+            let sample = now
+                .saturating_duration_since(prev)
+                .saturating_sub(self.last_wait)
+                .min(Duration::from_secs(1));
+            self.busy = Some(self.busy.map_or(sample, |avg| (avg * 7 + sample) / 8));
+        }
+        self.last_call = Some(now);
+        self.last_wait = Duration::ZERO;
+    }
+}
+
+/// Records how long a frame() call waited for a frame, on every way out of the wait.
+struct WaitStamp<'a>(&'a Mutex<EncoderPace>, Instant);
+
+impl Drop for WaitStamp<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut pace) = self.0.lock() {
+            pace.last_wait = self.1.elapsed();
+        }
+    }
+}
+
+/// The rate to grab at for an encoder that asks for `spf` and is busy `busy` per frame: what it
+/// asks for, or what it achieves when that is less.
+fn demand_fps_of(spf: Duration, busy: Option<Duration>) -> u8 {
+    let max = f64::from(super::video_qos::MAX_FPS);
+    let asked = if spf.is_zero() {
+        max
+    } else {
+        // f32 makes 1/60 read 59.99999: round, or 60 would be asked as 59.
+        (1.0 / spf.as_secs_f64()).round().clamp(1.0, max)
+    };
+    let achieved = match busy {
+        Some(o) if o > spf => (1.0 / o.as_secs_f64()).ceil().clamp(1.0, max),
+        _ => max,
+    };
+    asked.min(achieved) as u8
 }
 
 pub struct IpcDrmCapturer {
@@ -372,6 +428,8 @@ impl IpcDrmCapturer {
             cv: Condvar::new(),
             cursor_transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
             cal_context: Mutex::new(None),
+            demand_fps: std::sync::atomic::AtomicU8::new(0),
+            pace: Mutex::new(EncoderPace::default()),
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<ResultType<(Vec<DrmDisplayInfo>, usize)>>();
@@ -470,8 +528,17 @@ impl Drop for IpcDrmCapturer {
 
 impl TraitCapturer for IpcDrmCapturer {
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
+        // video_service passes its spf as the timeout: that, and how busy it is between calls, is
+        // the rate the producer is asked for.
+        {
+            let mut pace = self.shared.pace.lock().unwrap();
+            pace.on_call(Instant::now());
+            let demand = demand_fps_of(timeout, pace.busy);
+            self.shared.demand_fps.store(demand, Ordering::Relaxed);
+        }
         let deadline = Instant::now() + timeout;
         {
+            let waited = WaitStamp(&self.shared.pace, Instant::now());
             let mut slot = self.shared.slot.lock().unwrap();
             loop {
                 if slot.latest.is_some() || slot.ended.is_some() {
@@ -487,6 +554,7 @@ impl TraitCapturer for IpcDrmCapturer {
             }
             if let Some((w, h, fmt, plane_rotation, buf)) = slot.latest.take() {
                 drop(slot);
+                drop(waited);
                 // A layout change bumps the generation and is otherwise invisible here (mode
                 // and framebuffer keep their size). Rebuild for the new transform; not counted
                 // against health: the layout moved, the display did not fail.
@@ -782,7 +850,7 @@ async fn recv_thread(
                 // `recv_fd` closes at the end of this iteration, AFTER convert imported it.
                 // Ack so the producer RELEASES ONE SEND CREDIT and forwards the next; this bounds
                 // the socket to a couple of in-flight frames instead of a stale backlog.
-                if let Err(err) = conn.send_frame_ack().await {
+                if let Err(err) = conn.send_frame_ack(shared.demand_fps.load(Ordering::Relaxed)).await {
                     break format!("frame ack: {err}");
                 }
             }
@@ -836,7 +904,7 @@ async fn recv_thread(
                     Ok(Err(err)) => break format!("frame body: {err}"),
                 }
                 // Ack this CPU frame too (flow control; see the dma-buf arm above).
-                if let Err(err) = conn.send_frame_ack().await {
+                if let Err(err) = conn.send_frame_ack(shared.demand_fps.load(Ordering::Relaxed)).await {
                     break format!("frame ack: {err}");
                 }
             }
@@ -2336,6 +2404,8 @@ mod drm_capturer_tests {
                 cv: Condvar::new(),
                 cursor_transform: std::sync::atomic::AtomicI32::new(0),
                 cal_context: Mutex::new(None),
+                demand_fps: std::sync::atomic::AtomicU8::new(0),
+                pace: Mutex::new(EncoderPace::default()),
             }),
             stop: Arc::new(AtomicBool::new(false)),
             display: 0,

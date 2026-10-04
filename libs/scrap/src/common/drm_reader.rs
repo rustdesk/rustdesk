@@ -309,6 +309,8 @@ pub struct DisplaySnapshot {
     pub y: i32,
     pub width: u32,
     pub height: u32,
+    /// The kernel's whole-hertz vrefresh: 59.94 reads 60. `DrmReader::crtc_refresh` is exact.
+    pub refresh_hz: u32,
     pub active: bool,
 }
 
@@ -545,6 +547,17 @@ impl DrmReader {
         self.last_plane_rotation
     }
 
+    /// The refresh of the captured CRTC in hertz as the reduced fraction `(num, den)` of its
+    /// current mode, read now. `None` when the library predates the call (0.5.9) or the CRTC has
+    /// no mode.
+    pub fn crtc_refresh(&mut self) -> Option<(u64, u64)> {
+        let f = self.lib.crtc_refresh?;
+        let (mut num, mut den) = (0u64, 0u64);
+        // SAFETY: self.ctx is a live context and both outputs outlive the call.
+        let rc = unsafe { f(self.ctx, &mut num, &mut den) };
+        (rc == 0 && num != 0 && den != 0).then_some((num, den))
+    }
+
     fn read_plane_rotation(&mut self) -> Option<u32> {
         let f = self.lib.plane_rotation?;
         let mut rotation: u32 = 0;
@@ -755,6 +768,7 @@ impl DrmReader {
                         y: raw[i].y as i32,
                         width: raw[i].width,
                         height: raw[i].height,
+                        refresh_hz: raw[i].refresh_hz,
                         active: raw[i].active != 0,
                     }
                 })
@@ -1100,5 +1114,65 @@ mod plane_rotation_tests {
         PLANE.store(0x8, Ordering::SeqCst);
         r.grab_desc().expect("the fake export succeeds");
         assert_eq!(r.plane_rotation(), Some(0x8), "dma-buf export");
+    }
+}
+
+#[cfg(test)]
+mod crtc_refresh_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+
+    static RC: AtomicI32 = AtomicI32::new(0);
+    static NUM: AtomicU64 = AtomicU64::new(0);
+    static DEN: AtomicU64 = AtomicU64::new(0);
+
+    unsafe extern "C" fn crtc_refresh(_: *mut drmtap_ctx, num: *mut u64, den: *mut u64) -> c_int {
+        *num = NUM.load(Ordering::SeqCst);
+        *den = DEN.load(Ordering::SeqCst);
+        RC.load(Ordering::SeqCst)
+    }
+    unsafe extern "C" fn grab_mapped(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) -> c_int {
+        -1
+    }
+    unsafe extern "C" fn frame_release(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) {}
+    unsafe extern "C" fn grab_desc(
+        _: *mut drmtap_ctx,
+        _: *mut drmtap_dmabuf_desc,
+        _: *mut drmtap_frame_info,
+    ) -> c_int {
+        -1
+    }
+    unsafe extern "C" fn plane_rotation(_: *mut drmtap_ctx, _: *mut u32) -> c_int {
+        -1
+    }
+
+    fn reader(with_call: bool) -> DrmReader {
+        let mut lib = DrmtapLib::fake(grab_mapped, frame_release, grab_desc, plane_rotation);
+        if with_call {
+            lib.crtc_refresh = Some(crtc_refresh);
+        }
+        DrmReader {
+            lib: Box::leak(Box::new(lib)),
+            ctx: std::ptr::null_mut(),
+            buf: Vec::new(),
+            last_provenance: -1,
+            last_plane_rotation: None,
+        }
+    }
+
+    /// rustdesk#16175: the exact refresh paces the producer; an older library has no answer.
+    #[test]
+    fn the_crtc_refresh_is_a_fraction_or_nothing() {
+        assert_eq!(reader(false).crtc_refresh(), None, "a library before 0.5.9");
+        let mut r = reader(true);
+        RC.store(0, Ordering::SeqCst);
+        NUM.store(148352, Ordering::SeqCst);
+        DEN.store(2475, Ordering::SeqCst);
+        assert_eq!(r.crtc_refresh(), Some((148352, 2475)));
+        RC.store(-hbb_common::libc::ENODATA, Ordering::SeqCst);
+        assert_eq!(r.crtc_refresh(), None, "a CRTC with no mode");
+        RC.store(0, Ordering::SeqCst);
+        DEN.store(0, Ordering::SeqCst);
+        assert_eq!(r.crtc_refresh(), None, "a zero denominator is no answer");
     }
 }

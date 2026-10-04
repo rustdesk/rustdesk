@@ -2086,10 +2086,14 @@ jobs:
               cargo test --locked --lib --features drm peer_abs_sample_tests
             run_drm_tests "rustdesk input_map_tests" \
               cargo test --locked --lib --features drm input_map_tests
+            run_drm_tests "rustdesk drm_pacing_tests" \
+              cargo test --locked --lib --features drm drm_pacing_tests
             run_drm_tests "scrap hotspot_provenance_tests" \
               cargo test --locked -p scrap --features drm hotspot_provenance_tests
             run_drm_tests "scrap hotspot_guess_tests" \
               cargo test --locked -p scrap --features drm hotspot_guess_tests
+            run_drm_tests "scrap crtc_refresh_tests" \
+              cargo test --locked -p scrap --features drm crtc_refresh_tests
             run_drm_tests "scrap plane_rotation_tests" \
               cargo test --locked -p scrap --features drm plane_rotation_tests
             cargo build --locked --lib --features "$FEATURES" --release
