@@ -82,7 +82,7 @@ pub mod client {
                 return self.send_layout_key_down(&pressed);
             }
             let mut pressed = LayoutKey {
-                keycode: mapping.keycode,
+                key: mapping.key,
                 modifiers: Vec::new(),
             };
             for keycode in mapping.modifiers {
@@ -111,11 +111,11 @@ pub mod client {
             for keycode in &pressed.modifiers {
                 self.send_raw_key(*keycode, true)?;
             }
-            self.send_raw_key(pressed.keycode, true)
+            self.send(Data::Keyboard(DataKeyboard::KeyDown(pressed.key)))
         }
 
         fn release_layout_key(&mut self, pressed: &LayoutKey) -> ResultType<()> {
-            let mut result = self.send_raw_key(pressed.keycode, false);
+            let mut result = self.send(Data::Keyboard(DataKeyboard::KeyUp(pressed.key)));
             for keycode in pressed.modifiers.iter().rev() {
                 // Attempt every release even if an earlier send failed.
                 result = result.and(self.send_raw_key(*keycode, false));

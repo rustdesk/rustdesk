@@ -16,6 +16,7 @@ const GNOME_DEFAULT_LAYOUT: &str = "us";
 pub(super) enum Source {
     Gnome(Names),
     Wayland { keymap: Vec<u8>, group: Option<u32> },
+    Xwayland { keymap: Vec<u8>, group: Option<u32> },
 }
 
 #[derive(PartialEq, Eq)]
@@ -30,15 +31,27 @@ impl Source {
     pub fn read() -> ResultType<Self> {
         let connection = Connection::new_session()?;
         if name_has_owner(&connection, "org.gnome.Shell")? {
-            return Ok(Self::Gnome(gnome_layout()?));
+            if let Some(names) = gnome_layout()? {
+                return Ok(Self::Gnome(names));
+            }
+            return Ok(Self::Wayland {
+                keymap: super::wayland::read_keymap()?,
+                group: None,
+            });
         }
-        let keymap = super::wayland::read_keymap()?;
-        let group = if name_has_owner(&connection, "org.kde.keyboard")? {
-            Some(kde_layout_group(&connection)?)
-        } else {
-            None
-        };
-        Ok(Self::Wayland { keymap, group })
+        let kde_layouts = name_has_owner(&connection, "org.kde.keyboard")?;
+        // KWin 5 does not publish the layout service for a single-layout map.
+        if kde_layouts || name_has_owner(&connection, "org.kde.KWin")? {
+            return Ok(Self::Wayland {
+                keymap: super::wayland::read_keymap()?,
+                group: if kde_layouts {
+                    Some(kde_layout_group(&connection)?)
+                } else {
+                    None
+                },
+            });
+        }
+        super::xwayland::read()
     }
 }
 
@@ -58,7 +71,7 @@ fn kde_layout_group(connection: &Connection) -> ResultType<u32> {
     Ok(group)
 }
 
-fn gnome_layout() -> ResultType<Names> {
+fn gnome_layout() -> ResultType<Option<Names>> {
     let schemas = gio::SettingsSchemaSource::default()
         .ok_or_else(|| anyhow!("GSettings schemas are unavailable"))?;
     let schema = schemas
@@ -73,7 +86,10 @@ fn gnome_layout() -> ResultType<Names> {
         .iter()
         .find(|source| sources.contains(source))
         .or(sources.first());
-    let (layout, variant) = gnome_source_layout(selected)?;
+    let Some((layout, variant)) = gnome_source_layout(selected)? else {
+        // IBus engines without an XKB override use the compositor's keymap.
+        return Ok(None);
+    };
     if layout.is_empty() {
         bail!("GNOME input source has an empty layout");
     }
@@ -84,23 +100,25 @@ fn gnome_layout() -> ResultType<Names> {
     } else {
         String::new()
     };
-    Ok(Names {
+    Ok(Some(Names {
         model: CString::new(model)?,
         layout: CString::new(layout)?,
         variant: CString::new(variant)?,
         options: CString::new(options.join(","))?,
-    })
+    }))
 }
 
-fn gnome_source_layout(selected: Option<&(String, String)>) -> ResultType<(String, String)> {
+fn gnome_source_layout(
+    selected: Option<&(String, String)>,
+) -> ResultType<Option<(String, String)>> {
     let Some((kind, id)) = selected else {
         // GNOME Shell selects this layout when no input source is configured.
-        return Ok((GNOME_DEFAULT_LAYOUT.to_owned(), String::new()));
+        return Ok(Some((GNOME_DEFAULT_LAYOUT.to_owned(), String::new())));
     };
     match kind.as_str() {
         "xkb" => {
             let (layout, variant) = id.split_once('+').unwrap_or((id.as_str(), ""));
-            Ok((layout.to_owned(), variant.to_owned()))
+            Ok(Some((layout.to_owned(), variant.to_owned())))
         }
         "ibus" => ibus::layout(id),
         _ => bail!("Unsupported GNOME input source type: {}", kind),

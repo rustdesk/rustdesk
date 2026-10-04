@@ -1,12 +1,16 @@
 use super::{source::Source, Keymap, LayoutKey, CAPS_LOCK_BIT, NUM_LOCK_BIT};
-use base::message_proto::{key_event, KeyEvent, KeyboardMode};
-use hbb_common::{anyhow::anyhow, lazy_static, ResultType};
+use base::{
+    config::keys::OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK,
+    message_proto::{key_event, KeyEvent, KeyboardMode},
+};
+use hbb_common::{anyhow::anyhow, config::Config, lazy_static, ResultType};
 use std::{
     sync::{Mutex, RwLock},
     time::{Duration, Instant},
 };
 
 const LAYOUT_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
+const LAYOUT_WARNING_INTERVAL: Duration = Duration::from_secs(5);
 
 lazy_static::lazy_static! {
     static ref REFRESH: Mutex<Refresh> = Mutex::new(Refresh::default());
@@ -34,8 +38,17 @@ pub(in crate::server::uinput) fn prepare_layout(event: &KeyEvent) {
         return;
     }
     if let Err(error) = refresh.update() {
-        refresh.source = None;
-        *CURRENT.write().unwrap() = Err(error.to_string());
+        let mut current = CURRENT.write().unwrap();
+        if current.is_err() {
+            *current = Err(error.to_string());
+        }
+        hbb_common::throttled_log!(
+            LAYOUT_WARNING_INTERVAL,
+            warn,
+            "Uinput layout refresh failed (previous mapping retained: {}): {}",
+            current.is_ok(),
+            error
+        );
     }
     refresh.checked = Some(Instant::now());
 }
@@ -46,7 +59,15 @@ impl Refresh {
         if self.source.as_ref() == Some(&source) {
             return Ok(());
         }
-        let keymap = Keymap::load(&source)?;
+        let keymap = match Keymap::load(&source) {
+            Ok(keymap) => keymap,
+            Err(error) => {
+                // A newly observed layout cannot use the previous layout's map.
+                self.source = None;
+                *CURRENT.write().unwrap() = Err(error.to_string());
+                return Err(error);
+            }
+        };
         *CURRENT.write().unwrap() = Ok(keymap);
         self.source = Some(source);
         Ok(())
@@ -71,7 +92,25 @@ pub(in crate::server::uinput) fn resolve(
     locks: (bool, bool),
 ) -> ResultType<LayoutKey> {
     let current = CURRENT.read().unwrap();
-    let keymap = current.as_ref().map_err(|error| anyhow!("{}", error))?;
+    let keymap = match current.as_ref() {
+        Ok(keymap) => keymap,
+        Err(error) => {
+            if Config::get_option(OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK) == "Y" {
+                return Err(anyhow!("{}", error));
+            }
+            hbb_common::throttled_log!(
+                LAYOUT_WARNING_INTERVAL,
+                warn,
+                "Uinput layout unavailable: {}; using legacy character mapping (may differ from the host layout). Set {}=Y to disable",
+                error,
+                OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK
+            );
+            return Ok(LayoutKey {
+                key: enigo::Key::Layout(character),
+                modifiers: Vec::new(),
+            });
+        }
+    };
     let index = usize::from(locks.0) * CAPS_LOCK_BIT + usize::from(locks.1) * NUM_LOCK_BIT;
     keymap.maps[index]
         .get(&character)

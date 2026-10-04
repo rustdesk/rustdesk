@@ -14,7 +14,7 @@ const ENGINE_NAME_FIELD: usize = 2;
 const ENGINE_LAYOUT_FIELD: usize = 9;
 const ENGINE_VARIANT_FIELD: usize = 14;
 
-pub(super) fn layout(id: &str) -> ResultType<(String, String)> {
+pub(super) fn layout(id: &str) -> ResultType<Option<(String, String)>> {
     let connection = Connection::from(Channel::open_private(&address()?)?);
     let bus = connection.with_proxy(
         "org.freedesktop.DBus",
@@ -38,10 +38,13 @@ pub(super) fn layout(id: &str) -> ResultType<(String, String)> {
     {
         bail!("IBus returned an unexpected engine description");
     }
-    Ok((
-        field(&fields, ENGINE_LAYOUT_FIELD)?.to_owned(),
-        field(&fields, ENGINE_VARIANT_FIELD)?.to_owned(),
-    ))
+    let layout = field(&fields, ENGINE_LAYOUT_FIELD)?;
+    if layout.is_empty() || layout == "default" {
+        return Ok(None);
+    }
+    let variant = field(&fields, ENGINE_VARIANT_FIELD)?;
+    let variant = if variant == "default" { "" } else { variant };
+    Ok(Some((layout.to_owned(), variant.to_owned())))
 }
 
 fn field<'a>(fields: &[&'a dyn RefArg], index: usize) -> ResultType<&'a str> {

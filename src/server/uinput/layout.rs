@@ -5,6 +5,7 @@ use xkbcommon_dl::{self as xkb, keysyms};
 mod cache;
 mod source;
 mod wayland;
+mod xwayland;
 
 pub(super) use cache::{prepare_layout, resolve};
 
@@ -16,7 +17,7 @@ const DEFAULT_GROUP: u32 = 0;
 
 #[derive(Clone)]
 pub(super) struct LayoutKey {
-    pub keycode: u16,
+    pub key: enigo::Key,
     pub modifiers: Vec<u16>,
 }
 
@@ -58,7 +59,9 @@ impl XkbKeymap {
             group: DEFAULT_GROUP,
         };
         let groups = unsafe { (api.xkb_keymap_num_layouts)(keymap.map.as_ptr()) };
-        if let source::Source::Wayland { group, .. } = source {
+        if let source::Source::Wayland { group, .. } | source::Source::Xwayland { group, .. } =
+            source
+        {
             if groups > 1 {
                 keymap.group =
                     group.ok_or_else(|| anyhow!("Cannot determine the active XKB group"))?;
@@ -101,7 +104,8 @@ fn compile(api: &xkb::XkbCommon, source: &source::Source) -> ResultType<NonNull<
                 };
                 (api.xkb_keymap_new_from_names)(context.as_ptr(), &names, flags)
             }
-            source::Source::Wayland { keymap: bytes, .. } => (api.xkb_keymap_new_from_string)(
+            source::Source::Wayland { keymap: bytes, .. }
+            | source::Source::Xwayland { keymap: bytes, .. } => (api.xkb_keymap_new_from_string)(
                 context.as_ptr(),
                 bytes.as_ptr().cast(),
                 xkb::xkb_keymap_format::XKB_KEYMAP_FORMAT_TEXT_V1,
@@ -239,7 +243,7 @@ impl<'a> State<'a> {
                     char::from_u32(codepoint).filter(|character| *character != '\0')
                 {
                     mappings.entry(character).or_insert_with(|| LayoutKey {
-                        keycode,
+                        key: enigo::Key::Raw(keycode),
                         modifiers: selected.iter().map(|modifier| modifier.keycode).collect(),
                     });
                 }
