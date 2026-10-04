@@ -1073,7 +1073,7 @@ class InputModel {
     if (isViewCamera) return null;
     final keyName = physicalKeyName(key);
     if (keyName == null) return null;
-    final config = ShortcutModel.config();
+    final config = ShortcutModel.config(active: true);
     if (!config.enabled || config.passThrough) return null;
     final mods = <String>[];
     if (isMacOS || isIOS || isWebOnMacOs) {

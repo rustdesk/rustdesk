@@ -101,17 +101,22 @@ class ShortcutModel {
 
   static String _configRaw = '';
   static ShortcutConfig _config = ShortcutConfig.parse('');
+  static ShortcutConfig _activeConfig = _config;
 
   /// The stored config, parsed once per distinct stored value. The Flutter
   /// matcher reads it on every key press, so a key press costs one config
   /// read and no JSON parsing while the config is unchanged.
-  static ShortcutConfig config() {
+  /// Runtime matching requests [active] to exclude unsupported Wayland bindings
+  /// while retaining the stored config for a later return to X11.
+  static ShortcutConfig config({bool active = false}) {
     final raw = bind.mainGetLocalOption(key: kShortcutLocalConfigKey);
     if (raw != _configRaw) {
       _config = ShortcutConfig.parse(raw);
+      _activeConfig = _config.forPlatform(
+          isWayland: isLinux && bind.mainCurrentIsWayland());
       _configRaw = raw;
     }
-    return _config;
+    return active ? _activeConfig : _config;
   }
 
   /// Read the bindings JSON from LocalConfig. Returns a copy the caller may
@@ -239,6 +244,16 @@ class ShortcutConfig {
   final List<Map<String, dynamic>> bindings;
 
   const ShortcutConfig._(this.enabled, this.passThrough, this.bindings);
+
+  ShortcutConfig forPlatform({required bool isWayland}) {
+    if (!isWayland) return this;
+    return ShortcutConfig._(
+      enabled,
+      passThrough,
+      List.unmodifiable(bindings.where(
+          (b) => b['action'] != kShortcutActionToggleRelativeMouseMode)),
+    );
+  }
 
   static ShortcutConfig parse(String raw) {
     if (raw.isEmpty) return const ShortcutConfig._(false, false, []);

@@ -500,6 +500,32 @@ void main() {
     }
   });
 
+  test('Wayland active config preserves stored bindings and flags', () {
+    const relative = {
+      'action': kShortcutActionToggleRelativeMouseMode,
+      'mods': ['primary'],
+      'key': 'r',
+    };
+    const mute = {
+      'action': kShortcutActionToggleMute,
+      'mods': ['primary'],
+      'key': 'm',
+    };
+    for (final flags in [(true, false), (false, false), (true, true)]) {
+      final stored = ShortcutConfig.parse(jsonEncode({
+        'enabled': flags.$1,
+        'pass_through': flags.$2,
+        'bindings': [relative, mute],
+      }));
+      final active = stored.forPlatform(isWayland: true);
+      expect(active.bindings, [mute]);
+      expect(active.enabled, flags.$1);
+      expect(active.passThrough, flags.$2);
+      expect(stored.bindings, [relative, mute]);
+      expect(stored.forPlatform(isWayland: false).bindings, [relative, mute]);
+    }
+  });
+
   test('non-US layouts record and match the physical key', () {
     // AZERTY: the key labelled "A" sits where US QWERTY has Q. The native
     // matcher only sees the physical position (USB HID usage), so the
