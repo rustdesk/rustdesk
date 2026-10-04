@@ -1030,6 +1030,8 @@ class InputModel {
     final pressed = raw
         ? RawKeyboard.instance.keysPressed
         : HardwareKeyboard.instance.logicalKeysPressed;
+    final neutralizeAlt = _needsLegacyAltMenuGuard(pressed);
+    if (neutralizeAlt) await _sendLegacyShortcutControl(true);
     for (final entry in {
       LogicalKeyboardKey.controlLeft: PhysicalKeyboardKey.controlLeft,
       LogicalKeyboardKey.controlRight: PhysicalKeyboardKey.controlRight,
@@ -1064,8 +1066,38 @@ class InputModel {
         ));
       }
     }
-    await Future.wait(releases);
+    await Future.wait(releases).whenComplete(() async {
+      if (neutralizeAlt) await _sendLegacyShortcutControl(false);
+    });
   }
+
+  bool _needsLegacyAltMenuGuard(Set<LogicalKeyboardKey> pressed) {
+    if (peerPlatform != kPeerPlatformWindows ||
+        (isWebDesktop && keyboardMode == kKeyMapMode)) return false;
+    return pressed.any(
+            {LogicalKeyboardKey.altLeft, LogicalKeyboardKey.altRight}.contains) &&
+        !pressed.any({
+          LogicalKeyboardKey.controlLeft,
+          LogicalKeyboardKey.controlRight,
+          LogicalKeyboardKey.shiftLeft,
+          LogicalKeyboardKey.shiftRight,
+          LogicalKeyboardKey.metaLeft,
+          LogicalKeyboardKey.metaRight,
+        }.contains);
+  }
+
+  Future<void> _sendLegacyShortcutControl(bool down) => bind.sessionInputKey(
+        sessionId: sessionId,
+        name: 'VK_CONTROL',
+        down: down,
+        press: false,
+        // Legacy receivers reconcile modifiers before key-down. Keep Alt held
+        // until Ctrl is down so that reconciliation cannot activate the menu.
+        alt: down,
+        ctrl: false,
+        shift: false,
+        command: false,
+      );
 
   void _syncFlutterShortcutModifiersAfterViewOnly(PhysicalKeyboardKey incoming,
       {bool raw = false}) {
