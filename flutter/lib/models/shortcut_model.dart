@@ -8,6 +8,7 @@ import '../common/shared_state.dart' show PrivacyModeState;
 import '../common/widgets/dialog.dart'
     show desktopTryShowTabAuditDialogCloseCancelled;
 import '../common/widgets/keyboard_shortcuts/shortcut_utils.dart';
+import '../common/widgets/keyboard_shortcuts/shortcut_actions.dart';
 import '../common/widgets/toolbar.dart'
     show allowDisplaySwitchInPrivacyMode, showVirtualDisplayMenu;
 import '../consts.dart';
@@ -106,14 +107,13 @@ class ShortcutModel {
   /// The stored config, parsed once per distinct stored value. The Flutter
   /// matcher reads it on every key press, so a key press costs one config
   /// read and no JSON parsing while the config is unchanged.
-  /// Runtime matching requests [active] to exclude unsupported Wayland bindings
-  /// while retaining the stored config for a later return to X11.
+  /// Runtime matching requests [active] to exclude platform-hidden bindings
+  /// while retaining the stored config for other platforms.
   static ShortcutConfig config({bool active = false}) {
     final raw = bind.mainGetLocalOption(key: kShortcutLocalConfigKey);
     if (raw != _configRaw) {
       _config = ShortcutConfig.parse(raw);
-      _activeConfig = _config.forPlatform(
-          isWayland: isLinux && bind.mainCurrentIsWayland());
+      _activeConfig = _config.forPlatform(currentPlatformCapabilities());
       _configRaw = raw;
     }
     return active ? _activeConfig : _config;
@@ -245,13 +245,19 @@ class ShortcutConfig {
 
   const ShortcutConfig._(this.enabled, this.passThrough, this.bindings);
 
-  ShortcutConfig forPlatform({required bool isWayland}) {
-    if (!isWayland) return this;
+  ShortcutConfig forPlatform(ShortcutPlatformCapabilities capabilities) {
+    final visible = allActionEntries(
+            filterKeyboardShortcutActionGroupsForPlatform(capabilities))
+        .map((entry) => entry.id)
+        .toSet();
+    final hidden = allActionEntries(kKeyboardShortcutActionGroups)
+        .map((entry) => entry.id)
+        .where((id) => !visible.contains(id))
+        .toSet();
     return ShortcutConfig._(
       enabled,
       passThrough,
-      List.unmodifiable(bindings.where(
-          (b) => b['action'] != kShortcutActionToggleRelativeMouseMode)),
+      List.unmodifiable(bindings.where((b) => !hidden.contains(b['action']))),
     );
   }
 

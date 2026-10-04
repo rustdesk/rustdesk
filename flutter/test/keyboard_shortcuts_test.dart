@@ -21,6 +21,7 @@ ShortcutPlatformCapabilities capabilities({
   bool includePinToolbarShortcut = true,
   bool includeViewModeShortcut = true,
   bool includeVoiceCallShortcut = true,
+  Set<String> excludedActions = const {},
 }) {
   return ShortcutPlatformCapabilities(
     includeFullscreenShortcut: includeFullscreenShortcut,
@@ -35,6 +36,7 @@ ShortcutPlatformCapabilities capabilities({
     includePinToolbarShortcut: includePinToolbarShortcut,
     includeViewModeShortcut: includeViewModeShortcut,
     includeVoiceCallShortcut: includeVoiceCallShortcut,
+    excludedActions: excludedActions,
   );
 }
 
@@ -517,13 +519,50 @@ void main() {
         'pass_through': flags.$2,
         'bindings': [relative, mute],
       }));
-      final active = stored.forPlatform(isWayland: true);
+      final active = stored.forPlatform(
+          capabilities(includeRelativeMouseModeShortcut: false));
       expect(active.bindings, [mute]);
       expect(active.enabled, flags.$1);
       expect(active.passThrough, flags.$2);
       expect(stored.bindings, [relative, mute]);
-      expect(stored.forPlatform(isWayland: false).bindings, [relative, mute]);
+      expect(stored.forPlatform(capabilities()).bindings, [relative, mute]);
     }
+  });
+
+  test('active saved bindings follow Settings capabilities without reseeding', () {
+    final actions = [
+      kShortcutActionSwitchDisplayAll,
+      kShortcutActionKeyboardModeMap,
+      kShortcutActionToggleShowMyCursor,
+      kShortcutActionToggleZoomCursor,
+      kShortcutActionToggleRecording,
+      kShortcutActionToggleVoiceCall,
+      kShortcutActionResetCanvas,
+      kShortcutActionToggleMute,
+      kShortcutActionSendCtrlAltDel,
+    ];
+    final saved = ShortcutConfig.parse(jsonEncode({
+      'enabled': true,
+      'bindings': [
+        for (final action in actions)
+          {'action': action, 'mods': ['primary'], 'key': 'm'},
+      ],
+    }));
+    final cap = capabilities(
+      includeRecordingShortcut: false,
+      includeVoiceCallShortcut: false,
+      includeResetCanvasShortcut: false,
+      excludedActions: {
+        kShortcutActionSwitchDisplayAll,
+        kShortcutActionKeyboardModeMap,
+        kShortcutActionToggleShowMyCursor,
+        kShortcutActionToggleZoomCursor,
+      },
+    );
+    expect(saved.forPlatform(cap).bindings.map((b) => b['action']),
+        [kShortcutActionToggleMute, kShortcutActionSendCtrlAltDel]);
+    expect(saved.bindings.map((b) => b['action']), actions);
+    expect(saved.forPlatform(capabilities()).bindings, saved.bindings);
   });
 
   test('non-US layouts record and match the physical key', () {
