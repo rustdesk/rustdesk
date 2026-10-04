@@ -12,7 +12,8 @@ pub(super) use cache::{prepare_layout, resolve};
 pub(super) const XKB_KEYCODE_OFFSET: u16 = 8;
 const CAPS_LOCK_BIT: usize = 1;
 const NUM_LOCK_BIT: usize = 2;
-const LOCK_STATE_COUNT: usize = 4;
+const SHIFT_BIT: usize = 4;
+const LAYOUT_STATE_COUNT: usize = 8;
 const DEFAULT_GROUP: u32 = 0;
 
 #[derive(Clone)]
@@ -22,7 +23,7 @@ pub(super) struct LayoutKey {
 }
 
 struct Keymap {
-    maps: [HashMap<char, LayoutKey>; LOCK_STATE_COUNT],
+    maps: [HashMap<char, LayoutKey>; LAYOUT_STATE_COUNT],
 }
 
 impl Keymap {
@@ -31,14 +32,19 @@ impl Keymap {
         let mut state = State::new(&keymap)?;
         let caps = state.locked_mask(keysyms::Caps_Lock);
         let num = state.locked_mask(keysyms::Num_Lock);
-        let modifiers = [
-            state.modifier(&[keysyms::Shift_L, keysyms::Shift_R]),
-            state.modifier(&[keysyms::ISO_Level3_Shift]),
-        ];
+        let shift = state.modifier(&[keysyms::Shift_L, keysyms::Shift_R]);
+        let level3 = state.modifier(&[keysyms::ISO_Level3_Shift]);
+        let modifiers = [shift, level3];
         let maps = std::array::from_fn(|index| {
             let locked = if index & CAPS_LOCK_BIT != 0 { caps } else { 0 }
                 | if index & NUM_LOCK_BIT != 0 { num } else { 0 };
-            state.mappings(locked, &modifiers)
+            let held_shift = if index & SHIFT_BIT != 0 { shift } else { None };
+            let modifiers = if held_shift.is_some() {
+                std::slice::from_ref(&level3)
+            } else {
+                &modifiers
+            };
+            state.mappings(locked, modifiers, held_shift)
         });
         Ok(Self { maps })
     }
@@ -223,6 +229,7 @@ impl<'a> State<'a> {
         &mut self,
         locked: u32,
         modifiers: &[Option<Modifier>],
+        held_shift: Option<Modifier>,
     ) -> HashMap<char, LayoutKey> {
         let mut mappings = HashMap::new();
         let mut keypad_mappings = HashMap::new();
@@ -233,9 +240,11 @@ impl<'a> State<'a> {
                 .filter(|(index, _)| combination & (1 << *index) != 0)
                 .filter_map(|(_, modifier)| *modifier)
                 .collect();
-            let mask = selected
-                .iter()
-                .fold(0, |mask, modifier| mask | modifier.mask);
+            // Held Shift affects the symbol, but belongs to the caller.
+            let mask = selected.iter().fold(
+                held_shift.map_or(0, |modifier| modifier.mask),
+                |mask, modifier| mask | modifier.mask,
+            );
             self.set_modifiers(mask, locked);
             for keycode in self.keymap.keycodes().filter_map(supported_keycode) {
                 let symbol = self.symbol(keycode);
@@ -256,8 +265,11 @@ impl<'a> State<'a> {
                 }
             }
         }
-        for (character, mapping) in keypad_mappings {
-            mappings.entry(character).or_insert(mapping);
+        // Shift must not redirect an ordinary shortcut to a keypad alias.
+        if held_shift.is_none() {
+            for (character, mapping) in keypad_mappings {
+                mappings.entry(character).or_insert(mapping);
+            }
         }
         mappings
     }

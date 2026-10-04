@@ -1,4 +1,4 @@
-use super::{source::Source, Keymap, LayoutKey, CAPS_LOCK_BIT, NUM_LOCK_BIT};
+use super::{source::Source, Keymap, LayoutKey, CAPS_LOCK_BIT, NUM_LOCK_BIT, SHIFT_BIT};
 use crate::server::input_service::is_ascii_printable;
 use base::{
     config::keys::OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK,
@@ -166,7 +166,7 @@ fn needs_layout(event: &KeyEvent) -> bool {
 pub(in crate::server::uinput) fn resolve(
     character: char,
     locks: (bool, bool),
-    shortcut: bool,
+    shortcut_shift: Option<bool>,
 ) -> ResultType<LayoutKey> {
     let current = CURRENT.read().unwrap();
     let keymap = match current.as_ref() {
@@ -189,10 +189,15 @@ pub(in crate::server::uinput) fn resolve(
         }
     };
     let index = usize::from(locks.0) * CAPS_LOCK_BIT + usize::from(locks.1) * NUM_LOCK_BIT;
-    if let Some(mapping) = keymap.maps[index].get(&character) {
+    // Letter shortcuts keep their physical key even when Shift changes case.
+    // Other shortcuts prefer a symbol compatible with the caller's held Shift.
+    let shifted = (shortcut_shift == Some(true) && !character.is_alphabetic())
+        .then(|| keymap.maps[index | SHIFT_BIT].get(&character))
+        .flatten();
+    if let Some(mapping) = shifted.or_else(|| keymap.maps[index].get(&character)) {
         return Ok(mapping.clone());
     }
-    if shortcut
+    if shortcut_shift.is_some()
         && character.is_ascii_graphic()
         && Config::get_option(OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK) != "Y"
     {

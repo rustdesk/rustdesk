@@ -31,7 +31,8 @@ pub mod client {
     struct LayoutContext {
         locks: (bool, bool),
         caps_shortcut: bool,
-        shortcut: bool,
+        // None for ordinary input; otherwise whether the shortcut holds Shift.
+        shortcut_shift: Option<bool>,
     }
 
     impl LayoutContext {
@@ -43,7 +44,7 @@ pub mod client {
             } else {
                 chr
             };
-            layout::resolve(chr, self.locks, self.shortcut)
+            layout::resolve(chr, self.locks, self.shortcut_shift)
         }
     }
 
@@ -185,10 +186,17 @@ pub mod client {
                 || self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Alt)))?
                 || self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Meta)))?;
             let caps_shortcut = caps_lock && shortcut;
+            let shortcut_shift = if shortcut {
+                Some(
+                    self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Shift)))?,
+                )
+            } else {
+                None
+            };
             Ok(LayoutContext {
                 locks: (caps_lock && !caps_shortcut, num_lock),
                 caps_shortcut,
-                shortcut,
+                shortcut_shift,
             })
         }
 
