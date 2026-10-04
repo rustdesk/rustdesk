@@ -13,7 +13,7 @@ import '../common/widgets/toolbar.dart'
     show allowDisplaySwitchInPrivacyMode, showVirtualDisplayMenu;
 import '../consts.dart';
 import '../desktop/widgets/remote_toolbar.dart' show ToolbarState;
-import 'chat_model.dart' show VoiceCallStatus;
+import 'chat_model.dart' show ChatModel, MessageKey, VoiceCallStatus;
 import '../desktop/widgets/tabbar_widget.dart' show DesktopTabController;
 import '../models/model.dart';
 import '../models/platform_model.dart';
@@ -441,6 +441,7 @@ void registerSessionShortcutActions(
   // helper that returns a TToggleMenu list — so its handler is wired
   // here rather than picked up by helper auto-register.
   ffi.shortcutModel.register(kShortcutActionToggleChat, () {
+    ffi.chatModel.changeCurrentKey(MessageKey(ffi.id, ChatModel.clientModeID));
     ffi.chatModel.toggleChatOverlay();
   });
 
