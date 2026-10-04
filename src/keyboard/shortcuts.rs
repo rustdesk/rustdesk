@@ -629,7 +629,7 @@ fn release_remote_keys(
             .collect()
     };
     // A consumed Alt-only chord otherwise reaches Windows as a bare Alt tap.
-    let neutralize_alt = peer == "windows" && mode == base::message_proto::KeyboardMode::Map
+    let neutralize_alt = peer == "windows"
         && !to_release.is_empty()
         && to_release.iter().all(|(key, _)| matches!(key, Key::Alt | Key::AltGr));
     if neutralize_alt {
@@ -662,6 +662,7 @@ fn send_windows_menu_ctrl(down: bool, send: &impl Fn(&base::message_proto::KeyEv
     use base::message_proto::{KeyEvent, KeyboardMode};
     const LEFT_CTRL_SCAN_CODE: u32 = 0x1d;
     let mut event = KeyEvent::new();
+    // Keep Ctrl in Map mode: Legacy modifier sync could release Alt before Ctrl.
     event.mode = KeyboardMode::Map.into();
     event.set_chr(LEFT_CTRL_SCAN_CODE);
     event.down = down;
@@ -1370,22 +1371,35 @@ mod tests {
     #[cfg(feature = "flutter")]
     #[test]
     fn alt_only_shortcut_neutralizes_windows_menu() {
-        use base::message_proto::{KeyEvent, KeyboardMode};
+        use base::message_proto::KeyEvent;
+        #[cfg(windows)]
+        use rdev::EventType;
         use rdev::Key;
 
         let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        for alt in [Key::Alt, Key::AltGr] {
+        let mut results = Vec::new();
+        for (mode, alt) in ["map", "translate", "legacy"].into_iter()
+            .flat_map(|mode| [Key::Alt, Key::AltGr].map(|alt| (mode, alt)))
+        {
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            if mode == "legacy" { continue; } // Mobile does not encode Legacy events.
+            #[cfg(target_os = "macos")]
+            if mode == "translate" && alt == Key::AltGr { continue; } // Right Option is filtered.
             reload_from_raw(r#"{"enabled":true,"bindings":[{"action":"toggle_mute","mods":["alt"],"key":"m"}]}"#, "windows", false);
             reset_fired_keys();
             clear_session_state(&SID_A);
             let sent = std::cell::RefCell::new(Vec::new());
             let send = |event: &KeyEvent| {
-                sent.borrow_mut().push((rdev::win_key_from_scancode(event.chr()), event.down));
+                sent.borrow_mut().push(windows_shortcut_modifier(event));
             };
             let handle = |event: &rdev::Event| {
-                if !try_dispatch(Some(&SID_A), event, "map", || "windows".into(), &send) {
+                #[cfg(windows)]
+                if matches!(event.event_type, EventType::KeyPress(k) | EventType::KeyRelease(k) if k == alt) {
+                    rdev::set_modifier(alt, matches!(event.event_type, EventType::KeyPress(_)));
+                }
+                if !try_dispatch(Some(&SID_A), event, mode, || "windows".into(), &send) {
                     for key in super::super::event_to_key_events(
-                        "windows".into(), event, KeyboardMode::Map, Some(0),
+                        "windows".into(), event, super::super::get_keyboard_mode_enum(mode), Some(0),
                     ) {
                         send(&key);
                     }
@@ -1398,11 +1412,30 @@ mod tests {
             handle(&make_release(alt));
             reset_fired_keys();
             clear_session_state(&SID_A);
-            assert_eq!(*sent.borrow(), vec![
-                (alt, true), (Key::ControlLeft, true), (alt, false),
-                (Key::ControlLeft, false), (alt, false),
-            ], "the consumed M must not leave a bare Alt tap on Windows");
+            results.push((mode, alt, sent.into_inner()));
         }
+        assert!(results.iter().all(|(_, alt, sent)| *sent == vec![
+            (*alt, true), (Key::ControlLeft, true), (*alt, false),
+            (Key::ControlLeft, false), (*alt, false),
+        ]), "the consumed M must not leave a bare Alt tap on Windows: {results:?}");
+    }
+
+    #[cfg(feature = "flutter")]
+    fn windows_shortcut_modifier(event: &base::message_proto::KeyEvent) -> (rdev::Key, bool) {
+        use base::message_proto::{key_event::Union, ControlKey};
+        use rdev::Key;
+        let key = match event.union.as_ref() {
+            Some(Union::Chr(code)) => rdev::win_key_from_scancode(*code),
+            Some(Union::Win2winHotkey(code)) => rdev::win_key_from_keycode(*code >> 16),
+            Some(Union::ControlKey(key)) => match key.enum_value().unwrap() {
+                ControlKey::Alt => Key::Alt,
+                ControlKey::RAlt => Key::AltGr,
+                ControlKey::Control => Key::ControlLeft,
+                _ => panic!("unexpected modifier: {event:?}"),
+            },
+            _ => panic!("unexpected shortcut output: {event:?}"),
+        };
+        (key, event.down)
     }
 
     #[cfg(feature = "flutter")]
