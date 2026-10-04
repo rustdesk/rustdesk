@@ -31,6 +31,7 @@ pub mod client {
     struct LayoutContext {
         locks: (bool, bool),
         caps_shortcut: bool,
+        shortcut: bool,
     }
 
     impl LayoutContext {
@@ -42,7 +43,7 @@ pub mod client {
             } else {
                 chr
             };
-            layout::resolve(chr, self.locks)
+            layout::resolve(chr, self.locks, self.shortcut)
         }
     }
 
@@ -179,17 +180,15 @@ pub mod client {
                 self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::CapsLock)))?;
             let num_lock =
                 self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::NumLock)))?;
-            let caps_shortcut = caps_lock
-                && (self
-                    .send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Control)))?
-                    || self
-                        .send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Alt)))?
-                    || self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(
-                        Key::Meta,
-                    )))?);
+            let shortcut = self
+                .send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Control)))?
+                || self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Alt)))?
+                || self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Meta)))?;
+            let caps_shortcut = caps_lock && shortcut;
             Ok(LayoutContext {
                 locks: (caps_lock && !caps_shortcut, num_lock),
                 caps_shortcut,
+                shortcut,
             })
         }
 

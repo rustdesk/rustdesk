@@ -4,7 +4,7 @@ use base::{
     config::keys::OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK,
     message_proto::{key_event, KeyEvent, KeyboardMode},
 };
-use hbb_common::{anyhow::anyhow, config::Config, lazy_static, ResultType};
+use hbb_common::{anyhow::anyhow, bail, config::Config, lazy_static, ResultType};
 use std::{
     sync::{mpsc, Mutex, RwLock, TryLockError},
     thread,
@@ -166,6 +166,7 @@ fn needs_layout(event: &KeyEvent) -> bool {
 pub(in crate::server::uinput) fn resolve(
     character: char,
     locks: (bool, bool),
+    shortcut: bool,
 ) -> ResultType<LayoutKey> {
     let current = CURRENT.read().unwrap();
     let keymap = match current.as_ref() {
@@ -188,8 +189,27 @@ pub(in crate::server::uinput) fn resolve(
         }
     };
     let index = usize::from(locks.0) * CAPS_LOCK_BIT + usize::from(locks.1) * NUM_LOCK_BIT;
-    keymap.maps[index]
-        .get(&character)
-        .cloned()
-        .ok_or_else(|| anyhow!("Character cannot be generated in the detected XKB layout"))
+    if let Some(mapping) = keymap.maps[index].get(&character) {
+        return Ok(mapping.clone());
+    }
+    if shortcut
+        && character.is_ascii_alphabetic()
+        && Config::get_option(OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK) != "Y"
+    {
+        // Non-Latin layouts can lack letters whose physical shortcuts still work.
+        // Preserve those keys only for shortcuts; Shift comes from the caller.
+        let (key, _) =
+            super::super::service::map_key(&enigo::Key::Layout(character.to_ascii_lowercase()))?;
+        hbb_common::throttled_log!(
+            LAYOUT_WARNING_INTERVAL,
+            warn,
+            "Uinput layout lacks a Latin shortcut letter; using its legacy physical key. Set {}=Y to disable",
+            OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK
+        );
+        return Ok(LayoutKey {
+            key: enigo::Key::Raw(key.code() + super::XKB_KEYCODE_OFFSET),
+            modifiers: Vec::new(),
+        });
+    }
+    bail!("Character cannot be generated in the detected XKB layout")
 }
