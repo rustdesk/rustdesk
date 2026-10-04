@@ -1886,13 +1886,21 @@ pub(super) fn warm_availability() {
             std::thread::sleep(Duration::from_millis(300));
             continue;
         }
-        if matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..)) {
-            return;
-        }
+        let sampled_gen = {
+            let st = DRM_STATE.lock().unwrap();
+            if matches!(&*st, ProbeState::Available(..)) {
+                return;
+            }
+            DRM_STATE_GEN.load(Ordering::Acquire)
+        };
         match query_displays(false) {
             Ok(list) if !list.is_empty() => {
-                log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
-                publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), list));
+                let mut st = DRM_STATE.lock().unwrap();
+                // A login probe that published while this query ran keeps its newer list.
+                if DRM_STATE_GEN.load(Ordering::Acquire) == sampled_gen {
+                    log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
+                    publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+                }
                 return;
             }
             Ok(_) => {
