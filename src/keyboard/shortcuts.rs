@@ -628,11 +628,21 @@ fn release_remote_keys(
             .map(|(key, event)| (*key, event.clone()))
             .collect()
     };
+    // A consumed Alt-only chord otherwise reaches Windows as a bare Alt tap.
+    let neutralize_alt = peer == "windows" && mode == base::message_proto::KeyboardMode::Map
+        && !to_release.is_empty()
+        && to_release.iter().all(|(key, _)| matches!(key, Key::Alt | Key::AltGr));
+    if neutralize_alt {
+        send_windows_menu_ctrl(true, send);
+    }
     for (key, mut event) in to_release {
         event.event_type = EventType::KeyRelease(key);
         for key_event in event_to_key_events(peer.to_owned(), &event, mode, None) {
             send(&key_event);
         }
+    }
+    if neutralize_alt {
+        send_windows_menu_ctrl(false, send);
     }
     {
         let mut state = MODIFIERS_STATE.lock().unwrap();
@@ -645,6 +655,17 @@ fn release_remote_keys(
     );
     // Focus-loss cleanup must still reset modifiers released outside the grab.
     TO_RELEASE.lock().unwrap().extend(held);
+}
+
+#[cfg(feature = "flutter")]
+fn send_windows_menu_ctrl(down: bool, send: &impl Fn(&base::message_proto::KeyEvent)) {
+    use base::message_proto::{KeyEvent, KeyboardMode};
+    const LEFT_CTRL_SCAN_CODE: u32 = 0x1d;
+    let mut event = KeyEvent::new();
+    event.mode = KeyboardMode::Map.into();
+    event.set_chr(LEFT_CTRL_SCAN_CODE);
+    event.down = down;
+    send(&event);
 }
 
 fn mods_bits(m: &[Modifier]) -> u8 {
@@ -1344,6 +1365,44 @@ mod tests {
         assert!(!release_consumed, "the original keyup must still reach the peer");
         assert_eq!(release_events.len(), 1);
         assert!(!release_events[0].down);
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn alt_only_shortcut_neutralizes_windows_menu() {
+        use base::message_proto::{KeyEvent, KeyboardMode};
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        for alt in [Key::Alt, Key::AltGr] {
+            reload_from_raw(r#"{"enabled":true,"bindings":[{"action":"toggle_mute","mods":["alt"],"key":"m"}]}"#, "windows", false);
+            reset_fired_keys();
+            clear_session_state(&SID_A);
+            let sent = std::cell::RefCell::new(Vec::new());
+            let send = |event: &KeyEvent| {
+                sent.borrow_mut().push((rdev::win_key_from_scancode(event.chr()), event.down));
+            };
+            let handle = |event: &rdev::Event| {
+                if !try_dispatch(Some(&SID_A), event, "map", || "windows".into(), &send) {
+                    for key in super::super::event_to_key_events(
+                        "windows".into(), event, KeyboardMode::Map, Some(0),
+                    ) {
+                        send(&key);
+                    }
+                }
+            };
+            handle(&make_press(alt));
+            handle(&make_press(Key::KeyM));
+            handle(&make_press(Key::KeyM));
+            handle(&make_release(Key::KeyM));
+            handle(&make_release(alt));
+            reset_fired_keys();
+            clear_session_state(&SID_A);
+            assert_eq!(*sent.borrow(), vec![
+                (alt, true), (Key::ControlLeft, true), (alt, false),
+                (Key::ControlLeft, false), (alt, false),
+            ], "the consumed M must not leave a bare Alt tap on Windows");
+        }
     }
 
     #[cfg(feature = "flutter")]
