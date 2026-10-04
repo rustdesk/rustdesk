@@ -71,6 +71,58 @@ RawKeyEvent rawP({required bool down, bool repeat = false, bool ctrl = false}) {
 }
 
 void main() {
+  for (final action in [
+    kShortcutActionToggleViewOnly,
+    kShortcutActionToggleShowMyCursor,
+    kShortcutActionToggleMute,
+  ]) {
+    test('forwarded W retains correct ownership across $action', () async {
+      final events = <String>['W down'];
+      final released = Completer<void>();
+      final dispatcher = dispatcherFor(events.add);
+      dispatcher.recordForwardedKey(PhysicalKeyboardKey.keyW,
+          down: true, release: () {
+        events.add('W up');
+        return released.future;
+      });
+      expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyP),
+          match: () => action), isTrue);
+      await pumpEventQueue();
+      if (action == kShortcutActionToggleMute) {
+        expect(events, ['W down', action]);
+      } else {
+        expect(events, ['W down', 'W up']);
+      }
+      released.complete();
+      await pumpEventQueue();
+      expect(events.last, action);
+    });
+  }
+
+  test('view-only cleanup skips released keys and cancels after session close',
+      () async {
+    final events = <String>[];
+    final released = Completer<void>();
+    final dispatcher = dispatcherFor(events.add);
+    dispatcher.recordForwardedKey(PhysicalKeyboardKey.keyW,
+        down: true, release: () {
+      events.add('W up');
+      return released.future;
+    });
+    dispatcher.recordForwardedKey(PhysicalKeyboardKey.keyC,
+        down: true, release: () async => events.add('C up'));
+    dispatcher.recordForwardedKey(PhysicalKeyboardKey.keyC,
+        down: false, release: () async => events.add('C up'));
+    dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyP),
+        match: () => kShortcutActionToggleViewOnly);
+    await pumpEventQueue();
+    expect(events, ['W up']);
+    dispatcher.clear();
+    released.complete();
+    await pumpEventQueue();
+    expect(events, ['W up']);
+  });
+
   test('owns repeats and release after the chord modifiers are released',
       () async {
     var modifiersPressed = true;

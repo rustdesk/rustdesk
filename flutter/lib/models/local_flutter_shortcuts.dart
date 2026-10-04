@@ -20,6 +20,8 @@ class LocalFlutterShortcutDispatcher {
   static final _clipboardModifierReleases =
       <PhysicalKeyboardKey, (LocalFlutterShortcutDispatcher, Future<void>)>{};
   final _releasedModifiers = <PhysicalKeyboardKey>{};
+  final _forwardedKeyReleases =
+      <PhysicalKeyboardKey, Future<void> Function()>{};
   bool _viewOnlyShortcutPending = false;
   int _generation = 0;
 
@@ -32,6 +34,7 @@ class LocalFlutterShortcutDispatcher {
     _clipboardModifierReleases
         .removeWhere((_, pending) => identical(pending.$1, this));
     _releasedModifiers.clear();
+    _forwardedKeyReleases.clear();
     _viewOnlyShortcutPending = false;
     _generation++;
   }
@@ -45,6 +48,16 @@ class LocalFlutterShortcutDispatcher {
 
   void recordReleasedModifiers(Iterable<PhysicalKeyboardKey> keys) {
     _releasedModifiers.addAll(keys);
+  }
+
+  void recordForwardedKey(PhysicalKeyboardKey key,
+      {required bool down, required Future<void> Function() release}) {
+    if (_isModifier(key)) return;
+    if (down) {
+      _forwardedKeyReleases.putIfAbsent(key, () => release);
+    } else {
+      _forwardedKeyReleases.remove(key);
+    }
   }
 
   bool resumeModifiersAfterViewOnly(
@@ -166,7 +179,16 @@ class LocalFlutterShortcutDispatcher {
     final generation = _generation;
     try {
       if (releaseModifiers != null) await releaseModifiers();
-      if (action != null && generation == _generation) onTriggered(action);
+      if (action == null || generation != _generation) return;
+      if ((action == kShortcutActionToggleViewOnly ||
+              action == kShortcutActionToggleShowMyCursor) &&
+          _forwardedKeyReleases.isNotEmpty) {
+        // Once keyboard input is disabled, physical keyups cannot reach the peer.
+        final releases = _forwardedKeyReleases.values.toList();
+        _forwardedKeyReleases.clear();
+        await Future.wait(releases.map((release) => Future<void>.sync(release)));
+      }
+      if (generation == _generation) onTriggered(action);
     } catch (e, st) {
       debugPrint('Local shortcut failed for $action: $e\n$st');
     }

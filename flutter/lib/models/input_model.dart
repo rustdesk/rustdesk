@@ -833,6 +833,8 @@ class InputModel {
     } else {
       if (_tryDispatchRawFlutterShortcut(e)) return KeyEventResult.handled;
       _restoreRawFlutterShortcutModifiers(e, mapMode: false);
+      _trackFlutterShortcutKey(e.physicalKey, e.logicalKey,
+          down: e is RawKeyDownEvent && !e.repeat, up: e is RawKeyUpEvent);
       legacyKeyboardModeRaw(e);
     }
 
@@ -938,6 +940,13 @@ class InputModel {
         isDesktop || (isWebDesktop && keyboardMode == kKeyMapMode);
     if (isMobileAndMapMode || isDesktopAndMapMode) {
       _restoreFlutterShortcutModifiers(e);
+      // Native map input is matched and tracked by Rust before forwarding.
+      if (isWeb) {
+        _trackFlutterShortcutKey(e.physicalKey, e.logicalKey,
+            down: e is KeyDownEvent || e is KeyRepeatEvent,
+            up: e is KeyUpEvent,
+            mapMode: true);
+      }
       // FIXME: e.character is wrong for dead keys, eg: ^ in de
       newKeyboardMode(
           e.character ?? '',
@@ -948,10 +957,40 @@ class InputModel {
     } else {
       if (!isWeb && _tryDispatchFlutterShortcut(e)) return KeyEventResult.handled;
       _restoreFlutterShortcutModifiers(e, mapMode: false);
+      _trackFlutterShortcutKey(e.physicalKey, e.logicalKey,
+          down: e is KeyDownEvent, up: e is KeyUpEvent);
       legacyKeyboardMode(e);
     }
 
     return KeyEventResult.handled;
+  }
+
+  void _trackFlutterShortcutKey(
+      PhysicalKeyboardKey physical, LogicalKeyboardKey logical,
+      {required bool down, required bool up, bool mapMode = false}) {
+    if ((!down && !up) || (down && !keyboardPerm)) return;
+    _localFlutterShortcuts.recordForwardedKey(physical,
+        down: down,
+        release: () => mapMode
+            ? bind.sessionHandleFlutterKeyEvent(
+                sessionId: sessionId,
+                character: '',
+                usbHid: physical.usbHidUsage & 0xFFFF,
+                lockModes: _buildLockModes(false),
+                downOrUp: false,
+              )
+            : bind.sessionInputKey(
+                sessionId: sessionId,
+                name: physicalKeyMap[physical.usbHidUsage] ??
+                    logicalKeyMap[logical.keyId] ??
+                    logical.keyLabel,
+                down: false,
+                press: false,
+                alt: false,
+                ctrl: false,
+                shift: false,
+                command: false,
+              ));
   }
 
   bool _tryDispatchFlutterShortcut(KeyEvent e, {bool releaseModifiers = true}) {
