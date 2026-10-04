@@ -4768,6 +4768,20 @@ impl Connection {
 
     async fn toggle_privacy_mode(&mut self, t: TogglePrivacyMode) {
         if t.on {
+            // Only a remembered request waits: the client's toggle shows it as on, so turning
+            // it off cancels it. A manual one gets its answer now, as before.
+            #[cfg(windows)]
+            if t.remembered
+                && self.is_authed_remote_conn()
+                && self.privacy_mode
+                && privacy_mode::win_wait_unlock::wait_for_unlock(
+                    &t.impl_key,
+                    self.inner.id,
+                    &mut self.privacy_mode_waiting,
+                )
+            {
+                return;
+            }
             self.turn_on_privacy(t.impl_key).await;
         } else {
             self.turn_off_privacy(t.impl_key).await;
@@ -5123,13 +5137,10 @@ impl Connection {
             return;
         }
 
+        // A request that goes ahead now replaces a waiting one.
         #[cfg(windows)]
-        if privacy_mode::win_wait_unlock::wait_for_unlock(
-            &impl_key,
-            self.inner.id,
-            &mut self.privacy_mode_waiting,
-        ) {
-            return;
+        {
+            self.privacy_mode_waiting = None;
         }
 
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {

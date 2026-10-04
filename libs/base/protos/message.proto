@@ -623,6 +623,8 @@ message ToggleVirtualDisplay {
 message TogglePrivacyMode {
   string impl_key = 1;
   bool on = 2;
+  // Sent by the client itself after connecting, to restore privacy mode remembered for the peer.
+  bool remembered = 3;
 }
 
 message PermissionInfo {
