@@ -225,6 +225,7 @@ impl<'a> State<'a> {
         modifiers: &[Option<Modifier>],
     ) -> HashMap<char, LayoutKey> {
         let mut mappings = HashMap::new();
+        let mut keypad_mappings = HashMap::new();
         for combination in 0..(1usize << modifiers.len()) {
             let selected: Vec<_> = modifiers
                 .iter()
@@ -237,17 +238,26 @@ impl<'a> State<'a> {
                 .fold(0, |mask, modifier| mask | modifier.mask);
             self.set_modifiers(mask, locked);
             for keycode in self.keymap.keycodes().filter_map(supported_keycode) {
-                let codepoint =
-                    unsafe { (self.keymap.api.xkb_keysym_to_utf32)(self.symbol(keycode)) };
+                let symbol = self.symbol(keycode);
+                // Keypad aliases can produce the same text but different shortcuts.
+                let candidates = if (keysyms::KP_Space..=keysyms::KP_Equal).contains(&symbol) {
+                    &mut keypad_mappings
+                } else {
+                    &mut mappings
+                };
+                let codepoint = unsafe { (self.keymap.api.xkb_keysym_to_utf32)(symbol) };
                 if let Some(character) =
                     char::from_u32(codepoint).filter(|character| *character != '\0')
                 {
-                    mappings.entry(character).or_insert_with(|| LayoutKey {
+                    candidates.entry(character).or_insert_with(|| LayoutKey {
                         key: enigo::Key::Raw(keycode),
                         modifiers: selected.iter().map(|modifier| modifier.keycode).collect(),
                     });
                 }
             }
+        }
+        for (character, mapping) in keypad_mappings {
+            mappings.entry(character).or_insert(mapping);
         }
         mappings
     }
