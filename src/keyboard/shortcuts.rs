@@ -486,14 +486,21 @@ pub fn try_dispatch(
             _ => {}
         }
     }
-    let Some(action_id) = match_event(event) else {
+    // A forwarded press keeps ownership through repeats. Adding modifiers
+    // while it is held must not consume the key-up owed to the remote.
+    let action_id = match event.event_type {
+        EventType::KeyPress(key) if super::TO_RELEASE.lock().unwrap().contains_key(&key) => None,
+        _ => match_event(event),
+    };
+    let Some(action_id) = action_id else {
         restore_remote_modifiers(sid, event, keyboard_mode, peer, &send);
         return false;
     };
     let peer = peer();
     if runs_on_release(&action_id)
         || matches!(action_id.as_str(),
-            action_id::TOGGLE_VIEW_ONLY | action_id::INSERT_LOCK | action_id::SEND_CTRL_ALT_DEL
+            action_id::TOGGLE_VIEW_ONLY | action_id::TOGGLE_SHOW_MY_CURSOR
+            | action_id::INSERT_LOCK | action_id::SEND_CTRL_ALT_DEL
             | action_id::KEYBOARD_MODE_MAP | action_id::KEYBOARD_MODE_TRANSLATE
             | action_id::KEYBOARD_MODE_LEGACY)
     {
@@ -1227,7 +1234,8 @@ mod tests {
 
         let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         for action in [action_id::TOGGLE_MUTE, action_id::TOGGLE_CHAT,
-            action_id::TOGGLE_VIEW_ONLY, action_id::INSERT_LOCK, action_id::SEND_CTRL_ALT_DEL,
+            action_id::TOGGLE_VIEW_ONLY, action_id::TOGGLE_SHOW_MY_CURSOR,
+            action_id::INSERT_LOCK, action_id::SEND_CTRL_ALT_DEL,
             action_id::KEYBOARD_MODE_MAP, action_id::KEYBOARD_MODE_TRANSLATE,
             action_id::KEYBOARD_MODE_LEGACY]
         {
@@ -1264,6 +1272,39 @@ mod tests {
                 .filter(|(key, _)| *key == Key::KeyW).map(|(_, down)| *down).collect();
             assert_eq!(w_events, if keep_held { vec![] } else { vec![false] }, "{action}");
         }
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn repeated_forwarded_key_does_not_start_shortcut() {
+        use base::message_proto::KeyboardMode;
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        release_chord(chord);
+        let press = make_press(Key::KeyS);
+        let release = make_release(Key::KeyS);
+        assert!(!try_dispatch(Some(&SID_A), &press, "map", || "windows".into(), |_| {}));
+        super::super::event_to_key_events("windows".into(), &press, KeyboardMode::Map, Some(0));
+        for key in chord {
+            super::super::event_to_key_events("windows".into(), &make_press(key), KeyboardMode::Map, Some(0));
+        }
+        let repeat_consumed = try_dispatch(Some(&SID_A), &press, "map", || "windows".into(), |_| {});
+        let release_consumed = try_dispatch(Some(&SID_A), &release, "map", || "windows".into(), |_| {});
+        let release_events = if release_consumed { vec![] } else {
+            super::super::event_to_key_events("windows".into(), &release, KeyboardMode::Map, Some(0))
+        };
+        // Cleanup precedes assertions so a failing regression cannot poison other tests.
+        super::super::event_to_key_events("windows".into(), &release, KeyboardMode::Map, Some(0));
+        release_chord(chord);
+        reset_fired_keys();
+        clear_session_state(&SID_A);
+
+        assert!(!repeat_consumed, "a repeated forwarded key must not become a shortcut");
+        assert!(!release_consumed, "the original keyup must still reach the peer");
+        assert_eq!(release_events.len(), 1);
+        assert!(!release_events[0].down);
     }
 
     #[cfg(feature = "flutter")]
