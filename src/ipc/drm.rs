@@ -917,7 +917,11 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let wake = match conn.recv_msg_timeout2(3_000).await {
         Some(Ok((Data::DrmHello { wake }, _fd))) => wake,
         Some(Ok((_, _fd))) => {
-            log::info!("drm: peer did not open with DrmHello; closing");
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(5),
+                info,
+                "drm: peer did not open with DrmHello; closing"
+            );
             return Ok(());
         }
         Some(Err(e)) => return Err(e),
