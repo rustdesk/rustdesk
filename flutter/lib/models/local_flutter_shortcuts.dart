@@ -181,9 +181,11 @@ class LocalFlutterShortcutDispatcher {
       if (releaseModifiers != null) await releaseModifiers();
       if (action == null || generation != _generation) return;
       if ((action == kShortcutActionToggleViewOnly ||
-              action == kShortcutActionToggleShowMyCursor) &&
+              action == kShortcutActionToggleShowMyCursor ||
+              kShortcutActionsRunOnKeyUp.contains(action) ||
+              (!kIsWeb && action == kShortcutActionSendClipboardKeystrokes)) &&
           _forwardedKeyReleases.isNotEmpty) {
-        // Once keyboard input is disabled, physical keyups cannot reach the peer.
+        // Focus changes and view-only can keep physical keyups from the peer.
         final releases = _forwardedKeyReleases.values.toList();
         _forwardedKeyReleases.clear();
         await Future.wait(releases.map((release) => Future<void>.sync(release)));

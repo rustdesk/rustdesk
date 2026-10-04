@@ -995,6 +995,8 @@ class RustdeskImpl {
   // Tell the JS-side matcher (flutter/web/js/src/shortcut_matcher.ts) to
   // use the same platform-filtered bindings as the Flutter matcher, while
   // keeping unsupported saved bindings in LocalStorage.
+  // Web-JS must include this counterpart; older matchers ignore the argument:
+  // https://github.com/rustdesk/rustdesk-web-js/commit/94abe431d60977292803b812f086efaaff5e8a3b
   void mainReloadKeyboardShortcuts({dynamic hint}) {
     final config = ShortcutModel.config(active: true);
     js.context.callMethod('reloadShortcuts', [
