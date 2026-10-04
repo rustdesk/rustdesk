@@ -48,6 +48,19 @@ pub struct FileDescription {
     pub creation_time: SystemTime,
     pub size: u64,
     pub perm: u16,
+    /// `file_list_id()` of the list this file came from, sent back in file contents requests
+    #[serde(default)]
+    pub clip_data_id: i32,
+}
+
+/// Identifies a file list by its descriptor PDU, which both peers hold, so file contents
+/// requests can name the list they read from. FNV-1a, same as `wf_cliprdr_file_list_id()`.
+pub fn file_list_id(file_descriptor_pdu: &[u8]) -> i32 {
+    file_descriptor_pdu
+        .iter()
+        .fold(0x811c_9dc5_u32, |id, byte| {
+            (id ^ *byte as u32).wrapping_mul(0x0100_0193)
+        }) as i32
 }
 
 pub(super) fn validate_file_name(name: &str) -> Result<(), CliprdrError> {
@@ -69,6 +82,7 @@ impl FileDescription {
     fn parse_file_descriptor(
         bytes: &mut Bytes,
         conn_id: i32,
+        clip_data_id: i32,
     ) -> Result<FileDescription, CliprdrError> {
         let flags = bytes.get_u32_le();
         // skip reserved 32 bytes
@@ -126,12 +140,13 @@ impl FileDescription {
             // cannot set as is...
         } else if normal {
             PERM_RWX
+        } else if directory {
+            // Windows ignores read-only and hidden on a directory; without `x` it cannot be entered.
+            PERM_RWX
         } else if readonly {
             PERM_READ
         } else if hidden {
             PERM_SELF_RO
-        } else if directory {
-            PERM_RWX
         } else {
             PERM_RW
         };
@@ -154,8 +169,11 @@ impl FileDescription {
 
         let valid_write_time = flags & FLAGS_FD_LAST_WRITE != 0;
         let last_modified = if valid_write_time && last_write_time >= LDAP_EPOCH_DELTA {
-            let last_write_time = (last_write_time - LDAP_EPOCH_DELTA) * 100;
-            let last_write_time = Duration::from_nanos(last_write_time);
+            let last_write_time = last_write_time - LDAP_EPOCH_DELTA;
+            let last_write_time = Duration::new(
+                last_write_time / 10_000_000,
+                (last_write_time % 10_000_000) as u32 * 100,
+            );
             SystemTime::UNIX_EPOCH + last_write_time
         } else {
             SystemTime::UNIX_EPOCH
@@ -175,6 +193,7 @@ impl FileDescription {
             creation_time: last_modified,
             size,
             perm,
+            clip_data_id,
         };
 
         Ok(desc)
@@ -186,6 +205,7 @@ impl FileDescription {
         file_descriptor_pdu: Vec<u8>,
         conn_id: i32,
     ) -> Result<Vec<Self>, CliprdrError> {
+        let clip_data_id = file_list_id(&file_descriptor_pdu);
         let mut data = Bytes::from(file_descriptor_pdu);
         if data.remaining() < 4 {
             return Err(CliprdrError::InvalidRequest {
@@ -206,7 +226,7 @@ impl FileDescription {
 
         let mut files = Vec::with_capacity(count);
         for _ in 0..count {
-            let desc = Self::parse_file_descriptor(&mut data, conn_id)?;
+            let desc = Self::parse_file_descriptor(&mut data, conn_id, clip_data_id)?;
             files.push(desc);
         }
 
@@ -222,6 +242,7 @@ mod tests {
     const PDU_HEADER_SIZE: usize = size_of::<u32>();
     const DESCRIPTOR_SIZE: usize = 592;
     const ATTRIBUTES_OFFSET: usize = PDU_HEADER_SIZE + 36;
+    const LAST_WRITE_TIME_OFFSET: usize = PDU_HEADER_SIZE + 56;
     const NAME_OFFSET: usize = PDU_HEADER_SIZE + 72;
     const FILE_NAME_CODE_UNITS: usize = 260;
     const INVALID_UTF16_UNIT: u16 = 0xdc00;
@@ -283,11 +304,80 @@ mod tests {
     }
 
     #[test]
+    fn file_list_id_is_fnv1a() {
+        // Reference vectors; the Windows side computes the same id in C.
+        assert_eq!(file_list_id(b"") as u32, 0x811c_9dc5);
+        assert_eq!(file_list_id(b"a") as u32, 0xe40c_292c);
+        assert_eq!(file_list_id(b"foobar") as u32, 0xbf9c_f968);
+    }
+
+    #[test]
+    fn parsed_files_carry_their_list_id() {
+        let pdu = descriptor_pdu("file.txt");
+        let id = file_list_id(&pdu);
+        let files = FileDescription::parse_file_descriptors(pdu, 0).unwrap();
+        assert_eq!(files[0].clip_data_id, id);
+    }
+
+    #[test]
     fn rejects_non_terminated_file_name() {
         let name = "a".repeat(FILE_NAME_CODE_UNITS);
         assert!(matches!(
             parse_name(&name),
             Err(CliprdrError::InvalidRequest { .. })
         ));
+    }
+
+    fn parse_perm(attributes: u32) -> u16 {
+        let mut pdu = descriptor_pdu("folder");
+        pdu[ATTRIBUTES_OFFSET..ATTRIBUTES_OFFSET + size_of::<u32>()]
+            .copy_from_slice(&attributes.to_le_bytes());
+        FileDescription::parse_file_descriptors(pdu, 0).unwrap()[0].perm
+    }
+
+    #[test]
+    fn windows_directories_stay_searchable() {
+        const FILE_ATTRIBUTE_READONLY: u32 = 0x01;
+        const FILE_ATTRIBUTE_HIDDEN: u32 = 0x02;
+        const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+        for attributes in [
+            FILE_ATTRIBUTE_DIRECTORY,
+            FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY,
+            FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_HIDDEN,
+        ] {
+            assert_eq!(
+                parse_perm(attributes),
+                PERM_RWX,
+                "attributes {attributes:#x}"
+            );
+        }
+    }
+
+    fn parse_last_write_time(filetime: u64) -> SystemTime {
+        let mut pdu = descriptor_pdu("file.txt");
+        pdu[PDU_HEADER_SIZE..PDU_HEADER_SIZE + size_of::<u32>()]
+            .copy_from_slice(&(FLAGS_FD_ATTRIBUTES | FLAGS_FD_LAST_WRITE).to_le_bytes());
+        pdu[LAST_WRITE_TIME_OFFSET..LAST_WRITE_TIME_OFFSET + size_of::<u64>()]
+            .copy_from_slice(&filetime.to_le_bytes());
+        FileDescription::parse_file_descriptors(pdu, 0).unwrap()[0].last_modified
+    }
+
+    #[test]
+    fn decodes_last_write_time_from_windows_filetime() {
+        // 2023-11-14 22:13:20 UTC
+        assert_eq!(
+            parse_last_write_time(133_444_736_000_000_000),
+            SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000)
+        );
+        // 3000-01-01 00:00:00 UTC
+        assert_eq!(
+            parse_last_write_time(441_481_536_000_000_000),
+            SystemTime::UNIX_EPOCH + Duration::from_secs(32_503_680_000)
+        );
+        // 1969-12-31 23:59:59 UTC falls back to the Unix epoch.
+        assert_eq!(
+            parse_last_write_time(116_444_736_000_000_000 - 10_000_000),
+            SystemTime::UNIX_EPOCH
+        );
     }
 }

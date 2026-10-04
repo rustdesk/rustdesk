@@ -310,7 +310,9 @@ message KeyEvent {
 }
 
 message CursorData {
-  uint64 id = 1;
+  // A string in JS: a Windows peer before 1.5.0 sends its cursor handle, sign-extended above
+  // 2^53 when its top bit is set, which a JS number cannot hold.
+  uint64 id = 1 [jstype = JS_STRING];
   sint32 hotx = 2;
   sint32 hoty = 3;
   int32 width = 4;
@@ -859,6 +861,12 @@ message Misc {
     DisplayResolution change_display_resolution = 36;
     MessageQuery message_query = 37;
     int32 follow_current_display = 38;
+    // Since 1.5.0: send the CursorData of this id again. No controller sends this yet; it is
+    // here so a controller can one day bound its own shape store and ask for the shape the
+    // peer just selected. The peer answers with what it holds then: a shape its cache dropped
+    // is rebuilt, and held again, the next time it is shown, before any connection names it
+    // by id again, so the shape just selected is always there to give.
+    uint64 request_cursor_data = 39;
   }
 }
 
@@ -1002,7 +1010,7 @@ message Message {
     AudioFrame audio_frame = 11;
     CursorData cursor_data = 12;
     CursorPosition cursor_position = 13;
-    uint64 cursor_id = 14;
+    uint64 cursor_id = 14 [jstype = JS_STRING]; // as CursorData.id
     KeyEvent key_event = 15;
     Clipboard clipboard = 16;
     FileAction file_action = 17;

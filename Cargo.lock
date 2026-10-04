@@ -1305,7 +1305,7 @@ dependencies = [
 [[package]]
 name = "clipboard-master"
 version = "4.0.0-beta.6"
-source = "git+https://github.com/rustdesk-org/clipboard-master#7762d74e38db37cfeb6ded88c964b9cdbddfb6db"
+source = "git+https://github.com/rustdesk-org/clipboard-master#522fafb65edfe7939cf63fa797f916569ecab595"
 dependencies = [
  "objc",
  "objc-foundation",
@@ -7196,6 +7196,7 @@ dependencies = [
  "wol-rs",
  "x11-clipboard 0.8.1",
  "x11rb 0.12.0",
+ "xxhash-rust",
  "zstd",
 ]
 
@@ -10805,6 +10806,12 @@ name = "xkeysym"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aee1b19627c7c60102ab80d3a9cbe18de90bfe03bfa6c3715447681f0e8c8af6"
 
 [[package]]
 name = "yasna"

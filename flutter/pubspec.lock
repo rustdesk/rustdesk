@@ -339,8 +339,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "8b774a66671cbb9bcb2631af6ac28f9bdd469ce3"
-      resolved-ref: "8b774a66671cbb9bcb2631af6ac28f9bdd469ce3"
+      ref: "cddc2e64f8fefce4f80db87b20bcda2dd019bed6"
+      resolved-ref: "cddc2e64f8fefce4f80db87b20bcda2dd019bed6"
       url: "https://github.com/rustdesk-org/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"

@@ -277,6 +277,8 @@ fn gst_element(name: &str) -> ResultType<gst::Element> {
 impl PipeWireRecorder {
     pub fn new(capturable: PipeWireCapturable) -> ResultType<Self> {
         let pipeline = gst::Pipeline::new(None);
+        // Clock waits on stale capture timestamps can exhaust the compositor's buffers.
+        pipeline.use_clock(None::<&gst::Clock>);
 
         let src = gst_element("pipewiresrc")?;
         src.set_property("fd", &capturable.fd.as_raw_fd())?;
