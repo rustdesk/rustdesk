@@ -193,23 +193,31 @@ pub(in crate::server::uinput) fn resolve(
         return Ok(mapping.clone());
     }
     if shortcut
-        && character.is_ascii_alphabetic()
+        && character.is_ascii_graphic()
         && Config::get_option(OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK) != "Y"
     {
-        // Non-Latin layouts can lack letters whose physical shortcuts still work.
-        // Preserve those keys only for shortcuts; Shift comes from the caller.
-        let (key, _) =
-            super::super::service::map_key(&enigo::Key::Layout(character.to_ascii_lowercase()))?;
-        hbb_common::throttled_log!(
-            LAYOUT_WARNING_INTERVAL,
-            warn,
-            "Uinput layout lacks a Latin shortcut letter; using its legacy physical key. Set {}=Y to disable",
-            OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK
-        );
-        return Ok(LayoutKey {
-            key: enigo::Key::Raw(key.code() + super::XKB_KEYCODE_OFFSET),
-            modifiers: Vec::new(),
-        });
+        return legacy_shortcut(character);
     }
     bail!("Character cannot be generated in the detected XKB layout")
+}
+
+fn legacy_shortcut(character: char) -> ResultType<LayoutKey> {
+    // Uppercase letters must not synthesize Shift for a shortcut, but shifted
+    // punctuation still needs the legacy table's modifier.
+    let (key, shift) =
+        super::super::service::map_key(&enigo::Key::Layout(character.to_ascii_lowercase()))?;
+    hbb_common::throttled_log!(
+        LAYOUT_WARNING_INTERVAL,
+        warn,
+        "Uinput layout lacks an ASCII shortcut character; using its legacy physical mapping. Set {}=Y to disable",
+        OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK
+    );
+    Ok(LayoutKey {
+        key: enigo::Key::Raw(key.code() + super::XKB_KEYCODE_OFFSET),
+        modifiers: if shift {
+            vec![evdev::Key::KEY_LEFTSHIFT.code() + super::XKB_KEYCODE_OFFSET]
+        } else {
+            Vec::new()
+        },
+    })
 }
