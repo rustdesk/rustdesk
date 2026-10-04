@@ -1918,7 +1918,9 @@ pub(super) fn warm_availability() {
 pub(super) async fn settle_unknown_availability() {
     let unknown = matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Unknown);
     if unknown {
-        let _ = tokio::task::spawn_blocking(availability).await;
+        if let Err(err) = tokio::task::spawn_blocking(availability).await {
+            log::warn!("drm: login availability settlement task failed: {err}");
+        }
     }
 }
 
