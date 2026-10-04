@@ -1,15 +1,18 @@
 use super::{source::Source, Keymap, LayoutKey, CAPS_LOCK_BIT, NUM_LOCK_BIT};
+use crate::server::input_service::is_ascii_printable;
 use base::{
     config::keys::OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK,
     message_proto::{key_event, KeyEvent, KeyboardMode},
 };
 use hbb_common::{anyhow::anyhow, config::Config, lazy_static, ResultType};
 use std::{
-    sync::{Mutex, RwLock},
+    sync::{mpsc, Mutex, RwLock, TryLockError},
+    thread,
     time::{Duration, Instant},
 };
 
 const LAYOUT_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
+const LAYOUT_INPUT_WAIT: Duration = Duration::from_millis(25);
 const LAYOUT_WARNING_INTERVAL: Duration = Duration::from_secs(5);
 
 lazy_static::lazy_static! {
@@ -22,35 +25,98 @@ lazy_static::lazy_static! {
 struct Refresh {
     checked: Option<Instant>,
     source: Option<Source>,
+    // Cover scheduling until the worker acquires REFRESH.
+    running: bool,
 }
 
 pub(in crate::server::uinput) fn prepare_layout(event: &KeyEvent) {
     if !crate::server::input_service::wayland_use_uinput() || !needs_layout(event) {
         return;
     }
-    // Only preparation takes REFRESH. Character dispatch takes CURRENT alone,
-    // so desktop IO never holds a lock needed by ENIGO's character resolver.
-    let mut refresh = REFRESH.lock().unwrap();
-    if refresh
-        .checked
-        .is_some_and(|checked| checked.elapsed() < LAYOUT_REFRESH_INTERVAL)
+    let deadline = Instant::now() + LAYOUT_INPUT_WAIT;
+    // A stalled desktop query must not block later input or spawn more workers.
+    let mut refresh = match REFRESH.try_lock() {
+        Ok(refresh) => refresh,
+        Err(TryLockError::WouldBlock) => return,
+        Err(TryLockError::Poisoned(error)) => {
+            hbb_common::throttled_log!(
+                LAYOUT_WARNING_INTERVAL,
+                error,
+                "Uinput layout refresh lock is poisoned: {}",
+                error
+            );
+            return;
+        }
+    };
+    if refresh.running
+        || refresh
+            .checked
+            .is_some_and(|checked| checked.elapsed() < LAYOUT_REFRESH_INTERVAL)
     {
         return;
     }
+    let (completed, receiver) = mpsc::channel();
+    refresh.running = true;
+    if let Err(error) = thread::Builder::new()
+        .name("uinput-layout".to_owned())
+        .spawn(move || refresh_layout(completed))
+    {
+        refresh.running = false;
+        refresh.checked = Some(Instant::now());
+        hbb_common::throttled_log!(
+            LAYOUT_WARNING_INTERVAL,
+            error,
+            "Cannot start uinput layout refresh: {}",
+            error
+        );
+        return;
+    }
+    drop(refresh);
+    wait_for_refresh(receiver, deadline);
+}
+
+fn refresh_layout(completed: mpsc::Sender<()>) {
+    let mut refresh = REFRESH.lock().unwrap();
     if let Err(error) = refresh.update() {
-        let mut current = CURRENT.write().unwrap();
-        if current.is_err() {
-            *current = Err(error.to_string());
-        }
+        let retained = {
+            let mut current = CURRENT.write().unwrap();
+            if current.is_err() {
+                *current = Err(error.to_string());
+            }
+            current.is_ok()
+        };
         hbb_common::throttled_log!(
             LAYOUT_WARNING_INTERVAL,
             warn,
             "Uinput layout refresh failed (previous mapping retained: {}): {}",
-            current.is_ok(),
+            retained,
             error
         );
     }
     refresh.checked = Some(Instant::now());
+    refresh.running = false;
+    drop(refresh);
+    // Timing out only ends the input wait; the worker still publishes its map.
+    if completed.send(()).is_err() {
+        hbb_common::log::trace!("Uinput layout refresh finished after the input wait ended");
+    }
+}
+
+fn wait_for_refresh(receiver: mpsc::Receiver<()>, deadline: Instant) {
+    match receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+        Ok(()) => {}
+        Err(mpsc::RecvTimeoutError::Timeout) => hbb_common::throttled_log!(
+            LAYOUT_WARNING_INTERVAL,
+            warn,
+            "Uinput layout refresh exceeded the {} ms input wait; query continues in the background",
+            LAYOUT_INPUT_WAIT.as_millis()
+        ),
+        Err(mpsc::RecvTimeoutError::Disconnected) => hbb_common::throttled_log!(
+            LAYOUT_WARNING_INTERVAL,
+            error,
+            "Uinput layout refresh worker stopped before completion"
+        ),
+    }
 }
 
 impl Refresh {
@@ -80,9 +146,16 @@ fn needs_layout(event: &KeyEvent) -> bool {
         return false;
     }
     match &event.union {
-        Some(key_event::Union::Seq(sequence)) => !sequence.is_empty(),
+        Some(key_event::Union::Seq(sequence)) => {
+            // Translate shortcuts use Key::Layout even for non-ASCII text.
+            !sequence.is_empty()
+                && (mode == KeyboardMode::Translate || sequence.chars().all(is_ascii_printable))
+        }
         Some(key_event::Union::Chr(_)) => mode == KeyboardMode::Legacy && event.down,
-        Some(key_event::Union::Unicode(_)) => mode == KeyboardMode::Legacy,
+        Some(key_event::Union::Unicode(character)) => {
+            mode == KeyboardMode::Legacy
+                && char::from_u32(*character).is_some_and(is_ascii_printable)
+        }
         _ => false,
     }
 }

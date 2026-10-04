@@ -58,6 +58,8 @@ impl Drop for Connection {
 }
 
 pub(super) fn read() -> ResultType<Source> {
+    // Best effort: a compositor may leave Xwayland's group stale while a native
+    // Wayland window has focus. A successful XKB query cannot prove freshness.
     let api = xkb::xkbcommon_option().ok_or_else(|| anyhow!("Cannot load libxkbcommon"))?;
     let x11 = x11::xkbcommon_x11_option().ok_or_else(|| anyhow!("Cannot load libxkbcommon-x11"))?;
     let connection = Connection::open()?;

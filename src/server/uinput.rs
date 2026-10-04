@@ -49,6 +49,9 @@ pub mod client {
     pub struct UInputKeyboard {
         conn: Connection,
         rt: Runtime,
+        // Ownership is per character. The Linux connection turns character
+        // downs into clicks; overlapping direct-backend holds can release a
+        // generated modifier still needed by another character.
         layout_keys: HashMap<char, LayoutKey>,
     }
 
