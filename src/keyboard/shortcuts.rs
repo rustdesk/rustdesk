@@ -481,7 +481,16 @@ pub fn try_dispatch(
         restore_remote_modifiers(sid, event, keyboard_mode, peer, &send);
         return false;
     };
-    release_remote_keys(sid, keyboard_mode, &peer(), &send);
+    let peer = peer();
+    if runs_on_release(&action_id)
+        || matches!(action_id.as_str(),
+            action_id::TOGGLE_VIEW_ONLY | action_id::INSERT_LOCK | action_id::SEND_CTRL_ALT_DEL
+            | action_id::KEYBOARD_MODE_MAP | action_id::KEYBOARD_MODE_TRANSLATE
+            | action_id::KEYBOARD_MODE_LEGACY)
+    {
+        release_remote_non_modifiers(keyboard_mode, &peer, &send);
+    }
+    release_remote_keys(sid, keyboard_mode, &peer, &send);
     if let EventType::KeyPress(k) = event.event_type {
         FIRED_KEYS.lock().unwrap().insert(k);
         let mut pending = RELEASE_ACTIONS.lock().unwrap();
@@ -538,8 +547,29 @@ fn restore_remote_modifiers(
     }
 }
 
-/// Release on the remote every key it still holds, the chord's modifiers
-/// included, so the action does not run with them held down there.
+// Actions that move focus, stop input or change its mode must release ordinary
+// keys too: their physical key-up may no longer balance the original key-down.
+#[cfg(feature = "flutter")]
+fn release_remote_non_modifiers(
+    keyboard_mode: &str,
+    peer: &str,
+    send: &impl Fn(&base::message_proto::KeyEvent),
+) {
+    use super::{event_to_key_events, get_keyboard_mode_enum, is_modifier, TO_RELEASE};
+    let held: Vec<_> = TO_RELEASE.lock().unwrap().iter()
+        .filter(|(key, _)| !is_modifier(key))
+        .map(|(key, event)| (*key, event.clone()))
+        .collect();
+    let mode = get_keyboard_mode_enum(keyboard_mode);
+    for (key, mut event) in held {
+        event.event_type = rdev::EventType::KeyRelease(key);
+        for key_event in event_to_key_events(peer.to_owned(), &event, mode, None) {
+            send(&key_event);
+        }
+    }
+}
+
+/// Release the remote modifiers before an action, preserving unrelated held keys.
 ///
 /// Unlike `keyboard::release_remote_keys` this keeps the local modifier state:
 /// the user is still physically holding the modifiers, and the next key of
@@ -552,11 +582,14 @@ fn release_remote_keys(
     peer: &str,
     send: &impl Fn(&base::message_proto::KeyEvent),
 ) {
-    use super::{event_to_key_events, get_keyboard_mode_enum, take_remote_keys, MODIFIERS_STATE, TO_RELEASE};
+    use super::{event_to_key_events, get_keyboard_mode_enum, is_modifier, MODIFIERS_STATE, TO_RELEASE};
     use rdev::{EventType, Key};
 
     let mode = get_keyboard_mode_enum(keyboard_mode);
-    let to_release = take_remote_keys();
+    let to_release: Vec<_> = TO_RELEASE.lock().unwrap().iter()
+        .filter(|(key, _)| is_modifier(key))
+        .map(|(key, event)| (*key, event.clone()))
+        .collect();
     let held: Vec<(Key, rdev::Event)> = {
         let state = MODIFIERS_STATE.lock().unwrap();
         to_release
@@ -566,18 +599,9 @@ fn release_remote_keys(
             .collect()
     };
     for (key, mut event) in to_release {
-        let mut types = vec![EventType::KeyRelease(key)];
-        // Keep the focus-loss workaround for other peers. Tapping Alt on
-        // Windows activates its system menu and consumes the next character.
-        if peer != "windows" && (key == Key::Alt || key == Key::AltGr) {
-            types.push(EventType::KeyPress(key));
-            types.push(EventType::KeyRelease(key));
-        }
-        for t in types {
-            event.event_type = t;
-            for key_event in event_to_key_events(peer.to_owned(), &event, mode, None) {
-                send(&key_event);
-            }
+        event.event_type = EventType::KeyRelease(key);
+        for key_event in event_to_key_events(peer.to_owned(), &event, mode, None) {
+            send(&key_event);
         }
     }
     {
@@ -1159,6 +1183,82 @@ mod tests {
         }
         release_chord(chord);
         reset_fired_keys();
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn shortcut_cleanup_keeps_unrelated_keys_held() {
+        use base::message_proto::KeyboardMode;
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        for action in [action_id::TOGGLE_MUTE, action_id::TOGGLE_CHAT,
+            action_id::TOGGLE_VIEW_ONLY, action_id::INSERT_LOCK, action_id::SEND_CTRL_ALT_DEL,
+            action_id::KEYBOARD_MODE_MAP, action_id::KEYBOARD_MODE_TRANSLATE,
+            action_id::KEYBOARD_MODE_LEGACY]
+        {
+            let chord = enable_defaults_and_hold_chord();
+            let mut bindings = default_bindings();
+            bindings.iter_mut().find(|b| b.key == "s").unwrap().action = action.into();
+            *CACHE.write().unwrap() = Arc::new(Bindings { enabled: true, pass_through: false, bindings });
+            release_chord(chord);
+            super::super::event_to_key_events(
+                "windows".into(), &make_press(Key::KeyW), KeyboardMode::Map, Some(0),
+            );
+            for key in chord {
+                super::super::event_to_key_events(
+                    "windows".into(), &make_press(key), KeyboardMode::Map, Some(0),
+                );
+            }
+            let sent = std::cell::RefCell::new(Vec::new());
+            let consumed = try_dispatch(
+                Some(&SID_A), &make_press(Key::KeyS), "map", || "windows".into(),
+                |event| sent.borrow_mut().push((rdev::win_key_from_scancode(event.chr()), event.down)),
+            );
+            let tracked = super::super::TO_RELEASE.lock().unwrap().contains_key(&Key::KeyW);
+            super::super::event_to_key_events(
+                "windows".into(), &make_release(Key::KeyW), KeyboardMode::Map, Some(0),
+            );
+            release_chord(chord);
+            reset_fired_keys();
+            clear_session_state(&SID_A);
+
+            assert!(consumed);
+            let keep_held = action == action_id::TOGGLE_MUTE;
+            assert_eq!(tracked, keep_held, "held key tracking after {action}");
+            let w_events: Vec<_> = sent.borrow().iter()
+                .filter(|(key, _)| *key == Key::KeyW).map(|(_, down)| *down).collect();
+            assert_eq!(w_events, if keep_held { vec![] } else { vec![false] }, "{action}");
+        }
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn shortcut_cleanup_does_not_tap_alt() {
+        use base::message_proto::KeyboardMode;
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        for peer in ["windows", "linux", "macos"] {
+            let chord = enable_defaults_and_hold_chord();
+            let alt = super::super::event_to_key_events(
+                peer.into(), &make_press(Key::Alt), KeyboardMode::Map, Some(0),
+            );
+            assert_eq!(alt.len(), 1);
+            let sent = std::cell::RefCell::new(Vec::new());
+            let consumed = try_dispatch(
+                Some(&SID_A), &make_press(Key::KeyS), "map", || peer.into(),
+                |event| {
+                    if event.chr() == alt[0].chr() { sent.borrow_mut().push(event.down); }
+                },
+            );
+            release_chord(chord);
+            reset_fired_keys();
+            clear_session_state(&SID_A);
+
+            assert!(consumed);
+            assert_eq!(*sent.borrow(), vec![false], "shortcut cleanup must only release Alt on {peer}");
+        }
     }
 
     #[cfg(feature = "flutter")]
