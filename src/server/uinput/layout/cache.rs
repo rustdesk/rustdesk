@@ -12,6 +12,9 @@ use std::{
 };
 
 const LAYOUT_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
+// GNOME 46/Plasma 6.6 probes (200-400 initial samples): preparation p99 7-16 ms;
+// repeated refresh medians were 2-6 ms. KDE query outliers exceeded 100 ms,
+// so this limits input waiting while the background query continues.
 const LAYOUT_INPUT_WAIT: Duration = Duration::from_millis(25);
 const LAYOUT_WARNING_INTERVAL: Duration = Duration::from_secs(5);
 
