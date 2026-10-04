@@ -107,6 +107,9 @@ final List<Map<String, Object>> kDefaultShortcutBindings = [
     [kShortcutActionSwitchDisplayPrev,      'arrow_left'],
     [kShortcutActionScreenshot,             'p'],
     [kShortcutActionToggleShowRemoteCursor, 'm'],
+    // The tested iPad/Bluetooth keyboard setup did not deliver the complete
+    // Cmd+Option+Shift+S chord, also in Safari. Other physical keyboards are
+    // unverified; Mute can be rebound to a chord that reaches the app.
     [kShortcutActionToggleMute,             's'],
     [kShortcutActionToggleBlockInput,       'i'],
     [kShortcutActionToggleChat,             'c'],

@@ -17,6 +17,8 @@ class LocalFlutterShortcutDispatcher {
   // session that fired them. See [kShortcutActionsRunOnKeyUp].
   static final _keyUpActions =
       <PhysicalKeyboardKey, (LocalFlutterShortcutDispatcher, String)>{};
+  static final _clipboardModifierReleases =
+      <PhysicalKeyboardKey, (LocalFlutterShortcutDispatcher, Future<void>)>{};
   final _releasedModifiers = <PhysicalKeyboardKey>{};
   bool _viewOnlyShortcutPending = false;
   int _generation = 0;
@@ -27,6 +29,8 @@ class LocalFlutterShortcutDispatcher {
   /// stay owned until their release, whichever session receives it.
   void clear() {
     _keyUpActions.removeWhere((_, pending) => identical(pending.$1, this));
+    _clipboardModifierReleases
+        .removeWhere((_, pending) => identical(pending.$1, this));
     _releasedModifiers.clear();
     _viewOnlyShortcutPending = false;
     _generation++;
@@ -36,6 +40,7 @@ class LocalFlutterShortcutDispatcher {
   static void resetFiredKeys() {
     _firedKeys.clear();
     _keyUpActions.clear();
+    _clipboardModifierReleases.clear();
   }
 
   void recordReleasedModifiers(Iterable<PhysicalKeyboardKey> keys) {
@@ -119,9 +124,11 @@ class LocalFlutterShortcutDispatcher {
     if (up) {
       if (!_firedKeys.remove(key)) return false;
       final pending = _keyUpActions.remove(key);
+      final release = _clipboardModifierReleases.remove(key)?.$2;
       if (pending != null) {
         final (owner, action) = pending;
-        unawaited(owner._trigger(action, null));
+        unawaited(
+            owner._trigger(action, release == null ? null : () => release));
       }
       return true;
     }
@@ -131,13 +138,24 @@ class LocalFlutterShortcutDispatcher {
     if (action == null) return false;
     _firedKeys.add(key);
     if (viewOnly) _viewOnlyShortcutPending = true;
-    final runOnKeyUp = kShortcutActionsRunOnKeyUp.contains(action);
+    // Web clipboard reads need the key-down's browser user activation.
+    final runOnKeyUp = kShortcutActionsRunOnKeyUp.contains(action) ||
+        (!kIsWeb && action == kShortcutActionSendClipboardKeystrokes);
     if (runOnKeyUp) {
       _keyUpActions[key] = (this, action);
     } else {
       _keyUpActions.remove(key);
     }
-    unawaited(_trigger(runOnKeyUp ? null : action, releaseModifiers));
+    if (runOnKeyUp &&
+        action == kShortcutActionSendClipboardKeystrokes &&
+        releaseModifiers != null) {
+      // The release can precede completion of the asynchronous FFI calls.
+      final release = Future<void>.sync(releaseModifiers);
+      _clipboardModifierReleases[key] = (this, release);
+      unawaited(_trigger(null, () => release));
+    } else {
+      unawaited(_trigger(runOnKeyUp ? null : action, releaseModifiers));
+    }
     return true;
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/shortcut_constants.dart';
@@ -191,6 +192,96 @@ void main() {
     await Future<void>.value();
     expect(actions, ['screenshot']);
   });
+
+  test('native clipboard prompt can be repeated immediately after cancelling',
+      () async {
+    var dialogOpen = false;
+    var prompts = 0;
+    final dispatcher = _ShortcutHarness(
+      match: (_) => kShortcutActionSendClipboardKeystrokes,
+      releaseModifiers: () async {},
+      onTriggered: (_) {
+        dialogOpen = true;
+        prompts++;
+      },
+    );
+    bool route(KeyEvent event) => !dialogOpen && dispatcher.tryDispatch(event);
+
+    for (var attempt = 1; attempt <= 2; attempt++) {
+      expect(route(down(PhysicalKeyboardKey.keyV)), isTrue);
+      await Future<void>.value();
+      expect(dialogOpen, isFalse,
+          reason: 'the local dialog must not consume the trigger release');
+      expect(route(repeat(PhysicalKeyboardKey.keyV)), isTrue);
+      expect(route(up(PhysicalKeyboardKey.keyV)), isTrue);
+      await Future<void>.value();
+      expect(dialogOpen, isTrue);
+      expect(prompts, attempt);
+      dialogOpen = false;
+    }
+  }, skip: kIsWeb);
+
+  test('native clipboard waits for outstanding remote modifier releases',
+      () async {
+    final released = Completer<void>();
+    final actions = <String>[];
+    final dispatcher = _ShortcutHarness(
+      match: (_) => kShortcutActionSendClipboardKeystrokes,
+      releaseModifiers: () => released.future,
+      onTriggered: actions.add,
+    );
+    expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyV)), isTrue);
+    expect(dispatcher.tryDispatch(up(PhysicalKeyboardKey.keyV)), isTrue);
+    await Future<void>.value();
+    expect(actions, isEmpty,
+        reason: 'clipboard input must follow the remote modifier releases');
+    released.complete();
+    await Future<void>.value();
+    expect(actions, [kShortcutActionSendClipboardKeystrokes]);
+  }, skip: kIsWeb);
+
+  test('Web clipboard still runs on key down for browser activation', () async {
+    final actions = <String>[];
+    final dispatcher = _ShortcutHarness(
+      match: (_) => kShortcutActionSendClipboardKeystrokes,
+      releaseModifiers: () async {},
+      onTriggered: actions.add,
+    );
+    expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyV)), isTrue);
+    await Future<void>.value();
+    expect(actions, [kShortcutActionSendClipboardKeystrokes]);
+    expect(dispatcher.tryDispatch(up(PhysicalKeyboardKey.keyV)), isTrue);
+    expect(actions, [kShortcutActionSendClipboardKeystrokes]);
+  }, skip: !kIsWeb);
+
+  test('closing a clipboard owner preserves another session release', () async {
+    final closingRelease = Completer<void>();
+    final nextRelease = Completer<void>();
+    final actions = <String>[];
+    final closing = _ShortcutHarness(
+      match: (_) => kShortcutActionSendClipboardKeystrokes,
+      releaseModifiers: () => closingRelease.future,
+      onTriggered: (_) => actions.add('closing'),
+    );
+    final next = _ShortcutHarness(
+      match: (_) => kShortcutActionSendClipboardKeystrokes,
+      releaseModifiers: () => nextRelease.future,
+      onTriggered: (_) => actions.add('next'),
+    );
+
+    expect(closing.tryDispatch(down(PhysicalKeyboardKey.keyV)), isTrue);
+    expect(next.tryDispatch(down(PhysicalKeyboardKey.keyC)), isTrue);
+    closing.clear();
+    expect(next.tryDispatch(up(PhysicalKeyboardKey.keyC)), isTrue);
+    closingRelease.complete();
+    await Future<void>.value();
+    expect(actions, isEmpty,
+        reason: 'the live session still awaits its own modifier release');
+    expect(next.tryDispatch(up(PhysicalKeyboardKey.keyV)), isTrue);
+    nextRelease.complete();
+    await Future<void>.value();
+    expect(actions, ['next']);
+  }, skip: kIsWeb);
 
   test('closing the session drops its pending action but keeps the fired key',
       () async {

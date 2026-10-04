@@ -41,9 +41,9 @@ void _disableAndroidSoftKeyboard({bool? isKeyboardVisible}) {
   }
 }
 
-bool handleMobileChatKeyEvent(KeyEvent event,
-    {required bool chatFocused, required InputModel inputModel}) {
-  if (chatFocused &&
+bool handleMobileLocalKeyEvent(KeyEvent event,
+    {required bool remoteFocused, required InputModel inputModel}) {
+  if (!remoteFocused &&
       event is KeyUpEvent &&
       const [
         PhysicalKeyboardKey.controlLeft,
@@ -55,7 +55,8 @@ bool handleMobileChatKeyEvent(KeyEvent event,
         PhysicalKeyboardKey.metaLeft,
         PhysicalKeyboardKey.metaRight,
       ].contains(event.physicalKey)) {
-    // Chat owns focus, but the remote input path still owns these modifiers.
+    // Local UI may consume key-ups while the remote input path still owns
+    // the modifiers pressed before focus moved.
     inputModel.handleKeyEvent(event);
   }
   return false;
@@ -128,7 +129,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     });
     WakelockManager.enable(_uniqueKey);
     _physicalFocusNode.requestFocus();
-    HardwareKeyboard.instance.addHandler(_handleChatKeyEvent);
+    HardwareKeyboard.instance.addHandler(_handleLocalKeyEvent);
     gFFI.inputModel.listenToMouse(true);
     gFFI.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     keyboardSubscription =
@@ -177,7 +178,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   Future<void> dispose() async {
-    HardwareKeyboard.instance.removeHandler(_handleChatKeyEvent);
+    HardwareKeyboard.instance.removeHandler(_handleLocalKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
     // after several awaits (canvas save, image update, the `enable_soft_keyboard`
@@ -570,8 +571,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
   }
 
-  bool _handleChatKeyEvent(KeyEvent event) => handleMobileChatKeyEvent(event,
-      chatFocused: gFFI.chatModel.inputNode.hasFocus, inputModel: inputModel);
+  bool _handleLocalKeyEvent(KeyEvent event) => handleMobileLocalKeyEvent(event,
+      remoteFocused: _physicalFocusNode.hasPrimaryFocus, inputModel: inputModel);
 
   Widget getRawPointerAndKeyBody(Widget child) {
     final ffiModel = Provider.of<FfiModel>(context);

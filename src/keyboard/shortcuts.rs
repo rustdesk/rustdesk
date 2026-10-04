@@ -355,7 +355,9 @@ const RELEASE_ACTION_IDS: &[&str] = &[
 ];
 
 pub fn runs_on_release(action_id: &str) -> bool {
-    RELEASE_ACTION_IDS.contains(&action_id)
+    // A clipboard consent dialog can consume the trigger release. Web keeps
+    // this action on key-down for browser clipboard user activation.
+    action_id == action_id::SEND_CLIPBOARD_KEYSTROKES || RELEASE_ACTION_IDS.contains(&action_id)
 }
 
 /// Forget the modifiers a session released on its remote and the actions it
@@ -1334,6 +1336,39 @@ mod tests {
         clear_session_state(&SID_A);
         assert_eq!(pending_for(Key::KeyW), None, "a closed session owes nothing");
         assert!(dispatch(&SID_A, &make_release(Key::KeyW)), "but its key stays owned");
+        release_chord(chord);
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn clipboard_prompt_waits_for_release_before_taking_focus() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        *CACHE.write().unwrap() = Arc::new(Bindings {
+            enabled: true,
+            pass_through: false,
+            bindings: vec![Binding {
+                action: action_id::SEND_CLIPBOARD_KEYSTROKES.into(),
+                mods: vec![Modifier::Primary, Modifier::Alt, Modifier::Shift],
+                key: "v".into(),
+            }],
+        });
+        let dispatch = |event: &rdev::Event| {
+            try_dispatch(Some(&SID_A), event, "map", || "linux".into(), |_| {})
+        };
+        for _ in 0..2 {
+            assert!(dispatch(&make_press(Key::KeyV)));
+            assert_eq!(
+                RELEASE_ACTIONS.lock().unwrap().get(&Key::KeyV).cloned(),
+                Some((SID_A, action_id::SEND_CLIPBOARD_KEYSTROKES.to_owned())),
+                "the prompt must not take focus before the trigger release"
+            );
+            assert!(dispatch(&make_release(Key::KeyV)));
+            assert!(!fired_keys().contains(&Key::KeyV));
+            assert!(!RELEASE_ACTIONS.lock().unwrap().contains_key(&Key::KeyV));
+        }
         release_chord(chord);
     }
 
