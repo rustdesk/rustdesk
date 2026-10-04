@@ -993,10 +993,17 @@ class RustdeskImpl {
   }
 
   // Tell the JS-side matcher (flutter/web/js/src/shortcut_matcher.ts) to
-  // re-read its bindings from LocalStorage. Mirrors the native call which
-  // refreshes the Rust matcher's in-memory cache.
+  // use the same platform-filtered bindings as the Flutter matcher, while
+  // keeping unsupported saved bindings in LocalStorage.
   void mainReloadKeyboardShortcuts({dynamic hint}) {
-    js.context.callMethod('reloadShortcuts', []);
+    final config = ShortcutModel.config(active: true);
+    js.context.callMethod('reloadShortcuts', [
+      jsonEncode({
+        'enabled': config.enabled,
+        'pass_through': config.passThrough,
+        'bindings': config.bindings,
+      })
+    ]);
   }
 
   // Web has no Rust at runtime, so the defaults seed comes from the
@@ -1263,6 +1270,7 @@ class RustdeskImpl {
         ShortcutModel.onWebTriggered(action);
       }
     };
+    mainReloadKeyboardShortcuts();
     return Future.value();
   }
 
