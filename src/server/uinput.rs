@@ -157,12 +157,21 @@ pub mod client {
                 return Ok(());
             }
             let context = self.layout_context()?;
+            // Keep supported text after a mapping failure and report the first error.
+            // Modifier and IPC failures must still stop the sequence immediately.
+            let mut result = Ok(());
             for chr in sequence.chars() {
-                let mapping = context.resolve(chr)?;
+                let mapping = match context.resolve(chr) {
+                    Ok(mapping) => mapping,
+                    Err(error) => {
+                        result = result.and(Err(error));
+                        continue;
+                    }
+                };
                 self.press_layout_key(chr, mapping)?;
                 self.layout_key_up(chr)?;
             }
-            Ok(())
+            result
         }
 
         fn layout_context(&mut self) -> ResultType<LayoutContext> {
