@@ -205,6 +205,9 @@ pub mod client {
                 Ok(Some(Data::KeyboardResponse(ipc::DataKeyboardResponse::GetKeyState(state)))) => {
                     Ok(state)
                 }
+                Ok(Some(Data::KeyboardResponse(ipc::DataKeyboardResponse::GetKeyStateError(
+                    error,
+                )))) => bail!("Failed to query uinput key state: {}", error),
                 Ok(Some(resp)) => {
                     // FATAL error!!!
                     bail!(
@@ -882,6 +885,14 @@ pub mod service {
                                 "Failed to query uinput layout modifier state: {}",
                                 error
                             );
+                            // Unknown modifier state must not be treated as released.
+                            ipc_send_data(
+                                stream,
+                                &Data::KeyboardResponse(
+                                    ipc::DataKeyboardResponse::GetKeyStateError(error.to_string()),
+                                ),
+                            )
+                            .await;
                             return;
                         }
                         Err(_e) => {

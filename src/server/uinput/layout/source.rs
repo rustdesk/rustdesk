@@ -93,6 +93,8 @@ fn gnome_layout() -> ResultType<Option<Names>> {
     if layout.is_empty() {
         bail!("GNOME input source has an empty layout");
     }
+    // Match GNOME Shell's session-wide options; it does not merge IBus
+    // engine layout-option metadata into the compositor keymap.
     let options: Vec<String> = required_setting(&settings, "xkb-options")?;
     // Older GNOME releases use the default model and have no xkb-model setting.
     let model: String = if schema.has_key("xkb-model") {
