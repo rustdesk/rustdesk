@@ -103,6 +103,8 @@ pub struct IpcDrmCapturer {
     cur_h: usize,
     cur_fmt: Pixfmt,
     got_frame: bool,
+    // The last frame handed to the encoder: a repeat of it is dropped, as the other capturers do.
+    saved_raw_data: Vec<u8>,
 }
 
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
@@ -426,6 +428,7 @@ impl IpcDrmCapturer {
                 cur_h: 0,
                 cur_fmt: Pixfmt::BGRA,
                 got_frame: false,
+                saved_raw_data: Vec::new(),
             },
             displays,
             wire_idx,
@@ -575,6 +578,8 @@ impl TraitCapturer for IpcDrmCapturer {
                 return Err(io::Error::new(io::ErrorKind::Other, err));
             }
         }
+        // The producer grabs on a timer, so a still screen arrives as the same bytes every tick.
+        scrap::would_block_if_equal(&mut self.saved_raw_data, &self.cur)?;
         Ok(Frame::PixelBuffer(PixelBuffer::new(
             &self.cur,
             self.cur_fmt,
@@ -2348,6 +2353,7 @@ mod drm_capturer_tests {
             cur_h: 0,
             cur_fmt: Pixfmt::BGRA,
             got_frame: false,
+            saved_raw_data: Vec::new(),
         }
     }
 
@@ -2888,6 +2894,8 @@ mod drm_capturer_tests {
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
         // A producer that cannot say (pre-0.5.8 library) keeps the old rule: 180 left alone.
+        // That is the image of the case above, which frame() would drop as a repeat.
+        c.saved_raw_data.clear();
         put_frame_with(&c, w, h, None, &src);
         match c.frame(Duration::from_millis(50)) {
             Ok(Frame::PixelBuffer(pb)) => {
@@ -2896,6 +2904,22 @@ mod drm_capturer_tests {
             Ok(_) => panic!("expected a pixel-buffer frame"),
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
+    }
+
+    #[test]
+    fn a_frame_equal_to_the_last_one_is_not_encoded_again() {
+        let (still, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let (moved, _, _) = px_frame(&[&[1, 2, 3], &[4, 5, 7]], 0);
+        let mut c = capturer_with(Some((w, h)));
+        put_frame_with(&c, w, h, None, &still);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+        put_frame_with(&c, w, h, None, &still);
+        assert!(matches!(
+            c.frame(Duration::from_millis(50)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock
+        ));
+        put_frame_with(&c, w, h, None, &moved);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
     }
 
     #[test]
@@ -3009,9 +3033,12 @@ mod drm_capturer_tests {
     }
 
     fn put_frame_rot(c: &IpcDrmCapturer, w: usize, h: usize, plane_rotation: Option<u32>) {
+        // Each call differs in its first pixel: frame() drops a frame equal to the last one.
+        static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let mut buf = c.shared.slot.lock().unwrap().take_free().unwrap_or_default();
         buf.clear();
         buf.resize(w * h * 4, 0);
+        buf[..4].copy_from_slice(&SEQ.fetch_add(1, Ordering::Relaxed).to_le_bytes());
         let mut slot = c.shared.slot.lock().unwrap();
         slot.publish(w, h, Pixfmt::BGRA, plane_rotation, buf);
         c.shared.cv.notify_one();
