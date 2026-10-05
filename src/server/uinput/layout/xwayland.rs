@@ -58,8 +58,11 @@ impl Drop for Connection {
 }
 
 pub(super) fn read() -> ResultType<Source> {
-    // Best effort: a compositor may leave Xwayland's group stale while a native
-    // Wayland window has focus. A successful XKB query cannot prove freshness.
+    // Xwayland receives the group through focus-scoped wl_keyboard.modifiers.
+    // With a native window focused, both core and slave X11 keyboards can
+    // retain the last X11-focused group (verified on GNOME and KWin).
+    // Reopening XCB or waiting cannot request the missing compositor update.
+    // Prefer native GNOME/KDE sources; do not steal focus to refresh Xwayland.
     let api = xkb::xkbcommon_option().ok_or_else(|| anyhow!("Cannot load libxkbcommon"))?;
     let x11 = x11::xkbcommon_x11_option().ok_or_else(|| anyhow!("Cannot load libxkbcommon-x11"))?;
     let connection = Connection::open()?;
