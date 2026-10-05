@@ -914,6 +914,20 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let mut conn = dup_to_drm_conn(&stream)?;
     drop(stream);
 
+    let wake = match conn.recv_msg_timeout2(3_000).await {
+        Some(Ok((Data::DrmHello { wake }, _fd))) => wake,
+        Some(Ok((_, _fd))) => {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(5),
+                info,
+                "drm: peer did not open with DrmHello; closing"
+            );
+            return Ok(());
+        }
+        Some(Err(e)) => return Err(e),
+        None => return Ok(()),
+    };
+
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
     let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool)>();
     let stop = Arc::new(AtomicBool::new(false));
@@ -923,7 +937,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let worker_gate = frames_gated.clone();
     std::thread::Builder::new()
         .name("drm-capture".into())
-        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate))
+        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate, wake))
         .map_err(|err| anyhow::anyhow!("could not spawn the drm capture worker: {err}"))?;
 
     let displays = match frame_rx.recv().await {
@@ -1108,6 +1122,7 @@ fn drm_capture_worker(
     crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    wake: bool,
 ) {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
@@ -1118,7 +1133,15 @@ fn drm_capture_worker(
     let t_conn = std::time::Instant::now();
 
     // Enumerate FRESH rather than serve the cache: a cached display may no longer be driven.
-    let displays = drm_enumerate_settled("a consumer connected");
+    let displays = if wake {
+        drm_enumerate_settled("a consumer connected")
+    } else {
+        let (displays, _undriven) = drm_enumerate_all_displays();
+        // Seen lit, a connector a failed wake gave up on is wakeable again.
+        #[cfg(feature = "drm-wake")]
+        drm_wakeable_undriven(&displays, &_undriven);
+        displays
+    };
     if frame_tx
         .blocking_send(DrmProducerMsg::Displays(displays))
         .is_err()

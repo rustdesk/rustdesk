@@ -600,6 +600,10 @@ async fn recv_thread(
             return;
         }
     };
+    if let Err(err) = conn.send_msg(&Data::DrmHello { wake: true }, None).await {
+        let _ = tx.send(Err(err));
+        return;
+    }
     let displays = match conn.recv_msg_timeout2(DISPLAY_LIST_TIMEOUT_MS).await {
         Some(Ok((Data::DrmDisplayList(v), _fd))) => v,
         Some(Ok((other, _fd))) => {
@@ -1536,12 +1540,12 @@ const NEGATIVE_TTL: Duration = Duration::from_secs(30);
 const POSITIVE_TTL: Duration = Duration::from_secs(15);
 
 /// Runs on a throwaway thread: a nested `#[tokio::main]` panics if called from inside a runtime.
-fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
+fn query_displays(wake: bool) -> ResultType<Vec<DrmDisplayInfo>> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::Builder::new()
         .name("drm-query".into())
         .spawn(move || {
-            let _ = tx.send(query_displays_async());
+            let _ = tx.send(query_displays_async(wake));
         })
         .map_err(|err| anyhow!("could not spawn the drm display query thread: {err}"))?;
     rx.recv_timeout(Duration::from_millis(HANDSHAKE_WAIT_MS))
@@ -1549,12 +1553,13 @@ fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn query_displays_async() -> ResultType<Vec<DrmDisplayInfo>> {
-    query_displays_inner().await
+async fn query_displays_async(wake: bool) -> ResultType<Vec<DrmDisplayInfo>> {
+    query_displays_inner(wake).await
 }
 
-async fn query_displays_inner() -> ResultType<Vec<DrmDisplayInfo>> {
+async fn query_displays_inner(wake: bool) -> ResultType<Vec<DrmDisplayInfo>> {
     let mut conn = connect_drm(DRM_CONNECT_TIMEOUT_MS).await?;
+    conn.send_msg(&Data::DrmHello { wake }, None).await?;
     match conn.recv_msg_timeout2(DISPLAY_LIST_TIMEOUT_MS).await {
         Some(Ok((Data::DrmDisplayList(v), _fd))) => Ok(v),
         Some(Ok((other, _fd))) => Err(anyhow!("expected DrmDisplayList, got {:?}", other)),
@@ -1625,8 +1630,8 @@ pub(crate) enum Availability {
     Unsettled,
 }
 
-/// MAY BLOCK for seconds: never a routing gate, and never on the login request path — that path
-/// reads `availability_cached`. This blocking form serves the capture-side callers through
+/// MAY BLOCK for seconds: never on an async executor (a login with no verdict runs it on the
+/// blocking pool). This blocking form serves the capture-side callers through
 /// `is_available`, where waiting out a settle is acceptable.
 fn availability() -> Availability {
     let (verdict, stale_no) = {
@@ -1709,7 +1714,7 @@ pub(crate) fn availability_cached() -> Availability {
 /// Probe synchronously and publish the outcome. The caller must hold DRM_PROBE_IN_FLIGHT.
 fn probe_and_publish() -> Availability {
     let t = Instant::now();
-    let result = query_displays();
+    let result = query_displays(true);
     let mut st = DRM_STATE.lock().unwrap();
     let answer = match result {
         Ok(list) if !list.is_empty() => {
@@ -1772,7 +1777,7 @@ fn refresh_unavailable_async() {
         .name("drm-unavail-refresh".into())
         .spawn(move || {
             let _in_flight = in_flight;
-            let result = query_displays();
+            let result = query_displays(true);
             let mut st = DRM_STATE.lock().unwrap();
             if DRM_STATE_GEN.load(Ordering::Acquire) != sampled_gen {
                 return;
@@ -1816,7 +1821,7 @@ fn refresh_available_async() {
         .name("drm-avail-refresh".into())
         .spawn(move || {
             let _in_flight = in_flight;
-            let result = query_displays();
+            let result = query_displays(true);
             let mut st = DRM_STATE.lock().unwrap();
             if DRM_STATE_GEN.load(Ordering::Acquire) != sampled_gen {
                 return;
@@ -1881,19 +1886,42 @@ pub(super) fn warm_availability() {
             std::thread::sleep(Duration::from_millis(300));
             continue;
         }
-        if matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..)) {
-            return;
-        }
-        match query_displays() {
-            Ok(list) if !list.is_empty() => {
-                log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
-                publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), list));
+        let sampled_gen = {
+            let st = DRM_STATE.lock().unwrap();
+            if matches!(&*st, ProbeState::Available(..)) {
                 return;
             }
-            _ => std::thread::sleep(Duration::from_millis(300)),
+            DRM_STATE_GEN.load(Ordering::Acquire)
+        };
+        match query_displays(false) {
+            Ok(list) if !list.is_empty() => {
+                let mut st = DRM_STATE.lock().unwrap();
+                // A login probe that published while this query ran keeps its newer list.
+                if DRM_STATE_GEN.load(Ordering::Acquire) == sampled_gen {
+                    log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
+                    publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+                }
+                return;
+            }
+            Ok(_) => {
+                log::info!("drm: no display is lit at startup; the first login probes again");
+                return;
+            }
+            Err(_) => std::thread::sleep(Duration::from_millis(300)),
         }
     }
     log::info!("drm: consumer cache warm found no producer at startup (will probe lazily)");
+}
+
+/// With no verdict yet, a login probes now instead of answering "not yet"; that may wake displays.
+/// A login that finds another probe running does not wait for it.
+pub(super) async fn settle_unknown_availability() {
+    let unknown = matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+    if unknown {
+        if let Err(err) = tokio::task::spawn_blocking(availability).await {
+            log::warn!("drm: login availability settlement task failed: {err}");
+        }
+    }
 }
 
 /// The service holds its answer until the topology settles. Replaces only an `Available` verdict.
@@ -1906,7 +1934,7 @@ pub(super) async fn refresh_displays_for_login() {
         DRM_STATE_GEN.load(Ordering::Acquire)
     };
     let t = Instant::now();
-    match query_displays_inner().await {
+    match query_displays_inner(true).await {
         Ok(list) if !list.is_empty() => {
             let changed = {
                 let mut st = DRM_STATE.lock().unwrap();
