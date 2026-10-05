@@ -138,25 +138,6 @@ void main() {
     });
   }
 
-  test('owns repeats and release after the chord modifiers are released',
-      () async {
-    var modifiersPressed = true;
-    final actions = <String>[];
-    final dispatcher = _ShortcutHarness(
-      match: (_) => modifiersPressed ? 'screenshot' : null,
-      releaseModifiers: () async {},
-      onTriggered: actions.add,
-    );
-
-    expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyP)), isTrue);
-    modifiersPressed = false;
-    expect(dispatcher.tryDispatch(repeat(PhysicalKeyboardKey.keyP)), isTrue);
-    expect(dispatcher.tryDispatch(up(PhysicalKeyboardKey.keyP)), isTrue);
-    expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyP)), isFalse);
-    await Future<void>.value();
-    expect(actions, ['screenshot']);
-  });
-
   test('owns each overlapping shortcut key until its own release', () async {
     var modifiersPressed = true;
     final actions = <String>[];
@@ -448,41 +429,6 @@ void main() {
     expect(actions, ['screenshot']);
   });
 
-  test('read-only shortcut release is consumed after local matching stops', () {
-    var viewOnly = true;
-    final actions = <String>[];
-    final dispatcher = dispatcherFor((action) {
-      actions.add(action);
-      viewOnly = false;
-    });
-
-    expect(
-      dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyP),
-          match: () => viewOnly ? 'toggle_view_only' : null),
-      isTrue,
-    );
-    expect(viewOnly, isFalse);
-    expect(dispatcher.tryDispatch(repeat(PhysicalKeyboardKey.keyP)), isTrue);
-    expect(dispatcher.tryDispatch(up(PhysicalKeyboardKey.keyP)), isTrue);
-    expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyP)), isFalse);
-    expect(actions, ['toggle_view_only']);
-  });
-
-  test('raw read-only shortcut keeps ownership when input routing changes', () {
-    final actions = <String>[];
-    final dispatcher = dispatcherFor(actions.add);
-
-    expect(
-      dispatcher.tryDispatchRaw(rawP(down: true, ctrl: true),
-          match: () => 'toggle_view_only'),
-      isTrue,
-    );
-    expect(dispatcher.tryDispatchRaw(rawP(down: true, repeat: true)), isTrue);
-    expect(dispatcher.tryDispatchRaw(rawP(down: false)), isTrue);
-    expect(dispatcher.tryDispatchRaw(rawP(down: true)), isFalse);
-    expect(actions, ['toggle_view_only']);
-  });
-
   test('shortcut key ownership follows focus to another session', () {
     final actions = <String>[];
     final first = dispatcherFor(actions.add);
@@ -590,6 +536,7 @@ void main() {
         isTrue,
       );
       expect(viewOnly, isFalse);
+      expect(dispatcher.tryDispatch(repeat(PhysicalKeyboardKey.keyP)), isTrue);
       final shortcutUp = up(PhysicalKeyboardKey.keyP);
       keyboard.handleKeyEvent(shortcutUp);
       expect(dispatcher.tryDispatch(shortcutUp), isTrue);

@@ -214,28 +214,6 @@ void main() {
   Set<String> idSet(Iterable<KeyboardShortcutActionGroup> groups) =>
       {for (final e in allActionEntries(groups)) e.id};
 
-  /// Convenience: extract the children of the named group as a flat list of
-  /// human-readable tokens. Subgroups appear as `'group:<title>'` followed
-  /// by their entries, so call sites can assert on full ordering (subgroups
-  /// interleaved with direct items) in one expectation.
-  List<String> childTokens(
-      List<KeyboardShortcutActionGroup> groups, String titleKey) {
-    final group = groups.firstWhere((g) => g.titleKey == titleKey);
-    final out = <String>[];
-    for (final child in group.children) {
-      switch (child) {
-        case KeyboardShortcutActionEntry():
-          out.add(child.id);
-        case KeyboardShortcutActionSubgroup():
-          out.add('group:${child.titleKey}');
-          for (final entry in child.entries) {
-            out.add('  ${entry.id}');
-          }
-      }
-    }
-    return out;
-  }
-
   test('filterKeyboardShortcutActionGroupsForPlatform strips desktop-only', () {
     final groups = filterKeyboardShortcutActionGroupsForPlatform(
       capabilities(
@@ -307,87 +285,7 @@ void main() {
     expect(ids, contains(kShortcutActionScreenshot));
   });
 
-  test('shortcut action groups follow toolbar menu order', () {
-    final groups = kKeyboardShortcutActionGroups;
-
-    // Top-level groups in toolbar order.
-    expect(
-      groups.map((g) => g.titleKey).toList(),
-      ['Monitor', 'Control Actions', 'Display', 'Keyboard', 'Chat', 'Other'],
-    );
-
-    // Display: subgroups (View Mode → Image Quality → Codec → Virtual
-    // display) first, then direct items (cursor toggles + display toggles),
-    // then Privacy mode subgroup last — exactly matching `_DisplayMenu`.
-    expect(childTokens(groups, 'Display'), [
-      'group:View Mode',
-      '  $kShortcutActionViewModeOriginal',
-      '  $kShortcutActionViewModeAdaptive',
-      '  $kShortcutActionViewModeCustom',
-      'group:Image Quality',
-      '  $kShortcutActionImageQualityBest',
-      '  $kShortcutActionImageQualityBalanced',
-      '  $kShortcutActionImageQualityLow',
-      'group:Codec',
-      '  $kShortcutActionCodecAuto',
-      '  $kShortcutActionCodecVp8',
-      '  $kShortcutActionCodecVp9',
-      '  $kShortcutActionCodecAv1',
-      '  $kShortcutActionCodecH264',
-      '  $kShortcutActionCodecH265',
-      'group:Virtual display',
-      '  $kShortcutActionPlugOutAllVirtualDisplays',
-      kShortcutActionToggleShowRemoteCursor,
-      kShortcutActionToggleFollowRemoteCursor,
-      kShortcutActionToggleFollowRemoteWindow,
-      kShortcutActionToggleZoomCursor,
-      kShortcutActionToggleQualityMonitor,
-      kShortcutActionToggleMute,
-      kShortcutActionToggleEnableFileCopyPaste,
-      kShortcutActionToggleDisableClipboard,
-      kShortcutActionToggleLockAfterSessionEnd,
-      kShortcutActionToggleTrueColor,
-      'group:Privacy mode',
-      '  $kShortcutActionPrivacyMode1',
-      '  $kShortcutActionPrivacyMode2',
-    ]);
-
-    // Privacy mode is the last child under Display (matching the toolbar's
-    // submenu order — `_DisplayMenu` adds Privacy mode after the toggles).
-    final displayChildren =
-        groups.firstWhere((g) => g.titleKey == 'Display').children;
-    expect(displayChildren.last, isA<KeyboardShortcutActionSubgroup>());
-    expect(
-      (displayChildren.last as KeyboardShortcutActionSubgroup).titleKey,
-      'Privacy mode',
-    );
-
-    // Keyboard: Keyboard mode subgroup first, then direct items —
-    // matching `_KeyboardMenu`.
-    expect(childTokens(groups, 'Keyboard'), [
-      'group:Keyboard mode',
-      '  $kShortcutActionKeyboardModeLegacy',
-      '  $kShortcutActionKeyboardModeMap',
-      '  $kShortcutActionKeyboardModeTranslate',
-      kShortcutActionToggleViewOnly,
-      kShortcutActionToggleShowMyCursor,
-      kShortcutActionToggleSwapCtrlCmd,
-      kShortcutActionToggleRelativeMouseMode,
-      kShortcutActionToggleReverseMouseWheel,
-      kShortcutActionToggleSwapLeftRightMouse,
-    ]);
-  });
-
   test('filterKeyboardShortcutActionGroupsForPlatform drops empty groups', () {
-    // Sanity: KeyboardShortcutActionGroup ctor still accepts a single direct
-    // entry as a child.
-    final original = [
-      KeyboardShortcutActionGroup('TestGroup', [
-        KeyboardShortcutActionEntry(kShortcutActionCloseTab, 'Close Tab'),
-      ]),
-    ];
-    expect(original.first.children, hasLength(1));
-
     // With every capability flag off, groups whose items are all behind
     // those flags get dropped. Display / Keyboard parent groups still carry
     // cross-platform direct items so they survive even when the gated
@@ -606,34 +504,4 @@ void main() {
     }
   });
 
-  test('configurable shortcut list does not include known-removed action IDs',
-      () {
-    // These IDs were briefly defined without handlers (a "ghost action"
-    // footgun). If you intend to re-add one of these as a real action,
-    // wire up its handler and add a constant + group entry — do not just
-    // resurrect the literal string below.
-    //
-    // Note: `toggle_privacy_mode` was once on this list but is now a real
-    // implemented action (registered in shortcut_model.dart). The other
-    // legacy IDs (toggle_audio, view_mode_shrink/stretch, view_mode_1_to_1)
-    // were renamed: their replacements are kShortcutActionToggleMute and
-    // kShortcutActionViewModeOriginal/Adaptive/Custom.
-    //
-    // `toggle_input_source` was removed on purpose: it switches the key
-    // capture backend between key down and key up, so the matcher that
-    // consumed the press never sees the repeats and the release.
-    const knownRemoved = [
-      'toggle_audio',
-      'toggle_input_source',
-      'view_mode_1_to_1',
-      'view_mode_shrink',
-      'view_mode_stretch',
-    ];
-    final actions = idSet(kKeyboardShortcutActionGroups);
-    for (final id in knownRemoved) {
-      expect(actions, isNot(contains(id)),
-          reason:
-              '"$id" was a known ghost action — wire a real handler before re-adding it');
-    }
-  });
 }

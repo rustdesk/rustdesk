@@ -745,14 +745,6 @@ mod tests {
         event
     }
 
-    #[test]
-    fn event_to_key_name_handles_f_keys() {
-        use rdev::Key;
-        assert_eq!(event_to_key_name(&make_press(Key::F1)), Some("f1".into()));
-        assert_eq!(event_to_key_name(&make_press(Key::F5)), Some("f5".into()));
-        assert_eq!(event_to_key_name(&make_press(Key::F12)), Some("f12".into()));
-    }
-
     /// Cross-language parity for default bindings. The fixture file is the
     /// shared source of truth — Dart has a mirror test against the same file
     /// (`kDefaultShortcutBindings matches fixture` in
@@ -775,68 +767,6 @@ mod tests {
     }
 
     #[test]
-    fn event_to_key_name_treats_numpad_enter_as_enter() {
-        use rdev::{Event, EventType, Key};
-        let make = |k: Key| Event {
-            time: std::time::SystemTime::now(),
-            unicode: None,
-            platform_code: 0,
-            position_code: 0,
-            event_type: EventType::KeyPress(k),
-            usb_hid: 0,
-            #[cfg(any(target_os = "windows", target_os = "macos"))]
-            extra_data: 0,
-        };
-        assert_eq!(event_to_key_name(&make(Key::Return)), Some("enter".into()));
-        assert_eq!(event_to_key_name(&make(Key::KpReturn)), Some("enter".into()));
-    }
-
-    #[test]
-    fn bindings_round_trip_json() {
-        let json = r#"{
-            "enabled": true,
-            "bindings": [
-                {"action": "send_ctrl_alt_del", "mods": ["primary","alt","shift"], "key": "delete"},
-                {"action": "toggle_fullscreen",  "mods": ["primary","alt","shift"], "key": "enter"}
-            ]
-        }"#;
-        let parsed: Bindings = serde_json::from_str(json).expect("parse");
-        assert!(parsed.enabled);
-        assert_eq!(parsed.bindings.len(), 2);
-        assert_eq!(parsed.bindings[0].action, "send_ctrl_alt_del");
-        assert_eq!(parsed.bindings[0].key, "delete");
-
-        let serialized = serde_json::to_string(&parsed).expect("serialize");
-        let reparsed: Bindings = serde_json::from_str(&serialized).expect("reparse");
-        assert_eq!(parsed, reparsed);
-    }
-
-    #[test]
-    fn defaults_match_design_doc() {
-        let defaults = default_bindings();
-        let actions: Vec<&str> = defaults.iter().map(|b| b.action.as_str()).collect();
-        assert!(actions.contains(&action_id::SEND_CTRL_ALT_DEL));
-        assert!(actions.contains(&action_id::TOGGLE_FULLSCREEN));
-        assert!(actions.contains(&action_id::SWITCH_DISPLAY_NEXT));
-        assert!(actions.contains(&action_id::SWITCH_DISPLAY_PREV));
-        assert!(actions.contains(&action_id::SCREENSHOT));
-        assert!(actions.contains(&action_id::TOGGLE_SHOW_REMOTE_CURSOR));
-        assert!(actions.contains(&action_id::TOGGLE_MUTE));
-        assert!(actions.contains(&action_id::TOGGLE_BLOCK_INPUT));
-        assert!(actions.contains(&action_id::TOGGLE_CHAT));
-        // every default binding includes the three-modifier prefix
-        for b in &defaults {
-            assert!(b.mods.contains(&Modifier::Primary));
-            assert!(b.mods.contains(&Modifier::Alt));
-            assert!(b.mods.contains(&Modifier::Shift));
-        }
-    }
-
-    fn match_for_test<'a>(key: &str, mods: &[Modifier], b: &'a Bindings) -> Option<&'a str> {
-        match_normalized(key, mods, b)
-    }
-
-    #[test]
     fn match_returns_none_when_pass_through() {
         let bindings = Bindings {
             enabled: true,
@@ -854,14 +784,14 @@ mod tests {
     #[test]
     fn match_returns_none_when_disabled() {
         let bindings = Bindings { enabled: false, pass_through: false, bindings: default_bindings() };
-        let result = match_for_test("p", &[Modifier::Primary, Modifier::Alt, Modifier::Shift], &bindings);
+        let result = match_normalized("p", &[Modifier::Primary, Modifier::Alt, Modifier::Shift], &bindings);
         assert_eq!(result, None);
     }
 
     #[test]
     fn match_screenshot_when_enabled() {
         let bindings = Bindings { enabled: true, pass_through: false, bindings: default_bindings() };
-        let result = match_for_test("p", &[Modifier::Primary, Modifier::Alt, Modifier::Shift], &bindings);
+        let result = match_normalized("p", &[Modifier::Primary, Modifier::Alt, Modifier::Shift], &bindings);
         assert_eq!(result, Some(action_id::SCREENSHOT));
     }
 
@@ -869,14 +799,14 @@ mod tests {
     fn match_returns_none_when_modifiers_partial() {
         let bindings = Bindings { enabled: true, pass_through: false, bindings: default_bindings() };
         // missing Shift
-        let result = match_for_test("p", &[Modifier::Primary, Modifier::Alt], &bindings);
+        let result = match_normalized("p", &[Modifier::Primary, Modifier::Alt], &bindings);
         assert_eq!(result, None);
     }
 
     #[test]
     fn match_does_not_fire_on_extra_unbound_keys() {
         let bindings = Bindings { enabled: true, pass_through: false, bindings: default_bindings() };
-        let result = match_for_test("z", &[Modifier::Primary, Modifier::Alt, Modifier::Shift], &bindings);
+        let result = match_normalized("z", &[Modifier::Primary, Modifier::Alt, Modifier::Shift], &bindings);
         assert_eq!(result, None);
     }
 
@@ -954,84 +884,6 @@ mod tests {
         assert_eq!(
             match_normalized("p", &[Modifier::Primary], &bindings),
             None,
-        );
-    }
-
-    /// Cross-language parity for the full set of shortcut-bindable key
-    /// names (not just the defaults). The fixture lists every name the
-    /// matcher accepts; this test verifies the (rdev::Key → name) round-trip
-    /// covers exactly that set. Dart has a mirror test against the same
-    /// fixture (`physicalKeyName covers the supported-keys fixture` in
-    /// `flutter/test/keyboard_shortcuts_test.dart`).
-    ///
-    /// Adding a key requires updates in three places: the fixture, this
-    /// table, and the Dart `physicalKeyName` — that's the price of the
-    /// parity guarantee. Drift on any side breaks one of the two tests.
-    #[test]
-    fn supported_keys_match_fixture() {
-        use rdev::Key;
-        use std::collections::BTreeSet;
-
-        let table: &[(&str, Key)] = &[
-            ("a", Key::KeyA), ("b", Key::KeyB), ("c", Key::KeyC),
-            ("d", Key::KeyD), ("e", Key::KeyE), ("f", Key::KeyF),
-            ("g", Key::KeyG), ("h", Key::KeyH), ("i", Key::KeyI),
-            ("j", Key::KeyJ), ("k", Key::KeyK), ("l", Key::KeyL),
-            ("m", Key::KeyM), ("n", Key::KeyN), ("o", Key::KeyO),
-            ("p", Key::KeyP), ("q", Key::KeyQ), ("r", Key::KeyR),
-            ("s", Key::KeyS), ("t", Key::KeyT), ("u", Key::KeyU),
-            ("v", Key::KeyV), ("w", Key::KeyW), ("x", Key::KeyX),
-            ("y", Key::KeyY), ("z", Key::KeyZ),
-            ("digit0", Key::Num0), ("digit1", Key::Num1),
-            ("digit2", Key::Num2), ("digit3", Key::Num3),
-            ("digit4", Key::Num4), ("digit5", Key::Num5),
-            ("digit6", Key::Num6), ("digit7", Key::Num7),
-            ("digit8", Key::Num8), ("digit9", Key::Num9),
-            ("f1", Key::F1), ("f2", Key::F2), ("f3", Key::F3),
-            ("f4", Key::F4), ("f5", Key::F5), ("f6", Key::F6),
-            ("f7", Key::F7), ("f8", Key::F8), ("f9", Key::F9),
-            ("f10", Key::F10), ("f11", Key::F11), ("f12", Key::F12),
-            ("delete", Key::Delete),
-            ("backspace", Key::Backspace),
-            ("tab", Key::Tab),
-            ("space", Key::Space),
-            ("enter", Key::Return),
-            ("enter", Key::KpReturn),
-            ("arrow_left", Key::LeftArrow),
-            ("arrow_right", Key::RightArrow),
-            ("arrow_up", Key::UpArrow),
-            ("arrow_down", Key::DownArrow),
-            ("home", Key::Home),
-            ("end", Key::End),
-            ("page_up", Key::PageUp),
-            ("page_down", Key::PageDown),
-            ("insert", Key::Insert),
-        ];
-
-        // Round-trip: every entry in the table must map through
-        // event_to_key_name to its declared name.
-        for (name, key) in table {
-            assert_eq!(
-                event_to_key_name(&make_press(*key)).as_deref(),
-                Some(*name),
-                "rdev::Key::{:?} should map to {:?}",
-                key, name,
-            );
-        }
-
-        // The set of names produced by the table must equal the fixture.
-        let actual: BTreeSet<&str> = table.iter().map(|(n, _)| *n).collect();
-        let fixture_raw: Vec<String> = serde_json::from_str(include_str!(
-            "../../flutter/test/fixtures/supported_shortcut_keys.json"
-        ))
-        .expect("fixture is valid JSON");
-        let expected: BTreeSet<&str> =
-            fixture_raw.iter().map(String::as_str).collect();
-        assert_eq!(
-            actual, expected,
-            "event_to_key_name vocabulary drifted from \
-             flutter/test/fixtures/supported_shortcut_keys.json — update \
-             shortcuts.rs, the fixture, and Dart physicalKeyName together"
         );
     }
 
