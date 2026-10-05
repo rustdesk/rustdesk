@@ -119,7 +119,7 @@ fn gnome_layout() -> ResultType<Option<Names>> {
     }
     let recent: Vec<(String, String)> = required_setting(&settings, "mru-sources")?;
     // GNOME initially selects the first configured source when MRU is empty.
-    // Its stored MRU still does not track temporary IBus suppression.
+    // The IBus reader verifies the active engine before accepting persisted MRU.
     let selected = recent
         .iter()
         .find(|source| sources.contains(source))
