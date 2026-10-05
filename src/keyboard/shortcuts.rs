@@ -150,10 +150,6 @@ pub fn match_normalized<'a>(key: &str, mods: &[Modifier], b: &'a Bindings) -> Op
 pub fn normalize_modifiers(alt: bool, ctrl: bool, shift: bool, command: bool) -> Vec<Modifier> {
     // iOS shares Apple's keyboard semantics with macOS — recording dialog
     // already treats iOS as `_isMac`, so the matcher must too.
-    //
-    // AltGr conflation: `get_modifiers_state` ORs Alt and AltGr, so an
-    // AltGr+key press satisfies `Modifier::Alt`. Theoretical collision only;
-    // fix at `get_modifiers_state` if a real bug surfaces.
     let mut v = Vec::new();
     if cfg!(any(target_os = "macos", target_os = "ios")) {
         if command { v.push(Modifier::Primary); }
@@ -333,7 +329,28 @@ pub fn match_event(event: &rdev::Event) -> Option<String> {
     let (alt, ctrl, shift, command) =
         crate::keyboard::client::get_modifiers_state(false, false, false, false);
     let mods = normalize_modifiers(alt, ctrl, shift, command);
-    match_normalized(&key_name, &mods, &bindings).map(str::to_owned)
+    let action = match_normalized(&key_name, &mods, &bindings)?;
+    // AltGraph is text input, not the ordinary Alt recorded in a shortcut.
+    // Keep the shared modifier snapshot unchanged for remote key encoding.
+    #[cfg(target_os = "windows")]
+    if unsafe { super::IS_0X021D_DOWN }
+        && super::MODIFIERS_STATE.lock().unwrap().get(&rdev::Key::AltGr) == Some(&true)
+    {
+        return None;
+    }
+    #[cfg(target_os = "linux")]
+    if super::MODIFIERS_STATE.lock().unwrap().get(&rdev::Key::AltGr) == Some(&true) {
+        match crate::platform::linux::right_alt_is_level3_shift() {
+            Ok(true) => return None,
+            Ok(false) => {}
+            Err(err) => {
+                hbb_common::throttled_log!(std::time::Duration::from_secs(5), warn,
+                    "Cannot identify AltGraph for keyboard shortcuts: {}", err);
+                return None;
+            }
+        }
+    }
+    Some(action.to_owned())
 }
 
 #[cfg(feature = "flutter")]
