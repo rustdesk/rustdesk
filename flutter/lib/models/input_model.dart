@@ -1022,11 +1022,21 @@ class InputModel {
     return _localFlutterShortcuts.tryDispatchRaw(
       e,
       viewOnly: isViewOnly,
-      match: () => _matchFlutterShortcut(e.physicalKey,
-          ctrlPressed: e.isControlPressed,
-          altPressed: e.isAltPressed,
-          shiftPressed: e.isShiftPressed,
-          commandPressed: e.isMetaPressed),
+      match: () {
+        final data = e.data;
+        const gtkMod5Mask = 1 << 7;
+        // GTK's Mod5 (used by AltGr) is missing from the ordinary modifier flags.
+        if (data is RawKeyEventDataLinux &&
+            data.keyHelper is GtkKeyHelper &&
+            (data.modifiers & gtkMod5Mask) != 0) {
+          return null;
+        }
+        return _matchFlutterShortcut(e.physicalKey,
+            ctrlPressed: e.isControlPressed,
+            altPressed: e.isAltPressed,
+            shiftPressed: e.isShiftPressed,
+            commandPressed: e.isMetaPressed);
+      },
       releaseModifiers: releaseModifiers
           ? () => _releaseFlutterShortcutModifiers(raw: true)
           : null,
