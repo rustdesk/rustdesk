@@ -20,6 +20,8 @@ const LAYOUT_WARNING_INTERVAL: Duration = Duration::from_secs(5);
 
 lazy_static::lazy_static! {
     static ref REFRESH: Mutex<Refresh> = Mutex::new(Refresh::default());
+    // Only the first relevant input takes the startup query's completion receiver.
+    static ref PREWARM_RECEIVER: Mutex<Option<mpsc::Receiver<()>>> = Mutex::new(None);
     static ref CURRENT: RwLock<Result<Keymap, String>> =
         RwLock::new(Err("Uinput keyboard layout has not been detected".to_owned()));
 }
@@ -37,7 +39,12 @@ pub(in crate::server::uinput) fn prepare_layout(event: &KeyEvent) {
         return;
     }
     let deadline = Instant::now() + LAYOUT_INPUT_WAIT;
-    if let Some(receiver) = start_refresh() {
+    let receiver = {
+        let mut prewarm = PREWARM_RECEIVER.lock().unwrap();
+        // Prefer a due refresh over an old, already-completed startup query.
+        start_refresh().or(prewarm.take())
+    };
+    if let Some(receiver) = receiver {
         wait_for_refresh(receiver, deadline);
     }
 }
@@ -45,7 +52,10 @@ pub(in crate::server::uinput) fn prepare_layout(event: &KeyEvent) {
 pub(in crate::server::uinput) fn prewarm_layout() {
     // Use server startup time for discovery before the first remote character.
     // This reduces cold-start fallback; a still-pending query cannot guarantee readiness.
-    drop(start_refresh());
+    let mut prewarm = PREWARM_RECEIVER.lock().unwrap();
+    if let Some(receiver) = start_refresh() {
+        *prewarm = Some(receiver);
+    }
 }
 
 fn start_refresh() -> Option<mpsc::Receiver<()>> {
@@ -111,7 +121,7 @@ fn refresh_layout(completed: mpsc::Sender<()>) {
     refresh.checked = Some(Instant::now());
     refresh.running = false;
     drop(refresh);
-    // Prewarming has no waiter. An input timeout also leaves this worker running.
+    // An input timeout drops its receiver but leaves this worker running.
     if completed.send(()).is_err() {
         hbb_common::log::trace!("Uinput layout refresh finished without an input waiter");
     }
