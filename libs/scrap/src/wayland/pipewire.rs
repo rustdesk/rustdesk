@@ -23,7 +23,7 @@ use gstreamer_app::AppSink;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
-use base::platform::linux::CMD_SH;
+use base::platform::linux::{WaylandDisplayInfo, CMD_SH};
 use hbb_common::{anyhow::anyhow, bail, config, serde_json, tokio, ResultType};
 
 use super::capturable::PixelProvider;
@@ -1288,6 +1288,26 @@ pub fn fill_displays(
             )?;
         }
         HAS_POSITION_ATTR.store(true, Ordering::SeqCst);
+    } else if all_displays.displays.len() > 1 {
+        for (i, sd) in shared_displays.iter_mut().enumerate() {
+            if let crate::Display::WAYLAND(d) = sd {
+                let capturable = &mut d.0;
+                if let Some(origin) = corrected_origin(
+                    capturable.position,
+                    capturable.physical_size,
+                    &all_displays.displays,
+                ) {
+                    warn!(
+                        "Position {:?} names no output of size {:?}, using {:?}.",
+                        capturable.position, capturable.physical_size, origin
+                    );
+                    capturable.position = origin;
+                    if let Some(pw_stream) = rdp_info.streams.get_mut(i) {
+                        pw_stream.position = origin;
+                    }
+                }
+            }
+        }
     }
 
     if all_displays.displays.len() > 1 {
@@ -1301,6 +1321,34 @@ pub fn fill_displays(
     });
 
     Ok(())
+}
+
+// The origin for a stream whose position names no output of the stream's size (a rotated output
+// counts in either orientation), when exactly one output has that size. xdg-desktop-portal-hyprland reports every stream at (0, 0):
+// with no output there `sort_streams` dropped the stream, and with another output there the
+// stream took its origin and missed `try_fix_logical_size`, so the pointer landed on the wrong
+// output (#15731). With several outputs of that size the position is kept.
+fn corrected_origin(
+    position: (i32, i32),
+    size: (usize, usize),
+    outputs: &[WaylandDisplayInfo],
+) -> Option<(i32, i32)> {
+    let has_size = |o: &&WaylandDisplayInfo| {
+        let mode = (o.width as usize, o.height as usize);
+        mode == size || (o.transform % 180 != 0 && (mode.1, mode.0) == size)
+    };
+    if outputs
+        .iter()
+        .filter(has_size)
+        .any(|o| (o.x, o.y) == position)
+    {
+        return None;
+    }
+    let mut same_size = outputs.iter().filter(has_size);
+    match (same_size.next(), same_size.next()) {
+        (Some(o), None) => Some((o.x, o.y)),
+        _ => None,
+    }
 }
 
 fn try_fill_positions(
@@ -1731,7 +1779,58 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::stage_err;
+    use super::{corrected_origin, stage_err, WaylandDisplayInfo};
+
+    fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
+        WaylandDisplayInfo {
+            name: String::new(),
+            x,
+            y,
+            width: mode.0,
+            height: mode.1,
+            logical_size: None,
+            refresh_rate: 60,
+            transform: 0,
+        }
+    }
+
+    #[test]
+    fn a_portal_position_naming_no_output_of_its_size_moves_to_the_only_one() {
+        // 1920x1080 at the origin, 2880x1800 to its right: xdph puts the right one at (0, 0).
+        let pair = [output(0, 0, (1920, 1080)), output(1920, 0, (2880, 1800))];
+        assert_eq!(
+            corrected_origin((0, 0), (2880, 1800), &pair),
+            Some((1920, 0))
+        );
+        // A real origin is kept.
+        assert_eq!(corrected_origin((1920, 0), (2880, 1800), &pair), None);
+        // Nothing starts at the origin (the hyprland layout in #15731).
+        let three = [
+            output(0, 120, (1920, 1200)),
+            output(1920, 0, (3440, 1440)),
+            output(5360, 180, (1920, 1080)),
+        ];
+        assert_eq!(
+            corrected_origin((0, 0), (3440, 1440), &three),
+            Some((1920, 0))
+        );
+        // Two outputs of that size cannot be told apart: the position is kept.
+        let twins = [
+            output(0, 0, (2560, 1600)),
+            output(2560, 0, (1920, 1080)),
+            output(4480, 0, (1920, 1080)),
+        ];
+        assert_eq!(corrected_origin((0, 0), (1920, 1080), &twins), None);
+        // A portrait panel turned to landscape keeps its position next to a 1920x1080 output.
+        let turned = [
+            WaylandDisplayInfo {
+                transform: 90,
+                ..output(0, 0, (1080, 1920))
+            },
+            output(1920, 0, (1920, 1080)),
+        ];
+        assert_eq!(corrected_origin((0, 0), (1920, 1080), &turned), None);
+    }
 
     #[test]
     fn stage_err_keeps_the_detail_safe_for_a_placeholder() {
