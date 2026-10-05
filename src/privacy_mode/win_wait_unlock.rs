@@ -4,7 +4,7 @@
 
 use super::{
     get_privacy_mode_conn_id, get_supported_impl, get_supported_privacy_mode_impl,
-    turn_on_privacy_sync, PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY,
+    turn_on_privacy_sync, INVALID_PRIVACY_MODE_CONN_ID, PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY,
 };
 use crate::{
     common::{make_privacy_mode_msg, make_privacy_mode_msg_with_details},
@@ -52,7 +52,9 @@ pub fn wait_for_unlock(impl_key: &str, conn_id: i32, waiting: &mut Option<Waitin
     let effective_key = get_supported_impl(impl_key);
     let must_wait = effective_key == PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
         && is_supported(&effective_key)
-        && get_privacy_mode_conn_id() != Some(conn_id)
+        // Only while privacy mode is off. A request queued behind another connection's could
+        // turn it back on after the user at the PC turned it off with Ctrl+P.
+        && get_privacy_mode_conn_id().map_or(true, |id| id == INVALID_PRIVACY_MODE_CONN_ID)
         && is_locked();
     // A new request replaces a waiting one.
     *waiting = None;
