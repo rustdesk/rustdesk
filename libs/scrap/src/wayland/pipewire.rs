@@ -109,6 +109,9 @@ pub struct PwStreamInfo {
     pub path: u64,
     source_type: u64,
     position: (i32, i32),
+    // Whether `position` came from the portal, rather than the (0, 0) default or a position
+    // RustDesk filled in.
+    position_from_portal: bool,
     size: (usize, usize),
 }
 
@@ -157,6 +160,9 @@ pub struct PipeWireCapturable {
     pub position: (i32, i32),
     pub logical_size: (usize, usize),
     pub physical_size: (usize, usize),
+    // False when `physical_size` is the portal size standing in for a resolution get_res() could
+    // not read.
+    physical_size_measured: bool,
 }
 
 impl PipeWireCapturable {
@@ -168,7 +174,7 @@ impl PipeWireCapturable {
     ) -> Self {
         // alternative to get screen resolution as stream.size is not always correct ex: on fractional scaling
         // https://github.com/rustdesk/rustdesk/issues/6116#issuecomment-1817724244
-        let physical_size = get_res(Self {
+        let measured = get_res(Self {
             dbus_conn: conn.clone(),
             fd: fd.clone(),
             path: stream.path,
@@ -177,8 +183,10 @@ impl PipeWireCapturable {
             position: stream.position,
             logical_size: stream.size,
             physical_size: (0, 0),
-        })
-        .unwrap_or(stream.size);
+            physical_size_measured: false,
+        });
+        let physical_size_measured = measured.is_ok();
+        let physical_size = measured.unwrap_or(stream.size);
         *resolution.lock().unwrap() = Some(physical_size);
         Self {
             dbus_conn: conn,
@@ -189,6 +197,7 @@ impl PipeWireCapturable {
             position: stream.position,
             logical_size: stream.size,
             physical_size,
+            physical_size_measured,
         }
     }
 }
@@ -702,6 +711,7 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
                             .get("source_type")
                             .map_or(Some(0), |v| v.as_u64())?,
                         position: (0, 0),
+                        position_from_portal: false,
                         size: (0, 0),
                     };
                     let v = attributes
@@ -737,6 +747,7 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
                                 info.position.0 = v[0] as _;
                                 info.position.1 = v[1] as _;
                                 HAS_POSITION_ATTR.store(true, Ordering::SeqCst);
+                                info.position_from_portal = true;
                             }
                         }
                     }
@@ -1288,13 +1299,21 @@ pub fn fill_displays(
             )?;
         }
         HAS_POSITION_ATTR.store(true, Ordering::SeqCst);
-    } else if all_displays.displays.len() > 1 {
+    }
+
+    if all_displays.displays.len() > 1 {
         for (i, sd) in shared_displays.iter_mut().enumerate() {
             if let crate::Display::WAYLAND(d) = sd {
                 let capturable = &mut d.0;
-                if let Some(origin) = corrected_origin(
+                let from_portal = rdp_info
+                    .streams
+                    .get(i)
+                    .map_or(false, |s| s.position_from_portal);
+                if let Some(origin) = reconciled_origin(
                     capturable.position,
+                    from_portal,
                     capturable.physical_size,
+                    capturable.physical_size_measured,
                     &all_displays.displays,
                 ) {
                     warn!(
@@ -1308,9 +1327,6 @@ pub fn fill_displays(
                 }
             }
         }
-    }
-
-    if all_displays.displays.len() > 1 {
         sort_streams(&all_displays, shared_displays, &mut rdp_info.streams);
     }
 
@@ -1321,6 +1337,22 @@ pub fn fill_displays(
     });
 
     Ok(())
+}
+
+// The origin a stream takes when its position names no output of its size. A position the portal
+// sent gives way only to a measured size: when get_res() failed, the size is the portal size,
+// which can be the mode of another output and says less than the position does.
+fn reconciled_origin(
+    position: (i32, i32),
+    position_from_portal: bool,
+    size: (usize, usize),
+    size_measured: bool,
+    outputs: &[WaylandDisplayInfo],
+) -> Option<(i32, i32)> {
+    if position_from_portal && !size_measured {
+        return None;
+    }
+    corrected_origin(position, size, outputs)
 }
 
 // The origin for a stream whose position names no output of the stream's size (a rotated output
@@ -1653,6 +1685,7 @@ fn fill_multi_matched_positions_cursor(
                     position: pw_stream_with_cursor.position,
                     logical_size: pw_stream_with_cursor.size,
                     physical_size: (0, 0),
+                    physical_size_measured: false,
                 })?;
                 // Take first frame and copy owned buffer to avoid borrow across second capture
                 let (is_bgr, w, first_buf): (bool, usize, Vec<u8>) =
@@ -1779,7 +1812,7 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::{corrected_origin, stage_err, WaylandDisplayInfo};
+    use super::{corrected_origin, reconciled_origin, stage_err, WaylandDisplayInfo};
 
     fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
         WaylandDisplayInfo {
@@ -1830,6 +1863,36 @@ mod tests {
             output(1920, 0, (1920, 1080)),
         ];
         assert_eq!(corrected_origin((0, 0), (1920, 1080), &turned), None);
+    }
+
+    #[test]
+    fn a_portal_position_gives_way_only_to_a_measured_size() {
+        // xdph said (0, 0); the measured size names the output on the right.
+        let pair = [output(0, 0, (1920, 1080)), output(1920, 0, (2880, 1800))];
+        assert_eq!(
+            reconciled_origin((0, 0), true, (2880, 1800), true, &pair),
+            Some((1920, 0))
+        );
+        // A correct portal position stays when the size is only the portal size standing in for
+        // a resolution get_res() could not read, even though another output has that mode.
+        let small_left = [output(0, 0, (1440, 900)), output(1920, 0, (2880, 1800))];
+        assert_eq!(
+            reconciled_origin((1920, 0), true, (1440, 900), false, &small_left),
+            None
+        );
+        // No portal position: a rotated output that try_fill_positions could not match by its
+        // mode is found in its delivered orientation.
+        let turned_right = [
+            output(0, 0, (2560, 1440)),
+            WaylandDisplayInfo {
+                transform: 90,
+                ..output(2560, 0, (1080, 1920))
+            },
+        ];
+        assert_eq!(
+            reconciled_origin((0, 0), false, (1920, 1080), true, &turned_right),
+            Some((2560, 0))
+        );
     }
 
     #[test]
