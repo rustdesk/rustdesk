@@ -54,7 +54,6 @@ typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
 final _constSessionId = Uuid().v4obj();
 // Empirical restart reconnect cadence: keep the last frame briefly and retry quickly.
 const _restartReconnectSilentDelaySecs = 5;
-// How often a held automatic reconnect checks again whether a display is awake.
 const _displayAsleepRecheckSecs = 5;
 
 class CachedPeerData {
@@ -122,7 +121,6 @@ class FfiModel with ChangeNotifier {
   Timer? _timer;
   Timer? _restartReconnectDelayTimer;
   Timer? _displayAsleepTimer;
-  bool _waitingForDisplay = false;
   var _reconnects = 1;
   DateTime? _offlineReconnectStartTime;
   bool _androidDocumentPickerActive = false;
@@ -931,7 +929,10 @@ class FfiModel with ChangeNotifier {
       if (_restartReconnectDelayTimer == null) {
         parent.target?.inputModel.setRelativeMouseMode(false);
         _cancelPendingMonitorRestore();
-        _autoReconnect(dialogManager, sessionId, silent: true);
+        if (!_waitForDisplay(() => bind.sessionReconnect(
+            sessionId: sessionId, forceRelay: false))) {
+          bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
+        }
         clearPermissions();
         // Retry once more after the silent window so restart reconnect attempts
         // are spaced by the empirical short cadence instead of only updating UI.
@@ -941,13 +942,18 @@ class FfiModel with ChangeNotifier {
           if (parent.target?.closed == true) {
             return;
           }
-          _autoReconnect(dialogManager, sessionId);
+          if (!_waitForDisplay(
+              () => reconnect(dialogManager, sessionId, false))) {
+            reconnect(dialogManager, sessionId, false);
+          }
         });
       }
     } else if (type == 'restarting-show') {
       _restartReconnectDelayTimer?.cancel();
       _restartReconnectDelayTimer = null;
-      _autoReconnect(dialogManager, sessionId);
+      if (!_waitForDisplay(() => reconnect(dialogManager, sessionId, false))) {
+        reconnect(dialogManager, sessionId, false);
+      }
     } else if (type == 'wait-remote-accept-nook') {
       showWaitAcceptDialog(sessionId, type, title, text, dialogManager);
     } else if (type == 'on-uac' || type == 'on-foreground-elevated') {
@@ -969,6 +975,9 @@ class FfiModel with ChangeNotifier {
       if (!hasRetry) {
         hasRetry = shouldAutoRetryOnOffline(type, title, text);
       }
+      if (hasRetry || type.contains('error')) {
+        _cancelDisplayWait();
+      }
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
     }
   }
@@ -976,7 +985,7 @@ class FfiModel with ChangeNotifier {
   void resetRestartReconnectState() {
     _restartReconnectDelayTimer?.cancel();
     _restartReconnectDelayTimer = null;
-    _cancelDisplayAsleepWait();
+    _cancelDisplayWait();
   }
 
   void beginAndroidDocumentPicker() {
@@ -1063,9 +1072,6 @@ class FfiModel with ChangeNotifier {
   showMsgBox(SessionID sessionId, String type, String title, String text,
       String link, bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) async {
-    // A new error replaces any pending wait; with retry, the timer below starts
-    // a fresh one if the display is still asleep.
-    _cancelDisplayAsleepWait();
     final noteAllowed = parent.target != null &&
         allowAskForNoteAtEndOfConnection(parent.target, false) &&
         (title == "Connection Error" || type == "restarting");
@@ -1095,7 +1101,10 @@ class FfiModel with ChangeNotifier {
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
-        _autoReconnect(dialogManager, sessionId);
+        if (!_waitForDisplay(
+            () => reconnect(dialogManager, sessionId, false))) {
+          reconnect(dialogManager, sessionId, false);
+        }
       });
       _reconnects *= 2;
     } else {
@@ -1115,47 +1124,40 @@ class FfiModel with ChangeNotifier {
     _pendingRestoreTimer = null;
   }
 
-  /// Reconnect that no user asked for: a retry timer, a lost peer, or a remote
-  /// restart. On macOS, with "allow-skip-auto-reconnect-display-asleep" on, it
-  /// waits while no display is awake and checks again later. A user's Reconnect
-  /// click calls [reconnect]. With [silent], it reconnects without the
-  /// Connecting dialog, as a remote restart does.
-  void _autoReconnect(OverlayDialogManager dialogManager, SessionID sessionId,
-      {bool silent = false}) {
-    if (isMacOS &&
-        bind.mainShouldDeferAutoReconnect(
-            id: parent.target?.id ?? '', waiting: _waitingForDisplay)) {
-      _waitingForDisplay = true;
-      _displayAsleepTimer?.cancel();
-      _displayAsleepTimer =
-          Timer(const Duration(seconds: _displayAsleepRecheckSecs), () {
+  /// With the macOS option on and no display awake, runs [onAwake] once a
+  /// display wakes and returns true. Otherwise returns false.
+  bool _waitForDisplay(VoidCallback onAwake) {
+    if (!isMacOS ||
+        !mainGetLocalBoolOptionSync(
+            kOptionAllowSkipAutoReconnectDisplayAsleep) ||
+        !bind.mainShouldDeferAutoReconnect(
+            id: parent.target?.id ?? '',
+            waiting: _displayAsleepTimer != null)) {
+      return false;
+    }
+    _displayAsleepTimer?.cancel();
+    _displayAsleepTimer =
+        Timer(const Duration(seconds: _displayAsleepRecheckSecs), () {
+      if (parent.target?.closed == true) {
         _displayAsleepTimer = null;
-        if (parent.target?.closed == true) {
-          return;
-        }
-        _autoReconnect(dialogManager, sessionId, silent: silent);
-      });
-      return;
-    }
-    if (silent) {
-      _cancelDisplayAsleepWait();
-      bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
-    } else {
-      reconnect(dialogManager, sessionId, false);
-    }
+        return;
+      }
+      if (!_waitForDisplay(onAwake)) {
+        _displayAsleepTimer = null;
+        onAwake();
+      }
+    });
+    return true;
   }
 
-  /// Stops a pending display-asleep recheck, so it can't reconnect a session
-  /// that has since connected, failed, or been reconnected by the user.
-  void _cancelDisplayAsleepWait() {
+  void _cancelDisplayWait() {
     _displayAsleepTimer?.cancel();
     _displayAsleepTimer = null;
-    _waitingForDisplay = false;
   }
 
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
-    _cancelDisplayAsleepWait();
+    _cancelDisplayWait();
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
     _cancelPendingMonitorRestore();
