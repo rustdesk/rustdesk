@@ -4,13 +4,24 @@ use gtk::{
     glib::variant::FromVariant,
 };
 use hbb_common::{anyhow::anyhow, bail, ResultType};
-use std::{ffi::CString, time::Duration};
+use std::{error::Error, ffi::CString, fmt, time::Duration};
 
 mod ibus;
 
 pub(super) const DBUS_TIMEOUT: Duration = Duration::from_millis(250);
 const GNOME_INPUT_SCHEMA: &str = "org.gnome.desktop.input-sources";
 const GNOME_DEFAULT_LAYOUT: &str = "us";
+
+#[derive(Debug)]
+pub(super) struct UnreliableSource(pub &'static str);
+
+impl fmt::Display for UnreliableSource {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.0)
+    }
+}
+
+impl Error for UnreliableSource {}
 
 #[derive(PartialEq, Eq)]
 pub(super) enum Source {
@@ -98,9 +109,17 @@ fn gnome_layout() -> ResultType<Option<Names>> {
         .ok_or_else(|| anyhow!("GNOME input source schema is unavailable"))?;
     let settings = gio::Settings::new_full(&schema, gio::SettingsBackend::NONE, None);
     let sources: Vec<(String, String)> = required_setting(&settings, "sources")?;
+    // Focus changes restore a window's source without persisting MRU. Mark it
+    // unreliable so refresh also discards a previously accepted MRU mapping.
+    if sources.len() > 1 && required_setting::<bool>(&settings, "per-window")? {
+        return Err(UnreliableSource(
+            "GNOME per-window input sources cannot be determined from persisted MRU",
+        )
+        .into());
+    }
     let recent: Vec<(String, String)> = required_setting(&settings, "mru-sources")?;
     // GNOME initially selects the first configured source when MRU is empty.
-    // Its stored MRU does not track temporary or per-window layout switches.
+    // Its stored MRU still does not track temporary IBus suppression.
     let selected = recent
         .iter()
         .find(|source| sources.contains(source))

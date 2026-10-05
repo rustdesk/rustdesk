@@ -124,7 +124,14 @@ fn wait_for_refresh(receiver: mpsc::Receiver<()>, deadline: Instant) {
 
 impl Refresh {
     fn update(&mut self) -> ResultType<()> {
-        let source = Source::read()?;
+        let source = Source::read().map_err(|error| {
+            if error.is::<super::source::UnreliableSource>() {
+                // Unlike a transient query failure, this invalidates the old map.
+                self.source = None;
+                *CURRENT.write().unwrap() = Err(error.to_string());
+            }
+            error
+        })?;
         if self.source.as_ref() == Some(&source) {
             return Ok(());
         }
