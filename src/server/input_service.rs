@@ -710,6 +710,8 @@ struct VirtualInputState {
 
 #[cfg(target_os = "macos")]
 impl VirtualInputState {
+    const KEY_UP_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(5);
+
     fn new() -> Option<Self> {
         VirtualInput::new(
             CGEventSourceStateID::CombinedSessionState,
@@ -1657,6 +1659,13 @@ fn simulate_(event_type: &EventType) {
         let _lock = VIRTUAL_INPUT_MTX.lock();
         if let Some(input) = VIRTUAL_INPUT_STATE.as_ref() {
             let _ = input.simulate(&event_type);
+        } else if matches!(event_type, EventType::KeyRelease(_)) {
+            hbb_common::throttled_log!(
+                VirtualInputState::KEY_UP_ERROR_LOG_INTERVAL,
+                error,
+                "Failed to inject macOS key-up {:?}: virtual input is not initialized",
+                event_type
+            );
         }
     }
 }
