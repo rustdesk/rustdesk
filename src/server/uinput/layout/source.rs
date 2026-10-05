@@ -6,6 +6,7 @@ use gtk::{
 use hbb_common::{anyhow::anyhow, bail, ResultType};
 use std::{ffi::CString, time::Duration};
 
+mod compositor;
 mod ibus;
 
 pub(super) const DBUS_TIMEOUT: Duration = Duration::from_millis(250);
@@ -50,6 +51,9 @@ impl Source {
                     None
                 },
             });
+        }
+        if let Some(source) = compositor::read()? {
+            return Ok(source);
         }
         super::xwayland::read()
     }
