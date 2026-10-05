@@ -507,6 +507,8 @@ pub fn try_dispatch(
         match event.event_type {
             EventType::KeyPress(k) if fired.contains(&k) => return true,
             EventType::KeyRelease(k) if fired.remove(&k) => {
+                // X11 Source 1 can report auto-repeat as release/press pairs.
+                // Held shortcuts may fire again until the backend normalizes them.
                 drop(fired);
                 let pending = RELEASE_ACTIONS.lock().unwrap().remove(&k);
                 if let Some((sid, action_id)) = pending {
@@ -645,11 +647,14 @@ fn release_remote_keys(
             .map(|(key, event)| (*key, event.clone()))
             .collect()
     };
-    // A consumed Alt-only chord otherwise reaches Windows as a bare Alt tap.
-    let neutralize_alt = peer == "windows"
+    let swap_ctrl_cmd = crate::flutter::sessions::get_session_by_session_id(session_id)
+        .is_some_and(|session| session.get_toggle_option("allow_swap_key".into()));
+    // A consumed Alt/Meta-only chord must not activate Windows menus or Start.
+    let neutralize_menu = peer == "windows"
         && !to_release.is_empty()
-        && to_release.iter().all(|(key, _)| matches!(key, Key::Alt | Key::AltGr));
-    if neutralize_alt {
+        && to_release.iter().all(|(key, _)| matches!(key, Key::Alt | Key::AltGr)
+            || (!swap_ctrl_cmd && matches!(key, Key::MetaLeft | Key::MetaRight)));
+    if neutralize_menu {
         send_windows_menu_ctrl(true, send);
     }
     for (key, mut event) in to_release {
@@ -658,7 +663,7 @@ fn release_remote_keys(
             send(&key_event);
         }
     }
-    if neutralize_alt {
+    if neutralize_menu {
         send_windows_menu_ctrl(false, send);
     }
     {
@@ -679,7 +684,7 @@ fn send_windows_menu_ctrl(down: bool, send: &impl Fn(&base::message_proto::KeyEv
     use base::message_proto::{KeyEvent, KeyboardMode};
     const LEFT_CTRL_SCAN_CODE: u32 = 0x1d;
     let mut event = KeyEvent::new();
-    // Keep Ctrl in Map mode: Legacy modifier sync could release Alt before Ctrl.
+    // Keep Ctrl in Map mode: Legacy sync could release Alt/Meta before Ctrl.
     event.mode = KeyboardMode::Map.into();
     event.set_chr(LEFT_CTRL_SCAN_CODE);
     event.down = down;
