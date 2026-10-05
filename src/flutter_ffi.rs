@@ -1218,28 +1218,28 @@ pub fn main_get_use_texture_render() -> SyncReturn<bool> {
     SyncReturn(use_texture_render())
 }
 
-/// Whether an automatic (not user-triggered) reconnect should wait. True only on
-/// macOS, with the option on, while no display is awake.
-pub fn main_should_defer_auto_reconnect() -> SyncReturn<bool> {
+/// Whether an automatic (not user-triggered) reconnect to peer `id` should wait.
+/// True only on macOS, with the option on, while no display is awake.
+/// `waiting` says whether this session is already waiting, so the log records
+/// when each wait starts and when it resumes, not every recheck.
+pub fn main_should_defer_auto_reconnect(id: String, waiting: bool) -> SyncReturn<bool> {
     #[cfg(target_os = "macos")]
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
-        // Log when a hold starts and ends, not on every recheck.
-        static HOLDING: AtomicBool = AtomicBool::new(false);
         let hold = LocalConfig::get_bool_option(
             keys::OPTION_ALLOW_SKIP_AUTO_RECONNECT_DISPLAY_ASLEEP,
         ) && crate::platform::macos::is_display_asleep();
-        if HOLDING.swap(hold, Ordering::Relaxed) != hold {
-            if hold {
-                log::info!("Display asleep, skipping automatic reconnect");
-            } else {
-                log::info!("Resuming automatic reconnect");
-            }
+        if hold && !waiting {
+            log::info!("Display asleep, skipping automatic reconnect to {}", id);
+        } else if !hold && waiting {
+            log::info!("Resuming automatic reconnect to {}", id);
         }
         return SyncReturn(hold);
     }
     #[cfg(not(target_os = "macos"))]
-    SyncReturn(false)
+    {
+        let _ = (id, waiting);
+        SyncReturn(false)
+    }
 }
 
 pub fn main_get_env(key: String) -> SyncReturn<String> {

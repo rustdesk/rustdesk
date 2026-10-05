@@ -1770,7 +1770,8 @@ class RustdeskImpl {
     throw UnimplementedError("mainGetUseTextureRender");
   }
 
-  bool mainShouldDeferAutoReconnect({dynamic hint}) {
+  bool mainShouldDeferAutoReconnect(
+      {required String id, required bool waiting, dynamic hint}) {
     return false;
   }
 
