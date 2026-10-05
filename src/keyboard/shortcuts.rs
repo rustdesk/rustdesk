@@ -653,9 +653,10 @@ fn release_remote_keys(
     let neutralize_menu = peer == "windows"
         && !to_release.is_empty()
         && to_release.iter().all(|(key, _)| matches!(key, Key::Alt | Key::AltGr)
+            || (swap_ctrl_cmd && matches!(key, Key::ControlLeft | Key::ControlRight))
             || (!swap_ctrl_cmd && matches!(key, Key::MetaLeft | Key::MetaRight)));
     if neutralize_menu {
-        send_windows_menu_ctrl(true, send);
+        send_windows_menu_ctrl(true, swap_ctrl_cmd, send);
     }
     for (key, mut event) in to_release {
         event.event_type = EventType::KeyRelease(key);
@@ -664,7 +665,7 @@ fn release_remote_keys(
         }
     }
     if neutralize_menu {
-        send_windows_menu_ctrl(false, send);
+        send_windows_menu_ctrl(false, swap_ctrl_cmd, send);
     }
     {
         let mut state = MODIFIERS_STATE.lock().unwrap();
@@ -680,13 +681,23 @@ fn release_remote_keys(
 }
 
 #[cfg(feature = "flutter")]
-fn send_windows_menu_ctrl(down: bool, send: &impl Fn(&base::message_proto::KeyEvent)) {
+fn send_windows_menu_ctrl(
+    down: bool,
+    swap_ctrl_cmd: bool,
+    send: &impl Fn(&base::message_proto::KeyEvent),
+) {
     use base::message_proto::{KeyEvent, KeyboardMode};
     const LEFT_CTRL_SCAN_CODE: u32 = 0x1d;
+    const LEFT_META_SCAN_CODE: u32 = 0xe05b;
     let mut event = KeyEvent::new();
     // Keep Ctrl in Map mode: Legacy sync could release Alt/Meta before Ctrl.
     event.mode = KeyboardMode::Map.into();
-    event.set_chr(LEFT_CTRL_SCAN_CODE);
+    // The session sender swaps this packet too; the mask must arrive as Ctrl.
+    event.set_chr(if swap_ctrl_cmd {
+        LEFT_META_SCAN_CODE
+    } else {
+        LEFT_CTRL_SCAN_CODE
+    });
     event.down = down;
     send(&event);
 }

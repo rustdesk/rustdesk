@@ -56,6 +56,11 @@ class _LegacyBinding extends _ChatBinding {
   final keys = <(String, bool, bool)>[];
 
   @override
+  bool sessionGetToggleOptionSync(
+          {required SessionID sessionId, required String arg, dynamic hint}) =>
+      false;
+
+  @override
   String mainGetInputSource({dynamic hint}) => 'Input source 2';
   @override
   bool mainCurrentIsWayland({dynamic hint}) => false;

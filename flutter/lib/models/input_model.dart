@@ -1049,8 +1049,12 @@ class InputModel {
     final pressed = raw
         ? RawKeyboard.instance.keysPressed
         : HardwareKeyboard.instance.logicalKeysPressed;
-    final neutralizeMenu = _needsShortcutMenuGuard(pressed);
-    if (neutralizeMenu) await _sendShortcutMenuControl(true, pressed);
+    final swapCtrlCmd = peerPlatform == kPeerPlatformWindows &&
+        bind.sessionGetToggleOptionSync(
+            sessionId: sessionId, arg: 'allow_swap_key');
+    final neutralizeMenu = _needsShortcutMenuGuard(pressed, swapCtrlCmd);
+    if (neutralizeMenu)
+      await _sendShortcutMenuControl(true, pressed, swapCtrlCmd);
     for (final entry in {
       LogicalKeyboardKey.controlLeft: PhysicalKeyboardKey.controlLeft,
       LogicalKeyboardKey.controlRight: PhysicalKeyboardKey.controlRight,
@@ -1085,48 +1089,58 @@ class InputModel {
         ));
       }
     }
-    await Future.wait(releases).whenComplete(() async {
-      if (neutralizeMenu) await _sendShortcutMenuControl(false, pressed);
-    });
+    await Future.wait(releases).whenComplete(() => neutralizeMenu
+        ? _sendShortcutMenuControl(false, pressed, swapCtrlCmd)
+        : null);
   }
 
-  bool _needsShortcutMenuGuard(Set<LogicalKeyboardKey> pressed) {
+  bool _needsShortcutMenuGuard(
+      Set<LogicalKeyboardKey> pressed, bool swapCtrlCmd) {
     if (peerPlatform != kPeerPlatformWindows) return false;
-    if (pressed.any({LogicalKeyboardKey.metaLeft, LogicalKeyboardKey.metaRight}
-            .contains) &&
-        bind.sessionGetToggleOptionSync(
-            sessionId: sessionId, arg: 'allow_swap_key')) return false;
+    // Web's legacy key-name API does not swap the key itself.
+    final swapped =
+        swapCtrlCmd && (!isWebDesktop || keyboardMode == kKeyMapMode);
     return pressed.any({
           LogicalKeyboardKey.altLeft,
           LogicalKeyboardKey.altRight,
-          LogicalKeyboardKey.metaLeft,
-          LogicalKeyboardKey.metaRight,
+          swapped
+              ? LogicalKeyboardKey.controlLeft
+              : LogicalKeyboardKey.metaLeft,
+          swapped
+              ? LogicalKeyboardKey.controlRight
+              : LogicalKeyboardKey.metaRight,
         }.contains) &&
         !pressed.any({
-          LogicalKeyboardKey.controlLeft,
-          LogicalKeyboardKey.controlRight,
+          swapped
+              ? LogicalKeyboardKey.metaLeft
+              : LogicalKeyboardKey.controlLeft,
+          swapped
+              ? LogicalKeyboardKey.metaRight
+              : LogicalKeyboardKey.controlRight,
           LogicalKeyboardKey.shiftLeft,
           LogicalKeyboardKey.shiftRight,
         }.contains);
   }
 
   Future<void> _sendShortcutMenuControl(
-      bool down, Set<LogicalKeyboardKey> pressed) {
-    if (isWebDesktop &&
-        keyboardMode == kKeyMapMode &&
-        pressed.any({LogicalKeyboardKey.metaLeft, LogicalKeyboardKey.metaRight}
-            .contains)) {
+      bool down, Set<LogicalKeyboardKey> pressed, bool swapCtrlCmd) {
+    // Choose the pre-swap key that reaches Windows as Ctrl.
+    if (isWebDesktop) {
       return bind.sessionHandleFlutterKeyEvent(
         sessionId: sessionId,
         character: '',
-        usbHid: PhysicalKeyboardKey.controlLeft.usbHidUsage & 0xFFFF,
+        usbHid: (swapCtrlCmd
+                    ? PhysicalKeyboardKey.metaLeft
+                    : PhysicalKeyboardKey.controlLeft)
+                .usbHidUsage &
+            0xFFFF,
         lockModes: _buildLockModes(false),
         downOrUp: down,
       );
     }
     return bind.sessionInputKey(
       sessionId: sessionId,
-      name: 'VK_CONTROL',
+      name: swapCtrlCmd ? 'Meta' : 'VK_CONTROL',
       down: down,
       press: false,
       // Legacy reconciles modifiers before key-down. Keep Alt/Meta held until
@@ -1134,7 +1148,11 @@ class InputModel {
       alt: down &&
           pressed.any({LogicalKeyboardKey.altLeft, LogicalKeyboardKey.altRight}
               .contains),
-      ctrl: false,
+      ctrl: down &&
+          pressed.any({
+            LogicalKeyboardKey.controlLeft,
+            LogicalKeyboardKey.controlRight
+          }.contains),
       shift: false,
       command: down &&
           pressed.any({
