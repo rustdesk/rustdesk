@@ -6,7 +6,6 @@ use gtk::{
 use hbb_common::{anyhow::anyhow, bail, ResultType};
 use std::{ffi::CString, time::Duration};
 
-mod compositor;
 mod ibus;
 
 pub(super) const DBUS_TIMEOUT: Duration = Duration::from_millis(250);
@@ -52,9 +51,25 @@ impl Source {
                 },
             });
         }
-        if let Some(source) = compositor::read()? {
-            return Ok(source);
-        }
+        // Other compositors need the effective keymap and active group of our
+        // uinput device, including per-device options and custom keymap overrides.
+        // wl_keyboard exposes a seat map that may belong to a physical keyboard.
+        // Equal layout names/group indices do not prove map identity: Caps can
+        // act as AltGr in one map and toggle CapsLock in the other.
+        //
+        // Sway GET_INPUTS/GET_SEATS expose names and an index, not the device map.
+        // GET_CONFIG returns saved config text, not effective runtime input
+        // settings; parsing it cannot reliably account for runtime overrides.
+        // Hyprland's devices reply reports RMLVO (rules/model/layout/variant/options),
+        // but kb_file can override it. Those fields alone cannot reconstruct the
+        // loaded map. This does not rule out additional compositor-specific APIs.
+        //
+        // Reliable native discovery needs a compositor query associating the
+        // device's actual map (or verified effective configuration) with its group.
+        // uinput supplies keycodes; it cannot report the compositor's XKB policy.
+        // Xwayland remains best effort; see xwayland::read for its freshness limits.
+        // zwp_virtual_keyboard_manager_v1 needs a separate injection backend and
+        // is not universally supported; it does not query an existing uinput map.
         super::xwayland::read()
     }
 }
