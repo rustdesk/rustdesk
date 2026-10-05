@@ -1770,6 +1770,11 @@ class RustdeskImpl {
     throw UnimplementedError("mainGetUseTextureRender");
   }
 
+  bool mainShouldDeferAutoReconnect(
+      {required String id, required bool waiting, dynamic hint}) {
+    return false;
+  }
+
   bool mainHasValidBotSync({dynamic hint}) {
     throw UnimplementedError("mainHasValidBotSync");
   }

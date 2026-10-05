@@ -54,6 +54,7 @@ typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
 final _constSessionId = Uuid().v4obj();
 // Empirical restart reconnect cadence: keep the last frame briefly and retry quickly.
 const _restartReconnectSilentDelaySecs = 5;
+const _displayAsleepRecheckSecs = 5;
 
 class CachedPeerData {
   Map<String, dynamic> updatePrivacyMode = {};
@@ -119,6 +120,7 @@ class FfiModel with ChangeNotifier {
   late VirtualMouseMode virtualMouseMode;
   Timer? _timer;
   Timer? _restartReconnectDelayTimer;
+  Timer? _displayAsleepTimer;
   var _reconnects = 1;
   DateTime? _offlineReconnectStartTime;
   bool _androidDocumentPickerActive = false;
@@ -927,7 +929,10 @@ class FfiModel with ChangeNotifier {
       if (_restartReconnectDelayTimer == null) {
         parent.target?.inputModel.setRelativeMouseMode(false);
         _cancelPendingMonitorRestore();
-        bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
+        if (!_waitForDisplay(() => bind.sessionReconnect(
+            sessionId: sessionId, forceRelay: false))) {
+          bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
+        }
         clearPermissions();
         // Retry once more after the silent window so restart reconnect attempts
         // are spaced by the empirical short cadence instead of only updating UI.
@@ -937,13 +942,18 @@ class FfiModel with ChangeNotifier {
           if (parent.target?.closed == true) {
             return;
           }
-          reconnect(dialogManager, sessionId, false);
+          if (!_waitForDisplay(
+              () => reconnect(dialogManager, sessionId, false))) {
+            reconnect(dialogManager, sessionId, false);
+          }
         });
       }
     } else if (type == 'restarting-show') {
       _restartReconnectDelayTimer?.cancel();
       _restartReconnectDelayTimer = null;
-      reconnect(dialogManager, sessionId, false);
+      if (!_waitForDisplay(() => reconnect(dialogManager, sessionId, false))) {
+        reconnect(dialogManager, sessionId, false);
+      }
     } else if (type == 'wait-remote-accept-nook') {
       showWaitAcceptDialog(sessionId, type, title, text, dialogManager);
     } else if (type == 'on-uac' || type == 'on-foreground-elevated') {
@@ -965,6 +975,9 @@ class FfiModel with ChangeNotifier {
       if (!hasRetry) {
         hasRetry = shouldAutoRetryOnOffline(type, title, text);
       }
+      if (hasRetry || type.contains('error')) {
+        _cancelDisplayWait();
+      }
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
     }
   }
@@ -972,6 +985,7 @@ class FfiModel with ChangeNotifier {
   void resetRestartReconnectState() {
     _restartReconnectDelayTimer?.cancel();
     _restartReconnectDelayTimer = null;
+    _cancelDisplayWait();
   }
 
   void beginAndroidDocumentPicker() {
@@ -1087,7 +1101,10 @@ class FfiModel with ChangeNotifier {
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
-        reconnect(dialogManager, sessionId, false);
+        if (!_waitForDisplay(
+            () => reconnect(dialogManager, sessionId, false))) {
+          reconnect(dialogManager, sessionId, false);
+        }
       });
       _reconnects *= 2;
     } else {
@@ -1107,8 +1124,40 @@ class FfiModel with ChangeNotifier {
     _pendingRestoreTimer = null;
   }
 
+  /// With the macOS option on and no display awake, runs [onAwake] once a
+  /// display wakes and returns true. Otherwise returns false.
+  bool _waitForDisplay(VoidCallback onAwake) {
+    if (!isMacOS ||
+        !mainGetLocalBoolOptionSync(
+            kOptionAllowSkipAutoReconnectDisplayAsleep) ||
+        !bind.mainShouldDeferAutoReconnect(
+            id: parent.target?.id ?? '',
+            waiting: _displayAsleepTimer != null)) {
+      return false;
+    }
+    _displayAsleepTimer?.cancel();
+    _displayAsleepTimer =
+        Timer(const Duration(seconds: _displayAsleepRecheckSecs), () {
+      if (parent.target?.closed == true) {
+        _displayAsleepTimer = null;
+        return;
+      }
+      if (!_waitForDisplay(onAwake)) {
+        _displayAsleepTimer = null;
+        onAwake();
+      }
+    });
+    return true;
+  }
+
+  void _cancelDisplayWait() {
+    _displayAsleepTimer?.cancel();
+    _displayAsleepTimer = null;
+  }
+
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
+    _cancelDisplayWait();
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
     _cancelPendingMonitorRestore();

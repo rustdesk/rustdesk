@@ -82,10 +82,43 @@ extern "C" {
     fn MacSetMode(display: u32, width: u32, height: u32, tryHiDPI: bool) -> BOOL;
     fn CGWarpMouseCursorPosition(newCursorPosition: CGPoint) -> CGError;
     fn CGAssociateMouseAndMouseCursorPosition(connected: BooleanT) -> CGError;
+    fn CGGetActiveDisplayList(
+        max_displays: u32,
+        active_displays: *mut u32,
+        display_count: *mut u32,
+    ) -> CGError;
+    fn CGDisplayIsAsleep(display: u32) -> BooleanT;
 }
 
 pub fn major_version() -> u32 {
     unsafe { majorVersion() }
+}
+
+/// True when no display is awake: there is no active display (lid closed with
+/// no external monitor), or every active display is asleep (display sleep, or a
+/// dark wake). A lid-closed Mac driving an external monitor returns false.
+pub fn is_display_asleep() -> bool {
+    const MAX_DISPLAYS: u32 = 32;
+    let mut displays = [0u32; MAX_DISPLAYS as usize];
+    let mut count: u32 = 0;
+    let err = unsafe { CGGetActiveDisplayList(MAX_DISPLAYS, displays.as_mut_ptr(), &mut count) };
+    if err != CGError::Success {
+        // Unknown state: never hold a reconnect on a failed query.
+        log::warn!("CGGetActiveDisplayList failed: {:?}", err);
+        return false;
+    }
+    let count = (count as usize).min(displays.len());
+    all_displays_asleep(
+        displays[..count]
+            .iter()
+            .map(|d| unsafe { CGDisplayIsAsleep(*d) } != 0),
+    )
+}
+
+/// Pure part of `is_display_asleep`: each item says whether one active display
+/// is asleep. No active displays counts as asleep.
+fn all_displays_asleep(mut asleep: impl Iterator<Item = bool>) -> bool {
+    asleep.all(|a| a)
 }
 
 pub fn is_process_trusted(prompt: bool) -> bool {
@@ -2071,5 +2104,30 @@ fn get_bundle_id() -> Option<String> {
             .to_string_lossy()
             .to_string();
         Some(bundle_id_str)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_displays_asleep() {
+        // Lid closed, no external monitor: no active displays.
+        assert!(all_displays_asleep(std::iter::empty()));
+        // Display sleep or dark wake: every active display asleep.
+        assert!(all_displays_asleep([true].into_iter()));
+        assert!(all_displays_asleep([true, true].into_iter()));
+        // Lid open, or clamshell mode with an external monitor awake.
+        assert!(!all_displays_asleep([false].into_iter()));
+        assert!(!all_displays_asleep([true, false].into_iter()));
+    }
+
+    #[test]
+    fn test_skip_auto_reconnect_option_defaults_off() {
+        use base::config::keys::OPTION_ALLOW_SKIP_AUTO_RECONNECT_DISPLAY_ASLEEP as KEY;
+        assert!(!hbb_common::config::option2bool(KEY, ""));
+        assert!(!hbb_common::config::option2bool(KEY, "N"));
+        assert!(hbb_common::config::option2bool(KEY, "Y"));
     }
 }
