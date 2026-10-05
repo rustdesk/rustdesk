@@ -1663,8 +1663,7 @@ fn simulate_(event_type: &EventType) {
             hbb_common::throttled_log!(
                 VirtualInputState::KEY_UP_ERROR_LOG_INTERVAL,
                 error,
-                "Failed to inject macOS key-up {:?}: virtual input is not initialized",
-                event_type
+                "Failed to inject macOS key-up: virtual input is not initialized"
             );
         }
     }

@@ -460,6 +460,12 @@ impl KeyboardControllable for Enigo {
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), keycode, true) {
                 self.post(event, Some(keycode));
+            } else {
+                hbb_common::throttled_log!(
+                    KEYBOARD_ERROR_LOG_INTERVAL,
+                    error,
+                    "Failed to inject macOS Enigo key-down in key-click: could not create keyboard event"
+                );
             }
 
             if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), keycode, false) {
@@ -468,16 +474,14 @@ impl KeyboardControllable for Enigo {
                 hbb_common::throttled_log!(
                     KEYBOARD_ERROR_LOG_INTERVAL,
                     error,
-                    "Failed to inject macOS Enigo key-up in key-click (keycode {}): could not create keyboard event",
-                    keycode
+                    "Failed to inject macOS Enigo key-up in key-click: could not create keyboard event"
                 );
             }
         } else {
             hbb_common::throttled_log!(
                 KEYBOARD_ERROR_LOG_INTERVAL,
                 error,
-                "Failed to inject macOS Enigo key-click (keycode {}): event source is not initialized",
-                keycode
+                "Failed to inject macOS Enigo key-click: event source is not initialized"
             );
         }
     }
@@ -511,16 +515,14 @@ impl KeyboardControllable for Enigo {
                 hbb_common::throttled_log!(
                     KEYBOARD_ERROR_LOG_INTERVAL,
                     error,
-                    "Failed to inject macOS Enigo key-up (keycode {}): could not create keyboard event",
-                    code
+                    "Failed to inject macOS Enigo key-up: could not create keyboard event"
                 );
             }
         } else {
             hbb_common::throttled_log!(
                 KEYBOARD_ERROR_LOG_INTERVAL,
                 error,
-                "Failed to inject macOS Enigo key-up (keycode {}): event source is not initialized",
-                code
+                "Failed to inject macOS Enigo key-up: event source is not initialized"
             );
         }
     }
