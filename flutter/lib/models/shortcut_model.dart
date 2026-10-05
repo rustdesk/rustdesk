@@ -591,6 +591,14 @@ void registerSessionShortcutActions(
   // mode 2 is on correctly turns mode 1 ON, instead of misreading the
   // "any-mode-active" state as "this-mode-active" and toggling OFF.
   ffi.shortcutModel.register(kShortcutActionPrivacyMode1, () {
+    if (ffi.ffiModel.pi
+            .platformAdditions[kPlatformAdditionsSupportedPrivacyModeImpl] ==
+        null) {
+      // Older peers use the legacy option instead of a named implementation.
+      if (!checkPrivacyModeAllowed(kPrivacyModeImplMag)) return;
+      bind.sessionToggleOption(sessionId: sessionId, value: 'privacy-mode');
+      return;
+    }
     final implKey = findPrivacyImpl('privacy_mode_impl_mag_tip');
     if (implKey == null) return;
     if (!checkPrivacyModeAllowed(implKey)) return;
