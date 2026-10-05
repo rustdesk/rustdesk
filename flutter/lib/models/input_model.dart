@@ -749,6 +749,7 @@ class InputModel {
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (_localFlutterShortcuts.tryDispatchRaw(e)) return KeyEventResult.handled;
     if (isViewOnly) {
+      if (isWeb && !isInputSourceFlutter) return KeyEventResult.ignored;
       _tryDispatchRawFlutterShortcut(e, releaseModifiers: false);
       return KeyEventResult.handled;
     }
@@ -844,6 +845,7 @@ class InputModel {
   KeyEventResult handleKeyEvent(KeyEvent e) {
     if (_localFlutterShortcuts.tryDispatch(e)) return KeyEventResult.handled;
     if (isViewOnly) {
+      if (isWeb && !isInputSourceFlutter) return KeyEventResult.ignored;
       _tryDispatchFlutterShortcut(e, releaseModifiers: false);
       return KeyEventResult.handled;
     }
@@ -1072,8 +1074,7 @@ class InputModel {
   }
 
   bool _needsLegacyAltMenuGuard(Set<LogicalKeyboardKey> pressed) {
-    if (peerPlatform != kPeerPlatformWindows ||
-        (isWebDesktop && keyboardMode == kKeyMapMode)) return false;
+    if (peerPlatform != kPeerPlatformWindows) return false;
     return pressed.any(
             {LogicalKeyboardKey.altLeft, LogicalKeyboardKey.altRight}.contains) &&
         !pressed.any({
