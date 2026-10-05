@@ -7,7 +7,7 @@ mod source;
 mod wayland;
 mod xwayland;
 
-pub(super) use cache::{prepare_layout, resolve};
+pub(super) use cache::{prepare_layout, prewarm_layout, resolve};
 
 pub(super) const XKB_KEYCODE_OFFSET: u16 = 8;
 const CAPS_LOCK_BIT: usize = 1;

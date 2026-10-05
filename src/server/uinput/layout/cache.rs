@@ -37,10 +37,22 @@ pub(in crate::server::uinput) fn prepare_layout(event: &KeyEvent) {
         return;
     }
     let deadline = Instant::now() + LAYOUT_INPUT_WAIT;
+    if let Some(receiver) = start_refresh() {
+        wait_for_refresh(receiver, deadline);
+    }
+}
+
+pub(in crate::server::uinput) fn prewarm_layout() {
+    // Use server startup time for discovery before the first remote character.
+    // This reduces cold-start fallback; a still-pending query cannot guarantee readiness.
+    drop(start_refresh());
+}
+
+fn start_refresh() -> Option<mpsc::Receiver<()>> {
     // A stalled desktop query must not block later input or spawn more workers.
     let mut refresh = match REFRESH.try_lock() {
         Ok(refresh) => refresh,
-        Err(TryLockError::WouldBlock) => return,
+        Err(TryLockError::WouldBlock) => return None,
         Err(TryLockError::Poisoned(error)) => {
             hbb_common::throttled_log!(
                 LAYOUT_WARNING_INTERVAL,
@@ -48,7 +60,7 @@ pub(in crate::server::uinput) fn prepare_layout(event: &KeyEvent) {
                 "Uinput layout refresh lock is poisoned: {}",
                 error
             );
-            return;
+            return None;
         }
     };
     if refresh.running
@@ -56,7 +68,7 @@ pub(in crate::server::uinput) fn prepare_layout(event: &KeyEvent) {
             .checked
             .is_some_and(|checked| checked.elapsed() < LAYOUT_REFRESH_INTERVAL)
     {
-        return;
+        return None;
     }
     let (completed, receiver) = mpsc::channel();
     refresh.running = true;
@@ -72,10 +84,10 @@ pub(in crate::server::uinput) fn prepare_layout(event: &KeyEvent) {
             "Cannot start uinput layout refresh: {}",
             error
         );
-        return;
+        return None;
     }
     drop(refresh);
-    wait_for_refresh(receiver, deadline);
+    Some(receiver)
 }
 
 fn refresh_layout(completed: mpsc::Sender<()>) {
@@ -99,9 +111,9 @@ fn refresh_layout(completed: mpsc::Sender<()>) {
     refresh.checked = Some(Instant::now());
     refresh.running = false;
     drop(refresh);
-    // Timing out only ends the input wait; the worker still publishes its map.
+    // Prewarming has no waiter. An input timeout also leaves this worker running.
     if completed.send(()).is_err() {
-        hbb_common::log::trace!("Uinput layout refresh finished after the input wait ended");
+        hbb_common::log::trace!("Uinput layout refresh finished without an input waiter");
     }
 }
 

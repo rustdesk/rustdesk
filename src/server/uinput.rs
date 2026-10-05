@@ -61,6 +61,7 @@ pub mod client {
         pub async fn new() -> ResultType<Self> {
             let conn = ipc::connect(IPC_CONN_TIMEOUT, IPC_POSTFIX_KEYBOARD).await?;
             let rt = Runtime::new()?;
+            layout::prewarm_layout();
             Ok(Self {
                 conn,
                 rt,
