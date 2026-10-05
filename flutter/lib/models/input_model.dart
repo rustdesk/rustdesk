@@ -1000,11 +1000,18 @@ class InputModel {
     return _localFlutterShortcuts.tryDispatch(
       e,
       viewOnly: isViewOnly,
-      match: () => _matchFlutterShortcut(e.physicalKey,
-          ctrlPressed: keyboard.isControlPressed,
-          altPressed: keyboard.isAltPressed,
-          shiftPressed: keyboard.isShiftPressed,
-          commandPressed: keyboard.isMetaPressed),
+      match: () {
+        // AltGraph is text input on Windows/Linux; Apple Option stays bindable.
+        if (!(isMacOS || isIOS || isWebOnMacOs) &&
+            keyboard.logicalKeysPressed.contains(LogicalKeyboardKey.altGraph)) {
+          return null;
+        }
+        return _matchFlutterShortcut(e.physicalKey,
+            ctrlPressed: keyboard.isControlPressed,
+            altPressed: keyboard.isAltPressed,
+            shiftPressed: keyboard.isShiftPressed,
+            commandPressed: keyboard.isMetaPressed);
+      },
       releaseModifiers:
           releaseModifiers ? _releaseFlutterShortcutModifiers : null,
     );
