@@ -513,13 +513,17 @@ pub enum Data {
     CmWindowClosed,
     // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
     // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
-    // to upstream. Protocol on `_drm`: on connect the root service sends `DrmDisplayList`, the
+    // to upstream. `_drm` protocol: the client sends `DrmHello`, the service `DrmDisplayList`, the
     // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
     // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
     // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
     // the header extensible. The zero-copy `DrmFrameDmabuf(DmabufDesc)` sibling below carries only a
     // small JSON metadata descriptor; the scanout dma-buf fd rides an SCM_RIGHTS ancillary message on
     // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
+    /// Client -> service, first on `_drm`: whether the service may wake sleeping displays before
+    /// it answers. The cache warm at every `--server` start says no: no peer is waiting for it.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmHello { wake: bool },
     /// Client -> service: begin streaming the chosen display.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context

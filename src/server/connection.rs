@@ -2027,6 +2027,10 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if self.is_remote() {
             let mut msg = "".to_string();
+            #[cfg(feature = "drm")]
+            if !crate::platform::linux::is_x11_for_drm() {
+                super::drm_capturer::settle_unknown_availability().await;
+            }
             // Refuse only while nothing can capture a Wayland greeter: the DRM path can.
             if crate::platform::linux::is_login_screen_wayland() && !drm_can_serve_login_screen() {
                 msg = crate::client::LOGIN_SCREEN_WAYLAND.to_owned()
