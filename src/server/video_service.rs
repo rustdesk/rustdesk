@@ -726,6 +726,10 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut repeat_encode_counter = 0;
     let repeat_encode_max = 10;
     let mut encode_fail_counter = 0;
+    // Set on the first macOS hardware-encoder warm-up failure and cleared on
+    // the next success; handle_one_frame() turns it into an fps-independent
+    // warm-up time budget (a strike count alone is fps-dependent).
+    let mut hw_fail_started: Option<Instant> = None;
     let mut first_frame = true;
     let capture_width = c.width;
     let capture_height = c.height;
@@ -856,6 +860,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                         &mut encoder,
                         recorder.clone(),
                         &mut encode_fail_counter,
+                        &mut hw_fail_started,
                         &mut first_frame,
                         capture_width,
                         capture_height,
@@ -920,6 +925,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                             &mut encoder,
                             recorder.clone(),
                             &mut encode_fail_counter,
+                            &mut hw_fail_started,
                             &mut first_frame,
                             capture_width,
                             capture_height,
@@ -1242,6 +1248,7 @@ fn handle_one_frame(
     encoder: &mut Encoder,
     recorder: Arc<Mutex<Option<Recorder>>>,
     encode_fail_counter: &mut usize,
+    hw_fail_started: &mut Option<Instant>,
     first_frame: &mut bool,
     width: usize,
     height: usize,
@@ -1261,6 +1268,7 @@ fn handle_one_frame(
     match encoder.encode_to_message(frame, ms) {
         Ok(mut vf) => {
             *encode_fail_counter = 0;
+            *hw_fail_started = None;
             vf.display = display as _;
             let mut msg = Message::new();
             msg.set_video_frame(vf);
@@ -1273,14 +1281,29 @@ fn handle_one_frame(
         }
         Err(e) => {
             *encode_fail_counter += 1;
-            // Encoding errors are not frequent except on Android
-            if !cfg!(target_os = "android") {
-                log::error!("encode fail: {e:?}, times: {}", *encode_fail_counter,);
-            }
             // VideoToolbox hardware encoders legitimately buffer their first
             // packets: pipeline warm-up returns no frame for the first ~0.6-3s
             // even when the encoder is healthy (same class of behavior as
             // Android MediaCodec, which already gets a larger budget below).
+            let hw_warmup_exempt = cfg!(target_os = "macos") && encoder.is_hardware();
+            if hw_warmup_exempt && hw_fail_started.is_none() {
+                *hw_fail_started = Some(Instant::now());
+            }
+            // Encoding errors are not frequent except on Android
+            if !cfg!(target_os = "android") {
+                if hw_warmup_exempt {
+                    // Warm-up failures arrive at frame rate (30/s at 30fps);
+                    // one line per 3s with the suppressed count instead.
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(3),
+                        error,
+                        "encode fail (VideoToolbox warm-up): {e:?}, times: {}",
+                        *encode_fail_counter
+                    );
+                } else {
+                    log::error!("encode fail: {e:?}, times: {}", *encode_fail_counter,);
+                }
+            }
             let max_fail_times = if cfg!(target_os = "macos") && encoder.is_hardware() {
                 30
             } else if cfg!(target_os = "android") && encoder.is_hardware() {
@@ -1292,11 +1315,22 @@ fn handle_one_frame(
             // repeat encoders can reach max_fail_times on the first frame;
             // macOS hardware encoders are exempt from the fast first-frame
             // switch for the warm-up reason above.
-            let hw_warmup_exempt = cfg!(target_os = "macos") && encoder.is_hardware();
+            //
+            // The macOS warm-up budget is a time window, not a frame count:
+            // 30 strikes cover only ~1s at 30fps, so require both the strike
+            // count and 3s elapsed from the first failure. The budget is thus
+            // never shorter than the intended window whatever the fps is, and
+            // never fewer than 30 real attempts (Instant is monotonic).
+            let warmup_over = hw_fail_started
+                .as_ref()
+                .map(|started| started.elapsed() >= Duration::from_secs(3))
+                .unwrap_or(false);
             if (first && !repeat && !hw_warmup_exempt)
-                || *encode_fail_counter >= max_fail_times
+                || (*encode_fail_counter >= max_fail_times
+                    && (!hw_warmup_exempt || warmup_over))
             {
                 *encode_fail_counter = 0;
+                *hw_fail_started = None;
                 if encoder.is_hardware() {
                     encoder.disable();
                     log::error!("switch due to encoding fails, first frame: {first}, error: {e:?}");
