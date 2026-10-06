@@ -763,8 +763,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "Zablokuj ekran"),
         ("Sync clipboard between sessions", "Synchronizuj schowek między sesjami"),
         ("sync-clipboard-between-sessions-tip", "Tekst lub obrazy skopiowane w jednej sesji zdalnej są wysyłane także do schowka pozostałych połączonych sesji."),
-        ("terminal-clipboard-write-tip", ""),
-        ("Allow terminal apps to copy to clipboard", ""),
+        ("terminal-clipboard-write-tip", "Aplikacja w terminalu chce skopiować tekst do schowka tego urządzenia. Jeśli wyrazisz na to zgodę, uprawnienie to będzie dotyczyć aplikacji terminalowych we wszystkich połączeniach, dopóki nie wyłączysz go w Ustawieniach. Ręczne kopiowanie i wklejanie pozostanie bez zmian."),
+        ("Allow terminal apps to copy to clipboard", "Zezwól aplikacjom terminalowym na kopiowanie do schowka"),
         ("Enable", "Włącz"),
         ("Reuse one connection for port forwarding", "Użyj ponownie jednego połączenia do przekierowania portów"),
         ("port-forward-mux-tip", "Przekazuj wszystkie połączenia jednego przekierowania portów przez jedno połączenie ze zdalnym komputerem, zamiast łączyć się i logować od nowa dla każdego z nich."),
@@ -780,7 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk nie mógł załadować składnika GStreamer wymaganego do przechwytywania ekranu ({})"),
         ("Relay fallback delay in seconds", "Opóźnienie przed przejściem na przekaźnik w sekundach"),
         ("relay-fallback-delay-tip", "Jak długo nawiązane już połączenie przez przekaźnik czeka na bezpośrednie połączenie WebRTC, zanim zostanie użyte zamiast niego. Zwiększ, aby dać wolnemu połączeniu bezpośredniemu więcej czasu; zmniejsz, aby w sieciach, w których połączenie bezpośrednie jest niemożliwe, szybciej przechodzić na przekaźnik. Pozostaw puste, aby użyć wartości domyślnej 2.5 sekundy."),
-        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", ""),
         ("Output resolution", "Rozdzielczość wyjściowa"),
         ("Width", "Szerokość"),
         ("Height", "Wysokość"),
@@ -822,5 +821,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "Nieprawidłowy zakres skalowania ekranu"),
         ("Interface size", "Rozmiar interfejsu"),
         ("Current interface size", "Bieżący rozmiar interfejsu"),
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Aby rozpocząć połączenie głosowe, włącz opcję \"Przechwytywanie dźwięku\" na stronie \"Udostępnianie ekranu\".")
     ].iter().cloned().collect();
 }

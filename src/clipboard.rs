@@ -34,8 +34,6 @@ const CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET: &'static str = "XML Spreadsheet";
 #[cfg(not(target_os = "android"))]
 lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
-    // cache the clipboard msg
-    static ref LAST_MULTI_CLIPBOARDS: Arc<Mutex<MultiClipboards>> = Arc::new(Mutex::new(MultiClipboards::new()));
     // For updating in server and getting content in cm.
     // Clipboard on Linux is "server--clients" mode.
     // The clipboard content is owned by the server and passed to the clients when requested.
@@ -79,8 +77,7 @@ pub fn check_clipboard(
     side: ClipboardSide,
     force: bool,
 ) -> Option<Message> {
-    let (msg, clipboards) = read_clipboard_message(ctx, side, force)?;
-    *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
+    let (msg, _) = read_clipboard_message(ctx, side, force)?;
     Some(msg)
 }
 
@@ -564,18 +561,25 @@ pub fn get_current_clipboard_msg(
     peer_platform: &str,
     side: ClipboardSide,
 ) -> Option<Message> {
-    let mut multi_clipboards = LAST_MULTI_CLIPBOARDS.lock().unwrap();
-    if multi_clipboards.clipboards.is_empty() {
-        let mut ctx = ClipboardContext::new().ok()?;
-        *multi_clipboards = proto::create_multi_clipboards(ctx.get(side, true).ok()?);
+    // Clipboard changes can be skipped while synchronization is disabled.
+    #[cfg(target_os = "linux")]
+    if !clipboard_listener::is_ready() {
+        log::error!("Cannot read initial clipboard before the listener is ready");
+        return None;
     }
+    let ctx = match ClipboardContext::new() {
+        Ok(ctx) => ctx,
+        Err(err) => {
+            log::error!("Failed to create clipboard context for initial sync: {}", err);
+            return None;
+        }
+    };
+    let (msg, multi_clipboards) = read_clipboard_message(&mut Some(ctx), side, true)?;
     if multi_clipboards.clipboards.is_empty() {
         return None;
     }
 
     if is_support_multi_clipboard(peer_version, peer_platform) {
-        let mut msg = Message::new();
-        msg.set_multi_clipboards(multi_clipboards.clone());
         Some(msg)
     } else {
         // Find the first text clipboard and send it.
@@ -888,10 +892,13 @@ pub fn get_clipboards_msg(client: bool) -> Option<Message> {
 #[cfg(not(target_os = "android"))]
 pub mod clipboard_listener {
     use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
+    #[cfg(target_os = "linux")]
+    use hbb_common::tokio::sync::watch;
     use hbb_common::{bail, log, ResultType};
     use std::{
         collections::HashMap,
         io,
+        sync::atomic::{AtomicUsize, Ordering},
         sync::mpsc::{channel, Sender},
         sync::{Arc, Mutex},
         thread::JoinHandle,
@@ -901,15 +908,83 @@ pub mod clipboard_listener {
         pub static ref CLIPBOARD_LISTENER: Arc<Mutex<ClipboardListener>> = Default::default();
     }
 
+    static CLIPBOARD_GENERATION: AtomicUsize = AtomicUsize::new(0);
+
+    pub enum ClipboardEvent {
+        Changed,
+        #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+        InitialSelection,
+        Stop,
+        StopWithError(io::Error),
+    }
+
+    pub fn current_generation() -> usize {
+        CLIPBOARD_GENERATION.load(Ordering::SeqCst)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn is_ready() -> bool {
+        let listener = CLIPBOARD_LISTENER.lock().unwrap();
+        let ready = listener
+            .ready
+            .as_ref()
+            .map(|ready| *ready.borrow())
+            .unwrap_or(false);
+        ready
+            && listener
+                .handle
+                .as_ref()
+                .map(|(_, h)| !h.is_finished())
+                .unwrap_or(false)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn wait_for_ready() -> ResultType<()> {
+        let Some(mut ready) = CLIPBOARD_LISTENER.lock().unwrap().ready.clone() else {
+            bail!("Clipboard listener has not started");
+        };
+        let is_ready = *ready.borrow_and_update();
+        if !is_ready {
+            ready.changed().await?;
+        }
+        Ok(())
+    }
+
     struct Handler {
-        subscribers: Arc<Mutex<HashMap<String, Sender<CallbackResult>>>>,
+        subscribers: Arc<Mutex<HashMap<String, Sender<ClipboardEvent>>>>,
+        #[cfg(target_os = "linux")]
+        ready: Option<watch::Sender<bool>>,
     }
 
     impl ClipboardHandler for Handler {
+        #[cfg(target_os = "linux")]
+        fn on_clipboard_ready(&mut self) {
+            // A restart must invalidate older snapshots, including on X11 or an empty selection.
+            CLIPBOARD_GENERATION.fetch_add(1, Ordering::SeqCst);
+            if let Some(tx) = self.ready.take() {
+                if let Err(err) = tx.send(true) {
+                    log::debug!("Failed to report clipboard listener readiness: {}", err);
+                }
+            }
+        }
+
         fn on_clipboard_change(&mut self) -> CallbackResult {
+            // Empty or unsupported contents still invalidate an initial snapshot.
+            CLIPBOARD_GENERATION.fetch_add(1, Ordering::SeqCst);
             let sub_lock = self.subscribers.lock().unwrap();
             for tx in sub_lock.values() {
-                tx.send(CallbackResult::Next).ok();
+                tx.send(ClipboardEvent::Changed).ok();
+            }
+            CallbackResult::Next
+        }
+
+        fn on_clipboard_initial_selection(&mut self) -> CallbackResult {
+            // Only client file sync consumes this event; text initial sync is per session.
+            #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+            for tx in self.subscribers.lock().unwrap().values() {
+                if let Err(err) = tx.send(ClipboardEvent::InitialSelection) {
+                    log::debug!("Failed to notify initial clipboard selection: {}", err);
+                }
             }
             CallbackResult::Next
         }
@@ -918,11 +993,16 @@ pub mod clipboard_listener {
             let msg = format!("Clipboard listener error: {}", error);
             let sub_lock = self.subscribers.lock().unwrap();
             for tx in sub_lock.values() {
-                tx.send(CallbackResult::StopWithError(io::Error::new(
+                tx.send(ClipboardEvent::StopWithError(io::Error::new(
                     io::ErrorKind::Other,
                     msg.clone(),
                 )))
                 .ok();
+            }
+            #[cfg(target_os = "linux")]
+            if self.ready.is_some() {
+                // Subscribers must receive the error before a failed startup stops.
+                return CallbackResult::StopWithError(error);
             }
             CallbackResult::Next
         }
@@ -930,11 +1010,13 @@ pub mod clipboard_listener {
 
     #[derive(Default)]
     pub struct ClipboardListener {
-        subscribers: Arc<Mutex<HashMap<String, Sender<CallbackResult>>>>,
+        subscribers: Arc<Mutex<HashMap<String, Sender<ClipboardEvent>>>>,
         handle: Option<(Shutdown, JoinHandle<()>)>,
+        #[cfg(target_os = "linux")]
+        ready: Option<watch::Receiver<bool>>,
     }
 
-    pub fn subscribe(name: String, tx: Sender<CallbackResult>) -> ResultType<()> {
+    pub fn subscribe(name: String, tx: Sender<ClipboardEvent>) -> ResultType<()> {
         log::info!("Subscribe clipboard listener: {}", &name);
         let mut listener_lock = CLIPBOARD_LISTENER.lock().unwrap();
         listener_lock
@@ -946,8 +1028,12 @@ pub mod clipboard_listener {
         cleanup_stale_listener(&mut listener_lock);
         if listener_lock.handle.is_none() {
             log::info!("Start clipboard listener thread");
+            #[cfg(target_os = "linux")]
+            let (tx_ready, rx_ready) = watch::channel(false);
             let handler = Handler {
                 subscribers: listener_lock.subscribers.clone(),
+                #[cfg(target_os = "linux")]
+                ready: Some(tx_ready),
             };
             let (tx_start_res, rx_start_res) = channel();
             let h = start_clipboard_master_thread(handler, tx_start_res);
@@ -962,6 +1048,11 @@ pub mod clipboard_listener {
                 }
             };
             listener_lock.handle = Some((shutdown, h));
+            #[cfg(target_os = "linux")]
+            {
+                // Initial-sync tasks await backend readiness without blocking the connection loop.
+                listener_lock.ready = Some(rx_ready);
+            }
             log::info!("Clipboard listener thread started");
         }
 
@@ -993,7 +1084,7 @@ pub mod clipboard_listener {
         let is_empty = {
             let mut sub_lock = listener_lock.subscribers.lock().unwrap();
             if let Some(tx) = sub_lock.remove(name) {
-                tx.send(CallbackResult::Stop).ok();
+                tx.send(ClipboardEvent::Stop).ok();
             }
             sub_lock.is_empty()
         };

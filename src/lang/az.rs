@@ -780,7 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", ""),
         ("Relay fallback delay in seconds", "Ötürücüyə keçid gecikməsi, saniyə"),
         ("relay-fallback-delay-tip", "Artıq qurulmuş ötürücü bağlantı birbaşa WebRTC bağlantısını nə qədər gözləyir, sonra onun əvəzinə istifadə olunur. Yavaş birbaşa bağlantıya daha çox vaxt vermək üçün artırın; birbaşa bağlantının mümkün olmadığı şəbəkələrdə ötürücüyə daha tez keçmək üçün azaldın. Standart 2.5 saniyə üçün boş buraxın."),
-        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", ""),
         ("Output resolution", "Çıxış ayırdetməsi"),
         ("Width", "En"),
         ("Height", "Hündürlük"),
@@ -822,5 +821,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "Yanlış ekran miqyaslama aralığı"),
         ("Interface size", "İnterfeys ölçüsü"),
         ("Current interface size", "Cari interfeys ölçüsü"),
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "")
     ].iter().cloned().collect();
 }

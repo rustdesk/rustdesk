@@ -780,7 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk 无法加载屏幕捕获所需的 GStreamer 组件 ({})"),
         ("Relay fallback delay in seconds", "回落到中继前的等待时间（秒）"),
         ("relay-fallback-delay-tip", "已经建立的中继连接会等待直连的 WebRTC 多久，超过这个时间就改用中继。调大可以让较慢的直连有更多机会胜出；调小则在无法直连的网络上更快回落到中继。留空表示使用默认值 2.5 秒。"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "开始语音通话前请在\"仅共享屏幕\"页面启用\"音频录制\"。"),
         ("Output resolution", "输出分辨率"),
         ("Width", "宽度"),
         ("Height", "高度"),
@@ -822,5 +821,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "显示缩放范围无效"),
         ("Interface size", "界面大小"),
         ("Current interface size", "当前界面大小"),
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "开始语音通话前请在\"共享屏幕\"页面启用\"音频录制\"。")
     ].iter().cloned().collect();
 }

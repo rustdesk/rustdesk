@@ -874,7 +874,7 @@ jobs:
       - name: Test cursor sizing
         if: ${{ !inputs.upload-artifact && matrix.job.arch == 'aarch64' }}
         working-directory: flutter
-        run: flutter test --timeout 60s test/cursor_size_test.dart
+        run: flutter test --timeout 60s test/cursor_size_test.dart test/cursor_replay_test.dart test/cursor_default_test.dart
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -2080,10 +2080,18 @@ jobs:
               cargo test --locked --lib --features drm drm_capturer_tests
             run_drm_tests "rustdesk ipc::test" \
               cargo test --locked --lib --features drm ipc::test
+            run_drm_tests "rustdesk cursor_pos_tests" \
+              cargo test --locked --lib --features drm cursor_pos_tests
+            run_drm_tests "rustdesk peer_abs_sample_tests" \
+              cargo test --locked --lib --features drm peer_abs_sample_tests
+            run_drm_tests "rustdesk input_map_tests" \
+              cargo test --locked --lib --features drm input_map_tests
             run_drm_tests "scrap hotspot_provenance_tests" \
               cargo test --locked -p scrap --features drm hotspot_provenance_tests
             run_drm_tests "scrap hotspot_guess_tests" \
               cargo test --locked -p scrap --features drm hotspot_guess_tests
+            run_drm_tests "scrap plane_rotation_tests" \
+              cargo test --locked -p scrap --features drm plane_rotation_tests
             cargo build --locked --lib --features "$FEATURES" --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo
@@ -2444,7 +2452,9 @@ jobs:
           sudo pip3 install git+https://github.com/rustdesk-org/appimage-builder.git
           # run appimage-builder
           pushd appimage
+          ./build-apprun.sh ${{ matrix.job.arch }}
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
+          cmp AppDir/AppRun appimage-build/AppRun/v2.0.0/AppRun-Release-${{ matrix.job.arch }}
 
       - name: Publish appimage package
         if: env.UPLOAD_ARTIFACT == 'true'

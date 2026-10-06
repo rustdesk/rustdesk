@@ -513,13 +513,17 @@ pub enum Data {
     CmWindowClosed,
     // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
     // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
-    // to upstream. Protocol on `_drm`: on connect the root service sends `DrmDisplayList`, the
+    // to upstream. `_drm` protocol: the client sends `DrmHello`, the service `DrmDisplayList`, the
     // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
     // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
     // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
     // the header extensible. The zero-copy `DrmFrameDmabuf(DmabufDesc)` sibling below carries only a
     // small JSON metadata descriptor; the scanout dma-buf fd rides an SCM_RIGHTS ancillary message on
     // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
+    /// Client -> service, first on `_drm`: whether the service may wake sleeping displays before
+    /// it answers. The cache warm at every `--server` start says no: no peer is waiting for it.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmHello { wake: bool },
     /// Client -> service: begin streaming the chosen display.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context
@@ -540,7 +544,17 @@ pub enum Data {
     /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
     /// CPU-fallback path (no render node, or no transferable dma-buf): pixels cross the wire.
     #[cfg(all(target_os = "linux", feature = "drm"))]
-    DrmFrame { width: u32, height: u32 },
+    DrmFrame {
+        width: u32,
+        height: u32,
+        /// See `DmabufDesc::plane_rotation`; absent from a producer older than this field.
+        #[serde(default)]
+        plane_rotation: Option<u32>,
+        /// See `DmabufDesc::cursor_pos`: the cursor plane position read right after this frame,
+        /// or `None` when the cursor is hidden, the read failed or the producer predates the field.
+        #[serde(default)]
+        cursor_pos: Option<(i32, i32)>,
+    },
     /// Service -> client: a zero-copy dma-buf frame descriptor. The scanout fd is NOT a field; when
     /// `desc.has_fd` it rides an SCM_RIGHTS ancillary message on the same `DrmConn::send_msg`, and
     /// there is NO trailing `send_raw()` body. The unprivileged `--server` imports the fd and does
@@ -2367,6 +2381,71 @@ mod test {
         match serde_json::from_str::<Data>(modern).expect("modern DrmCursor must deserialize") {
             Data::DrmCursor { hot_measured, .. } => assert!(!hot_measured),
             other => panic!("expected DrmCursor, got {other:?}"),
+        }
+    }
+
+    /// A frame from a producer that predates the plane rotation reads as `None`, in the cpu frame
+    /// header and in the dma-buf descriptor: the root service and the `--server` are upgraded
+    /// separately, and `None` keeps the previous rule.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[test]
+    fn a_frame_without_a_plane_rotation_reads_as_none() {
+        let legacy = r#"{"t":"DrmFrame","c":{"width":8,"height":8}}"#;
+        match serde_json::from_str::<Data>(legacy).expect("legacy DrmFrame must deserialize") {
+            Data::DrmFrame { plane_rotation, .. } => assert_eq!(plane_rotation, None),
+            other => panic!("expected DrmFrame, got {other:?}"),
+        }
+        let modern = r#"{"t":"DrmFrame","c":{"width":8,"height":8,"plane_rotation":4}}"#;
+        match serde_json::from_str::<Data>(modern).expect("modern DrmFrame must deserialize") {
+            Data::DrmFrame { plane_rotation, .. } => assert_eq!(plane_rotation, Some(4)),
+            other => panic!("expected DrmFrame, got {other:?}"),
+        }
+        let desc = DmabufDesc {
+            buffer_id: 0,
+            width: 4,
+            height: 4,
+            format: 0,
+            modifier: 0,
+            fb_id: 0,
+            num_planes: 1,
+            offsets: [0; 4],
+            pitches: [16, 0, 0, 0],
+            hdr_eotf: 0,
+            hdr_max_nits: 0,
+            has_fd: false,
+            plane_rotation: Some(4),
+            cursor_pos: None,
+        };
+        let mut value = serde_json::to_value(&desc).unwrap();
+        assert!(value.as_object_mut().unwrap().remove("plane_rotation").is_some());
+        let legacy: DmabufDesc =
+            serde_json::from_value(value).expect("legacy DmabufDesc must deserialize");
+        assert_eq!(legacy.plane_rotation, None);
+    }
+
+    /// A frame header from a producer that predates the cursor plane position reads as `None`;
+    /// a producer that sends one is read back exactly. A pin, not a gate: the consumer only ever
+    /// measures against `Some`.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[test]
+    fn a_drm_frame_without_a_cursor_position_reads_as_none() {
+        let legacy = r#"{"t":"DrmFrame","c":{"width":8,"height":8}}"#;
+        match serde_json::from_str::<Data>(legacy).expect("legacy DrmFrame must deserialize") {
+            Data::DrmFrame {
+                width,
+                height,
+                cursor_pos,
+                ..
+            } => {
+                assert_eq!((width, height), (8, 8));
+                assert_eq!(cursor_pos, None);
+            }
+            other => panic!("expected DrmFrame, got {other:?}"),
+        }
+        let modern = r#"{"t":"DrmFrame","c":{"width":8,"height":8,"cursor_pos":[3,4]}}"#;
+        match serde_json::from_str::<Data>(modern).expect("modern DrmFrame must deserialize") {
+            Data::DrmFrame { cursor_pos, .. } => assert_eq!(cursor_pos, Some((3, 4))),
+            other => panic!("expected DrmFrame, got {other:?}"),
         }
     }
 }

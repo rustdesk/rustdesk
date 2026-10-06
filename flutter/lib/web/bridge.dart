@@ -26,6 +26,14 @@ sealed class EventToUI {
     int field0,
     bool field1,
   ) = EventToUI_Texture;
+  const factory EventToUI.cursor({
+    required String id,
+    required int hotx,
+    required int hoty,
+    required int width,
+    required int height,
+    required Uint8List colors,
+  }) = EventToUI_Cursor;
 }
 
 class EventToUI_Event implements EventToUI {
@@ -50,7 +58,60 @@ class EventToUI_Texture implements EventToUI {
   bool get field1 => f1;
 }
 
+class EventToUI_Cursor implements EventToUI {
+  const EventToUI_Cursor({
+    required this.id,
+    required this.hotx,
+    required this.hoty,
+    required this.width,
+    required this.height,
+    required this.colors,
+  });
+  final String id;
+  final int hotx;
+  final int hoty;
+  final int width;
+  final int height;
+  final Uint8List colors;
+}
+
+class CursorShape {
+  final int hotx;
+  final int hoty;
+  final int width;
+  final int height;
+  final Uint8List colors;
+
+  const CursorShape({
+    required this.hotx,
+    required this.hoty,
+    required this.width,
+    required this.height,
+    required this.colors,
+  });
+}
+
 class RustdeskImpl {
+  // The core answers through the callback, before callMethod returns.
+  Future<CursorShape?> sessionGetCursorShape(
+      {required UuidValue sessionId, required String id, dynamic hint}) {
+    final completer = Completer<CursorShape?>();
+    js.context.callMethod('getCursorShape', [
+      id,
+      (int hotx, int hoty, int width, int height, Uint8List? colors) {
+        completer.complete(colors == null
+            ? null
+            : CursorShape(
+                hotx: hotx,
+                hoty: hoty,
+                width: width,
+                height: height,
+                colors: colors));
+      }
+    ]);
+    return completer.future;
+  }
+
   Future<void> stopGlobalEventStream({required String appType, dynamic hint}) {
     throw UnimplementedError("stopGlobalEventStream");
   }
