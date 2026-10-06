@@ -1,8 +1,12 @@
 use crate::{quartz, Frame, Pixfmt};
-use std::marker::PhantomData;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, TryLockError};
-use std::{io, mem, time};
+use std::{
+    io,
+    marker::PhantomData,
+    mem,
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+    sync::{Arc, Mutex, TryLockError},
+    time,
+};
 
 /// Probing duration: if CGDisplayStream produces zero frames within this
 /// window after start, we switch to the CGWindowList fallback capturer.

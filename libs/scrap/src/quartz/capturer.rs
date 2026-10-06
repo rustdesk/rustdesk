@@ -1,9 +1,11 @@
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::ptr;
+use std::{
+    ptr,
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+    sync::{Arc, Mutex},
+};
 
 use block::{Block, ConcreteBlock};
 use hbb_common::libc::c_void;
-use std::sync::{Arc, Mutex};
 
 use super::config::Config;
 use super::display::Display;
