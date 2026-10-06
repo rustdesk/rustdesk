@@ -100,7 +100,6 @@ pub const OPTION_AV1_TEST: &str = "av1-test";
 /// - If unset, negative, or non-integer, no explicit limit is enforced for backward compatibility.
 pub const OPTION_FILE_TRANSFER_MAX_FILES: &str = "file-transfer-max-files";
 pub const OPTION_DISABLE_UDP: &str = "disable-udp";
-pub const OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK: &str = "disable-uinput-layout-fallback";
 pub const OPTION_SHOW_VIRTUAL_MOUSE: &str = "show-virtual-mouse";
 // joystick is the virtual mouse.
 // So `OPTION_SHOW_VIRTUAL_MOUSE` should also be set if `OPTION_SHOW_VIRTUAL_JOYSTICK` is set.
@@ -326,7 +325,6 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_RELAY_SERVER,
     OPTION_ICE_SERVERS,
     OPTION_DISABLE_UDP,
-    OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK,
     OPTION_ALLOW_INSECURE_TLS_FALLBACK,
     OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS,
     OPTION_ALLOW_AUTO_UPDATE,

@@ -947,14 +947,15 @@ pub fn event_to_key_events(
 
     update_modifiers_state(event);
 
-    let pressed_event = match event.event_type {
+    match event.event_type {
         EventType::KeyPress(key) => {
             TO_RELEASE.lock().unwrap().insert(key, event.clone());
-            None
         }
-        EventType::KeyRelease(key) => TO_RELEASE.lock().unwrap().remove(&key),
-        _ => None,
-    };
+        EventType::KeyRelease(key) => {
+            TO_RELEASE.lock().unwrap().remove(&key);
+        }
+        _ => {}
+    }
 
     let mut key_event = KeyEvent::new();
     key_event.mode = keyboard_mode.into();
@@ -965,12 +966,7 @@ pub fn event_to_key_events(
         _ => {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
-                // Releases may have no Unicode name, or reflect changed modifiers.
-                let release_event = pressed_event.map(|pressed| Event {
-                    unicode: pressed.unicode,
-                    ..event.clone()
-                });
-                legacy_keyboard_mode(release_event.as_ref().unwrap_or(event), key_event)
+                legacy_keyboard_mode(event, key_event)
             }
             #[cfg(any(target_os = "android", target_os = "ios"))]
             {

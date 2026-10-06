@@ -1,10 +1,7 @@
 use super::{source::Source, Keymap, LayoutKey, CAPS_LOCK_BIT, NUM_LOCK_BIT, SHIFT_BIT};
 use crate::server::input_service::is_ascii_printable;
-use base::{
-    config::keys::OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK,
-    message_proto::{key_event, KeyEvent, KeyboardMode},
-};
-use hbb_common::{anyhow::anyhow, bail, config::Config, lazy_static, ResultType};
+use base::message_proto::{key_event, KeyEvent, KeyboardMode};
+use hbb_common::{bail, lazy_static, ResultType};
 use std::{
     sync::{mpsc, Mutex, RwLock, TryLockError},
     thread,
@@ -201,15 +198,11 @@ pub(in crate::server::uinput) fn resolve(
     let keymap = match current.as_ref() {
         Ok(keymap) => keymap,
         Err(error) => {
-            if Config::get_option(OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK) == "Y" {
-                return Err(anyhow!("{}", error));
-            }
             hbb_common::throttled_log!(
                 LAYOUT_WARNING_INTERVAL,
                 warn,
-                "Uinput layout unavailable: {}; using legacy character mapping (may differ from the host layout). Set {}=Y to disable",
-                error,
-                OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK
+                "Uinput layout unavailable: {}; using legacy character mapping (may differ from the host layout)",
+                error
             );
             return Ok(LayoutKey {
                 key: enigo::Key::Layout(character),
@@ -226,10 +219,7 @@ pub(in crate::server::uinput) fn resolve(
     if let Some(mapping) = shifted.or_else(|| keymap.maps[index].get(&character)) {
         return Ok(mapping.clone());
     }
-    if shortcut_shift.is_some()
-        && character.is_ascii_graphic()
-        && Config::get_option(OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK) != "Y"
-    {
+    if shortcut_shift.is_some() && character.is_ascii_graphic() {
         return legacy_shortcut(character);
     }
     bail!("Character cannot be generated in the detected XKB layout")
@@ -243,8 +233,7 @@ fn legacy_shortcut(character: char) -> ResultType<LayoutKey> {
     hbb_common::throttled_log!(
         LAYOUT_WARNING_INTERVAL,
         warn,
-        "Uinput layout lacks an ASCII shortcut character; using its legacy physical mapping. Set {}=Y to disable",
-        OPTION_DISABLE_UINPUT_LAYOUT_FALLBACK
+        "Uinput layout lacks an ASCII shortcut character; using its legacy physical mapping"
     );
     Ok(LayoutKey {
         key: enigo::Key::Raw(key.code() + super::XKB_KEYCODE_OFFSET),
