@@ -4792,11 +4792,14 @@ impl Connection {
                         ((display.width() as f64) / scale).round() as _,
                         (display.height() as f64 / scale).round() as _,
                     );
+                    let original_refresh_rate =
+                        crate::platform::current_refresh_rate(&name);
                     if record_changed {
                         display_service::set_last_changed_resolution(
                             &name,
                             original,
                             (r.width, r.height),
+                            original_refresh_rate,
                         );
                     }
                     if let Err(e) =

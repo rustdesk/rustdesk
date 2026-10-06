@@ -20,6 +20,7 @@ const DUMMY_DISPLAY_SIDE_MAX_SIZE: usize = 1024;
 struct ChangedResolution {
     original: (i32, i32),
     changed: (i32, i32),
+    original_refresh_rate: Option<u32>,
 }
 
 lazy_static::lazy_static! {
@@ -573,14 +574,23 @@ pub(super) fn check_display_changed(
 }
 
 #[inline]
-pub fn set_last_changed_resolution(display_name: &str, original: (i32, i32), changed: (i32, i32)) {
+pub fn set_last_changed_resolution(
+    display_name: &str,
+    original: (i32, i32),
+    changed: (i32, i32),
+    original_refresh_rate: Option<u32>,
+) {
     let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
     match lock.get_mut(display_name) {
         Some(res) => res.changed = changed,
         None => {
             lock.insert(
                 display_name.to_owned(),
-                ChangedResolution { original, changed },
+                ChangedResolution {
+                    original,
+                    changed,
+                    original_refresh_rate,
+                },
             );
         }
     }
@@ -589,21 +599,32 @@ pub fn set_last_changed_resolution(display_name: &str, original: (i32, i32), cha
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn restore_resolutions() {
+    let mut restored = Vec::new();
     for (name, res) in CHANGED_RESOLUTIONS.read().unwrap().iter() {
         let (w, h) = res.original;
         log::info!("Restore resolution of display '{}' to ({}, {})", name, w, h);
-        if let Err(e) = crate::platform::change_resolution(name, w as _, h as _) {
-            log::error!(
+        match crate::platform::change_resolution_with_refresh(
+            name,
+            w as _,
+            h as _,
+            res.original_refresh_rate,
+        ) {
+            Ok(_) => restored.push(name.clone()),
+            Err(e) => log::error!(
                 "Failed to restore resolution of display '{}' to ({},{}): {}",
                 name,
                 w,
                 h,
                 e
-            );
+            ),
         }
     }
-    // Can be cleared because restore resolutions is called when there is no client connected.
-    CHANGED_RESOLUTIONS.write().unwrap().clear();
+    // Only drop the displays that were actually restored. Failed restores stay
+    // recorded so a later call can retry them instead of losing the original mode.
+    let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
+    for name in restored {
+        lock.remove(&name);
+    }
 }
 
 #[inline]

@@ -64,6 +64,16 @@ pub fn breakdown_callback() {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
+    change_resolution_with_refresh(name, width, height, None)
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn change_resolution_with_refresh(
+    name: &str,
+    width: usize,
+    height: usize,
+    refresh_rate: Option<u32>,
+) -> ResultType<()> {
     let cur_resolution = current_resolution(name)?;
     // For MacOS
     // to-do: Make sure the following comparison works.
@@ -76,7 +86,19 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
         return Ok(());
     }
     hbb_common::log::warn!("Change resolution of '{}' to ({},{})", name, width, height);
-    change_resolution_directly(name, width, height)
+    #[cfg(windows)]
+    return change_resolution_directly(name, width, height, refresh_rate);
+    #[cfg(not(windows))]
+    {
+        let _ = refresh_rate;
+        change_resolution_directly(name, width, height)
+    }
+}
+
+#[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
+pub fn current_refresh_rate(_name: &str) -> Option<u32> {
+    // Refresh-rate capture/restore is currently only implemented on Windows.
+    None
 }
 
 // Android

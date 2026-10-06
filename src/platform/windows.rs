@@ -3063,10 +3063,23 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
     }
 }
 
+pub fn current_refresh_rate(name: &str) -> Option<u32> {
+    let device_name = str_to_device_name(name);
+    unsafe {
+        let mut dm: DEVMODEW = std::mem::zeroed();
+        dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+        if EnumDisplaySettingsW(device_name.as_ptr(), ENUM_CURRENT_SETTINGS, &mut dm) == 0 {
+            return None;
+        }
+        Some(dm.dmDisplayFrequency)
+    }
+}
+
 pub(super) fn change_resolution_directly(
     name: &str,
     width: usize,
     height: usize,
+    refresh_rate: Option<u32>,
 ) -> ResultType<()> {
     let device_name = str_to_device_name(name);
     unsafe {
@@ -3075,6 +3088,10 @@ pub(super) fn change_resolution_directly(
         dm.dmPelsWidth = width as _;
         dm.dmPelsHeight = height as _;
         dm.dmFields = DM_PELSHEIGHT | DM_PELSWIDTH;
+        if let Some(rate) = refresh_rate {
+            dm.dmDisplayFrequency = rate as _;
+            dm.dmFields |= DM_DISPLAYFREQUENCY;
+        }
         let res = ChangeDisplaySettingsExW(
             device_name.as_ptr(),
             &mut dm,
