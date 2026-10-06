@@ -209,6 +209,23 @@ class _RecordingDialogState extends State<_RecordingDialog> {
     return KeyEventResult.handled;
   }
 
+  KeyEventResult _onRawKeyEvent(FocusNode node, RawKeyEvent event) {
+    final data = event.data;
+    const gtkMod5Mask = 1 << 7;
+    // GTK can expose AltGr only through Mod5, without a logical AltGraph key.
+    if (event is RawKeyDownEvent &&
+        data is RawKeyEventDataLinux &&
+        data.keyHelper is GtkKeyHelper &&
+        (data.modifiers & gtkMod5Mask) != 0) {
+      setState(() {
+        _key = null;
+        _unsupportedKey = LogicalKeyboardKey.altGraph.keyLabel;
+      });
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   void _onSave() {
     if (_key == null || !_hasRequiredPrefix) return;
     final ordered = canonicalShortcutModsForSave(_mods);
@@ -356,6 +373,7 @@ class _RecordingDialogState extends State<_RecordingDialog> {
         focusNode: _focusNode,
         autofocus: true,
         onKeyEvent: _onKeyEvent,
+        onKey: _onRawKeyEvent,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 380),
           child: Column(
