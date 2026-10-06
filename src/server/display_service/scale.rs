@@ -2,7 +2,7 @@ use base::{
     config::keys,
     message_proto::{DisplayScaleRequest, Message, Misc},
 };
-use hbb_common::{bail, config::Config, log, tokio, ResultType};
+use hbb_common::{bail, config::Config, log, throttled_log, tokio, ResultType};
 use std::{
     collections::HashMap,
     sync::{
@@ -26,8 +26,6 @@ struct Tracking {
     pending: usize,
     restoring: bool,
     originals: HashMap<String, OriginalScale>,
-    next_resolution: u64,
-    serving_resolution: u64,
 }
 
 fn tracking() -> &'static (Mutex<Tracking>, Condvar) {
@@ -59,22 +57,11 @@ pub(in crate::server) struct ResolutionReservation {
     _pending: Option<Pending>,
 }
 
-struct ResolutionTurn;
-
-impl Drop for ResolutionTurn {
-    fn drop(&mut self) {
-        let (lock, ready) = tracking();
-        let mut state = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        state.serving_resolution = state.serving_resolution.wrapping_add(1);
-        ready.notify_all();
-    }
-}
-
 pub(in crate::server) fn reserve_resolution() -> Option<ResolutionReservation> {
     let capture = Config::get_bool_option(keys::OPTION_ALLOW_DISPLAY_SCALING);
     let mut state = tracking().0.lock().unwrap();
     if state.restoring {
-        log::trace!("Resolution change deferred: display settings are busy");
+        log::trace!("Resolution change skipped: display settings are busy");
         return None;
     }
     let pending = if capture || state.pending != 0 || !state.originals.is_empty() {
@@ -112,21 +99,8 @@ pub(in crate::server) fn change_resolution_after_capture(
         origin: display.origin(),
         size: (display.width(), display.height()),
     };
-    let ticket = {
-        let mut state = tracking().0.lock().unwrap();
-        let ticket = state.next_resolution;
-        state.next_resolution = state.next_resolution.wrapping_add(1);
-        ticket
-    };
     tokio::task::spawn_blocking(move || {
         let _operation = operation;
-        let (lock, ready) = tracking();
-        let mut state = lock.lock().unwrap();
-        while state.serving_resolution != ticket {
-            state = ready.wait(state).unwrap();
-        }
-        drop(state);
-        let _turn = ResolutionTurn;
         match crate::platform::display_scale::configure(&captured, 0.0, "") {
             Ok(state) => remember(&state),
             Err(error) => log::trace!("Could not record original display scale: {error}"),
@@ -135,7 +109,9 @@ pub(in crate::server) fn change_resolution_after_capture(
         if let Err(error) =
             crate::platform::change_resolution(&name, requested.0 as _, requested.1 as _)
         {
-            log::error!(
+            throttled_log!(
+                Duration::from_secs(60),
+                error,
                 "Failed to change resolution '{}' to ({},{}): {:?}",
                 name,
                 requested.0,
@@ -194,7 +170,11 @@ fn restore_original(identity: &str, original: OriginalScale) {
             }
         }
         if Instant::now() >= deadline {
-            log::warn!("Could not restore original scale for display {identity}");
+            throttled_log!(
+                Duration::from_secs(60),
+                warn,
+                "Could not restore original scale for display {identity}"
+            );
             return;
         }
         std::thread::sleep(Duration::from_millis(50));
@@ -205,10 +185,11 @@ struct RestoreGuard;
 
 impl Drop for RestoreGuard {
     fn drop(&mut self) {
-        let (lock, ready) = tracking();
-        let mut state = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        state.restoring = false;
-        ready.notify_all();
+        tracking()
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .restoring = false;
     }
 }
 
@@ -235,7 +216,11 @@ fn restore_after_pending() {
     #[cfg(windows)]
     if no_remote {
         if let Err(error) = crate::virtual_display_manager::reset_all() {
-            log::error!("Could not reset virtual displays after scale restoration: {error}");
+            throttled_log!(
+                Duration::from_secs(60),
+                error,
+                "Could not reset virtual displays after scale restoration: {error}"
+            );
         }
     }
     #[cfg(target_os = "linux")]
@@ -258,7 +243,11 @@ pub(in crate::server) fn restore_at_disconnect() -> bool {
         .name("restore-display-scale".into())
         .spawn(restore_after_pending)
     {
-        log::error!("Could not start display scale restoration: {error}");
+        throttled_log!(
+            Duration::from_secs(60),
+            error,
+            "Could not start display scale restoration: {error}"
+        );
         restore_after_pending();
     }
     true

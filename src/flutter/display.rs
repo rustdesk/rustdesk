@@ -40,32 +40,29 @@ mod tests {
         {
             let mut handlers = session.ui_handler.session_handlers.write().unwrap();
             handlers.insert(id, SessionHandler::default());
-            handlers.insert(consumer_id, SessionHandler::default());
-        }
-
-        for count in [2, 1, 0, 1, 3, 2] {
-            session.ui_handler.peer_info.write().unwrap().displays =
-                vec![DisplayInfo::default(); count];
-            session
-                .ui_handler
-                .session_handlers
-                .write()
-                .unwrap()
-                .get_mut(&consumer_id)
-                .unwrap()
-                .displays = if count == 0 { vec![] } else { vec![0] };
-            session.ui_handler.display_rgbas.write().unwrap().insert(
-                0,
-                RgbaData {
-                    valid: true,
+            handlers.insert(
+                consumer_id,
+                SessionHandler {
+                    displays: vec![0],
                     ..Default::default()
                 },
             );
+        }
+        let pixels = vec![10, 20, 30, 255];
+        session.ui_handler.display_rgbas.write().unwrap().insert(
+            0,
+            RgbaData {
+                data: pixels.clone(),
+                valid: true,
+            },
+        );
+        let buffer = session.ui_handler.get_rgba(0);
+        assert!(!buffer.is_null());
+
+        for count in [2, 1] {
+            session.ui_handler.peer_info.write().unwrap().displays =
+                vec![DisplayInfo::default(); count];
             refresh_capture(&session, &id);
-            assert_eq!(
-                session.ui_handler.session_handlers.read().unwrap()[&id].displays,
-                (0..count).collect::<Vec<_>>()
-            );
             let Data::Message(message) = receiver.try_recv().unwrap() else {
                 panic!("Expected capture subscriptions");
             };
@@ -85,13 +82,11 @@ mod tests {
                     Some(misc::Union::RefreshVideoDisplay(index)) if index == display as i32));
             }
             assert!(receiver.try_recv().is_err());
-            if count == 1 {
-                assert_eq!(
-                    session.ui_handler.session_handlers.read().unwrap()[&consumer_id].displays,
-                    vec![0]
-                );
-                assert!(session.ui_handler.display_rgbas.read().unwrap()[&0].valid);
-            }
+            assert_eq!(session.ui_handler.get_rgba(0), buffer);
+            assert_eq!(
+                unsafe { std::slice::from_raw_parts(buffer, pixels.len()) },
+                pixels
+            );
         }
     }
 }

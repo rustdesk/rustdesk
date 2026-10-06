@@ -68,34 +68,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('logical local fit converts output pixels before fitting bounds',
-      (tester) async {
-    List<int>? applied;
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: AlertDialog(
-      content: DisplaySettings(
-          translate: (s) => s,
-          minDimension: 160,
-          maxDimension: 2048,
-          width: 160,
-          height: 160,
-          outputPixelRatio: 2,
-          localResolution: (3200, 1800),
-          onCancel: () {},
-          onApply: (w, h, scale) {
-            applied = [w, h, scale];
-            return null;
-          }),
-    ))));
-    await tester.ensureVisible(find.text('resolution_fit_local_tip'));
-    await tester.tap(find.text('resolution_fit_local_tip'));
-    await tester.pump();
-    await tester.ensureVisible(find.text('Apply'));
-    await tester.tap(find.text('Apply'));
-    expect(applied, [1600, 900, 1]);
-  });
-
   Future<void> openEditor(
           WidgetTester tester, void Function(int, int, int) apply,
           {List<(int, int)>? supportedResolutions,

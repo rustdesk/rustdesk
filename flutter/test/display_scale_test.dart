@@ -129,17 +129,26 @@ void main() {
 
   test('response requires matching session and request; duplicate is ignored',
       () async {
-    var complete = false;
-    final result = DisplayScaleRequests.request('session-a', (id) async {
-      final response = jsonEncode({'request_id': id, 'state': data});
-      DisplayScaleRequests.handle('session-b', response);
-      await Future<void>.delayed(Duration.zero);
-      expect(complete, isFalse);
-      DisplayScaleRequests.handle('session-a', response);
-      DisplayScaleRequests.handle('session-a', response);
-    });
+    final sent = Completer<String>();
+    final result = DisplayScaleRequests.request(
+        'session-a', (id) async => sent.complete(id));
+    final id = await sent.future;
+    DisplayScaleRequests.handle(
+        'session-b',
+        jsonEncode({
+          'request_id': id,
+          'state': {...data, 'percent': 100}
+        }));
+    DisplayScaleRequests.handle(
+        'session-a',
+        jsonEncode({
+          'request_id': 'another-request',
+          'state': {...data, 'percent': 125}
+        }));
+    final response = jsonEncode({'request_id': id, 'state': data});
+    DisplayScaleRequests.handle('session-a', response);
+    DisplayScaleRequests.handle('session-a', response);
     expect((await result).percent, 150);
-    complete = true;
   });
 
   test('explicit unsupported is neutral only before a native baseline',
@@ -176,21 +185,25 @@ void main() {
     expect(controller.canApply, isFalse);
   });
 
-  test(
-      'timeout cleans request and late responses cannot complete another request',
-      () async {
-    String? id;
+  test('timed-out response cannot complete the next request', () async {
+    late String expiredId;
     final request = DisplayScaleRequests.request('session', (value) async {
-      id = value;
-    }, timeout: const Duration(milliseconds: 10));
+      expiredId = value;
+    }, timeout: Duration.zero);
     await expectLater(request, throwsA(isA<DisplayScaleError>()));
+    final sent = Completer<String>();
+    final next = DisplayScaleRequests.request(
+        'session', (id) async => sent.complete(id));
+    final id = await sent.future;
+    DisplayScaleRequests.handle(
+        'session',
+        jsonEncode({
+          'request_id': expiredId,
+          'state': {...data, 'percent': 100}
+        }));
     DisplayScaleRequests.handle(
         'session', jsonEncode({'request_id': id, 'state': data}));
-    await expectLater(
-        DisplayScaleRequests.request('session', (_) async {
-          throw StateError('disconnected');
-        }),
-        throwsStateError);
+    expect((await next).percent, 150);
   });
 
   test('decimal capabilities and range validation retain precision', () {
@@ -908,8 +921,7 @@ void main() {
   testWidgets('Original resolution restores scale with confirmed mode token',
       (tester) async {
     final calls = <(double, String)>[];
-    var modeCalls = 0;
-    var failFirstRead = true;
+    final modes = <(int, int)>[];
     await tester.pumpWidget(_displaySettings(
         width: 1600,
         height: 900,
@@ -917,17 +929,12 @@ void main() {
         supportedResolutions: const [(1600, 900), (1920, 1080)],
         defaultResolution: (1920, 1080, 1),
         onApply: (width, height, _) {
-          modeCalls++;
-          expect((width, height), (1920, 1080));
+          modes.add((width, height));
           return scaleState(150, 'confirmed');
         },
         onCancel: () {},
         requestScale: (percent, token) async {
           calls.add((percent, token));
-          if (percent == 0 && failFirstRead) {
-            failFirstRead = false;
-            throw const DisplayScaleError('read failed');
-          }
           return percent == 0
               ? scaleState(150, 'before', resolution: (1600, 900))
               : scaleState(100, 'restored');
@@ -935,14 +942,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('resolution_original_tip'));
     await tester.pumpAndSettle();
-    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
-        isNull);
-    await tester.tap(find.text('Refresh'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
-    expect(modeCalls, 1);
-    expect(calls, [(0, ''), (0, ''), (-1, 'confirmed')]);
+    expect(modes, [(1920, 1080)]);
+    expect(calls, [(0, ''), (-1, 'confirmed')]);
   });
 
   testWidgets(

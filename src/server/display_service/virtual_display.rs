@@ -7,7 +7,7 @@ use base::message_proto::{
     VirtualDisplayMode,
 };
 use hbb_common::{bail, log, tokio, ResultType};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 pub(in crate::server) fn get_platform_additions() -> serde_json::Map<String, serde_json::Value> {
     let mut additions = serde_json::Map::new();
@@ -72,14 +72,22 @@ pub(in crate::server) async fn sync_display_modes(peer: &mut PeerInfo) {
             {
                 Ok(additions) => additions,
                 Err(error) => {
-                    log::error!("Failed to decode local platform additions: {error}");
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(60),
+                        error,
+                        "Failed to decode local platform additions: {error}"
+                    );
                     return;
                 }
             };
             additions.insert("macos_virtual_display_modes".into(), modes);
             peer.platform_additions = serde_json::Value::Object(additions).to_string();
         }
-        Err(error) => log::error!("Failed to query native virtual display modes: {error}"),
+        Err(error) => hbb_common::throttled_log!(
+            Duration::from_secs(60),
+            error,
+            "Failed to query native virtual display modes: {error}"
+        ),
     }
 }
 
@@ -163,7 +171,7 @@ pub(in crate::server) fn configure(
                 "scale": mode.scale,
             }),
             Err(error) => {
-                log::debug!("Virtual display mode: {error}");
+                log::trace!("Virtual display mode: {error}");
                 serde_json::json!({"request_id": request.request_id, "error": error.to_string()})
             }
         };
@@ -176,7 +184,7 @@ pub(in crate::server) fn configure(
 }
 
 fn error_message(title: &str, error: hbb_common::anyhow::Error) -> Message {
-    log::error!("{error}");
+    hbb_common::throttled_log!(Duration::from_secs(60), error, "{error}");
     let mut message = Message::new();
     message.set_message_box(MessageBox {
         msgtype: "nook-nocancel-hasclose".into(),

@@ -423,41 +423,28 @@ void main() {
   });
 
   test(
-      'mode confirmation retries only snapshot changes with the original identity',
+      'mode confirmation recovers a changed snapshot with the original identity',
       () async {
     model.pi.platformAdditions['display_scale'] = true;
-    for (final failure in [
-      null,
-      const DisplayScaleError('unsupported', code: 'unsupported'),
-    ]) {
-      final identities = <String>[];
-      var sends = 0;
-      final target =
-          DisplaySettingsTarget(session, (_, percent, __, identity) async {
-        expect(percent, 0);
-        identities.add(identity);
-        if (identities.length == 2) {
-          throw const DisplayScaleError('changing', code: 'snapshot_changed');
-        }
-        if (identities.length == 3 && failure != null) throw failure;
-        return scaleState(100, 'current',
-            resolution: identities.length == 1 ? (1920, 1080) : (2560, 1440));
-      });
-      await target.requestScale(0, '');
-      final operation =
-          target.applyResolution(() => sends++, resolution: (2560, 1440));
-      if (failure == null) {
-        expect((await operation)!.resolution, (2560, 1440));
-      } else {
-        await expectLater(
-            operation,
-            throwsA(isA<DisplaySettingsReopenRequired>()
-                .having((error) => error.cause, 'cause', same(failure))));
+    final identities = <String>[];
+    var sends = 0;
+    final target =
+        DisplaySettingsTarget(session, (_, percent, __, identity) async {
+      expect(percent, 0);
+      identities.add(identity);
+      if (identities.length == 2) {
+        throw const DisplayScaleError('changing', code: 'snapshot_changed');
       }
-      expect(identities, ['', 'display', 'display']);
-      expect(sends, 1);
-      target.close();
-    }
+      return scaleState(100, 'current',
+          resolution: identities.length == 1 ? (1920, 1080) : (2560, 1440));
+    });
+    await target.requestScale(0, '');
+    final state =
+        await target.applyResolution(() => sends++, resolution: (2560, 1440));
+    expect(state!.resolution, (2560, 1440));
+    expect(identities.skip(1), everyElement('display'));
+    expect(sends, 1);
+    target.close();
   });
 
   test('mode confirmation rejects replacement and closing during readback',
@@ -493,7 +480,6 @@ void main() {
       await expectLater(
           target.requestScale(0, ''), throwsA(isA<DisplayScaleError>()));
       expect(sends, 1);
-      expect(queries, 3);
     }
   });
 

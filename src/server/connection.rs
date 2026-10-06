@@ -4867,7 +4867,11 @@ impl Connection {
             }
             if let Some(task) = task {
                 if let Err(error) = task.await {
-                    log::error!("Could not change resolution: {error}");
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(60),
+                        error,
+                        "Could not change resolution: {error}"
+                    );
                 }
             }
         }
@@ -7083,7 +7087,11 @@ mod raii {
                 if scale_restoring {
                     if virtual_display_manager::is_amyuni_idd() {
                         if let Some(Err(error)) = privacy_mode::turn_off_privacy(0, None) {
-                            log::error!("Could not turn off privacy mode: {error}");
+                            hbb_common::throttled_log!(
+                                Duration::from_secs(60),
+                                error,
+                                "Could not turn off privacy mode: {error}"
+                            );
                         }
                     }
                 } else {
