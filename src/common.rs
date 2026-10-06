@@ -737,13 +737,6 @@ async fn test_nat_type_() -> ResultType<bool> {
                 } else {
                     port2 = tnr.port;
                 }
-                if let Some(cu) = tnr.cu.as_ref() {
-                    Config::set_option(
-                        "rendezvous-servers".to_owned(),
-                        cu.rendezvous_servers.join(","),
-                    );
-                    Config::set_serial(cu.serial);
-                }
             }
         } else {
             break;
