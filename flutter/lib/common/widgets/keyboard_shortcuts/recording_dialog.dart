@@ -185,6 +185,13 @@ class _RecordingDialogState extends State<_RecordingDialog> {
 
     setState(() {
       _mods = mods;
+      if (!_isMac &&
+          HardwareKeyboard.instance.logicalKeysPressed
+              .contains(LogicalKeyboardKey.altGraph)) {
+        _key = null;
+        _unsupportedKey = LogicalKeyboardKey.altGraph.keyLabel;
+        return;
+      }
       // Match runtime dispatch: modifiers added after a held letter do not
       // produce a new shortcut key-down event.
       _key = keyName;

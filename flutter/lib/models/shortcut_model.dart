@@ -335,6 +335,18 @@ void registerSessionShortcutActions(
     });
   }
 
+  void openDisplay(int display, PeerInfo pi, {bool updateCursorPos = true}) {
+    if (isDesktop &&
+        pi.isSupportMultiDisplay &&
+        bind.sessionGetDisplaysAsIndividualWindows(sessionId: sessionId) ==
+            'Y') {
+      openMonitorInNewTabOrWindow(display, ffi.id, pi);
+    } else {
+      openMonitorInTheSameTab(display, ffi, pi,
+          updateCursorPos: updateCursorPos);
+    }
+  }
+
   // Switch Display Next / Prev — requires the peer to have at least 2
   // displays. From the "All displays" merged view, Next jumps to display 0
   // and Prev to the last display, so the user can always escape the merged
@@ -355,7 +367,7 @@ void registerSessionShortcutActions(
     } else {
       next = ((current + delta) % count + count) % count;
     }
-    openMonitorInTheSameTab(next, ffi, pi, updateCursorPos: isMobile);
+    openDisplay(next, pi, updateCursorPos: isMobile);
   }
 
   ffi.shortcutModel.register(kShortcutActionSwitchDisplayNext, () {
@@ -371,7 +383,7 @@ void registerSessionShortcutActions(
   // (Switch to next/previous display, or another monitor button) takes
   // you back to a single display.
   //
-  // Use `openMonitorInTheSameTab(kAllDisplayValue, ...)` rather than calling
+  // For same-tab view, use `openMonitorInTheSameTab` rather than calling
   // `sessionSwitchDisplay` with `[kAllDisplayValue]` directly — the toolbar
   // path treats `kAllDisplayValue` as a UI sentinel and expands it to the
   // real display index list (`[0, 1, ...]`) before sending, then updates
@@ -387,7 +399,7 @@ void registerSessionShortcutActions(
     }
     if (pi.displays.length <= 1) return;
     if (pi.currentDisplay == kAllDisplayValue) return;
-    openMonitorInTheSameTab(kAllDisplayValue, ffi, pi);
+    openDisplay(kAllDisplayValue, pi);
   });
 
   // Switch tab next / prev — desktop only. The remote-screen tabs live in
