@@ -910,7 +910,15 @@ fn run(vs: VideoService) -> ResultType<()> {
                 }
                 if !encoder.latency_free() && yuv.len() > 0 {
                     // yun.len() > 0 means the frame is not texture.
-                    if repeat_encode_counter < repeat_encode_max {
+                    // Keep retrying while a macOS hardware encoder has
+                    // unresolved encoding failures: a static screen stops
+                    // sending new captures, so without this the 3s warm-up
+                    // grace in handle_one_frame() would never be checked and
+                    // the viewer stays black until the screen changes.
+                    let hw_warmup_pending = cfg!(target_os = "macos")
+                        && encoder.is_hardware()
+                        && encode_fail_counter > 0;
+                    if repeat_encode_counter < repeat_encode_max || hw_warmup_pending {
                         repeat_encode_counter += 1;
                         let send_conn_ids = handle_one_frame(
                             display_idx,
