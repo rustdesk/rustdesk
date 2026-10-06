@@ -154,6 +154,10 @@ class RustDeskMcpBackend implements McpBackend {
   /// Pending control requests, by session id.
   final Map<String, Future<dynamic>> _controlRequests = {};
 
+  /// The last screenshot request. Screenshots run one at a time because the
+  /// native side keeps the received image in one cache for all sessions.
+  Future<void> _lastScreenshot = Future.value();
+
   @override
   Future<Map<String, dynamic>> connect(String peerId,
       {String? password}) async {
@@ -200,6 +204,15 @@ class RustDeskMcpBackend implements McpBackend {
         mainGetLocalBoolOptionSync(kOptionMcpAutoApproveControl);
     if (!autoApprove && !await approveConnect(peerId)) {
       throw McpToolException('The user denied the connection to $peerId.');
+    }
+    // The human may have opened this peer while the prompt was up; leave
+    // that session as it is.
+    try {
+      for (final s in await listSessions()) {
+        if (s['peer_id'] == peerId) return s['session_id'] as String;
+      }
+    } on McpWindowBusy {
+      // A window is still starting; open as usual.
     }
     // The password is not passed to the new window: its arguments are
     // printed to the debug log. It is submitted once asked for.
@@ -365,6 +378,18 @@ class RustDeskMcpBackend implements McpBackend {
 
   @override
   Future<McpImage> screenshot(String sessionId, {int display = 0}) async {
+    final previous = _lastScreenshot;
+    final done = Completer<void>();
+    _lastScreenshot = done.future;
+    try {
+      await previous;
+      return await _screenshot(sessionId, display);
+    } finally {
+      done.complete();
+    }
+  }
+
+  Future<McpImage> _screenshot(String sessionId, int display) async {
     final s = await _ready(sessionId);
     _display(s, display);
     final sid = UuidValue(sessionId);
@@ -377,16 +402,17 @@ class RustDeskMcpBackend implements McpBackend {
       bind.sessionTakeScreenshot(sessionId: sid, display: display);
       final deadline = DateTime.now().add(_kScreenshotTimeout);
       while (DateTime.now().isBefore(deadline)) {
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          if (bytes.isNotEmpty) return McpImage(bytes);
-        }
         final status = await bind.sessionGetFlutterOption(
                 sessionId: sid, k: kMcpScreenshotPathOption) ??
             '';
         if (status.startsWith(kMcpScreenshotErrorPrefix)) {
           throw McpToolException('Screenshot failed: '
               '${status.substring(kMcpScreenshotErrorPrefix.length)}');
+        }
+        // The remote window clears the path once the file is fully written.
+        if (status.isEmpty && await file.exists()) {
+          final bytes = await file.readAsBytes();
+          if (bytes.isNotEmpty) return McpImage(bytes);
         }
         await Future.delayed(const Duration(milliseconds: 100));
       }

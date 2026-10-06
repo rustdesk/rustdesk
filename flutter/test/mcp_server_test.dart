@@ -272,6 +272,9 @@ void main() {
       var r =
           await _rpc(dispatcher, _call('authenticate', {'session_id': 's'}));
       expect(r['result']['isError'], true);
+      r = await _rpc(dispatcher,
+          _call('authenticate', {'session_id': 's', 'password': 1234}));
+      expect(r['result']['isError'], true);
       expect(backend.calls, isEmpty);
       r = await _rpc(dispatcher,
           _call('authenticate', {'session_id': 's', 'password': 'pw'}));
@@ -484,6 +487,15 @@ void main() {
           }));
       expect(long['result']['isError'], true);
       expect(long['result']['content'][0]['text'], contains('split'));
+      final slow = await _rpc(
+          dispatcher,
+          _call('type_text', {
+            'session_id': 's',
+            'text': 'a' * kMcpMaxTypeChars,
+            'delay_ms': 100
+          }));
+      expect(slow['result']['isError'], true);
+      expect(slow['result']['content'][0]['text'], contains('60 seconds'));
     });
 
     test('backend failures become tool errors', () async {

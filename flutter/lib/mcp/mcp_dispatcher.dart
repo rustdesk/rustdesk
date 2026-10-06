@@ -291,7 +291,7 @@ class McpDispatcher {
         {..._safeWrite, 'idempotentHint': true},
         (a) async => structured(await backend.connect(
             _requireString(a, 'peer_id'),
-            password: a['password'] as String?)),
+            password: _optionalString(a, 'password'))),
         outputSchema: _sessionSchema,
       ),
       _Tool(
@@ -349,8 +349,8 @@ class McpDispatcher {
         ['session_id'],
         _safeWrite,
         (a) async {
-          final password = a['password'] as String?;
-          final code = a['two_factor_code'] as String?;
+          final password = _optionalString(a, 'password');
+          final code = _optionalString(a, 'two_factor_code');
           if ((password == null || password.isEmpty) &&
               (code == null || code.isEmpty)) {
             throw McpToolException('Provide password or two_factor_code.');
@@ -527,7 +527,7 @@ class McpDispatcher {
             'Some apps (Notepad, for example) drop or garble characters that '
             'arrive that fast; there set `delay_ms` to 20-30 to type one '
             'character at a time (slower, at most $kMcpMaxTypeChars '
-            'characters per call). Check the result with '
+            'characters and 60 seconds per call). Check the result with '
             '`screenshot_after_ms`. Needs agent control.',
         {
           'session_id': _sessionIdProp,
@@ -552,6 +552,11 @@ class McpDispatcher {
           if (delay > 0 && value.runes.length > kMcpMaxTypeChars) {
             throw McpToolException('`text` is longer than $kMcpMaxTypeChars '
                 'characters; split it into several calls.');
+          }
+          // Clients give up on a call long before 1000 slow characters finish.
+          if (delay * value.runes.length > 60000) {
+            throw McpToolException('Typing this with `delay_ms` $delay takes '
+                'over 60 seconds; split it into several calls.');
           }
           return input(
               a, () => backend.typeText(sid(a), value, delayMs: delay));
@@ -820,6 +825,12 @@ class _RpcError implements Exception {
 
 int _optionalInt(Map<String, dynamic> args, String key) =>
     args[key] == null ? 0 : _requireInt(args, key);
+
+String? _optionalString(Map<String, dynamic> args, String key) {
+  final v = args[key];
+  if (v == null || v is String) return v as String?;
+  throw McpToolException('Missing or invalid argument: $key');
+}
 
 String _requireString(Map<String, dynamic> args, String key) {
   final v = args[key];
