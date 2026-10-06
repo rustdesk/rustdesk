@@ -153,6 +153,7 @@ impl CGWindowListCapturer {
     pub fn new(
         width: usize,
         height: usize,
+        bounds: CGRect,
         frame: Arc<Mutex<Option<Frame>>>,
     ) -> Self {
         let should_stop = Arc::new(AtomicBool::new(false));
@@ -166,7 +167,7 @@ impl CGWindowListCapturer {
         let f_frame = frame.clone();
         let f_stop = should_stop.clone();
         std::thread::spawn(move || {
-            Self::poll_loop(width, height, f_frame, f_stop);
+            Self::poll_loop(width, height, bounds, f_frame, f_stop);
         });
 
         CGWindowListCapturer {
@@ -187,6 +188,7 @@ impl CGWindowListCapturer {
     fn poll_loop(
         width: usize,
         height: usize,
+        bounds: CGRect,
         frame: Arc<Mutex<Option<Frame>>>,
         should_stop: Arc<AtomicBool>,
     ) {
@@ -200,7 +202,7 @@ impl CGWindowListCapturer {
                 return;
             }
 
-            let data = match Self::capture_one(width, height) {
+            let data = match Self::capture_one(width, height, bounds) {
                 Some(d) => {
                     if !first_frame_done {
                         first_frame_done = true;
@@ -232,8 +234,22 @@ impl CGWindowListCapturer {
                 }
             };
 
-            let mut f_lock = frame.lock().unwrap();
-            *f_lock = Some(Frame::from_bytes(data.0, data.1, height));
+            // Publish the frame and drop the lock BEFORE sleeping: the parent
+            // reads this slot with try_lock(), so holding it across the 33ms
+            // poll sleep would starve the reader of (nearly) every frame.
+            match frame.lock() {
+                Ok(mut f_lock) => {
+                    *f_lock = Some(Frame::from_bytes(data.0, data.1, height));
+                }
+                Err(_) => {
+                    // Poisoned means a writer panicked mid-update; the slot is
+                    // unusable and there is no point in polling further.
+                    hbb_common::log::error!(
+                        "CGWindowList fallback: frame lock poisoned, stopping"
+                    );
+                    break;
+                }
+            }
 
             std::thread::sleep(interval);
         }
@@ -242,6 +258,7 @@ impl CGWindowListCapturer {
     fn capture_one(
         width: usize,
         height: usize,
+        bounds: CGRect,
     ) -> Option<(Vec<u8>, usize)> {
         unsafe {
             // Create a CGColorSpace for the bitmap context
@@ -274,9 +291,12 @@ impl CGWindowListCapturer {
                 return None;
             }
 
-            // Get the screen image
+            // Get the screen image: capture the selected display's bounds in
+            // global screen coordinates. CGRectZero would only be correct for
+            // a single display sitting at the origin; multi-display setups
+            // would capture the wrong region (or nothing at all).
             let cg_image = CGWindowListCreateImage(
-                CGRect::zero(),
+                bounds,
                 kCGWindowListOptionOnScreenOnly,
                 kCGNullWindowID,
                 kCGWindowImageBestResolution,
@@ -330,7 +350,10 @@ impl CGWindowListCapturer {
                 bgra.extend_from_slice(std::slice::from_raw_parts(ptr, length));
 
                 CFRelease(cf_data);
-                CGDataProviderRelease(provider);
+                // No CGDataProviderRelease(provider): CGImageGetDataProvider
+                // returns a reference owned by the image, which the release
+                // below disposes of; releasing the provider here would
+                // over-free a borrowed reference.
                 CGImageRelease(result_image);
                 CGImageRelease(cg_image);
                 let _ = CGContextRelease(context);
