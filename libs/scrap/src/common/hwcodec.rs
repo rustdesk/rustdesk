@@ -728,8 +728,11 @@ pub fn start_check_process() {
                 if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
                     #[cfg(windows)]
                     hwcodec::common::child_exit_when_parent_exit(child.id());
-                    // wait up to 30 seconds, it maybe slow on windows startup for poorly performing machines
-                    for _ in 0..30 {
+                    // wait up to 60 seconds: it maybe slow on windows startup for poorly
+                    // performing machines, and on older Intel Macs each VideoToolbox probe
+                    // inside the child can legitimately take ~10s (a failing HEVC session
+                    // creation alone costs that); the child exits on its own when healthy.
+                    for _ in 0..60 {
                         std::thread::sleep(std::time::Duration::from_secs(1));
                         if let Ok(Some(_)) = child.try_wait() {
                             break;

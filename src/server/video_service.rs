@@ -1277,14 +1277,25 @@ fn handle_one_frame(
             if !cfg!(target_os = "android") {
                 log::error!("encode fail: {e:?}, times: {}", *encode_fail_counter,);
             }
-            let max_fail_times = if cfg!(target_os = "android") && encoder.is_hardware() {
+            // VideoToolbox hardware encoders legitimately buffer their first
+            // packets: pipeline warm-up returns no frame for the first ~0.6-3s
+            // even when the encoder is healthy (same class of behavior as
+            // Android MediaCodec, which already gets a larger budget below).
+            let max_fail_times = if cfg!(target_os = "macos") && encoder.is_hardware() {
+                30
+            } else if cfg!(target_os = "android") && encoder.is_hardware() {
                 9
             } else {
                 3
             };
             let repeat = !encoder.latency_free();
-            // repeat encoders can reach max_fail_times on the first frame
-            if (first && !repeat) || *encode_fail_counter >= max_fail_times {
+            // repeat encoders can reach max_fail_times on the first frame;
+            // macOS hardware encoders are exempt from the fast first-frame
+            // switch for the warm-up reason above.
+            let hw_warmup_exempt = cfg!(target_os = "macos") && encoder.is_hardware();
+            if (first && !repeat && !hw_warmup_exempt)
+                || *encode_fail_counter >= max_fail_times
+            {
                 *encode_fail_counter = 0;
                 if encoder.is_hardware() {
                     encoder.disable();
