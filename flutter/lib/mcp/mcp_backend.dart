@@ -205,14 +205,18 @@ class RustDeskMcpBackend implements McpBackend {
     if (!autoApprove && !await approveConnect(peerId)) {
       throw McpToolException('The user denied the connection to $peerId.');
     }
-    // The human may have opened this peer while the prompt was up; leave
-    // that session as it is.
+    // The human may have opened this peer while the prompt was up. That
+    // session stays theirs; the next connect call returns it unchanged.
+    final List<Map<String, dynamic>> open;
     try {
-      for (final s in await listSessions()) {
-        if (s['peer_id'] == peerId) return s['session_id'] as String;
-      }
+      open = await listSessions();
     } on McpWindowBusy {
-      // A window is still starting; open as usual.
+      throw McpToolException('A RustDesk window is still opening. Call '
+          'connect again.');
+    }
+    if (open.any((s) => s['peer_id'] == peerId)) {
+      throw McpToolException('The user opened $peerId meanwhile. Call '
+          'connect again to get that session.');
     }
     // The password is not passed to the new window: its arguments are
     // printed to the debug log. It is submitted once asked for.
