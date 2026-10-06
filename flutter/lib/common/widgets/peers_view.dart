@@ -17,6 +17,7 @@ import '../../common.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import 'peer_card.dart';
+import 'fs_company_groups.dart';
 
 typedef PeerFilter = bool Function(Peer peer);
 typedef PeerCardBuilder = Widget Function(Peer peer);
@@ -271,7 +272,14 @@ class _PeersViewState extends State<_PeersView>
                           top: index == 0 ? 0 : space / 2, bottom: space / 2);
                     },
                   )
-                : peerCardUiType.value == PeerUiType.list
+                : fsGroupByCompany.value
+                    ? FsCompanyGroupedView(
+                        peers: peers,
+                        cardBuilder: (peer) => buildOnePeer(peer, false),
+                        controller: _scrollController,
+                        space: space,
+                      )
+                    : peerCardUiType.value == PeerUiType.list
                     ? ListView.builder(
                         controller: _scrollController,
                         itemCount: peers.length,

@@ -2,6 +2,7 @@ import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/common/widgets/fs_company_groups.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -781,6 +782,23 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
+  /// FS Support : rattacher l'appareil à une entreprise (vue « par entreprise »).
+  @protected
+  MenuEntryBase<String> _fsCompanyAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        'Entreprise…',
+        style: style,
+      ),
+      proc: () {
+        fsCompanyDialog(
+            id, fsKnownCompanies(gFFI.peerTabModel.currentTabCachedPeers));
+      },
+      padding: menuPadding,
+      dismissOnClicked: true,
+    );
+  }
+
   @protected
   MenuEntryBase<String> _removeAction(String id) {
     return MenuEntryButton<String>(
@@ -995,6 +1013,7 @@ class RecentPeerCard extends BasePeerCard {
     menuItems.add(MenuEntryDivider());
     if (isMobile || isDesktop || isWebDesktop) {
       menuItems.add(_renameAction(peer.id));
+      if (isDesktop) menuItems.add(_fsCompanyAction(peer.id));
     }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
@@ -1058,6 +1077,7 @@ class FavoritePeerCard extends BasePeerCard {
     menuItems.add(MenuEntryDivider());
     if (isMobile || isDesktop || isWebDesktop) {
       menuItems.add(_renameAction(peer.id));
+      if (isDesktop) menuItems.add(_fsCompanyAction(peer.id));
     }
     if (await bind.mainPeerHasPassword(id: peer.id)) {
       menuItems.add(_unrememberPasswordAction(peer.id));
@@ -1178,6 +1198,7 @@ class AddressBookPeerCard extends BasePeerCard {
       menuItems.add(MenuEntryDivider());
       if (isMobile || isDesktop || isWebDesktop) {
         menuItems.add(_renameAction(peer.id));
+        if (isDesktop) menuItems.add(_fsCompanyAction(peer.id));
       }
       if (gFFI.abModel.current.isPersonal() && peer.hash.isNotEmpty) {
         menuItems.add(_unrememberPasswordAction(peer.id));
