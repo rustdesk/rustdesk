@@ -780,6 +780,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "O RustDesk não conseguiu carregar um componente do GStreamer necessário para a captura de tela ({})."),
         ("Relay fallback delay in seconds", "Atraso antes de recorrer ao retransmissor em segundos"),
         ("relay-fallback-delay-tip", "Tempo que a conexão de retransmissão aguarda pela conexão direta WebRTC. Aumente para dar mais tempo a conexões lentas; diminua para usar o retransmissor mais cedo. Deixe vazio para usar o padrão de 2,5 segundos."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Para iniciar uma chamada de voz, ative \"Captura de áudio\" na página \"Compartilhar Tela\"."),
         ("Output resolution", "Resolução de saída"),
         ("Width", "Largura"),
         ("Height", "Altura"),
@@ -821,7 +822,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "Intervalo de escala de exibição inválido"),
         ("Interface size", "Tamanho da interface"),
         ("Current interface size", "Tamanho atual da interface"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Para iniciar uma chamada de voz, ative \"Captura de áudio\" na página \"Compartilhar Tela\"."),
         ("Allow display scaling", ""),
         ("Enable display scaling in Settings > Security > Permissions on the controlled machine.", ""),
     ].iter().cloned().collect();

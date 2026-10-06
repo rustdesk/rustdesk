@@ -780,6 +780,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk nepavyko įkelti ekrano įrašymui reikalingo GStreamer komponento ({})"),
         ("Relay fallback delay in seconds", "Delsa prieš pereinant prie perdavimo sekundėmis"),
         ("relay-fallback-delay-tip", "Kiek laiko jau užmegztas perdavimo ryšys laukia tiesioginio WebRTC ryšio, kol bus panaudotas vietoj jo. Padidinkite, kad lėtam tiesioginiam ryšiui būtų skirta daugiau laiko; sumažinkite, kad tinkluose, kuriuose tiesioginis ryšys neįmanomas, greičiau būtų pereinama prie perdavimo. Palikite tuščią numatytajai 2.5 sekundės reikšmei."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", ""),
         ("Output resolution", "Išvesties raiška"),
         ("Width", "Plotis"),
         ("Height", "Aukštis"),
@@ -821,7 +822,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "Netinkamas ekrano mastelio intervalas"),
         ("Interface size", "Sąsajos dydis"),
         ("Current interface size", "Dabartinis sąsajos dydis"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", ""),
         ("Allow display scaling", ""),
         ("Enable display scaling in Settings > Security > Permissions on the controlled machine.", ""),
     ].iter().cloned().collect();
