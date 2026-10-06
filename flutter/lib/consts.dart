@@ -80,6 +80,21 @@ const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
 const String kWindowEventGetCachedSessionData = "get_cached_session_data";
 const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
+const String kWindowEventMcpListSessions = "mcp_list_sessions";
+const String kWindowEventMcpSetControl = "mcp_set_control";
+const String kWindowEventMcpRequestControl = "mcp_request_control";
+const String kWindowEventMcpAuthenticate = "mcp_authenticate";
+const String kWindowEventMcpClose = "mcp_close_session";
+
+/// Per-session flutter option holding the file the next screenshot is saved to
+/// without showing a dialog. Set by the MCP server.
+const String kMcpScreenshotPathOption = "mcp-screenshot-path";
+/// Replaces the path in [kMcpScreenshotPathOption] when the screenshot failed.
+const String kMcpScreenshotErrorPrefix = "error:";
+/// Set in [kMcpScreenshotPathOption] after a timeout so the late screenshot is
+/// dropped instead of opening the save dialog.
+const String kMcpScreenshotDropLate = "drop-late";
+
 const String kOptionViewStyle = "view_style";
 const String kOptionScrollStyle = "scroll_style";
 const String kOptionEdgeScrollEdgeThickness = "edge-scroll-edge-thickness";
@@ -92,6 +107,10 @@ const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
 const String kOptionViewOnly = "view_only";
 const String kOptionEnableLanDiscovery = "enable-lan-discovery";
+const String kOptionEnableMcpServer = "allow-mcp-server";
+const String kOptionMcpServerPort = "mcp-server-port";
+const String kOptionMcpServerToken = "mcp-server-token";
+const String kOptionMcpAutoApproveControl = "allow-mcp-auto-approve";
 const String kOptionWhitelist = "whitelist";
 const String kOptionIdWhitelist = "id-whitelist";
 const String kOptionEnableAbr = "enable-abr";

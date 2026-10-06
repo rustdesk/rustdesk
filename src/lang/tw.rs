@@ -780,6 +780,20 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk 無法載入螢幕擷取所需的 GStreamer 元件 ({})"),
         ("Relay fallback delay in seconds", "回退到中繼前的等待時間（秒）"),
         ("relay-fallback-delay-tip", "已經建立的中繼連線會等待直連的 WebRTC 多久，超過這個時間就改用中繼。調大可以讓較慢的直連有更多機會勝出；調小則在無法直連的網路上更快回退到中繼。留空表示使用預設值 2.5 秒。"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "若要開始語音通話，請在「螢幕分享」頁面啟用「音訊錄製」。")
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "若要開始語音通話，請在「螢幕分享」頁面啟用「音訊錄製」。"),
+        ("MCP server", "MCP 伺服器"),
+        ("Enable MCP server", "啟用 MCP 伺服器"),
+        ("Let agents connect and take control without asking", "允許 Agent 無需詢問即可連線並接管控制"),
+        ("Running", "執行中"),
+        ("Starting...", "正在啟動..."),
+        ("Copy MCP client config", "複製 MCP 用戶端設定"),
+        ("Regenerate token", "重新產生權杖"),
+        ("MCP connection request", "MCP 連線請求"),
+        ("An MCP client wants to control {}. Allow?", "MCP 用戶端想要控制 {}，是否允許？"),
+        ("Agent control request", "Agent 控制請求"),
+        ("An AI agent asks to take exclusive control of {}. Your input is blocked until you take over again.", "AI Agent 請求獨占控制 {}。在您重新接管之前，您的輸入將被封鎖。"),
+        ("AI agent is in control", "AI Agent 正在控制"),
+        ("Take over", "接管"),
+        ("mcp-server-tip", "允許 Claude 等 MCP 用戶端透過 RustDesk 控制遠端電腦。僅監聽 127.0.0.1 並需要存取權杖；除非在下方關閉，否則連線與控制請求都需要您的核准。")
     ].iter().cloned().collect();
 }

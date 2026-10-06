@@ -780,6 +780,20 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk non è riuscito a caricare un componente GStreamer necessario per l'acquisizione dello schermo ({})"),
         ("Relay fallback delay in seconds", "Ritardo fallback relay (secondi)"),
         ("relay-fallback-delay-tip", "Quanto tempo una connessione relay già attiva attende la connessione WebRTC diretta prima di essere usata. Aumentalo per dare a una connessione diretta lenta più tempo per funzionare; diminuiscilo per passare prima al relay sulle reti in cui non è possibile effettuare una connessione diretta. Lascia vuoto per il valore predefinito di 2,5 secondi."),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Per avviare una chiamata vocale, attiva nella pagina 'Condividi schermo' la voce 'Cattura audio'.")
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Per avviare una chiamata vocale, attiva nella pagina 'Condividi schermo' la voce 'Cattura audio'."),
+        ("MCP server", ""),
+        ("Enable MCP server", ""),
+        ("Let agents connect and take control without asking", ""),
+        ("Running", ""),
+        ("Starting...", ""),
+        ("Copy MCP client config", ""),
+        ("Regenerate token", ""),
+        ("MCP connection request", ""),
+        ("An MCP client wants to control {}. Allow?", ""),
+        ("Agent control request", ""),
+        ("An AI agent asks to take exclusive control of {}. Your input is blocked until you take over again.", ""),
+        ("AI agent is in control", ""),
+        ("Take over", ""),
+        ("mcp-server-tip", "")
     ].iter().cloned().collect();
 }
