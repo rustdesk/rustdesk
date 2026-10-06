@@ -76,13 +76,21 @@ pub(in crate::server) fn reserve_resolution() -> Option<ResolutionReservation> {
     })
 }
 
-fn remember(state: &crate::platform::display_scale::State) {
+fn remember(state: &crate::platform::display_scale::State, display_name: &str) {
+    // Resolution may already have changed before display scaling was enabled.
+    let resolution = super::CHANGED_RESOLUTIONS
+        .read()
+        .unwrap()
+        .get(display_name)
+        .map_or(state.resolution, |original| {
+            (original.original.0 as _, original.original.1 as _)
+        });
     let mut tracking = tracking().0.lock().unwrap();
     tracking
         .originals
         .entry(state.identity.clone())
         .or_insert(OriginalScale {
-            resolution: state.resolution,
+            resolution,
             percent: state.percent,
         });
 }
@@ -102,7 +110,7 @@ pub(in crate::server) fn change_resolution_after_capture(
     tokio::task::spawn_blocking(move || {
         let _operation = operation;
         match crate::platform::display_scale::configure(&captured, 0.0, "") {
-            Ok(state) => remember(&state),
+            Ok(state) => remember(&state, &name),
             Err(error) => log::trace!("Could not record original display scale: {error}"),
         }
         super::set_last_changed_resolution(&name, original, requested);
@@ -375,7 +383,7 @@ pub(in crate::server) fn request(
                             &request.token,
                         )?;
                         if (original.percent - request.percent).abs() >= 0.000001 {
-                            remember(&original);
+                            remember(&original, &display.name);
                         }
                         crate::platform::display_scale::configure(
                             &display,
