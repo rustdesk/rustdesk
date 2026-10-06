@@ -267,6 +267,27 @@ class DisplayScaleModel extends ChangeNotifier {
   Future<bool> refresh() => _request(false);
   Future<bool> apply() => _request(true);
 
+  Future<bool> restoreOriginal() async {
+    if (_disposed || busy || needsReopen || current == null) return false;
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      final state = await request(-1, current!.token);
+      if (_disposed || needsReopen) return false;
+      _acceptState(state, applied: true);
+      return true;
+    } catch (failure) {
+      invalidate(failure);
+      return false;
+    } finally {
+      if (!_disposed) {
+        busy = false;
+        notifyListeners();
+      }
+    }
+  }
+
   void invalidate(Object failure) {
     if (_disposed || needsReopen) return;
     if (failure is DisplaySettingsReopenRequired) {
@@ -277,9 +298,11 @@ class DisplayScaleModel extends ChangeNotifier {
         failure.code == 'unsupported';
     error = unavailable
         ? null
-        : failure is FormatException
-            ? failure.message
-            : failure.toString();
+        : failure is DisplayScaleError && failure.code == 'disabled'
+            ? 'Enable display scaling in Settings > Security > Permissions on the controlled machine.'
+            : failure is FormatException
+                ? failure.message
+                : failure.toString();
     _recovery = failure is DisplaySettingsReopenRequired
         ? _DisplayScaleRecovery.reopen
         : current != null

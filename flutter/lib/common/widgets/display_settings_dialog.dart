@@ -140,7 +140,8 @@ class DisplaySettingsTarget {
     if (percent == 0 && !identical(selected, _selected())) throw _stale;
     _validateState(state);
     _nativeState = state;
-    if (percent != 0 && (state.percent - percent).abs() < 0.000001) {
+    if (percent == -1 ||
+        (percent > 0 && (state.percent - percent).abs() < 0.000001)) {
       _confirmedToken = state.token;
     }
     return state;
@@ -424,6 +425,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
   bool _applying = false;
   String? _applyError;
   bool _resolutionApplied = false;
+  bool _restoreOriginalScale = false;
   DisplayScaleState? _scaleSnapshot;
   late (int, int, int) _currentMode =
       (widget.width, widget.height, widget.initialScale);
@@ -490,6 +492,10 @@ class _DisplaySettingsState extends State<DisplaySettings> {
       }
       if (systemScale?.changed == true) {
         if (!await systemScale!.apply() || !mounted) return;
+      } else if (_restoreOriginalScale &&
+          widget.defaultResolution == mode &&
+          systemScale?.current != null) {
+        if (!await systemScale!.restoreOriginal() || !mounted) return;
       }
       if (mounted) widget.onCancel();
     } catch (error) {
@@ -757,18 +763,23 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     return size == null ? null : (size.$1, size.$2, _scale);
   }
 
-  void _setMode((int, int, int) mode) => setState(() {
-        _scale = widget.scales.contains(mode.$3) ? mode.$3 : 1;
-        _width.text = '${mode.$1 ~/ _scale}';
-        _height.text = '${mode.$2 ~/ _scale}';
-        _ratio = _ratioForSize(mode.$1 ~/ _scale, mode.$2 ~/ _scale);
-      });
+  void _setMode((int, int, int) mode, {bool restoreOriginalScale = false}) {
+    if (restoreOriginalScale) _systemScale?.reset();
+    setState(() {
+      _restoreOriginalScale = restoreOriginalScale;
+      _scale = widget.scales.contains(mode.$3) ? mode.$3 : 1;
+      _width.text = '${mode.$1 ~/ _scale}';
+      _height.text = '${mode.$2 ~/ _scale}';
+      _ratio = _ratioForSize(mode.$1 ~/ _scale, mode.$2 ~/ _scale);
+    });
+  }
 
   Widget _shortcut({
     required String label,
     required IconData icon,
     required (int, int, int)? mode,
     String? hint,
+    bool restoreOriginalScale = false,
   }) {
     final enabled =
         !_needsReopen && mode != null && _validSize(mode.$1, mode.$2, mode.$3);
@@ -781,7 +792,9 @@ class _DisplaySettingsState extends State<DisplaySettings> {
           widget.translate(label),
       ].join('\n'),
       child: TextButton.icon(
-        onPressed: enabled ? () => _setMode(mode) : null,
+        onPressed: enabled
+            ? () => _setMode(mode, restoreOriginalScale: restoreOriginalScale)
+            : null,
         icon: Icon(icon, size: 18),
         label: Text(widget.translate(label)),
       ),
@@ -812,6 +825,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
           label: widget.defaultLabel,
           icon: Icons.settings_backup_restore,
           mode: defaultMode,
+          restoreOriginalScale: !widget.allowArbitrarySize,
         ),
     ]);
   }
@@ -822,6 +836,10 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     final sectionStyle = theme.textTheme.titleSmall;
     final busy = _applying || _systemScale?.busy == true;
     final scaleChanged = _systemScale?.changed == true;
+    final restoreOriginalScale = _restoreOriginalScale &&
+        widget.defaultResolution == _editedMode &&
+        _systemScale != null &&
+        !_systemScale!.unavailable;
     final canEditResolution =
         widget.allowArbitrarySize || widget.supportedResolutions.isNotEmpty;
     final showSystemScale = _systemScale != null &&
@@ -829,7 +847,8 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     final canApply = !busy &&
         (_valid || (!_hasChanges && scaleChanged)) &&
         (_systemScale?.canApply ?? true) &&
-        (_hasChanges || scaleChanged);
+        (!restoreOriginalScale || _systemScale!.current != null) &&
+        (_hasChanges || scaleChanged || restoreOriginalScale);
     return preventMouseKeyBuilder(
       block: busy,
       child: SingleChildScrollView(
@@ -841,7 +860,12 @@ class _DisplaySettingsState extends State<DisplaySettings> {
               DisplayScale(
                   excludeInputSemantics: widget.excludeInputSemantics,
                   translate: widget.translate,
-                  controller: _systemScale!),
+                  controller: _systemScale!,
+                  onSelection: () {
+                    if (_restoreOriginalScale) {
+                      setState(() => _restoreOriginalScale = false);
+                    }
+                  }),
               if (canEditResolution) const Divider(height: 24),
             ],
             if (canEditResolution) ...[
@@ -945,6 +969,8 @@ class _DisplaySettingsState extends State<DisplaySettings> {
                             !_needsReopen &&
                             (_hasEdits ||
                                 scaleChanged ||
+                                (restoreOriginalScale &&
+                                    _systemScale!.current != null) ||
                                 _systemScale?.customMode == true ||
                                 _systemScale?.valid == false)
                         ? () {

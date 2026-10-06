@@ -821,6 +821,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "Intervallu de iscala de s’ischermu non vàlidu"),
         ("Interface size", "Mannària de s’interfache"),
         ("Current interface size", "Mannària atuale de s’interfache"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Pro aviare una mutida de boghe, ativa in sa pàgina \"Cumpartzi ischermu\" s’elementu \"Catura de s’àudio\".")
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Pro aviare una mutida de boghe, ativa in sa pàgina \"Cumpartzi ischermu\" s’elementu \"Catura de s’àudio\"."),
+        ("Allow display scaling", ""),
+        ("Enable display scaling in Settings > Security > Permissions on the controlled machine.", ""),
     ].iter().cloned().collect();
 }

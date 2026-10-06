@@ -95,7 +95,48 @@ pub fn configure(display: &Display, percent: f64, expected: &str) -> ResultType<
     }
 }
 
-pub(super) fn validate(state: &State, percent: f64, expected: &str) -> ResultType<()> {
+pub fn restore_original(display: &Display, percent: f64, expected: &str) -> ResultType<State> {
+    if percent >= 100.0 {
+        return configure(display, percent, expected);
+    }
+    #[cfg(windows)]
+    return configure(display, percent, expected);
+    #[cfg(target_os = "linux")]
+    {
+        if !percent.is_finite() || !(50.0..100.0).contains(&percent) {
+            bail!("Invalid display scaling request.");
+        }
+        let current = backend::read(display)?;
+        if expected.is_empty() || current.token != expected {
+            bail!(STALE);
+        }
+        if validate(&current, percent, expected).is_ok() {
+            return configure(display, percent, expected);
+        }
+        let before = backend::apply_original(display, percent, expected)?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            if std::time::Instant::now() >= deadline {
+                bail!("The system did not apply the requested scale. Refresh and try again.");
+            }
+            match backend::read(display) {
+                Ok(after) => {
+                    if after.identity != before.identity || after.resolution != before.resolution {
+                        bail!(STALE);
+                    }
+                    if (after.percent - percent).abs() < 0.000001 {
+                        return Ok(after);
+                    }
+                }
+                Err(error) if error.is::<SnapshotChanged>() => {}
+                Err(error) => return Err(error),
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+}
+
+pub(crate) fn validate(state: &State, percent: f64, expected: &str) -> ResultType<()> {
     if expected.is_empty() || expected != state.token {
         bail!(STALE);
     }

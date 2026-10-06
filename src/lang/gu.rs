@@ -821,6 +821,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "ડિસ્પ્લે સ્કેલિંગની મર્યાદા અમાન્ય છે"),
         ("Interface size", "ઇન્ટરફેસનું કદ"),
         ("Current interface size", "ઇન્ટરફેસનું વર્તમાન કદ"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "")
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", ""),
+        ("Allow display scaling", ""),
+        ("Enable display scaling in Settings > Security > Permissions on the controlled machine.", ""),
     ].iter().cloned().collect();
 }

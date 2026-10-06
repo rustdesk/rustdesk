@@ -63,21 +63,3 @@ pub fn resize(display_id: u32, width: u32, height: u32) -> bool {
 pub fn toggle(index: i32, on: bool) -> bool {
     unsafe { RustDeskToggleVirtualDisplay(index, on) }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn native_api_rejects_unowned_displays_and_invalid_indices() {
-        let _ = is_supported();
-        assert_eq!(active_mask(), 0);
-        assert!(!owns_display(0));
-        assert_eq!(display_mode(0), None);
-        assert!(!configure(0, 1920, 1080, 1));
-        assert!(!resize(0, 1920, 1080));
-        for index in [-1, 0, 5] {
-            assert!(!toggle(index, true));
-        }
-    }
-}

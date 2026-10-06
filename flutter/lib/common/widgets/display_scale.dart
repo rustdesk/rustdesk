@@ -5,12 +5,14 @@ class DisplayScale extends StatefulWidget {
   final String Function(String) translate;
   final DisplayScaleModel controller;
   final bool excludeInputSemantics;
+  final VoidCallback? onSelection;
 
   const DisplayScale(
       {super.key,
       required this.translate,
       required this.controller,
-      this.excludeInputSemantics = false});
+      this.excludeInputSemantics = false,
+      this.onSelection});
 
   @override
   State<DisplayScale> createState() => _DisplayScaleState();
@@ -42,8 +44,14 @@ class _DisplayScaleState extends State<DisplayScale> {
   void _edit(String text) {
     if (_editing || widget.controller.current?.custom == null) return;
     _editing = true;
+    widget.onSelection?.call();
     widget.controller.edit(text);
     _editing = false;
+  }
+
+  void _select(VoidCallback action) {
+    widget.onSelection?.call();
+    action();
   }
 
   @override
@@ -91,7 +99,7 @@ class _DisplayScaleState extends State<DisplayScale> {
                   MenuItemButton(
                       focusNode: _firstItemFocus,
                       onPressed: enabled && current.custom != null
-                          ? widget.controller.useCustom
+                          ? () => _select(widget.controller.useCustom)
                           : null,
                       child: Text(translate('Custom'))),
                 for (final percent in current.options)
@@ -101,7 +109,7 @@ class _DisplayScaleState extends State<DisplayScale> {
                           : null,
                       onPressed: !enabled
                           ? null
-                          : () => widget.controller.select(percent),
+                          : () => _select(() => widget.controller.select(percent)),
                       child: Text(
                           '${formatDisplayScale(percent)}%${percent == current.recommended ? ' (${translate('Recommended')})' : ''}')),
               ],
@@ -151,7 +159,7 @@ class _DisplayScaleState extends State<DisplayScale> {
                 onPressed: enabled &&
                         widget.controller.valid &&
                         current.adjacent(widget.controller.percent!, -1) != null
-                    ? () => widget.controller.step(-1)
+                    ? () => _select(() => widget.controller.step(-1))
                     : null),
             Expanded(
                 child: ExcludeSemantics(
@@ -180,7 +188,7 @@ class _DisplayScaleState extends State<DisplayScale> {
                 onPressed: enabled &&
                         widget.controller.valid &&
                         current.adjacent(widget.controller.percent!, 1) != null
-                    ? () => widget.controller.step(1)
+                    ? () => _select(() => widget.controller.step(1))
                     : null),
           ]),
           if (widget.controller.suggestion != null)
@@ -188,8 +196,9 @@ class _DisplayScaleState extends State<DisplayScale> {
                 alignment: Alignment.centerLeft,
                 child: TextButton(
                     key: const ValueKey('accept-scale-suggestion'),
-                    onPressed:
-                        !enabled ? null : widget.controller.acceptSuggestion,
+                    onPressed: !enabled
+                        ? null
+                        : () => _select(widget.controller.acceptSuggestion),
                     child: Text(
                         '${translate('Use nearest supported scale')}: ${formatDisplayScale(widget.controller.suggestion!)}%'))),
         ],

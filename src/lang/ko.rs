@@ -821,6 +821,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "디스플레이 배율 범위가 유효하지 않습니다"),
         ("Interface size", "인터페이스 크기"),
         ("Current interface size", "현재 인터페이스 크기"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "음성 통화를 시작하려면 '화면 공유' 페이지에서 '오디오 캡처'를 사용함으로 하세요.")
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "음성 통화를 시작하려면 '화면 공유' 페이지에서 '오디오 캡처'를 사용함으로 하세요."),
+        ("Allow display scaling", ""),
+        ("Enable display scaling in Settings > Security > Permissions on the controlled machine.", ""),
     ].iter().cloned().collect();
 }

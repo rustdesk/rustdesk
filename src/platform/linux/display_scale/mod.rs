@@ -75,6 +75,17 @@ pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<Stat
     }
 }
 
+pub fn apply_original(display: &Display, percent: f64, expected: &str) -> ResultType<State> {
+    let connection = connection()?;
+    let captured = resolve_capture(display)?;
+    let display = captured.as_ref().unwrap_or(display);
+    if has_owner(&connection, "org.kde.KWin")? && crate::platform::current_is_wayland() {
+        kde::apply_original(display, percent, expected)
+    } else {
+        bail!(UNSUPPORTED)
+    }
+}
+
 fn resolve_capture(display: &Display) -> ResultType<Option<Display>> {
     if !display.name.is_empty() || !crate::platform::current_is_wayland() {
         return Ok(None);

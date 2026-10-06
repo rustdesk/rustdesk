@@ -9,9 +9,6 @@ pub(crate) fn refresh_capture(session: &FlutterSession, session_id: &SessionID) 
     // Read the current topology instead of indices from an older UI event.
     let count = session.ui_handler.peer_info.read().unwrap().displays.len();
     handler.displays = (0..count).collect();
-    if count == 1 {
-        session.ui_handler.next_rgba(0);
-    }
     // All displays includes every valid selection in the other windows.
     // Switching displays here would also restore a saved custom resolution.
     session.capture_displays(vec![], vec![], (0..count as i32).collect());
@@ -39,16 +36,24 @@ mod tests {
         *session.sender.write().unwrap() = Some(sender);
         session.lc.write().unwrap().version = get_version_number("1.4.9");
         let id = SessionID::new_v4();
-        session
-            .ui_handler
-            .session_handlers
-            .write()
-            .unwrap()
-            .insert(id, SessionHandler::default());
+        let consumer_id = SessionID::new_v4();
+        {
+            let mut handlers = session.ui_handler.session_handlers.write().unwrap();
+            handlers.insert(id, SessionHandler::default());
+            handlers.insert(consumer_id, SessionHandler::default());
+        }
 
         for count in [2, 1, 0, 1, 3, 2] {
             session.ui_handler.peer_info.write().unwrap().displays =
                 vec![DisplayInfo::default(); count];
+            session
+                .ui_handler
+                .session_handlers
+                .write()
+                .unwrap()
+                .get_mut(&consumer_id)
+                .unwrap()
+                .displays = if count == 0 { vec![] } else { vec![0] };
             session.ui_handler.display_rgbas.write().unwrap().insert(
                 0,
                 RgbaData {
@@ -81,7 +86,11 @@ mod tests {
             }
             assert!(receiver.try_recv().is_err());
             if count == 1 {
-                assert!(!session.ui_handler.display_rgbas.read().unwrap()[&0].valid);
+                assert_eq!(
+                    session.ui_handler.session_handlers.read().unwrap()[&consumer_id].displays,
+                    vec![0]
+                );
+                assert!(session.ui_handler.display_rgbas.read().unwrap()[&0].valid);
             }
         }
     }

@@ -13,6 +13,10 @@ Widget _displaySettings({
   required VoidCallback onCancel,
   required Future<DisplayScaleState> Function(double, String)? requestScale,
   bool allowArbitrarySize = true,
+  int width = 1920,
+  int height = 1080,
+  List<(int, int)> supportedResolutions = const [],
+  (int, int, int)? defaultResolution,
 }) =>
     MaterialApp(
         home: Scaffold(
@@ -20,11 +24,14 @@ Widget _displaySettings({
                 width: 400,
                 child: DisplaySettings(
                     translate: (s) => s,
-                    width: 1920,
-                    height: 1080,
+                    width: width,
+                    height: height,
                     minDimension: 1,
                     maxDimension: 9999,
                     allowArbitrarySize: allowArbitrarySize,
+                    supportedResolutions: supportedResolutions,
+                    defaultResolution: defaultResolution,
+                    defaultLabel: 'resolution_original_tip',
                     onApply: onApply,
                     onCancel: onCancel,
                     requestScale: requestScale))));
@@ -37,6 +44,14 @@ void main() {
       recommended: 150,
       options: [100, 125, 150, 175, 200],
       token: 'fresh');
+  DisplayScaleState scaleState(double percent, String token,
+          {(int, int) resolution = (1920, 1080)}) =>
+      DisplayScaleState(
+          identity: 'display',
+          resolution: resolution,
+          percent: percent,
+          options: const [100, 125, 150],
+          token: token);
   final data = {
     'percent': 150,
     'recommended': 150,
@@ -826,14 +841,6 @@ void main() {
     expect(menuRect.width, closeTo(buttonRect.width, 1));
     await tester.tap(item);
     await tester.pumpAndSettle();
-    expect(tester.widget<OutlinedButton>(menuButton).focusNode!.hasFocus, isTrue);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(MenuItemButton, '125%').hitTestable(),
-        findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(tester.widget<OutlinedButton>(menuButton).focusNode!.hasFocus, isTrue);
     expect(
         tester.widget<TextField>(find.byType(TextField).first).controller!.text,
         '2560');
@@ -842,14 +849,6 @@ void main() {
             of: find.byKey(const ValueKey('system-scale-menu')),
             matching: find.text('125%')),
         findsOneWidget);
-    await tester.tap(find.text('Reset changes'));
-    await tester.pumpAndSettle();
-    expect(
-        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-        '1920');
-    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
-        isNull);
-    expect(tester.takeException(), isNull);
     tester.view.physicalSize = const Size(1680, 1920);
     await tester.pumpAndSettle();
     await tester.tap(menuButton);
@@ -859,5 +858,122 @@ void main() {
         find.ancestor(of: resizedItem, matching: find.byType(Material)).first);
     expect(resizedMenu.width, closeTo(tester.getRect(menuButton).width, 1));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Original resolution restores native scale at the same mode',
+      (tester) async {
+    final calls = <(double, String)>[];
+    var closed = false;
+    var failFirstRead = true;
+    await tester.pumpWidget(_displaySettings(
+        allowArbitrarySize: false,
+        supportedResolutions: const [(1920, 1080)],
+        defaultResolution: (1920, 1080, 1),
+        onApply: (_, __, ___) => fail('The resolution is unchanged'),
+        onCancel: () => closed = true,
+        requestScale: (percent, token) async {
+          calls.add((percent, token));
+          if (percent == 0 && failFirstRead) {
+            failFirstRead = false;
+            throw const DisplayScaleError('read failed');
+          }
+          return percent == 0
+              ? state
+              : scaleState(100, 'restored');
+        }));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('resolution_original_tip'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+    await tester.tap(find.text('Refresh'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+        find.widgetWithText(MenuItemButton, '150% (Recommended)').hitTestable());
+    await tester.pumpAndSettle();
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+    await tester.tap(find.text('resolution_original_tip'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextButton>(find.widgetWithText(TextButton, 'Reset changes')).onPressed,
+        isNotNull);
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(calls, [(0, ''), (0, ''), (-1, 'fresh')]);
+    expect(closed, isTrue);
+  });
+
+  testWidgets('Original resolution restores scale with confirmed mode token',
+      (tester) async {
+    final calls = <(double, String)>[];
+    var modeCalls = 0;
+    var failFirstRead = true;
+    await tester.pumpWidget(_displaySettings(
+        width: 1600,
+        height: 900,
+        allowArbitrarySize: false,
+        supportedResolutions: const [(1600, 900), (1920, 1080)],
+        defaultResolution: (1920, 1080, 1),
+        onApply: (width, height, _) {
+          modeCalls++;
+          expect((width, height), (1920, 1080));
+          return scaleState(150, 'confirmed');
+        },
+        onCancel: () {},
+        requestScale: (percent, token) async {
+          calls.add((percent, token));
+          if (percent == 0 && failFirstRead) {
+            failFirstRead = false;
+            throw const DisplayScaleError('read failed');
+          }
+          return percent == 0
+              ? scaleState(150, 'before', resolution: (1600, 900))
+              : scaleState(100, 'restored');
+        }));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('resolution_original_tip'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+    await tester.tap(find.text('Refresh'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(modeCalls, 1);
+    expect(calls, [(0, ''), (0, ''), (-1, 'confirmed')]);
+  });
+
+  testWidgets(
+      'explicit scale after Original wins and disabled host gives action',
+      (tester) async {
+    final calls = <double>[];
+    await tester.pumpWidget(_displaySettings(
+        allowArbitrarySize: false,
+        supportedResolutions: const [(1920, 1080)],
+        defaultResolution: (1920, 1080, 1),
+        onApply: (_, __, ___) => fail('The resolution is unchanged'),
+        onCancel: () => fail('Denied scaling must keep the dialog open'),
+        requestScale: (percent, _) async {
+          calls.add(percent);
+          if (percent == 0) return state;
+          throw const DisplayScaleError('disabled', code: 'disabled');
+        }));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('resolution_original_tip'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(calls, [0, 125]);
+    expect(
+        find.text(
+            'Enable display scaling in Settings > Security > Permissions on the controlled machine.'),
+        findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
   });
 }

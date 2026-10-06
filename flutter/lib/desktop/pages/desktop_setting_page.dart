@@ -1223,6 +1223,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             _OptionCheckBox(context, 'Enable remote configuration modification',
                 kOptionAllowRemoteConfigModification,
                 enabled: enabled, fakeValue: fakeValue),
+            if (isWindows || isLinux)
+              _OptionCheckBox(
+                  context, 'Allow display scaling', kOptionAllowDisplayScaling,
+                  enabled: enabled),
           ],
         ),
       ]);

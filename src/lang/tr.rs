@@ -821,6 +821,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "Geçersiz ekran ölçeklendirme aralığı"),
         ("Interface size", "Arayüz boyutu"),
         ("Current interface size", "Geçerli arayüz boyutu"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Sesli arama başlatmak için \"Ekranı Paylaş\" sayfasındaki \"Ses yakalama\" seçeneğini açın.")
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Sesli arama başlatmak için \"Ekranı Paylaş\" sayfasındaki \"Ses yakalama\" seçeneğini açın."),
+        ("Allow display scaling", ""),
+        ("Enable display scaling in Settings > Security > Permissions on the controlled machine.", ""),
     ].iter().cloned().collect();
 }

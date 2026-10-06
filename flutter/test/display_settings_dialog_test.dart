@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart' as app;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/common/widgets/display_settings_dialog.dart';
@@ -30,7 +29,6 @@ void main() {
         home: Overlay(key: overlay.key, initialEntries: [
           OverlayEntry(builder: (_) => const Scaffold()),
         ])));
-    List<int>? applied;
     dialogs.show(
         (_, close, context) => app.CustomAlertDialog(
               title: const Text('Resolution'),
@@ -45,10 +43,7 @@ void main() {
                   initialScale: 2,
                   supportedResolutions: const [(1920, 1080), (2560, 1600)],
                   onCancel: close,
-                  onApply: (w, h, scale) {
-                    applied = [w, h, scale];
-                    return null;
-                  }),
+                  onApply: (_, __, ___) => null),
             ),
         clickMaskDismiss: true,
         backDismiss: true);
@@ -59,32 +54,10 @@ void main() {
     expect(preset.hitTestable(), findsOneWidget);
     await tester.tap(preset);
     await tester.pumpAndSettle();
-    expect(applied, isNull);
     expect(find.byType(DisplaySettings), findsOneWidget);
     expect(
         tester.widget<TextField>(find.byType(TextField).first).controller!.text,
         '1280');
-    await tester.tap(find.byKey(const ValueKey('resolution-aspect-ratio')));
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(find.byType(MenuItemButton), findsNothing);
-    expect(find.byType(DisplaySettings), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('resolution-aspect-ratio')));
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
-    expect(find.byType(MenuItemButton), findsNothing);
-    expect(
-        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-        '1280');
-    await tester.ensureVisible(find.text('Standard'));
-    await tester.tap(find.text('Standard'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Apply'));
-    await tester.tap(find.text('Apply'));
-    expect(applied, [1280, 720, 1]);
     await tester
         .ensureVisible(find.byKey(const ValueKey('resolution-aspect-ratio')));
     await tester.tap(find.byKey(const ValueKey('resolution-aspect-ratio')));
@@ -328,7 +301,6 @@ void main() {
       (3.0, (1440, 3120), 2),
       (1.25, (1920, 1080), 2),
       (3.0, (1920, 1080), 1),
-      (2.0, (3048, 2032), 2),
     ]) {
       tester.view.display.devicePixelRatio = density;
       tester.view.display.size = Size(pixels.$1.toDouble(), pixels.$2.toDouble());

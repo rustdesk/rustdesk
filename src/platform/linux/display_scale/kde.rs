@@ -392,6 +392,17 @@ pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<Stat
     Ok(state)
 }
 
+pub fn apply_original(display: &Display, percent: f64, expected: &str) -> ResultType<State> {
+    let data = serde_json::from_slice(&doctor(&["--json"])?)?;
+    let (state, id) = snapshot(&data, display)?;
+    if expected.is_empty() || state.token != expected || !(50.0..100.0).contains(&percent) {
+        bail!(STALE);
+    }
+    let args = arguments(&data, id, percent)?;
+    doctor(&args.iter().map(String::as_str).collect::<Vec<_>>())?;
+    Ok(state)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

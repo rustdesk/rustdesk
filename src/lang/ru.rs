@@ -821,6 +821,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling range", "Недопустимый диапазон масштабирования дисплея"),
         ("Interface size", "Размер интерфейса"),
         ("Current interface size", "Текущий размер интерфейса"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Чтобы начать голосовой вызов, включите \"Захват аудио\" на странице \"Демонстрация экрана\".")
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Чтобы начать голосовой вызов, включите \"Захват аудио\" на странице \"Демонстрация экрана\"."),
+        ("Allow display scaling", ""),
+        ("Enable display scaling in Settings > Security > Permissions on the controlled machine.", ""),
     ].iter().cloned().collect();
 }

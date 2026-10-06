@@ -822,5 +822,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Interface size", "Розмір інтерфейсу"),
         ("Current interface size", "Поточний розмір інтерфейсу"),
         ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Щоб розпочати голосовий виклик, увімкніть «Захоплення аудіо» на сторінці «Поділитися екраном»."),
+        ("Allow display scaling", ""),
+        ("Enable display scaling in Settings > Security > Permissions on the controlled machine.", ""),
     ].iter().cloned().collect();
 }

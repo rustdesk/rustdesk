@@ -609,7 +609,7 @@ message SupportedResolutions { repeated Resolution resolutions = 1; }
 message DisplayScaleRequest {
   string request_id = 1;
   int32 display = 2;
-  // Zero queries capabilities. A change requires the token from a fresh query.
+  // Zero queries capabilities; -1 restores the original scale. Writes require a fresh token.
   double percent = 3;
   string token = 4;
   // Bind post-change readback to the previously confirmed display.
