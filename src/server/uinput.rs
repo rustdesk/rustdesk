@@ -138,18 +138,7 @@ pub mod client {
         }
 
         fn layout_key_up(&mut self, chr: char) -> ResultType<()> {
-            let pressed = self.layout_keys.remove(&chr).or_else(|| {
-                // Older Legacy clients release ASCII letters in the opposite case.
-                let alternate = if chr.is_ascii_lowercase() {
-                    chr.to_ascii_uppercase()
-                } else if chr.is_ascii_uppercase() {
-                    chr.to_ascii_lowercase()
-                } else {
-                    return None;
-                };
-                self.layout_keys.remove(&alternate)
-            });
-            if let Some(pressed) = pressed {
+            if let Some(pressed) = self.layout_keys.remove(&chr) {
                 self.release_layout_key(&pressed)?;
             }
             Ok(())
