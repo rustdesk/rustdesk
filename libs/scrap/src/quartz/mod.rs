@@ -1,4 +1,4 @@
-pub use self::capturer::Capturer;
+pub use self::capturer::{Capturer, CGWindowListCapturer};
 pub use self::config::Config;
 pub use self::display::Display;
 pub use self::ffi::{CGError, PixelFormat};
