@@ -6772,7 +6772,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/rustdesk-org/rdev#a361d86a8b0245f3618a9efb375c149530a6b599"
+source = "git+https://github.com/tinhdowoss/rdev?rev=fe37a66fb866aadeee3e5fa24bd1a30ddefdd9e3#fe37a66fb866aadeee3e5fa24bd1a30ddefdd9e3"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
@@ -6781,6 +6781,7 @@ dependencies = [
  "dispatch",
  "enum-map",
  "epoll",
+ "foreign-types 0.3.2",
  "inotify",
  "lazy_static",
  "libc",

@@ -2073,3 +2073,19 @@ fn get_bundle_id() -> Option<String> {
         Some(bundle_id_str)
     }
 }
+
+pub fn macos_unicode_key_event(event: &rdev::Event) -> Option<base::message_proto::KeyEvent> {
+    if !matches!(event.event_type, rdev::EventType::KeyPress(_)) || event.platform_code != 0 {
+        return None;
+    }
+    let text = event.unicode.as_ref()?.name.as_deref()?;
+    if text.is_empty() || (text.is_ascii() && text.len() == 1) {
+        return None;
+    }
+
+    let mut key_event = base::message_proto::KeyEvent::new();
+    key_event.mode = base::message_proto::KeyboardMode::Translate.into();
+    key_event.down = true;
+    key_event.set_seq(text.to_owned());
+    Some(key_event)
+}
