@@ -729,7 +729,12 @@ pub fn start_check_process() {
                     #[cfg(windows)]
                     hwcodec::common::child_exit_when_parent_exit(child.id());
                     // wait up to 30 seconds, it maybe slow on windows startup for poorly performing machines
-                    for _ in 0..30 {
+                    // On macOS the budget is 60 seconds: each VideoToolbox probe
+                    // inside the child can legitimately take ~10s on older Intel
+                    // Macs (a failing HEVC session alone costs that); the child
+                    // exits on its own when healthy.
+                    let wait_secs = if cfg!(target_os = "macos") { 60 } else { 30 };
+                    for _ in 0..wait_secs {
                         std::thread::sleep(std::time::Duration::from_secs(1));
                         if let Ok(Some(_)) = child.try_wait() {
                             break;

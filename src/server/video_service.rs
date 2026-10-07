@@ -910,7 +910,15 @@ fn run(vs: VideoService) -> ResultType<()> {
                 }
                 if !encoder.latency_free() && yuv.len() > 0 {
                     // yun.len() > 0 means the frame is not texture.
-                    if repeat_encode_counter < repeat_encode_max {
+                    // Keep retrying while a macOS hardware encoder has
+                    // unresolved encoding failures: a static screen stops
+                    // sending new captures, so without this the warm-up
+                    // budget in handle_one_frame() would never be reached
+                    // and the viewer stays black until the screen changes.
+                    let hw_warmup_pending = cfg!(target_os = "macos")
+                        && encoder.is_hardware()
+                        && encode_fail_counter > 0;
+                    if repeat_encode_counter < repeat_encode_max || hw_warmup_pending {
                         repeat_encode_counter += 1;
                         let send_conn_ids = handle_one_frame(
                             display_idx,
@@ -1275,16 +1283,44 @@ fn handle_one_frame(
             *encode_fail_counter += 1;
             // Encoding errors are not frequent except on Android
             if !cfg!(target_os = "android") {
-                log::error!("encode fail: {e:?}, times: {}", *encode_fail_counter,);
+                if cfg!(target_os = "macos") && encoder.is_hardware() {
+                    // Warm-up failures arrive at frame rate (30/s at 30fps);
+                    // one line per 3s with the suppressed count instead.
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(3),
+                        error,
+                        "encode fail (VideoToolbox warm-up): {e:?}, times: {}",
+                        *encode_fail_counter
+                    );
+                } else {
+                    log::error!("encode fail: {e:?}, times: {}", *encode_fail_counter,);
+                }
             }
-            let max_fail_times = if cfg!(target_os = "android") && encoder.is_hardware() {
+            // VideoToolbox hardware encoders on macOS legitimately buffer their
+            // first packets: pipeline warm-up returns no frame for the first
+            // ~0.6-1s even when the encoder is healthy (same class of behavior
+            // as Android MediaCodec, which already gets a larger budget).
+            // A strike count is a natural fit: it scales with the number of
+            // real encode attempts, not wall-clock time, so it does not delay
+            // fallback for a truly broken encoder on a slow-capturing screen.
+            // A successful encode resets the counter to 0, so a warm-up that
+            // completes within 30 attempts has zero ongoing impact: the next
+            // failure streak starts from 0 and the strict 3-strike budget
+            // applies to the warmed-up encoder, same as upstream.
+            let max_fail_times = if cfg!(target_os = "macos") && encoder.is_hardware() {
+                30
+            } else if cfg!(target_os = "android") && encoder.is_hardware() {
                 9
             } else {
                 3
             };
             let repeat = !encoder.latency_free();
-            // repeat encoders can reach max_fail_times on the first frame
-            if (first && !repeat) || *encode_fail_counter >= max_fail_times {
+            // repeat encoders can reach max_fail_times on the first frame;
+            // macOS hardware encoders are exempt from the fast first-frame
+            // switch for the warm-up reason above.
+            let hw_warmup_exempt = cfg!(target_os = "macos") && encoder.is_hardware();
+            if (first && !repeat && !hw_warmup_exempt)
+                || *encode_fail_counter >= max_fail_times {
                 *encode_fail_counter = 0;
                 if encoder.is_hardware() {
                     encoder.disable();
