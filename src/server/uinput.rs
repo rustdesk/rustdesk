@@ -30,28 +30,12 @@ pub mod client {
 
     struct LayoutContext {
         locks: (bool, bool),
-        caps_shortcut: bool,
         // None for ordinary input; otherwise whether the shortcut holds Shift.
         shortcut_shift: Option<bool>,
     }
 
     impl LayoutContext {
         fn resolve(&self, chr: char) -> ResultType<LayoutKey> {
-            // Caps Lock must not turn Ctrl+C into Ctrl+Shift+C. The caller
-            // already holds any Shift explicitly requested by the client.
-            let chr = if self.caps_shortcut {
-                let mut lowercase = chr.to_lowercase();
-                match (lowercase.next(), lowercase.next()) {
-                    (Some(lowercase), None) => lowercase,
-                    _ => {
-                        // Lowercase can expand (e.g. İ -> i + combining dot).
-                        // Keep the whole symbol and actual Caps state instead.
-                        return layout::resolve(chr, (true, self.locks.1), self.shortcut_shift);
-                    }
-                }
-            } else {
-                chr
-            };
             layout::resolve(chr, self.locks, self.shortcut_shift)
         }
     }
@@ -183,7 +167,6 @@ pub mod client {
                 .send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Control)))?
                 || self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Alt)))?
                 || self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Meta)))?;
-            let caps_shortcut = caps_lock && shortcut;
             let shortcut_shift = if shortcut {
                 Some(
                     self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Shift)))?,
@@ -192,8 +175,7 @@ pub mod client {
                 None
             };
             Ok(LayoutContext {
-                locks: (caps_lock && !caps_shortcut, num_lock),
-                caps_shortcut,
+                locks: (caps_lock, num_lock),
                 shortcut_shift,
             })
         }
