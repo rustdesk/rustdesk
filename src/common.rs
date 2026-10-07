@@ -2351,6 +2351,18 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 }
 
 pub fn load_custom_client() {
+    // RIGGTEK: eigener Server fest eingestellt, Werte kommen beim Build aus den
+    // GitHub-Secrets RENDEZVOUS_SERVER / RS_PUB_KEY (fuer Kunden nicht aenderbar)
+    {
+        let mut s = hbb_common::config::OVERWRITE_SETTINGS.write().unwrap();
+        if let Some(v) = option_env!("RENDEZVOUS_SERVER").filter(|v| !v.is_empty()) {
+            s.insert("custom-rendezvous-server".to_owned(), v.to_owned());
+            s.insert("relay-server".to_owned(), v.to_owned());
+        }
+        if let Some(v) = option_env!("RS_PUB_KEY").filter(|v| !v.is_empty()) {
+            s.insert("key".to_owned(), v.to_owned());
+        }
+    }
     // RIGGTEK QuickSupport: nur eingehende Verbindungen zulassen
     hbb_common::config::HARD_SETTINGS
         .write()
