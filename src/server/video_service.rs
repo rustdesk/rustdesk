@@ -628,6 +628,9 @@ fn run(vs: VideoService) -> ResultType<()> {
     let dxgi_recovery_state = vs.dxgi_recovery_state.clone();
     let sp = vs.sp;
     let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
+    // A pipewire recorder outlives a restarted run while another display keeps the session open,
+    // and so does the frame it returned last: the first frame of a new run must go out.
+    c.forget_last_frame();
     #[cfg(windows)]
     // ACCESS_LOST marks the next successful capturer creation as a recovery. This timestamp is
     // consumed once and temporarily holds off the normal WouldBlock-to-GDI fallback, giving the
