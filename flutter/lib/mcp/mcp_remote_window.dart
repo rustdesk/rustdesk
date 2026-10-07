@@ -29,6 +29,12 @@ Future<dynamic> handleMcpWindowCall(
     } catch (_) {}
   }
   switch (method) {
+    case kWindowEventMcpStop:
+      for (final ffi in sessions.values) {
+        ffi.dialogManager.dismissByTag('mcp-agent-control-${ffi.sessionId}');
+        ffi.ffiModel.setAgentControl(false);
+      }
+      return true;
     case kWindowEventMcpListSessions:
       return jsonEncode(
           [for (final e in sessions.entries) _describe(e.key, e.value)]);

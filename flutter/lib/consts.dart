@@ -86,6 +86,7 @@ const String kWindowEventMcpRequestControl = "mcp_request_control";
 const String kWindowEventMcpAuthenticate = "mcp_authenticate";
 const String kWindowEventMcpClose = "mcp_close_session";
 const String kWindowEventMcpControlTakenOver = "mcp_control_taken_over";
+const String kWindowEventMcpStop = "mcp_stop";
 
 const String kOptionViewStyle = "view_style";
 const String kOptionScrollStyle = "scroll_style";

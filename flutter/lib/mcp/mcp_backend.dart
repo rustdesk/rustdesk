@@ -219,10 +219,8 @@ class RustDeskMcpBackend implements McpBackend {
     try {
       await Future.wait(_input.keys.toList().map(releaseHeld));
     } finally {
-      final sessions = await listSessions();
-      await Future.wait(sessions.map((s) => _callWindow(
-          kWindowEventMcpSetControl,
-          {'session_id': s['session_id'], 'agent': false})));
+      await Future.wait(rustDeskWinManager.remoteDesktopWindows.map((id) =>
+          _callWindowId(id, kWindowEventMcpStop, null, _kWindowCallTimeout)));
     }
   }
 

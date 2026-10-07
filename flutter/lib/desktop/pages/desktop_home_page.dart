@@ -807,7 +807,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           connToken: call.arguments['connToken'],
         );
       } else if (call.method == kWindowEventMcpControlTakenOver) {
-        await McpServerManager.instance.onControlTakenOver(call.arguments);
+        final sessionId = call.arguments;
+        if (sessionId is String) {
+          await McpServerManager.instance.onControlTakenOver(sessionId);
+        } else {
+          debugPrint('Invalid MCP takeover argument: expected a session ID string.');
+        }
       } else if (call.method == kWindowBumpMouse) {
         return RdPlatformChannel.instance.bumpMouse(
           dx: call.arguments['dx'],

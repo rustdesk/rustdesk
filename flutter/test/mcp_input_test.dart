@@ -5,6 +5,35 @@ import 'package:flutter_hbb/mcp/mcp_input.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('shutdown waits for a pending start and leaves no server running',
+      () async {
+    final operations = McpOperationQueue();
+    final starting = Completer<void>();
+    final bound = Completer<void>();
+    var running = false;
+    final start = operations.run(() async {
+      starting.complete();
+      await bound.future;
+      running = true;
+    });
+    await starting.future;
+    final stop = operations.run(() async => running = false);
+    bound.complete();
+    await Future.wait([start, stop]);
+    expect(running, isFalse);
+  });
+
+  test('a failed lifecycle operation does not block the next operation',
+      () async {
+    final operations = McpOperationQueue();
+    final failed = expectLater(operations.run(() async {
+      throw StateError('Stop failed');
+    }), throwsStateError);
+    final restarted = operations.run(() async => 'running with new token');
+    await failed;
+    expect(await restarted, 'running with new token');
+  });
+
   test('concurrent input operations finish without interleaving', () async {
     final input = McpInputState();
     final events = <String>[];
