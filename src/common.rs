@@ -1011,6 +1011,8 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 }
 
 pub fn check_software_update() {
+    // Build Ecletica: nao consultar o servidor de versao do RustDesk.
+    return;
     if is_custom_client() {
         return;
     }

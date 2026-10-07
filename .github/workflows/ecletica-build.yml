@@ -1,0 +1,22 @@
+name: Ecletica - build do cliente Windows
+
+# Dois gatilhos:
+#  - push na branch ecletica: dispara sozinho (deploy key serve, nao precisa de token)
+#  - manual: Actions -> este workflow -> Run workflow
+on:
+  push:
+    branches:
+      - ecletica
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Sufixo do artefato"
+        required: false
+        default: "ecletica"
+
+jobs:
+  build-windows:
+    uses: ./.github/workflows/flutter-build.yml
+    with:
+      upload-artifact: true
+      upload-tag: ${{ github.event.inputs.tag || 'ecletica' }}

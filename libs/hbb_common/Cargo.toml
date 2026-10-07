@@ -1,0 +1,92 @@
+[package]
+name = "hbb_common"
+version = "0.1.0"
+authors = ["open-trade <info@opentradesolutions.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = []
+webrtc = ["dep:webrtc"]
+
+[dependencies]
+# new flexi_logger failed on rustc 1.75
+flexi_logger = { version = "0.27", features = ["async"] }
+protobuf = { version = "3.7", features = ["with-bytes"] }
+tokio = { version = "1.44", features = ["full"] }
+tokio-util = { version = "0.7", features = ["full"] }
+futures = "0.3"
+bytes = { version = "1.10", features = ["serde"] }
+log = "0.4"
+env_logger = "0.11"
+socket2 = { version = "0.3", features = ["reuseport"] }
+zstd = "0.13"
+anyhow = "1.0"
+futures-util = "0.3"
+directories-next = "2.0"
+rand = "0.8"
+serde_derive = "1.0"
+serde = "1.0"
+serde_json = "1.0"
+lazy_static = "1.5"
+confy = { git = "https://github.com/rustdesk-org/confy" }
+dirs-next = "2.0"
+sodiumoxide = "0.2"
+regex = "1.11"
+tokio-socks = { git = "https://github.com/rustdesk-org/tokio-socks" }
+chrono = "0.4"
+libc = "0.2"
+dlopen = "0.1"
+toml = "0.7"
+uuid = { version = "1.16", features = ["v4"] }
+# new sysinfo issue: https://github.com/rustdesk/rustdesk/pull/6330#issuecomment-2270871442
+sysinfo = { git = "https://github.com/rustdesk-org/sysinfo", branch = "rlim_max" }
+# new flexi_logger failed on nightly rustc 1.75 for x86
+thiserror = "1.0"
+httparse = "1.10"
+base64 = "0.22"
+url = "2.5"
+percent-encoding = "2"
+sha2 = "0.10"
+whoami = "1.5"
+
+tokio-rustls = { version = "0.26", features = [
+    "logging",
+    "tls12",
+    "ring",
+], default-features = false }
+tokio-native-tls = "0.3"
+# Fork of v0.26.2: upstream's WebSocketStream exposes get_config but no set_config, so a
+# message cap lowered before authorization could never be lifted again. One commit on top of
+# the tag; pinned by rev, not branch, because a fork branch can be rewritten under the lockfile.
+tokio-tungstenite = { git = "https://github.com/rustdesk-org/tokio-tungstenite", rev = "c241b11b03de4881faf1ecd2fe6e867c92f3013b", version = "0.29", features = ["native-tls", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+tungstenite = { version = "0.29", features = ["native-tls", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+rustls-platform-verifier = "0.6"
+rustls-pki-types = "1.11"
+rustls-native-certs = "0.8"
+webpki-roots = "1.0.4"
+async-recursion = "1.1"
+# Pinned to 0.13: webrtc >=0.14 pulls sdp 0.10 / webrtc-util 0.12, which use
+# usize::is_multiple_of (needs rustc >=1.87), while rustdesk CI builds with Rust 1.75
+# (sciter i128 ABI pin, flutter-build.yml). Bump only after CI's Rust moves past 1.87,
+# and work through the upgrade checklist at the top of src/webrtc.rs first.
+webrtc = { version = "0.13.0", optional = true }
+libloading = "0.8"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+mac_address = "1.1"
+default_net = { git = "https://github.com/rustdesk-org/default_net" }
+machine-uid = { git = "https://github.com/rustdesk-org/machine-uid" }
+
+[build-dependencies]
+protobuf-codegen = { version = "3.7" }
+
+[dev-dependencies]
+clap = "4.5.51"
+webrtc = "0.13.0" # keep in lockstep with [dependencies] webrtc (rustc 1.75 pin, see above)
+
+
+[target.'cfg(target_os = "linux")'.dependencies]
+users = { version = "0.11" }
+x11 = "2.21"
