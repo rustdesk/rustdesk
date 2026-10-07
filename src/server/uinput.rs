@@ -40,7 +40,15 @@ pub mod client {
             // Caps Lock must not turn Ctrl+C into Ctrl+Shift+C. The caller
             // already holds any Shift explicitly requested by the client.
             let chr = if self.caps_shortcut {
-                chr.to_ascii_lowercase()
+                let mut lowercase = chr.to_lowercase();
+                match (lowercase.next(), lowercase.next()) {
+                    (Some(lowercase), None) => lowercase,
+                    _ => {
+                        // Lowercase can expand (e.g. İ -> i + combining dot).
+                        // Keep the whole symbol and actual Caps state instead.
+                        return layout::resolve(chr, (true, self.locks.1), self.shortcut_shift);
+                    }
+                }
             } else {
                 chr
             };
