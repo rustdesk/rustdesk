@@ -58,10 +58,6 @@ impl TraitCapturer for Capturer {
             _ => Err(map_err("Invalid data")),
         }
     }
-
-    fn forget_last_frame(&mut self) {
-        self.1.forget_last_frame();
-    }
 }
 
 pub struct Display(pub(crate) pipewire::PipeWireCapturable);

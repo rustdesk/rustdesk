@@ -25,9 +25,6 @@ impl<'a> PixelProvider<'a> {
 
 pub trait Recorder {
     fn capture(&mut self, timeout_ms: u64) -> Result<PixelProvider<'_>, Box<dyn Error>>;
-
-    /// See `TraitCapturer::forget_last_frame`.
-    fn forget_last_frame(&mut self) {}
 }
 
 pub trait BoxCloneCapturable {

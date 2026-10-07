@@ -31,10 +31,6 @@ impl TraitCapturer for Capturer {
             height,
         )))
     }
-
-    fn forget_last_frame(&mut self) {
-        self.0.forget_last_frame();
-    }
 }
 
 pub struct PixelBuffer<'a> {

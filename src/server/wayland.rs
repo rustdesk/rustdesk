@@ -304,10 +304,6 @@ impl TraitCapturer for CapturerPtr {
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
         unsafe { (*self.0).frame(timeout) }
     }
-
-    fn forget_last_frame(&mut self) {
-        unsafe { (*self.0).forget_last_frame() }
-    }
 }
 
 struct CapDisplayInfo {

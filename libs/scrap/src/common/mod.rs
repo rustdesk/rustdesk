@@ -144,11 +144,6 @@ pub trait TraitCapturer {
 
     #[cfg(feature = "vram")]
     fn set_output_texture(&mut self, texture: bool);
-
-    /// The frame `frame()` returned last was not sent: its encode failed. A capturer that drops a
-    /// repeat of the frame it returned last returns the next one anyway, or a still screen would
-    /// never show that frame.
-    fn forget_last_frame(&mut self) {}
 }
 
 #[derive(Debug, Clone, Copy)]
