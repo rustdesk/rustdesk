@@ -390,6 +390,10 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn toggle_option(&self, name: String) {
+        if name == crate::microphone_forwarding::TOGGLE {
+            self.send(Data::ToggleMicrophone);
+            return;
+        }
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
         if name == keys::OPTION_ENABLE_FILE_COPY_PASTE {
@@ -1739,6 +1743,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
     fn portable_service_running(&self, running: bool);
+    fn on_microphone_forwarding(&self, _state: &str, _error: &str) {}
     fn on_voice_call_started(&self);
     fn on_voice_call_closed(&self, reason: &str);
     fn on_voice_call_waiting(&self);

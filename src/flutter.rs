@@ -1055,6 +1055,10 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn on_microphone_forwarding(&self, state: &str, error: &str) {
+        self.push_event("microphone_forwarding", &[("state", state), ("error", error)], &[]);
+    }
+
     fn on_voice_call_started(&self) {
         self.push_event::<&str>("on_voice_call_started", &[], &[]);
     }

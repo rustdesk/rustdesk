@@ -104,6 +104,23 @@ class CachedPeerData {
 }
 
 class FfiModel with ChangeNotifier {
+  final microphoneForwardingState = 'off'.obs;
+  final microphoneForwardingError = ''.obs;
+  bool _microphoneAutoAttempted = false;
+
+  Future<void> toggleMicrophoneForwarding() async {
+    if (isWeb || isIOS) return;
+    final stopping = ['pending', 'capturing', 'active'].contains(microphoneForwardingState.value);
+    if (!stopping && isAndroid && !await AndroidPermissionManager.check(kRecordAudio)) {
+      if (!await AndroidPermissionManager.request(kRecordAudio)) {
+        microphoneForwardingState.value = 'error';
+        microphoneForwardingError.value = translate('Microphone permission denied');
+        return;
+      }
+    }
+    bind.sessionToggleOption(sessionId: sessionId, value: 'forward-microphone');
+  }
+
   CachedPeerData cachedPeerData = CachedPeerData();
   PeerInfo _pi = PeerInfo();
   int? lastUserDisplay;
@@ -338,6 +355,11 @@ class FfiModel with ChangeNotifier {
         handleMultipleWindowsSession(evt, sessionId, peerId);
       } else if (name == 'peer_info') {
         handlePeerInfo(evt, peerId, false);
+        if (!_microphoneAutoAttempted && parent.target?.connType == ConnType.defaultConn &&
+            bind.mainGetLocalOption(key: 'allow-auto-forward-microphone') == 'Y') {
+          _microphoneAutoAttempted = true;
+          unawaited(toggleMicrophoneForwarding());
+        }
       } else if (name == 'sync_peer_info') {
         handleSyncPeerInfo(evt, sessionId, peerId);
       } else if (name == 'sync_platform_additions') {
@@ -412,6 +434,18 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'on_url_scheme_received') {
         // currently comes from "_url" ipc of mac and dbus of linux
         onUrlSchemeReceived(evt);
+      } else if (name == 'microphone_forwarding') {
+        final previous = microphoneForwardingState.value;
+        final next = evt['state'] ?? 'off';
+        if (isAndroid && next == 'capturing' && previous != 'capturing') {
+          parent.target?.invokeMethod('on_voice_call_started');
+        } else if (isAndroid && ['off', 'error'].contains(next) &&
+            ['capturing', 'active'].contains(previous)) {
+          parent.target?.invokeMethod('on_voice_call_closed');
+        }
+        if (next == 'off') _microphoneAutoAttempted = false;
+        microphoneForwardingState.value = next;
+        microphoneForwardingError.value = evt['error'] ?? '';
       } else if (name == 'on_voice_call_waiting') {
         // Waiting for the response from the peer.
         parent.target?.chatModel.onVoiceCallWaiting();

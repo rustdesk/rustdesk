@@ -423,6 +423,9 @@ pub struct Connection {
     from_switch: bool,
     voice_call_request_timestamp: Option<NonZeroI64>,
     voice_calling: bool,
+    microphone_route: Option<crate::microphone_forwarding::RouteLease>,
+    microphone_id: Option<i64>,
+    microphone_sender: Option<crate::client::MicrophoneAudioSender>,
     options_in_login: Option<OptionMessage>,
     #[cfg(not(any(target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
@@ -629,6 +632,9 @@ impl Connection {
             audio_sender: None,
             voice_call_request_timestamp: None,
             voice_calling: false,
+            microphone_route: None,
+            microphone_id: None,
+            microphone_sender: None,
             options_in_login: None,
             #[cfg(not(any(target_os = "ios")))]
             pressed_modifiers: Default::default(),
@@ -824,6 +830,9 @@ impl Connection {
                                 }
                             } else if &name == "audio" {
                                 conn.audio = enabled;
+                                if !enabled && conn.microphone_route.is_some() {
+                                    conn.stop_microphone_forwarding("Audio permission revoked").await;
+                                }
                                 conn.send_permission(Permission::Audio, enabled).await;
                                 if conn.authorized {
                                     if let Some(s) = conn.server.upgrade() {
@@ -1157,6 +1166,9 @@ impl Connection {
                     }
                 }
                 _ = second_timer.tick() => {
+                    if conn.microphone_route.is_some() && Config::get_option(crate::microphone_forwarding::ALLOW) != "Y" {
+                        conn.stop_microphone_forwarding("Receiving microphone permission revoked").await;
+                    }
                     #[cfg(windows)]
                     conn.portable_check();
                     raii::AuthedConnID::check_wake_lock_on_setting_changed();
@@ -3917,6 +3929,11 @@ impl Connection {
                         }
                         _ => {}
                     },
+                    Some(misc::Union::MicrophoneForwarding(request)) => {
+                        if !request.response {
+                            self.handle_microphone_forwarding(request).await;
+                        }
+                    }
                     Some(misc::Union::AudioFormat(format)) => {
                         if !self.disable_audio {
                             // Drop the audio sender previously.
@@ -4018,6 +4035,9 @@ impl Connection {
                     }
                     _ => {}
                 },
+                Some(message::Union::MicrophonePacket(packet)) => {
+                    self.handle_microphone_packet(packet).await;
+                }
                 Some(message::Union::AudioFrame(frame)) => {
                     if !self.disable_audio {
                         if let Some(sender) = &self.audio_sender {
@@ -4815,7 +4835,76 @@ impl Connection {
         }
     }
 
+    async fn stop_microphone_forwarding(&mut self, reason: &str) {
+        self.microphone_sender = None;
+        if let Some(route) = self.microphone_route.take() {
+            if let Err(error) = tokio::task::spawn_blocking(move || drop(route)).await {
+                log::warn!("Microphone route cleanup failed: {error}");
+            }
+        }
+        if let Some(id) = self.microphone_id.take() {
+            self.send(crate::microphone_forwarding::message(id, false, true, reason)).await;
+        }
+    }
+
+    async fn handle_microphone_packet(&mut self, packet: MicrophonePacket) {
+        if self.microphone_id != Some(packet.request_id) || self.microphone_route.is_none() { return; }
+        if !self.audio_enabled() || Config::get_option(crate::microphone_forwarding::ALLOW) != "Y" {
+            self.stop_microphone_forwarding("Microphone permission revoked").await;
+            return;
+        }
+        match packet.union {
+            Some(microphone_packet::Union::Format(format)) => {
+                let output = match self.microphone_route.as_ref() { Some(route) => route.output().to_owned(), None => return };
+                self.microphone_sender = None;
+                let (sender, ready) = crate::client::start_microphone_audio_thread(output, format);
+                match tokio::time::timeout(Duration::from_secs(3), ready).await {
+                    Ok(Ok(Ok(()))) => {
+                        self.microphone_sender = Some(sender);
+                        let mut message = crate::microphone_forwarding::message(packet.request_id, true, true, "");
+                        if let Some(message::Union::Misc(misc)) = message.union.as_mut() {
+                            if let Some(misc::Union::MicrophoneForwarding(response)) = misc.union.as_mut() { response.ready = true; }
+                        }
+                        self.send(message).await;
+                    }
+                    result => {
+                        drop(sender);
+                        self.stop_microphone_forwarding(&format!("Virtual microphone output failed: {result:?}")).await;
+                    }
+                }
+            }
+            Some(microphone_packet::Union::Frame(frame)) => {
+                if let Some(sender) = self.microphone_sender.as_ref() {
+                    if !sender.send(frame) {
+                        self.stop_microphone_forwarding("Virtual microphone audio worker stopped").await;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    async fn handle_microphone_forwarding(&mut self, request: MicrophoneForwarding) {
+        if !request.enabled {
+            self.stop_microphone_forwarding("").await;
+            return;
+        }
+        let error = if !self.is_authed_remote_conn() || Config::get_option(crate::microphone_forwarding::ALLOW) != "Y" {
+            "Enable receiving a forwarded microphone in this computer's settings".to_owned()
+        } else if !self.audio_enabled() || self.voice_calling || self.microphone_route.is_some() {
+            "Audio is disabled or a voice/microphone session is already active".to_owned()
+        } else {
+            match tokio::task::spawn_blocking(crate::microphone_forwarding::RouteLease::open).await {
+                Ok(Ok(route)) => { self.microphone_route = Some(route); self.microphone_id = Some(request.request_id); String::new() }
+                Ok(Err(error)) => error.to_string(),
+                Err(error) => error.to_string(),
+            }
+        };
+        self.send(crate::microphone_forwarding::message(request.request_id, error.is_empty(), true, &error)).await;
+    }
+
     pub async fn handle_voice_call(&mut self, accepted: bool) {
+        let accepted = accepted && self.microphone_route.is_none();
         if let Some(ts) = self.voice_call_request_timestamp.take() {
             let msg = new_voice_call_response(ts.get(), accepted);
             if accepted {
@@ -5236,6 +5325,7 @@ impl Connection {
     }
 
     async fn on_close(&mut self, reason: &str, lock: bool) {
+        self.stop_microphone_forwarding("").await;
         if self.closed {
             return;
         }

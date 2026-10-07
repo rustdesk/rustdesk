@@ -946,6 +946,17 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                     },
             ),
           ]),
+        if (isAndroid && !incomingOnly)
+          SettingsSection(title: Text(translate('Microphone forwarding')), tiles: [
+            SettingsTile.switchTile(
+              title: Text(translate('Automatically forward microphone')),
+              initialValue: bind.mainGetLocalOption(key: 'allow-auto-forward-microphone') == 'Y',
+              onToggle: (value) async {
+                await bind.mainSetLocalOption(key: 'allow-auto-forward-microphone', value: value ? 'Y' : 'N');
+                setState(() {});
+              },
+            ),
+          ]),
         if (isAndroid)
           SettingsSection(
             title: Text(translate("Recording")),

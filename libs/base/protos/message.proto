@@ -824,6 +824,14 @@ message MessageQuery {
   int32 switch_display = 1;
 }
 
+message MicrophoneForwarding {
+  int64 request_id = 1;
+  bool enabled = 2;
+  bool response = 3;
+  string error = 4;
+  bool ready = 5;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -867,6 +875,7 @@ message Misc {
     // is rebuilt, and held again, the next time it is shown, before any connection names it
     // by id again, so the shape just selected is always there to give.
     uint64 request_cursor_data = 39;
+    MicrophoneForwarding microphone_forwarding = 40;
   }
 }
 
@@ -997,6 +1006,14 @@ message PortForwardChannel {
   }
 }
 
+message MicrophonePacket {
+  int64 request_id = 1;
+  oneof union {
+    AudioFormat format = 2;
+    AudioFrame frame = 3;
+  }
+}
+
 message Message {
   oneof union {
     SignedId signed_id = 3;
@@ -1030,5 +1047,6 @@ message Message {
     TerminalAction terminal_action = 31;
     TerminalResponse terminal_response = 32;
     PortForwardChannel port_forward_channel = 33;
+    MicrophonePacket microphone_packet = 34;
   }
 }

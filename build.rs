@@ -18,7 +18,9 @@ fn build_mac() {
             b.flag("-DNO_InputMonitoringAuthStatus=1");
         }
     }
-    b.flag("-std=c++17").file(file).compile("macos");
+    b.flag("-std=c++17").file(file).file("src/microphone_forwarding/macos.mm").compile("macos");
+    println!("cargo:rustc-link-lib=framework=CoreAudio");
+    println!("cargo:rerun-if-changed=src/microphone_forwarding/macos.mm");
     println!("cargo:rerun-if-changed={}", file);
 }
 

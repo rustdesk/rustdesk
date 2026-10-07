@@ -417,6 +417,14 @@ class _GeneralState extends State<_General> {
         _Card(title: 'Language', children: [language()]),
         if (!isWeb) hwcodec(),
         if (!isWeb) audio(context),
+        if (!isWeb) _Card(title: 'Microphone forwarding', children: [
+          if (!bind.isIncomingOnly())
+            _OptionCheckBox(context, 'Automatically forward microphone',
+                'allow-auto-forward-microphone', isServer: false),
+          if (!bind.isOutgoingOnly())
+            _OptionCheckBox(context, 'Allow forwarded microphone',
+                'allow-forwarded-microphone'),
+        ]),
         if (!isWeb) record(context),
         if (!isWeb) WaylandCard(),
         other()
