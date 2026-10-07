@@ -1962,6 +1962,8 @@ impl Connection {
                 platform_additions.insert("is_wayland".into(), json!(true));
             }
         }
+        #[cfg(any(windows, target_os = "linux"))]
+        platform_additions.insert("display_scale".into(), json!(true));
         #[cfg(target_os = "windows")]
         {
             platform_additions.insert(
@@ -1978,6 +1980,7 @@ impl Connection {
         }
         #[cfg(target_os = "macos")]
         {
+            platform_additions.extend(display_service::virtual_display::get_platform_additions());
             platform_additions.insert(
                 "supported_privacy_mode_impl".into(),
                 json!(privacy_mode::get_supported_privacy_mode_impl()),
@@ -2140,6 +2143,8 @@ impl Connection {
                     // A separate primary lookup here could race with display hot-plug.
                     self.display_idx = primary_display_idx;
                     pi.displays = displays;
+                    #[cfg(target_os = "macos")]
+                    display_service::virtual_display::sync_display_modes(&mut pi).await;
                     pi.current_display = self.display_idx as _;
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     {
@@ -3848,6 +3853,12 @@ impl Connection {
                             self.toggle_virtual_display(t).await;
                         }
                     }
+                    #[cfg(target_os = "macos")]
+                    Some(misc::Union::ToggleVirtualDisplay(t)) => {
+                        if !self.view_camera && self.peer_keyboard_enabled() {
+                            display_service::virtual_display::toggle(self.inner.clone(), t);
+                        }
+                    }
                     Some(misc::Union::TogglePrivacyMode(t)) => {
                         if !self.view_camera {
                             self.toggle_privacy_mode(t).await;
@@ -3947,16 +3958,31 @@ impl Connection {
                             return false;
                         }
                     }
+                    #[cfg(any(windows, target_os = "linux"))]
+                    Some(misc::Union::DisplayScaleRequest(request)) => {
+                        let allowed = !self.view_camera && self.peer_keyboard_enabled();
+                        let response = display_service::scale::request(request, allowed);
+                        let mut inner = self.inner.clone();
+                        tokio::spawn(async move {
+                            inner.send(Arc::new(response.await));
+                        });
+                    }
+                    #[cfg(target_os = "macos")]
+                    Some(misc::Union::VirtualDisplayMode(mode)) => {
+                        let allowed = !self.view_camera && self.peer_keyboard_enabled();
+                        display_service::virtual_display::configure(self.inner.clone(), mode, allowed);
+                    }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::ChangeResolution(r)) => {
                         if !self.view_camera {
-                            self.change_resolution(None, &r);
+                            self.change_resolution(None, &r).await;
                         }
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::ChangeDisplayResolution(dr)) => {
                         if !self.view_camera {
-                            self.change_resolution(Some(dr.display as _), &dr.resolution);
+                            self.change_resolution(Some(dr.display as _), &dr.resolution)
+                                .await;
                         }
                     }
                     Some(misc::Union::AutoAdjustFps(fps)) => video_service::VIDEO_QOS
@@ -4555,7 +4581,8 @@ impl Connection {
                             height: s.height,
                             ..Default::default()
                         },
-                    );
+                    )
+                    .await;
                 }
             }
 
@@ -4762,12 +4789,24 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn change_resolution(&mut self, d: Option<usize>, r: &Resolution) {
+    async fn change_resolution(&mut self, d: Option<usize>, r: &Resolution) {
         if self.keyboard {
+            #[cfg(any(windows, target_os = "linux"))]
+            let Some(scale_operation) = display_service::scale::reserve_resolution() else {
+                return;
+            };
+            let mut task: Option<tokio::task::JoinHandle<()>> = None;
             if let Ok(displays) = display_service::try_get_displays() {
                 let display_idx = d.unwrap_or(self.display_idx);
                 if let Some(display) = displays.get(display_idx) {
                     let name = display.name();
+                    #[cfg(target_os = "macos")]
+                    if crate::virtual_display_manager::owns_display(&name) {
+                        if self.peer_keyboard_enabled() {
+                            display_service::virtual_display::resize(self.inner.clone(), &name, r);
+                        }
+                        return;
+                    }
                     #[cfg(windows)]
                     if let Some(_ok) =
                         virtual_display_manager::rustdesk_idd::change_resolution_if_is_virtual_display(
@@ -4793,23 +4832,46 @@ impl Connection {
                         (display.height() as f64 / scale).round() as _,
                     );
                     if record_changed {
-                        display_service::set_last_changed_resolution(
-                            &name,
-                            original,
-                            (r.width, r.height),
-                        );
+                        #[cfg(any(windows, target_os = "linux"))]
+                        if original != (r.width, r.height) && scale_operation.capture {
+                            task = Some(display_service::scale::change_resolution_after_capture(
+                                scale_operation,
+                                display,
+                                name.clone(),
+                                original,
+                                (r.width, r.height),
+                            ));
+                        }
+                        if task.is_none() {
+                            display_service::set_last_changed_resolution(
+                                &name,
+                                original,
+                                (r.width, r.height),
+                            );
+                        }
                     }
-                    if let Err(e) =
-                        crate::platform::change_resolution(&name, r.width as _, r.height as _)
-                    {
-                        log::error!(
-                            "Failed to change resolution '{}' to ({},{}): {:?}",
-                            &name,
-                            r.width,
-                            r.height,
-                            e
-                        );
+                    if task.is_none() {
+                        if let Err(e) =
+                            crate::platform::change_resolution(&name, r.width as _, r.height as _)
+                        {
+                            log::error!(
+                                "Failed to change resolution '{}' to ({},{}): {:?}",
+                                &name,
+                                r.width,
+                                r.height,
+                                e
+                            );
+                        }
                     }
+                }
+            }
+            if let Some(task) = task {
+                if let Err(error) = task.await {
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(60),
+                        error,
+                        "Could not change resolution: {error}"
+                    );
                 }
             }
         }
@@ -6124,6 +6186,10 @@ impl Connection {
             Some(misc::Union::SelectedSid(_)) => "misc.selected_sid",
             Some(misc::Union::ChangeResolution(_)) => "misc.change_resolution",
             Some(misc::Union::ChangeDisplayResolution(_)) => "misc.change_display_resolution",
+            Some(misc::Union::VirtualDisplayMode(_)) => "misc.virtual_display_mode",
+            Some(misc::Union::DisplayScaleRequest(_)) => "misc.display_scale_request",
+            Some(misc::Union::DisplayScaleResponse(_)) => "misc.display_scale_response",
+            Some(misc::Union::VirtualDisplayModeResponse(_)) => "misc.virtual_display_mode_response",
             Some(misc::Union::MessageQuery(_)) => "misc.message_query",
             Some(misc::Union::FollowCurrentDisplay(_)) => "misc.follow_current_display",
             Some(misc::Union::SwitchSidesRequest(_)) => "misc.switch_sides_request",
@@ -6864,6 +6930,10 @@ mod raii {
                     .unwrap()
                     .on_connection_open(conn_id);
             }
+            #[cfg(target_os = "macos")]
+            if conn_type == AuthConnType::Remote {
+                crate::virtual_display_manager::on_connection_open(conn_id);
+            }
             Self(conn_id, conn_type)
         }
 
@@ -6989,6 +7059,10 @@ mod raii {
             // Clear per-connection state to avoid stale behavior if conn ids are reused.
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             clear_relative_mouse_active(self.0);
+            #[cfg(target_os = "macos")]
+            if self.1 == AuthConnType::Remote {
+                crate::virtual_display_manager::on_connection_close(self.0);
+            }
             AUTHED_CONNS.lock().unwrap().retain(|c| c.conn_id != self.0);
             let remote_count = AUTHED_CONNS
                 .lock()
@@ -7001,12 +7075,32 @@ mod raii {
                 {
                     *WALLPAPER_REMOVER.lock().unwrap() = None;
                 }
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(any(windows, target_os = "linux"))]
+                let scale_restoring = display_service::scale::restore_at_disconnect();
+                #[cfg(any(windows, target_os = "linux"))]
+                if !scale_restoring {
+                    display_service::restore_resolutions();
+                }
+                #[cfg(target_os = "macos")]
                 display_service::restore_resolutions();
                 #[cfg(windows)]
-                let _ = virtual_display_manager::reset_all();
+                if scale_restoring {
+                    if virtual_display_manager::is_amyuni_idd() {
+                        if let Some(Err(error)) = privacy_mode::turn_off_privacy(0, None) {
+                            hbb_common::throttled_log!(
+                                Duration::from_secs(60),
+                                error,
+                                "Could not turn off privacy mode: {error}"
+                            );
+                        }
+                    }
+                } else {
+                    let _ = virtual_display_manager::reset_all();
+                }
                 #[cfg(target_os = "linux")]
-                scrap::wayland::pipewire::try_close_session();
+                if !scale_restoring {
+                    scrap::wayland::pipewire::try_close_session();
+                }
             }
             Self::check_wake_lock();
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -7603,6 +7697,37 @@ mod test {
                 Connection::authorized_message_scope_violation(conn_type, &msg),
                 expected
             );
+        }
+    }
+
+    #[test]
+    fn session_scope_display_settings_require_remote_control() {
+        let cases = [
+            (
+                misc_msg(|m| m.set_virtual_display_mode(VirtualDisplayMode::new())),
+                "misc.virtual_display_mode",
+            ),
+            (
+                misc_msg(|m| m.set_display_scale_request(DisplayScaleRequest::new())),
+                "misc.display_scale_request",
+            ),
+        ];
+        for (message, violation) in cases {
+            assert_eq!(
+                Connection::authorized_message_scope_violation(AuthConnType::Remote, &message),
+                None
+            );
+            for conn_type in [
+                AuthConnType::FileTransfer,
+                AuthConnType::PortForward,
+                AuthConnType::ViewCamera,
+                AuthConnType::Terminal,
+            ] {
+                assert_eq!(
+                    Connection::authorized_message_scope_violation(conn_type, &message),
+                    Some(violation)
+                );
+            }
         }
     }
 

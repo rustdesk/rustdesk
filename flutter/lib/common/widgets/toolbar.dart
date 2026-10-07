@@ -1238,6 +1238,11 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
 }
 
 bool showVirtualDisplayMenu(FFI ffi) {
+  if (ffi.ffiModel.pi.platform == kPeerPlatformMacOS) {
+    return ffi
+            .ffiModel.pi.platformAdditions['macos_virtual_display_supported'] ==
+        true;
+  }
   if (ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
     return false;
   }
@@ -1257,6 +1262,46 @@ List<Widget> getVirtualDisplayMenuChildren(
   }
   final pi = ffi.ffiModel.pi;
   final privacyModeState = PrivacyModeState.find(id);
+  if (pi.platform == kPeerPlatformMacOS) {
+    final enabled = !ffi.ffiModel.viewOnly && ffi.ffiModel.keyboard;
+    final advertised = pi.platformAdditions['macos_virtual_displays'];
+    final displays =
+        advertised is List ? advertised.whereType<int>().toSet() : <int>{};
+    Future<void> toggle(int index, bool on) async {
+      try {
+        await bind.sessionToggleVirtualDisplay(
+            sessionId: ffi.sessionId, index: index, on: on);
+      } catch (e) {
+        debugPrint('Failed to toggle macOS virtual display: $e');
+        showToast(translate('Failed to toggle macOS virtual display'));
+        return;
+      }
+      clickCallBack?.call();
+    }
+
+    return [
+      for (var index = 1; index <= kMaxVirtualDisplayCount; index++)
+        CkbMenuButton(
+          value: displays.contains(index),
+          onChanged: !enabled
+              ? null
+              : (bool? value) async {
+                  if (value == null) return;
+                  await toggle(index, value);
+                },
+          child: Text('${translate('Virtual display')} $index'),
+          ffi: ffi,
+        ),
+      Divider(),
+      MenuButton(
+        onPressed: !enabled
+            ? null
+            : () => toggle(kAllVirtualDisplay, false),
+        child: Text(translate('Plug out all')),
+        ffi: ffi,
+      ),
+    ];
+  }
   if (pi.isRustDeskIdd) {
     final virtualDisplays = ffi.ffiModel.pi.RustDeskVirtualDisplays;
     final children = <Widget>[];

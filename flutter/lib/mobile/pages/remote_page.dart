@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
+import 'package:flutter_hbb/common/widgets/display_settings_dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
@@ -1394,7 +1395,7 @@ void showOptions(
     }
 
     var popupDialogMenus = List<Widget>.empty(growable: true);
-    final resolution = getResolutionMenu(gFFI, id);
+    final resolution = getResolutionMenu(gFFI);
     if (resolution != null) {
       popupDialogMenus.add(ListTile(
         contentPadding: EdgeInsets.zero,
@@ -1459,47 +1460,11 @@ TTextMenu? getVirtualDisplayMenu(FFI ffi, String id) {
   );
 }
 
-TTextMenu? getResolutionMenu(FFI ffi, String id) {
-  final ffiModel = ffi.ffiModel;
-  final pi = ffiModel.pi;
-  final resolutions = pi.resolutions;
-  final display = pi.tryGetDisplayIfNotAllDisplay(display: pi.currentDisplay);
-
-  final visible =
-      ffiModel.keyboard && (resolutions.length > 1) && display != null;
-  if (!visible) return null;
-
+TTextMenu? getResolutionMenu(FFI ffi) {
+  if (!canChangeDisplaySettings(ffi)) return null;
   return TTextMenu(
-    child: Text(translate("Resolution")),
-    onPressed: () {
-      ffi.dialogManager.show((setState, close, context) {
-        final children = resolutions
-            .map((e) => getRadio<String>(
-                  Text('${e.width}x${e.height}'),
-                  '${e.width}x${e.height}',
-                  '${display.width}x${display.height}',
-                  (value) {
-                    close();
-                    bind.sessionChangeResolution(
-                      sessionId: ffi.sessionId,
-                      display: pi.currentDisplay,
-                      width: e.width,
-                      height: e.height,
-                    );
-                  },
-                ))
-            .toList();
-        return CustomAlertDialog(
-          title: Text(translate('Resolution')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: children,
-          ),
-        );
-      }, clickMaskDismiss: true, backDismiss: true).then((value) {
-        _disableAndroidSoftKeyboard();
-      });
-    },
+    child: Text(translate('Resolution')),
+    onPressed: () => showDisplaySettingsDialog(ffi),
   );
 }
 

@@ -1204,12 +1204,15 @@ class _ImagePaintState extends State<ImagePaint> {
       return isWindows ? dpr : 1.0;
     }
     if (peer.isPeerLinux && peer.pi.currentDisplay == kAllDisplayValue) {
+      final displayScale = peer.pi.displays.length == 1
+          ? peer.pi.displays.first.scale
+          : _cursorDisplayScale.value;
       if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
         // Remove the host output's density without applying canvas zoom.
-        final scale = 1.0 / _cursorDisplayScale.value;
+        final scale = 1.0 / displayScale;
         return isWindows ? scale : scale / dpr;
       }
-      final scale = c.scale / _cursorDisplayScale.value;
+      final scale = c.scale / displayScale;
       return isWindows ? scale * dpr : scale;
     }
     if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
@@ -1223,8 +1226,9 @@ class _ImagePaintState extends State<ImagePaint> {
 
   double _getCursorScaleForDisplay(double scale) {
     final peer = widget.ffi.ffiModel;
-    // All Displays can mix densities; no single display scale applies.
-    if (peer.pi.currentDisplay == kAllDisplayValue) return scale;
+    // Multiple displays can mix densities; no single display scale applies.
+    if (peer.pi.currentDisplay == kAllDisplayValue &&
+        peer.pi.displays.length != 1) return scale;
     final displays = peer.pi.getCurDisplays();
     if (displays.isEmpty) return scale;
     if (peer.pi.platform == kPeerPlatformMacOS) {
@@ -1245,6 +1249,10 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollbarNonTextureRender(
       ImageModel m, Size imageSize, double s) {
+    if (widget.ffi.ffiModel.pi.currentDisplay == kAllDisplayValue &&
+        widget.ffi.ffiModel.pi.displays.isEmpty) {
+      return SizedBox.fromSize(size: imageSize);
+    }
     double sizeScale = s;
     if (widget.ffi.ffiModel.isPeerLinux) {
       final displays = widget.ffi.ffiModel.pi.getCurDisplays();
@@ -1260,6 +1268,10 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
+    if (widget.ffi.ffiModel.pi.currentDisplay == kAllDisplayValue &&
+        widget.ffi.ffiModel.pi.displays.isEmpty) {
+      return SizedBox.fromSize(size: c.size);
+    }
     double sizeScale = s;
     if (widget.ffi.ffiModel.isPeerLinux) {
       final displays = widget.ffi.ffiModel.pi.getCurDisplays();
