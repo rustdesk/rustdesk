@@ -1,11 +1,12 @@
 name: Ecletica - build do cliente Windows
 
-# Dois gatilhos:
+# Gatilhos:
 #  - push na branch ecletica: dispara sozinho (deploy key serve, nao precisa de token)
 #  - manual: Actions -> este workflow -> Run workflow
 #
-# secrets: inherit e obrigatorio: o flutter-build.yml le secrets no env e, sem isso,
-# o GitHub recusa a chamada na largada (startup_failure).
+# Detalhes que fazem a chamada passar na validacao do GitHub:
+#  - secrets: inherit            -> o flutter-build.yml le segredos no env
+#  - permissions: contents write -> o job generate-sbom pede escrita
 on:
   push:
     branches:
@@ -16,6 +17,9 @@ on:
         description: "Sufixo do artefato"
         required: false
         default: "ecletica"
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
