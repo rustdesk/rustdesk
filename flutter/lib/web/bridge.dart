@@ -1946,7 +1946,9 @@ class RustdeskImpl {
   }
 
   void sessionSetAgentControl(
-      {required UuidValue sessionId, required bool agent, dynamic hint}) {}
+      {required UuidValue sessionId, required String grantId, dynamic hint}) {}
+
+  String sessionGetAgentControl({required UuidValue sessionId, dynamic hint}) => '';
 
   Future<void> sessionOpenTerminal(
       {required UuidValue sessionId,

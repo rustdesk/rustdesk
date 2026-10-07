@@ -3,7 +3,7 @@
 use crate::flutter_ffi::SessionID;
 use base::message_proto::ScreenshotResponse;
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, VecDeque},
     fs::OpenOptions,
     io::Write,
     sync::{Mutex, RwLock},
@@ -17,21 +17,30 @@ const REQUEST_SEPARATOR: char = '#';
 const MAX_SCREENSHOTS: usize = 4;
 
 lazy_static::lazy_static! {
-    static ref AGENT_SESSIONS: RwLock<HashSet<SessionID>> = Default::default();
+    static ref AGENT_SESSIONS: RwLock<HashMap<SessionID, String>> = Default::default();
     static ref SCREENSHOTS: Mutex<VecDeque<ScreenshotResponse>> = Default::default();
 }
 
-pub fn set_agent_control(session_id: SessionID, agent: bool) {
+pub fn set_agent_control(session_id: SessionID, grant_id: String) {
     let mut sessions = AGENT_SESSIONS.write().unwrap();
-    if agent {
-        sessions.insert(session_id);
+    if !grant_id.is_empty() {
+        sessions.insert(session_id, grant_id);
     } else {
         sessions.remove(&session_id);
     }
 }
 
 pub fn is_agent_control(session_id: &SessionID) -> bool {
-    AGENT_SESSIONS.read().unwrap().contains(session_id)
+    AGENT_SESSIONS.read().unwrap().contains_key(session_id)
+}
+
+pub fn agent_control_grant(session_id: &SessionID) -> String {
+    AGENT_SESSIONS
+        .read()
+        .unwrap()
+        .get(session_id)
+        .cloned()
+        .unwrap_or_default()
 }
 
 pub fn screenshot_sid(session_id: &SessionID, request_id: &str) -> String {
@@ -86,10 +95,28 @@ mod tests {
     #[test]
     fn closing_session_clears_agent_control() {
         let session_id = SessionID::new_v4();
-        set_agent_control(session_id, true);
+        set_agent_control(session_id, "grant".to_owned());
         assert!(is_agent_control(&session_id));
+        assert_eq!(agent_control_grant(&session_id), "grant");
         crate::flutter_ffi::session_close(session_id);
         assert!(!is_agent_control(&session_id));
+        assert_eq!(agent_control_grant(&session_id), "");
+    }
+
+    #[test]
+    fn ownership_reads_follow_revoke_and_regrant_without_window_updates() {
+        let session_id = SessionID::new_v4();
+        set_agent_control(session_id, "old".to_owned());
+        let old_notice = agent_control_grant(&session_id);
+        set_agent_control(session_id, String::new());
+        assert!(!is_agent_control(&session_id));
+        assert_eq!(agent_control_grant(&session_id), "");
+        set_agent_control(session_id, "new".to_owned());
+        // A window refresh reads current state, even for an old notification.
+        assert_ne!(agent_control_grant(&session_id), old_notice);
+        assert_eq!(agent_control_grant(&session_id), "new");
+        assert!(is_agent_control(&session_id));
+        set_agent_control(session_id, String::new());
     }
 
     #[test]

@@ -80,8 +80,8 @@ class McpServerManager {
   }
 
   /// The user took a session back from the agent in its window.
-  Future<void> onControlTakenOver(String sessionId) async {
-    await _backend?.releaseHeld(sessionId);
+  Future<void> onControlTakenOver(String sessionId, String grantId) async {
+    await _backend?.takeOver(sessionId, grantId);
   }
 
   Future<void> _stop() async {

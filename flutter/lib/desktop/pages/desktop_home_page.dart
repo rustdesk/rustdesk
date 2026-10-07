@@ -807,11 +807,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           connToken: call.arguments['connToken'],
         );
       } else if (call.method == kWindowEventMcpControlTakenOver) {
-        final sessionId = call.arguments;
-        if (sessionId is String) {
-          await McpServerManager.instance.onControlTakenOver(sessionId);
+        final args = call.arguments;
+        if (args is Map &&
+            args['session_id'] is String &&
+            args['grant_id'] is String) {
+          await McpServerManager.instance.onControlTakenOver(
+              args['session_id'], args['grant_id']);
         } else {
-          debugPrint('Invalid MCP takeover argument: expected a session ID string.');
+          debugPrint(
+              'Invalid MCP takeover arguments: expected session and grant IDs.');
         }
       } else if (call.method == kWindowBumpMouse) {
         return RdPlatformChannel.instance.bumpMouse(

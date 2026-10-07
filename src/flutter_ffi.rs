@@ -301,7 +301,7 @@ pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<boo
 
 pub fn session_close(session_id: SessionID) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::flutter_mcp::set_agent_control(session_id, false);
+    crate::flutter_mcp::set_agent_control(session_id, String::new());
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
         // `release_remote_keys` is not required for mobile platforms in common cases.
         // But we still call it to make the code more stable.
@@ -353,19 +353,27 @@ pub fn session_save_mcp_screenshot(
 }
 
 #[allow(unused_variables)]
-pub fn session_set_agent_control(session_id: SessionID, agent: bool) -> SyncReturn<()> {
+pub fn session_set_agent_control(session_id: SessionID, grant_id: String) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         // The keyboard hook's releases are dropped from now on, so keys the
         // user holds would stay down on the peer.
-        if agent && flutter::get_cur_session_id() == session_id {
+        if !grant_id.is_empty() && flutter::get_cur_session_id() == session_id {
             if let Some(session) = sessions::get_session_by_session_id(&session_id) {
                 crate::keyboard::release_remote_keys(&session.get_keyboard_mode());
             }
         }
-        crate::flutter_mcp::set_agent_control(session_id, agent);
+        crate::flutter_mcp::set_agent_control(session_id, grant_id);
     }
     SyncReturn(())
+}
+
+#[allow(unused_variables)]
+pub fn session_get_agent_control(session_id: SessionID) -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(crate::flutter_mcp::agent_control_grant(&session_id));
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return SyncReturn(String::new());
 }
 
 pub fn session_handle_screenshot(

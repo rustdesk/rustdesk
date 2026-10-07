@@ -35,7 +35,7 @@ void main() {
   });
 
   test('concurrent input operations finish without interleaving', () async {
-    final input = McpInputState();
+    final input = McpInputState('grant');
     final events = <String>[];
     Future<void> drag(String name) => input.run(() async {
           events.add('$name down');
@@ -48,7 +48,7 @@ void main() {
 
   test('handoff cancels queued input and releases an in-flight press once',
       () async {
-    final input = McpInputState();
+    final input = McpInputState('grant');
     final started = Completer<void>();
     final sent = Completer<void>();
     final events = <String>[];
@@ -82,7 +82,7 @@ void main() {
   });
 
   test('a failed input call does not prevent release', () async {
-    final input = McpInputState();
+    final input = McpInputState('grant');
     final events = <String>[];
     final failed = expectLater(input.run(() async {
       input.keys.add('VK_SHIFT');
@@ -95,5 +95,18 @@ void main() {
       }
     });
     expect(events, ['VK_SHIFT up']);
+  });
+
+  test('failed cleanup keeps the old grant closed to further input', () async {
+    final input = McpInputState('old-grant');
+    await input.run(() async => input.keys.add('VK_SHIFT'));
+    await expectLater(input.release(() async {
+      throw StateError('Native release failed');
+    }), throwsStateError);
+    await expectLater(input.run(() async => fail('Input must stay cancelled')),
+        throwsA(isA<McpToolException>()));
+    await expectLater(
+        input.release(() async => fail('Do not hide failed cleanup')),
+        throwsStateError);
   });
 }

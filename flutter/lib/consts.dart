@@ -81,7 +81,7 @@ const String kWindowEventGetCachedSessionData = "get_cached_session_data";
 const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
 const String kWindowEventMcpListSessions = "mcp_list_sessions";
-const String kWindowEventMcpSetControl = "mcp_set_control";
+const String kWindowEventMcpRefreshControl = "mcp_refresh_control";
 const String kWindowEventMcpRequestControl = "mcp_request_control";
 const String kWindowEventMcpAuthenticate = "mcp_authenticate";
 const String kWindowEventMcpClose = "mcp_close_session";

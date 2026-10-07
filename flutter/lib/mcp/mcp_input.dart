@@ -20,6 +20,10 @@ class McpOperationQueue {
 
 /// Serializes a session's input and drains it before releasing held input.
 class McpInputState {
+  McpInputState(this.grantId);
+
+  final String grantId;
+  bool get active => _release == null;
   final _queue = McpOperationQueue();
   Future<void>? _release;
   final Set<String> buttons = {};

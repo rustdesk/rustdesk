@@ -30,22 +30,26 @@ Future<dynamic> handleMcpWindowCall(
   }
   switch (method) {
     case kWindowEventMcpStop:
+      final args = jsonDecode(arguments as String);
       for (final ffi in sessions.values) {
-        ffi.dialogManager.dismissByTag('mcp-agent-control-${ffi.sessionId}');
-        ffi.ffiModel.setAgentControl(false);
+        for (final id in args['cancelled_requests'] as List) {
+          ffi.dialogManager.dismissByTag('mcp-agent-control-$id');
+        }
+        ffi.ffiModel.refreshAgentControl();
       }
       return true;
     case kWindowEventMcpListSessions:
       return jsonEncode(
           [for (final e in sessions.entries) _describe(e.key, e.value)]);
-    case kWindowEventMcpSetControl:
+    case kWindowEventMcpRefreshControl:
       final args = jsonDecode(arguments as String);
       final ffi = _bySessionId(sessions, args['session_id']);
       if (ffi == null) return false;
-      if (args['agent'] != true) {
-        ffi.dialogManager.dismissByTag('mcp-agent-control-${ffi.sessionId}');
+      final cancelled = args['cancelled_request'];
+      if (cancelled is String) {
+        ffi.dialogManager.dismissByTag('mcp-agent-control-$cancelled');
       }
-      ffi.ffiModel.setAgentControl(args['agent'] == true);
+      ffi.ffiModel.refreshAgentControl();
       return true;
     case kWindowEventMcpAuthenticate:
       final args = jsonDecode(arguments as String);
@@ -69,7 +73,8 @@ Future<dynamic> handleMcpWindowCall(
           .firstOrNull;
       if (entry == null) return false;
       selectTab(entry.key);
-      return _askAgentControl(entry.key, entry.value);
+      return _askAgentControl(
+          entry.key, entry.value, args['request_id'] as String);
   }
   return null;
 }
@@ -109,12 +114,12 @@ FFI? _bySessionId(Map<String, FFI> sessions, Object? sessionId) =>
         .where((f) => f.sessionId.toString() == sessionId)
         .firstOrNull;
 
-Future<bool> _askAgentControl(String peerId, FFI ffi) async {
+Future<bool> _askAgentControl(String peerId, FFI ffi, String requestId) async {
   // A dialog in a hidden or minimized window would never be seen.
   final window = WindowController.fromWindowId(kWindowId!);
   await window.show();
   await window.focus();
-  final tag = 'mcp-agent-control-${ffi.sessionId}';
+  final tag = 'mcp-agent-control-$requestId';
   final answer = await ffi.dialogManager
       .show<bool>(
           (setState, close, context) => CustomAlertDialog(
@@ -145,17 +150,18 @@ Future<bool> _askAgentControl(String peerId, FFI ffi) async {
     ffi.dialogManager.dismissByTag(tag);
     return null;
   });
-  if (answer != true) return false;
-  ffi.ffiModel.setAgentControl(true);
-  return true;
+  return answer == true;
 }
 
 Future<void> _takeOver(FFI ffi) async {
   try {
     // Keep human input gated until the agent's last release has been sent.
-    await DesktopMultiWindow.invokeMethod(kMainWindowId,
-        kWindowEventMcpControlTakenOver, ffi.sessionId.toString());
-    ffi.ffiModel.setAgentControl(false);
+    await DesktopMultiWindow.invokeMethod(
+        kMainWindowId, kWindowEventMcpControlTakenOver, {
+      'session_id': ffi.sessionId.toString(),
+      'grant_id': ffi.ffiModel.agentControlGrant,
+    });
+    ffi.ffiModel.refreshAgentControl();
   } catch (e) {
     debugPrint('Failed to release MCP input: $e');
   }

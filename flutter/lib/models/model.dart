@@ -124,7 +124,6 @@ class FfiModel with ChangeNotifier {
   bool _androidDocumentPickerActive = false;
   bool _androidDocumentPickerInterruptedConnection = false;
   bool _viewOnly = false;
-  bool _agentControl = false;
   Map<String, String>? mcpLastMsgBox;
   bool _showMyCursor = false;
   WeakReference<FFI> parent;
@@ -167,8 +166,10 @@ class FfiModel with ChangeNotifier {
   bool get isPeerLinux => _pi.platform == kPeerPlatformLinux;
   bool get isPeerWindows => _pi.platform == kPeerPlatformWindows;
 
-  bool get viewOnly => _viewOnly || _agentControl;
-  bool get agentControl => _agentControl;
+  bool get viewOnly => _viewOnly || agentControl;
+  String get agentControlGrant =>
+      bind.sessionGetAgentControl(sessionId: sessionId);
+  bool get agentControl => agentControlGrant.isNotEmpty;
   bool get showMyCursor => _showMyCursor;
 
   set inputBlocked(v) {
@@ -1840,13 +1841,7 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  void setAgentControl(bool value) {
-    if (_agentControl != value) {
-      bind.sessionSetAgentControl(sessionId: sessionId, agent: value);
-      _agentControl = value;
-      notifyListeners();
-    }
-  }
+  void refreshAgentControl() => notifyListeners();
 
   void setShowMyCursor(bool value) {
     if (_showMyCursor != value) {

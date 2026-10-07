@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -80,8 +81,7 @@ class RustDeskMcpBackend implements McpBackend {
     if (windowId == null) {
       throw McpToolException('Unknown session_id: $sessionId');
     }
-    if (method == kWindowEventMcpRequestControl ||
-        (method == kWindowEventMcpSetControl && args['agent'] == true)) {
+    if (method == kWindowEventMcpRequestControl) {
       _checkRunning();
     }
     return _callWindowId(windowId, method, args, timeout);
@@ -112,7 +112,10 @@ class RustDeskMcpBackend implements McpBackend {
     for (var i = 0; i < windows.length; i++) {
       for (final s in (answers[i] ?? const []).cast<Map<String, dynamic>>()) {
         _windowOf[s['session_id'] as String] = windows[i];
-        sessions.add(_withNextStep(s));
+        sessions.add(_withNextStep({
+          ...s,
+          'mode': _input[s['session_id']]?.active == true ? 'agent' : 'human',
+        }));
       }
     }
     _input.removeWhere((id, _) => !_windowOf.containsKey(id));
@@ -166,7 +169,7 @@ class RustDeskMcpBackend implements McpBackend {
   final Map<String, Future<String>> _opening = {};
 
   /// Pending control requests, by session id.
-  final Map<String, Future<dynamic>> _controlRequests = {};
+  final Map<String, ({String id, Future<bool> result})> _controlRequests = {};
 
   /// The last screenshot request. Screenshots run one at a time because a
   /// peer keeps one pending request per display and drops the older one.
@@ -179,7 +182,8 @@ class RustDeskMcpBackend implements McpBackend {
   Future<T> _serialized<T>(
       String sessionId, Future<T> Function(McpInputState input) body) async {
     _checkRunning();
-    final input = _input.putIfAbsent(sessionId, McpInputState.new);
+    final input = _input[sessionId];
+    if (input == null) throw McpToolException(mcpHumanControlMessage);
     return input.run(() => body(input));
   }
 
@@ -187,7 +191,8 @@ class RustDeskMcpBackend implements McpBackend {
   /// input call in progress, so a press it is sending cannot land after the
   /// release.
   Future<void> releaseHeld(String sessionId) async {
-    final input = _input.putIfAbsent(sessionId, McpInputState.new);
+    final input = _input[sessionId];
+    if (input == null) return;
     await input.release(() async {
       final sid = UuidValue(sessionId);
       final at = input.pointer;
@@ -210,17 +215,47 @@ class RustDeskMcpBackend implements McpBackend {
       }
       input.buttons.clear();
       input.keys.clear();
+      bind.sessionSetAgentControl(sessionId: sid, grantId: '');
     });
+  }
+
+  // Notifications only refresh UI from native state. A late notification
+  // cannot grant/revoke control, and a frozen window cannot block restart.
+  Future<void> _notifyWindow(int id, String method, Object? args) async {
+    try {
+      await _callWindowId(id, method, args, _kWindowCallTimeout);
+    } catch (e) {
+      debugPrint('Failed to notify window $id of MCP state: $e');
+    }
+  }
+
+  Future<void> _refreshControl(String sessionId,
+      {String? cancelledRequest}) async {
+    final window = _windowOf[sessionId];
+    if (window != null) {
+      await _notifyWindow(window, kWindowEventMcpRefreshControl,
+          {'session_id': sessionId, 'cancelled_request': cancelledRequest});
+    }
+  }
+
+  Future<void> takeOver(String sessionId, String grantId) async {
+    final input = _input[sessionId];
+    if (input == null || !input.active || input.grantId != grantId) return;
+    _controlRequests.remove(sessionId);
+    await releaseHeld(sessionId);
   }
 
   Future<void> stop() async {
     _stopped = true;
+    final cancelled = _controlRequests.values.map((r) => r.id).toList();
+    _controlRequests.clear();
     // Start every release before awaiting so all session queues are cancelled.
     try {
       await Future.wait(_input.keys.toList().map(releaseHeld));
     } finally {
       await Future.wait(rustDeskWinManager.remoteDesktopWindows.map((id) =>
-          _callWindowId(id, kWindowEventMcpStop, null, _kWindowCallTimeout)));
+          _notifyWindow(
+              id, kWindowEventMcpStop, {'cancelled_requests': cancelled})));
     }
   }
 
@@ -309,59 +344,76 @@ class RustDeskMcpBackend implements McpBackend {
           'Timed out waiting for the session window to open.');
     }
     _checkRunning();
-    await _callWindow(
-        kWindowEventMcpSetControl, {'session_id': sessionId, 'agent': true});
+    await _requestControl(sessionId, ask: false);
     return sessionId;
   }
 
   @override
   Future<String> requestControl(String sessionId) async {
-    final s = await _find(sessionId);
-    if (s['mode'] == 'agent') return 'Already in agent control.';
-    dynamic granted;
-    if (mainGetLocalBoolOptionSync(kOptionMcpAutoApproveControl)) {
-      granted = await _callWindow(
-          kWindowEventMcpSetControl, {'session_id': sessionId, 'agent': true});
-    } else {
-      final request = _controlRequests[sessionId] ??= _callWindow(
-              kWindowEventMcpRequestControl,
-              {'session_id': sessionId},
-              _kControlRequestTimeout)
-          .then((granted) async {
-        if (_stopped && granted == true) {
-          await _callWindow(kWindowEventMcpSetControl,
-              {'session_id': sessionId, 'agent': false});
-          return false;
-        }
-        return granted;
-      });
-      try {
-        granted = await request.timeout(_kCallBudget);
-        if (identical(_controlRequests[sessionId], request)) {
-          _controlRequests.remove(sessionId);
-        }
-      } on TimeoutException {
-        return 'Not granted yet: the user has not answered the request in the '
-            'RustDesk window. Call request_control again to keep waiting.';
-      } catch (_) {
-        if (identical(_controlRequests[sessionId], request)) {
-          _controlRequests.remove(sessionId);
-        }
-        rethrow;
+    await _find(sessionId);
+    return _requestControl(sessionId,
+        ask: !mainGetLocalBoolOptionSync(kOptionMcpAutoApproveControl));
+  }
+
+  Future<String> _requestControl(String sessionId, {required bool ask}) async {
+    _checkRunning();
+    var request = _controlRequests[sessionId];
+    if (request == null && _input[sessionId]?.active == true) {
+      return 'Already in agent control.';
+    }
+    if (request == null) {
+      final id = Uuid().v4();
+      request = (id: id, result: _grantControl(sessionId, ask, id));
+      _controlRequests[sessionId] = request;
+    }
+    try {
+      final granted = await request.result.timeout(_kCallBudget);
+      if (_controlRequests[sessionId]?.id == request.id) {
+        _controlRequests.remove(sessionId);
+      }
+      if (!granted) throw McpToolException('The user did not grant control.');
+      return 'Granted. The session is now under agent control.';
+    } on TimeoutException {
+      return 'Not granted yet: the user has not answered the request in the '
+          'RustDesk window. Call request_control again to keep waiting.';
+    } catch (_) {
+      if (_controlRequests[sessionId]?.id == request.id) {
+        _controlRequests.remove(sessionId);
+      }
+      rethrow;
+    }
+  }
+
+  Future<bool> _grantControl(String sessionId, bool ask, String grantId) async {
+    void checkCurrent() {
+      _checkRunning();
+      if (_controlRequests[sessionId]?.id != grantId) {
+        throw McpToolException('The control request was cancelled.');
       }
     }
-    if (granted != true) {
-      throw McpToolException('The user did not grant control.');
-    }
-    if (_stopped) {
-      await _callWindow(
-          kWindowEventMcpSetControl, {'session_id': sessionId, 'agent': false});
-      _checkRunning();
-    }
+
+    // Awaiting cleanup also lets the caller register this request before
+    // checkCurrent runs. A failed release blocks re-granting this session.
     await releaseHeld(sessionId);
+    checkCurrent();
+    if (ask) {
+      final granted = await _callWindow(
+          kWindowEventMcpRequestControl,
+          {'session_id': sessionId, 'request_id': grantId},
+          _kControlRequestTimeout);
+      checkCurrent();
+      if (granted != true) return false;
+    }
+    await _find(sessionId);
+    checkCurrent();
+    final input = McpInputState(grantId);
+    bind.sessionSetAgentControl(
+        sessionId: UuidValue(sessionId), grantId: input.grantId);
+    _input[sessionId] = input;
+    await _refreshControl(sessionId);
+    input.checkActive();
     _checkRunning();
-    _input.remove(sessionId);
-    return 'Granted. The session is now under agent control.';
+    return true;
   }
 
   Future<Map<String, dynamic>> _waitForSettled(
@@ -459,13 +511,10 @@ class RustDeskMcpBackend implements McpBackend {
 
   @override
   Future<String> releaseControl(String sessionId) async {
-    final s = await _find(sessionId);
-    if (s['mode'] != 'agent') {
-      return 'The session is already under human control.';
-    }
+    await _find(sessionId);
+    final cancelled = _controlRequests.remove(sessionId);
     await releaseHeld(sessionId);
-    await _callWindow(
-        kWindowEventMcpSetControl, {'session_id': sessionId, 'agent': false});
+    await _refreshControl(sessionId, cancelledRequest: cancelled?.id);
     return 'Released. The human is in control; you can only read this session.';
   }
 
@@ -703,6 +752,7 @@ class RustDeskMcpBackend implements McpBackend {
   Future<void> disconnect(String sessionId) async {
     final s = await _find(sessionId);
     if (s['mode'] != 'agent') throw McpToolException(mcpHumanControlMessage);
+    _controlRequests.remove(sessionId);
     await releaseHeld(sessionId);
     final closed =
         await _callWindow(kWindowEventMcpClose, {'session_id': sessionId});
