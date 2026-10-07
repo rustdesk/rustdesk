@@ -99,6 +99,10 @@ impl Capturer {
         crate::would_block_if_equal(&mut self.saved_raw_data, result)?;
         Ok(result)
     }
+
+    pub fn forget_last_frame(&mut self) {
+        self.saved_raw_data.clear();
+    }
 }
 
 impl Drop for Capturer {

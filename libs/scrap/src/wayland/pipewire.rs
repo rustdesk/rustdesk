@@ -464,6 +464,10 @@ impl Recorder for PipeWireRecorder {
             )))),
         }
     }
+
+    fn forget_last_frame(&mut self) {
+        self.saved_raw_data.clear();
+    }
 }
 
 impl Drop for PipeWireRecorder {

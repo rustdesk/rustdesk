@@ -43,6 +43,13 @@ impl TraitCapturer for Capturer {
             Capturer::WAYLAND(d) => d.frame(timeout),
         }
     }
+
+    fn forget_last_frame(&mut self) {
+        match self {
+            Capturer::X11(d) => d.forget_last_frame(),
+            Capturer::WAYLAND(d) => d.forget_last_frame(),
+        }
+    }
 }
 
 pub enum Display {
