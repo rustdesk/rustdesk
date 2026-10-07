@@ -1,7 +1,9 @@
-name: Ecletica - build do cliente Windows
+name: Ecletica - build do cliente (Windows + macOS)
 
 # Gatilhos:
 #  - push na branch ecletica: dispara sozinho (deploy key serve, nao precisa de token)
+#  - o nome do job nao define plataforma: quem decide e o arquivo flutter-build.yml
+#    (jobs build-for-windows* e build-for-macOS, controlados pelo campo "if")
 #  - manual: Actions -> este workflow -> Run workflow
 #
 # Detalhes que fazem a chamada passar na validacao do GitHub:
@@ -22,7 +24,7 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
+  build-clientes:
     uses: ./.github/workflows/flutter-build.yml
     secrets: inherit
     with:
