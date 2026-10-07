@@ -1264,11 +1264,14 @@ fn handle_one_frame(
     })?;
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
+    // first_frame stays true until the first successful encode, so the Err
+    // branch can distinguish warm-up (first == true → 30-strike budget) from
+    // a post-warm-up failure (first == false → strict 3-strike budget).
     let first = *first_frame;
-    *first_frame = false;
     match encoder.encode_to_message(frame, ms) {
         Ok(mut vf) => {
             *encode_fail_counter = 0;
+            *first_frame = false;
             vf.display = display as _;
             let mut msg = Message::new();
             msg.set_video_frame(vf);
@@ -1307,7 +1310,10 @@ fn handle_one_frame(
             // completes within 30 attempts has zero ongoing impact: the next
             // failure streak starts from 0 and the strict 3-strike budget
             // applies to the warmed-up encoder, same as upstream.
-            let max_fail_times = if cfg!(target_os = "macos") && encoder.is_hardware() {
+            // macOS hardware encoders get 30 attempts during warm-up (before
+            // the first successful encode); once warm-up completes, first == false
+            // and the strict 3-strike budget applies, same as upstream.
+            let max_fail_times = if cfg!(target_os = "macos") && encoder.is_hardware() && first {
                 30
             } else if cfg!(target_os = "android") && encoder.is_hardware() {
                 9
