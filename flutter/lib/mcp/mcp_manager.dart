@@ -39,7 +39,7 @@ class McpServerManager {
     return t;
   }
 
-  Future<void> regenerateToken() => _run(() async {
+  Future<String?> regenerateToken() => _run(() async {
         await _stop();
         await _token(regenerate: true);
         await _sync();
@@ -47,9 +47,11 @@ class McpServerManager {
 
   String endpoint() => 'http://127.0.0.1:$port$kMcpEndpointPath';
 
-  Future<void> sync() => _run(_sync);
+  Future<void> sync() async {
+    await _run(_sync);
+  }
 
-  Future<void> _run(Future<void> Function() operation) =>
+  Future<String?> _run(Future<void> Function() operation) =>
       _operations.run(() async {
         try {
           await operation();
@@ -58,6 +60,7 @@ class McpServerManager {
           lastError = '$e';
           debugPrint('Failed to update MCP server: $e');
         }
+        return lastError;
       });
 
   Future<void> _sync() async {

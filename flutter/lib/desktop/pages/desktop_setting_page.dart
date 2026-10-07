@@ -3416,8 +3416,8 @@ class _McpConnectionInfo extends StatelessWidget {
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: Text(translate('Regenerate token')),
               onPressed: () async {
-                await m.regenerateToken();
-                showToast(translate('Successful'));
+                final error = await m.regenerateToken();
+                showToast(error ?? translate('Successful'));
               },
             ),
           ],
