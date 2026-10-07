@@ -300,6 +300,8 @@ pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<boo
 }
 
 pub fn session_close(session_id: SessionID) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::set_agent_control(session_id, false);
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
         // `release_remote_keys` is not required for mobile platforms in common cases.
         // But we still call it to make the code more stable.

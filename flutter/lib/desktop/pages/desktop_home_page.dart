@@ -807,7 +807,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           connToken: call.arguments['connToken'],
         );
       } else if (call.method == kWindowEventMcpControlTakenOver) {
-        McpServerManager.instance.onControlTakenOver(call.arguments);
+        await McpServerManager.instance.onControlTakenOver(call.arguments);
       } else if (call.method == kWindowBumpMouse) {
         return RdPlatformChannel.instance.bumpMouse(
           dx: call.arguments['dx'],

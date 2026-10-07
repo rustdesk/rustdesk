@@ -10,6 +10,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:uuid/uuid.dart';
 
 import 'mcp_dispatcher.dart';
+import 'mcp_input.dart';
 import 'mcp_utils.dart';
 
 const Duration _kSessionWaitTimeout = Duration(seconds: 20);
@@ -28,18 +29,16 @@ class McpWindowBusy extends McpToolException {
             'try again in a moment.');
 }
 
-/// What the agent's input left on a session's peer.
-class _AgentInput {
-  Future<void> tail = Future.value();
-  final Set<String> buttons = {};
-  final Set<String> keys = {};
-  ({int x, int y})? pointer;
-}
-
 class RustDeskMcpBackend implements McpBackend {
   final Future<bool> Function(String peerId) approveConnect;
 
   RustDeskMcpBackend({required this.approveConnect});
+
+  bool _stopped = false;
+
+  void _checkRunning() {
+    if (_stopped) throw McpToolException('The MCP server has stopped.');
+  }
 
   @override
   Future<List<Map<String, dynamic>>> listPeers() async {
@@ -81,6 +80,10 @@ class RustDeskMcpBackend implements McpBackend {
     if (windowId == null) {
       throw McpToolException('Unknown session_id: $sessionId');
     }
+    if (method == kWindowEventMcpRequestControl ||
+        (method == kWindowEventMcpSetControl && args['agent'] == true)) {
+      _checkRunning();
+    }
     return _callWindowId(windowId, method, args, timeout);
   }
 
@@ -112,6 +115,7 @@ class RustDeskMcpBackend implements McpBackend {
         sessions.add(_withNextStep(s));
       }
     }
+    _input.removeWhere((id, _) => !_windowOf.containsKey(id));
     return sessions;
   }
 
@@ -121,7 +125,9 @@ class RustDeskMcpBackend implements McpBackend {
   }
 
   Future<Map<String, dynamic>> _find(String sessionId) async {
-    for (final s in await listSessions()) {
+    final sessions = await listSessions();
+    _checkRunning();
+    for (final s in sessions) {
       if (s['session_id'] == sessionId) return s;
     }
     if (_windowOf.containsKey(sessionId)) throw McpWindowBusy();
@@ -166,51 +172,59 @@ class RustDeskMcpBackend implements McpBackend {
   /// peer keeps one pending request per display and drops the older one.
   Future<void> _lastScreenshot = Future.value();
 
-  final Map<String, _AgentInput> _input = {};
+  final Map<String, McpInputState> _input = {};
 
   /// Runs one input call on a session at a time. Each call awaits between its
   /// events, so two calls would otherwise interleave them.
   Future<T> _serialized<T>(
-      String sessionId, Future<T> Function(_AgentInput input) body) async {
-    final input = _input.putIfAbsent(sessionId, _AgentInput.new);
-    final previous = input.tail;
-    final done = Completer<void>();
-    input.tail = done.future;
-    try {
-      await previous;
-      return await body(input);
-    } finally {
-      done.complete();
-    }
+      String sessionId, Future<T> Function(McpInputState input) body) async {
+    _checkRunning();
+    final input = _input.putIfAbsent(sessionId, McpInputState.new);
+    return input.run(() => body(input));
   }
 
   /// Releases the buttons and keys the agent left down. Queued behind the
   /// input call in progress, so a press it is sending cannot land after the
   /// release.
-  Future<void> releaseHeld(String sessionId) =>
-      _serialized(sessionId, (input) async {
-        final sid = UuidValue(sessionId);
-        final at = input.pointer;
-        if (at != null) {
-          for (final b in input.buttons) {
-            await _sendMouse(
-                sid, mcpMouseMessage(type: 'up', buttons: b, x: at.x, y: at.y));
-          }
+  Future<void> releaseHeld(String sessionId) async {
+    final input = _input.putIfAbsent(sessionId, McpInputState.new);
+    await input.release(() async {
+      final sid = UuidValue(sessionId);
+      final at = input.pointer;
+      if (at != null) {
+        for (final b in input.buttons) {
+          await _sendMouse(
+              sid, mcpMouseMessage(type: 'up', buttons: b, x: at.x, y: at.y));
         }
-        for (final k in input.keys) {
-          await bind.sessionInputKey(
-              sessionId: sid,
-              name: k,
-              down: false,
-              press: false,
-              alt: false,
-              ctrl: false,
-              shift: false,
-              command: false);
-        }
-        input.buttons.clear();
-        input.keys.clear();
-      });
+      }
+      for (final k in input.keys) {
+        await bind.sessionInputKey(
+            sessionId: sid,
+            name: k,
+            down: false,
+            press: false,
+            alt: false,
+            ctrl: false,
+            shift: false,
+            command: false);
+      }
+      input.buttons.clear();
+      input.keys.clear();
+    });
+  }
+
+  Future<void> stop() async {
+    _stopped = true;
+    // Start every release before awaiting so all session queues are cancelled.
+    try {
+      await Future.wait(_input.keys.toList().map(releaseHeld));
+    } finally {
+      final sessions = await listSessions();
+      await Future.wait(sessions.map((s) => _callWindow(
+          kWindowEventMcpSetControl,
+          {'session_id': s['session_id'], 'agent': false})));
+    }
+  }
 
   @override
   Future<Map<String, dynamic>> connect(String peerId,
@@ -254,6 +268,7 @@ class RustDeskMcpBackend implements McpBackend {
   }
 
   Future<String> _open(String peerId) async {
+    _checkRunning();
     final autoApprove =
         mainGetLocalBoolOptionSync(kOptionMcpAutoApproveControl);
     if (!autoApprove && !await approveConnect(peerId)) {
@@ -272,12 +287,14 @@ class RustDeskMcpBackend implements McpBackend {
       throw McpToolException('The user opened $peerId meanwhile. Call '
           'connect again to get that session.');
     }
+    _checkRunning();
     // The password is not passed to the new window: its arguments are
     // printed to the debug log. It is submitted once asked for.
     await rustDeskWinManager.newRemoteDesktop(peerId);
     final opened = DateTime.now().add(_kSessionWaitTimeout);
     String? sessionId;
     while (sessionId == null && DateTime.now().isBefore(opened)) {
+      _checkRunning();
       try {
         for (final s in await listSessions()) {
           if (s['peer_id'] == peerId) sessionId = s['session_id'] as String;
@@ -293,6 +310,7 @@ class RustDeskMcpBackend implements McpBackend {
       throw McpToolException(
           'Timed out waiting for the session window to open.');
     }
+    _checkRunning();
     await _callWindow(
         kWindowEventMcpSetControl, {'session_id': sessionId, 'agent': true});
     return sessionId;
@@ -307,26 +325,44 @@ class RustDeskMcpBackend implements McpBackend {
       granted = await _callWindow(
           kWindowEventMcpSetControl, {'session_id': sessionId, 'agent': true});
     } else {
-      var request = _controlRequests[sessionId];
-      if (request == null) {
-        request = _controlRequests[sessionId] = _callWindow(
-            kWindowEventMcpRequestControl,
-            {'session_id': sessionId},
-            _kControlRequestTimeout);
-        request.whenComplete(() {
-          _controlRequests.remove(sessionId);
-        }).ignore();
-      }
+      final request = _controlRequests[sessionId] ??= _callWindow(
+              kWindowEventMcpRequestControl,
+              {'session_id': sessionId},
+              _kControlRequestTimeout)
+          .then((granted) async {
+        if (_stopped && granted == true) {
+          await _callWindow(kWindowEventMcpSetControl,
+              {'session_id': sessionId, 'agent': false});
+          return false;
+        }
+        return granted;
+      });
       try {
         granted = await request.timeout(_kCallBudget);
+        if (identical(_controlRequests[sessionId], request)) {
+          _controlRequests.remove(sessionId);
+        }
       } on TimeoutException {
         return 'Not granted yet: the user has not answered the request in the '
             'RustDesk window. Call request_control again to keep waiting.';
+      } catch (_) {
+        if (identical(_controlRequests[sessionId], request)) {
+          _controlRequests.remove(sessionId);
+        }
+        rethrow;
       }
     }
     if (granted != true) {
       throw McpToolException('The user did not grant control.');
     }
+    if (_stopped) {
+      await _callWindow(
+          kWindowEventMcpSetControl, {'session_id': sessionId, 'agent': false});
+      _checkRunning();
+    }
+    await releaseHeld(sessionId);
+    _checkRunning();
+    _input.remove(sessionId);
     return 'Granted. The session is now under agent control.';
   }
 
@@ -429,9 +465,9 @@ class RustDeskMcpBackend implements McpBackend {
     if (s['mode'] != 'agent') {
       return 'The session is already under human control.';
     }
+    await releaseHeld(sessionId);
     await _callWindow(
         kWindowEventMcpSetControl, {'session_id': sessionId, 'agent': false});
-    await releaseHeld(sessionId);
     return 'Released. The human is in control; you can only read this session.';
   }
 
@@ -497,8 +533,8 @@ class RustDeskMcpBackend implements McpBackend {
   /// Holds [modifiers] as real key presses around [body]. The remote side
   /// only keeps a modifier down for the single mouse-down event that carries
   /// it, so a click or wheel would otherwise lose it before it completes.
-  Future<void> _holding(UuidValue sid, List<String> modifiers,
-      Future<void> Function() body) async {
+  Future<void> _holding(McpInputState input, UuidValue sid,
+      List<String> modifiers, Future<void> Function() body) async {
     if (modifiers.isEmpty) return body();
     Future<void> key(String m, bool down) => bind.sessionInputKey(
           sessionId: sid,
@@ -512,6 +548,7 @@ class RustDeskMcpBackend implements McpBackend {
         );
     try {
       for (final m in modifiers) {
+        input.checkActive();
         await key(m, true);
       }
       await body();
@@ -537,7 +574,8 @@ class RustDeskMcpBackend implements McpBackend {
         final sid = UuidValue(sessionId);
         final p = _toRemote(s, display, x, y);
         final end = action == 'drag' ? _toRemote(s, display, toX!, toY!) : null;
-        return _holding(sid, modifiers, () async {
+        return _holding(input, sid, modifiers, () async {
+          input.checkActive();
           await _sendMouse(
               sid, mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
           input.pointer = p;
@@ -548,25 +586,30 @@ class RustDeskMcpBackend implements McpBackend {
             'down' || 'up' || 'drag' => kMcpMouseButtons[button]!,
             _ => 'left',
           };
-          Future<void> press(String type, ({int x, int y}) at) => _sendMouse(
-              sid,
-              mcpMouseMessage(
-                  type: type,
-                  buttons: buttons,
-                  x: at.x,
-                  y: at.y,
-                  modifiers: modifiers));
+          Future<void> press(String type, ({int x, int y}) at) async {
+            input.checkActive();
+            input.pointer = at;
+            if (type == 'down') input.buttons.add(buttons);
+            await _sendMouse(
+                sid,
+                mcpMouseMessage(
+                    type: type,
+                    buttons: buttons,
+                    x: at.x,
+                    y: at.y,
+                    modifiers: modifiers));
+            if (type == 'up') input.buttons.remove(buttons);
+          }
+
           if (action == 'down' || action == 'up') {
-            await press(action, p);
-            action == 'down'
-                ? input.buttons.add(buttons)
-                : input.buttons.remove(buttons);
-            return;
+            return press(action, p);
           }
           if (end != null) {
             await press('down', p);
             for (final point in mcpDragPath(p, end)) {
               await Future.delayed(const Duration(milliseconds: 20));
+              input.checkActive();
+              input.pointer = point;
               await _sendMouse(
                   sid,
                   mcpMouseMessage(
@@ -592,12 +635,14 @@ class RustDeskMcpBackend implements McpBackend {
         final s = await _writable(sessionId);
         final sid = UuidValue(sessionId);
         final p = _toRemote(s, display, x, y);
-        return _holding(sid, modifiers, () async {
+        return _holding(input, sid, modifiers, () async {
+          input.checkActive();
           await _sendMouse(
               sid, mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
           input.pointer = p;
           final step = mcpWheelStep(direction);
           for (var i = 0; i < amount.clamp(0, 50); i++) {
+            input.checkActive();
             await _sendMouse(
                 sid,
                 mcpMouseMessage(
@@ -613,8 +658,7 @@ class RustDeskMcpBackend implements McpBackend {
         final sid = UuidValue(sessionId);
         final chunks = mcpTextChunks(text, delayed: delayMs > 0).toList();
         for (var i = 0; i < chunks.length; i++) {
-          // The human may take over during a slow delayed run.
-          if (delayMs > 0 && i > 0) await _writable(sessionId);
+          input.checkActive();
           if (chunks[i] == '\n') {
             // Unicode LF is not an Enter key on Windows.
             await _pressKey(input, sessionId, 'VK_RETURN', const [], 'press');
@@ -640,8 +684,10 @@ class RustDeskMcpBackend implements McpBackend {
         return _pressKey(input, sessionId, key, modifiers, action);
       });
 
-  Future<void> _pressKey(_AgentInput input, String sessionId, String key,
+  Future<void> _pressKey(McpInputState input, String sessionId, String key,
       List<String> modifiers, String action) async {
+    input.checkActive();
+    if (action == 'down') input.keys.add(key);
     await bind.sessionInputKey(
       sessionId: UuidValue(sessionId),
       name: key,
@@ -652,7 +698,6 @@ class RustDeskMcpBackend implements McpBackend {
       shift: modifiers.contains('shift'),
       command: modifiers.contains('command'),
     );
-    if (action == 'down') input.keys.add(key);
     if (action == 'up') input.keys.remove(key);
   }
 
@@ -660,6 +705,7 @@ class RustDeskMcpBackend implements McpBackend {
   Future<void> disconnect(String sessionId) async {
     final s = await _find(sessionId);
     if (s['mode'] != 'agent') throw McpToolException(mcpHumanControlMessage);
+    await releaseHeld(sessionId);
     final closed =
         await _callWindow(kWindowEventMcpClose, {'session_id': sessionId});
     if (closed != true) {

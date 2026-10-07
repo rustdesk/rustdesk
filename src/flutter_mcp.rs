@@ -4,6 +4,8 @@ use crate::flutter_ffi::SessionID;
 use base::message_proto::ScreenshotResponse;
 use std::{
     collections::{HashSet, VecDeque},
+    fs::OpenOptions,
+    io::Write,
     sync::{Mutex, RwLock},
 };
 
@@ -59,10 +61,22 @@ pub fn save_screenshot(sid: &str, path: &str) -> Option<String> {
     if !response.msg.is_empty() {
         return Some(response.msg);
     }
-    Some(match std::fs::write(path, &response.data) {
-        Ok(()) => String::new(),
-        Err(e) => e.to_string(),
-    })
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    Some(
+        match options
+            .open(path)
+            .and_then(|mut f| f.write_all(&response.data))
+        {
+            Ok(()) => String::new(),
+            Err(e) => e.to_string(),
+        },
+    )
 }
 
 #[cfg(test)]
@@ -70,11 +84,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn closing_session_clears_agent_control() {
+        let session_id = SessionID::new_v4();
+        set_agent_control(session_id, true);
+        assert!(is_agent_control(&session_id));
+        crate::flutter_ffi::session_close(session_id);
+        assert!(!is_agent_control(&session_id));
+    }
+
+    #[test]
     fn saves_only_the_requested_screenshot() {
         let session_id = SessionID::new_v4();
         let late = screenshot_sid(&session_id, "late");
         let wanted = screenshot_sid(&session_id, "wanted");
-        for (sid, data) in [(&late, "late image"), (&wanted, "wanted image")] {
+        let other = screenshot_sid(&SessionID::new_v4(), "wanted");
+        for (sid, data) in [
+            (&late, "late image"),
+            (&other, "other session"),
+            (&wanted, "wanted image"),
+        ] {
             let response = ScreenshotResponse {
                 sid: sid.clone(),
                 data: data.as_bytes().to_vec().into(),
@@ -88,7 +116,21 @@ mod tests {
 
         assert_eq!(save_screenshot(&wanted, &path).as_deref(), Some(""));
         assert_eq!(std::fs::read(&*path).unwrap(), b"wanted image");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&*path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
         assert_eq!(save_screenshot(&wanted, &path), None);
+        std::fs::remove_file(&*path).unwrap();
+        assert_eq!(save_screenshot(&other, &path).as_deref(), Some(""));
+        assert_eq!(std::fs::read(&*path).unwrap(), b"other session");
+        // A pre-existing path must never be overwritten (including symlinks).
+        assert!(!save_screenshot(&late, &path).unwrap().is_empty());
+        assert_eq!(std::fs::read(&*path).unwrap(), b"other session");
         std::fs::remove_file(&*path).unwrap();
     }
 }

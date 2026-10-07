@@ -36,6 +36,9 @@ Future<dynamic> handleMcpWindowCall(
       final args = jsonDecode(arguments as String);
       final ffi = _bySessionId(sessions, args['session_id']);
       if (ffi == null) return false;
+      if (args['agent'] != true) {
+        ffi.dialogManager.dismissByTag('mcp-agent-control-${ffi.sessionId}');
+      }
       ffi.ffiModel.setAgentControl(args['agent'] == true);
       return true;
     case kWindowEventMcpAuthenticate:
@@ -105,7 +108,7 @@ Future<bool> _askAgentControl(String peerId, FFI ffi) async {
   final window = WindowController.fromWindowId(kWindowId!);
   await window.show();
   await window.focus();
-  final tag = 'mcp-agent-control-${DateTime.now().microsecondsSinceEpoch}';
+  final tag = 'mcp-agent-control-${ffi.sessionId}';
   final answer = await ffi.dialogManager
       .show<bool>(
           (setState, close, context) => CustomAlertDialog(
@@ -141,12 +144,16 @@ Future<bool> _askAgentControl(String peerId, FFI ffi) async {
   return true;
 }
 
-void _takeOver(FFI ffi) {
-  ffi.ffiModel.setAgentControl(false);
-  // The main window releases what the agent still holds down.
-  DesktopMultiWindow.invokeMethod(kMainWindowId,
-          kWindowEventMcpControlTakenOver, ffi.sessionId.toString())
-      .catchError((e) => debugPrint('Failed to report the take-over: $e'));
+Future<void> _takeOver(FFI ffi) async {
+  try {
+    // Keep human input gated until the agent's last release has been sent.
+    await DesktopMultiWindow.invokeMethod(kMainWindowId,
+        kWindowEventMcpControlTakenOver, ffi.sessionId.toString());
+  } catch (e) {
+    debugPrint('Failed to release MCP input: $e');
+  } finally {
+    ffi.ffiModel.setAgentControl(false);
+  }
 }
 
 /// Shown over a remote session while an agent has exclusive control.
