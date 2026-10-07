@@ -361,6 +361,7 @@ class InputModel {
         if (type == 'down') {
           final model = _activeSideButtonModel;
           if (model != null &&
+              !model._agentControl &&
               !(model.isViewOnly && !model.showMyCursor) &&
               model.keyboardPerm &&
               !model.isViewCamera) {
@@ -482,6 +483,7 @@ class InputModel {
   String get id => parent.target?.id ?? '';
   String? get peerPlatform => parent.target?.ffiModel.pi.platform;
   String get peerVersion => parent.target?.ffiModel.pi.version ?? '';
+  bool get _agentControl => parent.target?.ffiModel.agentControl ?? false;
   bool get isViewOnly => parent.target!.ffiModel.viewOnly;
   bool get showMyCursor => parent.target!.ffiModel.showMyCursor;
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
@@ -499,7 +501,7 @@ class InputModel {
     _relativeMouse = RelativeMouseModel(
       sessionId: sessionId,
       enabled: relativeMouseMode,
-      keyboardPerm: () => keyboardPerm,
+      keyboardPerm: () => !_agentControl && keyboardPerm,
       isViewCamera: () => isViewCamera,
       peerVersion: () => peerVersion,
       peerPlatform: () => peerPlatform,
@@ -1098,6 +1100,7 @@ class InputModel {
 
   /// Send scroll event with scroll distance [y].
   Future<void> scroll(int y) async {
+    if (_agentControl) return;
     if (isViewCamera) return;
     await bind.sessionSendMouse(
         sessionId: sessionId,
@@ -1130,6 +1133,7 @@ class InputModel {
 
   /// Send mouse press event.
   Future<void> sendMouse(String type, MouseButtons button) async {
+    if (_agentControl) return;
     if (!keyboardPerm) return;
     if (isViewCamera) return;
     await _sendMouseUnchecked(type, button);
@@ -1165,6 +1169,7 @@ class InputModel {
 
   /// Send mouse movement event with distance in [x] and [y].
   Future<void> moveMouse(double x, double y) async {
+    if (_agentControl) return;
     if (!keyboardPerm) return;
     if (isViewCamera) return;
     var x2 = x.toInt();
@@ -1284,6 +1289,7 @@ class InputModel {
   }
 
   void onPointHoverImage(PointerHoverEvent e) {
+    if (_agentControl) return;
     _stopFling = true;
     if (isViewOnly && !showMyCursor) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
@@ -1405,7 +1411,7 @@ class InputModel {
     }
 
     _flingTimer = Timer(Duration(milliseconds: delay), () {
-      if (_stopFling) {
+      if (_stopFling || _agentControl) {
         _fling = false;
         return;
       }
@@ -1450,6 +1456,11 @@ class InputModel {
   }
 
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
+    if (_agentControl) {
+      _stopFling = true;
+      _trackpadLastDelta = Offset.zero;
+      return;
+    }
     if (isViewCamera) return;
     if (peerPlatform == kPeerPlatformAndroid) {
       handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
@@ -1511,6 +1522,7 @@ class InputModel {
   }
 
   void onPointDownImage(PointerDownEvent e) {
+    if (_agentControl) return;
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
     if (isDesktop) _queryOtherWindowCoords = true;
@@ -1556,6 +1568,7 @@ class InputModel {
   }
 
   void onPointUpImage(PointerUpEvent e) {
+    if (_agentControl) return;
     if (isDesktop) _queryOtherWindowCoords = false;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
@@ -1579,6 +1592,7 @@ class InputModel {
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
+    if (_agentControl) return;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
@@ -1748,6 +1762,7 @@ class InputModel {
   }
 
   void handlePointerEvent(String kind, String type, Offset offset) {
+    if (_agentControl) return;
     double x = offset.dx;
     double y = offset.dy;
     if (_checkPeerControlProtected(x, y)) {
@@ -1895,6 +1910,7 @@ class InputModel {
     bool moveCanvas = true,
     bool edgeScroll = false,
   }) {
+    if (_agentControl) return null;
     final evtToPeer = processEventToPeer(evt, offset,
         onExit: onExit, moveCanvas: moveCanvas, edgeScroll: edgeScroll);
     if (evtToPeer != null) {
