@@ -103,8 +103,10 @@ pub struct IpcDrmCapturer {
     cur_h: usize,
     cur_fmt: Pixfmt,
     got_frame: bool,
-    // The last frame handed to the encoder: a repeat of it is dropped, as the other capturers do.
-    saved_raw_data: Vec<u8>,
+    // A turned frame lands here first, to be compared with `cur` before it replaces it.
+    turned: Vec<u8>,
+    // Set when the frame returned last was not sent (its encode failed): a repeat of it goes out.
+    resend: bool,
 }
 
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
@@ -359,6 +361,15 @@ pub(super) fn take_unrotated_snapshot_pending() -> bool {
 static UINPUT_REFRESH_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 impl IpcDrmCapturer {
+    /// Whether `next`, a `w`x`h` frame in `fmt`, repeats the frame `frame()` returned last. Never
+    /// before the first frame, nor after forget_last_frame.
+    fn is_repeat(&self, next: &[u8], w: usize, h: usize, fmt: Pixfmt) -> bool {
+        self.got_frame
+            && !self.resend
+            && (w, h, fmt) == (self.cur_w, self.cur_h, self.cur_fmt)
+            && next == self.cur.as_slice()
+    }
+
     /// The service resolves indices against ITS OWN enumeration, so the receive thread re-resolves
     /// `expected` by connector identity and returns the index geometry must be read at.
     pub fn new(
@@ -428,7 +439,8 @@ impl IpcDrmCapturer {
                 cur_h: 0,
                 cur_fmt: Pixfmt::BGRA,
                 got_frame: false,
-                saved_raw_data: Vec::new(),
+                turned: Vec::new(),
+                resend: false,
             },
             displays,
             wire_idx,
@@ -472,6 +484,10 @@ impl Drop for IpcDrmCapturer {
 }
 
 impl TraitCapturer for IpcDrmCapturer {
+    fn forget_last_frame(&mut self) {
+        self.resend = true;
+    }
+
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         let deadline = Instant::now() + timeout;
         {
@@ -529,7 +545,14 @@ impl TraitCapturer for IpcDrmCapturer {
                         ),
                     ));
                 }
+                // The producer grabs on a timer, so a still screen arrives as the same bytes every
+                // tick: a repeat of the frame returned last is dropped. Compared before it would
+                // replace `cur`, so no copy of the last frame is kept.
                 if t == 0 {
+                    if self.is_repeat(&buf, fw, fh, fmt) {
+                        self.shared.slot.lock().unwrap().recycle(buf);
+                        return Err(io::ErrorKind::WouldBlock.into());
+                    }
                     let previous = std::mem::replace(&mut self.cur, buf);
                     self.shared.slot.lock().unwrap().recycle(previous);
                 } else if !matches!(fmt, Pixfmt::BGRA | Pixfmt::RGBA) {
@@ -548,9 +571,16 @@ impl TraitCapturer for IpcDrmCapturer {
                         ),
                     ));
                 } else {
-                    unrotate_bgra(&buf, w, h, t, &mut self.cur);
+                    let mut turned = std::mem::take(&mut self.turned);
+                    unrotate_bgra(&buf, w, h, t, &mut turned);
                     self.shared.slot.lock().unwrap().recycle(buf);
+                    if self.is_repeat(&turned, fw, fh, fmt) {
+                        self.turned = turned;
+                        return Err(io::ErrorKind::WouldBlock.into());
+                    }
+                    self.turned = std::mem::replace(&mut self.cur, turned);
                 }
+                self.resend = false;
                 self.cur_w = fw;
                 self.cur_h = fh;
                 self.cur_fmt = fmt;
@@ -578,8 +608,6 @@ impl TraitCapturer for IpcDrmCapturer {
                 return Err(io::Error::new(io::ErrorKind::Other, err));
             }
         }
-        // The producer grabs on a timer, so a still screen arrives as the same bytes every tick.
-        scrap::would_block_if_equal(&mut self.saved_raw_data, &self.cur)?;
         Ok(Frame::PixelBuffer(PixelBuffer::new(
             &self.cur,
             self.cur_fmt,
@@ -2353,7 +2381,8 @@ mod drm_capturer_tests {
             cur_h: 0,
             cur_fmt: Pixfmt::BGRA,
             got_frame: false,
-            saved_raw_data: Vec::new(),
+            turned: Vec::new(),
+            resend: false,
         }
     }
 
@@ -2884,6 +2913,12 @@ mod drm_capturer_tests {
             Ok(_) => panic!("expected a pixel-buffer frame"),
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
+        // The same scanout again: once turned it repeats the frame above, so it is dropped.
+        put_frame_with(&c, w, h, Some(0x1), &src);
+        assert!(matches!(
+            c.frame(Duration::from_millis(50)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock
+        ));
         // Hardware rotation (i915 + mutter): the scanout is already upright and is left alone.
         put_frame_with(&c, w, h, Some(0x4), &src);
         match c.frame(Duration::from_millis(50)) {
@@ -2895,7 +2930,7 @@ mod drm_capturer_tests {
         }
         // A producer that cannot say (pre-0.5.8 library) keeps the old rule: 180 left alone.
         // That is the image of the case above, which frame() would drop as a repeat.
-        c.saved_raw_data.clear();
+        c.forget_last_frame();
         put_frame_with(&c, w, h, None, &src);
         match c.frame(Duration::from_millis(50)) {
             Ok(Frame::PixelBuffer(pb)) => {
@@ -2918,6 +2953,10 @@ mod drm_capturer_tests {
             c.frame(Duration::from_millis(50)),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock
         ));
+        // Unless the encode of that frame failed: then the repeat goes out again.
+        c.forget_last_frame();
+        put_frame_with(&c, w, h, None, &still);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
         put_frame_with(&c, w, h, None, &moved);
         assert!(c.frame(Duration::from_millis(50)).is_ok());
     }

@@ -796,6 +796,8 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         let time = now - start;
         let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
+        // A frame whose encode failed must not be dropped as a repeat of itself next time.
+        let mut unsent = false;
         let res = match c.frame(spf) {
             Ok(frame) => {
                 repeat_encode_counter = 0;
@@ -848,7 +850,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     }
 
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
-                    let send_conn_ids = handle_one_frame(
+                    let (send_conn_ids, encoded) = handle_one_frame(
                         display_idx,
                         &sp,
                         frame,
@@ -862,6 +864,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     )?;
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
+                    unsent = !encoded;
                 }
                 #[cfg(windows)]
                 {
@@ -875,6 +878,9 @@ fn run(vs: VideoService) -> ResultType<()> {
             }
             Err(err) => Err(err),
         };
+        if unsent {
+            c.forget_last_frame();
+        }
 
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
@@ -912,7 +918,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     // yun.len() > 0 means the frame is not texture.
                     if repeat_encode_counter < repeat_encode_max {
                         repeat_encode_counter += 1;
-                        let send_conn_ids = handle_one_frame(
+                        let (send_conn_ids, _) = handle_one_frame(
                             display_idx,
                             &sp,
                             EncodeInput::YUV(&yuv),
@@ -1234,6 +1240,7 @@ fn check_privacy_mode_changed(
 }
 
 #[inline]
+// The connections the frame went to, and whether it was encoded at all.
 fn handle_one_frame(
     display: usize,
     sp: &GenericService,
@@ -1245,7 +1252,7 @@ fn handle_one_frame(
     first_frame: &mut bool,
     width: usize,
     height: usize,
-) -> ResultType<HashSet<i32>> {
+) -> ResultType<(HashSet<i32>, bool)> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
         if sps.has_subscribes() {
@@ -1256,11 +1263,13 @@ fn handle_one_frame(
     })?;
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
+    let mut encoded = false;
     let first = *first_frame;
     *first_frame = false;
     match encoder.encode_to_message(frame, ms) {
         Ok(mut vf) => {
             *encode_fail_counter = 0;
+            encoded = true;
             vf.display = display as _;
             let mut msg = Message::new();
             msg.set_video_frame(vf);
@@ -1302,7 +1311,7 @@ fn handle_one_frame(
             }
         }
     }
-    Ok(send_conn_ids)
+    Ok((send_conn_ids, encoded))
 }
 
 #[inline]
