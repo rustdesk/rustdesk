@@ -1980,7 +1980,19 @@ pub fn main_load_group() -> String {
 }
 
 pub fn session_send_pointer(session_id: SessionID, msg: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::flutter_mcp::send_human_pointer(session_id, &msg, || {
+            super::flutter::session_send_pointer(session_id, msg.clone());
+        });
+        return;
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     super::flutter::session_send_pointer(session_id, msg);
+}
+
+pub fn session_send_mcp_mouse(session_id: SessionID, grant_id: String, msg: String) {
+    send_mouse(session_id, msg, Some(&grant_id));
 }
 
 /// Send mouse event from Flutter to the remote peer.
@@ -2012,6 +2024,10 @@ pub fn session_send_pointer(session_id: SessionID, msg: String) {
 /// If these assumptions are violated (e.g., `relative_mouse_mode` is added to normal events),
 /// legitimate mouse events may be silently dropped by the early-return logic below.
 pub fn session_send_mouse(session_id: SessionID, msg: String) {
+    send_mouse(session_id, msg, None);
+}
+
+fn send_mouse(session_id: SessionID, msg: String, _grant_id: Option<&str>) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         // Relative mouse mode marker validation (Flutter-only).
         // This only validates and filters markers; the server tracks per-connection
@@ -2110,6 +2126,14 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
             } << 3;
         }
         if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                crate::flutter_mcp::send_mouse(session_id, _grant_id, mask, || {
+                    session.send_mouse(mask, x, y, alt, ctrl, shift, command);
+                });
+                return;
+            }
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             session.send_mouse(mask, x, y, alt, ctrl, shift, command);
         }
     }

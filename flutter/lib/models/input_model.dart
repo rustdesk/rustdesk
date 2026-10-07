@@ -361,7 +361,6 @@ class InputModel {
         if (type == 'down') {
           final model = _activeSideButtonModel;
           if (model != null &&
-              !model._agentControl &&
               !(model.isViewOnly && !model.showMyCursor) &&
               model.keyboardPerm &&
               !model.isViewCamera) {
@@ -449,8 +448,6 @@ class InputModel {
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
-  final Set<String> _heldMouseButtons = {};
-  bool _touchPanStarted = false;
   Offset lastMousePos = Offset.zero;
   int _lastWheelTsUs = 0;
 
@@ -485,7 +482,6 @@ class InputModel {
   String get id => parent.target?.id ?? '';
   String? get peerPlatform => parent.target?.ffiModel.pi.platform;
   String get peerVersion => parent.target?.ffiModel.pi.version ?? '';
-  bool get _agentControl => parent.target?.ffiModel.agentControl ?? false;
   bool get isViewOnly => parent.target!.ffiModel.viewOnly;
   bool get showMyCursor => parent.target!.ffiModel.showMyCursor;
   double get devicePixelRatio => parent.target!.canvasModel.devicePixelRatio;
@@ -503,7 +499,7 @@ class InputModel {
     _relativeMouse = RelativeMouseModel(
       sessionId: sessionId,
       enabled: relativeMouseMode,
-      keyboardPerm: () => !_agentControl && keyboardPerm,
+      keyboardPerm: () => keyboardPerm,
       isViewCamera: () => isViewCamera,
       peerVersion: () => peerVersion,
       peerPlatform: () => peerPlatform,
@@ -1102,7 +1098,6 @@ class InputModel {
 
   /// Send scroll event with scroll distance [y].
   Future<void> scroll(int y) async {
-    if (_agentControl) return;
     if (isViewCamera) return;
     await bind.sessionSendMouse(
         sessionId: sessionId,
@@ -1128,7 +1123,6 @@ class InputModel {
   /// Used for side button releases that must go through even if permissions
   /// changed after the matching down was sent.
   Future<void> _sendMouseUnchecked(String type, MouseButtons button) async {
-    _trackMouseButton(type, button.value);
     await bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
@@ -1136,42 +1130,9 @@ class InputModel {
 
   /// Send mouse press event.
   Future<void> sendMouse(String type, MouseButtons button) async {
-    if (_agentControl) {
-      if (type == 'up' && _heldMouseButtons.remove(button.value)) {
-        await bind.sessionSendMouse(
-            sessionId: sessionId,
-            msg: json.encode({'type': 'up', 'buttons': button.value}));
-      }
-      return;
-    }
     if (!keyboardPerm) return;
     if (isViewCamera) return;
     await _sendMouseUnchecked(type, button);
-  }
-
-  void _trackMouseButton(String type, String button) {
-    if (button.isEmpty) return;
-    if (type == 'down') _heldMouseButtons.add(button);
-    if (type == 'up') _heldMouseButtons.remove(button);
-  }
-
-  void _releaseMouseButtons(int buttons) {
-    for (final bit in [
-      kPrimaryMouseButton,
-      kSecondaryMouseButton,
-      kMiddleMouseButton,
-      kBackMouseButton,
-      kForwardMouseButton,
-    ]) {
-      final button = mouseButtonsToPeer(bit);
-      if (buttons & bit != 0 && _heldMouseButtons.remove(button)) {
-        // Finish only a press we sent before handover, without moving the cursor
-        // or reapplying human modifiers to the agent's input.
-        bind.sessionSendMouse(
-            sessionId: sessionId,
-            msg: json.encode({'type': 'up', 'buttons': button}));
-      }
-    }
   }
 
   void enterOrLeave(bool enter) {
@@ -1204,7 +1165,6 @@ class InputModel {
 
   /// Send mouse movement event with distance in [x] and [y].
   Future<void> moveMouse(double x, double y) async {
-    if (_agentControl) return;
     if (!keyboardPerm) return;
     if (isViewCamera) return;
     var x2 = x.toInt();
@@ -1324,7 +1284,6 @@ class InputModel {
   }
 
   void onPointHoverImage(PointerHoverEvent e) {
-    if (_agentControl) return;
     _stopFling = true;
     if (isViewOnly && !showMyCursor) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
@@ -1446,7 +1405,7 @@ class InputModel {
     }
 
     _flingTimer = Timer(Duration(milliseconds: delay), () {
-      if (_stopFling || _agentControl) {
+      if (_stopFling) {
         _fling = false;
         return;
       }
@@ -1491,14 +1450,6 @@ class InputModel {
   }
 
   void onPointerPanZoomEnd(PointerPanZoomEndEvent e) {
-    if (_agentControl) {
-      if (_touchPanStarted) {
-        handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
-      }
-      _stopFling = true;
-      _trackpadLastDelta = Offset.zero;
-      return;
-    }
     if (isViewCamera) return;
     if (peerPlatform == kPeerPlatformAndroid) {
       handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
@@ -1560,7 +1511,6 @@ class InputModel {
   }
 
   void onPointDownImage(PointerDownEvent e) {
-    if (_agentControl) return;
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
     if (isDesktop) _queryOtherWindowCoords = true;
@@ -1596,11 +1546,8 @@ class InputModel {
       // In relative mouse mode, send button events without position.
       // Use _relativeMouse.enabled.value consistently with the guard above.
       if (_relativeMouse.enabled.value) {
-        final evt = _getMouseEvent(e, _kMouseEventDown);
-        if (keyboardPerm) {
-          _trackMouseButton('down', mouseButtonsToPeer(evt['buttons']));
-        }
-        _relativeMouse.sendRelativeMouseButton(evt);
+        _relativeMouse
+            .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventDown));
       } else {
         final canvasPosition = _pointerPositionForRemoteCanvas(e);
         handleMouse(_getMouseEvent(e, _kMouseEventDown), canvasPosition);
@@ -1609,14 +1556,6 @@ class InputModel {
   }
 
   void onPointUpImage(PointerUpEvent e) {
-    if (_agentControl) {
-      if (e.kind == ui.PointerDeviceKind.mouse) {
-        _releaseMouseButtons(_lastButtons);
-        _lastButtons = 0;
-      }
-      if (isDesktop) _queryOtherWindowCoords = false;
-      return;
-    }
     if (isDesktop) _queryOtherWindowCoords = false;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
@@ -1630,9 +1569,8 @@ class InputModel {
       // In relative mouse mode, send button events without position.
       // Use _relativeMouse.enabled.value consistently with the guard above.
       if (_relativeMouse.enabled.value) {
-        final evt = _getMouseEvent(e, _kMouseEventUp);
-        _trackMouseButton('up', mouseButtonsToPeer(evt['buttons']));
-        _relativeMouse.sendRelativeMouseButton(evt);
+        _relativeMouse
+            .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventUp));
       } else {
         final canvasPosition = _pointerPositionForRemoteCanvas(e);
         handleMouse(_getMouseEvent(e, _kMouseEventUp), canvasPosition);
@@ -1641,13 +1579,6 @@ class InputModel {
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
-    if (_agentControl) {
-      if (e.kind == ui.PointerDeviceKind.mouse) {
-        _releaseMouseButtons(_lastButtons & ~e.buttons);
-        _lastButtons &= e.buttons;
-      }
-      return;
-    }
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
@@ -1817,12 +1748,9 @@ class InputModel {
   }
 
   void handlePointerEvent(String kind, String type, Offset offset) {
-    final finishingPan = type == kMouseEventTypePanEnd && _touchPanStarted;
-    final agentControl = _agentControl;
-    if (agentControl && !finishingPan) return;
     double x = offset.dx;
     double y = offset.dy;
-    if (!(agentControl && finishingPan) && _checkPeerControlProtected(x, y)) {
+    if (_checkPeerControlProtected(x, y)) {
       return;
     }
     // Only touch events are handled for now. So we can just ignore buttons.
@@ -1854,10 +1782,8 @@ class InputModel {
 
     final evt = PointerEventToRust(kind, type, evtValue).toJson();
     if (isViewCamera) return;
-    if (type == kMouseEventTypePanStart) _touchPanStarted = true;
-    if (type == kMouseEventTypePanEnd) _touchPanStarted = false;
     bind.sessionSendPointer(
-        sessionId: sessionId, msg: json.encode(agentControl ? evt : modify(evt)));
+        sessionId: sessionId, msg: json.encode(modify(evt)));
   }
 
   bool _checkPeerControlProtected(double x, double y) {
@@ -1969,11 +1895,9 @@ class InputModel {
     bool moveCanvas = true,
     bool edgeScroll = false,
   }) {
-    if (_agentControl) return null;
     final evtToPeer = processEventToPeer(evt, offset,
         onExit: onExit, moveCanvas: moveCanvas, edgeScroll: edgeScroll);
     if (evtToPeer != null) {
-      _trackMouseButton(evtToPeer['type'], evtToPeer['buttons']);
       bind.sessionSendMouse(
           sessionId: sessionId, msg: json.encode(modify(evtToPeer)));
     }

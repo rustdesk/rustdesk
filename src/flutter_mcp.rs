@@ -1,6 +1,11 @@
 //! Native state behind the MCP server that runs in the Flutter main window.
 
-use crate::flutter_ffi::SessionID;
+use crate::{
+    flutter_ffi::SessionID,
+    input::{
+        MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_MASK, MOUSE_TYPE_UP,
+    },
+};
 use base::message_proto::ScreenshotResponse;
 use std::{
     collections::{HashMap, VecDeque},
@@ -17,29 +22,149 @@ const REQUEST_SEPARATOR: char = '#';
 const MAX_SCREENSHOTS: usize = 4;
 
 lazy_static::lazy_static! {
-    static ref AGENT_SESSIONS: RwLock<HashMap<SessionID, String>> = Default::default();
+    static ref INPUT_OWNERS: RwLock<HashMap<SessionID, InputOwner>> = Default::default();
     static ref SCREENSHOTS: Mutex<VecDeque<ScreenshotResponse>> = Default::default();
 }
 
-pub fn set_agent_control(session_id: SessionID, grant_id: String) {
-    let mut sessions = AGENT_SESSIONS.write().unwrap();
-    if !grant_id.is_empty() {
-        sessions.insert(session_id, grant_id);
-    } else {
-        sessions.remove(&session_id);
+#[derive(Default)]
+struct InputOwner {
+    grant_id: String,
+    human_buttons: i32,
+    human_pan: Option<(i32, i32)>,
+}
+
+impl InputOwner {
+    fn accepts(&self, grant_id: Option<&str>) -> bool {
+        match grant_id {
+            Some(id) => !id.is_empty() && self.grant_id == id,
+            None => self.grant_id.is_empty(),
+        }
+    }
+
+    fn grant(&mut self, grant_id: String, release: impl FnOnce(i32, Option<(i32, i32)>)) {
+        release(
+            std::mem::take(&mut self.human_buttons),
+            self.human_pan.take(),
+        );
+        self.grant_id = grant_id;
+    }
+
+    fn mouse(&mut self, grant_id: Option<&str>, mask: i32, send: impl FnOnce()) -> bool {
+        if !self.accepts(grant_id) {
+            return false;
+        }
+        if grant_id.is_none() {
+            match mask & MOUSE_TYPE_MASK {
+                MOUSE_TYPE_DOWN => self.human_buttons |= mask >> 3,
+                MOUSE_TYPE_UP => self.human_buttons &= !(mask >> 3),
+                _ => {}
+            }
+        }
+        send();
+        true
+    }
+
+    fn pointer(&mut self, msg: &str, send: impl FnOnce()) {
+        if !self.accepts(None) {
+            return;
+        }
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(msg) {
+            if value["k"] == "touch" {
+                let event = &value["v"];
+                match event["t"].as_str() {
+                    Some("pan_start") => {
+                        if let (Some(x), Some(y)) =
+                            (event["v"]["x"].as_i64(), event["v"]["y"].as_i64())
+                        {
+                            self.human_pan = Some((x as _, y as _));
+                        }
+                    }
+                    Some("pan_end") => self.human_pan = None,
+                    _ => {}
+                }
+            }
+        }
+        send();
     }
 }
 
-pub fn is_agent_control(session_id: &SessionID) -> bool {
-    AGENT_SESSIONS.read().unwrap().contains_key(session_id)
+pub fn set_agent_control(session_id: SessionID, grant_id: String) {
+    let mut owners = INPUT_OWNERS.write().unwrap();
+    if !grant_id.is_empty() {
+        // Keep the same lock through release and grant: neither a human send
+        // nor the first agent send can pass the ownership boundary out of order.
+        owners
+            .entry(session_id)
+            .or_default()
+            .grant(grant_id, |buttons, pan| {
+                if let Some(session) =
+                    crate::flutter::sessions::get_session_by_session_id(&session_id)
+                {
+                    let swap = session.get_toggle_option("swap-left-right-mouse".to_owned());
+                    for button in [1, 2, 4, 8, 16] {
+                        if buttons & button == 0 {
+                            continue;
+                        }
+                        let button = match (swap, button) {
+                            (true, MOUSE_BUTTON_LEFT) => MOUSE_BUTTON_RIGHT,
+                            (true, MOUSE_BUTTON_RIGHT) => MOUSE_BUTTON_LEFT,
+                            _ => button,
+                        };
+                        // Bypass live human modifiers while releasing their old input.
+                        crate::client::send_mouse(
+                            (button << 3) | MOUSE_TYPE_UP,
+                            0,
+                            0,
+                            false,
+                            false,
+                            false,
+                            false,
+                            &*session,
+                        );
+                    }
+                    if let Some((x, y)) = pan {
+                        session.send_touch_pan_event("pan_end", x, y, false, false, false, false);
+                    }
+                }
+            });
+    } else {
+        owners.remove(&session_id);
+    }
 }
 
-pub fn agent_control_grant(session_id: &SessionID) -> String {
-    AGENT_SESSIONS
+pub fn send_mouse(
+    session_id: SessionID,
+    grant_id: Option<&str>,
+    mask: i32,
+    send: impl FnOnce(),
+) -> bool {
+    INPUT_OWNERS
+        .write()
+        .unwrap()
+        .entry(session_id)
+        .or_default()
+        .mouse(grant_id, mask, send)
+}
+
+pub fn send_human_pointer(session_id: SessionID, msg: &str, send: impl FnOnce()) {
+    let mut owners = INPUT_OWNERS.write().unwrap();
+    owners.entry(session_id).or_default().pointer(msg, send);
+}
+
+pub fn is_agent_control(session_id: &SessionID) -> bool {
+    INPUT_OWNERS
         .read()
         .unwrap()
         .get(session_id)
-        .cloned()
+        .map_or(false, |owner| !owner.grant_id.is_empty())
+}
+
+pub fn agent_control_grant(session_id: &SessionID) -> String {
+    INPUT_OWNERS
+        .read()
+        .unwrap()
+        .get(session_id)
+        .map(|owner| owner.grant_id.clone())
         .unwrap_or_default()
 }
 
@@ -91,6 +216,48 @@ pub fn save_screenshot(sid: &str, path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn human_release_cannot_interrupt_agent_drag() {
+        let mut owner = InputOwner::default();
+        let mut sent = Vec::new();
+        let down = (MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_DOWN;
+        let up = (MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP;
+        assert!(owner.mouse(None, down, || sent.push("human down")));
+        owner.grant("grant".to_owned(), |buttons, pan| {
+            assert_eq!(buttons, MOUSE_BUTTON_LEFT);
+            assert_eq!(pan, None);
+            sent.push("handover up");
+        });
+        assert!(owner.mouse(Some("grant"), down, || sent.push("agent down")));
+        assert!(!owner.mouse(None, up, || sent.push("late human up")));
+        assert!(!owner.mouse(None, down, || sent.push("new human down")));
+        assert!(!owner.mouse(Some("old"), up, || sent.push("stale agent up")));
+        assert!(owner.mouse(Some("grant"), up, || sent.push("agent up")));
+        assert_eq!(
+            sent,
+            ["human down", "handover up", "agent down", "agent up"]
+        );
+    }
+
+    #[test]
+    fn handover_ends_human_pan_and_drops_late_pointer_events() {
+        let mut owner = InputOwner::default();
+        let mut sent = Vec::new();
+        let start = r#"{"k":"touch","v":{"t":"pan_start","v":{"x":30,"y":40}}}"#;
+        let end = r#"{"k":"touch","v":{"t":"pan_end","v":{"x":30,"y":40}}}"#;
+        owner.pointer(start, || sent.push("pan start"));
+        owner.grant("grant".to_owned(), |buttons, pan| {
+            assert_eq!(buttons, 0);
+            assert_eq!(pan, Some((30, 40)));
+            sent.push("pan end before grant");
+        });
+        owner.pointer(end, || sent.push("late pan end"));
+        owner.pointer(r#"{"k":"touch","v":{"t":"scale","v":10}}"#, || {
+            sent.push("scale")
+        });
+        assert_eq!(sent, ["pan start", "pan end before grant"]);
+    }
 
     #[test]
     fn closing_session_clears_agent_control() {

@@ -1339,6 +1339,14 @@ class RustdeskImpl {
         () => js.context.callMethod('setByName', ['send_mouse', msg]));
   }
 
+  Future<void> sessionSendMcpMouse(
+      {required UuidValue sessionId,
+      required String grantId,
+      required String msg,
+      dynamic hint}) {
+    throw UnsupportedError('MCP is only supported on desktop');
+  }
+
   Future<void> sessionRestartRemoteDevice(
       {required UuidValue sessionId, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', ['restart']));

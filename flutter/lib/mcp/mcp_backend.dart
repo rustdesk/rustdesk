@@ -564,7 +564,10 @@ class RustDeskMcpBackend implements McpBackend {
   }
 
   Future<void> _sendMouse(UuidValue sid, Map<String, String> msg) =>
-      bind.sessionSendMouse(sessionId: sid, msg: jsonEncode(msg));
+      bind.sessionSendMcpMouse(
+          sessionId: sid,
+          grantId: _input[sid.toString()]!.grantId,
+          msg: jsonEncode(msg));
 
   ({int x, int y}) _toRemote(
       Map<String, dynamic> session, int display, int x, int y) {
