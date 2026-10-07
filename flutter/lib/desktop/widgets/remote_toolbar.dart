@@ -850,6 +850,21 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
+    if (!isWeb && widget.ffi.connType == ConnType.defaultConn) {
+      toolbarItems.add(Obx(() {
+        final model = widget.ffi.ffiModel;
+        final state = model.microphoneForwardingState.value;
+        final error = model.microphoneForwardingError.value;
+        return IconButton(
+          tooltip: error.isNotEmpty ? error : translate(state == 'active'
+              ? 'Stop forwarding microphone' : ['pending', 'capturing'].contains(state)
+                  ? 'Cancel microphone forwarding' : 'Forward microphone'),
+          icon: Icon(state == 'active' ? Icons.mic : Icons.mic_off,
+              color: state == 'active' ? Colors.redAccent : ['pending', 'capturing'].contains(state) ? Colors.orange : null),
+          onPressed: model.toggleMicrophoneForwarding,
+        );
+      }));
+    }
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     // innerAxis: how the toolbar icons themselves flow.

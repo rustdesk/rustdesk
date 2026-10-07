@@ -78,6 +78,9 @@ pub struct Remote<T: InvokeUiSession> {
     sender: mpsc::UnboundedSender<Data>,
     // Stop sending local audio to remote client.
     stop_voice_call_sender: Option<std::sync::mpsc::Sender<()>>,
+    microphone_request: Option<(i64, Instant)>,
+    microphone_active: bool,
+    microphone_id: Option<i64>,
     voice_call_request_timestamp: Option<NonZeroI64>,
     read_jobs: Vec<fs::TransferJob>,
     write_jobs: Vec<fs::TransferJob>,
@@ -146,6 +149,9 @@ impl<T: InvokeUiSession> Remote<T> {
             data_count: Arc::new(AtomicUsize::new(0)),
             video_format: CodecFormat::Unknown,
             stop_voice_call_sender: None,
+            microphone_request: None,
+            microphone_active: false,
+            microphone_id: None,
             voice_call_request_timestamp: None,
             elevation_requested: false,
             peer_info: Default::default(),
@@ -329,6 +335,13 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _ = status_timer.tick() => {
+                            if self.microphone_request.as_ref().map(|(_, since)| since.elapsed() > Duration::from_secs(10)).unwrap_or(false) {
+                                self.microphone_request = None;
+                                self.microphone_id = None;
+                                self.stop_voice_call();
+                                self.handler.on_microphone_forwarding("error", "Microphone startup timed out: check peer support and microphone permission");
+                                allow_err!(peer.send(&crate::microphone_forwarding::message(0, false, false, "")).await);
+                            }
                             if self.handler.is_restarting_remote_device()
                                 && last_recv_time.elapsed() >= RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT
                             {
@@ -406,6 +419,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 log::debug!("Exit io_loop of id={}", self.handler.get_id());
+                self.microphone_request = None;
+                self.microphone_active = false;
+                self.microphone_id = None;
+                self.handler.on_microphone_forwarding("off", "");
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
                     s.send(()).ok();
@@ -609,6 +626,94 @@ impl<T: InvokeUiSession> Remote<T> {
                                 let mut msg = Message::new();
                                 msg.set_misc(misc.clone());
                                 tx_audio.send(Data::Message(msg)).ok();
+                            }
+                            _ => {}
+                        },
+                        Err(err) => {
+                            if err == TryRecvError::Empty {
+                                // ignore
+                            } else {
+                                log::debug!("Failed to record local audio channel: {}", err);
+                            }
+                            // Both arms fall through with nothing else in this loop blocking, so
+                            // without a pause the thread spun a core for the whole voice call.
+                            std::thread::sleep(std::time::Duration::from_millis(1));
+                        }
+                    }
+                }
+            });
+            return Some(tx);
+        }
+        #[cfg(target_os = "ios")]
+        {
+            None
+        }
+    }
+
+    fn start_microphone_capture(&mut self, request_id: i64) -> Option<std::sync::mpsc::Sender<()>> {
+        if self.handler.is_file_transfer()
+            || self.handler.is_port_forward()
+            || self.handler.is_terminal()
+        {
+            return None;
+        }
+        // iOS does not have this server.
+        #[cfg(not(any(target_os = "ios")))]
+        {
+            // NOTE:
+            // The client server and --server both use the same sound input device.
+            // It's better to distinguish the server side and client side.
+            // But it' not necessary for now, because it's not a common case.
+            // And it is immediately known when the input device is changed.
+            if crate::audio_service::get_voice_call_input_device().is_some() { return None; }
+            let capture_lease = crate::microphone_forwarding::CaptureLease::acquire()?;
+            let input = get_default_sound_input();
+            #[cfg(not(target_os = "android"))]
+            if input.is_none() { return None; }
+            crate::audio_service::set_voice_call_input_device(input, false);
+            // Create a channel to receive error or closed message
+            let (tx, rx) = std::sync::mpsc::channel();
+            let (tx_audio_data, mut rx_audio_data) =
+                hbb_common::tokio::sync::mpsc::unbounded_channel();
+            // Create a stand-alone inner, add subscribe to audio service
+            let conn_id = CLIENT_SERVER.write().unwrap().get_new_id();
+            let client_conn_inner = ConnInner::new(conn_id.clone(), Some(tx_audio_data), None);
+            // now we subscribe
+            CLIENT_SERVER.write().unwrap().subscribe(
+                audio_service::NAME,
+                client_conn_inner.clone(),
+                true,
+            );
+            let tx_audio = self.sender.clone();
+            std::thread::spawn(move || {
+                let _capture_lease = capture_lease;
+                loop {
+                    // check if client is closed
+                    match rx.try_recv() {
+                        Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            log::debug!("Exit voice call audio service of client");
+                            // unsubscribe
+                            CLIENT_SERVER.write().unwrap().subscribe(
+                                audio_service::NAME,
+                                client_conn_inner,
+                                false,
+                            );
+                            crate::audio_service::set_voice_call_input_device(None, true);
+                            break;
+                        }
+                        _ => {}
+                    }
+                    match rx_audio_data.try_recv() {
+                        Ok((_instant, msg)) => match &msg.union {
+                            Some(message::Union::AudioFrame(frame)) => {
+                                let mut msg = Message::new();
+                                msg.set_audio_frame(frame.clone());
+                                tx_audio.send(Data::MicrophoneMessage(request_id, msg)).ok();
+                            }
+                            Some(message::Union::Misc(misc)) => {
+                                let mut msg = Message::new();
+                                msg.set_misc(misc.clone());
+                                tx_audio.send(Data::MicrophoneMessage(request_id, msg)).ok();
                             }
                             _ => {}
                         },
@@ -1185,7 +1290,45 @@ impl<T: InvokeUiSession> Remote<T> {
                 allow_err!(peer.send(&msg).await);
                 self.elevation_requested = true;
             }
+            Data::MicrophoneMessage(id, data) => {
+                if self.microphone_id == Some(id) && self.stop_voice_call_sender.is_some() {
+                    let mut packet = MicrophonePacket { request_id: id, ..Default::default() };
+                    match data.union {
+                        Some(message::Union::AudioFrame(frame)) => packet.set_frame(frame),
+                        Some(message::Union::Misc(misc)) => match misc.union {
+                            Some(misc::Union::AudioFormat(format)) => packet.set_format(format),
+                            _ => return true,
+                        },
+                        _ => return true,
+                    }
+                    let mut message = Message::new();
+                    message.set_microphone_packet(packet);
+                    allow_err!(peer.send(&message).await);
+                }
+            }
+            Data::ToggleMicrophone => {
+                if self.microphone_active || self.microphone_request.is_some() {
+                    self.stop_voice_call();
+                    self.microphone_active = false;
+                    self.microphone_id = None;
+                    self.microphone_request = None;
+                    allow_err!(peer.send(&crate::microphone_forwarding::message(0, false, false, "")).await);
+                    self.handler.on_microphone_forwarding("off", "");
+                } else if self.stop_voice_call_sender.is_some() || self.voice_call_request_timestamp.is_some() {
+                    self.handler.on_microphone_forwarding("error", "End the voice call before forwarding the microphone");
+                } else if self.handler.is_default() {
+                    let id = get_time();
+                    self.microphone_request = Some((id, Instant::now()));
+                    self.microphone_id = Some(id);
+                    self.handler.on_microphone_forwarding("pending", "");
+                    allow_err!(peer.send(&crate::microphone_forwarding::message(id, true, false, "")).await);
+                }
+            }
             Data::NewVoiceCall => {
+                if crate::microphone_forwarding::capture_in_use() || self.microphone_request.is_some() {
+                    self.handler.on_voice_call_closed("Stop microphone forwarding first");
+                    return true;
+                }
                 let msg = new_voice_call_request(true);
                 // Save the voice call request timestamp for the further validation.
                 self.voice_call_request_timestamp = Some(
@@ -1196,6 +1339,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.handler.on_voice_call_waiting();
             }
             Data::CloseVoiceCall => {
+                if self.microphone_id.is_some() { return true; }
                 self.stop_voice_call();
                 let msg = new_voice_call_request(false);
                 self.handler
@@ -2033,6 +2177,31 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::Misc(misc)) => match misc.union {
+                    Some(misc::Union::MicrophoneForwarding(response)) => {
+                        if response.response && self.microphone_id == Some(response.request_id) {
+                            if !response.enabled {
+                                self.stop_voice_call();
+                                self.microphone_active = false;
+                                self.microphone_request = None;
+                                self.microphone_id = None;
+                                self.handler.on_microphone_forwarding("error", &response.error);
+                            } else if response.ready {
+                                self.microphone_request = None;
+                                self.microphone_active = true;
+                                self.handler.on_microphone_forwarding("active", "");
+                            } else if self.stop_voice_call_sender.is_none() {
+                                self.stop_voice_call_sender = self.start_microphone_capture(response.request_id);
+                                if self.stop_voice_call_sender.is_some() {
+                                    self.handler.on_microphone_forwarding("capturing", "");
+                                } else {
+                                    self.microphone_request = None;
+                                    self.microphone_id = None;
+                                    self.handler.on_microphone_forwarding("error", "Microphone capture is busy or unavailable on this platform");
+                                    allow_err!(peer.send(&crate::microphone_forwarding::message(0, false, false, "")).await);
+                                }
+                            }
+                        }
+                    }
                     Some(misc::Union::AudioFormat(f)) => {
                         self.audio_sender.send(MediaData::AudioFormat(f)).ok();
                     }
@@ -2305,6 +2474,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         .msgbox(&msgbox.msgtype, &msgbox.title, &msgbox.text, &link);
                 }
                 Some(message::Union::VoiceCallRequest(request)) => {
+                    if self.microphone_id.is_some() { return true; }
                     if request.is_connect {
                         // TODO: maybe we will do a voice call from the peer in the future.
                     } else {

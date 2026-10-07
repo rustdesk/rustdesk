@@ -19,6 +19,7 @@ use std::{
     ops::Deref,
     str::FromStr,
     sync::{
+        atomic::Ordering,
         mpsc::{self, RecvTimeoutError},
         Arc, Mutex, RwLock,
     },
@@ -99,6 +100,8 @@ mod audio_playback_recovery;
 #[cfg(all(test, not(target_os = "linux")))]
 #[path = "client/tests/audio_state_tests.rs"]
 mod audio_state_tests;
+#[cfg(all(test, target_os = "macos"))]
+mod microphone_loopback_test;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
@@ -2126,6 +2129,7 @@ impl ClientClipboardHandler {
 /// Audio handler for the [`Client`].
 #[derive(Default)]
 pub struct AudioHandler {
+    output_device: Option<String>,
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
     #[cfg(target_os = "linux")]
     simple: Option<psimple::Simple>,
@@ -2383,7 +2387,7 @@ impl AudioHandler {
             None,                   // Use the default server
             &crate::get_app_name(), // Our application’s name
             Direction::Playback,    // We want a playback stream
-            None,                   // Use the default device
+            self.output_device.as_deref(), // Explicit sink for forwarded microphone only
             "playback",             // Description of our stream
             &spec,                  // Our sample format
             None,                   // Use default channel map
@@ -2396,9 +2400,13 @@ impl AudioHandler {
     /// Start the audio playback.
     #[cfg(not(target_os = "linux"))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
-        let device = AUDIO_HOST
-            .default_output_device()
-            .with_context(|| "Failed to get default output device")?;
+        let device = if let Some(name) = self.output_device.as_deref() {
+            AUDIO_HOST.output_devices()?.find(|device| {
+                device.name().map(|n| n == name || (name == "CABLE Input" && n.starts_with("CABLE Input ("))).unwrap_or(false)
+            }).with_context(|| format!("Virtual microphone output not found: {name}"))?
+        } else {
+            AUDIO_HOST.default_output_device().with_context(|| "Failed to get default output device")?
+        };
         log::info!(
             "Using default output device: \"{}\"",
             device.name().unwrap_or("".to_owned())
@@ -4183,6 +4191,57 @@ pub fn start_audio_thread() -> MediaSender {
     audio_sender
 }
 
+pub struct MicrophoneAudioSender {
+    sender: mpsc::SyncSender<MediaData>,
+    running: Arc<std::sync::atomic::AtomicBool>,
+}
+impl MicrophoneAudioSender {
+    pub fn send(&self, frame: AudioFrame) -> bool {
+        match self.sender.try_send(MediaData::AudioFrame(Box::new(frame))) {
+            Ok(()) | Err(mpsc::TrySendError::Full(_)) => true,
+            Err(mpsc::TrySendError::Disconnected(_)) => false,
+        }
+    }
+}
+impl Drop for MicrophoneAudioSender {
+    fn drop(&mut self) { self.running.store(false, Ordering::Release); }
+}
+
+pub fn start_microphone_audio_thread(output_device: String, format: AudioFormat) -> (MicrophoneAudioSender, tokio::sync::oneshot::Receiver<Result<(), String>>) {
+    let (sender, audio_receiver) = mpsc::sync_channel::<MediaData>(32);
+    let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let worker_running = running.clone();
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+    std::thread::spawn(move || {
+        let mut audio_handler = AudioHandler::default();
+        let mut startup = Err("Unsupported microphone audio format".to_owned());
+        audio_handler.handle_format_with_start(format, |handler, format| {
+            // handle_format resets the handler; select the sink after that reset.
+            handler.output_device = Some(output_device);
+            let result = handler.start_audio(format);
+            startup = result.as_ref().map(|_| ()).map_err(|error| error.to_string());
+            result
+        });
+        #[cfg(not(target_os = "linux"))]
+        if startup.is_ok() {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while !audio_handler.playback_status.ready.load(Ordering::Acquire) && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if !audio_handler.playback_status.ready.load(Ordering::Acquire) {
+                startup = Err("Virtual microphone output callback did not start".to_owned());
+            }
+        }
+        let started = startup.is_ok();
+        if ready_tx.send(startup).is_err() || !started { return; }
+        while let Ok(data) = audio_receiver.recv() {
+            if !worker_running.load(Ordering::Acquire) { break; }
+            if let MediaData::AudioFrame(frame) = data { audio_handler.handle_frame(*frame); }
+        }
+    });
+    (MicrophoneAudioSender { sender, running }, ready_rx)
+}
+
 #[inline]
 fn fps_calculate(
     skip_beginning: &mut usize,
@@ -4997,6 +5056,8 @@ pub enum Data {
     RecordScreen(bool),
     ElevateDirect,
     ElevateWithLogon(String, String),
+    ToggleMicrophone,
+    MicrophoneMessage(i64, Message),
     NewVoiceCall,
     CloseVoiceCall,
     ContinueInsecureConnection,

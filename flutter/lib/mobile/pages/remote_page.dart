@@ -626,6 +626,19 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                   ))
                         ]) +
                   [
+                    if (isAndroid) Obx(() {
+                      final model = gFFI.ffiModel;
+                      final active = model.microphoneForwardingState.value == 'active';
+                      final pending = ['pending', 'capturing'].contains(model.microphoneForwardingState.value);
+                      return IconButton(
+                        tooltip: model.microphoneForwardingError.value.isNotEmpty
+                            ? model.microphoneForwardingError.value
+                            : translate(active ? 'Stop forwarding microphone' : 'Forward microphone'),
+                        color: active ? Colors.redAccent : pending ? Colors.orange : Colors.white,
+                        icon: Icon(active ? Icons.mic : Icons.mic_off),
+                        onPressed: model.toggleMicrophoneForwarding,
+                      );
+                    }),
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.more_vert),
@@ -835,6 +848,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       VoiceCallStatus.connected
     ].contains(gFFI.chatModel.voiceCallStatus.value);
     final menus = [
+      if (isAndroid)
+        makeTextMenu(
+          ['active', 'pending', 'capturing'].contains(gFFI.ffiModel.microphoneForwardingState.value)
+              ? 'Stop forwarding microphone' : 'Forward microphone',
+          Icon(Icons.mic, color: gFFI.ffiModel.microphoneForwardingState.value == 'active'
+              ? Colors.redAccent : MyTheme.accent),
+          () => gFFI.ffiModel.toggleMicrophoneForwarding()),
       makeTextMenu('Text chat', Icon(Icons.message, color: MyTheme.accent),
           () => onPressedTextChat(widget.id)),
       isInVoice
