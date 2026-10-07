@@ -204,12 +204,6 @@ pub(in crate::server::uinput) fn resolve(
                 "Uinput layout unavailable: {}; using legacy character mapping (may differ from the host layout)",
                 error
             );
-            // Preserve ASCII shortcut casing only for the fixed-US compatibility path.
-            let character = if locks.0 && shortcut_shift.is_some() {
-                character.to_ascii_lowercase()
-            } else {
-                character
-            };
             return Ok(LayoutKey {
                 key: enigo::Key::Layout(character),
                 modifiers: Vec::new(),
@@ -217,39 +211,18 @@ pub(in crate::server::uinput) fn resolve(
         }
     };
     let index = usize::from(locks.0) * CAPS_LOCK_BIT + usize::from(locks.1) * NUM_LOCK_BIT;
-    let caps_shortcut = (locks.0 && shortcut_shift.is_some() && character.is_alphabetic())
-        .then(|| caps_shortcut_mapping(keymap, index, character))
-        .flatten();
     // Letter shortcuts keep their physical key even when Shift changes case.
     // Other shortcuts prefer a symbol compatible with the caller's held Shift.
     let shifted = (shortcut_shift == Some(true) && !character.is_alphabetic())
         .then(|| keymap.maps[index | SHIFT_BIT].get(&character))
         .flatten();
-    if let Some(mapping) = caps_shortcut
-        .or(shifted)
-        .or_else(|| keymap.maps[index].get(&character))
-    {
+    if let Some(mapping) = shifted.or_else(|| keymap.maps[index].get(&character)) {
         return Ok(mapping.clone());
     }
     if shortcut_shift.is_some() && character.is_ascii_graphic() {
         return legacy_shortcut(character);
     }
     bail!("Character cannot be generated in the detected XKB layout")
-}
-
-fn caps_shortcut_mapping(keymap: &Keymap, index: usize, character: char) -> Option<&LayoutKey> {
-    let mapping = keymap.maps[index].get(&character)?;
-    let without_caps = keymap.maps[index & !CAPS_LOCK_BIT].get(&character)?;
-    let shifted = keymap.maps[index | SHIFT_BIT].get(&character)?;
-    // Unicode casing cannot identify XKB keys (e.g. Turkish I/ı and İ/i).
-    // Shift-held maps exclude generated Shift. Reuse the Caps-off mapping only
-    // when XKB confirms the same key and remaining modifiers with Caps+Shift.
-    // Any explicitly held Shift still belongs to the caller.
-    (mapping.key == without_caps.key
-        && mapping.key == shifted.key
-        && without_caps.modifiers == shifted.modifiers
-        && without_caps.modifiers.len() < mapping.modifiers.len())
-    .then_some(without_caps)
 }
 
 fn legacy_shortcut(character: char) -> ResultType<LayoutKey> {
