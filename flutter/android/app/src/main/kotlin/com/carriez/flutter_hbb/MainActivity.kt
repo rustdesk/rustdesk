@@ -19,6 +19,7 @@ import android.os.Bundle
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import android.view.KeyEvent
 import android.view.WindowManager
 import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
@@ -35,6 +36,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import com.hjq.permissions.XXPermissions
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterView
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import kotlin.concurrent.thread
@@ -105,6 +107,15 @@ class MainActivity : FlutterActivity() {
                 mapOf("name" to "input", "value" to inputPer.toString())
             )
         }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN &&
+            KeyEvent.isModifierKey(event.keyCode) && currentFocus == null) {
+            // Android can drop modifier-first input when the native view has no focus.
+            findViewById<FlutterView>(FlutterActivity.FLUTTER_VIEW_ID)?.requestFocus()
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun requestMediaProjection() {
