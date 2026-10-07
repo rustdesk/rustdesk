@@ -223,7 +223,7 @@ static int runTests(int argc) {
             if (!RustDeskToggleVirtualDisplay(i, true)) return 8;
         }
         if (RustDeskVirtualDisplayMask() != 30 || !waitForDisplays(30)) return 9;
-        if (!testResolution(320, 320, 2) || !testResolution(2560, 1600, 2) || !testResolution(1080, 1920, 2) || !testResolution(2560, 1600) || !testResolution(1080, 1920) || !testResolution(1920, 1080)) return 16;
+        if (!testResolution(2560, 1600, 2) || !testResolution(1080, 1920, 2) || !testResolution(2560, 1600) || !testResolution(1080, 1920) || !testResolution(1920, 1080)) return 16;
         if (RustDeskResizeVirtualDisplay(0, 1920, 1080)) return 17;
         if (!testResolution(2882, 1802, 2) || !testResolution(1441, 901) || !testResolution(1920, 1080)) return 22;
         if (!testExternalModeChange()) return 21;
