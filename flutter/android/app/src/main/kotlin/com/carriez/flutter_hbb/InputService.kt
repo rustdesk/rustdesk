@@ -35,6 +35,8 @@ import kotlin.math.max
 import hbb.MessageOuterClass.KeyEvent
 import hbb.MessageOuterClass.KeyboardMode
 import hbb.KeyEventConverter
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 // const val BUTTON_UP = 2
 // const val BUTTON_BACK = 0x08
@@ -102,6 +104,148 @@ class InputService : AccessibilityService() {
 
     private val volumeController: VolumeController by lazy { VolumeController(applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager) }
 
+    private val rootInputExecutor = Executors.newSingleThreadExecutor()
+
+    private var rootDragStartX = 0
+    private var rootDragStartY = 0
+    private var rootDragStartTime = 0L
+    private var rootHasMoved = false
+
+    private var rootPanStartX = 0
+    private var rootPanStartY = 0
+    private var rootPanStartTime = 0L
+
+    @Volatile
+    private var rootInputAvailable = false
+
+    // Accessed from onServiceConnected on the main thread
+    private var rootInputCheckStarted = false
+
+    private val useAndroid11RootInputFallback: Boolean
+        get() = Build.VERSION.SDK_INT == Build.VERSION_CODES.R && rootInputAvailable
+
+    private fun checkRootInputAvailability() {
+        if (Build.VERSION.SDK_INT != Build.VERSION_CODES.R || rootInputCheckStarted) {
+            return
+        }
+
+        rootInputCheckStarted = true
+
+        rootInputExecutor.execute {
+            var process: Process? = null
+
+            try {
+                // Use the same su syntax as rootInput()
+                val rootCheck = ProcessBuilder("su", "0", "id", "-u").redirectErrorStream(true).start()
+
+                process = rootCheck
+
+                if (!rootCheck.waitFor(3, TimeUnit.SECONDS)) {
+                    Log.w(logTag, "Root check timed out; keeping accessibility input")
+                    return@execute
+                }
+
+                val output = rootCheck.inputStream.bufferedReader().use {
+                    it.readText().trim()
+                }
+
+                rootInputAvailable = rootCheck.exitValue() == 0 && output == "0"
+
+                if (rootInputAvailable) {
+                    Log.i(logTag, "Android 11 root input workaround enabled")
+                } else {
+                    Log.i(logTag, "Root unavailable; keeping accessibility input")
+                }
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                Log.w(logTag, "Root check interrupted")
+            } catch (e: Exception) {
+                Log.w(logTag, "Root check failed; keeping accessibility input", e)
+            } finally {
+                process?.destroy()
+            }
+        }
+    }
+
+    private fun handleRootMouseInput(mask: Int): Boolean {
+        if (!useAndroid11RootInputFallback) {
+            return false
+        }
+
+        // Left mouse pressed
+        if (mask == LEFT_DOWN) {
+            leftIsDown = true
+
+            rootDragStartX = mouseX
+            rootDragStartY = mouseY
+            rootDragStartTime = System.currentTimeMillis()
+            rootHasMoved = false
+
+            return true
+        }
+
+        // Mouse moving while left button is held
+        if (leftIsDown && (mask == LEFT_MOVE || mask == 0)) {
+            val delta = abs(mouseX - rootDragStartX) + abs(mouseY - rootDragStartY)
+
+            if (delta > 8) {
+                rootHasMoved = true
+            }
+
+            return true
+        }
+
+        // Left mouse released
+        if (mask == LEFT_UP) {
+            if (leftIsDown) {
+                leftIsDown = false
+
+                val heldFor = System.currentTimeMillis() - rootDragStartTime
+
+                if (rootHasMoved) {
+                    // Drag
+                    val duration = heldFor.coerceIn(100L, 5000L)
+                    rootInput("swipe", rootDragStartX.toString(), rootDragStartY.toString(), mouseX.toString(), mouseY.toString(), duration.toString())
+                } else if (heldFor >= longPressDuration) {
+                    // Long press
+                    val duration = heldFor.coerceIn(500L, 5000L)
+                    rootInput("swipe", mouseX.toString(), mouseY.toString(), mouseX.toString(), mouseY.toString(), duration.toString())
+                } else {
+                    // Normal click
+                    rootInput("tap", mouseX.toString(), mouseY.toString())
+                }
+            }
+
+            return true
+        }
+
+        // Right mouse = Android long press
+        if (mask == RIGHT_UP) {
+            rootInput("swipe", mouseX.toString(), mouseY.toString(), mouseX.toString(), mouseY.toString(), "600")
+            return true
+        }
+
+        return false
+    }
+
+    private fun rootInput(vararg args: String) {
+        rootInputExecutor.execute {
+            try {
+                val command = arrayOf("su", "0", "input", *args)
+
+                val process = Runtime.getRuntime().exec(command)
+                val exitCode = process.waitFor()
+
+                if (exitCode != 0) {
+                    val error = process.errorStream.bufferedReader().readText()
+                    Log.e(logTag, "rootInput failed: exit=$exitCode error=$error")
+                }
+            } catch (e: Exception) {
+                Log.e(logTag, "rootInput error", e)
+            }
+        }
+    }
+
     @RequiresApi(Build.VERSION_CODES.N)
     fun onMouseInput(mask: Int, _x: Int, _y: Int) {
         val x = max(0, _x)
@@ -119,6 +263,13 @@ class InputService : AccessibilityService() {
                     isWaitingLongPress = false
                 }
             }
+        }
+
+        // =============================================
+        // Android 11 root input workaround
+        // =============================================
+        if (handleRootMouseInput(mask)) {
+            return
         }
 
         // left button down, was up
@@ -224,6 +375,52 @@ class InputService : AccessibilityService() {
 
     @RequiresApi(Build.VERSION_CODES.N)
     fun onTouchInput(mask: Int, _x: Int, _y: Int) {
+
+        // =============================================
+        // Android 11 root input fallback
+        // =============================================
+        if (useAndroid11RootInputFallback) {
+
+            when (mask) {
+                TOUCH_PAN_START -> {
+                    mouseX = max(0, _x) * SCREEN_INFO.scale
+                    mouseY = max(0, _y) * SCREEN_INFO.scale
+
+                    rootPanStartX = mouseX
+                    rootPanStartY = mouseY
+                    rootPanStartTime = System.currentTimeMillis()
+                }
+
+                TOUCH_PAN_UPDATE -> {
+                    mouseX -= _x * SCREEN_INFO.scale
+                    mouseY -= _y * SCREEN_INFO.scale
+
+                    mouseX = max(0, mouseX)
+                    mouseY = max(0, mouseY)
+                }
+
+                TOUCH_PAN_END -> {
+
+                    val endX = mouseX
+                    val endY = mouseY
+
+                    val duration = (System.currentTimeMillis() - rootPanStartTime).coerceIn(100L, 1000L)
+
+                    val distance = abs(endX - rootPanStartX) + abs(endY - rootPanStartY)
+
+                    if (distance > 20) {
+                        rootInput("swipe", rootPanStartX.toString(), rootPanStartY.toString(), endX.toString(), endY.toString(), duration.toString())
+                    }
+
+                    // Preserve RustDesk's normal final coordinate update
+                    mouseX = max(0, _x) * SCREEN_INFO.scale
+                    mouseY = max(0, _y) * SCREEN_INFO.scale
+                }
+            }
+
+            return
+        }
+
         when (mask) {
             TOUCH_PAN_UPDATE -> {
                 mouseX -= _x * SCREEN_INFO.scale
@@ -742,6 +939,8 @@ class InputService : AccessibilityService() {
         val layout = fakeEditTextForTextStateCalculation?.getLayout()
         Log.d(logTag, "fakeEditTextForTextStateCalculation layout:$layout")
         Log.d(logTag, "onServiceConnected!")
+
+        checkRootInputAvailability()
     }
 
     override fun onDestroy() {
