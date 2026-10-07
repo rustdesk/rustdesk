@@ -100,6 +100,9 @@ pub fn set_agent_control(session_id: SessionID, grant_id: String) {
                 if let Some(session) =
                     crate::flutter::sessions::get_session_by_session_id(&session_id)
                 {
+                    if crate::flutter::get_cur_session_id() == session_id {
+                        crate::keyboard::release_remote_keys_for_session(&session);
+                    }
                     let swap = session.get_toggle_option("swap-left-right-mouse".to_owned());
                     for button in [1, 2, 4, 8, 16] {
                         if buttons & button == 0 {
@@ -132,6 +135,30 @@ pub fn set_agent_control(session_id: SessionID, grant_id: String) {
     }
 }
 
+pub fn with_human_input(session_id: SessionID, send: impl FnOnce()) {
+    let owners = INPUT_OWNERS.read().unwrap();
+    if owners
+        .get(&session_id)
+        .map_or(true, |owner| owner.accepts(None))
+    {
+        send();
+    }
+}
+
+pub fn process_human_key_event(keyboard_mode: &str, event: &rdev::Event, lock_modes: Option<i32>) {
+    let session_id = crate::flutter::get_cur_session_id();
+    if let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) {
+        with_human_input(session_id, || {
+            crate::keyboard::client::process_event_with_session(
+                keyboard_mode,
+                event,
+                lock_modes,
+                &session,
+            );
+        });
+    }
+}
+
 pub fn send_mouse(
     session_id: SessionID,
     grant_id: Option<&str>,
@@ -149,14 +176,6 @@ pub fn send_mouse(
 pub fn send_human_pointer(session_id: SessionID, msg: &str, send: impl FnOnce()) {
     let mut owners = INPUT_OWNERS.write().unwrap();
     owners.entry(session_id).or_default().pointer(msg, send);
-}
-
-pub fn is_agent_control(session_id: &SessionID) -> bool {
-    INPUT_OWNERS
-        .read()
-        .unwrap()
-        .get(session_id)
-        .map_or(false, |owner| !owner.grant_id.is_empty())
 }
 
 pub fn agent_control_grant(session_id: &SessionID) -> String {
@@ -218,6 +237,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn grant_waits_for_human_key_submission_and_blocks_later_keys() {
+        use std::{sync::mpsc, thread, time::Duration};
+
+        let session_id = SessionID::new_v4();
+        let (started, received_start) = mpsc::channel();
+        let (finish, received_finish) = mpsc::channel();
+        let human = thread::spawn(move || {
+            with_human_input(session_id, || {
+                started.send(()).unwrap();
+                received_finish.recv().unwrap();
+            });
+        });
+        received_start.recv_timeout(Duration::from_secs(2)).unwrap();
+        let (granted, received_grant) = mpsc::channel();
+        let grant = thread::spawn(move || {
+            set_agent_control(session_id, "grant".to_owned());
+            granted.send(()).unwrap();
+        });
+        assert!(received_grant
+            .recv_timeout(Duration::from_millis(50))
+            .is_err());
+        finish.send(()).unwrap();
+        human.join().unwrap();
+        received_grant.recv_timeout(Duration::from_secs(2)).unwrap();
+        grant.join().unwrap();
+
+        let mut sent = Vec::new();
+        with_human_input(session_id, || sent.push("late human key"));
+        assert!(sent.is_empty());
+        set_agent_control(session_id, String::new());
+        with_human_input(session_id, || sent.push("human key after release"));
+        assert_eq!(sent, ["human key after release"]);
+    }
+
+    #[test]
     fn human_release_cannot_interrupt_agent_drag() {
         let mut owner = InputOwner::default();
         let mut sent = Vec::new();
@@ -263,10 +317,8 @@ mod tests {
     fn closing_session_clears_agent_control() {
         let session_id = SessionID::new_v4();
         set_agent_control(session_id, "grant".to_owned());
-        assert!(is_agent_control(&session_id));
         assert_eq!(agent_control_grant(&session_id), "grant");
         crate::flutter_ffi::session_close(session_id);
-        assert!(!is_agent_control(&session_id));
         assert_eq!(agent_control_grant(&session_id), "");
     }
 
@@ -276,13 +328,11 @@ mod tests {
         set_agent_control(session_id, "old".to_owned());
         let old_notice = agent_control_grant(&session_id);
         set_agent_control(session_id, String::new());
-        assert!(!is_agent_control(&session_id));
         assert_eq!(agent_control_grant(&session_id), "");
         set_agent_control(session_id, "new".to_owned());
         // A window refresh reads current state, even for an old notification.
         assert_ne!(agent_control_grant(&session_id), old_notice);
         assert_eq!(agent_control_grant(&session_id), "new");
-        assert!(is_agent_control(&session_id));
         set_agent_control(session_id, String::new());
     }
 

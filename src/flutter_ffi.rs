@@ -356,13 +356,6 @@ pub fn session_save_mcp_screenshot(
 pub fn session_set_agent_control(session_id: SessionID, grant_id: String) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        // The keyboard hook's releases are dropped from now on, so keys the
-        // user holds would stay down on the peer.
-        if !grant_id.is_empty() && flutter::get_cur_session_id() == session_id {
-            if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-                crate::keyboard::release_remote_keys(&session.get_keyboard_mode());
-            }
-        }
         crate::flutter_mcp::set_agent_control(session_id, grant_id);
     }
     SyncReturn(())
@@ -667,20 +660,22 @@ pub fn session_handle_flutter_key_event(
     lock_modes: i32,
     down_or_up: bool,
 ) {
+    let send = || {
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            let keyboard_mode = session.get_keyboard_mode();
+            session.handle_flutter_key_event(
+                &keyboard_mode,
+                &character,
+                usb_hid,
+                lock_modes,
+                down_or_up,
+            );
+        }
+    };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if crate::flutter_mcp::is_agent_control(&session_id) {
-        return;
-    }
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        let keyboard_mode = session.get_keyboard_mode();
-        session.handle_flutter_key_event(
-            &keyboard_mode,
-            &character,
-            usb_hid,
-            lock_modes,
-            down_or_up,
-        );
-    }
+    crate::flutter_mcp::with_human_input(session_id, send);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    send();
 }
 
 pub fn session_handle_flutter_raw_key_event(
@@ -691,21 +686,23 @@ pub fn session_handle_flutter_raw_key_event(
     lock_modes: i32,
     down_or_up: bool,
 ) {
+    let send = || {
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            let keyboard_mode = session.get_keyboard_mode();
+            session.handle_flutter_raw_key_event(
+                &keyboard_mode,
+                &name,
+                platform_code,
+                position_code,
+                lock_modes,
+                down_or_up,
+            );
+        }
+    };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if crate::flutter_mcp::is_agent_control(&session_id) {
-        return;
-    }
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        let keyboard_mode = session.get_keyboard_mode();
-        session.handle_flutter_raw_key_event(
-            &keyboard_mode,
-            &name,
-            platform_code,
-            position_code,
-            lock_modes,
-            down_or_up,
-        );
-    }
+    crate::flutter_mcp::with_human_input(session_id, send);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    send();
 }
 
 // If the cursor jumps between remote page of two connections, leave view and enter view will be called.

@@ -319,13 +319,18 @@ pub mod client {
     }
 
     pub fn process_event(keyboard_mode: &str, event: &Event, lock_modes: Option<i32>) {
-        let keyboard_mode = get_keyboard_mode_enum(keyboard_mode);
-        if is_long_press(&event) {
-            return;
-        }
-        let peer = get_peer_platform().to_lowercase();
-        for key_event in event_to_key_events(peer, &event, keyboard_mode, lock_modes) {
-            send_key_event(&key_event);
+        #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+        crate::flutter_mcp::process_human_key_event(keyboard_mode, event, lock_modes);
+        #[cfg(not(all(feature = "flutter", not(any(target_os = "android", target_os = "ios")))))]
+        {
+            let keyboard_mode = get_keyboard_mode_enum(keyboard_mode);
+            if is_long_press(&event) {
+                return;
+            }
+            let peer = get_peer_platform().to_lowercase();
+            for key_event in event_to_key_events(peer, &event, keyboard_mode, lock_modes) {
+                send_key_event(&key_event);
+            }
         }
     }
 
@@ -755,6 +760,23 @@ pub fn release_remote_keys(keyboard_mode: &str) {
     release_remote_keys_for_events(keyboard_mode, take_remote_keys());
 }
 
+#[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+pub fn release_remote_keys_for_session(session: &crate::flutter::FlutterSession) {
+    // MCP holds the ownership lock here; cleanup targets this session directly
+    // rather than re-entering the human-input gate or following a focus change.
+    let keyboard_mode = session.get_keyboard_mode();
+    for (key, mut event) in take_remote_keys() {
+        event.event_type = EventType::KeyRelease(key);
+        client::process_event_with_session(&keyboard_mode, &event, None, session);
+        if key == Key::Alt || key == Key::AltGr {
+            event.event_type = EventType::KeyPress(key);
+            client::process_event_with_session(&keyboard_mode, &event, None, session);
+            event.event_type = EventType::KeyRelease(key);
+            client::process_event_with_session(&keyboard_mode, &event, None, session);
+        }
+    }
+}
+
 pub fn get_keyboard_mode_enum(keyboard_mode: &str) -> KeyboardMode {
     match keyboard_mode {
         "map" => KeyboardMode::Map,
@@ -997,10 +1019,13 @@ pub fn send_key_event(key_event: &KeyEvent) {
     }
 
     #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
-    if crate::flutter_mcp::is_agent_control(&flutter::get_cur_session_id()) {
-        return;
+    {
+        let session_id = flutter::get_cur_session_id();
+        if let Some(session) = flutter::sessions::get_session_by_session_id(&session_id) {
+            crate::flutter_mcp::with_human_input(session_id, || session.send_key_event(key_event));
+        }
     }
-    #[cfg(feature = "flutter")]
+    #[cfg(all(feature = "flutter", any(target_os = "android", target_os = "ios")))]
     if let Some(session) = flutter::get_cur_session() {
         session.send_key_event(key_event);
     }
@@ -1103,6 +1128,10 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
         Key::UpArrow => Some(ControlKey::UpArrow),
         Key::Delete => {
             if is_win && ctrl && alt {
+                // Flutter sends converted events under the ownership lock.
+                #[cfg(feature = "flutter")]
+                events.push(client::event_ctrl_alt_del());
+                #[cfg(not(feature = "flutter"))]
                 client::ctrl_alt_del();
                 return events;
             }
@@ -1228,6 +1257,9 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
         }
         if chr != '\0' {
             if chr == 'l' && is_win && command {
+                #[cfg(feature = "flutter")]
+                events.push(client::event_lock_screen());
+                #[cfg(not(feature = "flutter"))]
                 client::lock_screen();
                 return events;
             }

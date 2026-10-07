@@ -198,8 +198,8 @@ class RustDeskMcpBackend implements McpBackend {
       final at = input.pointer;
       if (at != null) {
         for (final b in input.buttons) {
-          await _sendMouse(
-              sid, mcpMouseMessage(type: 'up', buttons: b, x: at.x, y: at.y));
+          await _sendMouse(input, sid,
+              mcpMouseMessage(type: 'up', buttons: b, x: at.x, y: at.y));
         }
       }
       for (final k in input.keys) {
@@ -563,11 +563,10 @@ class RustDeskMcpBackend implements McpBackend {
     }
   }
 
-  Future<void> _sendMouse(UuidValue sid, Map<String, String> msg) =>
+  Future<void> _sendMouse(
+          McpInputState input, UuidValue sid, Map<String, String> msg) =>
       bind.sessionSendMcpMouse(
-          sessionId: sid,
-          grantId: _input[sid.toString()]!.grantId,
-          msg: jsonEncode(msg));
+          sessionId: sid, grantId: input.grantId, msg: jsonEncode(msg));
 
   ({int x, int y}) _toRemote(
       Map<String, dynamic> session, int display, int x, int y) {
@@ -626,8 +625,8 @@ class RustDeskMcpBackend implements McpBackend {
         final end = action == 'drag' ? _toRemote(s, display, toX!, toY!) : null;
         return _holding(input, sid, modifiers, () async {
           input.checkActive();
-          await _sendMouse(
-              sid, mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
+          await _sendMouse(input, sid,
+              mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
           input.pointer = p;
           if (action == 'move') return;
           final buttons = switch (action) {
@@ -641,6 +640,7 @@ class RustDeskMcpBackend implements McpBackend {
             input.pointer = at;
             if (type == 'down') input.buttons.add(buttons);
             await _sendMouse(
+                input,
                 sid,
                 mcpMouseMessage(
                     type: type,
@@ -661,6 +661,7 @@ class RustDeskMcpBackend implements McpBackend {
               input.checkActive();
               input.pointer = point;
               await _sendMouse(
+                  input,
                   sid,
                   mcpMouseMessage(
                       x: point.x, y: point.y, modifiers: modifiers));
@@ -687,13 +688,14 @@ class RustDeskMcpBackend implements McpBackend {
         final p = _toRemote(s, display, x, y);
         return _holding(input, sid, modifiers, () async {
           input.checkActive();
-          await _sendMouse(
-              sid, mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
+          await _sendMouse(input, sid,
+              mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
           input.pointer = p;
           final step = mcpWheelStep(direction);
           for (var i = 0; i < amount.clamp(0, 50); i++) {
             input.checkActive();
             await _sendMouse(
+                input,
                 sid,
                 mcpMouseMessage(
                     type: 'wheel', x: step.x, y: step.y, modifiers: modifiers));
