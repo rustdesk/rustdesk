@@ -115,12 +115,11 @@ FFI? _bySessionId(Map<String, FFI> sessions, Object? sessionId) =>
         .firstOrNull;
 
 Future<bool> _askAgentControl(String peerId, FFI ffi, String requestId) async {
-  // A dialog in a hidden or minimized window would never be seen.
   final window = WindowController.fromWindowId(kWindowId!);
-  await window.show();
-  await window.focus();
   final tag = 'mcp-agent-control-$requestId';
-  final answer = await ffi.dialogManager
+  // Register before yielding so cancellation can find the dialog even while
+  // showing or focusing the window is still in progress.
+  final answer = ffi.dialogManager
       .show<bool>(
           (setState, close, context) => CustomAlertDialog(
                 title: Row(children: [
@@ -150,7 +149,15 @@ Future<bool> _askAgentControl(String peerId, FFI ffi, String requestId) async {
     ffi.dialogManager.dismissByTag(tag);
     return null;
   });
-  return answer == true;
+  try {
+    final results = await Future.wait<dynamic>([
+      answer,
+      window.show().then((_) => window.focus()),
+    ], eagerError: true);
+    return results.first == true;
+  } finally {
+    ffi.dialogManager.dismissByTag(tag);
+  }
 }
 
 Future<void> _takeOver(FFI ffi) async {
