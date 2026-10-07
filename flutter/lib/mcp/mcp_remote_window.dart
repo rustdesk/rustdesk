@@ -155,10 +155,9 @@ Future<void> _takeOver(FFI ffi) async {
     // Keep human input gated until the agent's last release has been sent.
     await DesktopMultiWindow.invokeMethod(kMainWindowId,
         kWindowEventMcpControlTakenOver, ffi.sessionId.toString());
+    ffi.ffiModel.setAgentControl(false);
   } catch (e) {
     debugPrint('Failed to release MCP input: $e');
-  } finally {
-    ffi.ffiModel.setAgentControl(false);
   }
 }
 
