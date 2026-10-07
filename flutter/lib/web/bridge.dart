@@ -1929,6 +1929,25 @@ class RustdeskImpl {
     throw UnimplementedError("sessionTakeScreenshot");
   }
 
+  Future<void> sessionTakeMcpScreenshot(
+      {required UuidValue sessionId,
+      required int display,
+      required String requestId,
+      dynamic hint}) {
+    throw UnimplementedError("sessionTakeMcpScreenshot");
+  }
+
+  Future<String?> sessionSaveMcpScreenshot(
+      {required UuidValue sessionId,
+      required String requestId,
+      required String path,
+      dynamic hint}) {
+    throw UnimplementedError("sessionSaveMcpScreenshot");
+  }
+
+  void sessionSetAgentControl(
+      {required UuidValue sessionId, required bool agent, dynamic hint}) {}
+
   Future<void> sessionOpenTerminal(
       {required UuidValue sessionId,
       required int terminalId,

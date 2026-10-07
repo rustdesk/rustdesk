@@ -693,6 +693,11 @@ class _GeneralState extends State<_General> {
           },
         ),
       ),
+      Align(
+        alignment: Alignment.topLeft,
+        child: Text(translate('mcp-read-access-tip'),
+            style: TextStyle(fontSize: 12, color: Colors.orange.shade800)),
+      ).marginOnly(left: 35, right: 10, bottom: 4),
       if (mainGetLocalBoolOptionSync(kOptionEnableMcpServer)) ...[
         _OptionCheckBox(
           context,

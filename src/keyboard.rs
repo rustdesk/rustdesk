@@ -996,6 +996,10 @@ pub fn send_key_event(key_event: &KeyEvent) {
         session.send_key_event(key_event);
     }
 
+    #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+    if crate::flutter_mcp::is_agent_control(&flutter::get_cur_session_id()) {
+        return;
+    }
     #[cfg(feature = "flutter")]
     if let Some(session) = flutter::get_cur_session() {
         session.send_key_event(key_event);

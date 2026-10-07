@@ -85,15 +85,7 @@ const String kWindowEventMcpSetControl = "mcp_set_control";
 const String kWindowEventMcpRequestControl = "mcp_request_control";
 const String kWindowEventMcpAuthenticate = "mcp_authenticate";
 const String kWindowEventMcpClose = "mcp_close_session";
-
-/// Per-session flutter option holding the file the next screenshot is saved to
-/// without showing a dialog. Set by the MCP server.
-const String kMcpScreenshotPathOption = "mcp-screenshot-path";
-/// Replaces the path in [kMcpScreenshotPathOption] when the screenshot failed.
-const String kMcpScreenshotErrorPrefix = "error:";
-/// Set in [kMcpScreenshotPathOption] after a timeout so the late screenshot is
-/// dropped instead of opening the save dialog.
-const String kMcpScreenshotDropLate = "drop-late";
+const String kWindowEventMcpControlTakenOver = "mcp_control_taken_over";
 
 const String kOptionViewStyle = "view_style";
 const String kOptionScrollStyle = "scroll_style";

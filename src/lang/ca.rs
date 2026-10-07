@@ -794,6 +794,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("An AI agent asks to take exclusive control of {}. Your input is blocked until you take over again.", ""),
         ("AI agent is in control", ""),
         ("Take over", ""),
-        ("mcp-server-tip", "")
+        ("mcp-server-tip", ""),
+        ("mcp-read-access-tip", "")
     ].iter().cloned().collect();
 }

@@ -141,6 +141,14 @@ Future<bool> _askAgentControl(String peerId, FFI ffi) async {
   return true;
 }
 
+void _takeOver(FFI ffi) {
+  ffi.ffiModel.setAgentControl(false);
+  // The main window releases what the agent still holds down.
+  DesktopMultiWindow.invokeMethod(kMainWindowId,
+          kWindowEventMcpControlTakenOver, ffi.sessionId.toString())
+      .catchError((e) => debugPrint('Failed to report the take-over: $e'));
+}
+
 /// Shown over a remote session while an agent has exclusive control.
 class AgentControlBanner extends StatelessWidget {
   final FFI ffi;
@@ -176,7 +184,7 @@ class AgentControlBanner extends StatelessWidget {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
-                    onPressed: () => ffi.ffiModel.setAgentControl(false),
+                    onPressed: () => _takeOver(ffi),
                     child: Text(translate('Take over')),
                   ),
                 ]),

@@ -28,6 +28,14 @@ class McpWindowBusy extends McpToolException {
             'try again in a moment.');
 }
 
+/// What the agent's input left on a session's peer.
+class _AgentInput {
+  Future<void> tail = Future.value();
+  final Set<String> buttons = {};
+  final Set<String> keys = {};
+  ({int x, int y})? pointer;
+}
+
 class RustDeskMcpBackend implements McpBackend {
   final Future<bool> Function(String peerId) approveConnect;
 
@@ -154,9 +162,55 @@ class RustDeskMcpBackend implements McpBackend {
   /// Pending control requests, by session id.
   final Map<String, Future<dynamic>> _controlRequests = {};
 
-  /// The last screenshot request. Screenshots run one at a time because the
-  /// native side keeps the received image in one cache for all sessions.
+  /// The last screenshot request. Screenshots run one at a time because a
+  /// peer keeps one pending request per display and drops the older one.
   Future<void> _lastScreenshot = Future.value();
+
+  final Map<String, _AgentInput> _input = {};
+
+  /// Runs one input call on a session at a time. Each call awaits between its
+  /// events, so two calls would otherwise interleave them.
+  Future<T> _serialized<T>(
+      String sessionId, Future<T> Function(_AgentInput input) body) async {
+    final input = _input.putIfAbsent(sessionId, _AgentInput.new);
+    final previous = input.tail;
+    final done = Completer<void>();
+    input.tail = done.future;
+    try {
+      await previous;
+      return await body(input);
+    } finally {
+      done.complete();
+    }
+  }
+
+  /// Releases the buttons and keys the agent left down. Queued behind the
+  /// input call in progress, so a press it is sending cannot land after the
+  /// release.
+  Future<void> releaseHeld(String sessionId) =>
+      _serialized(sessionId, (input) async {
+        final sid = UuidValue(sessionId);
+        final at = input.pointer;
+        if (at != null) {
+          for (final b in input.buttons) {
+            await _sendMouse(
+                sid, mcpMouseMessage(type: 'up', buttons: b, x: at.x, y: at.y));
+          }
+        }
+        for (final k in input.keys) {
+          await bind.sessionInputKey(
+              sessionId: sid,
+              name: k,
+              down: false,
+              press: false,
+              alt: false,
+              ctrl: false,
+              shift: false,
+              command: false);
+        }
+        input.buttons.clear();
+        input.keys.clear();
+      });
 
   @override
   Future<Map<String, dynamic>> connect(String peerId,
@@ -377,6 +431,7 @@ class RustDeskMcpBackend implements McpBackend {
     }
     await _callWindow(
         kWindowEventMcpSetControl, {'session_id': sessionId, 'agent': false});
+    await releaseHeld(sessionId);
     return 'Released. The human is in control; you can only read this session.';
   }
 
@@ -397,36 +452,28 @@ class RustDeskMcpBackend implements McpBackend {
     final s = await _ready(sessionId);
     _display(s, display);
     final sid = UuidValue(sessionId);
+    // The result carries this id back, so a late result of an earlier
+    // request is never taken for this one.
+    final requestId = Uuid().v4();
     final file =
-        File('${Directory.systemTemp.path}/rustdesk_mcp_${Uuid().v4()}.png');
-    var timedOut = false;
+        File('${Directory.systemTemp.path}/rustdesk_mcp_$requestId.png');
     try {
-      await bind.sessionSetFlutterOption(
-          sessionId: sid, k: kMcpScreenshotPathOption, v: file.path);
-      bind.sessionTakeScreenshot(sessionId: sid, display: display);
+      await bind.sessionTakeMcpScreenshot(
+          sessionId: sid, display: display, requestId: requestId);
       final deadline = DateTime.now().add(_kScreenshotTimeout);
       while (DateTime.now().isBefore(deadline)) {
-        final status = await bind.sessionGetFlutterOption(
-                sessionId: sid, k: kMcpScreenshotPathOption) ??
-            '';
-        if (status.startsWith(kMcpScreenshotErrorPrefix)) {
-          throw McpToolException('Screenshot failed: '
-              '${status.substring(kMcpScreenshotErrorPrefix.length)}');
-        }
-        // The remote window clears the path once the file is fully written.
-        if (status.isEmpty && await file.exists()) {
-          final bytes = await file.readAsBytes();
-          if (bytes.isNotEmpty) return McpImage(bytes);
+        final error = await bind.sessionSaveMcpScreenshot(
+            sessionId: sid, requestId: requestId, path: file.path);
+        if (error != null) {
+          if (error.isNotEmpty) {
+            throw McpToolException('Screenshot failed: $error');
+          }
+          return McpImage(await file.readAsBytes());
         }
         await Future.delayed(const Duration(milliseconds: 100));
       }
-      timedOut = true;
       throw McpToolException('Timed out waiting for the screenshot.');
     } finally {
-      await bind.sessionSetFlutterOption(
-          sessionId: sid,
-          k: kMcpScreenshotPathOption,
-          v: timedOut ? kMcpScreenshotDropLate : '');
       try {
         await file.delete();
       } catch (_) {}
@@ -480,101 +527,121 @@ class RustDeskMcpBackend implements McpBackend {
 
   @override
   Future<void> mouse(String sessionId, String action, int x, int y,
-      {int display = 0,
-      String button = 'left',
-      int? toX,
-      int? toY,
-      List<String> modifiers = const []}) async {
-    final s = await _writable(sessionId);
-    final sid = UuidValue(sessionId);
-    final p = _toRemote(s, display, x, y);
-    final end = action == 'drag' ? _toRemote(s, display, toX!, toY!) : null;
-    return _holding(sid, modifiers, () async {
-      await _sendMouse(
-          sid, mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
-      if (action == 'move') return;
-      final buttons = switch (action) {
-        'right_click' => 'right',
-        'middle_click' => 'wheel',
-        'down' || 'up' || 'drag' => kMcpMouseButtons[button]!,
-        _ => 'left',
-      };
-      Future<void> press(String type, ({int x, int y}) at) => _sendMouse(
-          sid,
-          mcpMouseMessage(
-              type: type,
-              buttons: buttons,
-              x: at.x,
-              y: at.y,
-              modifiers: modifiers));
-      if (action == 'down' || action == 'up') return press(action, p);
-      if (end != null) {
-        await press('down', p);
-        for (final point in mcpDragPath(p, end)) {
-          await Future.delayed(const Duration(milliseconds: 20));
-          await _sendMouse(sid,
-              mcpMouseMessage(x: point.x, y: point.y, modifiers: modifiers));
-        }
-        return press('up', end);
-      }
-      final times = action == 'double_click' ? 2 : 1;
-      for (var i = 0; i < times; i++) {
-        await press('down', p);
-        await press('up', p);
-      }
-    });
-  }
+          {int display = 0,
+          String button = 'left',
+          int? toX,
+          int? toY,
+          List<String> modifiers = const []}) =>
+      _serialized(sessionId, (input) async {
+        final s = await _writable(sessionId);
+        final sid = UuidValue(sessionId);
+        final p = _toRemote(s, display, x, y);
+        final end = action == 'drag' ? _toRemote(s, display, toX!, toY!) : null;
+        return _holding(sid, modifiers, () async {
+          await _sendMouse(
+              sid, mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
+          input.pointer = p;
+          if (action == 'move') return;
+          final buttons = switch (action) {
+            'right_click' => 'right',
+            'middle_click' => 'wheel',
+            'down' || 'up' || 'drag' => kMcpMouseButtons[button]!,
+            _ => 'left',
+          };
+          Future<void> press(String type, ({int x, int y}) at) => _sendMouse(
+              sid,
+              mcpMouseMessage(
+                  type: type,
+                  buttons: buttons,
+                  x: at.x,
+                  y: at.y,
+                  modifiers: modifiers));
+          if (action == 'down' || action == 'up') {
+            await press(action, p);
+            action == 'down'
+                ? input.buttons.add(buttons)
+                : input.buttons.remove(buttons);
+            return;
+          }
+          if (end != null) {
+            await press('down', p);
+            for (final point in mcpDragPath(p, end)) {
+              await Future.delayed(const Duration(milliseconds: 20));
+              await _sendMouse(
+                  sid,
+                  mcpMouseMessage(
+                      x: point.x, y: point.y, modifiers: modifiers));
+            }
+            await press('up', end);
+            input.pointer = end;
+            return;
+          }
+          final times = action == 'double_click' ? 2 : 1;
+          for (var i = 0; i < times; i++) {
+            await press('down', p);
+            await press('up', p);
+          }
+        });
+      });
 
   @override
   Future<void> scroll(
-      String sessionId, int x, int y, String direction, int amount,
-      {int display = 0, List<String> modifiers = const []}) async {
-    final s = await _writable(sessionId);
-    final sid = UuidValue(sessionId);
-    final p = _toRemote(s, display, x, y);
-    return _holding(sid, modifiers, () async {
-      await _sendMouse(
-          sid, mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
-      final step = mcpWheelStep(direction);
-      for (var i = 0; i < amount.clamp(0, 50); i++) {
-        await _sendMouse(
-            sid,
-            mcpMouseMessage(
-                type: 'wheel', x: step.x, y: step.y, modifiers: modifiers));
-      }
-    });
-  }
+          String sessionId, int x, int y, String direction, int amount,
+          {int display = 0, List<String> modifiers = const []}) =>
+      _serialized(sessionId, (input) async {
+        final s = await _writable(sessionId);
+        final sid = UuidValue(sessionId);
+        final p = _toRemote(s, display, x, y);
+        return _holding(sid, modifiers, () async {
+          await _sendMouse(
+              sid, mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
+          input.pointer = p;
+          final step = mcpWheelStep(direction);
+          for (var i = 0; i < amount.clamp(0, 50); i++) {
+            await _sendMouse(
+                sid,
+                mcpMouseMessage(
+                    type: 'wheel', x: step.x, y: step.y, modifiers: modifiers));
+          }
+        });
+      });
 
   @override
-  Future<void> typeText(String sessionId, String text,
-      {int delayMs = 0}) async {
-    await _writable(sessionId);
-    final sid = UuidValue(sessionId);
-    final chunks = mcpTextChunks(text, delayed: delayMs > 0).toList();
-    for (var i = 0; i < chunks.length; i++) {
-      // The human may take over during a slow delayed run.
-      if (delayMs > 0 && i > 0) await _writable(sessionId);
-      if (chunks[i] == '\n') {
-        // Unicode LF is not an Enter key on Windows.
-        await pressKey(sessionId, 'VK_RETURN', const []);
-      } else {
-        await bind.sessionInputString(sessionId: sid, value: chunks[i]);
-      }
-      if (delayMs > 0 && i < chunks.length - 1) {
-        await Future.delayed(Duration(milliseconds: delayMs));
-      }
-    }
-  }
+  Future<void> typeText(String sessionId, String text, {int delayMs = 0}) =>
+      _serialized(sessionId, (input) async {
+        await _writable(sessionId);
+        final sid = UuidValue(sessionId);
+        final chunks = mcpTextChunks(text, delayed: delayMs > 0).toList();
+        for (var i = 0; i < chunks.length; i++) {
+          // The human may take over during a slow delayed run.
+          if (delayMs > 0 && i > 0) await _writable(sessionId);
+          if (chunks[i] == '\n') {
+            // Unicode LF is not an Enter key on Windows.
+            await _pressKey(input, sessionId, 'VK_RETURN', const [], 'press');
+          } else {
+            await bind.sessionInputString(sessionId: sid, value: chunks[i]);
+          }
+          if (delayMs > 0 && i < chunks.length - 1) {
+            await Future.delayed(Duration(milliseconds: delayMs));
+          }
+        }
+      });
 
   @override
   Future<void> pressKey(String sessionId, String key, List<String> modifiers,
-      {String action = 'press'}) async {
-    await _writable(sessionId);
-    // A Linux peer turns a modifier key's press into a lone key up.
-    if (action == 'press' && kMcpModifierKeys.contains(key)) {
-      await pressKey(sessionId, key, modifiers, action: 'down');
-      return pressKey(sessionId, key, modifiers, action: 'up');
-    }
+          {String action = 'press'}) =>
+      _serialized(sessionId, (input) async {
+        await _writable(sessionId);
+        // A Linux peer turns a modifier key's press into a lone key up.
+        if (action == 'press' && kMcpModifierKeys.contains(key)) {
+          await _pressKey(input, sessionId, key, modifiers, 'down');
+          return _pressKey(input, sessionId, key, modifiers, 'up');
+        }
+        return _pressKey(input, sessionId, key, modifiers, action);
+      });
+
+  Future<void> _pressKey(_AgentInput input, String sessionId, String key,
+      List<String> modifiers, String action) async {
     await bind.sessionInputKey(
       sessionId: UuidValue(sessionId),
       name: key,
@@ -585,6 +652,8 @@ class RustDeskMcpBackend implements McpBackend {
       shift: modifiers.contains('shift'),
       command: modifiers.contains('command'),
     );
+    if (action == 'down') input.keys.add(key);
+    if (action == 'up') input.keys.remove(key);
   }
 
   @override
@@ -596,5 +665,6 @@ class RustDeskMcpBackend implements McpBackend {
     if (closed != true) {
       throw McpToolException('Unknown session_id: $sessionId');
     }
+    _input.remove(sessionId);
   }
 }

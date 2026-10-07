@@ -280,5 +280,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Carry every connection of a port-forward mapping over a single connection to the peer, instead of connecting and logging in again for each one."),
         ("relay-fallback-delay-tip", "How long a relay connection that is already up waits for the direct WebRTC connection before it is used instead. Raise it to give a slow direct connection more time to win; lower it to settle on the relay sooner on networks where a direct connection cannot be made. Leave empty for the default of 2.5 seconds."),
         ("mcp-server-tip", "Let MCP clients such as Claude control remote computers through RustDesk. Listens on 127.0.0.1 only and requires an access token. Connections and control requests need your approval unless you turn that off below."),
+        ("mcp-read-access-tip", "Enabling MCP lets local MCP clients that hold the access token list your open remote sessions and take screenshots of them without asking for control."),
     ].iter().cloned().collect();
 }

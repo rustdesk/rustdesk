@@ -322,6 +322,50 @@ pub fn session_take_screenshot(session_id: SessionID, display: usize) {
     }
 }
 
+#[allow(unused_variables)]
+pub fn session_take_mcp_screenshot(session_id: SessionID, display: usize, request_id: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+        s.take_screenshot(
+            display as _,
+            crate::flutter_mcp::screenshot_sid(&session_id, &request_id),
+        );
+    }
+}
+
+/// Returns `None` until the screenshot arrives, then "" once it is written to
+/// `path`, or the error.
+#[allow(unused_variables)]
+pub fn session_save_mcp_screenshot(
+    session_id: SessionID,
+    request_id: String,
+    path: String,
+) -> Option<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::flutter_mcp::save_screenshot(
+        &crate::flutter_mcp::screenshot_sid(&session_id, &request_id),
+        &path,
+    );
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return Some("Not supported".to_owned());
+}
+
+#[allow(unused_variables)]
+pub fn session_set_agent_control(session_id: SessionID, agent: bool) -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        // The keyboard hook's releases are dropped from now on, so keys the
+        // user holds would stay down on the peer.
+        if agent && flutter::get_cur_session_id() == session_id {
+            if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+                crate::keyboard::release_remote_keys(&session.get_keyboard_mode());
+            }
+        }
+        crate::flutter_mcp::set_agent_control(session_id, agent);
+    }
+    SyncReturn(())
+}
+
 pub fn session_handle_screenshot(
     #[allow(unused_variables)] session_id: SessionID,
     action: String,
@@ -613,6 +657,10 @@ pub fn session_handle_flutter_key_event(
     lock_modes: i32,
     down_or_up: bool,
 ) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if crate::flutter_mcp::is_agent_control(&session_id) {
+        return;
+    }
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         let keyboard_mode = session.get_keyboard_mode();
         session.handle_flutter_key_event(
@@ -633,6 +681,10 @@ pub fn session_handle_flutter_raw_key_event(
     lock_modes: i32,
     down_or_up: bool,
 ) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if crate::flutter_mcp::is_agent_control(&session_id) {
+        return;
+    }
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         let keyboard_mode = session.get_keyboard_mode();
         session.handle_flutter_raw_key_event(

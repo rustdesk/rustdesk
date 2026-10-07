@@ -15,6 +15,7 @@ class McpServerManager {
   static final McpServerManager instance = McpServerManager._();
 
   McpHttpServer? _server;
+  RustDeskMcpBackend? _backend;
   String? lastError;
 
   bool get running => _server?.running ?? false;
@@ -56,6 +57,7 @@ class McpServerManager {
       final server = McpHttpServer(McpDispatcher(backend), await token());
       await server.start(port: currentPort);
       _server = server;
+      _backend = backend;
       lastError = null;
     } catch (e) {
       lastError = '$e';
@@ -63,9 +65,14 @@ class McpServerManager {
     }
   }
 
+  /// The user took a session back from the agent in its window.
+  void onControlTakenOver(String sessionId) =>
+      _backend?.releaseHeld(sessionId).ignore();
+
   Future<void> _stop() async {
     final s = _server;
     _server = null;
+    _backend = null;
     await s?.stop();
   }
 
