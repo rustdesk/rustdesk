@@ -490,6 +490,19 @@ impl Config2 {
     fn load() -> Config2 {
         let mut config = Config::load_::<Config2>("2");
         let mut store = false;
+        // Ecletica: servidor, relay e chave de fabrica do cliente personalizado.
+        // Roda uma vez, aqui no carregamento, para a tela "Servidor ID/Relay" ja
+        // aparecer preenchida e o app usar sempre o nosso servidor.
+        for (chave, valor) in [
+            ("custom-rendezvous-server", RENDEZVOUS_SERVERS[0]),
+            ("relay-server", RENDEZVOUS_SERVERS[0]),
+            ("key", RS_PUB_KEY),
+        ] {
+            if config.options.get(chave).map_or(true, |v| v.is_empty()) {
+                config.options.insert(chave.to_string(), valor.to_string());
+                store = true;
+            }
+        }
         if let Some(mut socks) = config.socks {
             let (password, _, store2) =
                 decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);

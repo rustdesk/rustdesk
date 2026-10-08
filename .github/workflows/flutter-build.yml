@@ -106,8 +106,6 @@ jobs:
       target_version: Windows10
 
   build-for-windows-flutter:
-    # desligado temporariamente: o Windows ja sai do run #6
-    if: false
     name: ${{ matrix.job.target }}
     needs: [build-RustDeskTempTopMostWindow, generate-bridge]
     runs-on: ${{ matrix.job.os }}
