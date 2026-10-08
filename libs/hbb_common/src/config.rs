@@ -497,6 +497,7 @@ impl Config2 {
             ("custom-rendezvous-server", RENDEZVOUS_SERVERS[0]),
             ("relay-server", RENDEZVOUS_SERVERS[0]),
             ("key", RS_PUB_KEY),
+            ("api-server", "http://56.125.57.78:21114"),
         ] {
             if config.options.get(chave).map_or(true, |v| v.is_empty()) {
                 config.options.insert(chave.to_string(), valor.to_string());
