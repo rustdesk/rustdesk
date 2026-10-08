@@ -80,8 +80,15 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     final installOptions = jsonDecode(bind.installInstallOptions());
     startmenu.value = installOptions['STARTMENUSHORTCUTS'] != '0';
     desktopicon.value = installOptions['DESKTOPSHORTCUTS'] != '0';
-    printer.value = installOptions['PRINTER'] == '1' &&
-        bind.mainGetCommonSync(key: 'is-printer-installed') == 'true';
+    printer.value = installOptions['PRINTER'] == '1';
+    if (printer.value) {
+      final status = bind.mainGetCommonSync(key: 'is-printer-installed');
+      if (status == 'false') {
+        printer.value = false;
+      } else if (status != 'true') {
+        debugPrint('Failed to check printer installation status: $status');
+      }
+    }
   }
 
   @override

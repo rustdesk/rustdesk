@@ -6,6 +6,7 @@ use winapi::{
     shared::{
         minwindef::{BOOL, DWORD, FALSE, LPBYTE, LPDWORD},
         ntdef::{LPCWSTR, LPWSTR},
+        winerror::ERROR_INSUFFICIENT_BUFFER,
     },
     um::winbase::{lstrcmpiW, lstrlenW},
 };
@@ -47,6 +48,16 @@ fn is_name_equal(name: &PCWSTR, name_from_api: LPCWSTR) -> bool {
     unsafe { lstrcmpiW(name.as_ptr(), name_from_api) == 0 }
 }
 
+fn check_enum_buffer_size(enum_name: &str, result: BOOL, needed: DWORD) -> ResultType<()> {
+    if result == FALSE {
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() != Some(ERROR_INSUFFICIENT_BUFFER as i32) || needed == 0 {
+            bail!("Failed to query {enum_name} buffer size: {error}");
+        }
+    }
+    Ok(())
+}
+
 fn common_enum<T, R: Sized>(
     enum_name: &str,
     enum_fn: fn(
@@ -62,7 +73,8 @@ fn common_enum<T, R: Sized>(
 ) -> ResultType<Option<R>> {
     let mut needed = 0;
     let mut returned = 0;
-    enum_fn(level, null_mut(), 0, &mut needed, &mut returned);
+    let result = enum_fn(level, null_mut(), 0, &mut needed, &mut returned);
+    check_enum_buffer_size(enum_name, result, needed)?;
     if needed == 0 {
         return Ok(on_no_data());
     }
