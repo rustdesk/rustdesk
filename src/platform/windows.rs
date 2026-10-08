@@ -3910,7 +3910,11 @@ pub fn update_to(file: &str) -> ResultType<()> {
 //    `1` and `3` must be done in custom actions.
 //    We need also to handle the command line parsing to find the tray processes.
 pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
-    let printer_installed = remote_printer::is_rd_printer_installed(&crate::get_app_name())?;
+    let app_name = crate::get_app_name();
+    let subkey = format!(".{}", app_name.to_lowercase());
+    let printer_installed = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER).as_deref()
+        != Some("0")
+        && remote_printer::is_rd_printer_installed(&app_name)?;
     let cmds = msi_update_command(msi, quiet, printer_installed);
     run_cmds(cmds, false, "update-msi")?;
     Ok(())
