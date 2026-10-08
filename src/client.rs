@@ -115,6 +115,9 @@ pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
 pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
 pub const LOGIN_MSG_2FA_WRONG: &str = "Wrong 2FA Code";
 pub const REQUIRE_2FA: &'static str = "2FA Required";
+// Sent by a direct IP server that is set to refuse a plain stream, see
+// `keys::OPTION_REQUIRE_DIRECT_IP_ENCRYPTION`.
+pub const REQUIRE_ENCRYPTION: &'static str = "Encryption Required";
 pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
 pub const LOGIN_MSG_OFFLINE: &str = "Offline";
 pub const LOGIN_SCREEN_WAYLAND: &str = "Wayland login screen is not supported";
@@ -4637,6 +4640,14 @@ pub async fn handle_hash(
     peer: &mut Stream,
 ) -> bool {
     lc.write().unwrap().hash = hash.clone();
+    // A direct IP server may offer to encrypt the stream. This comes first: everything below,
+    // the login included, is to go out encrypted. Failing to answer it must not be turned
+    // into a plain login.
+    if let Err(err) = crate::common::direct_ip_kx_accept(peer, &hash).await {
+        log::error!("Direct IP key exchange failed: {}", err);
+        interface.msgbox("error", "Connection Error", &err.to_string(), "");
+        return false;
+    }
     // Take care of password application order
 
     // switch_uuid

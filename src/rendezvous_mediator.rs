@@ -46,6 +46,7 @@ fn connection_meta(
     ConnectionMeta {
         control_permissions,
         controlled_context,
+        offer_encryption: false,
     }
 }
 
@@ -1405,7 +1406,12 @@ async fn direct_server(server: ServerPtr) {
                             hbb_common::Stream::from(stream, local_addr),
                             addr,
                             false,
-                            ConnectionMeta::default(), // Direct connections don't have server-side user context.
+                            ConnectionMeta {
+                                // Direct connections don't have server-side user context,
+                                // but they can be upgraded to an encrypted stream.
+                                offer_encryption: true,
+                                ..Default::default()
+                            },
                         )
                         .await
                     );
