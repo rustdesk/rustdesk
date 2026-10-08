@@ -3,6 +3,7 @@
 #include <Windows.h>
 #include <winspool.h>
 #include <setupapi.h>
+#include <strutil.h>
 #include <memory>
 #include <string>
 #include <functional>
@@ -356,6 +357,42 @@ namespace RemotePrinter
         return EnumPrintersW(PRINTER_ENUM_LOCAL, NULL, level, pPrinterInfo, cbBuf, pcbNeeded, pcReturned);
     }
 
+    static HRESULT queryPrinterPresence(LPCWSTR name)
+    {
+        constexpr DWORD printerInfoLevel = 1;
+        DWORD needed = 0;
+        DWORD returned = 0;
+        if (!enumLocalPrinter(printerInfoLevel, NULL, 0, &needed, &returned))
+        {
+            const DWORD error = GetLastError();
+            if (error != ERROR_INSUFFICIENT_BUFFER || needed == 0)
+            {
+                return error == ERROR_SUCCESS ? E_FAIL : HRESULT_FROM_WIN32(error);
+            }
+        }
+        if (needed == 0)
+        {
+            return S_FALSE;
+        }
+
+        std::vector<BYTE> buffer(needed);
+        if (!enumLocalPrinter(printerInfoLevel, buffer.data(), needed, &needed, &returned))
+        {
+            const DWORD error = GetLastError();
+            return error == ERROR_SUCCESS ? E_FAIL : HRESULT_FROM_WIN32(error);
+        }
+
+        const auto printers = reinterpret_cast<const PRINTER_INFO_1W *>(buffer.data());
+        for (DWORD i = 0; i < returned; i++)
+        {
+            if (isNameEqual(name, printers[i].pName))
+            {
+                return S_OK;
+            }
+        }
+        return S_FALSE;
+    }
+
     BOOL isPrinterAdded(LPCWSTR name)
     {
         auto onData = [name](const PRINTER_INFO_1W &info)
@@ -527,4 +564,30 @@ namespace RemotePrinter
         checkDeleteLocalPort(printerName.c_str());
         WcaLog(LOGMSG_STANDARD, "Deleted the local port\n");
     }
+}
+
+extern "C" UINT __stdcall SetPrinterInstallDefault(__in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    LPWSTR appName = NULL;
+
+    hr = WcaInitialize(hInstall, "SetPrinterInstallDefault");
+    ExitOnFailure(hr, "Failed to initialize printer detection");
+
+    hr = WcaGetProperty(L"ProductName", &appName);
+    ExitOnFailure(hr, "Failed to get the printer's application name");
+
+    hr = RemotePrinter::queryPrinterPresence(RemotePrinter::printerNameOf(appName).c_str());
+    ExitOnFailure(hr, "Failed to detect the existing printer; upgrade cannot preserve its state");
+
+    if (hr == S_FALSE)
+    {
+        hr = WcaSetProperty(L"INSTALLPRINTER", L"0");
+        ExitOnFailure(hr, "Failed to disable installation of the missing printer");
+        WcaLog(LOGMSG_STANDARD, "The application's printer is absent; leaving printer installation disabled by default.");
+    }
+
+LExit:
+    ReleaseStr(appName);
+    return WcaFinalize(SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE);
 }
