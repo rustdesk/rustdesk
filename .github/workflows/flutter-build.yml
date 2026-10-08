@@ -106,6 +106,7 @@ jobs:
       target_version: Windows10
 
   build-for-windows-flutter:
+    if: false  # TEMPORARIO Ecletica: rodada so do macOS
     name: ${{ matrix.job.target }}
     needs: [build-RustDeskTempTopMostWindow, generate-bridge]
     runs-on: ${{ matrix.job.os }}
@@ -768,13 +769,6 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - {
-              target: x86_64-apple-darwin,
-              os: macos-15-intel, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
-              extra-build-args: "",
-              arch: x86_64,
-              vcpkg-triplet: x64-osx,
-            }
           - {
               target: aarch64-apple-darwin,
               os: macos-14,
