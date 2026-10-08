@@ -691,6 +691,12 @@ fn start_uinput_service() {
     std::thread::spawn(|| {
         service::start_service_mouse();
     });
+    if let Err(err) = std::thread::Builder::new()
+        .name("uinput-high-resolution-scroll".into())
+        .spawn(service::start_service_high_resolution_scroll)
+    {
+        log::error!("Failed to start high-resolution uinput scroll service: {err}");
+    }
 }
 
 /// Suggests the best terminal type based on the environment.
