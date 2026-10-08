@@ -1242,6 +1242,7 @@ fn check_privacy_mode_changed(
     Ok(())
 }
 
+#[inline]
 fn refresh_allowed(unfed: bool, warmed_up: bool, latency_free: bool) -> bool {
     // Only VideoToolbox has been seen to need this; other platforms keep refreshing as before.
     !cfg!(target_os = "macos") || unfed || warmed_up || latency_free
