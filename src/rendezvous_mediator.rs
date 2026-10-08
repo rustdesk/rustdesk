@@ -1408,8 +1408,10 @@ async fn direct_server(server: ServerPtr) {
                             false,
                             ConnectionMeta {
                                 // Direct connections don't have server-side user context,
-                                // but they can be upgraded to an encrypted stream.
-                                offer_encryption: true,
+                                // but they can be upgraded to an encrypted stream, unless
+                                // that is turned off.
+                                offer_encryption: Config::get_option(OPTION_DIRECT_IP_ENCRYPTION)
+                                    != "N",
                                 ..Default::default()
                             },
                         )

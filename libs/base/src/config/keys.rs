@@ -62,6 +62,8 @@ pub const OPTION_AUTO_DISCONNECT_TIMEOUT: &str = "auto-disconnect-timeout";
 pub const OPTION_ALLOW_ONLY_CONN_WINDOW_OPEN: &str = "allow-only-conn-window-open";
 // A direct IP server refuses to log in a controller that did not encrypt the stream, "Y" to turn on.
 pub const OPTION_REQUIRE_DIRECT_IP_ENCRYPTION: &str = "require-direct-ip-encryption";
+// "N" stops a direct IP server from offering to encrypt the stream at all (on by default).
+pub const OPTION_DIRECT_IP_ENCRYPTION: &str = "direct-ip-encryption";
 pub const OPTION_ALLOW_AUTO_RECORD_INCOMING: &str = "allow-auto-record-incoming";
 pub const OPTION_ALLOW_AUTO_RECORD_OUTGOING: &str = "allow-auto-record-outgoing";
 pub const OPTION_HIDE_RECORDING_BUTTON: &str = "hide-recording-button";
@@ -298,6 +300,7 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_AUTO_DISCONNECT_TIMEOUT,
     OPTION_ALLOW_ONLY_CONN_WINDOW_OPEN,
     OPTION_REQUIRE_DIRECT_IP_ENCRYPTION,
+    OPTION_DIRECT_IP_ENCRYPTION,
     OPTION_ALLOW_AUTO_RECORD_INCOMING,
     OPTION_WINDOWS_SERVICE_VIDEO_SAVE_DIRECTORY,
     OPTION_ENABLE_ABR,
