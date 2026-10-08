@@ -191,10 +191,14 @@ class LocalFlutterShortcutDispatcher {
       if (action == null || generation != _generation) return;
       if ((action == kShortcutActionToggleViewOnly ||
               action == kShortcutActionToggleShowMyCursor ||
+              action == kShortcutActionKeyboardModeMap ||
+              action == kShortcutActionKeyboardModeTranslate ||
+              action == kShortcutActionKeyboardModeLegacy ||
               kShortcutActionsRunOnKeyUp.contains(action) ||
               (!kIsWeb && action == kShortcutActionSendClipboardKeystrokes)) &&
           _forwardedKeyReleases.isNotEmpty) {
         // Focus changes and view-only can keep physical keyups from the peer.
+        // Mode changes can encode later keyups differently from their keydowns.
         final releases = _forwardedKeyReleases.values.toList();
         _forwardedKeyReleases.clear();
         await Future.wait(releases.map((release) => Future<void>.sync(release)));
