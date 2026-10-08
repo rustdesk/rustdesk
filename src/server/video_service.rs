@@ -1272,6 +1272,16 @@ fn handle_one_frame(
             send_conn_ids = sp.send_video_frame(msg);
         }
         Err(e) => {
+            // VideoToolbox pipelines buffer their first packets: the encoder
+            // accepts the frame but returns no output yet (FFmpeg got_packet=0
+            // / OBS empty-queue semantics). hwcodec surfaces this as
+            // "encoder warm-up pending" -- not an error. The repeat-encode
+            // path keeps feeding the pipeline; the packet comes out on a
+            // later call. No strike is counted.
+            if e.to_string() == "encoder warm-up pending" {
+                return Ok(Default::default());
+            }
+            // Real encode errors: keep the existing 3-strike fallback.
             *encode_fail_counter += 1;
             // Encoding errors are not frequent except on Android
             if !cfg!(target_os = "android") {
