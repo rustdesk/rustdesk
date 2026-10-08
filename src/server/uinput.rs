@@ -249,6 +249,12 @@ pub mod client {
         }
 
         fn key_sequence(&mut self, sequence: &str) {
+            if !layout::is_available() {
+                Self::log_layout_error(
+                    &self.send(Data::Keyboard(DataKeyboard::Sequence(sequence.to_string()))),
+                );
+                return;
+            }
             Self::log_layout_error(&self.layout_key_sequence(sequence));
         }
 
@@ -271,8 +277,10 @@ pub mod client {
         }
         fn key_click(&mut self, key: Key) {
             if let Key::Layout(chr) = key {
-                Self::log_layout_error(&self.layout_key_sequence(&chr.to_string()));
-                return;
+                if layout::is_available() {
+                    Self::log_layout_error(&self.layout_key_sequence(&chr.to_string()));
+                    return;
+                }
             }
             allow_err!(self.send(Data::Keyboard(DataKeyboard::KeyClick(key))));
         }

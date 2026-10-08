@@ -189,6 +189,19 @@ fn needs_layout(event: &KeyEvent) -> bool {
     }
 }
 
+pub(in crate::server::uinput) fn is_available() -> bool {
+    let current = CURRENT.read().unwrap();
+    if let Err(error) = current.as_ref() {
+        hbb_common::throttled_log!(
+            LAYOUT_WARNING_INTERVAL,
+            warn,
+            "Uinput layout unavailable: {}; using legacy character mapping (may differ from the host layout)",
+            error
+        );
+    }
+    current.is_ok()
+}
+
 pub(in crate::server::uinput) fn resolve(
     character: char,
     locks: (bool, bool),
