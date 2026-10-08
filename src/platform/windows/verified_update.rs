@@ -112,6 +112,10 @@ fn verified_msi_install_commands(
     expected_sha256: &str,
     quiet: bool,
 ) -> ResultType<String> {
+    use windows::Win32::Foundation::{
+        ERROR_SUCCESS, ERROR_SUCCESS_REBOOT_INITIATED, ERROR_SUCCESS_REBOOT_REQUIRED,
+    };
+
     // The open source handle prevents replacing that file, but not retargeting an
     // ancestor junction. Copy and reverify it in the protected runner directory.
     let source = path_for_cmd_environment(msi)?;
@@ -123,7 +127,14 @@ fn verified_msi_install_commands(
          copy /B /Y \"%RUSTDESK_VERIFIED_MSI_SOURCE%\" \"%RUSTDESK_VERIFIED_MSI%\" > nul || exit /b {VERIFIED_UPDATE_COPY_FAILURE_EXIT_CODE}\r\n\
          certutil.exe -hashfile \"%RUSTDESK_VERIFIED_MSI%\" SHA256 > \"%RUSTDESK_VERIFIED_MSI%.sha256\" || exit /b {VERIFIED_UPDATE_HASH_FAILURE_EXIT_CODE}\r\n\
          findstr.exe /R /I /X /C:\"{hash_pattern}\" \"%RUSTDESK_VERIFIED_MSI%.sha256\" > nul || exit /b {VERIFIED_UPDATE_HASH_MISMATCH_EXIT_CODE}\r\n\
-         msiexec.exe /i \"%RUSTDESK_VERIFIED_MSI%\"{quiet_args} REBOOT=ReallySuppress /norestart"
+         msiexec.exe /i \"%RUSTDESK_VERIFIED_MSI%\"{quiet_args} REBOOT=ReallySuppress /norestart\r\n\
+         set \"RUSTDESK_MSI_EXIT_CODE=%ERRORLEVEL%\"\r\n\
+         if \"%RUSTDESK_MSI_EXIT_CODE%\"==\"{reboot_initiated}\" exit /b {success}\r\n\
+         if \"%RUSTDESK_MSI_EXIT_CODE%\"==\"{reboot_required}\" exit /b {success}\r\n\
+         exit /b %RUSTDESK_MSI_EXIT_CODE%",
+        success = ERROR_SUCCESS.0,
+        reboot_initiated = ERROR_SUCCESS_REBOOT_INITIATED.0,
+        reboot_required = ERROR_SUCCESS_REBOOT_REQUIRED.0,
     ))
 }
 
