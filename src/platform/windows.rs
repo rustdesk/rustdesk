@@ -1353,21 +1353,25 @@ pub fn get_install_options() -> String {
     serde_json::to_string(&opts).unwrap_or("{}".to_owned())
 }
 
-pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static str {
+pub fn get_silent_install_options(printer_override: Option<bool>) -> ResultType<&'static str> {
+    if !is_win_10_or_greater() {
+        return Ok("desktopicon startmenu");
+    }
+
     let install_printer = match printer_override {
         Some(override_value) => override_value,
         None => {
             let app_name = crate::get_app_name();
             let subkey = format!(".{}", app_name.to_lowercase());
             let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
-            printer.as_deref() == Some("1")
+            printer.as_deref() == Some("1") && remote_printer::is_rd_printer_installed(&app_name)?
         }
     };
-    if install_printer && is_win_10_or_greater() {
+    Ok(if install_printer {
         "desktopicon startmenu printer"
     } else {
         "desktopicon startmenu"
-    }
+    })
 }
 
 // This function return Option<String>, because some registry value may be empty.
