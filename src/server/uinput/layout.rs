@@ -260,7 +260,13 @@ impl<'a> State<'a> {
                 {
                     candidates.entry(character).or_insert_with(|| LayoutKey {
                         key: enigo::Key::Raw(keycode),
-                        modifiers: selected.iter().map(|modifier| modifier.keycode).collect(),
+                        // Press Level3 first to avoid Shift+RightAlt activating Compose.
+                        // Candidate preference still follows the original modifier order.
+                        modifiers: selected
+                            .iter()
+                            .rev()
+                            .map(|modifier| modifier.keycode)
+                            .collect(),
                     });
                 }
             }
