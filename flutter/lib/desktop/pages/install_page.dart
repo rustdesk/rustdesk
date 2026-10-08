@@ -88,7 +88,6 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     showProgress.value = true;
     try {
       final status = await bind.mainGetCommon(key: 'is-printer-installed');
-      if (!mounted) return;
       if (status == 'false') {
         printer.value = false;
       } else if (status != 'true') {
@@ -97,10 +96,8 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     } catch (e) {
       debugPrint('Failed to check printer installation status: $e');
     } finally {
-      if (mounted) {
-        showProgress.value = false;
-        btnEnabled.value = true;
-      }
+      showProgress.value = false;
+      btnEnabled.value = true;
     }
   }
 
