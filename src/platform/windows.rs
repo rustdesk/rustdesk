@@ -3910,11 +3910,20 @@ pub fn update_to(file: &str) -> ResultType<()> {
 //    `1` and `3` must be done in custom actions.
 //    We need also to handle the command line parsing to find the tray processes.
 pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
-    let quiet_args = if quiet { " /qn LAUNCH_TRAY_APP=N" } else { "" };
-    let cmds =
-        format!("chcp 65001 && msiexec /i \"{msi}\"{quiet_args} REBOOT=ReallySuppress /norestart");
+    let printer_installed = remote_printer::is_rd_printer_installed(&crate::get_app_name())?;
+    let cmds = msi_update_command(msi, quiet, printer_installed);
     run_cmds(cmds, false, "update-msi")?;
     Ok(())
+}
+
+fn msi_update_command(msi: &str, quiet: bool, printer_installed: bool) -> String {
+    let quiet_args = if quiet { " /qn LAUNCH_TRAY_APP=N" } else { "" };
+    let printer_args = if printer_installed {
+        ""
+    } else {
+        " INSTALLPRINTER=0"
+    };
+    format!("chcp 65001 && msiexec /i \"{msi}\"{quiet_args}{printer_args} REBOOT=ReallySuppress /norestart")
 }
 
 fn get_import_config(exe: &str) -> String {
