@@ -114,7 +114,7 @@ const CHARS: &[char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-pub const RENDEZVOUS_SERVERS: &[&str] = &["56.125.57.78"];
+pub const RENDEZVOUS_SERVERS: &[&str] = &["app.ecletico.ai"];
 pub const RS_PUB_KEY: &str = "xaLY1y7ytr8vqykrRyukSTeg0zIsqzDscsPAi5tVlYY=";
 
 pub const RENDEZVOUS_PORT: i32 = 21116;
@@ -497,7 +497,7 @@ impl Config2 {
             ("custom-rendezvous-server", RENDEZVOUS_SERVERS[0]),
             ("relay-server", RENDEZVOUS_SERVERS[0]),
             ("key", RS_PUB_KEY),
-            ("api-server", "http://56.125.57.78:21114"),
+            ("api-server", "https://app.ecletico.ai/rustdesk"),
         ] {
             if config.options.get(chave).map_or(true, |v| v.is_empty()) {
                 config.options.insert(chave.to_string(), valor.to_string());
