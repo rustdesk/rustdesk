@@ -125,7 +125,15 @@ pub mod client {
             if let Some(pressed) = self.layout_keys.get(&chr).cloned() {
                 return self.send_layout_key_down(&pressed);
             }
-            let mapping = self.layout_context()?.resolve(chr)?;
+            let mapping = if layout::is_available() {
+                self.layout_context()?.resolve(chr)?
+            } else {
+                // Discovery may finish before key-up; retain the legacy key for release.
+                LayoutKey {
+                    key: Key::Layout(chr),
+                    modifiers: Vec::new(),
+                }
+            };
             self.press_layout_key(chr, mapping)
         }
 
