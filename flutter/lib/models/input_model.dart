@@ -1066,8 +1066,11 @@ class InputModel {
       LogicalKeyboardKey.metaRight: PhysicalKeyboardKey.metaRight,
     }.entries) {
       if (!pressed.contains(entry.key)) continue;
-      if (isWebDesktop && keyboardMode == kKeyMapMode) {
+      if (isWebDesktop) {
+        // The action can switch from Legacy to Map while modifiers stay held.
         _localFlutterShortcuts.recordReleasedModifiers([entry.value]);
+      }
+      if (isWebDesktop && keyboardMode == kKeyMapMode) {
         releases.add(bind.sessionHandleFlutterKeyEvent(
           sessionId: sessionId,
           character: '',
