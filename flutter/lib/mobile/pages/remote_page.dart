@@ -43,6 +43,11 @@ void _disableAndroidSoftKeyboard({bool? isKeyboardVisible}) {
 
 bool handleMobileLocalKeyEvent(KeyEvent event,
     {required bool remoteFocused, required InputModel inputModel}) {
+  if (event is KeyUpEvent && inputModel.isViewOnly) {
+    // View-only skips normal modifier cleanup; stale physical keys would
+    // otherwise look like touch selections in the input helper.
+    inputModel.handleKeyUpEventModifiers(event);
+  }
   if (!remoteFocused &&
       event is KeyUpEvent &&
       const [
@@ -991,22 +996,6 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
   InputModel get inputModel => gFFI.inputModel;
 
-  @override
-  void didUpdateWidget(KeyHelpTools oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!_pin && oldWidget.requestShow && !widget.requestShow) {
-      _releaseVirtualModifiers();
-    }
-  }
-
-  void _releaseVirtualModifiers() {
-    final keyboard = HardwareKeyboard.instance;
-    inputModel.ctrl = inputModel.ctrl && keyboard.isControlPressed;
-    inputModel.alt = inputModel.alt && keyboard.isAltPressed;
-    inputModel.shift = inputModel.shift && keyboard.isShiftPressed;
-    inputModel.command = inputModel.command && keyboard.isMetaPressed;
-  }
-
   Widget wrap(String text, void Function() onPressed,
       {bool? active, IconData? icon}) {
     return TextButton(
@@ -1044,7 +1033,13 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_pin && !widget.requestShow) {
+    final keyboard = HardwareKeyboard.instance;
+    // Keep touch selections visible without physical modifiers opening the bar.
+    final hasTouchModifier = (inputModel.ctrl && !keyboard.isControlPressed) ||
+        (inputModel.alt && !keyboard.isAltPressed) ||
+        (inputModel.shift && !keyboard.isShiftPressed) ||
+        (inputModel.command && !keyboard.isMetaPressed);
+    if (!_pin && !hasTouchModifier && !widget.requestShow) {
       gFFI.cursorModel
           .keyHelpToolsVisibilityChanged(null, widget.keyboardIsVisible);
       return Offstage();
@@ -1083,10 +1078,9 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
           active: _fn),
       wrap(
           '',
-          () => setState(() {
-                _pin = !_pin;
-                if (!_pin && !widget.requestShow) _releaseVirtualModifiers();
-              }),
+          () => setState(
+                () => _pin = !_pin,
+              ),
           active: _pin,
           icon: Icons.push_pin),
       wrap(
