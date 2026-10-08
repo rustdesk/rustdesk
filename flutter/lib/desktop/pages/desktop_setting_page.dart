@@ -435,7 +435,7 @@ class _GeneralState extends State<_General> {
     // hidden — both are meaningless without an active matcher.
     return StatefulBuilder(builder: (context, setLocalState) {
       final enabled = ShortcutModel.isEnabled();
-      return _Card(title: 'Keyboard Shortcuts', children: [
+      return _Card(title: 'Keyboard shortcuts', children: [
         _OptionCheckBox(
           context,
           'Enable keyboard shortcuts in remote session',

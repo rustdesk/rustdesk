@@ -41,7 +41,7 @@ class _DesktopKeyboardShortcutsPageState
         AppBarTheme.of(context).titleTextStyle?.color ?? Colors.white;
     return Scaffold(
       appBar: AppBar(
-        title: Text(translate('Keyboard Shortcuts')),
+        title: Text(translate('Keyboard shortcuts')),
         actions: [
           TextButton.icon(
             style: TextButton.styleFrom(foregroundColor: foregroundColor),

@@ -40,7 +40,7 @@ class _MobileKeyboardShortcutsPageState
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(translate('Keyboard Shortcuts')),
+        title: Text(translate('Keyboard shortcuts')),
         actions: [
           IconButton(
             tooltip: translate('Reset to defaults'),

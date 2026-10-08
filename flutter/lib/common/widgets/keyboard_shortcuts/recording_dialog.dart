@@ -367,7 +367,7 @@ class _RecordingDialogState extends State<_RecordingDialog> {
 
     return AlertDialog(
       title: Text(
-        '${translate('Set Shortcut')}: ${widget.actionLabel}',
+        '${translate('Set shortcut')}: ${widget.actionLabel}',
       ),
       content: Focus(
         focusNode: _focusNode,

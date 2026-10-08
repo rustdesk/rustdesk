@@ -902,7 +902,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           if (!disabledSettings)
             SettingsTile.navigation(
               leading: Icon(Icons.keyboard_outlined),
-              title: Text(translate('Keyboard Shortcuts')),
+              title: Text(translate('Keyboard shortcuts')),
               description: Text(ShortcutModel.isEnabled()
                   ? translate('On')
                   : translate('Off')),
