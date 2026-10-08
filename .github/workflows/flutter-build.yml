@@ -369,7 +369,8 @@ jobs:
           python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
+          PLAT=$([ "${{ matrix.job.arch }}" = "aarch64" ] && echo arm64 || echo x64)
+          mv ./target/release/rustdesk-portable-packer.exe "./SignOutput/Ecletica-Quicksuporte-Windows-$PLAT.exe"
 
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
@@ -392,8 +393,9 @@ jobs:
           $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
           msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
           $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
-          mv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
-          sha256sum ../../SignOutput/rustdesk-*.msi
+          $plat = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'arm64' } else { 'x64' }
+          mv $msi.FullName ../../SignOutput/Ecletica-Acesso-Remoto-Windows-$plat.msi
+          sha256sum ../../SignOutput/Ecletica-*.msi
 
       - name: Build pre-built MSI template
         # Two things this works around: preprocess.py rewrites res/msi in place, so the
@@ -456,8 +458,23 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./SignOutput/rustdesk-*.msi
-            ./SignOutput/rustdesk-*.exe
+            ./SignOutput/Ecletica-*.msi
+            ./SignOutput/Ecletica-*.exe
+
+      - name: Remove os nomes antigos do Release
+        # Depois que os arquivos com nome novo entraram, tiramos os antigos
+        # (rustdesk-<versao>*) para nao ficar arquivo repetido na lista.
+        if: env.UPLOAD_ARTIFACT == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ANTIGOS="$(gh release view "${{ env.TAG_NAME }}" --json assets -q '.assets[].name' \
+            | grep -E '^rustdesk-${{ env.VERSION }}.*\.(msi|exe|dmg)$' || true)"
+          [ -z "$ANTIGOS" ] && { echo "nada para remover"; exit 0; }
+          for n in $ANTIGOS; do
+            gh release delete-asset "${{ env.TAG_NAME }}" "$n" --yes && echo "removido: $n"
+          done
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
@@ -959,8 +976,10 @@ jobs:
       - name: Rename rustdesk
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
-          for name in rustdesk*??.dmg; do
-              mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}.dmg"
+          SUF=$([ "${{ matrix.job.arch }}" = "aarch64" ] && echo AppleSilicon || echo Intel)
+          for name in rustdesk*.dmg; do
+              [ -e "$name" ] || continue
+              mv "$name" "Ecletica-Acesso-Remoto-macOS-$SUF.dmg"
           done
 
       - name: Publish DMG package
@@ -970,7 +989,7 @@ jobs:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            rustdesk*-${{ matrix.job.arch }}.dmg
+            Ecletica-*.dmg
 
   publish_unsigned:
     needs:
