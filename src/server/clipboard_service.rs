@@ -1,6 +1,6 @@
 use super::*;
 #[cfg(not(target_os = "android"))]
-use crate::clipboard::clipboard_listener;
+use crate::clipboard::clipboard_listener::{self, ClipboardEvent};
 #[cfg(not(target_os = "android"))]
 pub use crate::clipboard::{ClipboardContext, ClipboardSide};
 pub use crate::clipboard::{CLIPBOARD_INTERVAL as INTERVAL, CLIPBOARD_NAME as NAME};
@@ -11,12 +11,12 @@ pub use crate::{
     clipboard::{check_clipboard_files, FILE_CLIPBOARD_NAME as FILE_NAME},
     clipboard_file::unix_file_clip,
 };
+#[cfg(target_os = "android")]
+use base::config::keys;
 #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
 use clipboard::platform::unix::fuse::{init_fuse_context, uninit_fuse_context};
-#[cfg(not(target_os = "android"))]
-use clipboard_master::CallbackResult;
 #[cfg(target_os = "android")]
-use hbb_common::config::{keys, option2bool};
+use hbb_common::config::option2bool;
 #[cfg(target_os = "android")]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
@@ -79,7 +79,7 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
 
     while sp.ok() {
         match rx_cb_result.recv_timeout(Duration::from_millis(INTERVAL)) {
-            Ok(CallbackResult::Next) => {
+            Ok(ClipboardEvent::Changed) => {
                 #[cfg(feature = "unix-file-copy-paste")]
                 if sp.name() == FILE_NAME {
                     handler.check_clipboard_file();
@@ -89,11 +89,14 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
                     sp.send(msg);
                 }
             }
-            Ok(CallbackResult::Stop) => {
+            // Host startup state must not supersede a client's explicit initial snapshot.
+            #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+            Ok(ClipboardEvent::InitialSelection) => {}
+            Ok(ClipboardEvent::Stop) => {
                 log::debug!("Clipboard listener stopped");
                 break;
             }
-            Ok(CallbackResult::StopWithError(err)) => {
+            Ok(ClipboardEvent::StopWithError(err)) => {
                 bail!("Clipboard listener stopped with error: {}", err);
             }
             Err(RecvTimeoutError::Timeout) => {}

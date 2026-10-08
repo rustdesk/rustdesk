@@ -8,6 +8,7 @@ pub use artifact::{
     current_update_artifact_query, get_update_download_file_from_url,
     verified_update_artifact_for_download_url, verified_update_artifact_for_release_page_url,
 };
+use base::config::keys;
 use download::ensure_verified_update_artifact;
 pub(crate) use download::remove_update_file;
 use hbb_common::{bail, config, log, ResultType};
@@ -196,7 +197,7 @@ fn check_update(manually: bool) -> ResultType<()> {
     let update_msi = crate::platform::is_msi_installed()? && !crate::is_custom_client();
     #[cfg(not(target_os = "windows"))]
     let update_msi = false;
-    if !(manually || config::Config::get_bool_option(config::keys::OPTION_ALLOW_AUTO_UPDATE)) {
+    if !(manually || config::Config::get_bool_option(keys::OPTION_ALLOW_AUTO_UPDATE)) {
         return Ok(());
     }
     do_check_software_update()?;
@@ -510,7 +511,7 @@ pub fn start_auto_update_macos() {
 pub fn check_update_as_root() -> ResultType<bool> {
     let _update_lock = acquire_mac_update_lock()?;
     // Allow-auto-update setting
-    if !config::Config::get_bool_option(config::keys::OPTION_ALLOW_AUTO_UPDATE) {
+    if !config::Config::get_bool_option(keys::OPTION_ALLOW_AUTO_UPDATE) {
         log::info!("[root-update] Auto update is disabled, skipping.");
         return Ok(false);
     }

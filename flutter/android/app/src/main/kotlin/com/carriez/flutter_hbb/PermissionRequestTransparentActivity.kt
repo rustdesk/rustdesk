@@ -2,9 +2,11 @@ package com.carriez.flutter_hbb
 
 import android.app.Activity
 import android.content.Intent
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.os.ResultReceiver
 import android.util.Log
 
 class PermissionRequestTransparentActivity: Activity() {
@@ -18,7 +20,13 @@ class PermissionRequestTransparentActivity: Activity() {
             ACT_REQUEST_MEDIA_PROJECTION -> {
                 val mediaProjectionManager =
                     getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                val intent = mediaProjectionManager.createScreenCaptureIntent()
+                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    mediaProjectionManager.createScreenCaptureIntent(
+                        MediaProjectionConfig.createConfigForDefaultDisplay()
+                    )
+                } else {
+                    mediaProjectionManager.createScreenCaptureIntent()
+                }
                 startActivityForResult(intent, REQ_REQUEST_MEDIA_PROJECTION)
             }
             else -> finish()
@@ -31,7 +39,13 @@ class PermissionRequestTransparentActivity: Activity() {
             if (resultCode == RESULT_OK && data != null) {
                 launchService(data)
             } else {
-                setResult(RES_FAILED)
+                val resultReceiver =
+                    intent.getParcelableExtra<ResultReceiver>(EXT_MEDIA_PROJECTION_RESULT_RECEIVER)
+                if (resultReceiver != null) {
+                    resultReceiver.send(RES_FAILED, null)
+                } else {
+                    setResult(RES_FAILED)
+                }
             }
         }
 

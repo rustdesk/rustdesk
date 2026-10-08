@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.4.9"
+version = "1.5.0"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -22,7 +22,7 @@ path = "src/service.rs"
 
 [features]
 inline = []
-use_samplerate = ["samplerate"]
+use_samplerate = ["samplerate", "libsamplerate-sys"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
 flutter = ["flutter_rust_bridge"]
@@ -52,7 +52,8 @@ screencapturekit = ["cpal/screencapturekit"]
 [dependencies]
 async-trait = "0.1"
 scrap = { path = "libs/scrap", features = ["wayland"] }
-hbb_common = { path = "libs/hbb_common" }
+hbb_common = { path = "libs/hbb_common", features = ["webrtc"] }
+base = { path = "libs/base" }
 serde_derive = "1.0"
 serde = "1.0"
 serde_json = "1.0"
@@ -61,11 +62,14 @@ cfg-if = "1.0"
 lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
+zstd = "0.13"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 parity-tokio-ipc = { git = "https://github.com/rustdesk-org/parity-tokio-ipc" }
 magnum-opus = { git = "https://github.com/rustdesk-org/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
+libsamplerate-sys = { version = "0.1.12", optional = true }
 uuid = { version = "1.3", features = ["v4"] }
 num_cpus = "1.15"
 bytes = { version = "1.4", features = ["serde"] }
@@ -83,7 +87,7 @@ fon = "0.6"
 shutdown_hooks = "0.1"
 totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
 stunclient = "0.4"
-kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys"}
+kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys", branch = "rustdesk-patches" }
 reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip", "zstd"], default-features=false }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
@@ -208,13 +212,46 @@ jni = "0.21"
 android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
+members = ["libs/scrap", "libs/hbb_common", "libs/base", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
 exclude = ["vdi/host"]
 
 # Patch libxdo-sys to use a stub implementation that doesn't require libxdo
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
 [patch.crates-io]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
+# Upstream reserves a frame's whole declared length as soon as its header is in, so a header alone
+# buys an allocation the size it names, bounded only by max_frame_size. This fork grows the read
+# buffer one read_buffer_size chunk at a time as the bytes actually arrive. Patched rather than
+# depended on directly, so tokio-tungstenite's own tungstenite resolves to the same copy.
+tungstenite = { git = "https://github.com/rustdesk-org/tungstenite-rs", rev = "efce47e5364f00a63302cf07ab1fb13ded478914" }
+# One branch off upstream v0.13.0, the tag whose crate versions match this stack.
+# webrtc-util: reads the Windows adapter list's IPv6 addresses as host-order u16 groups, so every
+# one comes out byte-swapped, fails to bind, and ICE gathers no IPv6 host candidate on Windows;
+# and names every Windows adapter "" with no mask, so ICE cannot tell one adapter's addresses
+# from another's; and lays the adapter struct out in nested parts, whose padding on x64 shifts
+# every field after OperStatus, Ipv6IfIndex first.
+# webrtc-ice: best effort, one IPv6 host candidate per interface and prefix - the one the OS
+# sends from when that is one of the group's, else all of them - since the stable address beside
+# the temporary one is an identifier that outlives every rotation and that nothing else this
+# machine sends out ever shows.
+# webrtc-sctp: RFC 4960's 1s RTO floor makes a single loss cost 1-3s on a link whose RTT is 24-64ms,
+# and fast retransmit cannot cover a request/response exchange; INITIAL_MTU 1228 also fragments on
+# IPv6; and its AIMD pins a lossy long-haul link to MSS/(RTT*sqrt(p)), so a switch sends without
+# a congestion window, as KCP does - on by default, `allow-webrtc-congestion-control` opts back in.
+# Sending that way, a reordering window keeps a chunk that is merely late from being resent on a
+# path that jitters, every DATA chunk asks for its SACK at once so a lost tail is back within an
+# RTT at KCP's RTO floors, and bundles of small chunks stay within the MTU. A T3-rtx resends
+# everything outstanding when it packs into four packets and otherwise probes with one and lets
+# the SACK settle the rest (F-RTO), timed from the latest send, so a stall no longer resends the
+# whole backlog behind itself while a short lost tail still comes back at once. A DATA chunk
+# received again is listed in the SACK, which never happened - the sender widens its reordering
+# window on that - and the SACK keeps to the MTU too, the lowest gap blocks first.
+# Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
+# webrtc: SettingEngine cannot reach the ICE agent's max_binding_requests, which decides how
+# long the answerer keeps checking a pair that has not answered yet.
+webrtc = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63" }
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
@@ -234,6 +271,7 @@ os-version = "0.2"
 [dev-dependencies]
 hound = "3.5"
 docopt = "1.1"
+tokio = { version = "1.44", features = ["test-util"] }
 
 [package.metadata.bundle]
 name = "RustDesk"

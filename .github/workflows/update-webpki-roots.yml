@@ -33,6 +33,10 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # The root workspace lists libs/hbb_common as a member; without the
+          # submodule its manifest is missing and cargo cannot load the workspace.
+          submodules: recursive
 
       - name: Update webpki-roots in all lockfiles
         id: update

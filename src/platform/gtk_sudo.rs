@@ -2,12 +2,11 @@
 // Sometimes reboot is needed to refresh sudoers.
 
 use crate::lang::translate;
+use base::platform::linux::CMD_SH;
 use gtk::{glib, prelude::*};
 use hbb_common::{
     anyhow::{bail, Error},
-    log,
-    platform::linux::CMD_SH,
-    ResultType,
+    log, ResultType,
 };
 use nix::{
     libc::{fcntl, kill},

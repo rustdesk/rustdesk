@@ -1,11 +1,8 @@
 use crate::CodecFormat;
+use base::message_proto::{message, video_frame, EncodedVideoFrame, Message};
 #[cfg(feature = "hwcodec")]
 use hbb_common::anyhow::anyhow;
-use hbb_common::{
-    bail, chrono, log,
-    message_proto::{message, video_frame, EncodedVideoFrame, Message},
-    ResultType,
-};
+use hbb_common::{bail, chrono, log, ResultType};
 #[cfg(feature = "hwcodec")]
 use hwcodec::mux::{MuxContext, Muxer};
 use std::{

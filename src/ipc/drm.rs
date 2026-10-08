@@ -45,6 +45,21 @@ pub struct DmabufDesc {
     pub hdr_max_nits: u32,
     /// True: the fd rides this message's SCM_RIGHTS cmsg. False: import-once cache hit for `fb_id`.
     pub has_fd: bool,
+    /// The DRM `rotation` bitmask the primary plane scanned this frame out with, from
+    /// `drmtap_plane_rotation()` (libdrmtap 0.5.8); a plane without the property is reported as
+    /// rotate-0. `None` when the library cannot say (older than 0.5.8, nothing bound, or the
+    /// property set unreadable). A frame from a plane that rotated in hardware is already
+    /// upright; one from a plane that did not is turned by the output transform. See
+    /// `frame_transform`.
+    #[serde(default)]
+    pub plane_rotation: Option<u32>,
+    /// Cursor plane position read right after this frame was grabbed, in scanout pixels of the
+    /// display this stream shows, so a few ms newer than the frame. `None` means the cursor is
+    /// hidden, the read failed or was rejected, or the producer predates this field. It rides
+    /// the frame instead of a stream of its own so it cannot queue and cannot backpressure the
+    /// capture worker; the consumer only acts on a position that held still for several frames.
+    #[serde(default)]
+    pub cursor_pos: Option<(i32, i32)>,
 }
 
 pub(crate) fn drm_ipc_path() -> String {
@@ -100,6 +115,11 @@ enum DrmProducerMsg {
         width: u32,
         height: u32,
         data: Bytes,
+        /// See `DmabufDesc::plane_rotation`.
+        plane_rotation: Option<u32>,
+        /// See `DmabufDesc::cursor_pos`. The dmabuf path carries it inside the descriptor; this
+        /// one has no descriptor, so it travels beside the pixels.
+        cursor_pos: Option<(i32, i32)>,
     },
     Cursor {
         id: u64,
@@ -107,8 +127,110 @@ enum DrmProducerMsg {
         height: u32,
         hotx: i32,
         hoty: i32,
+        hot_measured: bool,
         colors: Vec<u8>,
     },
+}
+
+/// Put this tick's cursor plane position on the frame it was read next to. The hidden sentinel
+/// carries no position; a shape message is left alone.
+fn stamp_cursor_pos(msg: &mut DrmProducerMsg, c: Option<&scrap::drm_reader::CursorSnapshot>) {
+    let pos = c.and_then(|c| (c.id != scrap::drm_reader::HIDDEN_CURSOR_ID).then_some((c.x, c.y)));
+    match msg {
+        DrmProducerMsg::Frame { desc, .. } => desc.cursor_pos = pos,
+        DrmProducerMsg::FrameCpu { cursor_pos, .. } => *cursor_pos = pos,
+        DrmProducerMsg::Displays(_) | DrmProducerMsg::Cursor { .. } => {}
+    }
+}
+
+#[cfg(test)]
+mod cursor_pos_tests {
+    use super::*;
+
+    fn desc() -> DmabufDesc {
+        DmabufDesc {
+            buffer_id: 0,
+            width: 4,
+            height: 4,
+            format: 0,
+            modifier: 0,
+            fb_id: 0,
+            num_planes: 1,
+            offsets: [0; 4],
+            pitches: [16, 0, 0, 0],
+            hdr_eotf: 0,
+            hdr_max_nits: 0,
+            has_fd: false,
+            plane_rotation: None,
+            cursor_pos: None,
+        }
+    }
+
+    fn snapshot(id: u64) -> scrap::drm_reader::CursorSnapshot {
+        scrap::drm_reader::CursorSnapshot {
+            id,
+            width: 2,
+            height: 2,
+            hotx: 0,
+            hoty: 0,
+            hot_measured: false,
+            colors: vec![0; 16],
+            x: 10,
+            y: 20,
+        }
+    }
+
+    #[test]
+    fn the_plane_position_rides_both_frame_kinds_and_a_hidden_cursor_rides_as_none() {
+        let visible = snapshot(7);
+        let hidden = snapshot(scrap::drm_reader::HIDDEN_CURSOR_ID);
+
+        let mut frame = DrmProducerMsg::Frame { desc: desc(), fd: None };
+        stamp_cursor_pos(&mut frame, Some(&visible));
+        assert!(matches!(&frame, DrmProducerMsg::Frame { desc, .. } if desc.cursor_pos == Some((10, 20))));
+        stamp_cursor_pos(&mut frame, Some(&hidden));
+        assert!(matches!(&frame, DrmProducerMsg::Frame { desc, .. } if desc.cursor_pos.is_none()));
+
+        let mut cpu = DrmProducerMsg::FrameCpu {
+            width: 4,
+            height: 4,
+            data: Bytes::new(),
+            plane_rotation: None,
+            cursor_pos: None,
+        };
+        stamp_cursor_pos(&mut cpu, Some(&visible));
+        assert!(matches!(&cpu, DrmProducerMsg::FrameCpu { cursor_pos: Some((10, 20)), .. }));
+        stamp_cursor_pos(&mut cpu, None);
+        assert!(matches!(&cpu, DrmProducerMsg::FrameCpu { cursor_pos: None, .. }));
+
+        let mut shape = DrmProducerMsg::Cursor {
+            id: 7,
+            width: 2,
+            height: 2,
+            hotx: 1,
+            hoty: 1,
+            hot_measured: false,
+            colors: vec![0; 16],
+        };
+        stamp_cursor_pos(&mut shape, Some(&visible));
+        assert!(matches!(&shape, DrmProducerMsg::Cursor { hotx: 1, hoty: 1, .. }));
+    }
+
+    // A producer that predates the field: the descriptor arrives without it and reads as None.
+    #[test]
+    fn a_descriptor_without_a_cursor_position_reads_as_none() {
+        let mut v = serde_json::to_value(desc()).unwrap();
+        v.as_object_mut().unwrap().remove("cursor_pos").expect("the field is serialized");
+        let d: DmabufDesc = serde_json::from_value(v).expect("a legacy descriptor must deserialize");
+        assert_eq!(d.cursor_pos, None);
+        let d: DmabufDesc = serde_json::from_value(serde_json::to_value(DmabufDesc {
+            cursor_pos: Some((3, 4)),
+            ..desc()
+        })
+        .unwrap())
+        .unwrap();
+        assert_eq!(d.cursor_pos, Some((3, 4)));
+    }
 }
 
 struct DrmStopGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
@@ -792,6 +914,20 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let mut conn = dup_to_drm_conn(&stream)?;
     drop(stream);
 
+    let wake = match conn.recv_msg_timeout2(3_000).await {
+        Some(Ok((Data::DrmHello { wake }, _fd))) => wake,
+        Some(Ok((_, _fd))) => {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(5),
+                info,
+                "drm: peer did not open with DrmHello; closing"
+            );
+            return Ok(());
+        }
+        Some(Err(e)) => return Err(e),
+        None => return Ok(()),
+    };
+
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
     let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool)>();
     let stop = Arc::new(AtomicBool::new(false));
@@ -801,7 +937,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let worker_gate = frames_gated.clone();
     std::thread::Builder::new()
         .name("drm-capture".into())
-        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate))
+        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate, wake))
         .map_err(|err| anyhow::anyhow!("could not spawn the drm capture worker: {err}"))?;
 
     let displays = match frame_rx.recv().await {
@@ -915,6 +1051,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                     height,
                     hotx,
                     hoty,
+                    hot_measured,
                     colors,
                 } => {
                     conn.send_msg(
@@ -924,6 +1061,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                             height,
                             hotx,
                             hoty,
+                            hot_measured,
                         },
                         None,
                     )
@@ -957,8 +1095,19 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 width,
                 height,
                 data,
+                plane_rotation,
+                cursor_pos,
             }) => {
-                conn.send_msg(&Data::DrmFrame { width, height }, None).await?;
+                conn.send_msg(
+                    &Data::DrmFrame {
+                        width,
+                        height,
+                        plane_rotation,
+                        cursor_pos,
+                    },
+                    None,
+                )
+                .await?;
                 conn.send_raw(data).await?;
                 credit -= 1; // one frame in flight until the consumer acks it
             }
@@ -973,6 +1122,7 @@ fn drm_capture_worker(
     crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    wake: bool,
 ) {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
@@ -983,7 +1133,15 @@ fn drm_capture_worker(
     let t_conn = std::time::Instant::now();
 
     // Enumerate FRESH rather than serve the cache: a cached display may no longer be driven.
-    let displays = drm_enumerate_settled("a consumer connected");
+    let displays = if wake {
+        drm_enumerate_settled("a consumer connected")
+    } else {
+        let (displays, _undriven) = drm_enumerate_all_displays();
+        // Seen lit, a connector a failed wake gave up on is wakeable again.
+        #[cfg(feature = "drm-wake")]
+        drm_wakeable_undriven(&displays, &_undriven);
+        displays
+    };
     if frame_tx
         .blocking_send(DrmProducerMsg::Displays(displays))
         .is_err()
@@ -1027,12 +1185,13 @@ fn drm_capture_worker(
     let mut stalled: u32 = 0;
     let mut logged_first = false;
     while !stop.load(Ordering::Relaxed) {
-        let grabbed: Option<std::io::Result<DrmProducerMsg>> = if frames_gated.load(Ordering::Relaxed)
+        let mut grabbed: Option<std::io::Result<DrmProducerMsg>> = if frames_gated.load(Ordering::Relaxed)
         {
             // `stalled` is left untouched because the device is healthy -- the task bounds this
             // state itself (CREDIT_STALL) since our watchdog cannot advance.
             None
         } else if use_dmabuf {
+            // Read right after the grab: the library answers for the plane that grab read from.
             Some(match reader.grab_desc() {
                 Ok((fd, d)) => Ok(DrmProducerMsg::Frame {
                     desc: DmabufDesc {
@@ -1048,21 +1207,38 @@ fn drm_capture_worker(
                         hdr_eotf: d.hdr_eotf,
                         hdr_max_nits: d.hdr_max_nits,
                         has_fd: true, // every exported frame carries its fd; see the send below
+                        plane_rotation: reader.plane_rotation(),
+                        cursor_pos: None, // stamped below, from the one cursor read of this tick
                     },
                     fd: Some(fd),
                 }),
                 Err(err) => Err(err),
             })
         } else {
-            Some(match reader.grab() {
-                Ok((buf, w, h)) => Ok(DrmProducerMsg::FrameCpu {
-                    width: w as u32,
-                    height: h as u32,
-                    data: Bytes::copy_from_slice(buf),
-                }),
-                Err(err) => Err(err),
-            })
+            // The mapped buffer borrows the reader: copy it out, then take the rotation the grab
+            // recorded.
+            let copied = reader
+                .grab()
+                .map(|(buf, w, h)| (Bytes::copy_from_slice(buf), w as u32, h as u32));
+            Some(copied.map(|(data, width, height)| DrmProducerMsg::FrameCpu {
+                width,
+                height,
+                data,
+                plane_rotation: reader.plane_rotation(),
+                cursor_pos: None,
+            }))
         };
+        // ONE cursor read per tick, and none on a stalled or failed grab: the plane position rides
+        // the frame it was read next to, and the shape ships when it changes. The position is a
+        // few ms newer than the frame; the consumer only measures a plane that held still for
+        // several frames, so that skew never reaches a measurement.
+        let cursor = match &grabbed {
+            Some(Err(_)) => None,
+            _ => reader.cursor(),
+        };
+        if let Some(Ok(msg)) = grabbed.as_mut() {
+            stamp_cursor_pos(msg, cursor.as_ref());
+        }
         match grabbed {
             None => {}
             Some(Ok(msg)) => {
@@ -1105,7 +1281,7 @@ fn drm_capture_worker(
         }
 
         // Ship the cursor shape only when it changes (id is a content hash or the hidden sentinel).
-        if let Some(c) = reader.cursor() {
+        if let Some(c) = cursor {
             if c.id != last_cursor_id {
                 last_cursor_id = c.id;
                 if frame_tx
@@ -1115,6 +1291,7 @@ fn drm_capture_worker(
                         height: c.height,
                         hotx: c.hotx,
                         hoty: c.hoty,
+                        hot_measured: c.hot_measured,
                         colors: c.colors,
                     })
                     .is_err()
@@ -1534,7 +1711,15 @@ mod drm_conn_tests {
         let (a, b) = tokio::net::UnixStream::pair().unwrap();
         let mut tx = DrmConn::new(a);
         let mut rx = DrmConn::new(b);
-        tx.send_msg(&Data::DrmFrame { width: 1920, height: 1080 }, None)
+        tx.send_msg(
+            &Data::DrmFrame {
+                width: 1920,
+                height: 1080,
+                plane_rotation: None,
+                cursor_pos: None,
+            },
+            None,
+        )
             .await
             .unwrap();
         let (data, fd) = rx.recv_msg().await.unwrap();
@@ -1542,7 +1727,9 @@ mod drm_conn_tests {
             data,
             Data::DrmFrame {
                 width: 1920,
-                height: 1080
+                height: 1080,
+                plane_rotation: None,
+                cursor_pos: None
             }
         ));
         assert!(fd.is_none(), "no fd was sent, none must be reported");
@@ -1554,7 +1741,15 @@ mod drm_conn_tests {
         let mut tx = DrmConn::new(a);
         let mut rx = DrmConn::new(b);
         let (rd, wr) = pipe();
-        tx.send_msg(&Data::DrmFrame { width: 4, height: 4 }, Some(rd.as_fd()))
+        tx.send_msg(
+            &Data::DrmFrame {
+                width: 4,
+                height: 4,
+                plane_rotation: None,
+                cursor_pos: None,
+            },
+            Some(rd.as_fd()),
+        )
             .await
             .unwrap();
         let (_data, fd) = rx.recv_msg().await.unwrap();
@@ -1668,6 +1863,8 @@ mod drm_conn_tests {
         let payload = serde_json::to_vec(&Data::DrmFrame {
             width: 8,
             height: 8,
+            plane_rotation: None,
+            cursor_pos: None,
         })
         .unwrap();
         let prefix = (payload.len() as u32).to_be_bytes();
@@ -1679,7 +1876,9 @@ mod drm_conn_tests {
             data,
             Data::DrmFrame {
                 width: 8,
-                height: 8
+                height: 8,
+                plane_rotation: None,
+                cursor_pos: None
             }
         ));
         let kept = fd.expect("the first surplus fd must be kept");

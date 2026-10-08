@@ -1,7 +1,7 @@
-diff --git a/build/cmake/aom_configure.cmake b/build/cmake/aom_configure.cmake
+diff --git a/cmake/aom_configure.cmake b/cmake/aom_configure.cmake
 index aaef2c310..5500ad4a3 100644
---- a/build/cmake/aom_configure.cmake
-+++ b/build/cmake/aom_configure.cmake
+--- a/cmake/aom_configure.cmake
++++ b/cmake/aom_configure.cmake
 @@ -309,6 +309,8 @@ if(MSVC)
  
    # Disable MSVC warnings that suggest making code non-portable.

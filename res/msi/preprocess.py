@@ -10,7 +10,6 @@ import subprocess
 import re
 import platform
 from pathlib import Path
-from itertools import chain
 import shutil
 from xml.sax.saxutils import quoteattr
 
@@ -68,6 +67,14 @@ def make_parser():
         "-c", "--custom", action="store_true", help="Is custom client", default=False
     )
     parser.add_argument(
+        "--template",
+        action="store_true",
+        default=False,
+        help="Build a template to be patched per customer rather than a finished "
+        "package: puts the files a custom client replaces in their own cabinet, so "
+        "rebranding rebuilds a few hundred KB instead of the whole payload.",
+    )
+    parser.add_argument(
         "--conn-type",
         type=str,
         default="",
@@ -92,6 +99,43 @@ def make_parser():
     return parser
 
 
+# Files a custom client replaces. Kept in their own cabinet by --template so that
+# rebranding rebuilds a few hundred KB instead of recompressing the whole payload.
+# The app executable is handled separately: it has its own component in RustDesk.wxs.
+#
+# A template has to ship a placeholder for each of these so there is a File row to
+# patch, but the branding assets are optional for a customer and a stock build has
+# none of them at all. So each optional one installs only when its property is set,
+# which the patcher does for the files a customer actually supplied. Otherwise a
+# customer without a logo would install the placeholder, where today they get no
+# logo at all -- the client treats a missing asset as "no logo".
+PER_CUSTOMER_DISK_ID = 2
+PER_CUSTOMER_FILES = {
+    # relative path -> property gating installation, or None if always installed
+    "custom.txt": None,
+    "data/flutter_assets/assets/icon.ico": "CC_HAS_ICON_ICO",
+    "data/flutter_assets/assets/icon.png": "CC_HAS_ICON_PNG",
+    "data/flutter_assets/assets/logo.png": "CC_HAS_LOGO",
+    "data/flutter_assets/assets/logo_light.png": "CC_HAS_LOGO_LIGHT",
+    "data/flutter_assets/assets/logo_dark.png": "CC_HAS_LOGO_DARK",
+}
+
+
+def normalize_relative(relative_path):
+    path = relative_path.replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return path.lower()
+
+
+def is_per_customer(relative_path):
+    return normalize_relative(relative_path) in PER_CUSTOMER_FILES
+
+
+def per_customer_condition(relative_path):
+    return PER_CUSTOMER_FILES.get(normalize_relative(relative_path))
+
+
 def read_lines_and_start_index(file_path, tag_start, tag_end):
     with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -112,7 +156,7 @@ def read_lines_and_start_index(file_path, tag_start, tag_end):
     return lines, index_start
 
 
-def insert_components_between_tags(lines, index_start, app_name, dist_dir):
+def insert_components_between_tags(lines, index_start, app_name, dist_dir, template=False):
     indent = g_indent_unit * 3
     path = Path(dist_dir)
     idx = 1
@@ -126,12 +170,23 @@ def insert_components_between_tags(lines, index_start, app_name, dist_dir):
             if subdir != ".":
                 dir_attr = f'Subdirectory="{subdir}"'
 
+            relative = file_path.relative_to(path).as_posix()
+            disk_attr = ""
+            condition_attr = ""
+            if template and is_per_customer(relative):
+                disk_attr = f' DiskId="{PER_CUSTOMER_DISK_ID}"'
+                # Branding assets are optional, and the template only carries a
+                # placeholder, so install one only when the customer supplied it.
+                condition = per_customer_condition(relative)
+                if condition:
+                    condition_attr = f' Condition="{condition} = 1"'
+
             # Don't generate Component Id and File Id like 'Component_{idx}' and 'File_{idx}'
             # because it will cause error
             # "Error WIX0130	The primary key 'xxxx' is duplicated in table 'Directory'"
             to_insert_lines = f"""
-{indent}<Component Guid="{uuid.uuid4()}" {dir_attr}>
-{indent}{g_indent_unit}<File Source="{file_path.as_posix()}" KeyPath="yes" Checksum="yes" />
+{indent}<Component Guid="{uuid.uuid4()}" {dir_attr}{condition_attr}>
+{indent}{g_indent_unit}<File Source="{file_path.as_posix()}" KeyPath="yes" Checksum="yes"{disk_attr} />
 {indent}</Component>
 """
             lines.insert(index_start + 1, to_insert_lines[1:])
@@ -140,15 +195,50 @@ def insert_components_between_tags(lines, index_start, app_name, dist_dir):
     return True
 
 
-def gen_auto_component(app_name, dist_dir):
+def gen_auto_component(app_name, dist_dir, template=False):
     return gen_content_between_tags(
         "Package/Components/RustDesk.wxs",
         "<!--$AutoComonentStart$-->",
         "<!--$AutoComponentEnd$-->",
         lambda lines, index_start: insert_components_between_tags(
-            lines, index_start, app_name, dist_dir
+            lines, index_start, app_name, dist_dir, template
         ),
     )
+
+
+def gen_media2():
+    """Second cabinet holding only what a custom client replaces."""
+
+    def func(lines, index_start):
+        indent = g_indent_unit * 2
+        lines.insert(
+            index_start + 1,
+            f'{indent}<Media Id="{PER_CUSTOMER_DISK_ID}" Cabinet="cab2.cab"'
+            ' EmbedCab="yes" CompressionLevel="high" />\n',
+        )
+        return lines
+
+    return gen_content_between_tags(
+        "Package/Package.wxs", "<!--$Media2Start$-->", "<!--$Media2End$-->", func
+    )
+
+
+def put_app_exe_on_media2():
+    """The app executable has its own component, so it is moved by name."""
+    target = Path(sys.argv[0]).parent.joinpath("Package/Components/RustDesk.wxs")
+    with open(target, "r", encoding="utf-8") as f:
+        content = f.read()
+    old = '<File Id="App.exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes">'
+    new = (
+        '<File Id="App.exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes"'
+        f' DiskId="{PER_CUSTOMER_DISK_ID}">'
+    )
+    if content.count(old) != 1:
+        print(f"Error: expected exactly one App.exe File element, found {content.count(old)}")
+        return False
+    with open(target, "w", encoding="utf-8") as f:
+        f.write(content.replace(old, new))
+    return True
 
 
 def gen_pre_vars(args, dist_dir):
@@ -187,18 +277,6 @@ def replace_app_name_in_langs(app_name):
             lines = f.readlines()
         for i, line in enumerate(lines):
             lines[i] = line.replace("RustDesk", app_name)
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.writelines(lines)
-
-def replace_app_name_in_custom_actions(app_name):
-    custion_actions_dir = Path(sys.argv[0]).parent.joinpath("CustomActions")
-    for file_path in chain(custion_actions_dir.glob("*.cpp"), custion_actions_dir.glob("*.h")):
-        with open(file_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        for i, line in enumerate(lines):
-            line = re.sub(r"\bRustDesk\b", app_name, line)
-            line = line.replace(f"{app_name} v4 Printer Driver", "RustDesk v4 Printer Driver")
-            lines[i] = line
         with open(file_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
 
@@ -478,11 +556,16 @@ if __name__ == "__main__":
     if not gen_conn_type(args):
         sys.exit(-1)
 
-    if not gen_auto_component(app_name, dist_dir):
+    if args.template:
+        if not gen_media2():
+            sys.exit(-1)
+        if not put_app_exe_on_media2():
+            sys.exit(-1)
+
+    if not gen_auto_component(app_name, dist_dir, args.template):
         sys.exit(-1)
 
     if not gen_custom_dialog_bitmaps():
         sys.exit(-1)
 
     replace_app_name_in_langs(args.app_name)
-    replace_app_name_in_custom_actions(args.app_name)

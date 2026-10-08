@@ -2,6 +2,7 @@ use hbb_common::regex::Regex;
 use std::ops::Deref;
 
 mod ar;
+mod az;
 mod be;
 mod bg;
 mod ca;
@@ -32,7 +33,8 @@ mod lv;
 mod nb;
 mod nl;
 mod pl;
-mod ptbr;
+mod pt_BR;
+mod pt_PT;
 mod ro;
 mod ru;
 mod sc;
@@ -51,6 +53,7 @@ mod ta;
 mod ge;
 mod fi;
 mod ml;
+mod gl;
 
 pub const LANGS: &[(&str, &str)] = &[
     ("en", "English"),
@@ -61,7 +64,8 @@ pub const LANGS: &[(&str, &str)] = &[
     ("nb", "Norsk bokmål"),
     ("zh-cn", "简体中文"),
     ("zh-tw", "繁體中文"),
-    ("pt", "Português"),
+    ("pt-pt", "Português (Portugal)"),
+    ("pt-br", "Português (Brasil)"),
     ("es", "Español"),
     ("et", "Eesti keel"),
     ("eu", "Euskara"),
@@ -84,6 +88,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("ur", "اردو"),
     ("fa", "فارسی"),
     ("ca", "Català"),
+    ("gl", "Galego"),
     ("el", "Ελληνικά"),
     ("sv", "Svenska"),
     ("sq", "Shqip"),
@@ -103,6 +108,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("ml", "മലയാളം"),
     ("hi", "हिंदी"),
     ("gu", "ગુજરાતી"),
+    ("az", "Azərbaycan dili"),
 ];
 
 pub(crate) fn cjk_ui_unavailable() -> bool {
@@ -135,6 +141,21 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
                 "zh-tw"
             } else {
                 "zh-cn"
+            })
+            .to_owned();
+        }
+    }
+    if lang.is_empty() {
+        // pt_PT on Linux, pt-PT on mac, pt_PT on Android.
+        // Per CLDR locale inheritance, every Portuguese-speaking locale
+        // besides bare "pt" and Brazil's own variants (pt-BR/pt_BR) has
+        // pt-PT as its parent (Angola, Mozambique, Cape Verde, etc.),
+        // so it should resolve to European Portuguese.
+        if locale.starts_with("pt") {
+            lang = (if locale == "pt" || locale.starts_with("pt-br") || locale.starts_with("pt_br") {
+                "pt-br"
+            } else {
+                "pt-pt"
             })
             .to_owned();
         }
@@ -181,8 +202,10 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "id" => id::T.deref(),
-        "br" => ptbr::T.deref(),
-        "pt" => ptbr::T.deref(),
+        "br" => pt_BR::T.deref(),
+        "pt" => pt_BR::T.deref(),
+        "pt-br" => pt_BR::T.deref(),
+        "pt-pt" => pt_PT::T.deref(),
         "tr" => tr::T.deref(),
         "cs" => cs::T.deref(),
         "da" => da::T.deref(),
@@ -217,6 +240,8 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ml" => ml::T.deref(),
         "hi" => hi::T.deref(),
         "gu" => gu::T.deref(),
+        "gl" => gl::T.deref(),
+        "az" => az::T.deref(),
         _ => en::T.deref(),
     };
     let (name, placeholder_value) = extract_placeholder(&name);
@@ -337,5 +362,25 @@ mod test {
         assert_eq!(f("zh-cn", "en-US", false), "zh-cn");
         assert_eq!(f("", "zh_TW", false), "zh-tw");
         assert_eq!(f("", "ja-JP", false), "ja");
+    }
+
+    #[test]
+    fn test_resolve_lang_detects_pt_pt_and_pt_br_from_locale() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "pt-PT", false), "pt-pt");
+        assert_eq!(f("", "pt_PT", false), "pt-pt");
+        assert_eq!(f("", "pt-BR", false), "pt-br");
+        assert_eq!(f("", "pt_BR", false), "pt-br");
+        assert_eq!(f("", "pt-AO", false), "pt-pt");
+        assert_eq!(f("", "pt-MZ", false), "pt-pt");
+    }
+
+    #[test]
+    fn test_resolve_lang_saved_lang_takes_precedence_over_locale() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("pt-br", "pt-PT", false), "pt-br");
+        assert_eq!(f("pt-pt", "pt-BR", false), "pt-pt");
     }
 }
