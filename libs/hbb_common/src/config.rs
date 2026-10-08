@@ -2831,7 +2831,10 @@ pub fn is_disable_account() -> bool {
 
 #[inline]
 pub fn is_disable_installation() -> bool {
-    is_some_hard_opton("disable-installation")
+    // Ecletica: cliente personalizado. Some a faixa do UAC e o aviso de nova
+    // versao do RustDesk oficial na tela inicial (nao instalamos o RustDesk
+    // de fabrica nem atualizamos para a versao publica).
+    true
 }
 
 // This function must be kept the same as the one in flutter and sciter code.
