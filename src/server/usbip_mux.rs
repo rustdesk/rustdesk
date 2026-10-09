@@ -33,8 +33,9 @@ const CONNECT_TIMEOUT_MS: u64 = 3000;
 const USBIP_HOST_DRIVER_DIR: &str = "/sys/bus/usb/drivers/usbip-host";
 // Caps how many relay tasks (and their `usbipd` TCP connections) a single
 // permitted peer can make us spawn; with `usbip_flow::CHANNEL_WINDOW` per
-// channel it also bounds what one connection can make us buffer.
-const MAX_LIVE_CHANNELS: usize = 32;
+// channel it also bounds what one connection can make us buffer, and so how
+// much USB data can queue ahead of the desktop traffic on that connection.
+const MAX_LIVE_CHANNELS: usize = 8;
 
 fn usb_channel_msg(union: usb_channel::Union) -> Message {
     let mut ch = UsbChannel::new();

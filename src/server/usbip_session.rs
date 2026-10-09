@@ -13,11 +13,16 @@ pub struct UsbSession {
     pull: UsbPullState,
 }
 
+lazy_static::lazy_static! {
+    // One privileged `usbip` step (and its elevation dialog) at a time across
+    // every session and both directions, so concurrent sessions cannot bind,
+    // attach or detach against each other.
+    static ref PRIVILEGED: Arc<Semaphore> = Arc::new(Semaphore::new(1));
+}
+
 impl UsbSession {
     pub fn new(tx: Sender) -> Self {
-        // One privileged `usbip` step (and its elevation dialog) at a time per
-        // session, for both directions.
-        let privileged = Arc::new(Semaphore::new(1));
+        let privileged = PRIVILEGED.clone();
         Self {
             mux: UsbipMux::new(tx.clone(), privileged.clone()),
             pull: UsbPullState::new(tx, privileged),

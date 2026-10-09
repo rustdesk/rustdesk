@@ -27,7 +27,7 @@ use std::{
 // Each live channel here is a privileged `usbip attach` plus its own local
 // vhci port, a much heavier resource than a plain relay task -- kept far
 // below `usbip_mux::MAX_LIVE_CHANNELS`.
-const MAX_PENDING_PUSHES: usize = 32;
+const MAX_PENDING_PUSHES: usize = 4;
 
 fn usb_channel_msg(union: usb_channel::Union) -> Message {
     let mut ch = UsbChannel::new();
