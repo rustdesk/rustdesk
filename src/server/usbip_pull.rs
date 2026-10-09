@@ -92,6 +92,14 @@ struct Entry {
     cancel: CancellationToken,
 }
 
+/// Removing a channel by any path stops its listener and relay, even one
+/// blocked on its socket.
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.cancel.cancel();
+    }
+}
+
 /// The controlled side of every push offered in one session.
 pub struct UsbPullState {
     channels: HashMap<i32, Entry>,
@@ -350,22 +358,30 @@ async fn pull(
     // leaving it parked on an `accept()` that the peer's real `usbip
     // attach` process -- which only exists if our own attach succeeded --
     // will now never make.
+    let relay_cancel = cancel.clone();
     let accept_task = tokio::spawn(async move {
-        match listener.accept().await {
-            Ok((socket, _)) => {
-                run_channel(
-                    id,
-                    relay_bus_id,
-                    socket,
-                    relay_tx,
-                    inbound,
-                    relay_attached_port,
-                    flow,
-                    relay_privileged,
-                )
-                .await
+        let relay = async {
+            match listener.accept().await {
+                Ok((socket, _)) => {
+                    run_channel(
+                        id,
+                        relay_bus_id,
+                        socket,
+                        relay_tx,
+                        inbound,
+                        relay_attached_port,
+                        flow,
+                        relay_privileged,
+                        relay_cancel.clone(),
+                    )
+                    .await
+                }
+                Err(err) => log::error!("usb push: accept failed: {}", err),
             }
-            Err(err) => log::error!("usb push: accept failed: {}", err),
+        };
+        tokio::select! {
+            _ = relay => {}
+            _ = relay_cancel.cancelled() => {}
         }
     });
 
@@ -479,6 +495,7 @@ async fn run_channel(
     attached_port: Arc<Mutex<Option<i32>>>,
     flow: Flow,
     privileged: Arc<Semaphore>,
+    cancel: CancellationToken,
 ) {
     send(&tx, open_msg(id, bus_id.clone()));
 
@@ -507,12 +524,14 @@ async fn run_channel(
     let tx_read = tx.clone();
     let flow_read = flow.clone();
     let mut to_tunnel = tokio::spawn(async move {
-        flow_read
-            .socket_to_peer(reader, |chunk| {
-                send(&tx_read, data_msg(id, chunk));
-                true
-            })
-            .await;
+        let read = flow_read.socket_to_peer(reader, |chunk| {
+            send(&tx_read, data_msg(id, chunk));
+            true
+        });
+        tokio::select! {
+            _ = read => {}
+            _ = cancel.cancelled() => {}
+        }
     });
 
     // Whichever half ends first ends the other; only an end on our side
@@ -805,6 +824,7 @@ Port 00: <Port in Use> at High Speed(480Mbps)
             Arc::new(Mutex::new(None)),
             Flow::new(),
             Arc::new(Semaphore::new(1)),
+            CancellationToken::new(),
         ));
         (relay, inbound_tx, rx)
     }
