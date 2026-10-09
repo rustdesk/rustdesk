@@ -55,8 +55,20 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
     });
 
     let attach_bus_id = bus_id.clone();
+    let usb = session.ui_handler.usb.clone();
     let local_port = match tokio::task::spawn_blocking(move || {
-        usb_attach_privileged(port, &attach_bus_id)
+        let local_port = usb_attach_privileged(port, &attach_bus_id)?;
+        // Settled here, not after the await below: this closure runs to the
+        // end even when the session's runtime is shut down under it.
+        if usb.attached_port_add(local_port, attach_bus_id.clone()) {
+            return Some(local_port);
+        }
+        log::info!(
+            "usb attach: session closed while attaching {}, detaching port {}",
+            attach_bus_id, local_port
+        );
+        detach_blocking(local_port);
+        None
     })
     .await
     {
@@ -67,14 +79,6 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
         }
     };
     match local_port {
-        Some(local_port) if !session.ui_handler.usb.attached_port_add(local_port) => {
-            log::info!(
-                "usb attach: session closed while attaching {}, detaching port {}",
-                bus_id, local_port
-            );
-            accept_task.abort();
-            tokio::task::spawn_blocking(move || detach_blocking(local_port));
-        }
         Some(local_port) => {
             session.ui_handler.push_event_(
                 "usb_attached",
@@ -358,14 +362,14 @@ impl Session<FlutterHandler> {
     /// once the connection drops. A failed detach keeps the port recorded so
     /// closing the session still detaches it.
     pub fn usb_detach(&self, port: i32) {
-        if !self.ui_handler.usb.attached_port_take(port) {
+        let Some(bus_id) = self.ui_handler.usb.attached_port_take(port) else {
             log::warn!("usb detach: port {} was not attached by this session", port);
             return;
-        }
+        };
         let usb = self.ui_handler.usb.clone();
         std::thread::spawn(move || {
             if !detach_blocking(port) {
-                usb.attached_port_add(port);
+                usb.attached_port_add(port, bus_id);
             }
         });
     }

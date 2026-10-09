@@ -308,14 +308,21 @@ fn detach_port(port: i32, privileged: Arc<Semaphore>) {
         let permit = privileged.acquire_owned().await;
         let _ = tokio::task::spawn_blocking(move || {
             let _permit = permit;
-            if crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]) {
-                log::info!("usb push: detached port {}", port);
-            } else {
-                log::error!("usb push: failed to detach port {}", port);
-            }
+            detach_blocking(port);
         })
         .await;
     });
+}
+
+/// Blocking; the caller holds the privileged permit.
+fn detach_blocking(port: i32) -> bool {
+    let ok = crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]);
+    if ok {
+        log::info!("usb push: detached port {}", port);
+    } else {
+        log::error!("usb push: failed to detach port {}", port);
+    }
+    ok
 }
 
 /// Mirrors `client/usbip_attach.rs::attach()`: bind a local listener to play
@@ -390,9 +397,26 @@ async fn pull(
         return;
     }
     let attach_bus_id = bus_id.clone();
+    let attach_cancel = cancel.clone();
     let local_port = match tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        usb_attach_privileged(port, &attach_bus_id)
+        let local_port = usb_attach_privileged(port, &attach_bus_id)?;
+        // Settled here, not after the await below: this closure runs to the
+        // end even when the task awaiting it is gone. `handle_close` and
+        // `close_all` cancel before they read the slot, so under its lock
+        // either they see the port and detach it, or this sees the cancel.
+        let mut slot = attached_port.lock().unwrap();
+        if attach_cancel.is_cancelled() {
+            drop(slot);
+            log::info!(
+                "usb push: {} attached on local port {} after channel {} was closed, detaching",
+                attach_bus_id, local_port, id
+            );
+            detach_blocking(local_port);
+            return None;
+        }
+        *slot = Some(local_port);
+        Some(local_port)
     })
     .await
     {
@@ -404,18 +428,7 @@ async fn pull(
     };
 
     if cancel.is_cancelled() {
-        // The controller already unpushed/closed while attach was still in
-        // flight, so `handle_close` already ran and won't run again for
-        // this id -- if attach succeeded anyway, detaching the port is on
-        // us now instead of leaking it.
         accept_task.abort();
-        if let Some(local_port) = local_port {
-            log::info!(
-                "usb push: {} attached on local port {} after channel {} was closed, detaching",
-                bus_id, local_port, id
-            );
-            detach_port(local_port, privileged);
-        }
         return;
     }
 
@@ -425,7 +438,6 @@ async fn pull(
                 "usb push: attached {} on local port {} (channel {})",
                 bus_id, local_port, id
             );
-            *attached_port.lock().unwrap() = Some(local_port);
             send(&tx, push_result_msg(bus_id, String::new()));
         }
         None => {
