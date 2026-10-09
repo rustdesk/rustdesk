@@ -11,13 +11,17 @@ class UsbDeviceInfo {
   // Local devices only: pushed by this session, as opposed to `shared`,
   // which also covers devices shared by the CLI or another session.
   final bool pushed;
+  // Peer's devices only: the local port this session attached it on, or -1.
+  final int attachedPort;
 
   UsbDeviceInfo.fromJson(Map<String, dynamic> json)
       : busId = json['bus_id']?.toString() ?? '',
         vendor = json['vendor']?.toString() ?? '',
         product = json['product']?.toString() ?? '',
         shared = json['shared'] == true,
-        pushed = json['pushed'] == true;
+        pushed = json['pushed'] == true,
+        attachedPort =
+            json['attached_port'] is int ? json['attached_port'] as int : -1;
 }
 
 /// Controller-side USB forwarding state for a session: the list of devices the
@@ -47,6 +51,11 @@ class UsbipModel with ChangeNotifier {
   List<UsbDeviceInfo> localDevices = [];
   // busIds with a push/unpush request in flight.
   final Set<String> localPendingBusIds = {};
+
+  // The last error per device, shown next to it; kept apart because a local
+  // and a peer device can have the same bus id.
+  final Map<String, String> remoteErrors = {};
+  final Map<String, String> localErrors = {};
 
   SessionID get _sessionId => parent.target!.sessionId;
 
@@ -80,6 +89,7 @@ class UsbipModel with ChangeNotifier {
   /// "busy" from the detach, so there's nothing to sequence here for that
   /// direction.
   void toggleAttach(String busId, bool attach) {
+    remoteErrors.remove(busId);
     pendingBusIds.add(busId);
     notifyListeners();
     if (attach) {
@@ -101,6 +111,12 @@ class UsbipModel with ChangeNotifier {
     devices = raw
         .map((e) => UsbDeviceInfo.fromJson(e as Map<String, dynamic>))
         .toList();
+    // The Rust side reports what this session actually has attached.
+    attachedPorts
+      ..clear()
+      ..addEntries(devices
+          .where((d) => d.attachedPort >= 0)
+          .map((d) => MapEntry(d.busId, d.attachedPort)));
     notifyListeners();
   }
 
@@ -110,7 +126,7 @@ class UsbipModel with ChangeNotifier {
     if (evt['bind'] == true && _pendingShareForAttach.remove(busId)) {
       if (error.isNotEmpty) {
         pendingBusIds.remove(busId);
-        lastError = error;
+        remoteErrors[busId] = error;
         notifyListeners();
       } else {
         bind.sessionUsbAttach(sessionId: _sessionId, busId: busId);
@@ -119,7 +135,7 @@ class UsbipModel with ChangeNotifier {
     }
     pendingBusIds.remove(busId);
     if (error.isNotEmpty) {
-      lastError = error;
+      remoteErrors[busId] = error;
       notifyListeners();
     } else {
       requestDevices();
@@ -135,7 +151,8 @@ class UsbipModel with ChangeNotifier {
       attachedPorts[busId] = port;
       requestDevices();
     } else {
-      lastError = evt['message']?.toString() ?? 'Failed to attach device';
+      remoteErrors[busId] =
+          evt['message']?.toString() ?? 'Failed to attach device';
       // Roll back the share we just asked for, since the attach it was for
       // failed -- mirrors the push direction's rollback on a failed attach.
       bind.sessionUsbBind(sessionId: _sessionId, busId: busId, bind: false);
@@ -155,6 +172,7 @@ class UsbipModel with ChangeNotifier {
   /// there's nothing here that can leave a device shared-but-not-pushed or
   /// vice versa.
   void togglePush(String busId, bool push) {
+    localErrors.remove(busId);
     localPendingBusIds.add(busId);
     notifyListeners();
     if (push) {
@@ -179,7 +197,7 @@ class UsbipModel with ChangeNotifier {
     if (error.isEmpty) {
       requestLocalDevices();
     } else {
-      lastError = error;
+      localErrors[busId] = error;
       notifyListeners();
     }
   }

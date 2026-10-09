@@ -837,5 +837,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer's devices", "Устройства собеседника"),
         ("Push", "Отправить"),
         ("Unpush", "Отменить отправку"),
+        ("Use my devices on the remote computer", "Использовать мои устройства на удалённом компьютере"),
+        ("Use remote devices on this computer", "Использовать устройства удалённого компьютера на этом компьютере"),
+        ("Forwarding", "Проброшено"),
     ].iter().cloned().collect();
 }

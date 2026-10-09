@@ -63,41 +63,53 @@ class _UsbipPageState extends State<UsbipPage> {
             children: [
               _buildSectionHeader(
                 context,
-                title: translate('My local devices'),
+                title: translate('Use my devices on the remote computer'),
                 loading: false,
                 onRefresh: model.requestLocalDevices,
               ),
               if (model.localDevices.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                  child: Text(translate('No USB devices')),
-                )
+                _buildEmpty(translate('No USB devices'))
               else
-                ...model.localDevices.map(
-                    (device) => _buildLocalDeviceRow(context, model, device)),
+                ...model.localDevices.map((device) => _buildDeviceRow(
+                      context,
+                      device,
+                      forwarding: device.pushed,
+                      pending: model.localPendingBusIds.contains(device.busId),
+                      error: model.localErrors[device.busId],
+                      onToggle: (start) => model.togglePush(device.busId, start),
+                    )),
               const Divider(height: 24),
               _buildSectionHeader(
                 context,
-                title: translate('Peer\'s devices'),
+                title: translate('Use remote devices on this computer'),
                 loading: model.loading,
                 onRefresh: model.loading ? null : model.requestDevices,
               ),
               if (model.devices.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                  child: Text(model.loading
-                      ? translate('Loading...')
-                      : translate('No USB devices')),
-                )
+                _buildEmpty(model.loading
+                    ? translate('Loading...')
+                    : translate('No USB devices'))
               else
-                ...model.devices
-                    .map((device) => _buildDeviceRow(context, model, device)),
+                ...model.devices.map((device) => _buildDeviceRow(
+                      context,
+                      device,
+                      forwarding: model.attachedPorts.containsKey(device.busId),
+                      pending: model.pendingBusIds.contains(device.busId),
+                      error: model.remoteErrors[device.busId],
+                      onToggle: (start) =>
+                          model.toggleAttach(device.busId, start),
+                    )),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildEmpty(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Text(text),
     );
   }
 
@@ -129,46 +141,18 @@ class _UsbipPageState extends State<UsbipPage> {
     );
   }
 
-  Widget _buildLocalDeviceRow(
-      BuildContext context, UsbipModel model, UsbDeviceInfo device) {
-    final pending = model.localPendingBusIds.contains(device.busId);
-    final pushed = device.pushed;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  device.product.isNotEmpty ? device.product : device.busId,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                Text(
-                  '${device.busId}  ${device.vendor}',
-                  style: TextStyle(
-                      fontSize: 12, color: Theme.of(context).hintColor),
-                ),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: pending
-                ? null
-                : () => model.togglePush(device.busId, !pushed),
-            child: Text(pushed ? translate('Unpush') : translate('Push')),
-          ),
-        ],
-      ),
-    );
-  }
-
+  /// One action per device: Start shares and attaches it on the other side,
+  /// Stop undoes both.
   Widget _buildDeviceRow(
-      BuildContext context, UsbipModel model, UsbDeviceInfo device) {
-    final pending = model.pendingBusIds.contains(device.busId);
-    final attachedPort = model.attachedPorts[device.busId];
-    final attached = attachedPort != null;
+    BuildContext context,
+    UsbDeviceInfo device, {
+    required bool forwarding,
+    required bool pending,
+    required String? error,
+    required void Function(bool start) onToggle,
+  }) {
+    final hint = Theme.of(context).hintColor;
+    final status = forwarding ? '  ·  ${translate('Forwarding')}' : '';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
@@ -182,18 +166,27 @@ class _UsbipPageState extends State<UsbipPage> {
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Text(
-                  '${device.busId}  ${device.vendor}',
-                  style: TextStyle(
-                      fontSize: 12, color: Theme.of(context).hintColor),
+                  '${device.busId}  ${device.vendor}$status',
+                  style: TextStyle(fontSize: 12, color: hint),
                 ),
+                if (error != null)
+                  Text(error,
+                      style: const TextStyle(fontSize: 12, color: Colors.red)),
               ],
             ),
           ),
+          if (pending)
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
           ElevatedButton(
-            onPressed: pending
-                ? null
-                : () => model.toggleAttach(device.busId, !attached),
-            child: Text(attached ? translate('Detach') : translate('Attach')),
+            onPressed: pending ? null : () => onToggle(!forwarding),
+            child: Text(translate(forwarding ? 'Stop' : 'Start')),
           ),
         ],
       ),
