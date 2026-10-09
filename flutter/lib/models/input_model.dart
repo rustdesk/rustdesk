@@ -1077,7 +1077,7 @@ class InputModel {
       }
     }
     _lastButtons = hasStaleButtonsOnMouseUp ? 0 : evt.buttons;
-    if (isMacOS && _relativeMouse.enabled.value && type == _kMouseEventUp) {
+    if (isDesktop && _relativeMouse.enabled.value && type == _kMouseEventUp) {
       // A relative up can finish a press sent before the mode switch.
       _pressedMouseButtons &= ~buttons;
     }
@@ -1827,7 +1827,7 @@ class InputModel {
   }) {
     if (isViewCamera) return null;
     final buttons = evt['buttons'];
-    final isMatchingMouseUp = isMacOS &&
+    final isMatchingMouseUp = (isDesktop || isWebDesktop) &&
         evt['type'] == _kMouseEventUp &&
         buttons is int &&
         mouseButtonsToPeer(buttons).isNotEmpty &&
@@ -1890,7 +1890,9 @@ class InputModel {
 
     if (buttons is int) {
       evt['buttons'] = mouseButtonsToPeer(buttons);
-      if (isMacOS && type == kMouseEventTypeDown && evt['buttons'] != '') {
+      if ((isDesktop || isWebDesktop) &&
+          type == kMouseEventTypeDown &&
+          evt['buttons'] != '') {
         _pressedMouseButtons |= buttons;
       }
     } else {
