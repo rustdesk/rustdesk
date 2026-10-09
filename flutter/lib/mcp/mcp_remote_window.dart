@@ -43,18 +43,20 @@ Future<dynamic> handleMcpWindowCall(
           [for (final e in sessions.entries) _describe(e.key, e.value)]);
     case kWindowEventMcpRefreshControl:
       final args = jsonDecode(arguments as String);
-      final ffi = _bySessionId(sessions, args['session_id']);
-      if (ffi == null) return false;
-      final cancelled = args['cancelled_request'];
-      if (cancelled is String) {
-        ffi.dialogManager.dismissByTag('mcp-agent-control-$cancelled');
+      for (final ffi in sessions.values) {
+        final cancelled = args['cancelled_request'];
+        if (cancelled is String) {
+          ffi.dialogManager.dismissByTag('mcp-agent-control-$cancelled');
+        }
+        ffi.ffiModel.refreshAgentControl();
       }
-      ffi.ffiModel.refreshAgentControl();
       return true;
     case kWindowEventMcpAuthenticate:
       final args = jsonDecode(arguments as String);
       final ffi = _bySessionId(sessions, args['session_id']);
-      if (ffi == null) return false;
+      if (ffi == null || ffi.ffiModel.agentControlGrant != args['grant_id']) {
+        return false;
+      }
       ffi.dialogManager.dismissAll();
       ffi.ffiModel.mcpLastMsgBox = null;
       return true;
@@ -64,6 +66,10 @@ Future<dynamic> handleMcpWindowCall(
           .where((e) => e.value.sessionId.toString() == args['session_id'])
           .firstOrNull;
       if (entry == null) return false;
+      if (args['grant_id'] != null &&
+          entry.value.ffiModel.agentControlGrant != args['grant_id']) {
+        return false;
+      }
       closeTab(entry.key);
       return true;
     case kWindowEventMcpRequestControl:

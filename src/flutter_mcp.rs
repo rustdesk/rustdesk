@@ -8,7 +8,7 @@ use crate::{
 };
 use base::message_proto::ScreenshotResponse;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     fs::OpenOptions,
     io::Write,
     sync::{Mutex, RwLock},
@@ -22,8 +22,21 @@ const REQUEST_SEPARATOR: char = '#';
 const MAX_SCREENSHOTS: usize = 4;
 
 lazy_static::lazy_static! {
-    static ref INPUT_OWNERS: RwLock<HashMap<SessionID, InputOwner>> = Default::default();
     static ref SCREENSHOTS: Mutex<VecDeque<ScreenshotResponse>> = Default::default();
+}
+
+pub struct ConnectionInput {
+    pub id: SessionID,
+    owner: RwLock<InputOwner>,
+}
+
+impl Default for ConnectionInput {
+    fn default() -> Self {
+        Self {
+            id: SessionID::new_v4(),
+            owner: Default::default(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -89,60 +102,82 @@ impl InputOwner {
 }
 
 pub fn set_agent_control(session_id: SessionID, grant_id: String) {
-    let mut owners = INPUT_OWNERS.write().unwrap();
-    if !grant_id.is_empty() {
-        // Keep the same lock through release and grant: neither a human send
-        // nor the first agent send can pass the ownership boundary out of order.
-        owners
-            .entry(session_id)
-            .or_default()
-            .grant(grant_id, |buttons, pan| {
-                if let Some(session) =
-                    crate::flutter::sessions::get_session_by_session_id(&session_id)
-                {
-                    if crate::flutter::get_cur_session_id() == session_id {
-                        crate::keyboard::release_remote_keys_for_session(&session);
-                    }
-                    let swap = session.get_toggle_option("swap-left-right-mouse".to_owned());
-                    for button in [1, 2, 4, 8, 16] {
-                        if buttons & button == 0 {
-                            continue;
-                        }
-                        let button = match (swap, button) {
-                            (true, MOUSE_BUTTON_LEFT) => MOUSE_BUTTON_RIGHT,
-                            (true, MOUSE_BUTTON_RIGHT) => MOUSE_BUTTON_LEFT,
-                            _ => button,
-                        };
-                        // Bypass live human modifiers while releasing their old input.
-                        crate::client::send_mouse(
-                            (button << 3) | MOUSE_TYPE_UP,
-                            0,
-                            0,
-                            false,
-                            false,
-                            false,
-                            false,
-                            &*session,
-                        );
-                    }
-                    if let Some((x, y)) = pan {
-                        session.send_touch_pan_event("pan_end", x, y, false, false, false, false);
-                    }
-                }
-            });
-    } else {
-        owners.remove(&session_id);
+    let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
+        return;
+    };
+    let mut owner = session.ui_handler.mcp.owner.write().unwrap();
+    if grant_id.is_empty() {
+        *owner = InputOwner::default();
+        return;
     }
+    owner.grant(grant_id, |buttons, pan| {
+        let current = crate::flutter::sessions::get_session_by_session_id(
+            &crate::flutter::get_cur_session_id(),
+        );
+        if current
+            .as_ref()
+            .map_or(false, |s| std::sync::Arc::ptr_eq(s, &session))
+        {
+            crate::keyboard::release_remote_keys_for_session(&session);
+        }
+        let swap = session.get_toggle_option("swap-left-right-mouse".to_owned());
+        for button in [1, 2, 4, 8, 16] {
+            if buttons & button == 0 {
+                continue;
+            }
+            let button = match (swap, button) {
+                (true, MOUSE_BUTTON_LEFT) => MOUSE_BUTTON_RIGHT,
+                (true, MOUSE_BUTTON_RIGHT) => MOUSE_BUTTON_LEFT,
+                _ => button,
+            };
+            crate::client::send_mouse(
+                (button << 3) | MOUSE_TYPE_UP,
+                0,
+                0,
+                false,
+                false,
+                false,
+                false,
+                &*session,
+            );
+        }
+        if let Some((x, y)) = pan {
+            session.send_touch_pan_event("pan_end", x, y, false, false, false, false);
+        }
+    });
 }
 
 pub fn with_human_input(session_id: SessionID, send: impl FnOnce()) {
-    let owners = INPUT_OWNERS.read().unwrap();
-    if owners
-        .get(&session_id)
-        .map_or(true, |owner| owner.accepts(None))
-    {
+    let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
+        return;
+    };
+    let owner = session.ui_handler.mcp.owner.read().unwrap();
+    if owner.accepts(None) {
         send();
     }
+}
+
+pub fn authenticate(
+    session_id: SessionID,
+    grant_id: &str,
+    password: Option<String>,
+    two_factor_code: Option<String>,
+) -> bool {
+    let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
+        return false;
+    };
+    let owner = session.ui_handler.mcp.owner.read().unwrap();
+    if !owner.accepts(Some(grant_id)) {
+        return false;
+    }
+    if let Some(password) = password {
+        session.login(String::new(), String::new(), password, false);
+    } else if let Some(code) = two_factor_code {
+        session.send2fa(code, false);
+    } else {
+        return false;
+    }
+    true
 }
 
 pub fn process_human_key_event(keyboard_mode: &str, event: &rdev::Event, lock_modes: Option<i32>) {
@@ -165,25 +200,34 @@ pub fn send_mouse(
     mask: i32,
     send: impl FnOnce(),
 ) -> bool {
-    INPUT_OWNERS
+    let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
+        return false;
+    };
+    let result = session
+        .ui_handler
+        .mcp
+        .owner
         .write()
         .unwrap()
-        .entry(session_id)
-        .or_default()
-        .mouse(grant_id, mask, send)
+        .mouse(grant_id, mask, send);
+    result
 }
 
 pub fn send_human_pointer(session_id: SessionID, msg: &str, send: impl FnOnce()) {
-    let mut owners = INPUT_OWNERS.write().unwrap();
-    owners.entry(session_id).or_default().pointer(msg, send);
+    if let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) {
+        session
+            .ui_handler
+            .mcp
+            .owner
+            .write()
+            .unwrap()
+            .pointer(msg, send);
+    }
 }
 
 pub fn agent_control_grant(session_id: &SessionID) -> String {
-    INPUT_OWNERS
-        .read()
-        .unwrap()
-        .get(session_id)
-        .map(|owner| owner.grant_id.clone())
+    crate::flutter::sessions::get_session_by_session_id(session_id)
+        .map(|s| s.ui_handler.mcp.owner.read().unwrap().grant_id.clone())
         .unwrap_or_default()
 }
 
@@ -236,11 +280,31 @@ pub fn save_screenshot(sid: &str, path: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    fn session() -> (SessionID, crate::flutter::FlutterSession) {
+        let id = SessionID::new_v4();
+        let session: crate::flutter::FlutterSession = std::sync::Arc::new(Default::default());
+        session.lc.write().unwrap().initialize(
+            id.to_string(),
+            hbb_common::rendezvous_proto::ConnType::DEFAULT_CONN,
+            None,
+            false,
+            None,
+            None,
+            None,
+        );
+        crate::flutter::sessions::insert_session(
+            id,
+            hbb_common::rendezvous_proto::ConnType::DEFAULT_CONN,
+            session.clone(),
+        );
+        (id, session)
+    }
+
     #[test]
     fn grant_waits_for_human_key_submission_and_blocks_later_keys() {
         use std::{sync::mpsc, thread, time::Duration};
 
-        let session_id = SessionID::new_v4();
+        let (session_id, _) = session();
         let (started, received_start) = mpsc::channel();
         let (finish, received_finish) = mpsc::channel();
         let human = thread::spawn(move || {
@@ -269,6 +333,7 @@ mod tests {
         set_agent_control(session_id, String::new());
         with_human_input(session_id, || sent.push("human key after release"));
         assert_eq!(sent, ["human key after release"]);
+        crate::flutter_ffi::session_close(session_id);
     }
 
     #[test]
@@ -315,7 +380,7 @@ mod tests {
 
     #[test]
     fn closing_session_clears_agent_control() {
-        let session_id = SessionID::new_v4();
+        let (session_id, _) = session();
         set_agent_control(session_id, "grant".to_owned());
         assert_eq!(agent_control_grant(&session_id), "grant");
         crate::flutter_ffi::session_close(session_id);
@@ -324,7 +389,7 @@ mod tests {
 
     #[test]
     fn ownership_reads_follow_revoke_and_regrant_without_window_updates() {
-        let session_id = SessionID::new_v4();
+        let (session_id, _) = session();
         set_agent_control(session_id, "old".to_owned());
         let old_notice = agent_control_grant(&session_id);
         set_agent_control(session_id, String::new());
@@ -334,6 +399,105 @@ mod tests {
         assert_ne!(agent_control_grant(&session_id), old_notice);
         assert_eq!(agent_control_grant(&session_id), "new");
         set_agent_control(session_id, String::new());
+        crate::flutter_ffi::session_close(session_id);
+    }
+
+    #[test]
+    fn sibling_windows_share_control_and_survive_one_window_closing() {
+        let (a, connection) = session();
+        let b = SessionID::new_v4();
+        crate::flutter::sessions::insert_session(
+            b,
+            hbb_common::rendezvous_proto::ConnType::DEFAULT_CONN,
+            connection,
+        );
+        assert_eq!(
+            crate::flutter_ffi::session_mcp_connection_id(a).0,
+            crate::flutter_ffi::session_mcp_connection_id(b).0
+        );
+        set_agent_control(a, "grant".into());
+        assert_eq!(agent_control_grant(&b), "grant");
+        with_human_input(b, || panic!("sibling keyboard must be blocked"));
+        assert!(!send_mouse(b, None, MOUSE_TYPE_DOWN, || panic!(
+            "sibling mouse must be blocked"
+        )));
+        crate::flutter_ffi::session_close(a);
+        assert_eq!(agent_control_grant(&b), "grant");
+        assert!(send_mouse(b, Some("grant"), MOUSE_TYPE_UP, || {}));
+        set_agent_control(b, String::new());
+        let mut sent = false;
+        with_human_input(b, || sent = true);
+        assert!(sent);
+        crate::flutter_ffi::session_close(b);
+    }
+
+    #[test]
+    fn revoked_authentication_cannot_use_a_new_grant() {
+        let (id, connection) = session();
+        let (sender, mut receiver) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+        *connection.sender.write().unwrap() = Some(sender);
+        set_agent_control(id, "old".into());
+        set_agent_control(id, String::new());
+        assert!(!authenticate(id, "old", Some("test".into()), None));
+        set_agent_control(id, "new".into());
+        assert!(!authenticate(id, "old", Some("test".into()), None));
+        assert!(receiver.try_recv().is_err());
+        assert!(authenticate(id, "new", Some("test".into()), None));
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            crate::client::Data::Login(_)
+        ));
+        crate::flutter_ffi::session_close(id);
+    }
+
+    #[test]
+    fn agent_mouse_uses_only_explicit_modifiers() {
+        use rdev::{Event, EventType, Key};
+        let (id, connection) = session();
+        let (sender, mut receiver) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+        *connection.sender.write().unwrap() = Some(sender);
+        set_agent_control(id, "grant".into());
+        let mut event = Event {
+            time: std::time::SystemTime::now(),
+            unicode: None,
+            event_type: EventType::KeyPress(Key::ControlLeft),
+            platform_code: 0,
+            position_code: 0,
+            usb_hid: 0,
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            extra_data: 0,
+        };
+        crate::keyboard::event_to_key_events(
+            "Windows".into(),
+            &event,
+            base::message_proto::KeyboardMode::Legacy,
+            None,
+        );
+        assert!(crate::keyboard::client::get_modifiers_state(false, false, false, false).1);
+        for (msg, count) in [
+            (r#"{"type":"down","buttons":"left"}"#, 0),
+            (r#"{"type":"wheel","y":"1","shift":"true"}"#, 1),
+        ] {
+            crate::flutter_ffi::session_send_mcp_mouse(id, "grant".into(), msg.into());
+            let crate::client::Data::Message(message) = receiver.try_recv().unwrap() else {
+                panic!("expected mouse");
+            };
+            assert_eq!(message.mouse_event().modifiers.len(), count);
+            if count == 1 {
+                assert_eq!(
+                    message.mouse_event().modifiers[0].enum_value_or_default(),
+                    base::message_proto::ControlKey::Shift
+                );
+            }
+        }
+        event.event_type = EventType::KeyRelease(Key::ControlLeft);
+        crate::keyboard::event_to_key_events(
+            "Windows".into(),
+            &event,
+            base::message_proto::KeyboardMode::Legacy,
+            None,
+        );
+        crate::flutter_ffi::session_close(id);
     }
 
     #[test]

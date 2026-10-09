@@ -300,8 +300,6 @@ pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<boo
 }
 
 pub fn session_close(session_id: SessionID) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::flutter_mcp::set_agent_control(session_id, String::new());
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
         // `release_remote_keys` is not required for mobile platforms in common cases.
         // But we still call it to make the code more stable.
@@ -350,6 +348,48 @@ pub fn session_save_mcp_screenshot(
     );
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return Some("Not supported".to_owned());
+}
+
+#[allow(unused_variables)]
+pub fn session_mcp_connection_id(session_id: SessionID) -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(
+        sessions::get_session_by_session_id(&session_id)
+            .map(|s| s.ui_handler.mcp.id.to_string())
+            .unwrap_or_default(),
+    );
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(String::new())
+}
+
+#[allow(unused_variables)]
+pub fn mcp_session_id(connection_id: String) -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(
+        sessions::mcp_session_id(&connection_id)
+            .map(|id| id.to_string())
+            .unwrap_or_default(),
+    );
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(String::new())
+}
+
+#[allow(unused_variables)]
+pub fn session_mcp_authenticate(
+    session_id: SessionID,
+    grant_id: String,
+    password: Option<String>,
+    two_factor_code: Option<String>,
+) -> SyncReturn<bool> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(crate::flutter_mcp::authenticate(
+        session_id,
+        &grant_id,
+        password,
+        two_factor_code,
+    ));
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(false)
 }
 
 #[allow(unused_variables)]
@@ -2126,7 +2166,11 @@ fn send_mouse(session_id: SessionID, msg: String, _grant_id: Option<&str>) {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 crate::flutter_mcp::send_mouse(session_id, _grant_id, mask, || {
-                    session.send_mouse(mask, x, y, alt, ctrl, shift, command);
+                    if _grant_id.is_some() {
+                        crate::client::send_mouse(mask, x, y, alt, ctrl, shift, command, &*session);
+                    } else {
+                        session.send_mouse(mask, x, y, alt, ctrl, shift, command);
+                    }
                 });
                 return;
             }

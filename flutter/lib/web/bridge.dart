@@ -1953,6 +1953,18 @@ class RustdeskImpl {
     throw UnimplementedError("sessionSaveMcpScreenshot");
   }
 
+  String sessionMcpConnectionId({required UuidValue sessionId, dynamic hint}) => '';
+
+  String mcpSessionId({required String connectionId, dynamic hint}) => '';
+
+  bool sessionMcpAuthenticate(
+          {required UuidValue sessionId,
+          required String grantId,
+          String? password,
+          String? twoFactorCode,
+          dynamic hint}) =>
+      false;
+
   void sessionSetAgentControl(
       {required UuidValue sessionId, required String grantId, dynamic hint}) {}
 
