@@ -46,6 +46,7 @@ fn connection_meta(
     ConnectionMeta {
         control_permissions,
         controlled_context,
+        direct_ip: false,
         offer_encryption: false,
     }
 }
@@ -1410,6 +1411,7 @@ async fn direct_server(server: ServerPtr) {
                                 // Direct connections don't have server-side user context,
                                 // but they can be upgraded to an encrypted stream, unless
                                 // that is turned off.
+                                direct_ip: true,
                                 offer_encryption: Config::get_option(OPTION_DIRECT_IP_ENCRYPTION)
                                     != "N",
                                 ..Default::default()

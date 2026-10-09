@@ -88,6 +88,8 @@ type ConnMap = HashMap<i32, ConnInner>;
 pub struct ConnectionMeta {
     pub control_permissions: Option<ControlPermissions>,
     pub controlled_context: Option<ControlledContext>,
+    /// The connection came in on the direct IP listener.
+    pub direct_ip: bool,
     /// Offer to encrypt the (otherwise unsigned) stream, see `common::direct_ip_kx_accept`.
     /// Only set for direct IP connections.
     pub offer_encryption: bool,

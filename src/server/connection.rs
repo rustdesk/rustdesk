@@ -541,6 +541,7 @@ impl Connection {
         let super::ConnectionMeta {
             control_permissions,
             controlled_context,
+            direct_ip,
             offer_encryption,
         } = meta;
         // Android is not supported yet, so we always set control_permissions to None.
@@ -558,7 +559,9 @@ impl Connection {
         // An offer goes out with the first message only; `hash` stays what it was, the login
         // checks use it.
         let kx_offer = (offer_encryption && !stream.is_secured()).then(box_::gen_keypair);
-        let require_encryption = offer_encryption
+        // Not tied to the offer: with the offer turned off as well, a direct IP login is
+        // refused rather than let through in plain text.
+        let require_encryption = direct_ip
             && Config::get_option(keys::OPTION_REQUIRE_DIRECT_IP_ENCRYPTION) == "Y";
         let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
         // holding tx_from_cm_holder to avoid cpu burning of rx_from_cm.recv when all sender closed
