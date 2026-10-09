@@ -75,6 +75,11 @@ pub trait PrivacyMode: Sync + Send {
         Ok(false)
     }
 
+    /// `INVALID_PRIVACY_MODE_CONN_ID` deliberately bypasses the ownership check, meaning
+    /// "turn it off whoever owns it": shutdown (`ipc::Data::Close`), `reset_all`, and
+    /// `TurnOnGuard`, which undoes a half-finished turn-on however far it got. A caller
+    /// acting for one connection must pass that connection's own id, or it can turn off
+    /// privacy mode belonging to another.
     #[inline]
     fn check_off_conn_id(&self, conn_id: i32) -> ResultType<()> {
         let pre_conn_id = self.pre_conn_id();
