@@ -2639,9 +2639,16 @@ pub fn run_cmds_privileged(cmds: &str) -> bool {
     crate::platform::gtk_sudo::run(vec![cmds]).is_ok()
 }
 
+lazy_static::lazy_static! {
+    // One elevation prompt at a time per process, whichever session or
+    // direction asks; the rest wait their turn.
+    static ref USBIP_PRIVILEGED: std::sync::Mutex<()> = Default::default();
+}
+
 /// Runs `usbip` as root with each argument passed separately, so no argument
 /// is ever parsed by a shell as part of a larger command string.
 pub fn run_usbip_privileged(args: &[&str]) -> bool {
+    let _one_at_a_time = USBIP_PRIVILEGED.lock().unwrap();
     let mut cmds = vec!["usbip"];
     cmds.extend_from_slice(args);
     match crate::platform::gtk_sudo::run_gui(cmds) {
@@ -2664,6 +2671,8 @@ pub fn run_usbip_privileged(args: &[&str]) -> bool {
 /// are its positional parameters. `bus_id` must already be validated.
 pub fn run_usbip_attach_privileged(listener_port: u16, bus_id: &str) -> Option<String> {
     use std::{hash::BuildHasher, os::unix::fs::DirBuilderExt};
+
+    let _one_at_a_time = USBIP_PRIVILEGED.lock().unwrap();
 
     const SCRIPT: &str = r#"usbip -t "$1" attach -r 127.0.0.1 -b "$2" || exit 1
 for i in 1 2 3 4 5 6 7 8 9 10; do
