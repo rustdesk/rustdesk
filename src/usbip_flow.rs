@@ -1,40 +1,115 @@
-// Flow control shared by all four USB forwarding relay directions (pull and push,
-// on either side), built on `port_forward_mux`'s window accounting. Every
-// channel starts with a fixed `CHANNEL_WINDOW` in each direction, so no
-// window is advertised in `Open`/`Opened`: a relay never reads more from its
-// local socket than the peer has credited, and the peer returns credit
-// (`UsbForwardWindowUpdate`) only once it has written that data to its own
-// local socket. Both what we buffer for the peer and what the peer can make
-// us buffer are therefore bounded per channel.
-use crate::port_forward_mux::{charge, RecvWindow, SendCredit, MIN_FRAME_CHARGE};
+// Flow control shared by all four USB forwarding relay directions (pull and
+// push, on either side). Every channel starts with a fixed `CHANNEL_WINDOW` in
+// each direction, so no window is advertised in `Open`/`Opened`: a relay never
+// reads more from its local socket than the peer has credited, and the peer
+// returns credit (`UsbForwardWindowUpdate`) only once it has written that data
+// to its own local socket. The window therefore bounds all of a channel's data
+// in flight, including what waits in the connection's shared outbound queue
+// ahead of desktop traffic, so it is kept small. The accounting mirrors
+// `port_forward_mux`'s, with USB's own limits.
+use crate::port_forward_mux::{charge, MIN_FRAME_CHARGE};
 use base::message_proto::*;
 use hbb_common::{
     bytes::Bytes,
-    tokio::io::{AsyncRead, AsyncReadExt},
+    tokio::{
+        io::{AsyncRead, AsyncReadExt},
+        sync::Notify,
+    },
 };
 use std::sync::{Arc, Mutex};
 
-pub(crate) use crate::port_forward_mux::{CHANNEL_WINDOW, MAX_FRAME as MAX_DATA};
+/// Per channel and direction: USB data sent but not yet written out by the
+/// receiver.
+pub const CHANNEL_WINDOW: u32 = 64 * 1024;
+/// Largest USB data frame, i.e. the longest one USB frame occupies the shared
+/// connection ahead of desktop traffic.
+pub const MAX_DATA: usize = 16 * 1024;
+const UPDATE_THRESHOLD: u32 = CHANNEL_WINDOW / 2;
 
 /// Enough queue slots for a whole window of minimum-charge frames, so a
 /// channel's inbound queue can only fill up if the peer overran its window,
 /// which `Flow::admit` rejects first.
 pub const QUEUE_FRAMES: usize = (CHANNEL_WINDOW / MIN_FRAME_CHARGE) as usize;
 
+/// Sender-side credit, never above our own window whatever the peer grants.
+struct Credit {
+    credit: Mutex<u32>,
+    notify: Notify,
+}
+
+impl Credit {
+    async fn take(&self, max: usize) -> usize {
+        loop {
+            {
+                let mut credit = self.credit.lock().unwrap();
+                if *credit >= MIN_FRAME_CHARGE {
+                    let n = (*credit as usize).min(max);
+                    *credit -= n as u32;
+                    return n;
+                }
+            }
+            self.notify.notified().await;
+        }
+    }
+
+    fn add(&self, n: u32) {
+        {
+            let mut credit = self.credit.lock().unwrap();
+            *credit = credit.saturating_add(n).min(CHANNEL_WINDOW);
+        }
+        self.notify.notify_one();
+    }
+}
+
+/// Receiver-side window.
+struct Window {
+    remaining: u32,
+    drained_since_update: u32,
+}
+
+impl Window {
+    fn accept(&mut self, len: usize) -> bool {
+        match self.remaining.checked_sub(charge(len)) {
+            Some(left) => {
+                self.remaining = left;
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn drained(&mut self, n: usize) -> Option<u32> {
+        self.drained_since_update = self.drained_since_update.saturating_add(charge(n));
+        if self.drained_since_update < UPDATE_THRESHOLD {
+            return None;
+        }
+        let add = self.drained_since_update;
+        self.drained_since_update = 0;
+        self.remaining = self.remaining.saturating_add(add);
+        Some(add)
+    }
+}
+
 /// One channel's credit toward the peer and window for the peer, shared by
 /// the channel's registry entry (which admits incoming data and applies
 /// window updates) and its relay tasks.
 #[derive(Clone)]
 pub struct Flow {
-    credit: Arc<SendCredit>,
-    window: Arc<Mutex<RecvWindow>>,
+    credit: Arc<Credit>,
+    window: Arc<Mutex<Window>>,
 }
 
 impl Flow {
     pub fn new() -> Self {
         Self {
-            credit: Arc::new(SendCredit::new(CHANNEL_WINDOW)),
-            window: Arc::new(Mutex::new(RecvWindow::new(CHANNEL_WINDOW))),
+            credit: Arc::new(Credit {
+                credit: Mutex::new(CHANNEL_WINDOW),
+                notify: Notify::new(),
+            }),
+            window: Arc::new(Mutex::new(Window {
+                remaining: CHANNEL_WINDOW,
+                drained_since_update: 0,
+            })),
         }
     }
 
@@ -50,8 +125,8 @@ impl Flow {
         len <= MAX_DATA && self.window.lock().unwrap().accept(len)
     }
 
-    /// Credit the peer returned in a `UsbForwardWindowUpdate`. Capped by
-    /// `SendCredit` at our own window, whatever the peer claims.
+    /// Credit the peer returned in a `UsbForwardWindowUpdate`, capped at our
+    /// own window whatever the peer claims.
     pub fn grant(&self, add: u32) {
         self.credit.add(add);
     }
@@ -191,6 +266,24 @@ mod tests {
             admitted += 1;
         }
         assert_eq!(admitted, QUEUE_FRAMES);
+    }
+
+    #[tokio::test]
+    async fn excess_credit_from_the_peer_does_not_widen_the_window() {
+        let flow = Flow::new();
+        flow.grant(u32::MAX);
+        let data = vec![7u8; CHANNEL_WINDOW as usize * 2];
+        let mut sent = 0usize;
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            flow.socket_to_peer(std::io::Cursor::new(data), |chunk| {
+                assert!(chunk.len() <= MAX_DATA);
+                sent += chunk.len();
+                true
+            }),
+        )
+        .await;
+        assert_eq!(sent, CHANNEL_WINDOW as usize);
     }
 
     #[tokio::test]
