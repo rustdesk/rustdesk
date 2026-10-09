@@ -45,14 +45,14 @@ fn usb_channel_msg(union: usb_channel::Union) -> Message {
     msg
 }
 
-fn device_list_msg(devices: Vec<UsbDevice>) -> Message {
+pub(super) fn device_list_msg(devices: Vec<UsbDevice>) -> Message {
     usb_channel_msg(usb_channel::Union::DeviceList(UsbDeviceList {
         devices,
         ..Default::default()
     }))
 }
 
-fn bind_result_msg(bus_id: String, bind: bool, error: String) -> Message {
+pub(super) fn bind_result_msg(bus_id: String, bind: bool, error: String) -> Message {
     usb_channel_msg(usb_channel::Union::BindResult(UsbBindResult {
         bus_id,
         bind,
@@ -61,7 +61,7 @@ fn bind_result_msg(bus_id: String, bind: bool, error: String) -> Message {
     }))
 }
 
-fn opened_msg(channel_id: i32, success: bool, message: String) -> Message {
+pub(super) fn opened_msg(channel_id: i32, success: bool, message: String) -> Message {
     usb_channel_msg(usb_channel::Union::Opened(UsbForwardOpened {
         channel_id,
         success,
@@ -340,7 +340,7 @@ impl UsbipMux {
     }
 }
 
-fn send(tx: &Sender, msg: Message) {
+pub(super) fn send(tx: &Sender, msg: Message) {
     tx.send((tokio::time::Instant::now(), Arc::new(msg))).ok();
 }
 
