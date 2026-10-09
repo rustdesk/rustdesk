@@ -1073,10 +1073,7 @@ fn backup_update_plist(source: &str, backup: &str) -> ResultType<()> {
             Ok(())
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            bail!(
-                "[root-update] required installed plist is missing: {}",
-                source
-            )
+            bail!("[root-update] required installed plist is missing: {}", source)
         }
         Err(err) => Err(err.into()),
     }
@@ -1088,10 +1085,7 @@ fn validate_update_tree(path: &Path, framework_root: Option<&Path>) -> ResultTyp
         // Frameworks legitimately use internal symlinks (Resources,
         // Versions/Current), but never allow a link to leave its framework.
         let Some(framework_root) = framework_root else {
-            bail!(
-                "[root-update] symlink outside framework: {}",
-                path.display()
-            );
+            bail!("[root-update] symlink outside framework: {}", path.display());
         };
         let target = std::fs::read_link(path)?;
         let target = if target.is_absolute() {
@@ -1180,19 +1174,10 @@ pub fn update_from_dmg_as_root(dmg_path: &str, expected_version: &str) -> Result
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&tmp_dir, std::fs::Permissions::from_mode(0o700))?;
     }
-    let agent_plist = format!(
-        "/Library/LaunchAgents/com.carriez.{}_server.plist",
-        app_name
-    );
-    let daemon_plist = format!(
-        "/Library/LaunchDaemons/com.carriez.{}_service.plist",
-        app_name
-    );
+    let agent_plist = format!("/Library/LaunchAgents/com.carriez.{}_server.plist", app_name);
+    let daemon_plist = format!("/Library/LaunchDaemons/com.carriez.{}_service.plist", app_name);
 
-    log::info!(
-        "[root-update] Starting silent root update from {}",
-        dmg_path
-    );
+    log::info!("[root-update] Starting silent root update from {}", dmg_path);
     // Check sessions before extracting to avoid unnecessary work
     if !crate::updater::has_no_active_conns_ipc() {
         bail!("[root-update] Active session detected, deferring update.");
@@ -1291,10 +1276,7 @@ pub fn update_from_dmg_as_root(dmg_path: &str, expected_version: &str) -> Result
     // launching a freshly extracted service binary from /tmp is not required.
     let new_service = format!("{}/Contents/MacOS/service", src_app);
     if !std::path::Path::new(&new_service).is_file() {
-        bail!(
-            "[root-update] staged service binary is missing: {}",
-            new_service
-        );
+        bail!("[root-update] staged service binary is missing: {}", new_service);
     }
     // The new binary writes its own plist definitions after the bundle is
     // moved into its final root-owned location.  This avoids executing code

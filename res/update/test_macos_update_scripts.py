@@ -1,3 +1,7 @@
+import socket
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,6 +19,35 @@ MANUAL_SCRIPT = MACOS_SOURCE.split(
 
 
 class MacosUpdateScriptTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", "requires macOS AppleScript")
+    def test_daemon_update_rejects_stale_ipc_sockets(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as directory:
+            for check in ("check_service", "check_agent"):
+                with self.subTest(check=check), socket.socket(
+                    socket.AF_UNIX, socket.SOCK_STREAM
+                ) as listener:
+                    path = str(Path(directory) / check)
+                    listener.bind(path)
+                    listener.listen(1)
+                    script = DAEMON_SCRIPT.split("  set sh to", 1)[0]
+                    script += f"  return {check}\nend run\n"
+                    script = script.replace("/tmp/RustDesk-service/ipc_service", path)
+                    script = script.replace("/tmp/RustDesk-$uid/ipc", path)
+                    command = subprocess.check_output(
+                        ["osascript", "-e", script, "test", "0", "", ""],
+                        text=True,
+                        timeout=10,
+                    )
+                    command = "launchctl() { echo 'state = running'; }; " + command
+                    args = ["/bin/sh", "-c", command]
+                    self.assertEqual(subprocess.call(args, timeout=10), 0)
+                    listener.setblocking(False)
+                    with self.assertRaises(BlockingIOError):
+                        connection, _ = listener.accept()
+                        connection.close()
+                    listener.close()
+                    self.assertNotEqual(subprocess.call(args, timeout=10), 0)
+
     def test_candidate_identity_precedes_install_without_os_signature_checks(self):
         for name, script in (
             ("daemon", DAEMON_SCRIPT),

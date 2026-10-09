@@ -18,9 +18,7 @@ mod offline;
 use artifact::{validate_artifact, validate_artifact_file_name, ArtifactUrlPolicy};
 
 #[cfg(target_os = "macos")]
-pub(crate) use offline::verify_offline_update_metadata;
-#[cfg(target_os = "macos")]
-pub(crate) use offline::OfflineUpdateMetadataRequirements;
+pub(crate) use offline::{verify_offline_update_metadata, OfflineUpdateMetadataRequirements};
 
 const UPDATE_METADATA_SIGNATURE_CONTEXT: &[u8] = b"RustDesk update metadata v1\n";
 const UPDATE_APP: &str = "rustdesk";

@@ -1017,6 +1017,7 @@ jobs:
 
       - name: Test verified updates
         run: |
+          python3 -m unittest res/update/test_macos_update_scripts.py
           cargo test --locked --release --lib verified_dmg_tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
           cargo test --locked --release --lib update_metadata::tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
 

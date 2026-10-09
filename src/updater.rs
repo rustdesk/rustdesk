@@ -447,7 +447,11 @@ fn wait_for_failed_update_retry() {
     let remaining = std::fs::metadata(marker)
         .and_then(|metadata| metadata.modified())
         .ok()
-        .and_then(|modified| std::time::SystemTime::now().duration_since(modified).ok())
+        .and_then(|modified| {
+            std::time::SystemTime::now()
+                .duration_since(modified)
+                .ok()
+        })
         .map(|elapsed| RETRY_INTERVAL.saturating_sub(elapsed))
         .unwrap_or(RETRY_INTERVAL);
     if !remaining.is_zero() {
@@ -614,11 +618,7 @@ pub fn check_update_as_root() -> ResultType<bool> {
     // Recheck active sessions before installing — download can take minutes
     if !has_no_active_conns_ipc() {
         if let Err(e) = std::fs::remove_dir_all(&private_tmp) {
-            log::warn!(
-                "[root-update] Failed to remove temp dir {}: {}",
-                private_tmp,
-                e
-            );
+            log::warn!("[root-update] Failed to remove temp dir {}: {}", private_tmp, e);
         }
         bail!("[root-update] Active session started during download, deferring update.");
     }

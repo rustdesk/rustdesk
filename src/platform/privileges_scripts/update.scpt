@@ -51,8 +51,9 @@ on run {user, cur_pid, source_path, expected_sha256}
   set kickstart_agent to "if [ -n \"$uid\" ]; then launchctl kickstart -k \"gui/$uid/$agent_label\" 2>/dev/null || launchctl kickstart -k \"user/$uid/$agent_label\" 2>/dev/null || true; fi;"
   set load_agent to agent_label_cmd & bootstrap_agent & kickstart_agent
   -- Registration can succeed before a job is ready; keep rollback until both IPC sockets are live.
-  set check_service to "service_info=$(launchctl print " & daemon_target_q & " 2>/dev/null || true); printf '%s\n' \"$service_info\" | grep -E '^[[:space:]]*state = running[[:space:]]*$' >/dev/null && [ -S " & quoted form of daemon_socket & " ]"
-  set check_agent to "agent_info=$(launchctl print \"gui/$uid/$agent_label\" 2>/dev/null || launchctl print \"user/$uid/$agent_label\" 2>/dev/null || launchctl print \"system/$agent_label\" 2>/dev/null || true); printf '%s\n' \"$agent_info\" | grep -E '^[[:space:]]*state = running[[:space:]]*$' >/dev/null && [ -S \"/tmp/RustDesk-$uid/ipc\" ]"
+  -- A stale socket still passes -S; inspect open sockets without triggering IPC authentication.
+  set check_service to "service_info=$(launchctl print " & daemon_target_q & " 2>/dev/null || true); printf '%s\n' \"$service_info\" | grep -E '^[[:space:]]*state = running[[:space:]]*$' >/dev/null && [ -S " & quoted form of daemon_socket & " ] && /usr/sbin/lsof -a -U -- " & quoted form of daemon_socket & " >/dev/null"
+  set check_agent to "agent_info=$(launchctl print \"gui/$uid/$agent_label\" 2>/dev/null || launchctl print \"user/$uid/$agent_label\" 2>/dev/null || launchctl print \"system/$agent_label\" 2>/dev/null || true); printf '%s\n' \"$agent_info\" | grep -E '^[[:space:]]*state = running[[:space:]]*$' >/dev/null && [ -S \"/tmp/RustDesk-$uid/ipc\" ] && /usr/sbin/lsof -a -U -- \"/tmp/RustDesk-$uid/ipc\" >/dev/null"
   set wait_for_service to "service_ready=0; for _ in $(/usr/bin/seq 1 " & readiness_attempts & "); do if " & check_service & "; then service_ready=1; break; fi; sleep 1; done; [ \"$service_ready\" -eq 1 ];"
   set wait_for_agent to "agent_ready=0; for _ in $(/usr/bin/seq 1 " & readiness_attempts & "); do if " & check_agent & "; then agent_ready=1; break; fi; sleep 1; done; [ \"$agent_ready\" -eq 1 ];"
   set verify_readiness to check_service & " || exit 1;" & check_agent & " || exit 1;"
