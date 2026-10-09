@@ -20,7 +20,7 @@ class UsbDeviceInfo {
         pushed = json['pushed'] == true;
 }
 
-/// Controller-side state for a RemoteUsb session: the list of devices the
+/// Controller-side USB forwarding state for a session: the list of devices the
 /// peer is offering, and which of them this side has bound/attached.
 class UsbipModel with ChangeNotifier {
   final WeakReference<FFI> parent;

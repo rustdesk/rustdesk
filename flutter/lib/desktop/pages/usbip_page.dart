@@ -1,72 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/usbip_model.dart';
-import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 class UsbipPage extends StatefulWidget {
-  UsbipPage({
-    Key? key,
-    required this.id,
-    required this.password,
-    required this.tabController,
-    required this.isSharedPassword,
-    this.forceRelay,
-    this.connToken,
-  }) : super(key: key);
-  final String id;
-  final String? password;
-  final DesktopTabController tabController;
-  final bool? forceRelay;
-  final bool? isSharedPassword;
-  final String? connToken;
+  const UsbipPage({Key? key, required this.ffi}) : super(key: key);
+  final FFI ffi;
 
   @override
   State<UsbipPage> createState() => _UsbipPageState();
 }
 
 class _UsbipPageState extends State<UsbipPage> {
-  late final FFI _ffi;
-
   @override
   void initState() {
     super.initState();
-    _ffi = FFI(null);
-    _ffi.start(widget.id,
-        isRemoteUsb: true,
-        password: widget.password,
-        isSharedPassword: widget.isSharedPassword,
-        forceRelay: widget.forceRelay,
-        connToken: widget.connToken);
-    Get.put<FFI>(_ffi, tag: 'usbip_${widget.id}');
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.tabController.onSelected?.call(widget.id);
-    });
-  }
-
-  @override
-  void dispose() {
-    // Closing the session detaches and unshares exactly what this session
-    // attached or shared itself (`UsbClientState::close` on the Rust side,
-    // `UsbipMux::close_all` on the peer); `UsbDeviceInfo.shared` is
-    // machine-wide and may belong to the CLI or another session.
-    _ffi.close();
-    _ffi.dialogManager.dismissAll();
-    Get.delete<FFI>(tag: 'usbip_${widget.id}');
-    super.dispose();
+    widget.ffi.usbipModel.requestDevices();
+    widget.ffi.usbipModel.requestLocalDevices();
   }
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
-      value: _ffi.usbipModel,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: Consumer<UsbipModel>(
-          builder: (context, model, _) => _buildBody(context, model),
-        ),
+      value: widget.ffi.usbipModel,
+      child: Consumer<UsbipModel>(
+        builder: (context, model, _) => _buildBody(context, model),
       ),
     );
   }
@@ -240,4 +199,17 @@ class _UsbipPageState extends State<UsbipPage> {
       ),
     );
   }
+}
+
+/// USB forwarding runs over the remote session's own connection, so it opens
+/// as a dialog in that session's window.
+void showUsbForwardingDialog(FFI ffi) {
+  ffi.dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+      title: null,
+      content: SizedBox(width: 480, height: 420, child: UsbipPage(ffi: ffi)),
+      actions: [dialogButton('Close', onPressed: close)],
+      onCancel: close,
+    );
+  }, tag: 'usb-forwarding');
 }

@@ -278,8 +278,8 @@ impl Default for FlutterHandler {
 
 #[cfg(target_os = "linux")]
 impl FlutterHandler {
-    /// Any one of this handler's registered UI sessions works -- a RemoteUsb
-    /// `FlutterHandler` only ever has the one.
+    /// Any one of this handler's registered UI sessions works: they all share
+    /// the one connection USB forwarding runs over.
     pub(crate) fn any_session(&self) -> Option<FlutterSession> {
         let sid = self.session_handlers.read().unwrap().keys().next().copied()?;
         sessions::get_session_by_session_id(&sid)
@@ -916,6 +916,7 @@ impl InvokeUiSession for FlutterHandler {
         let mut features: HashMap<&str, bool> = Default::default();
         for ref f in pi.features.iter() {
             features.insert("privacy_mode", f.privacy_mode);
+            features.insert("usbip", f.usbip);
         }
         // compatible with 1.1.9
         if get_version_number(&pi.version) < get_version_number("1.2.0") {
@@ -1234,7 +1235,7 @@ impl InvokeUiSession for FlutterHandler {
                 self.push_event_("usb_bind_result", &event_data, &[], &[]);
             }
             // Everything else (PushResult, Opened/Data/Close forwarding,
-            // push-side Open authorization) is RemoteUsb-specific
+            // push-side Open authorization) is USB-forwarding-specific
             // routing/auth/task-spawning, not shared plumbing -- lives in
             // its own module instead of inline in this shared trait impl.
             #[cfg(target_os = "linux")]
@@ -1361,7 +1362,6 @@ pub fn session_add(
     is_port_forward: bool,
     is_rdp: bool,
     is_terminal: bool,
-    is_remote_usb: bool,
     switch_uuid: &str,
     force_relay: bool,
     password: String,
@@ -1374,8 +1374,6 @@ pub fn session_add(
         ConnType::VIEW_CAMERA
     } else if is_terminal {
         ConnType::TERMINAL
-    } else if is_remote_usb {
-        ConnType::REMOTE_USB
     } else if is_port_forward {
         if is_rdp {
             ConnType::RDP

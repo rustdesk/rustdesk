@@ -58,7 +58,7 @@ pub fn run(cmds: Vec<&str>) -> ResultType<()> {
 /// Like `run`, but always asks for the password in the GTK dialog. `run`
 /// picks terminal mode for any `rustdesk --...` process, and the `--server`
 /// the service launches has no terminal to read a password from, so the
-/// call would fail at once. RemoteUsb needs root on the controlled side,
+/// call would fail at once. USB forwarding needs root on the controlled side,
 /// where the dialog is answered by the controlling user over the remote
 /// session.
 pub fn run_gui(cmds: Vec<&str>) -> ResultType<()> {
