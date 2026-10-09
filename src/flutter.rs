@@ -1215,12 +1215,18 @@ impl InvokeUiSession for FlutterHandler {
                     .devices
                     .iter()
                     .map(|d| {
+                        // What this session has actually attached, so a
+                        // reopened dialog shows the real state.
+                        #[cfg(target_os = "linux")]
+                        let attached_port = self.usb.attached_port_of(&d.bus_id).unwrap_or(-1);
+                        #[cfg(not(target_os = "linux"))]
+                        let attached_port = -1;
                         json!({
                             "bus_id": d.bus_id,
                             "vendor": d.vendor,
                             "product": d.product,
                             "shared": d.shared,
-                            "attached_port": d.attached_port,
+                            "attached_port": attached_port,
                         })
                     })
                     .collect();
