@@ -3,7 +3,11 @@
 // `connection.rs` -- a shared file that AGENTS.md says should only carry thin
 // one-line hooks for feature-specific work -- doesn't need to know the
 // channel_id sign convention or dispatch between them itself.
-use super::{connection::Sender, usbip_mux::UsbipMux, usbip_pull::UsbPullState};
+use super::{
+    connection::Sender,
+    usbip_mux::{self, UsbipMux},
+    usbip_pull::{self, UsbPullState},
+};
 use base::message_proto::*;
 use hbb_common::{log, tokio::sync::Semaphore};
 use std::sync::Arc;
@@ -69,12 +73,52 @@ impl UsbSession {
         self.mux.close_all();
         self.pull.close_all();
     }
+
+    /// Answers a control request on a connection without the USB forwarding
+    /// permission, without creating any USB state for it.
+    pub fn refuse(tx: &Sender, ch: UsbChannel) {
+        const DENIED: &str = "No permission of USB forwarding";
+        let msg = match ch.union {
+            Some(usb_channel::Union::ListDevices(_)) => usbip_mux::device_list_msg(Vec::new()),
+            Some(usb_channel::Union::Bind(b)) => {
+                usbip_mux::bind_result_msg(b.bus_id, b.bind, DENIED.into())
+            }
+            Some(usb_channel::Union::Open(o)) if o.channel_id >= 0 => {
+                usbip_mux::opened_msg(o.channel_id, false, DENIED.into())
+            }
+            Some(usb_channel::Union::PushRequest(r)) => {
+                usbip_pull::push_result_msg(r.bus_id, DENIED.into())
+            }
+            _ => return,
+        };
+        usbip_mux::send(tx, msg);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use hbb_common::tokio::sync::mpsc;
+
+    #[test]
+    fn bind_without_permission_is_refused_without_state() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut ch = UsbChannel::new();
+        ch.set_bind(UsbBind {
+            bus_id: "1-2".to_string(),
+            bind: true,
+            ..Default::default()
+        });
+        UsbSession::refuse(&tx, ch);
+        let (_, msg) = rx.try_recv().expect("the controller must get a reply");
+        match &msg.union {
+            Some(message::Union::UsbChannel(ch)) => match &ch.union {
+                Some(usb_channel::Union::BindResult(r)) => assert!(!r.error.is_empty()),
+                other => panic!("expected a BindResult, got {:?}", other),
+            },
+            other => panic!("expected a UsbChannel message, got {:?}", other),
+        }
+    }
 
     #[test]
     fn denied_push_request_is_answered_with_an_error() {

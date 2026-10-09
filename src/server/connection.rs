@@ -2398,15 +2398,33 @@ impl Connection {
         });
     }
 
-    /// USB forwarding runs inside a desktop session; its state starts with the
-    /// first frame and is dropped whenever the permission goes away.
+    /// USB forwarding runs inside an authorized desktop session. Its state
+    /// exists only while the permission does: a control request without it
+    /// is refused and ends any USB forwarding the session had.
     #[cfg(target_os = "linux")]
     fn handle_usb_channel(&mut self, ch: UsbChannel) {
         if self.authed_conn_type() != Some(AuthConnType::Remote) {
             return;
         }
+        let Some(tx) = self.inner.tx.clone() else {
+            return;
+        };
+        let data = matches!(
+            ch.union,
+            Some(usb_channel::Union::Data(_)) | Some(usb_channel::Union::WindowUpdate(_))
+        );
+        if !data && !Self::permission(keys::OPTION_ALLOW_USBIP, &self.control_permissions) {
+            if let Some(mut usbip) = self.usbip.take() {
+                usbip.close_all();
+            }
+            super::usbip_session::UsbSession::refuse(&tx, ch);
+            return;
+        }
         if self.usbip.is_none() {
-            self.usbip = self.inner.tx.clone().map(super::usbip_session::UsbSession::new);
+            if data {
+                return;
+            }
+            self.usbip = Some(super::usbip_session::UsbSession::new(tx));
         }
         let control_permissions = &self.control_permissions;
         if let Some(usbip) = self.usbip.as_mut() {
