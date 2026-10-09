@@ -18,6 +18,7 @@ use hbb_common::{
         net::TcpStream,
         sync::{mpsc, Semaphore},
     },
+    tokio_util::sync::CancellationToken,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -88,6 +89,15 @@ fn close_msg(channel_id: i32) -> Message {
 struct Entry {
     inbound: mpsc::Sender<Bytes>,
     flow: Flow,
+    cancel: CancellationToken,
+}
+
+/// Removing a channel by any path stops its relay, even one blocked on its
+/// usbipd socket; dropping the inbound sender alone would not.
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.cancel.cancel();
+    }
 }
 
 /// The controlled side of one session's USB forwarding. The connection's main loop
@@ -296,14 +306,22 @@ impl UsbipMux {
         }
         let (inbound_tx, inbound_rx) = mpsc::channel(usbip_flow::QUEUE_FRAMES);
         let flow = Flow::new();
+        let cancel = CancellationToken::new();
         self.channels.insert(
             id,
             Entry {
                 inbound: inbound_tx,
                 flow: flow.clone(),
+                cancel: cancel.clone(),
             },
         );
-        tokio::spawn(run_channel(id, open.bus_id, inbound_rx, self.tx.clone(), flow));
+        let relay = run_channel(id, open.bus_id, inbound_rx, self.tx.clone(), flow, cancel.clone());
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = relay => {}
+                _ = cancel.cancelled() => {}
+            }
+        });
     }
 
     fn reply(&self, msg: Message) {
@@ -354,6 +372,7 @@ async fn run_channel(
     mut inbound: mpsc::Receiver<Bytes>,
     tx: Sender,
     flow: Flow,
+    cancel: CancellationToken,
 ) {
     let socket = match timeout(CONNECT_TIMEOUT_MS, TcpStream::connect(USBIPD_ADDR)).await {
         Ok(Ok(s)) => s,
@@ -409,9 +428,10 @@ async fn run_channel(
     let tx_read = tx.clone();
     let flow_read = flow.clone();
     let mut to_tunnel = tokio::spawn(async move {
-        flow_read
-            .socket_to_peer(reader, |chunk| send_result(&tx_read, data_msg(id, chunk)))
-            .await;
+        tokio::select! {
+            _ = flow_read.socket_to_peer(reader, |chunk| send_result(&tx_read, data_msg(id, chunk))) => {}
+            _ = cancel.cancelled() => {}
+        }
     });
     // Whichever half ends first ends the other; only an end on our side
     // (local EOF or write error) needs a Close, the peer knows about its own.
