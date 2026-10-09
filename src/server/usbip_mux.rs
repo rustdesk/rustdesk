@@ -1,4 +1,4 @@
-// Controlled side of a `RemoteUsb` session: device listing/bind (via the
+// Controlled side of USB forwarding in a remote session: device listing/bind (via the
 // system `usbip` CLI) and the byte relay for the actual USB/IP TCP stream,
 // tunneled through `UsbChannel` frames. Mirrors the shape of
 // `port_forward_mux.rs`'s `PortForwardMux`, with per-channel windows in both
@@ -89,7 +89,7 @@ struct Entry {
     flow: Flow,
 }
 
-/// The controlled side of one `RemoteUsb` session. The connection's main loop
+/// The controlled side of one session's USB forwarding. The connection's main loop
 /// owns it and forwards every `UsbChannel` frame here; each forwarded
 /// USB/IP TCP connection is its own task.
 pub struct UsbipMux {

@@ -1,4 +1,4 @@
-// Controlled side of a `RemoteUsb` *push*: the controller offers one of its
+// Controlled side of a USB forwarding *push*: the controller offers one of its
 // own devices (`UsbPushRequest`), and we pull it in headlessly -- the exact
 // mirror of `client/usbip_attach.rs`'s `attach()`, just replying over
 // `Sender`/`UsbChannel` (there is no `Session<FlutterHandler>`/UI here)
@@ -92,7 +92,7 @@ struct Entry {
     cancel: CancellationToken,
 }
 
-/// The controlled side of every push offered in one `RemoteUsb` session.
+/// The controlled side of every push offered in one session.
 pub struct UsbPullState {
     channels: HashMap<i32, Entry>,
     next_id: i32,

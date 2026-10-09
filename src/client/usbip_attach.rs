@@ -1,4 +1,4 @@
-// Controller side of a `RemoteUsb` session: attaching a remote device means
+// Controller side of USB forwarding: attaching a remote device means
 // running the system `usbip attach`, which makes its own local TCP
 // connection that has to land somewhere -- so we stand up a local listener
 // that plays the role of the (otherwise unreachable) remote `usbipd`, and

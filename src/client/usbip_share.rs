@@ -1,4 +1,4 @@
-// Controller side of a `RemoteUsb` *push*: the controller's own local
+// Controller side of a USB forwarding *push*: the controller's own local
 // devices. Listing/binding is 100% local (no network -- same as running
 // `usbip list -p -l`/`usbip bind` directly), mirroring
 // `server/usbip_mux.rs`'s equivalent functions. The only network-facing
