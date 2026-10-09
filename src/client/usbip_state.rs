@@ -120,6 +120,23 @@ impl UsbClientState {
             .retain(|_, id| *id != channel_id);
     }
 
+    /// For a push relay ending itself: removes `channel_id` only while it is
+    /// still that relay's registration. After a reconnect the peer numbers
+    /// push channels from -1 again, and a late relay of the old connection
+    /// must not drop the new one.
+    pub(crate) fn unregister_share_channel_of(&self, channel_id: i32, flow: &Flow) {
+        let mut channels = self.share_channels.write().unwrap();
+        if !channels.get(&channel_id).is_some_and(|(_, f)| f.same(flow)) {
+            return;
+        }
+        channels.remove(&channel_id);
+        drop(channels);
+        self.share_bus_ids
+            .write()
+            .unwrap()
+            .retain(|_, id| *id != channel_id);
+    }
+
     pub(crate) fn share_channel_for_bus_id(&self, bus_id: &str) -> Option<i32> {
         self.share_bus_ids.read().unwrap().get(bus_id).copied()
     }
@@ -241,8 +258,12 @@ impl UsbClientState {
             .map(|(_, handle)| handle.clone())
     }
 
+    /// Relay channels belong to the connection that opened them, so a new
+    /// round starts without any: whatever an earlier round left behind (its
+    /// relays may have been cancelled before they could unregister) goes.
     pub(crate) fn register_runtime(&self, round: u32, handle: Handle) {
         *self.session_runtime.write().unwrap() = Some((round, handle));
+        self.clear_channels();
     }
 
     /// Only clears the slot if `round` is still the one registered --
@@ -254,7 +275,19 @@ impl UsbClientState {
         let mut guard = self.session_runtime.write().unwrap();
         if guard.as_ref().map(|(r, _)| *r) == Some(round) {
             *guard = None;
+            drop(guard);
+            self.clear_channels();
         }
+    }
+
+    /// Dropping every registered sender makes each relay's next `recv()`
+    /// return `None`, so it ends instead of running orphaned. Device
+    /// ownership (`share_owned`, `attached_ports`) is not touched.
+    fn clear_channels(&self) {
+        self.forward_channels.write().unwrap().clear();
+        self.share_channels.write().unwrap().clear();
+        self.share_bus_ids.write().unwrap().clear();
+        self.share_pending.write().unwrap().clear();
     }
 
     /// Called once the session's last UI session closes. A relay task
@@ -266,10 +299,7 @@ impl UsbClientState {
     /// task's next `recv()` return `None`, so it notices and cleans itself
     /// up instead of running orphaned indefinitely.
     pub(crate) fn close(&self) {
-        self.forward_channels.write().unwrap().clear();
-        self.share_channels.write().unwrap().clear();
-        self.share_bus_ids.write().unwrap().clear();
-        self.share_pending.write().unwrap().clear();
+        self.clear_channels();
         // Only what this session attached or bound itself is released: a
         // device shared by the CLI or another session is left alone.
         let ports = {
@@ -306,6 +336,26 @@ mod tests {
         let second = UsbClientState::next_channel_id();
         assert!(first >= 0);
         assert!(second > first);
+    }
+
+    #[tokio::test]
+    async fn reconnect_drops_the_old_rounds_channels() {
+        let state = UsbClientState::default();
+        let rt = Handle::current();
+        let (tx, _rx) = mpsc::channel(1);
+        let old = Flow::new();
+        state.register_runtime(1, rt.clone());
+        state.register_share_channel(-1, "1-1".into(), tx.clone(), old.clone());
+        state.register_runtime(2, rt);
+        assert!(!state.share_channel_live(-1));
+
+        let new = Flow::new();
+        state.register_share_channel(-1, "1-2".into(), tx, new.clone());
+        state.unregister_runtime(1);
+        state.unregister_share_channel_of(-1, &old);
+        assert!(state.share_channel_live(-1));
+        state.unregister_share_channel_of(-1, &new);
+        assert!(!state.share_channel_live(-1));
     }
 
     #[test]
