@@ -1077,6 +1077,10 @@ class InputModel {
       }
     }
     _lastButtons = hasStaleButtonsOnMouseUp ? 0 : evt.buttons;
+    if (isMacOS && _relativeMouse.enabled.value && type == _kMouseEventUp) {
+      // A relative up can finish a press sent before the mode switch.
+      _pressedMouseButtons &= ~buttons;
+    }
 
     out['buttons'] = buttons;
     out['type'] = type;
