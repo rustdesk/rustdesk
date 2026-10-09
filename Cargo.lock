@@ -7175,6 +7175,7 @@ dependencies = [
  "uuid",
  "virtual_display",
  "wallpaper",
+ "wayland-client",
  "winapi 0.3.9",
  "windows 0.61.1",
  "windows-service",
@@ -7184,6 +7185,7 @@ dependencies = [
  "wol-rs",
  "x11-clipboard 0.8.1",
  "x11rb 0.12.0",
+ "xkbcommon-dl",
  "xxhash-rust",
  "zstd",
 ]
