@@ -17,6 +17,7 @@ use hbb_common::{
         net::{TcpListener, TcpStream},
         sync::mpsc,
     },
+    tokio_util::sync::CancellationToken,
 };
 use serde_json::json;
 
@@ -209,9 +210,24 @@ pub(crate) fn detach_blocking(port: i32) -> bool {
 
 async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: TcpStream) {
     let id = UsbClientState::next_channel_id();
-    let (tx, mut rx) = mpsc::channel::<Inbound>(usbip_flow::QUEUE_FRAMES);
+    let (tx, rx) = mpsc::channel::<Inbound>(usbip_flow::QUEUE_FRAMES);
     let flow = Flow::new();
-    session.ui_handler.usb.register_forward_channel(id, tx, flow.clone());
+    let cancel = session.ui_handler.usb.register_forward_channel(id, tx, flow.clone());
+    tokio::select! {
+        _ = relay(session, bus_id, socket, id, rx, flow, cancel.clone()) => {}
+        _ = cancel.cancelled() => {}
+    }
+}
+
+async fn relay(
+    session: Session<FlutterHandler>,
+    bus_id: String,
+    socket: TcpStream,
+    id: i32,
+    mut rx: mpsc::Receiver<Inbound>,
+    flow: Flow,
+    cancel: CancellationToken,
+) {
     session.usb_open_forward(id, bus_id.clone());
 
     let success = loop {
@@ -282,12 +298,14 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
         // The validated prefix is the head of the stream and costs credit
         // like the rest of it.
         let reader = std::io::Cursor::new(prefix).chain(reader);
-        flow_read
-            .socket_to_peer(reader, |chunk| {
-                session_read.usb_forward_data(id, chunk);
-                true
-            })
-            .await;
+        let read = flow_read.socket_to_peer(reader, |chunk| {
+            session_read.usb_forward_data(id, chunk);
+            true
+        });
+        tokio::select! {
+            _ = read => {}
+            _ = cancel.cancelled() => {}
+        }
     });
 
     // Whichever half ends first ends the other; only an end on our side

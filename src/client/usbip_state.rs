@@ -7,6 +7,7 @@ use hbb_common::{
     bytes::Bytes,
     log,
     tokio::{runtime::Handle, sync::mpsc},
+    tokio_util::sync::CancellationToken,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -16,14 +17,38 @@ use std::{
     },
 };
 
+/// A registered relay channel. Dropping it, by whichever path removes it,
+/// stops the relay even while it is blocked on its local socket.
+pub(crate) struct Relay<T> {
+    tx: mpsc::Sender<T>,
+    flow: Flow,
+    cancel: CancellationToken,
+}
+
+impl<T> Relay<T> {
+    fn new(tx: mpsc::Sender<T>, flow: Flow) -> Self {
+        Self {
+            tx,
+            flow,
+            cancel: CancellationToken::new(),
+        }
+    }
+}
+
+impl<T> Drop for Relay<T> {
+    fn drop(&mut self) {
+        self.cancel.cancel();
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct UsbClientState {
     // Local usbip-attach relay channels (pull direction), keyed by the id
     // chosen when the channel opened.
-    forward_channels: RwLock<HashMap<i32, (mpsc::Sender<Inbound>, Flow)>>,
+    forward_channels: RwLock<HashMap<i32, Relay<Inbound>>>,
     // Local usbip-share relay channels (push direction), keyed by the
     // negative channel_id the peer's usbip_pull chose.
-    share_channels: RwLock<HashMap<i32, (mpsc::Sender<Bytes>, Flow)>>,
+    share_channels: RwLock<HashMap<i32, Relay<Bytes>>>,
     // bus_id -> the channel_id above, so "unpush" (given only a bus_id) can
     // find the channel to close.
     share_bus_ids: RwLock<HashMap<String, i32>>,
@@ -63,16 +88,18 @@ impl UsbClientState {
         NEXT_ID.fetch_add(1, Ordering::Relaxed)
     }
 
+    /// The returned token is cancelled once the channel is removed; the
+    /// relay runs under it.
     pub(crate) fn register_forward_channel(
         &self,
         channel_id: i32,
         tx: mpsc::Sender<Inbound>,
         flow: Flow,
-    ) {
-        self.forward_channels
-            .write()
-            .unwrap()
-            .insert(channel_id, (tx, flow));
+    ) -> CancellationToken {
+        let relay = Relay::new(tx, flow);
+        let cancel = relay.cancel.clone();
+        self.forward_channels.write().unwrap().insert(channel_id, relay);
+        cancel
     }
 
     pub(crate) fn unregister_forward_channel(&self, channel_id: i32) {
@@ -83,14 +110,14 @@ impl UsbClientState {
     /// peer, which otherwise keeps its side alive until the session ends.
     pub(crate) fn forward_send(&self, channel_id: i32, msg: Inbound) -> bool {
         let failed = match self.forward_channels.read().unwrap().get(&channel_id) {
-            Some((tx, flow)) => {
+            Some(relay) => {
                 let admitted = match &msg {
-                    Inbound::Data(data) => flow.admit(data.len()),
+                    Inbound::Data(data) => relay.flow.admit(data.len()),
                     _ => true,
                 };
                 // Over the window, or the relay task already ended: an
                 // admitted frame always fits (`usbip_flow::QUEUE_FRAMES`).
-                !admitted || tx.try_send(msg).is_err()
+                !admitted || relay.tx.try_send(msg).is_err()
             }
             None => return false,
         };
@@ -101,15 +128,19 @@ impl UsbClientState {
         failed
     }
 
+    /// As for `register_forward_channel`.
     pub(crate) fn register_share_channel(
         &self,
         channel_id: i32,
         bus_id: String,
         tx: mpsc::Sender<Bytes>,
         flow: Flow,
-    ) {
-        self.share_channels.write().unwrap().insert(channel_id, (tx, flow));
+    ) -> CancellationToken {
+        let relay = Relay::new(tx, flow);
+        let cancel = relay.cancel.clone();
+        self.share_channels.write().unwrap().insert(channel_id, relay);
         self.share_bus_ids.write().unwrap().insert(bus_id, channel_id);
+        cancel
     }
 
     pub(crate) fn unregister_share_channel(&self, channel_id: i32) {
@@ -126,7 +157,7 @@ impl UsbClientState {
     /// must not drop the new one.
     pub(crate) fn unregister_share_channel_of(&self, channel_id: i32, flow: &Flow) {
         let mut channels = self.share_channels.write().unwrap();
-        if !channels.get(&channel_id).is_some_and(|(_, f)| f.same(flow)) {
+        if !channels.get(&channel_id).is_some_and(|relay| relay.flow.same(flow)) {
             return;
         }
         channels.remove(&channel_id);
@@ -148,7 +179,7 @@ impl UsbClientState {
     /// `true` if the channel had to be dropped, as for `forward_send`.
     pub(crate) fn share_send(&self, channel_id: i32, data: Bytes) -> bool {
         let failed = match self.share_channels.read().unwrap().get(&channel_id) {
-            Some((tx, flow)) => !flow.admit(data.len()) || tx.try_send(data).is_err(),
+            Some(relay) => !relay.flow.admit(data.len()) || relay.tx.try_send(data).is_err(),
             None => return false,
         };
         if failed {
@@ -166,13 +197,13 @@ impl UsbClientState {
                 .read()
                 .unwrap()
                 .get(&channel_id)
-                .map(|(_, flow)| flow.clone())
+                .map(|relay| relay.flow.clone())
         } else {
             self.share_channels
                 .read()
                 .unwrap()
                 .get(&channel_id)
-                .map(|(_, flow)| flow.clone())
+                .map(|relay| relay.flow.clone())
         };
         if let Some(flow) = flow {
             flow.grant(add);
