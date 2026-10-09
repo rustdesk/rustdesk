@@ -65,8 +65,9 @@ pub(crate) struct UsbClientState {
     // record itself stays until that succeeds.
     share_releasing: RwLock<HashSet<String>>,
     // Local vhci ports this session attached (pull direction) and has not
-    // detached yet.
-    attached_ports: RwLock<HashSet<i32>>,
+    // detached yet, with the peer's bus id each one imports. The bus id
+    // alone is ambiguous: another peer may export the same one.
+    attached_ports: RwLock<HashMap<i32, String>>,
     // Set once `close` has run: an attach or bind finishing after that must
     // be undone by whoever finished it.
     closed: AtomicBool,
@@ -263,17 +264,27 @@ impl UsbClientState {
 
     /// `false` once the session is closing; the caller must then detach
     /// `port` itself, since teardown has already run.
-    pub(crate) fn attached_port_add(&self, port: i32) -> bool {
+    pub(crate) fn attached_port_add(&self, port: i32, bus_id: String) -> bool {
         let mut ports = self.attached_ports.write().unwrap();
         if self.closed.load(Ordering::SeqCst) {
             return false;
         }
-        ports.insert(port);
+        ports.insert(port, bus_id);
         true
     }
 
-    pub(crate) fn attached_port_take(&self, port: i32) -> bool {
+    pub(crate) fn attached_port_take(&self, port: i32) -> Option<String> {
         self.attached_ports.write().unwrap().remove(&port)
+    }
+
+    /// The local port this session attached the peer's `bus_id` on, for the
+    /// device list to show what is actually attached.
+    pub(crate) fn attached_port_of(&self, bus_id: &str) -> Option<i32> {
+        self.attached_ports
+            .read()
+            .unwrap()
+            .iter()
+            .find_map(|(port, b)| (b == bus_id).then_some(*port))
     }
 
     /// The runtime `register_runtime` recorded once `io_loop` started running
@@ -336,7 +347,7 @@ impl UsbClientState {
         let ports = {
             let mut ports = self.attached_ports.write().unwrap();
             self.closed.store(true, Ordering::SeqCst);
-            std::mem::take(&mut *ports)
+            std::mem::take(&mut *ports).into_keys().collect::<Vec<_>>()
         };
         let owned: Vec<String> = std::mem::take(&mut *self.share_owned.write().unwrap())
             .into_iter()
@@ -409,9 +420,9 @@ mod tests {
         let state = UsbClientState::default();
         state.close();
         assert!(!state.share_owned_add("1-3".into(), true));
-        assert!(!state.attached_port_add(4));
+        assert!(!state.attached_port_add(4, "1-3".into()));
         assert!(!state.share_owned("1-3"));
-        assert!(!state.attached_port_take(4));
+        assert_eq!(state.attached_port_take(4), None);
     }
 
     #[test]
