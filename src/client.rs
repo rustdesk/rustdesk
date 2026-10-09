@@ -4642,7 +4642,8 @@ pub async fn handle_hash(
     lc.write().unwrap().hash = hash.clone();
     // A direct IP server may offer to encrypt the stream. This comes first: everything below,
     // the login included, is to go out encrypted. Failing to answer it must not be turned
-    // into a plain login.
+    // into a plain login. Port forwarding answers it before it gets here (a password typed
+    // early skips this function); on a stream that is already keyed this is a no-op.
     if let Err(err) = crate::common::direct_ip_kx_accept(peer, &hash).await {
         log::error!("Direct IP key exchange failed: {}", err);
         interface.msgbox("error", "Connection Error", &err.to_string(), "");
