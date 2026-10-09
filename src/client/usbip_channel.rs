@@ -35,15 +35,11 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
                     r.bus_id, r.error
                 );
                 handler.usb.share_pending_remove(&r.bus_id);
-                let Some(bound) = handler.usb.share_owned_take(&r.bus_id) else {
-                    return;
-                };
-                if !bound {
-                    log::info!("usb push: {} was shared outside this session, leaving it", r.bus_id);
-                } else if let Some(rt) = handler.usb.session_runtime() {
+                if let Some(bound) = handler.usb.share_release_begin(&r.bus_id) {
+                    let usb = handler.usb.clone();
                     let bus_id = r.bus_id.clone();
-                    rt.spawn_blocking(move || {
-                        if crate::client::usbip_share::bind_device(&bus_id, false) {
+                    std::thread::spawn(move || {
+                        if crate::client::usbip_share::release_push(&usb, &bus_id, bound) {
                             log::info!("usb push: rolled back share of {}", bus_id);
                         } else {
                             log::error!("usb push: rollback unshare of {} also failed", bus_id);
@@ -173,9 +169,9 @@ mod tests {
     #[test]
     fn failed_push_result_rolls_back_only_once() {
         let handler = FlutterHandler::default();
-        handler.usb.share_owned_add("1-2".to_string(), true);
+        handler.usb.share_owned_add("1-2".to_string(), false);
         handle(&handler, failed_push("1-2"));
-        assert!(!handler.usb.share_owned("1-2"));
-        assert_eq!(handler.usb.share_owned_take("1-2"), None);
+        // Being undone or already undone: either way no second rollback.
+        assert_eq!(handler.usb.share_release_begin("1-2"), None);
     }
 }
