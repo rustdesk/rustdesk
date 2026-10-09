@@ -538,6 +538,10 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
                 log::debug!("Attempting to fix logical size with try_fix_logical_size()");
                 try_fix_logical_size(&mut all);
+                if all.is_empty() {
+                    scrap::wayland::pipewire::close_session();
+                    bail!("Failed to get capturer display info");
+                }
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 let mut displays = super::display_service::update_sync_displays(&all);
