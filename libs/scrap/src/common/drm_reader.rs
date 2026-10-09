@@ -553,6 +553,12 @@ impl DrmReader {
         plane_rotation_answer(rc, rotation)
     }
 
+    /// The primary plane's rotation read NOW, for a caller that has not grabbed (enumeration):
+    /// `plane_rotation()` only reflects the last grab.
+    pub fn query_plane_rotation(&mut self) -> Option<u32> {
+        self.read_plane_rotation()
+    }
+
     /// Zero-copy EXPORT grab: fills a `drmtap_dmabuf_desc` (dma-buf fd, plane layout, HDR metadata) WITHOUT mapping, detiling or copying pixels, so on this
     /// path the root process never loads libEGL/libGLESv2. The exported fd is READ-ONLY (libdrmtap drops `DRM_RDWR` and `dup` shares that open file
     /// description), so the `--server` that receives it can map the scanout but never write the live framebuffer. Validation here is METADATA ONLY.
