@@ -1354,6 +1354,10 @@ pub fn get_install_options() -> String {
 }
 
 pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static str {
+    if !is_win_10_or_greater() {
+        return "desktopicon startmenu";
+    }
+
     let install_printer = match printer_override {
         Some(override_value) => override_value,
         None => {
@@ -1361,9 +1365,13 @@ pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static st
             let subkey = format!(".{}", app_name.to_lowercase());
             let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
             printer.as_deref() == Some("1")
+                && remote_printer::is_rd_printer_installed(&app_name).unwrap_or_else(|err| {
+                    log::warn!("Failed to check printer installation status: {err}; skipping printer installation");
+                    false
+                })
         }
     };
-    if install_printer && is_win_10_or_greater() {
+    if install_printer {
         "desktopicon startmenu printer"
     } else {
         "desktopicon startmenu"
@@ -3911,8 +3919,22 @@ pub fn update_to(file: &str) -> ResultType<()> {
 //    We need also to handle the command line parsing to find the tray processes.
 pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
     let quiet_args = if quiet { " /qn LAUNCH_TRAY_APP=N" } else { "" };
-    let cmds =
-        format!("chcp 65001 && msiexec /i \"{msi}\"{quiet_args} REBOOT=ReallySuppress /norestart");
+    let app_name = crate::get_app_name();
+    let subkey = format!(".{}", app_name.to_lowercase());
+    let printer_installed = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER).as_deref()
+        != Some("0")
+        && remote_printer::is_rd_printer_installed(&app_name).unwrap_or_else(|err| {
+            log::warn!(
+                "Failed to check printer installation status: {err}; skipping printer installation"
+            );
+            false
+        });
+    let printer_args = if printer_installed {
+        ""
+    } else {
+        " INSTALLPRINTER=0"
+    };
+    let cmds = format!("chcp 65001 && msiexec /i \"{msi}\"{quiet_args}{printer_args} REBOOT=ReallySuppress /norestart");
     run_cmds(cmds, false, "update-msi")?;
     Ok(())
 }
@@ -4846,7 +4868,16 @@ mod tests {
     #[test]
     fn install_app_names_enforce_ascii_command_safety() {
         assert!(validate_install_app_name("RustDesk-Admin1").is_ok());
-        for app_name in ["", "RustDesk_Admin", "RustDesk&whoami", "RustDesk应用"] {
+        for app_name in [
+            "",
+            "RustDesk_Admin",
+            "RustDesk&whoami",
+            "RustDesk应用",
+            "RustDesk앱",
+            "RustDeskBüro",
+            "RustDeskFrançais",
+            "RustDeskアプリ",
+        ] {
             assert!(
                 validate_install_app_name(app_name).is_err(),
                 "unsafe application name was accepted: {app_name}"
