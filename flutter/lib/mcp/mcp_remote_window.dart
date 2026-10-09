@@ -66,8 +66,10 @@ Future<dynamic> handleMcpWindowCall(
           .where((e) => e.value.sessionId.toString() == args['session_id'])
           .firstOrNull;
       if (entry == null) return false;
-      if (args['grant_id'] != null &&
-          entry.value.ffiModel.agentControlGrant != args['grant_id']) {
+      final grantId = args['grant_id'];
+      if (grantId is! String ||
+          grantId.isEmpty ||
+          entry.value.ffiModel.agentControlGrant != grantId) {
         return false;
       }
       closeTab(entry.key);

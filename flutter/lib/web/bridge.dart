@@ -1957,6 +1957,15 @@ class RustdeskImpl {
 
   String mcpSessionId({required String connectionId, dynamic hint}) => '';
 
+  void mcpReleaseInput(
+      {required String connectionId,
+      required String grantId,
+      required List<String> buttons,
+      required List<String> keys,
+      dynamic hint}) {
+    throw UnimplementedError('mcpReleaseInput');
+  }
+
   bool sessionMcpAuthenticate(
           {required UuidValue sessionId,
           required String grantId,

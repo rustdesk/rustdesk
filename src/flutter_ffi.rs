@@ -375,6 +375,18 @@ pub fn mcp_session_id(connection_id: String) -> SyncReturn<String> {
 }
 
 #[allow(unused_variables)]
+pub fn mcp_release_input(
+    connection_id: String,
+    grant_id: String,
+    buttons: Vec<String>,
+    keys: Vec<String>,
+) -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::release_input(&connection_id, &grant_id, &buttons, &keys);
+    SyncReturn(())
+}
+
+#[allow(unused_variables)]
 pub fn session_mcp_authenticate(
     session_id: SessionID,
     grant_id: String,

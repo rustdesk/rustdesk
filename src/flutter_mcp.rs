@@ -147,6 +147,41 @@ pub fn set_agent_control(session_id: SessionID, grant_id: String) {
     });
 }
 
+// Hold the connection itself across cleanup; UI tabs can disappear independently.
+pub fn release_input(connection_id: &str, grant_id: &str, buttons: &[String], keys: &[String]) {
+    let Some(session) = crate::flutter::sessions::mcp_connection(connection_id) else {
+        return;
+    };
+    let mut owner = session.ui_handler.mcp.owner.write().unwrap();
+    if !owner.accepts(Some(grant_id)) {
+        return;
+    }
+    for button in buttons {
+        let button = match button.as_str() {
+            "left" => crate::input::MOUSE_BUTTON_LEFT,
+            "right" => crate::input::MOUSE_BUTTON_RIGHT,
+            "wheel" => crate::input::MOUSE_BUTTON_WHEEL,
+            "back" => crate::input::MOUSE_BUTTON_BACK,
+            "forward" => crate::input::MOUSE_BUTTON_FORWARD,
+            _ => continue,
+        };
+        crate::client::send_mouse(
+            (button << 3) | MOUSE_TYPE_UP,
+            0,
+            0,
+            false,
+            false,
+            false,
+            false,
+            &*session,
+        );
+    }
+    for key in keys {
+        session.input_key(key, false, false, false, false, false, false);
+    }
+    *owner = InputOwner::default();
+}
+
 pub fn with_human_input(session_id: SessionID, send: impl FnOnce()) {
     let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
         return;
@@ -428,6 +463,43 @@ mod tests {
         let mut sent = false;
         with_human_input(b, || sent = true);
         assert!(sent);
+        crate::flutter_ffi::session_close(b);
+    }
+
+    #[test]
+    fn cleanup_survives_tab_close_and_cannot_revoke_a_new_grant() {
+        let (a, connection) = session();
+        let b = SessionID::new_v4();
+        let connection_id = connection.ui_handler.mcp.id.to_string();
+        crate::flutter::sessions::insert_session(
+            b,
+            hbb_common::rendezvous_proto::ConnType::DEFAULT_CONN,
+            connection.clone(),
+        );
+        let (sender, mut receiver) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+        *connection.sender.write().unwrap() = Some(sender);
+        set_agent_control(a, "old".into());
+        crate::flutter_ffi::session_close(a);
+        release_input(&connection_id, "old", &["left".into()], &["a".into()]);
+        let crate::client::Data::Message(mouse) = receiver.try_recv().unwrap() else {
+            panic!("expected mouse release");
+        };
+        assert_eq!(
+            mouse.mouse_event().mask,
+            (MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP
+        );
+        let crate::client::Data::Message(key) = receiver.try_recv().unwrap() else {
+            panic!("expected key release");
+        };
+        assert!(!key.key_event().down);
+        assert_eq!(agent_control_grant(&b), "");
+        let mut human_sent = false;
+        with_human_input(b, || human_sent = true);
+        assert!(human_sent);
+        set_agent_control(b, "new".into());
+        release_input(&connection_id, "old", &["left".into()], &["a".into()]);
+        assert!(receiver.try_recv().is_err());
+        assert_eq!(agent_control_grant(&b), "new");
         crate::flutter_ffi::session_close(b);
     }
 

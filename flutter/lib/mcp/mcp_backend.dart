@@ -219,33 +219,19 @@ class RustDeskMcpBackend implements McpBackend {
   Future<void> _releaseConnection(String connectionId) async {
     final input = _input[connectionId];
     if (input == null) return;
-    await input.release(() async {
-      final sessionId = bind.mcpSessionId(connectionId: connectionId);
-      if (sessionId.isEmpty) return;
-      final sid = UuidValue(sessionId);
-      final at = input.pointer;
-      if (at != null) {
-        for (final b in input.buttons) {
-          await _sendMouse(input, sid,
-              mcpMouseMessage(type: 'up', buttons: b, x: at.x, y: at.y));
-        }
-      }
-      for (final k in input.keys) {
-        await bind.sessionInputKey(
-            sessionId: sid,
-            name: k,
-            down: false,
-            press: false,
-            alt: false,
-            ctrl: false,
-            shift: false,
-            command: false);
-      }
-      input.buttons.clear();
-      input.keys.clear();
-      bind.sessionSetAgentControl(sessionId: sid, grantId: '');
-    });
+    await _releaseInput(connectionId, input);
   }
+
+  Future<void> _releaseInput(String connectionId, McpInputState input) =>
+      input.release(() async {
+        bind.mcpReleaseInput(
+            connectionId: connectionId,
+            grantId: input.grantId,
+            buttons: input.buttons.toList(),
+            keys: input.keys.toList());
+        input.buttons.clear();
+        input.keys.clear();
+      });
 
   // Notifications only refresh UI from native state. A late notification
   // cannot grant/revoke control, and a frozen window cannot block restart.
@@ -802,15 +788,22 @@ class RustDeskMcpBackend implements McpBackend {
 
   @override
   Future<void> disconnect(String sessionId) async {
-    final s = await _find(sessionId);
-    if (s['mode'] != 'agent') throw McpToolException(mcpHumanControlMessage);
+    final input = _inputFor(sessionId);
+    if (input == null) throw McpToolException(mcpHumanControlMessage);
     final connectionId = _connectionId(sessionId);
+    await _find(sessionId);
+    _checkGrant(sessionId, input);
     _controlRequests.remove(connectionId);
-    await releaseHeld(sessionId);
-    final closed =
-        await _callWindow(kWindowEventMcpClose, {'session_id': sessionId});
-    if (closed != true) {
-      throw McpToolException('Unknown session_id: $sessionId');
+    try {
+      final closed = await _callWindow(kWindowEventMcpClose,
+          {'session_id': sessionId, 'grant_id': input.grantId});
+      if (closed != true) {
+        throw McpToolException('Control changed or the session was closed.');
+      }
+    } finally {
+      // Keep the grant valid until the receiver accepts the close. If a sibling
+      // survives, release on that connection even after this tab has gone.
+      await _releaseInput(connectionId, input);
     }
   }
 }

@@ -2075,6 +2075,16 @@ pub mod sessions {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn mcp_connection(connection_id: &str) -> Option<FlutterSession> {
+        SESSIONS
+            .read()
+            .unwrap()
+            .values()
+            .find(|s| s.ui_handler.mcp.id.to_string() == connection_id)
+            .cloned()
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn mcp_session_id(connection_id: &str) -> Option<SessionID> {
         SESSIONS.read().unwrap().values().find_map(|s| {
             if s.ui_handler.mcp.id.to_string() == connection_id {
