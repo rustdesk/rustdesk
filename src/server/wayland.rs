@@ -329,16 +329,6 @@ fn cleanup_capturers(lock: &mut HashMap<usize, u64>) {
     }
 }
 
-fn reset_pipewire_capture_state(lock: &mut HashMap<usize, u64>, force_close_session: bool) {
-    cleanup_capturers(lock);
-    *PIPEWIRE_INITIALIZED.write().unwrap() = false;
-    if force_close_session {
-        scrap::wayland::pipewire::close_session();
-    } else {
-        scrap::wayland::pipewire::try_close_session();
-    }
-}
-
 /// Uinput desktop rect from the DRM display list, for a login screen where no compositor can be
 /// asked. `(minx, maxx, miny, maxy)`, in delivered-orientation physical pixels (a rotated
 /// output counts transposed, matching its frames): no compositor here applied a scale, so
@@ -576,7 +566,9 @@ pub(super) async fn check_init() -> ResultType<()> {
                     let capturer = match Capturer::new(display) {
                         Ok(c) => CapturerPtr(Box::into_raw(Box::new(c))),
                         Err(e) => {
-                            reset_pipewire_capture_state(&mut lock, true);
+                            cleanup_capturers(&mut lock);
+                            *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+                            scrap::wayland::pipewire::close_session();
                             return Err(e.into());
                         }
                     };
@@ -632,18 +624,7 @@ pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, 
             Ok((cap_display_info.displays.clone(), cap_display_info.primary))
         }
     } else {
-        drop(cap_map);
-        let mut cap_map = CAP_DISPLAY_INFO.write().unwrap();
-        if let Some(addr) = cap_map.values().next() {
-            let cap_display_info: *const CapDisplayInfo = *addr as _;
-            unsafe {
-                let cap_display_info = &*cap_display_info;
-                Ok((cap_display_info.displays.clone(), cap_display_info.primary))
-            }
-        } else {
-            reset_pipewire_capture_state(&mut cap_map, true);
-            bail!("Failed to get capturer display info");
-        }
+        bail!("Failed to get capturer display info");
     }
 }
 
@@ -665,7 +646,8 @@ pub fn clear() {
     // enumeration path blocks the executor long enough to trip "deadline has elapsed" and spiral
     // into a restart loop. DRM availability is fixed at service start, so the cache stays valid.
     let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
-    reset_pipewire_capture_state(&mut write_lock, false);
+    cleanup_capturers(&mut write_lock);
+    *PIPEWIRE_INITIALIZED.write().unwrap() = false;
 }
 
 /// Initialize the PipeWire/portal capture path from the plain (sync) video thread, so a DRM display
