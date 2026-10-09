@@ -148,7 +148,13 @@ pub fn set_agent_control(session_id: SessionID, grant_id: String) {
 }
 
 // Hold the connection itself across cleanup; UI tabs can disappear independently.
-pub fn release_input(connection_id: &str, grant_id: &str, buttons: &[String], keys: &[String]) {
+pub fn release_input(
+    connection_id: &str,
+    grant_id: &str,
+    buttons: &[String],
+    keys: &[String],
+    revoke: bool,
+) {
     let Some(session) = crate::flutter::sessions::mcp_connection(connection_id) else {
         return;
     };
@@ -179,7 +185,9 @@ pub fn release_input(connection_id: &str, grant_id: &str, buttons: &[String], ke
     for key in keys {
         session.input_key(key, false, false, false, false, false, false);
     }
-    *owner = InputOwner::default();
+    if revoke {
+        *owner = InputOwner::default();
+    }
 }
 
 pub fn with_human_input(session_id: SessionID, send: impl FnOnce()) {
@@ -480,7 +488,7 @@ mod tests {
         *connection.sender.write().unwrap() = Some(sender);
         set_agent_control(a, "old".into());
         crate::flutter_ffi::session_close(a);
-        release_input(&connection_id, "old", &["left".into()], &["a".into()]);
+        release_input(&connection_id, "old", &["left".into()], &["a".into()], true);
         let crate::client::Data::Message(mouse) = receiver.try_recv().unwrap() else {
             panic!("expected mouse release");
         };
@@ -497,10 +505,30 @@ mod tests {
         with_human_input(b, || human_sent = true);
         assert!(human_sent);
         set_agent_control(b, "new".into());
-        release_input(&connection_id, "old", &["left".into()], &["a".into()]);
+        release_input(&connection_id, "old", &["left".into()], &["a".into()], true);
         assert!(receiver.try_recv().is_err());
         assert_eq!(agent_control_grant(&b), "new");
         crate::flutter_ffi::session_close(b);
+    }
+
+    #[test]
+    fn disconnect_releases_keys_before_closing_but_preserves_close_grant() {
+        let (id, connection) = session();
+        let connection_id = connection.ui_handler.mcp.id.to_string();
+        let (sender, mut receiver) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+        *connection.sender.write().unwrap() = Some(sender);
+        set_agent_control(id, "grant".into());
+        release_input(&connection_id, "grant", &[], &["VK_UP".into()], false);
+        assert_eq!(agent_control_grant(&id), "grant");
+        crate::flutter_ffi::session_close(id);
+        let crate::client::Data::Message(key) = receiver.try_recv().unwrap() else {
+            panic!("expected key release before close");
+        };
+        assert!(!key.key_event().down);
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            crate::client::Data::Close
+        ));
     }
 
     #[test]

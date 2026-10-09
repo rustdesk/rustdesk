@@ -223,15 +223,19 @@ class RustDeskMcpBackend implements McpBackend {
   }
 
   Future<void> _releaseInput(String connectionId, McpInputState input) =>
-      input.release(() async {
-        bind.mcpReleaseInput(
-            connectionId: connectionId,
-            grantId: input.grantId,
-            buttons: input.buttons.toList(),
-            keys: input.keys.toList());
-        input.buttons.clear();
-        input.keys.clear();
-      });
+      input.release(() async => _clearHeld(connectionId, input));
+
+  void _clearHeld(String connectionId, McpInputState input,
+      {bool revoke = true}) {
+    bind.mcpReleaseInput(
+        connectionId: connectionId,
+        grantId: input.grantId,
+        buttons: input.buttons.toList(),
+        keys: input.keys.toList(),
+        revoke: revoke);
+    input.buttons.clear();
+    input.keys.clear();
+  }
 
   // Notifications only refresh UI from native state. A late notification
   // cannot grant/revoke control, and a frozen window cannot block restart.
@@ -251,7 +255,7 @@ class RustDeskMcpBackend implements McpBackend {
 
   Future<void> takeOver(String sessionId, String grantId) async {
     final input = _inputFor(sessionId);
-    if (input == null || !input.active || input.grantId != grantId) return;
+    if (input == null || input.grantId != grantId) return;
     _controlRequests.remove(_connectionId(sessionId));
     await releaseHeld(sessionId);
     await _refreshControl();
@@ -794,16 +798,23 @@ class RustDeskMcpBackend implements McpBackend {
     await _find(sessionId);
     _checkGrant(sessionId, input);
     _controlRequests.remove(connectionId);
-    try {
-      final closed = await _callWindow(kWindowEventMcpClose,
-          {'session_id': sessionId, 'grant_id': input.grantId});
-      if (closed != true) {
-        throw McpToolException('Control changed or the session was closed.');
+    late Future<dynamic> closing;
+    await input.release(() async {
+      try {
+        // Drain/cancel input before closing the last tab, but keep its grant
+        // until the window has accepted the close.
+        _clearHeld(connectionId, input, revoke: false);
+        closing = _callWindow(kWindowEventMcpClose,
+            {'session_id': sessionId, 'grant_id': input.grantId});
+        // A window error belongs to disconnect, not to the cached input-release
+        // result that takeover and shutdown also await. Rethrow it below.
+        await closing.catchError((Object _) => null);
+      } finally {
+        _clearHeld(connectionId, input);
       }
-    } finally {
-      // Keep the grant valid until the receiver accepts the close. If a sibling
-      // survives, release on that connection even after this tab has gone.
-      await _releaseInput(connectionId, input);
+    });
+    if (await closing != true) {
+      throw McpToolException('Control changed or the session was closed.');
     }
   }
 }

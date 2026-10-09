@@ -380,9 +380,10 @@ pub fn mcp_release_input(
     grant_id: String,
     buttons: Vec<String>,
     keys: Vec<String>,
+    revoke: bool,
 ) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::flutter_mcp::release_input(&connection_id, &grant_id, &buttons, &keys);
+    crate::flutter_mcp::release_input(&connection_id, &grant_id, &buttons, &keys, revoke);
     SyncReturn(())
 }
 
