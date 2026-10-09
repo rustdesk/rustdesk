@@ -68,6 +68,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   final RxBool printer = false.obs;
   final RxBool showProgress = false.obs;
   final RxBool btnEnabled = true.obs;
+  final RxBool cancelEnabled = true.obs;
 
   // todo move to theme.
   final buttonStyle = OutlinedButton.styleFrom(
@@ -238,8 +239,9 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                     () => OutlinedButton.icon(
                       icon: Icon(Icons.close_rounded, size: 16),
                       label: Text(translate('Cancel')),
-                      onPressed:
-                          btnEnabled.value ? () => windowManager.close() : null,
+                      onPressed: cancelEnabled.value
+                          ? () => windowManager.close()
+                          : null,
                       style: buttonStyle,
                     ).marginOnly(right: 10),
                   ),
@@ -274,6 +276,7 @@ class _InstallPageBodyState extends State<_InstallPageBody>
   void install() {
     do_install() {
       btnEnabled.value = false;
+      cancelEnabled.value = false;
       showProgress.value = true;
       String args = '';
       if (startmenu.value) args += ' startmenu';
