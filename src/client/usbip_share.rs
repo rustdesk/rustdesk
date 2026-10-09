@@ -151,13 +151,13 @@ pub(crate) async fn run_channel(
         Ok(Err(e)) => {
             log::error!("usb share: channel {} usbipd connect failed: {}", id, e);
             session.usb_reply_opened(id, false, format!("usbipd connect failed: {}", e));
-            session.ui_handler.usb.unregister_share_channel(id);
+            session.ui_handler.usb.unregister_share_channel_of(id, &flow);
             return;
         }
         Err(e) => {
             log::error!("usb share: channel {} usbipd connect timed out: {}", id, e);
             session.usb_reply_opened(id, false, format!("usbipd connect timed out: {}", e));
-            session.ui_handler.usb.unregister_share_channel(id);
+            session.ui_handler.usb.unregister_share_channel_of(id, &flow);
             return;
         }
     };
@@ -182,13 +182,13 @@ pub(crate) async fn run_channel(
             Ok(None) => {
                 log::info!("usb share: channel {} closed before import request", id);
                 session.usb_close_forward(id);
-                session.ui_handler.usb.unregister_share_channel(id);
+                session.ui_handler.usb.unregister_share_channel_of(id, &flow);
                 return;
             }
             Err(_) => {
                 log::warn!("usb share: channel {} import request timed out, closing", id);
                 session.usb_close_forward(id);
-                session.ui_handler.usb.unregister_share_channel(id);
+                session.ui_handler.usb.unregister_share_channel_of(id, &flow);
                 return;
             }
         }
@@ -201,7 +201,7 @@ pub(crate) async fn run_channel(
                 id, requested, bus_id
             );
             session.usb_close_forward(id);
-            session.ui_handler.usb.unregister_share_channel(id);
+            session.ui_handler.usb.unregister_share_channel_of(id, &flow);
             return;
         }
         None => {
@@ -210,13 +210,13 @@ pub(crate) async fn run_channel(
                 id
             );
             session.usb_close_forward(id);
-            session.ui_handler.usb.unregister_share_channel(id);
+            session.ui_handler.usb.unregister_share_channel_of(id, &flow);
             return;
         }
     }
     if writer.write_all(&prefix).await.is_err() {
         session.usb_close_forward(id);
-        session.ui_handler.usb.unregister_share_channel(id);
+        session.ui_handler.usb.unregister_share_channel_of(id, &flow);
         return;
     }
     for len in prefix_frames {
@@ -258,7 +258,7 @@ pub(crate) async fn run_channel(
         session.usb_close_forward(id);
     }
     log::info!("usb share: channel {} relay closed", id);
-    session.ui_handler.usb.unregister_share_channel(id);
+    session.ui_handler.usb.unregister_share_channel_of(id, &flow);
 }
 
 fn usbipd_listening() -> bool {

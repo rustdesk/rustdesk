@@ -38,6 +38,11 @@ impl Flow {
         }
     }
 
+    /// Whether `other` is a clone of this channel's flow, i.e. the same channel.
+    pub fn same(&self, other: &Flow) -> bool {
+        Arc::ptr_eq(&self.credit, &other.credit)
+    }
+
     /// Charges a data frame from the peer against its window. `false` is a
     /// protocol violation (oversized frame or window overrun): the caller
     /// closes the channel.
