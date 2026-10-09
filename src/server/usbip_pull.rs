@@ -282,7 +282,8 @@ impl UsbPullState {
     /// detaching it here -- there would be no way to reach it again except
     /// locally on the controlled machine.
     pub fn close_all(&mut self) {
-        for (_, entry) in self.channels.drain() {
+        for (id, entry) in self.channels.drain() {
+            send(&self.tx, close_msg(id));
             entry.cancel.cancel();
             if let Some(port) = *entry.attached_port.lock().unwrap() {
                 detach_port(port, self.privileged.clone());
@@ -607,6 +608,28 @@ mod tests {
         state.close_all();
         assert!(state.channels.is_empty());
         assert!(tokens.iter().all(|t| t.is_cancelled()));
+    }
+
+    #[test]
+    fn close_all_tells_the_peer_about_every_channel() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut state = UsbPullState::new(tx, Arc::new(Semaphore::new(1)));
+        for id in [-1, -2] {
+            let (entry, _cancel) = fake_entry();
+            state.channels.insert(id, entry);
+        }
+        state.close_all();
+        let mut closed: Vec<i32> = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|(_, msg)| match &msg.union {
+                Some(message::Union::UsbChannel(ch)) => match &ch.union {
+                    Some(usb_channel::Union::Close(c)) => Some(c.channel_id),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        closed.sort();
+        assert_eq!(closed, vec![-2, -1]);
     }
 
     #[tokio::test]

@@ -1172,6 +1172,8 @@ impl Connection {
                     #[cfg(windows)]
                     conn.portable_check();
                     raii::AuthedConnID::check_wake_lock_on_setting_changed();
+                    #[cfg(target_os = "linux")]
+                    conn.revoke_usb_if_not_permitted();
                     if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
                         if instant.elapsed().as_secs() > minute * 60 {
                             conn.send_close_reason_no_retry("Connection failed due to inactivity").await;
@@ -2397,7 +2399,7 @@ impl Connection {
     }
 
     /// USB forwarding runs inside a desktop session; its state starts with the
-    /// first frame.
+    /// first frame and is dropped whenever the permission goes away.
     #[cfg(target_os = "linux")]
     fn handle_usb_channel(&mut self, ch: UsbChannel) {
         if self.authed_conn_type() != Some(AuthConnType::Remote) {
@@ -2409,6 +2411,18 @@ impl Connection {
         let control_permissions = &self.control_permissions;
         if let Some(usbip) = self.usbip.as_mut() {
             usbip.handle(ch, || Self::permission(keys::OPTION_ALLOW_USBIP, control_permissions));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn revoke_usb_if_not_permitted(&mut self) {
+        if self.usbip.is_some()
+            && !Self::permission(keys::OPTION_ALLOW_USBIP, &self.control_permissions)
+        {
+            log::info!("USB forwarding permission withdrawn, closing USB forwarding");
+            if let Some(mut usbip) = self.usbip.take() {
+                usbip.close_all();
+            }
         }
     }
 
