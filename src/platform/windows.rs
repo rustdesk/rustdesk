@@ -1353,9 +1353,9 @@ pub fn get_install_options() -> String {
     serde_json::to_string(&opts).unwrap_or("{}".to_owned())
 }
 
-pub fn get_silent_install_options(printer_override: Option<bool>) -> ResultType<&'static str> {
+pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static str {
     if !is_win_10_or_greater() {
-        return Ok("desktopicon startmenu");
+        return "desktopicon startmenu";
     }
 
     let install_printer = match printer_override {
@@ -1364,14 +1364,18 @@ pub fn get_silent_install_options(printer_override: Option<bool>) -> ResultType<
             let app_name = crate::get_app_name();
             let subkey = format!(".{}", app_name.to_lowercase());
             let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
-            printer.as_deref() == Some("1") && remote_printer::is_rd_printer_installed(&app_name)?
+            printer.as_deref() == Some("1")
+                && remote_printer::is_rd_printer_installed(&app_name).unwrap_or_else(|err| {
+                    log::warn!("Failed to check printer installation status: {err}; skipping printer installation");
+                    false
+                })
         }
     };
-    Ok(if install_printer {
+    if install_printer {
         "desktopicon startmenu printer"
     } else {
         "desktopicon startmenu"
-    })
+    }
 }
 
 // This function return Option<String>, because some registry value may be empty.
@@ -3918,7 +3922,12 @@ pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
     let subkey = format!(".{}", app_name.to_lowercase());
     let printer_installed = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER).as_deref()
         != Some("0")
-        && remote_printer::is_rd_printer_installed(&app_name)?;
+        && remote_printer::is_rd_printer_installed(&app_name).unwrap_or_else(|err| {
+            log::warn!(
+                "Failed to check printer installation status: {err}; skipping printer installation"
+            );
+            false
+        });
     let cmds = msi_update_command(msi, quiet, printer_installed);
     run_cmds(cmds, false, "update-msi")?;
     Ok(())
