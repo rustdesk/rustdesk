@@ -23,6 +23,7 @@ use hbb_common::{
         net::TcpStream,
         sync::mpsc,
     },
+    tokio_util::sync::CancellationToken,
 };
 use serde_json::json;
 use std::process::Command;
@@ -145,6 +146,7 @@ pub(crate) async fn run_channel(
     session: FlutterSession,
     mut inbound: mpsc::Receiver<Bytes>,
     flow: Flow,
+    cancel: CancellationToken,
 ) {
     let socket = match timeout(CONNECT_TIMEOUT_MS, TcpStream::connect(USBIPD_ADDR)).await {
         Ok(Ok(s)) => s,
@@ -228,12 +230,14 @@ pub(crate) async fn run_channel(
     let session_read = session.clone();
     let flow_read = flow.clone();
     let mut to_tunnel = hbb_common::tokio::spawn(async move {
-        flow_read
-            .socket_to_peer(reader, |chunk| {
-                session_read.usb_forward_data(id, chunk);
-                true
-            })
-            .await;
+        let read = flow_read.socket_to_peer(reader, |chunk| {
+            session_read.usb_forward_data(id, chunk);
+            true
+        });
+        hbb_common::tokio::select! {
+            _ = read => {}
+            _ = cancel.cancelled() => {}
+        }
     });
 
     // Whichever half ends first ends the other; only an end on our side

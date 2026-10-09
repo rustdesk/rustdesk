@@ -112,14 +112,21 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
             log::info!("usb push: peer opened channel {} for {}", id, open.bus_id);
             let (tx, rx) = tokio::sync::mpsc::channel(crate::usbip_flow::QUEUE_FRAMES);
             let flow = crate::usbip_flow::Flow::new();
-            handler.usb.register_share_channel(id, open.bus_id.clone(), tx, flow.clone());
-            tokio::spawn(crate::client::usbip_share::run_channel(
+            let cancel = handler.usb.register_share_channel(id, open.bus_id.clone(), tx, flow.clone());
+            let relay = crate::client::usbip_share::run_channel(
                 id,
                 open.bus_id,
                 session,
                 rx,
                 flow,
-            ));
+                cancel.clone(),
+            );
+            tokio::spawn(async move {
+                tokio::select! {
+                    _ = relay => {}
+                    _ = cancel.cancelled() => {}
+                }
+            });
         }
         _ => {}
     }
