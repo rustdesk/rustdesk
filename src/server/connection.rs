@@ -27,8 +27,8 @@ use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
 use cidr_utils::cidr::IpCidr;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
-use hbb_common::sodiumoxide::crypto::box_;
 use hbb_common::{
+    sodiumoxide::crypto::box_,
     config::{
         self, decode_permanent_password_h1_from_storage, decode_preset_password_h1_from_storage,
         local_permanent_password_storage_is_usable_for_auth,
