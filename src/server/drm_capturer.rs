@@ -559,6 +559,10 @@ impl TraitCapturer for IpcDrmCapturer {
                 }
                 self.cur_w = fw;
                 self.cur_h = fh;
+                // The same bytes in another format are another picture, so not a repeat.
+                if fmt != self.cur_fmt {
+                    self.saved_raw_data.clear();
+                }
                 self.cur_fmt = fmt;
                 if !self.got_frame {
                     // Clear ONLY the streak: `rapid_builds` is for a display that delivers a first
@@ -2895,12 +2899,6 @@ mod drm_capturer_tests {
             Ok(_) => panic!("expected a pixel-buffer frame"),
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
-        // The same scanout again: once turned it repeats the frame above, so it is dropped.
-        put_frame_with(&c, w, h, Some(0x1), &src);
-        assert!(matches!(
-            c.frame(Duration::from_millis(50)),
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock
-        ));
         // Hardware rotation (i915 + mutter): the scanout is already upright and is left alone.
         put_frame_with(&c, w, h, Some(0x4), &src);
         match c.frame(Duration::from_millis(50)) {
@@ -2946,6 +2944,30 @@ mod drm_capturer_tests {
         ));
         put_frame_with(&c, w, h, None, &moved);
         assert!(c.frame(Duration::from_millis(50)).is_ok());
+    }
+
+    #[test]
+    fn the_same_bytes_in_another_format_are_not_a_repeat() {
+        // Blue as BGRA, red as RGBA.
+        let px = [255u8, 0, 0, 255];
+        let put = |c: &IpcDrmCapturer, fmt| {
+            c.shared
+                .slot
+                .lock()
+                .unwrap()
+                .publish(1, 1, fmt, None, px.to_vec());
+            c.shared.cv.notify_one();
+        };
+        let mut c = capturer_with(Some((1, 1)));
+        put(&c, Pixfmt::BGRA);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+        put(&c, Pixfmt::RGBA);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+        put(&c, Pixfmt::RGBA);
+        assert!(matches!(
+            c.frame(Duration::from_millis(50)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock
+        ));
     }
 
     #[test]
