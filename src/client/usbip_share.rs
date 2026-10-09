@@ -115,16 +115,58 @@ pub fn bind_device(bus_id: &str, bind: bool) -> bool {
 
 /// Blocking. The relay's `usbipd` connection closes asynchronously after its
 /// channel is dropped, and `usbip unbind` fails while the device is still in
-/// use, so retry briefly.
-pub fn unbind_device_retrying(bus_id: &str) -> bool {
-    for attempt in 1..=10 {
-        if bind_device(bus_id, false) {
-            return true;
+/// use, so wait for usbip-host to release it (an unprivileged sysfs read)
+/// rather than retry the privileged unbind, each try of which is a prompt.
+pub fn unbind_device_when_released(bus_id: &str) -> bool {
+    if crate::client::usbip_attach::is_valid_bus_id(bus_id) {
+        let status = std::path::Path::new(USBIP_HOST_DRIVER_DIR)
+            .join(bus_id)
+            .join("usbip_status");
+        for attempt in 1..=10 {
+            // `SDEV_ST_USED`: the peer still has it imported.
+            if std::fs::read_to_string(&status).map_or(true, |s| s.trim() != "2") {
+                break;
+            }
+            log::debug!("usb push: {} still in use, waiting {}/10", bus_id, attempt);
+            std::thread::sleep(std::time::Duration::from_millis(200));
         }
-        log::debug!("usb push: {} still busy unsharing, retry {}/10", bus_id, attempt);
-        std::thread::sleep(std::time::Duration::from_millis(200));
     }
-    false
+    bind_device(bus_id, false)
+}
+
+lazy_static::lazy_static! {
+    // Bindings a closed session made and failed to unshare. A push of one of
+    // them is refused and retries the unshare instead of adopting it.
+    static ref RELEASE_PENDING: std::sync::Mutex<std::collections::HashSet<String>> =
+        Default::default();
+}
+
+/// Blocking. Unshares a binding no session owns any more, keeping it pending
+/// if that fails.
+pub(crate) fn release_orphaned(bus_id: &str) {
+    if unbind_device_when_released(bus_id) {
+        RELEASE_PENDING.lock().unwrap().remove(bus_id);
+    } else {
+        log::error!("usb push: failed to unshare {} after its session closed, will retry", bus_id);
+        RELEASE_PENDING.lock().unwrap().insert(bus_id.to_owned());
+    }
+}
+
+fn is_release_pending(bus_id: &str) -> bool {
+    RELEASE_PENDING.lock().unwrap().contains(bus_id)
+}
+
+/// Retries every pending unshare on its own thread.
+fn retry_pending_releases() {
+    let pending: Vec<String> = RELEASE_PENDING.lock().unwrap().iter().cloned().collect();
+    if pending.is_empty() {
+        return;
+    }
+    std::thread::spawn(move || {
+        for bus_id in pending {
+            release_orphaned(&bus_id);
+        }
+    });
 }
 
 /// The peer pulling one of our shared devices: dial our own local `usbipd`,
@@ -275,6 +317,7 @@ impl Session<FlutterHandler> {
     /// Purely local (no network): what's shareable on this machine, for the
     /// "My local devices" push section.
     pub fn usb_local_devices(&self) {
+        retry_pending_releases();
         let devices = list_local_devices();
         let devices: Vec<serde_json::Value> = devices
             .iter()
@@ -351,6 +394,19 @@ impl Session<FlutterHandler> {
                 );
                 return;
             }
+            if is_release_pending(&bus_id) {
+                retry_pending_releases();
+                session.push_event_(
+                    "usb_push_result",
+                    &[
+                        ("bus_id", json!(&bus_id)),
+                        ("error", json!("Unsharing this USB device after an earlier session failed; retrying")),
+                    ],
+                    &[],
+                    &[],
+                );
+                return;
+            }
             // A device the CLI or another session already shared is pushed as
             // it is (`usbip bind` would fail on it) and stays shared afterwards.
             let bound = !shared_bus_ids().contains(&bus_id);
@@ -376,7 +432,7 @@ impl Session<FlutterHandler> {
             if !session.ui_handler.usb.share_owned_add(bus_id.clone(), bound) {
                 log::info!("usb push: session closed while sharing {}", bus_id);
                 if bound {
-                    unbind_device_retrying(&bus_id);
+                    unbind_device_when_released(&bus_id);
                 }
                 return;
             }
@@ -430,7 +486,7 @@ impl Session<FlutterHandler> {
 /// `bus_id` if this session bound it, and keeps it recorded if that fails,
 /// so a retry or closing the session can still release it. Blocking.
 pub(crate) fn release_push(state: &UsbClientState, bus_id: &str, bound: bool) -> bool {
-    let released = !bound || unbind_device_retrying(bus_id);
+    let released = !bound || unbind_device_when_released(bus_id);
     state.share_release_end(bus_id, released);
     released
 }

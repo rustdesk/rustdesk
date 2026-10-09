@@ -362,7 +362,7 @@ impl UsbClientState {
                 crate::client::usbip_attach::detach_blocking(port);
             }
             for bus_id in owned {
-                crate::client::usbip_share::unbind_device_retrying(&bus_id);
+                crate::client::usbip_share::release_orphaned(&bus_id);
             }
         });
     }

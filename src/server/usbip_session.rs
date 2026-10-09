@@ -27,6 +27,7 @@ lazy_static::lazy_static! {
 impl UsbSession {
     pub fn new(tx: Sender) -> Self {
         let privileged = PRIVILEGED.clone();
+        usbip_mux::retry_pending_releases(privileged.clone());
         Self {
             mux: UsbipMux::new(tx.clone(), privileged.clone()),
             pull: UsbPullState::new(tx, privileged),
