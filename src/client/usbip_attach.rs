@@ -15,7 +15,6 @@ use hbb_common::{
         self,
         io::{AsyncReadExt, AsyncWriteExt},
         net::{TcpListener, TcpStream},
-        runtime::Handle,
         sync::mpsc,
     },
 };
@@ -200,14 +199,12 @@ fn parse_attached_port(output: &str, listener_port: u16, bus_id: &str) -> Option
     None
 }
 
-pub fn detach(rt: &Handle, port: i32) {
-    rt.spawn_blocking(move || detach_blocking(port));
-}
-
-pub(crate) fn detach_blocking(port: i32) {
-    if !crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]) {
+pub(crate) fn detach_blocking(port: i32) -> bool {
+    let ok = crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]);
+    if !ok {
         log::error!("usb detach: failed to detach port {}", port);
     }
+    ok
 }
 
 async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: TcpStream) {
@@ -321,19 +318,38 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
 impl Session<FlutterHandler> {
     pub fn usb_attach(&self, bus_id: String) {
         let session = self.clone();
-        if let Some(rt) = self.ui_handler.usb.session_runtime() {
-            rt.spawn(attach(session, bus_id));
+        match self.ui_handler.usb.session_runtime() {
+            Some(rt) => {
+                rt.spawn(attach(session, bus_id));
+            }
+            None => self.ui_handler.push_event_(
+                "usb_attached",
+                &[
+                    ("bus_id", json!(bus_id)),
+                    ("success", json!(false)),
+                    ("port", json!(-1)),
+                    ("message", json!("Not connected")),
+                ],
+                &[],
+                &[],
+            ),
         }
     }
 
+    /// Local only, so it runs without the session's runtime, which is gone
+    /// once the connection drops. A failed detach keeps the port recorded so
+    /// closing the session still detaches it.
     pub fn usb_detach(&self, port: i32) {
         if !self.ui_handler.usb.attached_port_take(port) {
             log::warn!("usb detach: port {} was not attached by this session", port);
             return;
         }
-        if let Some(rt) = self.ui_handler.usb.session_runtime() {
-            detach(&rt, port);
-        }
+        let usb = self.ui_handler.usb.clone();
+        std::thread::spawn(move || {
+            if !detach_blocking(port) {
+                usb.attached_port_add(port);
+            }
+        });
     }
 }
 
