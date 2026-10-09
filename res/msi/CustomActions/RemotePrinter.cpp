@@ -578,13 +578,16 @@ extern "C" UINT __stdcall SetPrinterInstallDefault(__in MSIHANDLE hInstall)
     ExitOnFailure(hr, "Failed to get the printer's application name");
 
     hr = RemotePrinter::queryPrinterPresence(RemotePrinter::printerNameOf(appName).c_str());
-    ExitOnFailure(hr, "Failed to detect the existing printer; upgrade cannot preserve its state");
+    if (FAILED(hr))
+    {
+        WcaLog(LOGMSG_STANDARD, "Failed to detect the existing printer (0x%08X); skipping printer installation.", static_cast<UINT>(hr));
+    }
 
-    if (hr == S_FALSE)
+    if (hr != S_OK)
     {
         hr = WcaSetProperty(L"INSTALLPRINTER", L"0");
-        ExitOnFailure(hr, "Failed to disable installation of the missing printer");
-        WcaLog(LOGMSG_STANDARD, "The application's printer is absent; leaving printer installation disabled by default.");
+        ExitOnFailure(hr, "Failed to disable printer installation");
+        WcaLog(LOGMSG_STANDARD, "The application's printer was not confirmed present; leaving printer installation disabled by default.");
     }
 
 LExit:
