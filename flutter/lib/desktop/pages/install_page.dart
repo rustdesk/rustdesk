@@ -62,6 +62,8 @@ class _InstallPageBody extends StatefulWidget {
 
 class _InstallPageBodyState extends State<_InstallPageBody>
     with WindowListener {
+  static const _printerStatusTimeout = Duration(seconds: 5);
+
   late final TextEditingController controller;
   final RxBool startmenu = true.obs;
   final RxBool desktopicon = true.obs;
@@ -88,7 +90,9 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     btnEnabled.value = false;
     showProgress.value = true;
     try {
-      final status = await bind.mainGetCommon(key: 'is-printer-installed');
+      final status = await bind
+          .mainGetCommon(key: 'is-printer-installed')
+          .timeout(_printerStatusTimeout);
       printer.value = status == 'true';
       if (status != 'true' && status != 'false') {
         debugPrint('Failed to check printer installation status: $status');
