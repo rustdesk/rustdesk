@@ -111,7 +111,6 @@ struct ParsedPeerInfo {
     idd_impl: String,
     support_view_camera: bool,
     support_terminal: bool,
-    support_usbip: bool,
 }
 
 impl ParsedPeerInfo {
@@ -188,8 +187,6 @@ impl<T: InvokeUiSession> Remote<T> {
             ConnType::VIEW_CAMERA
         } else if self.handler.is_terminal() {
             ConnType::TERMINAL
-        } else if self.handler.is_remote_usb() {
-            ConnType::REMOTE_USB
         } else {
             ConnType::default()
         };
@@ -1527,30 +1524,6 @@ impl<T: InvokeUiSession> Remote<T> {
         return false;
     }
 
-    /// Mirrors `check_terminal_support`. Without this, an older peer that
-    /// doesn't know `LoginRequest.remote_usb`/`UsbChannel` would just ignore
-    /// those unknown protobuf fields, silently falling back to a normal
-    /// default session instead of the USB-only one the user actually asked
-    /// for -- reject before that can happen.
-    #[cfg(target_os = "linux")]
-    fn check_usbip_support(&self, peer_version: &str) -> bool {
-        if self.peer_info.support_usbip {
-            return true;
-        }
-        if hbb_common::get_version_number(&peer_version) < hbb_common::get_version_number("1.5.0") {
-            self.handler.msgbox(
-                "error",
-                "Remote USB not supported",
-                "Remote USB forwarding is not supported by the remote side. Please upgrade to version 1.5.0 or higher.",
-                "",
-            );
-        } else {
-            self.handler
-                .on_error("Remote USB forwarding is not supported by the remote side");
-        }
-        return false;
-    }
-
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
@@ -1620,14 +1593,6 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.handler.lc.write().unwrap().handle_peer_info(&pi);
                                 return false;
                             }
-                        }
-                        #[cfg(target_os = "linux")]
-                        if self.handler.is_remote_usb() {
-                            if !self.check_usbip_support(&peer_version) {
-                                self.handler.lc.write().unwrap().handle_peer_info(&pi);
-                                return false;
-                            }
-                            crate::usbip_flow::cap_packet_size(peer);
                         }
                         self.handler.handle_peer_info(pi);
                         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
@@ -2387,7 +2352,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     self.handler.handle_terminal_response(response);
                 }
-                Some(message::Union::UsbChannel(ch)) if self.handler.is_remote_usb() => {
+                Some(message::Union::UsbChannel(ch)) if self.handler.is_default() => {
                     self.handler.handle_usb_channel(ch);
                 }
                 _ => {}
@@ -2399,10 +2364,9 @@ impl<T: InvokeUiSession> Remote<T> {
     fn set_peer_info(&mut self, pi: &PeerInfo) {
         self.peer_info.platform = pi.platform.clone();
 
-        // Check features field for terminal/usbip support
+        // Check features field for terminal support
         if let Some(features) = pi.features.as_ref() {
             self.peer_info.support_terminal = features.terminal;
-            self.peer_info.support_usbip = features.usbip;
         }
 
         if let Ok(platform_additions) =

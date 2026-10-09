@@ -3389,7 +3389,6 @@ impl LoginConfigHandler {
         if self.conn_type.eq(&ConnType::PORT_FORWARD)
             || self.conn_type.eq(&ConnType::RDP)
             || self.conn_type.eq(&ConnType::FILE_TRANSFER)
-            || self.conn_type.eq(&ConnType::REMOTE_USB)
         {
             return None;
         }
@@ -3910,7 +3909,6 @@ impl LoginConfigHandler {
                 terminal.service_id = self.get_option(self.get_key_terminal_service_id());
                 lr.set_terminal(terminal);
             }
-            ConnType::REMOTE_USB => lr.set_remote_usb(RemoteUsb::new()),
             _ => {}
         }
 

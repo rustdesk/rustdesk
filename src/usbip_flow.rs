@@ -1,4 +1,4 @@
-// Flow control shared by all four RemoteUsb relay directions (pull and push,
+// Flow control shared by all four USB forwarding relay directions (pull and push,
 // on either side), built on `port_forward_mux`'s window accounting. Every
 // channel starts with a fixed `CHANNEL_WINDOW` in each direction, so no
 // window is advertised in `Open`/`Opened`: a relay never reads more from its
@@ -14,7 +14,7 @@ use hbb_common::{
 };
 use std::sync::{Arc, Mutex};
 
-pub(crate) use crate::port_forward_mux::{cap_packet_size, CHANNEL_WINDOW, MAX_FRAME as MAX_DATA};
+pub(crate) use crate::port_forward_mux::{CHANNEL_WINDOW, MAX_FRAME as MAX_DATA};
 
 /// Enough queue slots for a whole window of minimum-charge frames, so a
 /// channel's inbound queue can only fill up if the peer overran its window,

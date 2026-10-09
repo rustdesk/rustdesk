@@ -547,7 +547,6 @@ abstract class BasePeerCard extends StatelessWidget {
     bool isRDP = false,
     bool isTerminal = false,
     bool isTerminalRunAsAdmin = false,
-    bool isRemoteUsb = false,
   }) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
@@ -567,7 +566,6 @@ abstract class BasePeerCard extends StatelessWidget {
           isTcpTunneling: isTcpTunneling,
           isRDP: isRDP,
           isTerminal: isTerminal || isTerminalRunAsAdmin,
-          isRemoteUsb: isRemoteUsb,
         );
       },
       padding: menuPadding,
@@ -618,15 +616,6 @@ abstract class BasePeerCard extends StatelessWidget {
       context,
       '${translate('Terminal (Run as administrator)')} (beta)',
       isTerminalRunAsAdmin: true,
-    );
-  }
-
-  @protected
-  MenuEntryBase<String> _remoteUsbAction(BuildContext context) {
-    return _connectCommonAction(
-      context,
-      '${translate('USB forwarding')} (beta)',
-      isRemoteUsb: true,
     );
   }
 
@@ -988,10 +977,6 @@ class RecentPeerCard extends BasePeerCard {
       menuItems.add(_terminalRunAsAdminAction(context));
     }
 
-    if (isLinux && peer.platform == kPeerPlatformLinux) {
-      menuItems.add(_remoteUsbAction(context));
-    }
-
     final List favs = (await bind.mainGetFav()).toList();
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
@@ -1057,10 +1042,6 @@ class FavoritePeerCard extends BasePeerCard {
       menuItems.add(_terminalRunAsAdminAction(context));
     }
 
-    if (isLinux && peer.platform == kPeerPlatformLinux) {
-      menuItems.add(_remoteUsbAction(context));
-    }
-
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
       menuItems.add(_tcpTunnelingAction(context));
     }
@@ -1121,10 +1102,6 @@ class DiscoveredPeerCard extends BasePeerCard {
       menuItems.add(_terminalRunAsAdminAction(context));
     }
 
-    if (isLinux && peer.platform == kPeerPlatformLinux) {
-      menuItems.add(_remoteUsbAction(context));
-    }
-
     final List favs = (await bind.mainGetFav()).toList();
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
@@ -1182,10 +1159,6 @@ class AddressBookPeerCard extends BasePeerCard {
 
     if (peer.platform == kPeerPlatformWindows) {
       menuItems.add(_terminalRunAsAdminAction(context));
-    }
-
-    if (isLinux && peer.platform == kPeerPlatformLinux) {
-      menuItems.add(_remoteUsbAction(context));
     }
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
@@ -1343,10 +1316,6 @@ class MyGroupPeerCard extends BasePeerCard {
 
     if (peer.platform == kPeerPlatformWindows) {
       menuItems.add(_terminalRunAsAdminAction(context));
-    }
-
-    if (isLinux && peer.platform == kPeerPlatformLinux) {
-      menuItems.add(_remoteUsbAction(context));
     }
 
     if (isDesktop && peer.platform != kPeerPlatformAndroid) {
@@ -1574,8 +1543,7 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
     bool isViewCamera = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
-    bool isTerminal = false,
-    bool isRemoteUsb = false}) async {
+    bool isTerminal = false}) async {
   var password = '';
   bool isSharedPassword = false;
   if (tab == PeerTabIndex.ab) {
@@ -1607,7 +1575,6 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
       isSharedPassword: isSharedPassword,
       isFileTransfer: isFileTransfer,
       isTerminal: isTerminal,
-      isRemoteUsb: isRemoteUsb,
       isViewCamera: isViewCamera,
       isTcpTunneling: isTcpTunneling,
       isRDP: isRDP);

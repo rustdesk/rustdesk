@@ -1,4 +1,4 @@
-// Controller-side RemoteUsb state for one session: the relay channels in
+// Controller-side USB forwarding state for one session: the relay channels in
 // both directions, push authorizations, what the session attached or bound
 // itself, and the session's runtime handle. `FlutterHandler` holds one of
 // these and otherwise only forwards to it.

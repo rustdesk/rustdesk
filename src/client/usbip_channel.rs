@@ -1,4 +1,4 @@
-// Client-side coordinator for `RemoteUsb` `UsbChannel` frames, mirroring
+// Client-side coordinator for USB forwarding `UsbChannel` frames, mirroring
 // `server/usbip_session.rs`'s role on the controlled side: `flutter.rs`'s
 // `handle_usb_channel` is a shared trait-method implementation touched by
 // every message type the session receives, so the actual routing/
@@ -10,7 +10,7 @@ use hbb_common::{log, tokio};
 
 /// Everything except `DeviceList`/`BindResult`, which `flutter.rs` handles
 /// itself (plain event translation shared by every message type, not
-/// RemoteUsb-specific routing).
+/// USB-forwarding-specific routing).
 pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
     match union {
         Some(Union::PushResult(r)) => {

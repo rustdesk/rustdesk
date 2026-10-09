@@ -235,10 +235,6 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL)
     }
 
-    pub fn is_remote_usb(&self) -> bool {
-        self.lc.read().unwrap().conn_type.eq(&ConnType::REMOTE_USB)
-    }
-
     pub fn is_port_forward(&self) -> bool {
         let conn_type = self.lc.read().unwrap().conn_type;
         conn_type == ConnType::PORT_FORWARD || conn_type == ConnType::RDP
@@ -845,7 +841,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
-    // RemoteUsb methods
+    // USB forwarding methods
     pub fn request_usb_devices(&self) {
         let mut ch = UsbChannel::new();
         ch.set_list_devices(UsbListDevicesRequest::new());
@@ -1849,7 +1845,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     /// `ch` carries both simple control responses (`device_list`,
     /// `bind_result`) and the forwarded USB/IP byte stream (`opened`,
     /// `data`, `close`); implementations route the latter to the local
-    /// attach-side relay rather than the UI. Default no-op: RemoteUsb is
+    /// attach-side relay rather than the UI. Default no-op: USB forwarding is
     /// Flutter/Linux-only, so other `InvokeUiSession` implementations (e.g.
     /// the Sciter UI) don't need to know about it.
     fn handle_usb_channel(&self, _ch: UsbChannel) {}
@@ -1926,7 +1922,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 self.on_error("No active console user logged on, please connect and logon first.");
                 return;
             }
-        } else if !self.is_port_forward() && !self.is_terminal() && !self.is_remote_usb() {
+        } else if !self.is_port_forward() && !self.is_terminal() {
             if pi.displays.is_empty() {
                 self.lc.write().unwrap().handle_peer_info(&pi);
                 self.update_privacy_mode();
@@ -1962,7 +1958,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         // Save recent peers, then push event to flutter. So flutter can refresh peer page.
         self.lc.write().unwrap().handle_peer_info(&pi);
         self.set_peer_info(&pi);
-        if self.is_file_transfer() || self.is_remote_usb() {
+        if self.is_file_transfer() {
             self.close_success();
         } else if !self.is_port_forward() && !self.is_terminal() {
             self.msgbox(
@@ -2065,8 +2061,8 @@ impl<T: InvokeUiSession> Session<T> {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
-    // Registers this function's own `#[tokio::main]`-created runtime so
-    // RemoteUsb's FFI-thread entry points can borrow it instead of creating
+    // Registers this function's own `#[tokio::main]`-created runtime so USB
+    // forwarding's FFI-thread entry points can borrow it instead of creating
     // a separate background one -- see `register_session_runtime`'s doc
     // comment. Unregistered on every exit path via the guard's `Drop`.
     struct RuntimeUnregisterGuard<T: InvokeUiSession>(Session<T>, u32);
@@ -2075,7 +2071,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
             self.0.unregister_session_runtime(self.1);
         }
     }
-    let _runtime_guard = handler.is_remote_usb().then(|| {
+    let _runtime_guard = handler.is_default().then(|| {
         handler.register_session_runtime(round, tokio::runtime::Handle::current());
         RuntimeUnregisterGuard(handler.clone(), round)
     });

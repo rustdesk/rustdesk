@@ -76,7 +76,6 @@ message LoginRequest {
     PortForward port_forward = 8;
     ViewCamera view_camera = 15;
     Terminal terminal = 16;
-    RemoteUsb remote_usb = 18;
   }
   bool video_ack_required = 9;
   uint64 session_id = 10;
@@ -90,8 +89,6 @@ message LoginRequest {
 message Terminal {
   string service_id = 1;  // Service ID for reconnecting to existing session
 }
-
-message RemoteUsb {}
 
 message Auth2FA {
   string code = 1;
