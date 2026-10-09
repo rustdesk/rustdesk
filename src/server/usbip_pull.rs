@@ -37,7 +37,7 @@ fn usb_channel_msg(union: usb_channel::Union) -> Message {
     msg
 }
 
-fn push_result_msg(bus_id: String, error: String) -> Message {
+pub(super) fn push_result_msg(bus_id: String, error: String) -> Message {
     usb_channel_msg(usb_channel::Union::PushResult(UsbPushResult {
         bus_id,
         error,
