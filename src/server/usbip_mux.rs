@@ -168,6 +168,15 @@ impl UsbipMux {
                     self.reply(bind_result_msg(b.bus_id, b.bind, String::new()));
                     return;
                 }
+                if b.bind && is_release_pending(&b.bus_id) {
+                    retry_pending_releases(self.privileged.clone());
+                    self.reply(bind_result_msg(
+                        b.bus_id,
+                        b.bind,
+                        "Unsharing this USB device after an earlier session failed; retrying".into(),
+                    ));
+                    return;
+                }
                 if b.bind && shared_bus_ids().contains(&b.bus_id) {
                     log::info!("usbip: {} is shared outside this session, refusing", b.bus_id);
                     self.reply(bind_result_msg(
@@ -202,7 +211,7 @@ impl UsbipMux {
                         let ok = bind_device_when_released(&b.bus_id, b.bind);
                         if ok && !record_binding(&bound, &b.bus_id, b.bind) {
                             log::info!("usbip: session closed while sharing {}, unsharing", b.bus_id);
-                            bind_device_when_released(&b.bus_id, false);
+                            release_orphaned(&b.bus_id);
                             return false;
                         }
                         ok
@@ -348,14 +357,51 @@ impl UsbipMux {
             let _ = tokio::task::spawn_blocking(move || {
                 let _permit = permit;
                 for bus_id in bound {
-                    if !bind_device_when_released(&bus_id, false) {
-                        log::error!("usbip: failed to unshare {} on session close", bus_id);
-                    }
+                    release_orphaned(&bus_id);
                 }
             })
             .await;
         });
     }
+}
+
+lazy_static::lazy_static! {
+    // Bindings whose session is gone and whose unshare failed. They stay
+    // recorded so a new Bind for them is refused and the unshare retried,
+    // instead of another session adopting the device.
+    static ref RELEASE_PENDING: Mutex<HashSet<String>> = Default::default();
+}
+
+/// Blocking; the caller holds the privileged permit. Unshares a binding no
+/// session owns any more, keeping it pending if that fails.
+fn release_orphaned(bus_id: &str) {
+    if bind_device_when_released(bus_id, false) {
+        RELEASE_PENDING.lock().unwrap().remove(bus_id);
+    } else {
+        log::error!("usbip: failed to unshare {} after its session ended, will retry", bus_id);
+        RELEASE_PENDING.lock().unwrap().insert(bus_id.to_owned());
+    }
+}
+
+fn is_release_pending(bus_id: &str) -> bool {
+    RELEASE_PENDING.lock().unwrap().contains(bus_id)
+}
+
+/// Retries every pending unshare in the background, when the permit is free.
+pub(super) fn retry_pending_releases(privileged: Arc<Semaphore>) {
+    let pending: Vec<String> = RELEASE_PENDING.lock().unwrap().iter().cloned().collect();
+    if pending.is_empty() {
+        return;
+    }
+    let Ok(permit) = privileged.try_acquire_owned() else {
+        return;
+    };
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        for bus_id in pending {
+            release_orphaned(&bus_id);
+        }
+    });
 }
 
 pub(super) fn send(tx: &Sender, msg: Message) {
@@ -743,6 +789,19 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
         let _busy = privileged.try_acquire_owned().unwrap();
         mux.handle(bind_frame("99-9"), || true);
         assert!(!bind_reply(&mut rx).error.is_empty());
+    }
+
+    #[test]
+    fn bind_of_a_device_whose_earlier_unshare_failed_is_refused() {
+        RELEASE_PENDING.lock().unwrap().insert("88-8".into());
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let privileged = Arc::new(Semaphore::new(1));
+        let mut mux = UsbipMux::new(tx, privileged.clone());
+        // Held, so the retry this triggers does not run `usbip` here.
+        let _busy = privileged.try_acquire_owned().unwrap();
+        mux.handle(bind_frame("88-8"), || true);
+        assert!(bind_reply(&mut rx).error.contains("earlier session"));
+        RELEASE_PENDING.lock().unwrap().remove("88-8");
     }
 
     #[test]
