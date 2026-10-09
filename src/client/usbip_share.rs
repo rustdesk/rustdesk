@@ -7,7 +7,7 @@
 // session's own `usb_reply_opened`/`usb_forward_data`/`usb_close_forward`
 // instead of a raw `Sender`.
 use crate::{
-    client::{Data, Interface},
+    client::{usbip_state::UsbClientState, Data, Interface},
     flutter::{FlutterHandler, FlutterSession},
     ui_session_interface::Session,
     usbip_flow::{
@@ -322,6 +322,12 @@ impl Session<FlutterHandler> {
     /// button label the way share-then-separately-push could.
     pub fn usb_push(&self, bus_id: String) {
         let Some(rt) = self.ui_handler.usb.session_runtime() else {
+            self.push_event_(
+                "usb_push_result",
+                &[("bus_id", json!(&bus_id)), ("error", json!("Not connected"))],
+                &[],
+                &[],
+            );
             return;
         };
         let session = self.clone();
@@ -376,55 +382,35 @@ impl Session<FlutterHandler> {
     }
 
     /// Push direction "Unpush": tell the peer to detach and free our own
-    /// relay slot immediately, then unshare. The peer's own read loop
-    /// aborts as soon as it sees our channel entry gone
-    /// (`usbip_pull.rs::handle_close`), so it never echoes a Close back to
-    /// confirm -- freeing the entry here (not just sending the close
-    /// request and waiting) matters, because our relay's TCP connection to
-    /// the local usbipd is exactly what keeps the device "in use" and
-    /// `usbip unbind` failing. That connection closes asynchronously a
-    /// moment after the entry is dropped, not synchronously with this call,
-    /// so the unshare below retries briefly rather than racing it.
+    /// relay slot immediately, then unshare. Our relay's TCP connection to
+    /// the local usbipd is what keeps the device "in use", so the entry is
+    /// dropped here rather than waiting for the peer. The unshare is local
+    /// and runs on its own thread: it must still work after the connection
+    /// (and with it the session's runtime) is gone.
     pub fn usb_unpush(&self, bus_id: String) {
         // Revoke the authorization to open a channel for this device in case
         // the peer never did (e.g. unpushed before its `Open` arrived).
         self.ui_handler.usb.share_pending_remove(&bus_id);
-        // Only a binding this session made is undone: a device shared by the
-        // CLI or another session stays shared.
-        let bound = self.ui_handler.usb.share_owned_take(&bus_id) == Some(true);
-        // No live channel happens whenever the peer never opened one or is
-        // already gone, and the unshare below must not depend on it.
         if let Some(channel_id) = self.ui_handler.usb.share_channel_for_bus_id(&bus_id) {
             log::info!("usb push: unpushing {} (channel {})", bus_id, channel_id);
             self.usb_close_forward(channel_id);
             self.ui_handler.usb.unregister_share_channel(channel_id);
         } else {
-            log::info!(
-                "usb push: unpushing {} with no live channel (peer gone or app restarted since sharing)",
-                bus_id
-            );
+            log::info!("usb push: unpushing {} with no live channel", bus_id);
         }
-
-        let Some(rt) = self.ui_handler.usb.session_runtime() else {
-            return;
-        };
+        let release = self.ui_handler.usb.share_release_begin(&bus_id);
         let session = self.clone();
-        rt.spawn_blocking(move || {
-            let ok = if bound {
-                unbind_device_retrying(&bus_id)
-            } else {
-                log::info!("usb push: {} not shared by this session, leaving it shared", bus_id);
-                true
-            };
-            let error = if ok {
-                log::info!("usb push: unpushed {}", bus_id);
-                String::new()
-            } else {
-                log::error!(
-                    "usb push: failed to unshare {} after unpush (still busy after retries)",
-                    bus_id
-                );
-                format!("Failed to unshare {}", bus_id)
+        std::thread::spawn(move || {
+            let released = release.map(|bound| release_push(&session.ui_handler.usb, &bus_id, bound));
+            let error = match released {
+                Some(false) => {
+                    log::error!("usb push: failed to unshare {} after unpush", bus_id);
+                    format!("Failed to unshare {}", bus_id)
+                }
+                _ => {
+                    log::info!("usb push: unpushed {}", bus_id);
+                    String::new()
+                }
             };
             session.push_event_(
                 "usb_push_result",
@@ -434,6 +420,15 @@ impl Session<FlutterHandler> {
             );
         });
     }
+}
+
+/// Finishes undoing a push that `share_release_begin` started: unbinds
+/// `bus_id` if this session bound it, and keeps it recorded if that fails,
+/// so a retry or closing the session can still release it. Blocking.
+pub(crate) fn release_push(state: &UsbClientState, bus_id: &str, bound: bool) -> bool {
+    let released = !bound || unbind_device_retrying(bus_id);
+    state.share_release_end(bus_id, released);
+    released
 }
 
 #[cfg(test)]
