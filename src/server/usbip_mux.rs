@@ -312,6 +312,11 @@ impl UsbipMux {
     /// Drops every channel's inbound sender, ending its relay task, and
     /// unshares the devices this connection shared.
     pub fn close_all(&mut self) {
+        // Only reaches the peer when the session outlives this, i.e. the
+        // permission was withdrawn; its relays would otherwise keep waiting.
+        for id in self.channels.keys() {
+            self.reply(close_msg(*id));
+        }
         self.channels.clear();
         let bound = self.bound.lock().unwrap().take().unwrap_or_default();
         if bound.is_empty() {
