@@ -1,6 +1,6 @@
 use super::*;
-use hbb_common::base64::engine::general_purpose::STANDARD;
 use hbb_common::{
+    base64::engine::general_purpose::STANDARD,
     sodiumoxide::{self, crypto::sign},
     ResultType,
 };
