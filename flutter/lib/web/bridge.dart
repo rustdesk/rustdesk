@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:html' as html;
 
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/shortcut_model.dart';
 
 final _privateConstructorUsedError = UnsupportedError(
     'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
@@ -991,6 +992,28 @@ class RustdeskImpl {
         ]));
   }
 
+  // Tell the JS-side matcher (flutter/web/js/src/shortcut_matcher.ts) to
+  // use the same platform-filtered bindings as the Flutter matcher, while
+  // keeping unsupported saved bindings in LocalStorage.
+  void mainReloadKeyboardShortcuts({dynamic hint}) {
+    final config = ShortcutModel.config(active: true);
+    js.context.callMethod('reloadShortcuts', [
+      jsonEncode({
+        'enabled': config.enabled,
+        'pass_through': config.passThrough,
+        'bindings': config.bindings,
+      })
+    ]);
+  }
+
+  // Web has no Rust at runtime, so the defaults seed comes from the
+  // [kDefaultShortcutBindings] canonical in shortcut_constants.dart. Parity
+  // with Rust's `default_bindings()` is enforced by tests on both sides
+  // against `flutter/test/fixtures/default_keyboard_shortcuts.json`.
+  String mainGetDefaultKeyboardShortcuts({dynamic hint}) {
+    return jsonEncode(kDefaultShortcutBindings);
+  }
+
   String mainGetInputSource({dynamic hint}) {
     final inputSource =
         js.context.callMethod('getByName', ['option:local', 'input-source']);
@@ -1237,6 +1260,17 @@ class RustdeskImpl {
   }
 
   Future<void> mainInit({required String appDir, dynamic hint}) {
+    // JS -> Dart shortcut bridge. The matcher in flutter/web/js/src/
+    // shortcut_matcher.ts calls `window.onShortcutTriggered(actionId)` when a
+    // binding fires; route it to the active session's ShortcutModel.
+    // Web uses a JS-side connection, so the event does not arrive through the
+    // native session event stream.
+    js.context['onShortcutTriggered'] = (dynamic action) {
+      if (action is String) {
+        ShortcutModel.onWebTriggered(action);
+      }
+    };
+    mainReloadKeyboardShortcuts();
     return Future.value();
   }
 

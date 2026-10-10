@@ -10,6 +10,7 @@ use crate::{client::get_key_state, common::GrabState};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::log;
 use base::message_proto::*;
+use hbb_common::SessionID;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use rdev::KeyCode;
 use rdev::{Event, EventType, Key};
@@ -78,6 +79,8 @@ lazy_static::lazy_static! {
         Mutex::new(m)
     };
 }
+
+pub mod shortcuts;
 
 pub mod client {
     use super::*;
@@ -319,6 +322,38 @@ pub mod client {
     }
 
     pub fn process_event(keyboard_mode: &str, event: &Event, lock_modes: Option<i32>) {
+        // Shortcut intercept — must come before any wire encoding.
+        // A press that fires a shortcut is consumed, and so are its auto repeats
+        // and its release; every other event passes through to the
+        // encode/forward path.
+        //
+        // NOTE: Shortcut matching intentionally happens BEFORE any key swapping
+        // (swap_modifier_key) so that shortcuts bind to the physical keys pressed,
+        // not the swapped keys. This makes shortcut setup intuitive: users bind
+        // shortcuts to the actual keys they press, regardless of swap settings.
+        // Key swapping only affects what gets sent to the remote.
+        //
+        // Gated on `feature = "flutter"` because the dispatch target
+        // (`flutter::push_session_event`) is Flutter-only. Sciter builds never
+        // call `reload_from_config`, so the cache stays disabled and the
+        // matcher would no-op anyway — but we still skip the call entirely so
+        // a hand-edited config can't silently swallow keys on a UI that has
+        // no way to surface the action.
+        //
+        // `None` for session_id makes the helper resolve through
+        // `flutter::get_cur_session_id()` — the rdev grab loop is process-wide
+        // and has no per-event session context to thread.
+        #[cfg(feature = "flutter")]
+        if crate::keyboard::shortcuts::try_dispatch(
+            None,
+            event,
+            keyboard_mode,
+            || get_peer_platform().to_lowercase(),
+            send_key_event,
+        ) {
+            return;
+        }
+
         let keyboard_mode = get_keyboard_mode_enum(keyboard_mode);
         if is_long_press(&event) {
             return;
@@ -334,7 +369,26 @@ pub mod client {
         event: &Event,
         lock_modes: Option<i32>,
         session: &Session<T>,
+        session_id: SessionID,
     ) {
+        // Shortcut intercept — see the long comment in `process_event` above
+        // for the consume / feature-gate rationale. The only difference
+        // here is that the Flutter FFI path threads an explicit SessionID
+        // through, so dispatch targets the exact tab the keystroke originated
+        // from — no dependency on the global focus tracker.
+        #[cfg(feature = "flutter")]
+        if crate::keyboard::shortcuts::try_dispatch(
+            Some(&session_id),
+            event,
+            keyboard_mode,
+            || session.peer_platform().to_lowercase(),
+            |key_event| session.send_key_event(key_event),
+        ) {
+            return;
+        }
+        #[cfg(not(feature = "flutter"))]
+        let _ = session_id;
+
         let keyboard_mode = get_keyboard_mode_enum(keyboard_mode);
         if is_long_press(&event) {
             return;
@@ -430,9 +484,9 @@ pub mod client {
         send_key_event(&event_lock_screen());
     }
 
-    pub fn event_ctrl_alt_del() -> KeyEvent {
+    pub fn event_ctrl_alt_del(peer_platform: &str) -> KeyEvent {
         let mut key_event = KeyEvent::new();
-        if get_peer_platform() == "Windows" {
+        if peer_platform == "Windows" {
             key_event.set_control_key(ControlKey::CtrlAltDel);
             key_event.down = true;
         } else {
@@ -447,7 +501,7 @@ pub mod client {
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn ctrl_alt_del() {
-        send_key_event(&event_ctrl_alt_del());
+        send_key_event(&event_ctrl_alt_del(&get_peer_platform()));
     }
 }
 
@@ -736,6 +790,10 @@ fn take_remote_keys() -> HashMap<Key, Event> {
 
 fn release_remote_keys_for_events(keyboard_mode: &str, to_release: HashMap<Key, Event>) {
     for (key, mut event) in to_release.into_iter() {
+        #[cfg(feature = "flutter")]
+        if get_peer_platform() == "Windows" && shortcuts::release_modifier_on_leave(key) {
+            continue;
+        }
         event.event_type = EventType::KeyRelease(key);
         client::process_event(keyboard_mode, &event, None);
         // If Alt or AltGr is pressed, we need to send another key stoke to release it.

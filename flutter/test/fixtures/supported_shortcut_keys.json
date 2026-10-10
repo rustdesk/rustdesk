@@ -1,0 +1,11 @@
+[
+  "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+  "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+  "digit0", "digit1", "digit2", "digit3", "digit4",
+  "digit5", "digit6", "digit7", "digit8", "digit9",
+  "f1", "f2", "f3", "f4", "f5", "f6",
+  "f7", "f8", "f9", "f10", "f11", "f12",
+  "delete", "backspace", "tab", "space", "enter",
+  "arrow_left", "arrow_right", "arrow_up", "arrow_down",
+  "home", "end", "page_up", "page_down", "insert"
+]
