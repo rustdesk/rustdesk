@@ -456,32 +456,7 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--password-stdin" {
-            if is_cli_setting_change_disabled() {
-                println!("Settings are disabled!");
-                return None;
-            }
-            if config::Config::is_disable_change_permanent_password() {
-                println!("Changing permanent password is disabled!");
-                return None;
-            }
-            if args.len() != 1 {
-                println!("--password-stdin takes no argument, the password is read from stdin");
-                return None;
-            }
-            if !crate::platform::is_installed() || !is_root() {
-                println!("Installation and administrative privileges required!");
-                return None;
-            }
-            match read_password_from(std::io::stdin()) {
-                Ok(password) => {
-                    if let Err(err) = crate::ipc::set_permanent_password(password) {
-                        println!("{err}");
-                    } else {
-                        println!("Done!");
-                    }
-                }
-                Err(err) => println!("{err}"),
-            }
+            set_permanent_password_from_stdin(&args);
             return None;
         } else if args[0] == "--set-unlock-pin" {
             if config::Config::is_disable_unlock_pin() {
@@ -915,6 +890,35 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
             | Some("--assign")
             | Some("--deploy")
     )
+}
+
+fn set_permanent_password_from_stdin(args: &[String]) {
+    if is_cli_setting_change_disabled() {
+        println!("Settings are disabled!");
+        return;
+    }
+    if config::Config::is_disable_change_permanent_password() {
+        println!("Changing permanent password is disabled!");
+        return;
+    }
+    if args.len() != 1 {
+        println!("--password-stdin takes no argument, the password is read from stdin");
+        return;
+    }
+    if !crate::platform::is_installed() || !is_root() {
+        println!("Installation and administrative privileges required!");
+        return;
+    }
+    match read_password_from(std::io::stdin()) {
+        Ok(password) => {
+            if let Err(err) = crate::ipc::set_permanent_password(password) {
+                println!("{err}");
+            } else {
+                println!("Done!");
+            }
+        }
+        Err(err) => println!("{err}"),
+    }
 }
 
 fn read_password_from(mut reader: impl std::io::Read) -> std::io::Result<String> {
