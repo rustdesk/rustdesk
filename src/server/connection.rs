@@ -2007,6 +2007,14 @@ impl Connection {
             platform_additions.insert("support_view_camera".into(), json!(true));
         }
 
+        // A client's auto-login types the OS password into whatever has focus, so it needs
+        // to know whether that is the logon or lock screen.
+        #[cfg(target_os = "windows")]
+        platform_additions.insert(
+            "is_logon_screen".into(),
+            json!(crate::platform::is_prelogin() || crate::platform::is_locked()),
+        );
+
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         if !platform_additions.is_empty() {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());

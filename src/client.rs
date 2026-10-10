@@ -3056,10 +3056,26 @@ impl LoginConfigHandler {
         let a = !self.get_option("auto-login").is_empty();
         let p = self.get_option("os-password");
         if !p.is_empty() && l && a {
+            if self.peer_reports_not_logon_screen() {
+                log::info!("Skip auto login, the peer is not at the logon or lock screen");
+                return "".to_owned();
+            }
             p
         } else {
             "".to_owned()
         }
+    }
+
+    /// Typed anywhere but the logon or lock screen, the OS password lands in whatever window
+    /// has focus. Peers older than `is_logon_screen` do not report it and keep auto-login.
+    fn peer_reports_not_logon_screen(&self) -> bool {
+        let Some(pi) = self.peer_info.as_ref() else {
+            return false;
+        };
+        serde_json::from_str::<HashMap<String, serde_json::Value>>(&pi.platform_additions)
+            .ok()
+            .and_then(|m| m.get("is_logon_screen").and_then(|v| v.as_bool()))
+            == Some(false)
     }
 
     /// Load [`PeerConfig`].
@@ -5218,6 +5234,29 @@ mod port_forward_mux_tests {
         assert!(!asks(&lc));
         lc.port_forward_multiplex = true;
         assert!(asks(&lc));
+    }
+}
+
+#[cfg(test)]
+mod auto_login_tests {
+    use super::*;
+
+    #[test]
+    fn auto_login_types_the_os_password_only_at_the_logon_screen() {
+        let mut lc = LoginConfigHandler::default();
+        lc.config.lock_after_session_end.v = true;
+        lc.config.options.insert("os-password".to_owned(), "dummy-os-password".to_owned());
+        lc.config.options.insert("auto-login".to_owned(), "Y".to_owned());
+        let with_additions = |lc: &mut LoginConfigHandler, additions: &str| {
+            lc.peer_info = Some(PeerInfo {
+                platform_additions: additions.to_owned(),
+                ..Default::default()
+            });
+            lc.should_auto_login()
+        };
+        assert_eq!(with_additions(&mut lc, r#"{"is_logon_screen":false}"#), "");
+        assert_eq!(with_additions(&mut lc, r#"{"is_logon_screen":true}"#), "dummy-os-password");
+        assert_eq!(with_additions(&mut lc, r#"{"is_installed":true}"#), "dummy-os-password");
     }
 }
 
