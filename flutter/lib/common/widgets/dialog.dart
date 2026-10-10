@@ -1450,7 +1450,6 @@ showSetOSPassword(
       !bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: lockOption) &&
           !bind.sessionGetToggleOptionSync(
               sessionId: sessionId, arg: kOptionToggleViewOnly);
-  var enableLock = true;
   controller.text = osPassword;
   dialogManager.show((setState, close, context) {
     closeWithCallback([dynamic]) {
@@ -1468,7 +1467,6 @@ showSetOSPassword(
           value: autoLogin ? 'Y' : '');
       if (autoLogin &&
           offerLock &&
-          enableLock &&
           !bind.sessionGetToggleOptionSync(
               sessionId: sessionId, arg: kOptionToggleViewOnly) &&
           !bind.sessionGetToggleOptionSync(
@@ -1515,10 +1513,9 @@ showSetOSPassword(
               title: Text(
                 translate('Lock after session end'),
               ),
-              value: enableLock,
+              value: true,
               onChanged: (v) {
-                if (v == null) return;
-                setState(() => enableLock = v);
+                if (v == false) setState(() => autoLogin = false);
               },
             ),
         ],
