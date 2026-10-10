@@ -100,6 +100,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
     );
+    // [FIX #15630] Let MainActivity intercept the trackpad's synthesized
+    // 2-finger drag (see InputModel.onNativeTrackpadScroll). Only this page
+    // enables it: while on, that drag is consumed natively and never reaches
+    // Flutter, so anywhere else it would silently break trackpad scrolling in
+    // ordinary Flutter lists. Paired with the disable in dispose().
+    gFFI.invokeMethod(AndroidChannel.kSetTrackpadScrollEnabled, true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       gFFI.dialogManager
@@ -151,6 +157,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // "Connecting...". Dispatching it here makes teardown happen synchronously on
     // pop; the `sessionClose` in `gFFI.close()` becomes a no-op once removed.
     unawaited(bind.sessionClose(sessionId: sessionId));
+    // [FIX #15630] Stop consuming the trackpad's 2-finger drag (paired with the
+    // enable in initState). Like sessionClose above, this must run before the
+    // first await: dispose() can be suspended there by the app being
+    // backgrounded, and a new RemotePage enabled in the meantime — when this
+    // dispose then resumes, a disable posted after that enable would switch
+    // interception off underneath the new session, and its trackpad 2-finger
+    // drags would reach Flutter as synthesized touch drags again.
+    gFFI.invokeMethod(AndroidChannel.kSetTrackpadScrollEnabled, false);
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
