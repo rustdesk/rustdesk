@@ -1283,16 +1283,16 @@ pub fn is_logon_ui() -> ResultType<bool> {
         .any(|pid| get_session_id_of_process(pid) == Some(current_sid)))
 }
 
-// Windows 7 and Server 2008 R2 report the WTS lock flag reversed (see WTSINFOEX_LEVEL1), so
-// there only LogonUI.exe tells the lock screen apart.
+// No `is_logon_ui()`: a LogonUI.exe that outlives the unlock would let the password through.
+// Windows 7 and Server 2008 R2 report the WTS lock flag reversed (see WTSINFOEX_LEVEL1); there a
+// failed query reads as locked, which types the password as before.
 pub fn is_logon_screen() -> bool {
-    let lock_flag_works = base::platform::windows::is_windows_version_or_greater(6, 2, 0, 0, 0);
-    is_prelogin()
-        || (lock_flag_works && is_locked())
-        || is_logon_ui().unwrap_or_else(|e| {
-            log::error!("Failed to detect logon UI: {:?}", e);
-            false
-        })
+    let locked = if base::platform::windows::is_windows_version_or_greater(6, 2, 0, 0, 0) {
+        is_locked()
+    } else {
+        !is_locked()
+    };
+    is_prelogin() || locked
 }
 
 pub fn is_root() -> bool {
