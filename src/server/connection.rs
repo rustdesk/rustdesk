@@ -2019,12 +2019,13 @@ impl Connection {
         // when this is false.
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         if self.is_remote() {
-            match tokio::task::spawn_blocking(crate::platform::is_logon_screen).await {
-                Ok(is_logon_screen) => {
-                    platform_additions.insert("is_logon_screen".into(), json!(is_logon_screen));
-                }
-                Err(e) => log::error!("Failed to check the logon screen: {}", e),
-            }
+            let is_logon_screen = tokio::task::spawn_blocking(crate::platform::is_logon_screen)
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to check the logon screen: {}", e);
+                    false
+                });
+            platform_additions.insert("is_logon_screen".into(), json!(is_logon_screen));
         }
 
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
