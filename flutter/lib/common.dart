@@ -1475,14 +1475,26 @@ String readableFileSize(double size) {
 class AccessibilityListener extends StatelessWidget {
   final Widget? child;
   static final offset = 100;
+  // Pointers mirrored so far; closed by pointer id because some touch
+  // screens (e.g. Xperia) report size 1 for real fingers and may report a
+  // different size on up.
+  static final Set<int> _mirrored = {};
 
   AccessibilityListener({this.child});
+
+  // Only input injected by our own accessibility service needs mirroring,
+  // which requires a connected client. Android forwards pointer input
+  // without checking the keyboard permission, so do not check it here.
+  static bool get _mayBeInjected =>
+      gFFI.serverModel.inputOk &&
+      gFFI.serverModel.clients.any((c) => c.authorized && !c.disconnected);
 
   @override
   Widget build(BuildContext context) {
     return Listener(
         onPointerDown: (evt) {
-          if (evt.size == 1) {
+          if (evt.size == 1 && _mayBeInjected) {
+            _mirrored.add(evt.pointer);
             GestureBinding.instance.handlePointerEvent(PointerAddedEvent(
                 pointer: evt.pointer + offset, position: evt.position));
             GestureBinding.instance.handlePointerEvent(PointerDownEvent(
@@ -1492,7 +1504,7 @@ class AccessibilityListener extends StatelessWidget {
           }
         },
         onPointerUp: (evt) {
-          if (evt.size == 1) {
+          if (_mirrored.remove(evt.pointer)) {
             GestureBinding.instance.handlePointerEvent(PointerUpEvent(
                 pointer: evt.pointer + offset,
                 size: 0.1,
@@ -1501,8 +1513,16 @@ class AccessibilityListener extends StatelessWidget {
                 pointer: evt.pointer + offset, position: evt.position));
           }
         },
+        onPointerCancel: (evt) {
+          if (_mirrored.remove(evt.pointer)) {
+            GestureBinding.instance.handlePointerEvent(PointerCancelEvent(
+                pointer: evt.pointer + offset, position: evt.position));
+            GestureBinding.instance.handlePointerEvent(PointerRemovedEvent(
+                pointer: evt.pointer + offset, position: evt.position));
+          }
+        },
         onPointerMove: (evt) {
-          if (evt.size == 1) {
+          if (_mirrored.contains(evt.pointer)) {
             GestureBinding.instance.handlePointerEvent(PointerMoveEvent(
                 pointer: evt.pointer + offset,
                 size: 0.1,
