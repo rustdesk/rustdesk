@@ -918,8 +918,16 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
 }
 
 fn read_password_from(mut reader: impl std::io::Read) -> std::io::Result<String> {
-    let mut password = String::new();
-    reader.read_to_string(&mut password)?;
+    use std::io::Read;
+    let too_long = || std::io::Error::new(std::io::ErrorKind::InvalidInput, "Password too long");
+    let max_bytes = config::ENCRYPT_MAX_LEN * 4 + 2;
+    let mut bytes = Vec::new();
+    reader.take(max_bytes as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > max_bytes {
+        return Err(too_long());
+    }
+    let mut password = String::from_utf8(bytes)
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
     if let Some(stripped) = password.strip_suffix('\n') {
         password.truncate(stripped.strip_suffix('\r').unwrap_or(stripped).len());
     }
@@ -928,6 +936,9 @@ fn read_password_from(mut reader: impl std::io::Read) -> std::io::Result<String>
             std::io::ErrorKind::InvalidInput,
             "Empty password",
         ));
+    }
+    if password.chars().count() > config::ENCRYPT_MAX_LEN {
+        return Err(too_long());
     }
     Ok(password)
 }
@@ -1004,6 +1015,26 @@ mod tests {
         ] {
             assert_eq!(read_password_from(input.as_bytes()).unwrap(), expected);
         }
+    }
+
+    #[test]
+    fn read_password_bounds_input() {
+        let max = config::ENCRYPT_MAX_LEN;
+        for input in [
+            "a".repeat(max),
+            "é".repeat(max),
+            format!("{}\r\n", "a".repeat(max)),
+        ] {
+            assert!(read_password_from(input.as_bytes()).is_ok());
+        }
+        for input in [
+            "a".repeat(max + 1),
+            "é".repeat(max + 1),
+            "a".repeat(max * 4 + 3),
+        ] {
+            assert!(read_password_from(input.as_bytes()).is_err());
+        }
+        assert!(read_password_from(std::io::repeat(0xff)).is_err());
     }
 
     #[test]
