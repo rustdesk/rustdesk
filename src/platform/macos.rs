@@ -767,6 +767,10 @@ pub fn is_locked() -> bool {
     }
 }
 
+pub fn is_logon_screen() -> bool {
+    is_prelogin() || is_locked()
+}
+
 pub fn is_root() -> bool {
     crate::username() == "root"
 }

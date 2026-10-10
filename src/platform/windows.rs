@@ -1283,6 +1283,18 @@ pub fn is_logon_ui() -> ResultType<bool> {
         .any(|pid| get_session_id_of_process(pid) == Some(current_sid)))
 }
 
+// Windows 7 and Server 2008 R2 report the WTS lock flag reversed (see WTSINFOEX_LEVEL1), so
+// there only LogonUI.exe tells the lock screen apart.
+pub fn is_logon_screen() -> bool {
+    let lock_flag_works = base::platform::windows::is_windows_version_or_greater(6, 2, 0, 0, 0);
+    is_prelogin()
+        || (lock_flag_works && is_locked())
+        || is_logon_ui().unwrap_or_else(|e| {
+            log::error!("Failed to detect logon UI: {:?}", e);
+            false
+        })
+}
+
 pub fn is_root() -> bool {
     // https://stackoverflow.com/questions/4023586/correct-way-to-find-out-if-a-service-is-running-as-the-system-user
     unsafe { is_local_system() == TRUE }
