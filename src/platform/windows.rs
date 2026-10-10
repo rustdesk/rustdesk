@@ -1283,6 +1283,47 @@ pub fn is_logon_ui() -> ResultType<bool> {
         .any(|pid| get_session_id_of_process(pid) == Some(current_sid)))
 }
 
+// Auto-login types the OS password on this, so a state that cannot be read counts as unlocked.
+// `is_prelogin()` reads a failed query as no user signed in, and `is_logon_ui()` is left out
+// because a LogonUI.exe can outlive the unlock.
+pub fn is_logon_screen() -> bool {
+    let Some(session_id) = get_current_process_session_id() else {
+        return false;
+    };
+    is_session_prelogin(session_id) == Some(true)
+        || is_session_locked_flag(session_id) == Some(true)
+}
+
+fn is_session_prelogin(session_id: u32) -> Option<bool> {
+    extern "C" {
+        fn get_session_user_info(path: *mut u16, n: u32, session_id: u32) -> u32;
+    }
+    let mut buff = [0u16; 256];
+    // The bytes copied include the terminating null, so 0 means the query failed.
+    let n = unsafe { get_session_user_info(buff.as_mut_ptr(), buff.len() as _, session_id) };
+    if n == 0 {
+        return None;
+    }
+    let username = String::from_utf16_lossy(&buff);
+    let username = username.trim_end_matches('\0');
+    Some(username.is_empty() || username == "SYSTEM")
+}
+
+// Windows 7 and Server 2008 R2 report LOCK and UNLOCK the other way round (see WTSINFOEX_LEVEL1).
+fn is_session_locked_flag(session_id: u32) -> Option<bool> {
+    extern "C" {
+        fn get_session_flags(session_id: DWORD) -> DWORD;
+    }
+    const WTS_SESSIONSTATE_LOCK: DWORD = 0;
+    const WTS_SESSIONSTATE_UNLOCK: DWORD = 1;
+    let reversed = !base::platform::windows::is_windows_version_or_greater(6, 2, 0, 0, 0);
+    match unsafe { get_session_flags(session_id) } {
+        WTS_SESSIONSTATE_LOCK => Some(!reversed),
+        WTS_SESSIONSTATE_UNLOCK => Some(reversed),
+        _ => None,
+    }
+}
+
 pub fn is_root() -> bool {
     // https://stackoverflow.com/questions/4023586/correct-way-to-find-out-if-a-service-is-running-as-the-system-user
     unsafe { is_local_system() == TRUE }

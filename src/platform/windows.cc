@@ -628,6 +628,28 @@ extern "C"
         return locked;
     }
 
+    // WTSInfoExLevel1.SessionFlags, or WTS_SESSIONSTATE_UNKNOWN when it cannot be read.
+    DWORD get_session_flags(DWORD session_id)
+    {
+        DWORD flags = WTS_SESSIONSTATE_UNKNOWN;
+        PWTSINFOEXW pInfo = NULL;
+        DWORD bytes = 0;
+        if (WTSQuerySessionInformationW(
+                WTS_CURRENT_SERVER_HANDLE,
+                session_id,
+                WTSSessionInfoEx,
+                (LPWSTR *)&pInfo,
+                &bytes)) {
+            if (pInfo && pInfo->Level == 1) {
+                flags = (DWORD)pInfo->Data.WTSInfoExLevel1.SessionFlags;
+            }
+            if (pInfo) {
+                WTSFreeMemory(pInfo);
+            }
+        }
+        return flags;
+    }
+
     uint32_t get_active_user(PWSTR bufin, uint32_t nin, BOOL rdp)
     {
         uint32_t nout = 0;

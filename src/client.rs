@@ -3056,10 +3056,27 @@ impl LoginConfigHandler {
         let a = !self.get_option("auto-login").is_empty();
         let p = self.get_option("os-password");
         if !p.is_empty() && l && a {
+            if self.peer_reports_not_logon_screen() {
+                log::info!("Skip auto login, the peer is not at the logon or lock screen");
+                return "".to_owned();
+            }
             p
         } else {
             "".to_owned()
         }
+    }
+
+    // Peers that don't report `is_logon_screen` (older ones, Linux) keep auto-login. The value is
+    // taken when the peer answers the login, so the screen can still lock or unlock before the
+    // password is typed.
+    fn peer_reports_not_logon_screen(&self) -> bool {
+        let Some(pi) = self.peer_info.as_ref() else {
+            return false;
+        };
+        serde_json::from_str::<serde_json::Value>(&pi.platform_additions)
+            .ok()
+            .and_then(|v| v.get("is_logon_screen")?.as_bool())
+            == Some(false)
     }
 
     /// Load [`PeerConfig`].
@@ -5218,6 +5235,34 @@ mod port_forward_mux_tests {
         assert!(!asks(&lc));
         lc.port_forward_multiplex = true;
         assert!(asks(&lc));
+    }
+}
+
+#[cfg(test)]
+mod auto_login_tests {
+    use super::*;
+
+    #[test]
+    fn auto_login_skips_a_peer_that_reports_no_logon_screen() {
+        let mut lc = LoginConfigHandler::default();
+        lc.config.lock_after_session_end.v = true;
+        lc.config
+            .options
+            .insert("os-password".to_owned(), "os-pass".to_owned());
+        lc.config
+            .options
+            .insert("auto-login".to_owned(), "Y".to_owned());
+        let mut with_additions = |additions: &str| {
+            lc.peer_info = Some(PeerInfo {
+                platform_additions: additions.to_owned(),
+                ..Default::default()
+            });
+            lc.should_auto_login()
+        };
+        assert_eq!(with_additions(r#"{"is_logon_screen":false}"#), "");
+        assert_eq!(with_additions(r#"{"is_logon_screen":true}"#), "os-pass");
+        assert_eq!(with_additions(r#"{"is_installed":true}"#), "os-pass");
+        assert_eq!(with_additions(""), "os-pass");
     }
 }
 

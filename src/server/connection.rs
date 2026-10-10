@@ -2015,6 +2015,19 @@ impl Connection {
             platform_additions.insert("support_view_camera".into(), json!(true));
         }
 
+        // A client's auto-login types the OS password into whatever has focus. It skips that
+        // when this is false.
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
+        if self.is_remote() {
+            let is_logon_screen = tokio::task::spawn_blocking(crate::platform::is_logon_screen)
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to check the logon screen: {}", e);
+                    false
+                });
+            platform_additions.insert("is_logon_screen".into(), json!(is_logon_screen));
+        }
+
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         if !platform_additions.is_empty() {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
