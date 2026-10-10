@@ -448,6 +448,7 @@ class InputModel {
   // mouse
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
+  int _pressedMouseButtons = 0;
   Offset lastMousePos = Offset.zero;
   int _lastWheelTsUs = 0;
 
@@ -1076,6 +1077,10 @@ class InputModel {
       }
     }
     _lastButtons = hasStaleButtonsOnMouseUp ? 0 : evt.buttons;
+    if (isDesktop && _relativeMouse.enabled.value && type == _kMouseEventUp) {
+      // A relative up can finish a press sent before the mode switch.
+      _pressedMouseButtons &= ~buttons;
+    }
 
     out['buttons'] = buttons;
     out['type'] = type;
@@ -1821,9 +1826,16 @@ class InputModel {
     bool edgeScroll = false,
   }) {
     if (isViewCamera) return null;
+    final buttons = evt['buttons'];
+    final isMatchingMouseUp = (isDesktop || isWebDesktop) &&
+        evt['type'] == _kMouseEventUp &&
+        buttons is int &&
+        mouseButtonsToPeer(buttons).isNotEmpty &&
+        _pressedMouseButtons & buttons != 0;
     double x = offset.dx;
     double y = max(0.0, offset.dy);
-    if (_checkPeerControlProtected(x, y)) {
+    // Cursor ownership may change between a forwarded down and its up.
+    if (_checkPeerControlProtected(x, y) && !isMatchingMouseUp) {
       return null;
     }
 
@@ -1865,6 +1877,9 @@ class InputModel {
     if (pos == null) {
       return null;
     }
+    if (isMatchingMouseUp) {
+      _pressedMouseButtons &= ~buttons;
+    }
     if (type != '') {
       evt['x'] = '0';
       evt['y'] = '0';
@@ -1873,9 +1888,13 @@ class InputModel {
       evt['y'] = '${pos.y.toInt()}';
     }
 
-    final buttons = evt['buttons'];
     if (buttons is int) {
       evt['buttons'] = mouseButtonsToPeer(buttons);
+      if ((isDesktop || isWebDesktop) &&
+          type == kMouseEventTypeDown &&
+          evt['buttons'] != '') {
+        _pressedMouseButtons |= buttons;
+      }
     } else {
       // Log warning if buttons exists but is not an int (unexpected caller).
       // Keep empty string fallback for missing buttons to preserve move/hover behavior.
