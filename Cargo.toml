@@ -202,6 +202,8 @@ gtk = "0.18"
 termios = "0.3"
 terminfo = "0.8"
 winit = "0.30"
+wayland-client = "0.31"
+xkbcommon-dl = { version = "0.4", features = ["x11"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }

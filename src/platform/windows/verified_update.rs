@@ -1,9 +1,10 @@
 mod file;
 
 use super::{
-    get_custom_client_staging_dir, handle_custom_client_staging_dir_before_update,
-    installer_handoff::run_cmds, installer_shell::path_for_cmd_environment,
-    remove_custom_client_staging_dir, ResultType,
+    get_custom_client_staging_dir, get_reg_of_hkcr,
+    handle_custom_client_staging_dir_before_update, installer_handoff::run_cmds,
+    installer_shell::path_for_cmd_environment, remove_custom_client_staging_dir, ResultType,
+    REG_NAME_INSTALL_PRINTER,
 };
 use hbb_common::{allow_err, anyhow::anyhow, bail, log};
 use std::path::Path;
@@ -121,13 +122,28 @@ fn verified_msi_install_commands(
     let source = path_for_cmd_environment(msi)?;
     let hash_pattern = verified_update_hash_pattern(expected_sha256)?;
     let quiet_args = if quiet { " /qn LAUNCH_TRAY_APP=N" } else { "" };
+    let app_name = crate::get_app_name();
+    let subkey = format!(".{}", app_name.to_lowercase());
+    let printer_installed = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER).as_deref()
+        != Some("0")
+        && remote_printer::is_rd_printer_installed(&app_name).unwrap_or_else(|err| {
+            log::warn!(
+                "Failed to check printer installation status: {err}; skipping printer installation"
+            );
+            false
+        });
+    let printer_args = if printer_installed {
+        ""
+    } else {
+        " INSTALLPRINTER=0"
+    };
     Ok(format!(
         "set \"RUSTDESK_VERIFIED_MSI_SOURCE={source}\"\r\n\
          set \"RUSTDESK_VERIFIED_MSI=%RUSTDESK_OUTPUT_DIR%\\{VERIFIED_MSI_FILENAME}\"\r\n\
          copy /B /Y \"%RUSTDESK_VERIFIED_MSI_SOURCE%\" \"%RUSTDESK_VERIFIED_MSI%\" > nul || exit /b {VERIFIED_UPDATE_COPY_FAILURE_EXIT_CODE}\r\n\
          certutil.exe -hashfile \"%RUSTDESK_VERIFIED_MSI%\" SHA256 > \"%RUSTDESK_VERIFIED_MSI%.sha256\" || exit /b {VERIFIED_UPDATE_HASH_FAILURE_EXIT_CODE}\r\n\
          findstr.exe /R /I /X /C:\"{hash_pattern}\" \"%RUSTDESK_VERIFIED_MSI%.sha256\" > nul || exit /b {VERIFIED_UPDATE_HASH_MISMATCH_EXIT_CODE}\r\n\
-         msiexec.exe /i \"%RUSTDESK_VERIFIED_MSI%\"{quiet_args} REBOOT=ReallySuppress /norestart\r\n\
+         msiexec.exe /i \"%RUSTDESK_VERIFIED_MSI%\"{quiet_args}{printer_args} REBOOT=ReallySuppress /norestart\r\n\
          set \"RUSTDESK_MSI_EXIT_CODE=%ERRORLEVEL%\"\r\n\
          if \"%RUSTDESK_MSI_EXIT_CODE%\"==\"{reboot_initiated}\" exit /b {success}\r\n\
          if \"%RUSTDESK_MSI_EXIT_CODE%\"==\"{reboot_required}\" exit /b {success}\r\n\

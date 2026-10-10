@@ -1348,6 +1348,10 @@ pub fn get_install_options() -> String {
 }
 
 pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static str {
+    if !is_win_10_or_greater() {
+        return "desktopicon startmenu";
+    }
+
     let install_printer = match printer_override {
         Some(override_value) => override_value,
         None => {
@@ -1355,9 +1359,13 @@ pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static st
             let subkey = format!(".{}", app_name.to_lowercase());
             let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
             printer.as_deref() == Some("1")
+                && remote_printer::is_rd_printer_installed(&app_name).unwrap_or_else(|err| {
+                    log::warn!("Failed to check printer installation status: {err}; skipping printer installation");
+                    false
+                })
         }
     };
-    if install_printer && is_win_10_or_greater() {
+    if install_printer {
         "desktopicon startmenu printer"
     } else {
         "desktopicon startmenu"
@@ -4797,6 +4805,26 @@ mod tests {
         assert_eq!(chr, Some('a'));
         let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
         assert_eq!(chr, None)
+    }
+
+    #[test]
+    fn install_app_names_enforce_ascii_command_safety() {
+        assert!(validate_install_app_name("RustDesk-Admin1").is_ok());
+        for app_name in [
+            "",
+            "RustDesk_Admin",
+            "RustDesk&whoami",
+            "RustDesk应用",
+            "RustDesk앱",
+            "RustDeskBüro",
+            "RustDeskFrançais",
+            "RustDeskアプリ",
+        ] {
+            assert!(
+                validate_install_app_name(app_name).is_err(),
+                "unsafe application name was accepted: {app_name}"
+            );
+        }
     }
 
     #[test]

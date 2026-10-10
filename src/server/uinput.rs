@@ -10,6 +10,12 @@ use hbb_common::{
     ResultType,
 };
 
+mod layout;
+
+pub(super) fn prepare_layout(event: &base::message_proto::KeyEvent) {
+    layout::prepare_layout(event);
+}
+
 static IPC_CONN_TIMEOUT: u64 = 1000;
 static IPC_REQUEST_TIMEOUT: u64 = 1000;
 static IPC_POSTFIX_KEYBOARD: &str = "_uinput_keyboard";
@@ -17,22 +23,180 @@ static IPC_POSTFIX_MOUSE: &str = "_uinput_mouse";
 static IPC_POSTFIX_CONTROL: &str = "_uinput_control";
 
 pub mod client {
-    use super::*;
+    use super::{layout::LayoutKey, *};
+    use std::{collections::HashMap, time::Duration};
+
+    const LAYOUT_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(5);
+
+    struct LayoutContext {
+        locks: (bool, bool),
+        // None for ordinary input; otherwise whether the shortcut holds Shift.
+        shortcut_shift: Option<bool>,
+    }
+
+    impl LayoutContext {
+        fn resolve(&self, chr: char) -> ResultType<LayoutKey> {
+            layout::resolve(chr, self.locks, self.shortcut_shift)
+        }
+    }
 
     pub struct UInputKeyboard {
         conn: Connection,
         rt: Runtime,
+        // Ownership is per character. The Linux connection turns character
+        // downs into clicks; overlapping direct-backend holds can release a
+        // generated modifier still needed by another character.
+        layout_keys: HashMap<char, LayoutKey>,
     }
 
     impl UInputKeyboard {
         pub async fn new() -> ResultType<Self> {
             let conn = ipc::connect(IPC_CONN_TIMEOUT, IPC_POSTFIX_KEYBOARD).await?;
             let rt = Runtime::new()?;
-            Ok(Self { conn, rt })
+            layout::prewarm_layout();
+            Ok(Self {
+                conn,
+                rt,
+                layout_keys: HashMap::new(),
+            })
         }
 
         fn send(&mut self, data: Data) -> ResultType<()> {
             self.rt.block_on(self.conn.send(&data))
+        }
+
+        fn send_raw_key(&mut self, keycode: u16, down: bool) -> ResultType<()> {
+            let key = Key::Raw(keycode);
+            let event = if down {
+                DataKeyboard::KeyDown(key)
+            } else {
+                DataKeyboard::KeyUp(key)
+            };
+            self.send(Data::Keyboard(event))
+        }
+
+        fn press_layout_key(&mut self, chr: char, mapping: LayoutKey) -> ResultType<()> {
+            if let Some(pressed) = self.layout_keys.get(&chr).cloned() {
+                return self.send_layout_key_down(&pressed);
+            }
+            let mut pressed = LayoutKey {
+                key: mapping.key,
+                modifiers: Vec::new(),
+            };
+            for keycode in mapping.modifiers {
+                let query = Data::Keyboard(DataKeyboard::GetKeyState(Key::Raw(keycode)));
+                if !self.send_get_key_state(query)? {
+                    pressed.modifiers.push(keycode);
+                }
+            }
+            let result = self.send_layout_key_down(&pressed);
+            if let Err(error) = result {
+                if let Err(release_error) = self.release_layout_key(&pressed) {
+                    bail!(
+                        "{}; failed to release uinput modifiers: {}",
+                        error,
+                        release_error
+                    );
+                }
+                return Err(error);
+            }
+            self.layout_keys.insert(chr, pressed);
+            Ok(())
+        }
+
+        fn send_layout_key_down(&mut self, pressed: &LayoutKey) -> ResultType<()> {
+            // Character dispatch can release Shift before a repeated key-down.
+            for keycode in &pressed.modifiers {
+                self.send_raw_key(*keycode, true)?;
+            }
+            self.send(Data::Keyboard(DataKeyboard::KeyDown(pressed.key)))
+        }
+
+        fn release_layout_key(&mut self, pressed: &LayoutKey) -> ResultType<()> {
+            let mut result = self.send(Data::Keyboard(DataKeyboard::KeyUp(pressed.key)));
+            for keycode in pressed.modifiers.iter().rev() {
+                // Attempt every release even if an earlier send failed.
+                result = result.and(self.send_raw_key(*keycode, false));
+            }
+            result
+        }
+
+        fn layout_key_down(&mut self, chr: char) -> ResultType<()> {
+            if let Some(pressed) = self.layout_keys.get(&chr).cloned() {
+                return self.send_layout_key_down(&pressed);
+            }
+            let mapping = if layout::is_available() {
+                self.layout_context()?.resolve(chr)?
+            } else {
+                // Discovery may finish before key-up; retain the legacy key for release.
+                LayoutKey {
+                    key: Key::Layout(chr),
+                    modifiers: Vec::new(),
+                }
+            };
+            self.press_layout_key(chr, mapping)
+        }
+
+        fn layout_key_up(&mut self, chr: char) -> ResultType<()> {
+            if let Some(pressed) = self.layout_keys.remove(&chr) {
+                self.release_layout_key(&pressed)?;
+            }
+            Ok(())
+        }
+
+        fn layout_key_sequence(&mut self, sequence: &str) -> ResultType<()> {
+            if sequence.is_empty() {
+                return Ok(());
+            }
+            let context = self.layout_context()?;
+            // Keep supported text after a mapping failure and report the first error.
+            // Modifier and IPC failures must still stop the sequence immediately.
+            let mut result = Ok(());
+            for chr in sequence.chars() {
+                let mapping = match context.resolve(chr) {
+                    Ok(mapping) => mapping,
+                    Err(error) => {
+                        result = result.and(Err(error));
+                        continue;
+                    }
+                };
+                self.press_layout_key(chr, mapping)?;
+                self.layout_key_up(chr)?;
+            }
+            result
+        }
+
+        fn layout_context(&mut self) -> ResultType<LayoutContext> {
+            let caps_lock =
+                self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::CapsLock)))?;
+            let num_lock =
+                self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::NumLock)))?;
+            let shortcut = self
+                .send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Control)))?
+                || self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Alt)))?
+                || self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Meta)))?;
+            let shortcut_shift = if shortcut {
+                Some(
+                    self.send_get_key_state(Data::Keyboard(DataKeyboard::GetKeyState(Key::Shift)))?,
+                )
+            } else {
+                None
+            };
+            Ok(LayoutContext {
+                locks: (caps_lock, num_lock),
+                shortcut_shift,
+            })
+        }
+
+        fn log_layout_error(result: &ResultType<()>) {
+            if let Err(error) = result {
+                hbb_common::throttled_log!(
+                    LAYOUT_ERROR_LOG_INTERVAL,
+                    error,
+                    "Uinput layout-aware keyboard input failed: {}",
+                    error
+                );
+            }
         }
 
         fn send_get_key_state(&mut self, data: Data) -> ResultType<bool> {
@@ -45,6 +209,9 @@ pub mod client {
                 Ok(Some(Data::KeyboardResponse(ipc::DataKeyboardResponse::GetKeyState(state)))) => {
                     Ok(state)
                 }
+                Ok(Some(Data::KeyboardResponse(ipc::DataKeyboardResponse::GetKeyStateError(
+                    error,
+                )))) => bail!("Failed to query uinput key state: {}", error),
                 Ok(Some(resp)) => {
                     // FATAL error!!!
                     bail!(
@@ -90,25 +257,39 @@ pub mod client {
         }
 
         fn key_sequence(&mut self, sequence: &str) {
-            // Sequence events are normally handled in the --server process before reaching here.
-            // Forward via IPC as a fallback — input_text_wayland can still handle ASCII chars
-            // via keysym/uinput, though non-ASCII will be skipped (no clipboard in --service).
-            log::debug!(
-                "UInputKeyboard::key_sequence called (len={})",
-                sequence.len()
-            );
-            allow_err!(self.send(Data::Keyboard(DataKeyboard::Sequence(sequence.to_string()))));
+            if !layout::is_available() {
+                Self::log_layout_error(
+                    &self.send(Data::Keyboard(DataKeyboard::Sequence(sequence.to_string()))),
+                );
+                return;
+            }
+            Self::log_layout_error(&self.layout_key_sequence(sequence));
         }
 
         // TODO: handle error???
         fn key_down(&mut self, key: Key) -> enigo::ResultType {
+            if let Key::Layout(chr) = key {
+                let result = self.layout_key_down(chr);
+                Self::log_layout_error(&result);
+                return result.map_err(Into::into);
+            }
             allow_err!(self.send(Data::Keyboard(DataKeyboard::KeyDown(key))));
             Ok(())
         }
         fn key_up(&mut self, key: Key) {
+            if let Key::Layout(chr) = key {
+                Self::log_layout_error(&self.layout_key_up(chr));
+                return;
+            }
             allow_err!(self.send(Data::Keyboard(DataKeyboard::KeyUp(key))));
         }
         fn key_click(&mut self, key: Key) {
+            if let Key::Layout(chr) = key {
+                if layout::is_available() {
+                    Self::log_layout_error(&self.layout_key_sequence(&chr.to_string()));
+                    return;
+                }
+            }
             allow_err!(self.send(Data::Keyboard(DataKeyboard::KeyClick(key))));
         }
     }
@@ -202,6 +383,8 @@ pub mod service {
     #[cfg(target_os = "linux")]
     use std::os::unix::io::AsRawFd;
     use std::{collections::HashMap, sync::Mutex};
+
+    const RAW_KEY_STATE_ERROR_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
     lazy_static::lazy_static! {
     static ref KEY_MAP: HashMap<enigo::Key, evdev::Key> = HashMap::from(
@@ -686,6 +869,9 @@ pub mod service {
                 } else {
                     match keyboard.get_key_state() {
                         Ok(keys) => match key {
+                            enigo::Key::Raw(code) if *code >= layout::XKB_KEYCODE_OFFSET => {
+                                keys.contains(evdev::Key::new(*code - layout::XKB_KEYCODE_OFFSET))
+                            }
                             enigo::Key::Shift => {
                                 keys.contains(evdev::Key::KEY_LEFTSHIFT)
                                     || keys.contains(evdev::Key::KEY_RIGHTSHIFT)
@@ -704,6 +890,23 @@ pub mod service {
                             }
                             _ => false,
                         },
+                        Err(error) if matches!(key, enigo::Key::Raw(_)) => {
+                            hbb_common::throttled_log!(
+                                RAW_KEY_STATE_ERROR_LOG_INTERVAL,
+                                error,
+                                "Failed to query uinput layout modifier state: {}",
+                                error
+                            );
+                            // Unknown modifier state must not be treated as released.
+                            ipc_send_data(
+                                stream,
+                                &Data::KeyboardResponse(
+                                    ipc::DataKeyboardResponse::GetKeyStateError(error.to_string()),
+                                ),
+                            )
+                            .await;
+                            return;
+                        }
                         Err(_e) => {
                             // log::debug!("Failed to get key state: {}", &_e);
                             false
