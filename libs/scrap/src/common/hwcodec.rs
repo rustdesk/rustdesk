@@ -356,6 +356,7 @@ impl HwRamDecoder {
             device_type: info.hwdevice.clone(),
             thread_count: codec_thread_num(16) as _,
         };
+        log::info!("create ram decoder: {ctx:?}");
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(HwRamDecoder { decoder, info }),
             Err(_) => {
