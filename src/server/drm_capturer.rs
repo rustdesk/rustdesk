@@ -24,6 +24,9 @@ const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + DISPLAY_LIST_TIMEOUT_MS 
 /// Only the header read rechecks `stop`, so bound the body read here rather than relying on
     /// `next_raw_into`'s own cap.
 const BODY_READ_TIMEOUT: Duration = Duration::from_secs(5);
+/// A repeat of the frame returned last goes out anyway once this much time has passed since
+/// then: a frame whose encode failed reaches the encoder again, even if nothing moves.
+const REPEAT_EVERY: Duration = Duration::from_secs(1);
 
 struct FrameSlot {
     // Row stride is `pixels.len() / height`, possibly padded; the format and the plane rotation
@@ -103,6 +106,10 @@ pub struct IpcDrmCapturer {
     cur_h: usize,
     cur_fmt: Pixfmt,
     got_frame: bool,
+    // The last frame handed to the encoder: a repeat of it is dropped, as the other capturers do.
+    saved_raw_data: Vec<u8>,
+    // When frame() last returned a frame; see REPEAT_EVERY.
+    returned_at: Instant,
 }
 
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
@@ -441,6 +448,8 @@ impl IpcDrmCapturer {
                 cur_h: 0,
                 cur_fmt: Pixfmt::BGRA,
                 got_frame: false,
+                saved_raw_data: Vec::new(),
+                returned_at: Instant::now(),
             },
             displays,
             wire_idx,
@@ -565,6 +574,10 @@ impl TraitCapturer for IpcDrmCapturer {
                 }
                 self.cur_w = fw;
                 self.cur_h = fh;
+                // The same bytes in another format are another picture, so not a repeat.
+                if fmt != self.cur_fmt {
+                    self.saved_raw_data.clear();
+                }
                 self.cur_fmt = fmt;
                 if !self.got_frame {
                     // Clear ONLY the streak: `rapid_builds` is for a display that delivers a first
@@ -590,6 +603,12 @@ impl TraitCapturer for IpcDrmCapturer {
                 return Err(io::Error::new(io::ErrorKind::Other, err));
             }
         }
+        // The producer grabs on a timer, so a still screen arrives as the same bytes every tick.
+        let repeat = scrap::would_block_if_equal(&mut self.saved_raw_data, &self.cur).is_err();
+        if repeat && self.returned_at.elapsed() < REPEAT_EVERY {
+            return Err(io::ErrorKind::WouldBlock.into());
+        }
+        self.returned_at = Instant::now();
         Ok(Frame::PixelBuffer(PixelBuffer::new(
             &self.cur,
             self.cur_fmt,
@@ -2401,6 +2420,8 @@ mod drm_capturer_tests {
             cur_h: 0,
             cur_fmt: Pixfmt::BGRA,
             got_frame: false,
+            saved_raw_data: Vec::new(),
+            returned_at: Instant::now(),
         }
     }
 
@@ -2941,14 +2962,65 @@ mod drm_capturer_tests {
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
         // A producer that cannot say (pre-0.5.8 library) keeps the old rule: 180 left alone.
-        put_frame_with(&c, w, h, None, &src);
+        // A new picture: `src` left alone is the frame above and would be dropped as a repeat.
+        let (other, _, _) = px_frame(&[&[7, 8, 9], &[10, 11, 12]], 0);
+        put_frame_with(&c, w, h, None, &other);
         match c.frame(Duration::from_millis(50)) {
             Ok(Frame::PixelBuffer(pb)) => {
-                assert_eq!(labels_of(pb.data(), w, h), vec![vec![1, 2, 3], vec![4, 5, 6]]);
+                assert_eq!(labels_of(pb.data(), w, h), vec![vec![7, 8, 9], vec![10, 11, 12]]);
             }
             Ok(_) => panic!("expected a pixel-buffer frame"),
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
+    }
+
+    #[test]
+    fn a_frame_equal_to_the_last_one_goes_out_once_a_second() {
+        let (still, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let (moved, _, _) = px_frame(&[&[1, 2, 3], &[4, 5, 7]], 0);
+        let mut c = capturer_with(Some((w, h)));
+        put_frame_with(&c, w, h, None, &still);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+        put_frame_with(&c, w, h, None, &still);
+        assert!(matches!(
+            c.frame(Duration::from_millis(50)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock
+        ));
+        // A second later it goes out again, in case its encode failed, and the second starts over.
+        std::thread::sleep(REPEAT_EVERY);
+        put_frame_with(&c, w, h, None, &still);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+        put_frame_with(&c, w, h, None, &still);
+        assert!(matches!(
+            c.frame(Duration::from_millis(50)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock
+        ));
+        put_frame_with(&c, w, h, None, &moved);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+    }
+
+    #[test]
+    fn the_same_bytes_in_another_format_are_not_a_repeat() {
+        // Blue as BGRA, red as RGBA.
+        let px = [255u8, 0, 0, 255];
+        let put = |c: &IpcDrmCapturer, fmt| {
+            c.shared
+                .slot
+                .lock()
+                .unwrap()
+                .publish(1, 1, fmt, None, px.to_vec());
+            c.shared.cv.notify_one();
+        };
+        let mut c = capturer_with(Some((1, 1)));
+        put(&c, Pixfmt::BGRA);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+        put(&c, Pixfmt::RGBA);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+        put(&c, Pixfmt::RGBA);
+        assert!(matches!(
+            c.frame(Duration::from_millis(50)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock
+        ));
     }
 
     #[test]
@@ -3062,9 +3134,12 @@ mod drm_capturer_tests {
     }
 
     fn put_frame_rot(c: &IpcDrmCapturer, w: usize, h: usize, plane_rotation: Option<u32>) {
+        // Each call differs in its first pixel: frame() drops a frame equal to the last one.
+        static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let mut buf = c.shared.slot.lock().unwrap().take_free().unwrap_or_default();
         buf.clear();
         buf.resize(w * h * 4, 0);
+        buf[..4].copy_from_slice(&SEQ.fetch_add(1, Ordering::Relaxed).to_le_bytes());
         let mut slot = c.shared.slot.lock().unwrap();
         slot.publish(w, h, Pixfmt::BGRA, plane_rotation, buf);
         c.shared.cv.notify_one();
