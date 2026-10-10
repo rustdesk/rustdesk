@@ -292,6 +292,7 @@ fn turn_on_privacy_sync(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>
 
     // turn on privacy mode
     let result = privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id);
+    #[cfg(not(target_os = "ios"))]
     if matches!(&result, Ok(true)) {
         crate::server::close_other_remote_connections_for_privacy(
             &crate::server::AUTHED_CONNS.lock().unwrap(),
