@@ -455,6 +455,34 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
             }
             return None;
+        } else if args[0] == "--password-stdin" {
+            if is_cli_setting_change_disabled() {
+                println!("Settings are disabled!");
+                return None;
+            }
+            if config::Config::is_disable_change_permanent_password() {
+                println!("Changing permanent password is disabled!");
+                return None;
+            }
+            if args.len() != 1 {
+                println!("--password-stdin takes no argument, the password is read from stdin");
+                return None;
+            }
+            if !crate::platform::is_installed() || !is_root() {
+                println!("Installation and administrative privileges required!");
+                return None;
+            }
+            match read_password_from(std::io::stdin()) {
+                Ok(password) => {
+                    if let Err(err) = crate::ipc::set_permanent_password(password) {
+                        println!("{err}");
+                    } else {
+                        println!("Done!");
+                    }
+                }
+                Err(err) => println!("{err}"),
+            }
+            return None;
         } else if args[0] == "--set-unlock-pin" {
             if config::Config::is_disable_unlock_pin() {
                 println!("Unlock PIN is disabled!");
@@ -878,6 +906,7 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
     matches!(
         args.first().map(String::as_str),
         Some("--password")
+            | Some("--password-stdin")
             | Some("--set-unlock-pin")
             | Some("--get-id")
             | Some("--set-id")
@@ -886,6 +915,21 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
             | Some("--assign")
             | Some("--deploy")
     )
+}
+
+fn read_password_from(mut reader: impl std::io::Read) -> std::io::Result<String> {
+    let mut password = String::new();
+    reader.read_to_string(&mut password)?;
+    if let Some(stripped) = password.strip_suffix('\n') {
+        password.truncate(stripped.strip_suffix('\r').unwrap_or(stripped).len());
+    }
+    if password.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Empty password",
+        ));
+    }
+    Ok(password)
 }
 
 #[inline]
@@ -925,6 +969,7 @@ mod tests {
     fn user_main_ipc_scope_cli_command_matches_management_commands_only() {
         for command in [
             "--password",
+            "--password-stdin",
             "--set-unlock-pin",
             "--get-id",
             "--set-id",
@@ -945,6 +990,26 @@ mod tests {
             "--connect",
         ] {
             assert!(!is_user_main_ipc_scope_cli_command(&args(&[command])));
+        }
+    }
+
+    #[test]
+    fn read_password_strips_one_trailing_newline() {
+        for (input, expected) in [
+            ("secret", "secret"),
+            ("secret\n", "secret"),
+            ("secret\r\n", "secret"),
+            ("secret\n\n", "secret\n"),
+            (" a b ", " a b "),
+        ] {
+            assert_eq!(read_password_from(input.as_bytes()).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn read_password_rejects_empty_input() {
+        for input in ["", "\n", "\r\n"] {
+            assert!(read_password_from(input.as_bytes()).is_err());
         }
     }
 }
