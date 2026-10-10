@@ -454,16 +454,21 @@ function open_whitelist_dialog() {
 
 function open_proxy_dialog() {
     var is_opt_fixed = handler.is_option_fixed("proxy-url");
+    var is_ws_proxy_fixed = handler.is_option_fixed("allow-websocket-proxy");
+    var old_ws_proxy = handler.get_option("allow-websocket-proxy") == "Y";
+    var ws_proxy_attrs = old_ws_proxy ? { checked: true } : {};
+    if (is_ws_proxy_fixed) { ws_proxy_attrs.disabled = true; ws_proxy_attrs.style = grey_text_style; }
     var socks5 = handler.get_socks() || {};
     var old_proxy = socks5[0] || "";
     var old_username = socks5[1] || "";
     var old_password = socks5[2] || "";
-    var type_str = is_opt_fixed ? "custom-server-nook" : "custom-server";
+    var type_str = is_opt_fixed && is_ws_proxy_fixed ? "custom-server-nook" : "custom-server";
     var greyStyle = is_opt_fixed ? grey_text_style : "";
     msgbox(type_str, "Socks5/Http(s) Proxy", <div .form .set-password>
             <div><span style={greyStyle}>{translate("Server")}:</span><input|text .outline-focus style={greyStyle} name='proxy' value={old_proxy} disabled={ is_opt_fixed ? "true" : "false" } /></div>
             <div><span style={greyStyle}>{translate("Username")}:</span><input|text style={greyStyle} name='username' value={old_username} disabled={ is_opt_fixed ? "true" : "false" } /></div>
             <div><span style={greyStyle}>{translate("Password")}:</span>{ is_opt_fixed ? <input|password style={grey_text_style} name='password' value={old_password} disabled="true" /> : <PasswordComponent value={old_password} /> }</div>
+            <div><button|checkbox(ws_proxy) {ws_proxy_attrs} .wrap-text>{translate("Use this proxy for WebSocket")}</button></div>
             </div>
             , "", function(res=null, show_progress) {
                 if (!res) return;
@@ -471,8 +476,9 @@ function open_proxy_dialog() {
                 var proxy = (res.proxy || "").trim();
                 var username = (res.username || "").trim();
                 var password = (res.password || "").trim();
-                if (proxy == old_proxy && username == old_username && password == old_password) return;
-                if (proxy) {
+                var proxy_changed = !is_opt_fixed && (proxy != old_proxy || username != old_username || password != old_password);
+                var ws_proxy = res.ws_proxy ? true : false;
+                if (proxy_changed && proxy) {
                     var domain_port = proxy;
                     var protocol_index = domain_port.indexOf('://');
                     if (protocol_index !== -1) {
@@ -481,7 +487,10 @@ function open_proxy_dialog() {
                     var err = handler.test_if_valid_server(domain_port, false);
                     if (err) { if (typeof show_progress === 'function') show_progress(false, translate("Server") + ": " + err); return; }
                 }
-                handler.set_socks(proxy, username, password);
+                if (proxy_changed) handler.set_socks(proxy, username, password);
+                if (!is_ws_proxy_fixed && ws_proxy != old_ws_proxy) {
+                    handler.set_option("allow-websocket-proxy", ws_proxy ? "Y" : default_option_no);
+                }
                 if (typeof show_progress === 'function') show_progress(-1);
             }, 240, get_msgbox_width());
 }
