@@ -50,6 +50,10 @@ const val WHEEL_BUTTON_UP = 34
 const val WHEEL_DOWN = 523331
 const val WHEEL_UP = 963
 
+// src/common.rs MOUSE_TYPE_WHEEL: the controller sends a wheel tick as a
+// MouseEvent with these type bits and the scroll delta in y (y < 0 = down).
+const val MOUSE_TYPE_WHEEL = 3
+
 const val TOUCH_SCALE_START = 1
 const val TOUCH_SCALE = 2
 const val TOUCH_SCALE_END = 3
@@ -102,6 +106,12 @@ class InputService : AccessibilityService() {
 
     private val volumeController: VolumeController by lazy { VolumeController(applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager) }
 
+    /**
+     * Handles a remote mouse event on the gesture path. [mask] is the
+     * button/phase mask of the mouse protocol ([MOUSE_TYPE_WHEEL] ticks carry
+     * the scroll delta in [_y] instead of a position), x/y the screen-space
+     * position. Requires API 24 for the gesture APIs.
+     */
     @RequiresApi(Build.VERSION_CODES.N)
     fun onMouseInput(mask: Int, _x: Int, _y: Int) {
         val x = max(0, _x)
@@ -181,6 +191,32 @@ class InputService : AccessibilityService() {
                 recentActionTask!!.cancel()
                 performGlobalAction(GLOBAL_ACTION_HOME)
             }
+            return
+        }
+
+        // The controller sends a wheel tick as a MouseEvent with the type bits
+        // MOUSE_TYPE_WHEEL (src/common.rs) and the scroll delta in _y
+        // (y < 0 = wheel down); the WHEEL_DOWN/WHEEL_UP masks below are legacy
+        // values that current controllers never send. Gated to API 24+ like
+        // the rest of the gesture path - below that, legacy devices take the
+        // Shizuku backend or a no-op, not this class.
+        if (mask == MOUSE_TYPE_WHEEL && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            if (mouseY < WHEEL_STEP) {
+                return
+            }
+            val path = Path()
+            path.moveTo(mouseX.toFloat(), mouseY.toFloat())
+            val deltaY = if (_y < 0) -WHEEL_STEP else WHEEL_STEP
+            path.lineTo(mouseX.toFloat(), (mouseY + deltaY).toFloat())
+            val stroke = GestureDescription.StrokeDescription(
+                path,
+                0,
+                WHEEL_DURATION
+            )
+            val builder = GestureDescription.Builder()
+            builder.addStroke(stroke)
+            wheelActionsQueue.offer(builder.build())
+            consumeWheelActions()
             return
         }
 
