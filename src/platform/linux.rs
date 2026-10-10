@@ -1302,6 +1302,11 @@ fn _get_display_manager() -> String {
 /// Returns the cached active username when available.
 /// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
 pub fn get_active_username() -> String {
+    // Flatpak runs only inside the logged-in user's session, and Flathub builds
+    // cannot reach the host's loginctl.
+    if is_flatpak() {
+        return crate::username();
+    }
     if let Some((_, username)) = get_active_user_id_name_from_cache() {
         return username;
     }
