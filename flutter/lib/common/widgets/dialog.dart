@@ -1445,6 +1445,10 @@ showSetOSPassword(
   var autoLogin =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'auto-login') !=
           '';
+  const lockOption = 'lock-after-session-end';
+  final lockOff =
+      !bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: lockOption);
+  var enableLock = true;
   controller.text = osPassword;
   dialogManager.show((setState, close, context) {
     closeWithCallback([dynamic]) {
@@ -1460,6 +1464,12 @@ showSetOSPassword(
           sessionId: sessionId,
           name: 'auto-login',
           value: autoLogin ? 'Y' : '');
+      if (autoLogin &&
+          enableLock &&
+          !bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: lockOption)) {
+        bind.sessionToggleOption(sessionId: sessionId, value: lockOption);
+      }
       if (text != '' && login) {
         bind.sessionInputOsPassword(sessionId: sessionId, value: text);
       }
@@ -1491,6 +1501,21 @@ showSetOSPassword(
               setState(() => autoLogin = v);
             },
           ),
+          // Auto login only runs when the session locks on end.
+          if (autoLogin && lockOff)
+            CheckboxListTile(
+              contentPadding: const EdgeInsets.all(0),
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                translate('Lock after session end'),
+              ),
+              value: enableLock,
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() => enableLock = v);
+              },
+            ),
         ],
       ),
       actions: [
