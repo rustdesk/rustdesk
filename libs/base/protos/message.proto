@@ -328,6 +328,14 @@ message CursorPosition {
 message Hash {
   string salt = 1;
   string challenge = 2;
+  // Optional offer to encrypt a connection that has no signed identity, e.g. a direct IP
+  // connection: the server's ephemeral public key (box_) and the newest key exchange version
+  // it speaks. A peer that does not know these fields ignores them and the connection stays
+  // as it was. A peer that accepts answers with a PublicKey message (the controller's
+  // ephemeral public key and the key sealed to the offered one) and both sides switch to
+  // the encrypted stream. See `direct_ip_kx_*` in common.rs.
+  bytes kx_public_key = 3;
+  uint32 kx_version = 4;
 }
 
 enum ClipboardFormat {

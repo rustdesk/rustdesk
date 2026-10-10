@@ -28,6 +28,7 @@ use cidr_utils::cidr::IpCidr;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
+    sodiumoxide::crypto::box_,
     config::{
         self, decode_permanent_password_h1_from_storage, decode_preset_password_h1_from_storage,
         local_permanent_password_storage_is_usable_for_auth,
@@ -359,6 +360,14 @@ pub struct Connection {
     stream: super::Stream,
     server: super::ServerPtrWeak,
     hash: Hash,
+    // The ephemeral key pair offered in the `Hash` of a direct IP connection, until the
+    // controller has answered it, see `common::direct_ip_kx_accept`.
+    kx_offer: Option<(box_::PublicKey, box_::SecretKey)>,
+    // While the offer is open, what the server sends is held: it would reach the controller
+    // before the controller keys its end, as plain frames it then fails to decrypt.
+    kx_held: Option<Vec<Message>>,
+    // Refuse to log in on a direct IP stream that was not encrypted.
+    require_encryption: bool,
     read_jobs: Vec<fs::TransferJob>,
     timer: crate::RustDeskInterval,
     file_timer: crate::RustDeskInterval,
@@ -532,6 +541,8 @@ impl Connection {
         let super::ConnectionMeta {
             control_permissions,
             controlled_context,
+            direct_ip,
+            offer_encryption,
         } = meta;
         // Android is not supported yet, so we always set control_permissions to None.
         #[cfg(target_os = "android")]
@@ -545,6 +556,13 @@ impl Connection {
             challenge: Config::get_auto_password(6),
             ..Default::default()
         };
+        // An offer goes out with the first message only; `hash` stays what it was, the login
+        // checks use it.
+        let kx_offer = (offer_encryption && !stream.is_secured()).then(box_::gen_keypair);
+        // Not tied to the offer: with the offer turned off as well, a direct IP login is
+        // refused rather than let through in plain text.
+        let require_encryption = direct_ip
+            && Config::get_option(keys::OPTION_REQUIRE_DIRECT_IP_ENCRYPTION) == "Y";
         let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
         // holding tx_from_cm_holder to avoid cpu burning of rx_from_cm.recv when all sender closed
         let tx_from_cm = tx_from_cm_holder.clone();
@@ -575,6 +593,9 @@ impl Connection {
             stream,
             server,
             hash,
+            kx_offer,
+            kx_held: None,
+            require_encryption,
             read_jobs: Vec::new(),
             timer: crate::rustdesk_interval(time::interval(SEC30)),
             file_timer: crate::rustdesk_interval(time::interval(SEC30)),
@@ -1515,9 +1536,17 @@ impl Connection {
             }
         }
         self.ip = addr.ip().to_string();
+        let mut hash = self.hash.clone();
+        if let Some((pk, _)) = &self.kx_offer {
+            hash.kx_public_key = Vec::from(pk.0).into();
+            hash.kx_version = hbb_common::tcp::KX_VERSION_LATEST;
+        }
         let mut msg_out = Message::new();
-        msg_out.set_hash(self.hash.clone());
+        msg_out.set_hash(hash);
         self.send(msg_out).await;
+        if self.kx_offer.is_some() {
+            self.kx_held = Some(Vec::new());
+        }
         self.get_api_server();
         let mut audit = json!({
             "ip": addr.ip(),
@@ -2861,6 +2890,48 @@ impl Connection {
                 raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
                 return false;
             }
+        }
+        if self.kx_held.is_some() {
+            // The offer is open and what the controller sends first settles it: the answer, or
+            // anything else from a controller that does not know the offer. What was held back
+            // is sent only now, in the clear in the second case and encrypted in the first,
+            // which is what the controller expects, as it keys its end when it answers.
+            let mut answered = false;
+            match (&msg.union, self.kx_offer.take()) {
+                (Some(message::Union::PublicKey(pk)), Some((our_pk, our_sk))) => {
+                    if let Err(err) = crate::common::direct_ip_kx_finish(
+                        &mut self.stream,
+                        &our_pk,
+                        &our_sk,
+                        pk,
+                    ) {
+                        log::warn!("Direct IP key exchange failed: {}", err);
+                        self.kx_held = None;
+                        self.on_close("Key exchange failed", false).await;
+                        return false;
+                    }
+                    answered = true;
+                }
+                _ => {}
+            }
+            for held in self.kx_held.take().unwrap_or_default() {
+                self.send(held).await;
+            }
+            if answered {
+                return true;
+            }
+        }
+        if matches!(msg.union.as_ref(), Some(message::Union::PublicKey(_))) {
+            // Nothing to key any more, an answer out of turn is ignored.
+            return true;
+        }
+        if self.require_encryption
+            && !self.stream.is_secured()
+            && matches!(msg.union.as_ref(), Some(message::Union::LoginRequest(_)))
+        {
+            self.send_login_error(crate::client::REQUIRE_ENCRYPTION).await;
+            sleep(1.).await;
+            return false;
         }
         if self.authorized {
             if matches!(msg.union.as_ref(), Some(message::Union::LoginRequest(_))) {
@@ -5579,6 +5650,10 @@ impl Connection {
 
     #[inline]
     async fn send(&mut self, msg: Message) {
+        if let Some(held) = self.kx_held.as_mut() {
+            held.push(msg);
+            return;
+        }
         allow_err!(self.stream.send(&msg).await);
     }
 

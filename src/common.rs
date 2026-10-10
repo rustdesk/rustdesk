@@ -2299,6 +2299,103 @@ pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbo
     (Vec::from(our_pk_b.0).into(), sealed_key.into(), key)
 }
 
+// Encryption of a connection that has no signed identity, i.e. a direct IP connection.
+//
+// A direct IP server has no ID and no rendezvous server vouching for its key, so the
+// `SignedId` exchange that secures every other connection is not available and the session
+// used to run in the clear. This is an anonymous key exchange on top of the `Hash` message the
+// server sends first anyway: it hides the session from a passive observer. It does not
+// authenticate the server (there is nothing to authenticate it against), so an attacker who
+// can modify traffic can still strip the offer or sit in the middle; a deployment that needs
+// that closed has to bring its own tunnel.
+//
+//   server -> controller   Hash { salt, challenge, kx_public_key, kx_version }   in the clear
+//   controller -> server   PublicKey { asymmetric_value, symmetric_value, kx_version }
+//
+// The controller's reply is sealed to the offered key exactly like the one in the signed
+// exchange, and both sides then key the stream with `set_negotiated_key`, so the framing,
+// the nonces and the split keys of version 1 are the existing ones. A peer that does not
+// know the new `Hash` fields ignores them and the connection stays as it was, and a server
+// that makes no offer leaves the controller where it was, so no pairing of old and new
+// builds breaks; the server can be told to refuse the plain case instead.
+
+/// The controller's half: if the server's `Hash` carries an offer, answer it and key `stream`.
+/// Returns whether the stream is encrypted now. Anything but a plain TCP stream, and a
+/// `Hash` without an offer, is left alone.
+pub async fn direct_ip_kx_accept(
+    stream: &mut Stream,
+    hash: &base::message_proto::Hash,
+) -> ResultType<bool> {
+    if hash.kx_public_key.is_empty()
+        || stream.is_secured()
+        || !matches!(stream, hbb_common::Stream::Tcp(_))
+    {
+        return Ok(false);
+    }
+    let their_pk_b = <[u8; box_::PUBLICKEYBYTES]>::try_from(&hash.kx_public_key[..])
+        .map_err(|_| {
+            anyhow!(
+                "Handshake failed: offered public key has length {}",
+                hash.kx_public_key.len()
+            )
+        })?;
+    let picked = hbb_common::tcp::kx_version_for(hash.kx_version);
+    let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(their_pk_b);
+    let mut msg_out = base::message_proto::Message::new();
+    msg_out.set_public_key(base::message_proto::PublicKey {
+        asymmetric_value: asymmetric_value.clone(),
+        symmetric_value,
+        kx_version: picked,
+        ..Default::default()
+    });
+    // Goes out in the clear, the key is not set yet; the next frame either way is encrypted.
+    timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
+    stream.set_negotiated_key(
+        key,
+        true,
+        &hbb_common::tcp::KxTranscript {
+            initiator_pk: &asymmetric_value,
+            responder_pk: &their_pk_b,
+            advertised: hash.kx_version,
+            picked,
+        },
+    )?;
+    Ok(true)
+}
+
+/// The server's half: key `stream` with the controller's reply to the offer made with
+/// `our_pk_b`/`our_sk_b`, advertised as `KX_VERSION_LATEST`.
+pub fn direct_ip_kx_finish(
+    stream: &mut Stream,
+    our_pk_b: &box_::PublicKey,
+    our_sk_b: &box_::SecretKey,
+    reply: &base::message_proto::PublicKey,
+) -> ResultType<()> {
+    let advertised = hbb_common::tcp::KX_VERSION_LATEST;
+    if reply.kx_version > advertised {
+        bail!(
+            "Handshake failed: key exchange version {} not offered, {} was",
+            reply.kx_version,
+            advertised
+        );
+    }
+    let key = hbb_common::tcp::Encrypt::decode(
+        &reply.symmetric_value,
+        &reply.asymmetric_value,
+        our_sk_b,
+    )?;
+    stream.set_negotiated_key(
+        key,
+        false,
+        &hbb_common::tcp::KxTranscript {
+            initiator_pk: &reply.asymmetric_value,
+            responder_pk: &our_pk_b.0,
+            advertised,
+            picked: reply.kx_version,
+        },
+    )
+}
+
 #[inline]
 pub fn using_public_server() -> bool {
     crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
@@ -3480,6 +3577,177 @@ mod tests {
         let host = rendezvous_stub(serve).await;
         let mut conn = connect(&host).await;
         secure_tcp(&mut conn, &key).await.unwrap();
+        assert!(!conn.is_secured());
+    }
+
+    // The direct IP offer, with the two halves as the connection code calls them.
+    fn direct_ip_hash(pk: Option<&box_::PublicKey>) -> base::message_proto::Message {
+        let mut hash = base::message_proto::Hash {
+            salt: "salt".into(),
+            challenge: "challenge".into(),
+            ..Default::default()
+        };
+        if let Some(pk) = pk {
+            hash.kx_public_key = pk.0.to_vec().into();
+            hash.kx_version = hbb_common::tcp::KX_VERSION_LATEST;
+        }
+        let mut msg = base::message_proto::Message::new();
+        msg.set_hash(hash);
+        msg
+    }
+
+    fn direct_ip_ping(text: &str) -> base::message_proto::Message {
+        let mut msg = base::message_proto::Message::new();
+        msg.set_misc(base::message_proto::Misc {
+            union: Some(base::message_proto::misc::Union::ChatMessage(
+                base::message_proto::ChatMessage {
+                    text: text.to_owned(),
+                    ..Default::default()
+                },
+            )),
+            ..Default::default()
+        });
+        msg
+    }
+
+    async fn direct_ip_next(conn: &mut Stream) -> base::message_proto::Message {
+        let bytes = conn.next_timeout(3000).await.unwrap().unwrap();
+        base::message_proto::Message::parse_from_bytes(&bytes).unwrap()
+    }
+
+    fn direct_ip_text(msg: base::message_proto::Message) -> String {
+        match msg.union {
+            Some(base::message_proto::message::Union::Misc(misc)) => match misc.union {
+                Some(base::message_proto::misc::Union::ChatMessage(c)) => c.text,
+                _ => panic!("expected a chat message"),
+            },
+            _ => panic!("expected a misc message"),
+        }
+    }
+
+    // Accepts the way `Connection::on_message` does: the first message of the controller is the
+    // answer to the offer, unless it is something else, as it is from a controller that has not
+    // heard of the offer.
+    async fn direct_ip_server(
+        s: hbb_common::tcp::FramedStream,
+        offer: bool,
+    ) -> (Stream, Option<String>, ResultType<()>) {
+        let mut s = Stream::Tcp(s);
+        let (pk, sk) = box_::gen_keypair();
+        s.send(&direct_ip_hash(offer.then_some(&pk))).await.unwrap();
+        let first = direct_ip_next(&mut s).await;
+        let mut result = Ok(());
+        let mut text = None;
+        match first.union {
+            Some(base::message_proto::message::Union::PublicKey(reply)) => {
+                result = direct_ip_kx_finish(&mut s, &pk, &sk, &reply);
+            }
+            _ => text = Some(direct_ip_text(first)),
+        }
+        (s, text, result)
+    }
+
+    #[tokio::test]
+    async fn test_direct_ip_offer_encrypts_the_stream_both_ways() {
+        let host = rendezvous_stub(|s| async move {
+            let (mut s, text, result) = direct_ip_server(s, true).await;
+            assert!(text.is_none());
+            result.unwrap();
+            assert!(s.is_secured());
+            assert_eq!(direct_ip_text(direct_ip_next(&mut s).await), "from controller");
+            s.send(&direct_ip_ping("from server")).await.unwrap();
+        })
+        .await;
+        let mut conn = connect(&host).await;
+        let hash = match direct_ip_next(&mut conn).await.union {
+            Some(base::message_proto::message::Union::Hash(h)) => h,
+            _ => panic!("expected the hash"),
+        };
+        assert!(!conn.is_secured());
+        assert!(direct_ip_kx_accept(&mut conn, &hash).await.unwrap());
+        assert!(conn.is_secured());
+        conn.send(&direct_ip_ping("from controller")).await.unwrap();
+        assert_eq!(direct_ip_text(direct_ip_next(&mut conn).await), "from server");
+    }
+
+    #[tokio::test]
+    async fn test_direct_ip_without_an_offer_stays_plain() {
+        let host = rendezvous_stub(|s| async move {
+            let (mut s, text, result) = direct_ip_server(s, false).await;
+            result.unwrap();
+            assert_eq!(text.as_deref(), Some("plain"));
+            assert!(!s.is_secured());
+            s.send(&direct_ip_ping("plain too")).await.unwrap();
+        })
+        .await;
+        let mut conn = connect(&host).await;
+        let hash = match direct_ip_next(&mut conn).await.union {
+            Some(base::message_proto::message::Union::Hash(h)) => h,
+            _ => panic!("expected the hash"),
+        };
+        // An old server: the fields are empty, there is nothing to answer.
+        assert!(!direct_ip_kx_accept(&mut conn, &hash).await.unwrap());
+        assert!(!conn.is_secured());
+        conn.send(&direct_ip_ping("plain")).await.unwrap();
+        assert_eq!(direct_ip_text(direct_ip_next(&mut conn).await), "plain too");
+    }
+
+    #[tokio::test]
+    async fn test_direct_ip_offer_unanswered_by_an_old_controller_stays_plain() {
+        let host = rendezvous_stub(|s| async move {
+            let (mut s, text, result) = direct_ip_server(s, true).await;
+            result.unwrap();
+            assert_eq!(text.as_deref(), Some("plain"));
+            // This is what `require-direct-ip-encryption` turns into a refusal.
+            assert!(!s.is_secured());
+            s.send(&direct_ip_ping("plain too")).await.unwrap();
+        })
+        .await;
+        let mut conn = connect(&host).await;
+        // The controller never looks at the new fields, as one built before them does not.
+        let _ = direct_ip_next(&mut conn).await;
+        conn.send(&direct_ip_ping("plain")).await.unwrap();
+        assert_eq!(direct_ip_text(direct_ip_next(&mut conn).await), "plain too");
+        assert!(!conn.is_secured());
+    }
+
+    #[tokio::test]
+    async fn test_direct_ip_offer_is_checked() {
+        // A key of the wrong length is an error, not a plain login.
+        let host = rendezvous_stub(|s| async move {
+            let mut s = Stream::Tcp(s);
+            let mut msg = direct_ip_hash(None);
+            if let Some(base::message_proto::message::Union::Hash(h)) = msg.union.as_mut() {
+                h.kx_public_key = vec![1u8; 7].into();
+                h.kx_version = 1;
+            }
+            s.send(&msg).await.unwrap();
+        })
+        .await;
+        let mut conn = connect(&host).await;
+        let hash = match direct_ip_next(&mut conn).await.union {
+            Some(base::message_proto::message::Union::Hash(h)) => h,
+            _ => panic!("expected the hash"),
+        };
+        assert!(direct_ip_kx_accept(&mut conn, &hash).await.is_err());
+        assert!(!conn.is_secured());
+
+        // A reply that picks a version the server did not offer is refused.
+        let (pk, sk) = box_::gen_keypair();
+        let (asymmetric_value, symmetric_value, _) = create_symmetric_key_msg(pk.0);
+        let reply = base::message_proto::PublicKey {
+            asymmetric_value,
+            symmetric_value,
+            kx_version: hbb_common::tcp::KX_VERSION_LATEST + 1,
+            ..Default::default()
+        };
+        let host = rendezvous_stub(|s| async move {
+            let _ = s;
+            sleep(Duration::from_millis(200)).await;
+        })
+        .await;
+        let mut conn = connect(&host).await;
+        assert!(direct_ip_kx_finish(&mut conn, &pk, &sk, &reply).is_err());
         assert!(!conn.is_secured());
     }
 
