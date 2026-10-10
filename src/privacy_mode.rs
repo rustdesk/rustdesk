@@ -308,7 +308,7 @@ pub(crate) fn close_other_remote_connections_for_privacy(owner_id: i32) {
             continue;
         }
         if let Err(err) = connection.sender.send(crate::ipc::Data::Close) {
-            hbb_common::log::trace!(
+            hbb_common::log::debug!(
                 "Failed to close connection {} for privacy mode: {}",
                 connection.conn_id,
                 err
