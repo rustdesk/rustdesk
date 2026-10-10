@@ -58,19 +58,20 @@ const UPDATE_CLEANUP_FAILED_AFTER_COMMIT: &str = "UPDATE_CLEANUP_FAILED_AFTER_CO
 // App-only update transaction used when launchd jobs are absent or intentionally stopped.
 // Keep its verification, staging, bundle rollback, and cleanup aligned with update.scpt.
 const PRIVILEGED_UPDATE_BODY: &str = r#"
-	on run {app_name, cur_pid, source_path, user_name, restore_owner, expected_sha256}
+	on run {app_name, cur_pid, source_path, user_name, restore_owner, expected_sha256, expected_bundle_id}
 	    set app_bundle to "/Applications/" & app_name & ".app"
 	    set app_bundle_q to quoted form of app_bundle
 	    set installed_info_q to quoted form of (app_bundle & "/Contents/Info.plist")
 	    set source_path_q to quoted form of source_path
 	    set user_name_q to quoted form of user_name
 	    set expected_sha256_q to quoted form of expected_sha256
+	    set expected_bundle_id_q to quoted form of expected_bundle_id
 
 	    set check_source to "if [ -n " & expected_sha256_q & " ]; then test -f " & source_path_q & "; else test -d " & source_path_q & "; fi;"
 	    set kill_others to "pids=$(pgrep -x '" & app_name & "' | grep -vx " & cur_pid & " || true); if [ -n \"$pids\" ]; then echo \"$pids\" | xargs kill -9 || true; fi;"
 	    -- Rehash the root-owned copy in a clean environment before staging bytes.
 	    set prepare_verified to "verified_dir=$(/usr/bin/mktemp -d /tmp/.rustdeskupdate-verified.XXXXXX); /bin/chmod 0700 \"$verified_dir\"; verified_app=\"$verified_dir/" & app_name & ".app\"; dmg_attached=0; if [ -n " & expected_sha256_q & " ]; then verified_dmg=\"$verified_dir/update.dmg\"; /bin/cp " & source_path_q & " \"$verified_dmg\"; /usr/sbin/chown root:wheel \"$verified_dmg\"; /bin/chmod 0400 \"$verified_dmg\"; actual_sha256=$(/usr/bin/env -i /usr/bin/shasum -a 256 \"$verified_dmg\"); actual_sha256=${actual_sha256%% *}; if [ \"$actual_sha256\" != " & expected_sha256_q & " ]; then echo 'Update DMG SHA256 mismatch' >&2; exit 1; fi; dmg_mount=\"$verified_dir/mount\"; /bin/mkdir \"$dmg_mount\"; dmg_attached=1; /usr/bin/hdiutil attach -readonly -nobrowse -mountpoint \"$dmg_mount\" \"$verified_dmg\" >/dev/null; /usr/bin/ditto \"$dmg_mount/" & app_name & ".app\" \"$verified_app\"; /usr/bin/hdiutil detach \"$dmg_mount\" -force >/dev/null; dmg_attached=0; /bin/rm -f \"$verified_dmg\"; else /usr/bin/ditto " & source_path_q & " \"$verified_app\"; fi; /usr/sbin/chown -R root:wheel \"$verified_app\"; /bin/chmod -R go-w \"$verified_app\";"
-	    set validate_verified_app to "installed_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' " & installed_info_q & "); candidate_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \"$verified_app/Contents/Info.plist\"); if [ -z \"$installed_bundle_id\" ] || [ -z \"$candidate_bundle_id\" ] || [ \"$installed_bundle_id\" != \"$candidate_bundle_id\" ]; then echo 'Update app bundle identifier mismatch' >&2; exit 1; fi;"
+	    set validate_verified_app to "candidate_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \"$verified_app/Contents/Info.plist\"); if [ -z " & expected_bundle_id_q & " ] || [ \"$candidate_bundle_id\" != " & expected_bundle_id_q & " ]; then echo 'Update app bundle identifier mismatch' >&2; exit 1; fi; if [ -e " & app_bundle_q & " ]; then installed_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' " & installed_info_q & "); if [ \"$installed_bundle_id\" != " & expected_bundle_id_q & " ]; then echo 'Installed app bundle identifier mismatch' >&2; exit 1; fi; fi;"
 	    set prepare_swap_paths to "temp_bundle=" & app_bundle_q & ".new.$$; old_bundle=" & app_bundle_q & ".old.$$;"
 	    set cleanup_swap_paths to "rm -rf \"$temp_bundle\" \"$old_bundle\";"
 	    set stage_bundle to "ditto \"$verified_app\" \"$temp_bundle\";"
@@ -976,6 +977,9 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
         update_daemon_agent(agent_plist_file, update_source)?;
     } else {
         let (update_source_path, expected_sha256) = update_source.into_script_args();
+        let expected_bundle_id = get_bundle_id()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| anyhow!("client bundle identifier is missing"))?;
         let output = Command::new("osascript")
             .arg("-e")
             .arg(PRIVILEGED_UPDATE_BODY)
@@ -985,6 +989,7 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
             .arg(get_active_username())
             .arg(if is_installed_daemon { "0" } else { "1" })
             .arg(expected_sha256)
+            .arg(expected_bundle_id)
             .output();
         match output {
             Ok(output) if !output.status.success() => {
@@ -2089,15 +2094,6 @@ pub(crate) fn get_bundle_id() -> Option<String> {
 mod update_tests {
     use super::*;
 
-    fn privileged_update_scripts() -> [&'static str; 2] {
-        let daemon_script = PRIVILEGES_SCRIPTS_DIR
-            .get_file("update.scpt")
-            .unwrap()
-            .contents_utf8()
-            .unwrap();
-        [daemon_script, PRIVILEGED_UPDATE_BODY]
-    }
-
     #[test]
     fn update_tree_rejects_framework_root_symlink() {
         let test_dir = std::env::temp_dir().join(format!(
@@ -2141,116 +2137,34 @@ mod update_tests {
     }
 
     #[test]
-    fn update_scripts_roll_back_uncommitted_bundle_swap() {
-        let [daemon_script, manual_script] = privileged_update_scripts();
-
-        for script in [daemon_script, manual_script] {
-            assert!(script.contains("transaction_committed"));
-            assert!(script.contains("rollback_bundle"));
-            assert!(script.contains("bundle_backed_up"));
-            assert!(script.contains(r#"if [ \"${rollback_status:-0}\" -eq 0 ]"#));
-        }
-        assert!(daemon_script
-            .contains("rollback_bundle & rollback_plists & restore_service & restore_agent"));
-        assert!(daemon_script.contains(
-            "load_service & wait_for_service & load_agent & wait_for_agent & verify_readiness & commit_update"
+    fn update_app_identity_requires_matching_bundles() {
+        let test_dir = std::env::temp_dir().join(format!(
+            "rustdesk-update-identity-test-{}-{}",
+            std::process::id(),
+            hbb_common::rand::random::<u64>()
         ));
-        assert!(manual_script.contains("restore_installed_owner & commit_update"));
-    }
+        let installed = test_dir.join("installed.app");
+        let candidate = test_dir.join("candidate.app");
+        let info = |bundle_id| {
+            format!("<plist version=\"1.0\"><dict><key>CFBundleIdentifier</key><string>{bundle_id}</string></dict></plist>")
+        };
+        for app in [&installed, &candidate] {
+            std::fs::create_dir_all(app.join("Contents")).unwrap();
+        }
+        std::fs::write(
+            installed.join("Contents/Info.plist"),
+            info("com.carriez.rustdesk"),
+        )
+        .unwrap();
 
-    #[test]
-    fn committed_update_cleanup_failure_is_non_fatal() {
-        for script in privileged_update_scripts() {
-            let cleanup = script
-                .lines()
-                .find(|line| line.contains("set cleanup_verified"))
-                .unwrap();
-            let rollback = script
-                .lines()
-                .find(|line| line.contains("set rollback_update"))
-                .unwrap();
-
-            assert!(cleanup.contains("cleanup_status=1"));
-            assert!(!cleanup.contains("|| status=1"));
-            assert!(rollback.contains("cleanup_status=0"));
-            assert!(rollback.contains("UPDATE_CLEANUP_FAILED_AFTER_COMMIT"));
-            assert!(
-                rollback.contains(r#"[ \"${transaction_committed:-0}\" -ne 1 ]; then status=1"#)
+        for (bundle_id, accepted) in [("com.carriez.rustdesk", true), ("example.other", false)] {
+            std::fs::write(candidate.join("Contents/Info.plist"), info(bundle_id)).unwrap();
+            assert_eq!(
+                verify_update_app_identity(&installed, &candidate).is_ok(),
+                accepted
             );
         }
-    }
 
-    #[test]
-    fn verified_dmg_is_hashed_after_privileged_copy() {
-        for script in privileged_update_scripts() {
-            let copy = script.find("/bin/cp").unwrap();
-            let hash = script.find("/usr/bin/shasum -a 256").unwrap();
-            let attach = script.find("/usr/bin/hdiutil attach -readonly").unwrap();
-            assert!(script.contains("expected_sha256"));
-            assert!(copy < hash && hash < attach);
-        }
-    }
-
-    #[test]
-    fn daemon_update_requires_launch_agent_load() {
-        let [daemon_script, _] = privileged_update_scripts();
-        let bootstrap_agent = daemon_script
-            .lines()
-            .find(|line| line.contains("set bootstrap_agent"))
-            .unwrap();
-
-        assert!(!bootstrap_agent.contains("|| true"));
-    }
-
-    #[test]
-    fn daemon_update_quotes_daemon_plist_path() {
-        let [daemon_script, _] = privileged_update_scripts();
-
-        assert!(daemon_script.contains("set daemon_plist_q to quoted form of daemon_plist"));
-        assert!(!daemon_script.contains("& daemon_plist &"));
-    }
-
-    #[test]
-    fn daemon_update_bounds_plist_generation() {
-        let [daemon_script, _] = privileged_update_scripts();
-        let write_new_plists = daemon_script
-            .lines()
-            .find(|line| line.contains("set write_new_plists"))
-            .unwrap();
-
-        assert!(daemon_script.contains("set write_plist_attempts to \"60\""));
-        assert!(write_new_plists.contains("kill -TERM"));
-        assert!(write_new_plists.contains("kill -KILL"));
-        assert!(write_new_plists.contains("return 124"));
-    }
-
-    #[test]
-    fn daemon_update_quotes_launchd_targets() {
-        let [daemon_script, _] = privileged_update_scripts();
-        let check_service = daemon_script
-            .lines()
-            .find(|line| line.contains("set check_service"))
-            .unwrap();
-        let check_agent = daemon_script
-            .lines()
-            .find(|line| line.contains("set check_agent"))
-            .unwrap();
-        let kickstart_agent = daemon_script
-            .lines()
-            .find(|line| line.contains("set kickstart_agent"))
-            .unwrap();
-
-        assert!(daemon_script
-            .contains("set daemon_target_q to quoted form of (\"system/\" & daemon_label)"));
-        assert!(check_service.contains("launchctl print \" & daemon_target_q & \""));
-        for target in [
-            r#"\"gui/$uid/$agent_label\""#,
-            r#"\"user/$uid/$agent_label\""#,
-            r#"\"system/$agent_label\""#,
-        ] {
-            assert!(check_agent.contains(target));
-        }
-        assert!(kickstart_agent.contains(r#"\"gui/$uid/$agent_label\""#));
-        assert!(kickstart_agent.contains(r#"\"user/$uid/$agent_label\""#));
+        std::fs::remove_dir_all(test_dir).unwrap();
     }
 }

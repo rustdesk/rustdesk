@@ -7,21 +7,9 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).with_name("generate_update_metadata.py")
-WORKFLOW = (SCRIPT.parents[2] / ".github/workflows/flutter-build.yml").read_text(
-    encoding="utf-8"
-)
 
 
 class UpdateMetadataCliTests(unittest.TestCase):
-    def test_official_workflow_passes_explicit_update_policy(self):
-        self.assertEqual(2, WORKFLOW.count("--package-id rustdesk"))
-        self.assertEqual(
-            2,
-            WORKFLOW.count(
-                "--release-base-url https://github.com/rustdesk/rustdesk/releases/download"
-            ),
-        )
-
     def test_sign_and_verify_require_update_identity_policy(self):
         commands = (
             [

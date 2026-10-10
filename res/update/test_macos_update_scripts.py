@@ -1,3 +1,4 @@
+import plistlib
 import socket
 import subprocess
 import sys
@@ -16,6 +17,14 @@ DAEMON_SCRIPT = (
 MANUAL_SCRIPT = MACOS_SOURCE.split(
     'const PRIVILEGED_UPDATE_BODY: &str = r#"', 1
 )[1].split('"#;', 1)[0]
+
+
+def write_bundle_id(app, bundle_id):
+    if bundle_id is None:
+        return
+    info = app / "Contents/Info.plist"
+    info.parent.mkdir(parents=True)
+    info.write_bytes(plistlib.dumps({"CFBundleIdentifier": bundle_id}))
 
 
 class MacosUpdateScriptTests(unittest.TestCase):
@@ -48,56 +57,47 @@ class MacosUpdateScriptTests(unittest.TestCase):
                     listener.close()
                     self.assertNotEqual(subprocess.call(args, timeout=10), 0)
 
-    def test_candidate_identity_precedes_install_without_os_signature_checks(self):
-        for name, script in (
-            ("daemon", DAEMON_SCRIPT),
-            ("manual", MANUAL_SCRIPT),
-        ):
-            with self.subTest(script=name):
-                validation = next(
-                    line
-                    for line in script.splitlines()
-                    if "set validate_verified_app" in line
-                )
-                self.assertGreaterEqual(validation.count("CFBundleIdentifier"), 2)
-                self.assertNotIn("/usr/bin/codesign", validation)
-                self.assertNotIn("/usr/sbin/spctl", validation)
-                self.assertIn(
-                    "prepare_verified & validate_verified_app", script
-                )
-                shell = next(
-                    line for line in script.splitlines() if "set sh to" in line
-                )
-                self.assertLess(
-                    shell.index("validate_verified_app"),
-                    shell.index("kill_others"),
-                )
-                if "copy_files" in shell:
-                    self.assertLess(
-                        shell.index("validate_verified_app"),
-                        shell.index("copy_files"),
-                    )
-                else:
-                    self.assertLess(
-                        shell.index("validate_verified_app"),
-                        shell.index('"transaction_started=1;"'),
-                    )
-
-    def test_root_update_validates_candidate_identity_before_transaction(self):
-        root_update = MACOS_SOURCE.split(
-            "pub fn update_from_dmg_as_root", 1
-        )[1]
-        validator = MACOS_SOURCE.split(
-            "fn verify_update_app_identity", 1
-        )[1].split("\nfn ", 1)[0]
-
-        self.assertNotIn('Command::new("/usr/bin/codesign")', validator)
-        self.assertNotIn('Command::new("/usr/sbin/spctl")', validator)
-        self.assertGreaterEqual(validator.count("CFBundleIdentifier"), 2)
-        self.assertLess(
-            root_update.index("verify_update_app_identity"),
-            root_update.index("let staged_version_result"),
+    @unittest.skipUnless(sys.platform == "darwin", "requires macOS AppleScript")
+    def test_manual_update_requires_matching_bundle_identity(self):
+        validation = next(
+            line for line in MANUAL_SCRIPT.splitlines()
+            if "set validate_verified_app" in line
         )
+        script = "\n".join([
+            "on run {app_bundle, expected_bundle_id}",
+            "set app_bundle_q to quoted form of app_bundle",
+            'set installed_info_q to quoted form of (app_bundle & "/Contents/Info.plist")',
+            "set expected_bundle_id_q to quoted form of expected_bundle_id",
+            validation,
+            "return validate_verified_app",
+            "end run",
+        ])
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        bundle_id = "com.carriez.rustdesk"
+        cases = (
+            ("new", None, bundle_id, 0),
+            ("installed", bundle_id, bundle_id, 0),
+            ("wrong_candidate", None, "example.other", 1),
+            ("wrong_destination", "example.other", bundle_id, 1),
+        )
+        for name, installed_id, candidate_id, exit_code in cases:
+            with self.subTest(case=name):
+                installed = root / name / "installed.app"
+                candidate = root / name / "candidate.app"
+                write_bundle_id(installed, installed_id)
+                write_bundle_id(candidate, candidate_id)
+                command = subprocess.check_output(
+                    ["osascript", "-e", script, str(installed), bundle_id],
+                    text=True, timeout=10,
+                )
+                result = subprocess.run(
+                    ["/bin/sh", "-c", 'set -e; verified_app="$1"; ' + command,
+                     "update-test", str(candidate)],
+                    text=True, capture_output=True, timeout=10,
+                )
+                self.assertEqual(result.returncode, exit_code, result.stderr)
 
 
 if __name__ == "__main__":
