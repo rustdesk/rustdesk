@@ -4,7 +4,8 @@ use super::{
         run_elevated_and_wait, trusted_install_environment,
         BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE, CMD_RELATIVE_PATH,
     },
-    validate_install_app_name, ResultType,
+    validate_install_app_name, ResultType, UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE,
+    UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE, UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE,
 };
 use hbb_common::{
     bail, log,
@@ -168,6 +169,9 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
             "failed to create the installer output directory"
         }
         BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE => "failed to decode an embedded shortcut",
+        UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE => "timed out waiting for the app processes to exit",
+        UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE => "failed to query the app processes",
+        UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE => "failed to restart the stopped service",
         _ => "installer command failed",
     }
 }
@@ -270,6 +274,158 @@ mod tests {
             Some(INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE as i32)
         );
         assert!(!marker.exists(), "replaced script must not execute");
+    }
+
+    #[test]
+    fn update_wait_for_app_exit_continues_only_after_a_clean_no_match() {
+        let app_name = format!("RustDeskWaitTest{}", uuid::Uuid::new_v4().simple());
+        let failed = Some(UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE as i32);
+        // No such process: the update goes on.
+        assert_eq!(run_update_wait_for_test(&app_name, "", None), (Some(0), false, true));
+        // None of the following may pass for "no process left". Each must
+        // restore the service, skip the copy and fail.
+        // The query fails without printing a match.
+        assert_eq!(
+            run_update_wait_for_test(&app_name, " /FI \"RUSTDESK_INVALID eq 1\"", None),
+            (failed, true, false)
+        );
+        // The query output cannot be written, which leaves ERRORLEVEL unchanged
+        // and would make `find` report no match.
+        assert_eq!(
+            run_update_wait_for_test(
+                &app_name,
+                "",
+                Some(("\\tasklist.csv", "\\missing\\tasklist.csv")),
+            ),
+            (failed, true, false)
+        );
+        // The search itself fails.
+        assert_eq!(
+            run_update_wait_for_test(
+                &app_name,
+                "",
+                Some(("\nfind /I ", "\nfind /RUSTDESK_INVALID /I ")),
+            ),
+            (failed, true, false)
+        );
+    }
+
+    // Stands in for sc.exe: the old instance still reports RUNNING, then the
+    // service is stopping, then stopped. The start is refused until it has
+    // stopped, as the SCM does, and the service runs once started.
+    const FAKE_SC_STOPPING_SERVICE: &str = r#"@echo off
+if "%~1"=="start" goto start
+if exist "%~dp0running" goto running
+if exist "%~dp0query2" (echo         STATE              : 1  STOPPED& exit /b 0)
+if exist "%~dp0query1" (type nul > "%~dp0query2" & goto stopping)
+type nul > "%~dp0query1"
+:running
+echo         STATE              : 4  RUNNING
+exit /b 0
+:stopping
+echo         STATE              : 3  STOP_PENDING
+exit /b 0
+:start
+if not exist "%~dp0query2" (type nul > "%~dp0refused" & exit /b 1056)
+type nul > "%~dp0running"
+exit /b 0
+"#;
+
+    // Stands in for sc.exe when the service cannot be queried.
+    const FAKE_SC_QUERY_FAILS: &str = "@echo off\nexit /b 1060\n";
+
+    #[test]
+    fn update_abort_restarts_the_service_only_once_it_has_stopped() {
+        // A failed process query aborts the update while the old instance still
+        // reports RUNNING and the service is then still stopping. It must not
+        // count as restored before it has stopped, must be started once it
+        // has, and must run again before the updater exits, which still
+        // reports the original failure.
+        let (code, copied, dir) = run_update_abort_with_fake_sc_for_test(FAKE_SC_STOPPING_SERVICE);
+        assert_eq!(code, Some(UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE as i32));
+        assert!(!copied);
+        assert!(dir.join("running").exists(), "the service must run again");
+        assert!(!dir.join("refused").exists(), "no start while still stopping");
+        std::fs::remove_dir_all(&dir).expect("test directory should be removed");
+
+        // A service that cannot be restored is reported instead of the
+        // original failure.
+        let (code, copied, dir) = run_update_abort_with_fake_sc_for_test(FAKE_SC_QUERY_FAILS);
+        assert_eq!(code, Some(UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE as i32));
+        assert!(!copied);
+        std::fs::remove_dir_all(&dir).expect("test directory should be removed");
+    }
+
+    // Aborts the update's wait with a failing process query, restoring the
+    // service through `fake_sc` in place of sc.exe. Returns the exit code,
+    // whether the copy was reached and the test directory holding the fake's
+    // state, which the caller removes.
+    fn run_update_abort_with_fake_sc_for_test(fake_sc: &str) -> (Option<i32>, bool, PathBuf) {
+        let app_name = format!("RustDeskWaitTest{}", uuid::Uuid::new_v4().simple());
+        let dir = create_test_dir_for_update();
+        let fake = dir.join("fake_sc.bat");
+        std::fs::write(&fake, fake_sc.replace('\n', "\r\n")).expect("fake sc should be written");
+        let restore = super::super::restore_service_after_abort_cmd(&app_name);
+        for command in ["query", "start"] {
+            assert!(restore.contains(&format!("sc {command} {app_name} ")));
+        }
+        let fake_path = fake.display();
+        let restore = restore
+            .replace(&format!("sc query {app_name} "), &format!("call \"{fake_path}\" query "))
+            .replace(&format!("sc start {app_name} "), &format!("call \"{fake_path}\" start "));
+        let wait = super::super::wait_for_app_exit_cmd(
+            &app_name,
+            " /FI \"RUSTDESK_INVALID eq 1\"",
+            &restore,
+        );
+        let (code, copied) = run_update_script_for_test(&dir, &wait);
+        (code, copied, dir)
+    }
+
+    // Runs the update's wait for the app to exit through the verified handoff,
+    // followed by a copy marker. Returns the exit code and whether the service
+    // restore and the copy were reached. `inject` replaces part of the lines.
+    fn run_update_wait_for_test(
+        app_name: &str,
+        filter: &str,
+        inject: Option<(&str, &str)>,
+    ) -> (Option<i32>, bool, bool) {
+        let dir = create_test_dir_for_update();
+        let restored = dir.join("restored");
+        let restore_service_cmd = format!("> \"{}\" echo restored", restored.display());
+        let mut wait = super::super::wait_for_app_exit_cmd(app_name, filter, &restore_service_cmd);
+        if let Some((from, to)) = inject {
+            assert!(wait.contains(from), "nothing to inject into");
+            wait = wait.replace(from, to);
+        }
+        let (code, copied) = run_update_script_for_test(&dir, &wait);
+        let result = (code, restored.exists(), copied);
+        std::fs::remove_dir_all(&dir).expect("test directory should be removed");
+        result
+    }
+
+    fn create_test_dir_for_update() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "rustdesk_update_wait_{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir(&dir).expect("test directory should be created");
+        dir
+    }
+
+    // Runs `wait` through the verified handoff in `dir`, followed by a copy
+    // marker. Returns the exit code and whether the copy was reached.
+    fn run_update_script_for_test(dir: &Path, wait: &str) -> (Option<i32>, bool) {
+        let copied = dir.join("copied");
+        let script = write_install_script(format!(
+            "{wait}\r\n> \"{}\" echo copied",
+            copied.display()
+        ))
+        .expect("install script should be created");
+        let bootstrap = verified_install_bootstrap(&script, dir)
+            .expect("native verifier bootstrap should be generated");
+        let output = run_install_bootstrap_for_test(&bootstrap);
+        (output.status.code(), copied.exists())
     }
 
     fn run_install_bootstrap_for_test(bootstrap: &str) -> std::process::Output {
