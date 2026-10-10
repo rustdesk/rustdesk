@@ -1145,6 +1145,14 @@ impl Connection {
                 },
                 Some(data) = rx_from_authed.recv() => {
                     match data {
+                        ipc::Data::Close => {
+                            conn.send(crate::common::make_privacy_mode_msg(
+                                back_notification::PrivacyModeState::PrvOnByOther,
+                                String::new(),
+                            )).await;
+                            conn.on_close("privacy mode", false).await;
+                            break;
+                        }
                         #[cfg(all(target_os = "windows", feature = "flutter"))]
                         ipc::Data::PrinterData(data) => {
                             if Self::permission(keys::OPTION_ENABLE_REMOTE_PRINTER, &conn.control_permissions) {
@@ -6793,6 +6801,24 @@ pub struct AuthedConn {
     pub session_key: SessionKey,
     pub sender: mpsc::UnboundedSender<Data>,
     pub printer: bool,
+}
+
+pub(crate) fn close_other_remote_connections_for_privacy(
+    connections: &[AuthedConn],
+    owner_id: i32,
+) {
+    for connection in connections {
+        if connection.conn_type != AuthConnType::Remote || connection.conn_id == owner_id {
+            continue;
+        }
+        if let Err(err) = connection.sender.send(Data::Close) {
+            log::trace!(
+                "Failed to close connection {} for privacy mode: {}",
+                connection.conn_id,
+                err
+            );
+        }
+    }
 }
 
 mod raii {
