@@ -1832,9 +1832,6 @@ class InputModel {
         buttons is int &&
         mouseButtonsToPeer(buttons).isNotEmpty &&
         _pressedMouseButtons & buttons != 0;
-    if (isMatchingMouseUp) {
-      _pressedMouseButtons &= ~buttons;
-    }
     double x = offset.dx;
     double y = max(0.0, offset.dy);
     // Cursor ownership may change between a forwarded down and its up.
@@ -1879,6 +1876,9 @@ class InputModel {
     );
     if (pos == null) {
       return null;
+    }
+    if (isMatchingMouseUp) {
+      _pressedMouseButtons &= ~buttons;
     }
     if (type != '') {
       evt['x'] = '0';
