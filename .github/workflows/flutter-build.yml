@@ -1015,6 +1015,7 @@ jobs:
           ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
 
       - name: Test verified updates
+        if: env.PUBLISH_UPDATE_METADATA == 'true'
         run: |
           python3 -m unittest res/update/test_macos_update_scripts.py
           cargo test --locked --release --lib platform::macos::update_tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
