@@ -1446,8 +1446,10 @@ showSetOSPassword(
       await bind.sessionGetOption(sessionId: sessionId, arg: 'auto-login') !=
           '';
   const lockOption = 'lock-after-session-end';
-  final lockOff =
-      !bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: lockOption);
+  final offerLock =
+      !bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: lockOption) &&
+          !bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: kOptionToggleViewOnly);
   var enableLock = true;
   controller.text = osPassword;
   dialogManager.show((setState, close, context) {
@@ -1465,7 +1467,10 @@ showSetOSPassword(
           name: 'auto-login',
           value: autoLogin ? 'Y' : '');
       if (autoLogin &&
+          offerLock &&
           enableLock &&
+          !bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: kOptionToggleViewOnly) &&
           !bind.sessionGetToggleOptionSync(
               sessionId: sessionId, arg: lockOption)) {
         bind.sessionToggleOption(sessionId: sessionId, value: lockOption);
@@ -1502,7 +1507,7 @@ showSetOSPassword(
             },
           ),
           // Auto login only runs when the session locks on end.
-          if (autoLogin && lockOff)
+          if (autoLogin && offerLock)
             CheckboxListTile(
               contentPadding: const EdgeInsets.all(0),
               dense: true,
