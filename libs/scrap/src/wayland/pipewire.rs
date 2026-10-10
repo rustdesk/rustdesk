@@ -84,8 +84,9 @@ pub fn try_close_session() {
     let mut rdp_info = RDP_SESSION_INFO.lock().unwrap();
     let mut close = false;
     if let Some(rdp_info) = &*rdp_info {
-        // If is server running and restore token is supported, there's no need to keep the session.
-        if is_server_running() && rdp_info.is_support_restore_token {
+        // If restore token is supported, there's no need to keep the session.
+        // In non-server mode, the session does not survive disconnect, so it must also be closed.
+        if !is_server_running() || rdp_info.is_support_restore_token {
             close = true;
         }
     }
