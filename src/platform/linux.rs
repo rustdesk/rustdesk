@@ -2634,6 +2634,85 @@ pub fn run_cmds_privileged(cmds: &str) -> bool {
     crate::platform::gtk_sudo::run(vec![cmds]).is_ok()
 }
 
+/// Runs `usbip` as root with each argument passed separately, so no argument
+/// is ever parsed by a shell as part of a larger command string.
+pub fn run_usbip_privileged(args: &[&str]) -> bool {
+    let mut cmds = vec!["usbip"];
+    cmds.extend_from_slice(args);
+    match crate::platform::gtk_sudo::run_gui(cmds) {
+        Ok(()) => true,
+        Err(err) => {
+            log::error!("usbip {:?} failed: {}", args, err);
+            false
+        }
+    }
+}
+
+/// Runs `usbip attach` against our loopback listener on `listener_port` and
+/// returns the `usbip port` output that follows it, under one password
+/// prompt. The attach record `usbip port` reads is root-only, hence both run
+/// as root; the vhci state can also lag behind the attach, hence the retries.
+///
+/// `gtk_sudo` quotes each argument on its `sudo` path but joins them unquoted
+/// on its `su` path, so only plain tokens work on both: the steps live in a
+/// fixed script inside a fresh 0700 directory, and the caller-supplied values
+/// are its positional parameters. `bus_id` must already be validated.
+pub fn run_usbip_attach_privileged(listener_port: u16, bus_id: &str) -> Option<String> {
+    use std::{hash::BuildHasher, os::unix::fs::DirBuilderExt};
+
+    const SCRIPT: &str = r#"usbip -t "$1" attach -r 127.0.0.1 -b "$2" || exit 1
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    usbip port > "$3" 2>&1
+    grep -q -- "127.0.0.1:$1/$2\$" "$3" && exit 0
+    sleep 0.2
+done
+exit 1
+"#;
+    let nonce = std::collections::hash_map::RandomState::new().hash_one(listener_port);
+    let dir = std::env::temp_dir().join(format!("rustdesk-usbip-{:016x}", nonce));
+    fn plain(p: &std::path::Path) -> Option<&str> {
+        p.to_str().filter(|s| {
+            s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"/._-".contains(&b))
+        })
+    }
+    if plain(&dir).is_none() {
+        log::error!("usb attach: temp dir {:?} is not a plain path", dir);
+        return None;
+    }
+    // Fails if anything already exists there, so nothing can be planted.
+    if let Err(err) = std::fs::DirBuilder::new().mode(0o700).create(&dir) {
+        log::error!("usb attach: failed to create {:?}: {}", dir, err);
+        return None;
+    }
+    let script = dir.join("attach.sh");
+    // Created by us, so root's `>` keeps it readable for us.
+    let output = dir.join("port.txt");
+    let result = std::fs::write(&script, SCRIPT)
+        .and_then(|_| std::fs::write(&output, ""))
+        .map_err(|err| log::error!("usb attach: failed to prepare {:?}: {}", dir, err))
+        .ok()
+        .and_then(|_| {
+            let port = listener_port.to_string();
+            let (Some(script), Some(output)) = (plain(&script), plain(&output)) else {
+                return None;
+            };
+            match crate::platform::gtk_sudo::run_gui(vec!["sh", script, &port, bus_id, output]) {
+                Ok(()) => std::fs::read_to_string(output)
+                    .map_err(|err| log::error!("usb attach: failed to read {}: {}", output, err))
+                    .ok(),
+                Err(err) => {
+                    log::error!("usb attach: privileged attach of {} failed: {}", bus_id, err);
+                    None
+                }
+            }
+        });
+    if let Err(err) = std::fs::remove_dir_all(&dir) {
+        log::warn!("usb attach: failed to remove {:?}: {}", dir, err);
+    }
+    result
+}
+
 /// Spawn the current executable after a delay.
 ///
 /// # Security

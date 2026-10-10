@@ -153,6 +153,7 @@ pub fn session_add_sync(
     is_port_forward: bool,
     is_rdp: bool,
     is_terminal: bool,
+    is_remote_usb: bool,
     switch_uuid: String,
     force_relay: bool,
     password: String,
@@ -167,6 +168,7 @@ pub fn session_add_sync(
         is_port_forward,
         is_rdp,
         is_terminal,
+        is_remote_usb,
         &switch_uuid,
         force_relay,
         password,
@@ -746,6 +748,73 @@ pub fn session_get_peer_option(session_id: SessionID, name: String) -> String {
         return session.get_option(name);
     }
     "".to_string()
+}
+
+// RemoteUsb functions
+pub fn session_request_usb_devices(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.request_usb_devices();
+    }
+}
+
+pub fn session_usb_bind(session_id: SessionID, bus_id: String, bind: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_bind(bus_id, bind);
+    }
+}
+
+pub fn session_usb_attach(session_id: SessionID, bus_id: String) {
+    #[cfg(target_os = "linux")]
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_attach(bus_id);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (session_id, bus_id);
+}
+
+pub fn session_usb_detach(session_id: SessionID, port: i32) {
+    #[cfg(target_os = "linux")]
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_detach(port);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (session_id, port);
+}
+
+pub fn session_usb_local_devices(session_id: SessionID) {
+    #[cfg(target_os = "linux")]
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_local_devices();
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = session_id;
+}
+
+pub fn session_usb_local_bind(session_id: SessionID, bus_id: String, bind: bool) {
+    #[cfg(target_os = "linux")]
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_local_bind(bus_id, bind);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (session_id, bus_id, bind);
+}
+
+pub fn session_usb_push(session_id: SessionID, bus_id: String) {
+    #[cfg(target_os = "linux")]
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_push(bus_id);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (session_id, bus_id);
+}
+
+pub fn session_usb_unpush(session_id: SessionID, bus_id: String) {
+    #[cfg(target_os = "linux")]
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_unpush(bus_id);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (session_id, bus_id);
 }
 
 pub fn session_input_os_password(session_id: SessionID, value: String) {
