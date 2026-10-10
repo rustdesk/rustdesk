@@ -455,6 +455,9 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
             }
             return None;
+        } else if args[0] == "--password-stdin" {
+            set_permanent_password_from_stdin(&args);
+            return None;
         } else if args[0] == "--set-unlock-pin" {
             if config::Config::is_disable_unlock_pin() {
                 println!("Unlock PIN is disabled!");
@@ -878,6 +881,7 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
     matches!(
         args.first().map(String::as_str),
         Some("--password")
+            | Some("--password-stdin")
             | Some("--set-unlock-pin")
             | Some("--get-id")
             | Some("--set-id")
@@ -886,6 +890,61 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
             | Some("--assign")
             | Some("--deploy")
     )
+}
+
+fn set_permanent_password_from_stdin(args: &[String]) {
+    if is_cli_setting_change_disabled() {
+        println!("Settings are disabled!");
+        return;
+    }
+    if config::Config::is_disable_change_permanent_password() {
+        println!("Changing permanent password is disabled!");
+        return;
+    }
+    if args.len() != 1 {
+        println!("--password-stdin takes no argument, the password is read from stdin");
+        return;
+    }
+    if !crate::platform::is_installed() || !is_root() {
+        println!("Installation and administrative privileges required!");
+        return;
+    }
+    match read_password_from(std::io::stdin()) {
+        Ok(password) => {
+            if let Err(err) = crate::ipc::set_permanent_password(password) {
+                println!("{err}");
+            } else {
+                println!("Done!");
+            }
+        }
+        Err(err) => println!("{err}"),
+    }
+}
+
+fn read_password_from(mut reader: impl std::io::Read) -> std::io::Result<String> {
+    use std::io::Read;
+    let too_long = || std::io::Error::new(std::io::ErrorKind::InvalidInput, "Password too long");
+    let max_bytes = config::ENCRYPT_MAX_LEN * 4 + 2;
+    let mut bytes = Vec::new();
+    reader.take(max_bytes as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > max_bytes {
+        return Err(too_long());
+    }
+    let mut password = String::from_utf8(bytes)
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+    if let Some(stripped) = password.strip_suffix('\n') {
+        password.truncate(stripped.strip_suffix('\r').unwrap_or(stripped).len());
+    }
+    if password.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Empty password",
+        ));
+    }
+    if password.chars().count() > config::ENCRYPT_MAX_LEN {
+        return Err(too_long());
+    }
+    Ok(password)
 }
 
 #[inline]
@@ -925,6 +984,7 @@ mod tests {
     fn user_main_ipc_scope_cli_command_matches_management_commands_only() {
         for command in [
             "--password",
+            "--password-stdin",
             "--set-unlock-pin",
             "--get-id",
             "--set-id",
@@ -945,6 +1005,46 @@ mod tests {
             "--connect",
         ] {
             assert!(!is_user_main_ipc_scope_cli_command(&args(&[command])));
+        }
+    }
+
+    #[test]
+    fn read_password_strips_one_trailing_newline() {
+        for (input, expected) in [
+            ("secret", "secret"),
+            ("secret\n", "secret"),
+            ("secret\r\n", "secret"),
+            ("secret\n\n", "secret\n"),
+            (" a b ", " a b "),
+        ] {
+            assert_eq!(read_password_from(input.as_bytes()).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn read_password_bounds_input() {
+        let max = config::ENCRYPT_MAX_LEN;
+        for input in [
+            "a".repeat(max),
+            "é".repeat(max),
+            format!("{}\r\n", "a".repeat(max)),
+        ] {
+            assert!(read_password_from(input.as_bytes()).is_ok());
+        }
+        for input in [
+            "a".repeat(max + 1),
+            "é".repeat(max + 1),
+            "a".repeat(max * 4 + 3),
+        ] {
+            assert!(read_password_from(input.as_bytes()).is_err());
+        }
+        assert!(read_password_from(std::io::repeat(0xff)).is_err());
+    }
+
+    #[test]
+    fn read_password_rejects_empty_input() {
+        for input in ["", "\n", "\r\n"] {
+            assert!(read_password_from(input.as_bytes()).is_err());
         }
     }
 }
