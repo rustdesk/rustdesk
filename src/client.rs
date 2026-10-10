@@ -5504,12 +5504,18 @@ async fn test_udp_uat(
                     last_send_time = Instant::now();
                 }
             }
-            res = udp_socket.recv(&mut buf[..]) => {
+            res = udp_socket.recv_from(&mut buf[..]) => {
                 match res {
-                    Ok(n) => {
+                    Ok((n, addr)) => {
+                        if addr != server_addr {
+                            continue;
+                        }
                         match RendezvousMessage::parse_from_bytes(&buf[0..n]) {
                             Ok(msg_in) => {
                                 if let Some(rendezvous_message::Union::TestNatResponse(response)) = msg_in.union {
+                                    if !(1..=u16::MAX as i32).contains(&response.port) {
+                                        continue;
+                                    }
                                     *udp_port.lock().unwrap() = response.port as u16;
                                     break;
                                 }
@@ -5563,6 +5569,52 @@ async fn udp_nat_connect(
             anyhow!(err)
         })?;
     Ok((res.1, Some(res.0), typ))
+}
+
+#[cfg(test)]
+mod udp_nat_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn udp_nat_ignores_unrelated_and_invalid_responses() {
+        let socket = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
+        let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let other = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        for (sender, port) in [
+            (&other, 45000),
+            (&server, 0),
+            (&server, -1),
+            (&server, 65536),
+            (&server, 65537),
+            (&server, i32::MAX),
+            (&server, 44321),
+        ] {
+            let mut msg = RendezvousMessage::new();
+            msg.set_test_nat_response(TestNatResponse {
+                port,
+                ..Default::default()
+            });
+            sender
+                .send_to(&msg.write_to_bytes().unwrap(), socket.local_addr().unwrap())
+                .await
+                .unwrap();
+        }
+        let udp_port = Arc::new(Mutex::new(0));
+        let (_stop_tx, stop_rx) = oneshot::channel();
+        timeout(
+            1000,
+            test_udp_uat(
+                socket,
+                server.local_addr().unwrap(),
+                udp_port.clone(),
+                stop_rx,
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(*udp_port.lock().unwrap(), 44321);
+    }
 }
 
 #[cfg(test)]
