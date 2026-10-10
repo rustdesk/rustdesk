@@ -1339,6 +1339,14 @@ class RustdeskImpl {
         () => js.context.callMethod('setByName', ['send_mouse', msg]));
   }
 
+  Future<void> sessionSendMcpMouse(
+      {required UuidValue sessionId,
+      required String grantId,
+      required String msg,
+      dynamic hint}) {
+    throw UnsupportedError('MCP is only supported on desktop');
+  }
+
   Future<void> sessionRestartRemoteDevice(
       {required UuidValue sessionId, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', ['restart']));
@@ -1928,6 +1936,49 @@ class RustdeskImpl {
       {required UuidValue sessionId, required int display, dynamic hint}) {
     throw UnimplementedError("sessionTakeScreenshot");
   }
+
+  Future<void> sessionTakeMcpScreenshot(
+      {required UuidValue sessionId,
+      required int display,
+      required String requestId,
+      dynamic hint}) {
+    throw UnimplementedError("sessionTakeMcpScreenshot");
+  }
+
+  Future<String?> sessionSaveMcpScreenshot(
+      {required UuidValue sessionId,
+      required String requestId,
+      required String path,
+      dynamic hint}) {
+    throw UnimplementedError("sessionSaveMcpScreenshot");
+  }
+
+  String sessionMcpConnectionId({required UuidValue sessionId, dynamic hint}) => '';
+
+  String mcpSessionId({required String connectionId, dynamic hint}) => '';
+
+  void mcpReleaseInput(
+      {required String connectionId,
+      required String grantId,
+      required List<String> buttons,
+      required List<String> keys,
+      required bool revoke,
+      dynamic hint}) {
+    throw UnimplementedError('mcpReleaseInput');
+  }
+
+  bool sessionMcpAuthenticate(
+          {required UuidValue sessionId,
+          required String grantId,
+          String? password,
+          String? twoFactorCode,
+          dynamic hint}) =>
+      false;
+
+  void sessionSetAgentControl(
+      {required UuidValue sessionId, required String grantId, dynamic hint}) {}
+
+  String sessionGetAgentControl({required UuidValue sessionId, dynamic hint}) => '';
 
   Future<void> sessionOpenTerminal(
       {required UuidValue sessionId,

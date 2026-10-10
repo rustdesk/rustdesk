@@ -2707,7 +2707,11 @@ class _KeyboardMenu extends StatelessWidget {
 
   viewMode() {
     final ffiModel = ffi.ffiModel;
-    final enabled = versionCmp(pi.version, '1.2.0') >= 0 && ffiModel.keyboard;
+    // Under agent control viewOnly is forced on; toggling would flip the real
+    // view-only option and block the agent too.
+    final enabled = versionCmp(pi.version, '1.2.0') >= 0 &&
+        ffiModel.keyboard &&
+        !ffiModel.agentControl;
     return CkbMenuButton(
         value: ffiModel.viewOnly,
         onChanged: enabled

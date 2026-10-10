@@ -322,6 +322,106 @@ pub fn session_take_screenshot(session_id: SessionID, display: usize) {
     }
 }
 
+#[allow(unused_variables)]
+pub fn session_take_mcp_screenshot(session_id: SessionID, display: usize, request_id: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+        s.take_screenshot(
+            display as _,
+            crate::flutter_mcp::screenshot_sid(&session_id, &request_id),
+        );
+    }
+}
+
+/// Returns `None` until the screenshot arrives, then "" once it is written to
+/// `path`, or the error.
+#[allow(unused_variables)]
+pub fn session_save_mcp_screenshot(
+    session_id: SessionID,
+    request_id: String,
+    path: String,
+) -> Option<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::flutter_mcp::save_screenshot(
+        &crate::flutter_mcp::screenshot_sid(&session_id, &request_id),
+        &path,
+    );
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return Some("Not supported".to_owned());
+}
+
+#[allow(unused_variables)]
+pub fn session_mcp_connection_id(session_id: SessionID) -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(
+        sessions::get_session_by_session_id(&session_id)
+            .map(|s| s.ui_handler.mcp.id.to_string())
+            .unwrap_or_default(),
+    );
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(String::new())
+}
+
+#[allow(unused_variables)]
+pub fn mcp_session_id(connection_id: String) -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(
+        sessions::mcp_session_id(&connection_id)
+            .map(|id| id.to_string())
+            .unwrap_or_default(),
+    );
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(String::new())
+}
+
+#[allow(unused_variables)]
+pub fn mcp_release_input(
+    connection_id: String,
+    grant_id: String,
+    buttons: Vec<String>,
+    keys: Vec<String>,
+    revoke: bool,
+) -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::release_input(&connection_id, &grant_id, &buttons, &keys, revoke);
+    SyncReturn(())
+}
+
+#[allow(unused_variables)]
+pub fn session_mcp_authenticate(
+    session_id: SessionID,
+    grant_id: String,
+    password: Option<String>,
+    two_factor_code: Option<String>,
+) -> SyncReturn<bool> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(crate::flutter_mcp::authenticate(
+        session_id,
+        &grant_id,
+        password,
+        two_factor_code,
+    ));
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(false)
+}
+
+#[allow(unused_variables)]
+pub fn session_set_agent_control(session_id: SessionID, grant_id: String) -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::flutter_mcp::set_agent_control(session_id, grant_id);
+    }
+    SyncReturn(())
+}
+
+#[allow(unused_variables)]
+pub fn session_get_agent_control(session_id: SessionID) -> SyncReturn<String> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(crate::flutter_mcp::agent_control_grant(&session_id));
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return SyncReturn(String::new());
+}
+
 pub fn session_handle_screenshot(
     #[allow(unused_variables)] session_id: SessionID,
     action: String,
@@ -613,16 +713,22 @@ pub fn session_handle_flutter_key_event(
     lock_modes: i32,
     down_or_up: bool,
 ) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        let keyboard_mode = session.get_keyboard_mode();
-        session.handle_flutter_key_event(
-            &keyboard_mode,
-            &character,
-            usb_hid,
-            lock_modes,
-            down_or_up,
-        );
-    }
+    let send = || {
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            let keyboard_mode = session.get_keyboard_mode();
+            session.handle_flutter_key_event(
+                &keyboard_mode,
+                &character,
+                usb_hid,
+                lock_modes,
+                down_or_up,
+            );
+        }
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::with_human_input(session_id, send);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    send();
 }
 
 pub fn session_handle_flutter_raw_key_event(
@@ -633,17 +739,23 @@ pub fn session_handle_flutter_raw_key_event(
     lock_modes: i32,
     down_or_up: bool,
 ) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        let keyboard_mode = session.get_keyboard_mode();
-        session.handle_flutter_raw_key_event(
-            &keyboard_mode,
-            &name,
-            platform_code,
-            position_code,
-            lock_modes,
-            down_or_up,
-        );
-    }
+    let send = || {
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            let keyboard_mode = session.get_keyboard_mode();
+            session.handle_flutter_raw_key_event(
+                &keyboard_mode,
+                &name,
+                platform_code,
+                position_code,
+                lock_modes,
+                down_or_up,
+            );
+        }
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::with_human_input(session_id, send);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    send();
 }
 
 // If the cursor jumps between remote page of two connections, leave view and enter view will be called.
@@ -1918,7 +2030,19 @@ pub fn main_load_group() -> String {
 }
 
 pub fn session_send_pointer(session_id: SessionID, msg: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::flutter_mcp::send_human_pointer(session_id, &msg, || {
+            super::flutter::session_send_pointer(session_id, msg.clone());
+        });
+        return;
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     super::flutter::session_send_pointer(session_id, msg);
+}
+
+pub fn session_send_mcp_mouse(session_id: SessionID, grant_id: String, msg: String) {
+    send_mouse(session_id, msg, Some(&grant_id));
 }
 
 /// Send mouse event from Flutter to the remote peer.
@@ -1950,6 +2074,10 @@ pub fn session_send_pointer(session_id: SessionID, msg: String) {
 /// If these assumptions are violated (e.g., `relative_mouse_mode` is added to normal events),
 /// legitimate mouse events may be silently dropped by the early-return logic below.
 pub fn session_send_mouse(session_id: SessionID, msg: String) {
+    send_mouse(session_id, msg, None);
+}
+
+fn send_mouse(session_id: SessionID, msg: String, _grant_id: Option<&str>) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         // Relative mouse mode marker validation (Flutter-only).
         // This only validates and filters markers; the server tracks per-connection
@@ -2048,6 +2176,18 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
             } << 3;
         }
         if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                crate::flutter_mcp::send_mouse(session_id, _grant_id, mask, || {
+                    if _grant_id.is_some() {
+                        crate::client::send_mouse(mask, x, y, alt, ctrl, shift, command, &*session);
+                    } else {
+                        session.send_mouse(mask, x, y, alt, ctrl, shift, command);
+                    }
+                });
+                return;
+            }
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             session.send_mouse(mask, x, y, alt, ctrl, shift, command);
         }
     }

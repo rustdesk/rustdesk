@@ -80,6 +80,14 @@ const String kWindowEventMoveTabToNewWindow = "move_tab_to_new_window";
 const String kWindowEventGetCachedSessionData = "get_cached_session_data";
 const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
+const String kWindowEventMcpListSessions = "mcp_list_sessions";
+const String kWindowEventMcpRefreshControl = "mcp_refresh_control";
+const String kWindowEventMcpRequestControl = "mcp_request_control";
+const String kWindowEventMcpAuthenticate = "mcp_authenticate";
+const String kWindowEventMcpClose = "mcp_close_session";
+const String kWindowEventMcpControlTakenOver = "mcp_control_taken_over";
+const String kWindowEventMcpStop = "mcp_stop";
+
 const String kOptionViewStyle = "view_style";
 const String kOptionScrollStyle = "scroll_style";
 const String kOptionEdgeScrollEdgeThickness = "edge-scroll-edge-thickness";
@@ -92,6 +100,10 @@ const String kOptionOpenInWindows = "allow-open-in-windows";
 const String kOptionForceAlwaysRelay = "force-always-relay";
 const String kOptionViewOnly = "view_only";
 const String kOptionEnableLanDiscovery = "enable-lan-discovery";
+const String kOptionEnableMcpServer = "allow-mcp-server";
+const String kOptionMcpServerPort = "mcp-server-port";
+const String kOptionMcpServerToken = "mcp-server-token";
+const String kOptionMcpAutoApproveControl = "allow-mcp-auto-approve";
 const String kOptionWhitelist = "whitelist";
 const String kOptionIdWhitelist = "id-whitelist";
 const String kOptionEnableAbr = "enable-abr";

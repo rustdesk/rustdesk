@@ -2336,6 +2336,12 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handler.set_displays(&pi.displays);
                     self.handler.set_platform_additions(&pi.platform_additions);
                 }
+                #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+                Some(message::Union::ScreenshotResponse(response))
+                    if crate::flutter_mcp::is_requested_screenshot(&response) =>
+                {
+                    crate::flutter_mcp::store_screenshot(response);
+                }
                 Some(message::Union::ScreenshotResponse(response)) => {
                     crate::client::screenshot::set_screenshot(response.data);
                     self.handler

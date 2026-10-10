@@ -232,6 +232,8 @@ enum RenderType {
 
 #[derive(Clone)]
 pub struct FlutterHandler {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub(crate) mcp: Arc<crate::flutter_mcp::ConnectionInput>,
     // ui session id -> display handler data
     session_handlers: Arc<RwLock<HashMap<SessionID, SessionHandler>>>,
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
@@ -242,6 +244,8 @@ pub struct FlutterHandler {
 impl Default for FlutterHandler {
     fn default() -> Self {
         Self {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            mcp: Default::default(),
             session_handlers: Default::default(),
             display_rgbas: Default::default(),
             peer_info: Default::default(),
@@ -2068,6 +2072,33 @@ pub mod sessions {
                     .contains_key(id)
             })
             .cloned()
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn mcp_connection(connection_id: &str) -> Option<FlutterSession> {
+        SESSIONS
+            .read()
+            .unwrap()
+            .values()
+            .find(|s| s.ui_handler.mcp.id.to_string() == connection_id)
+            .cloned()
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn mcp_session_id(connection_id: &str) -> Option<SessionID> {
+        SESSIONS.read().unwrap().values().find_map(|s| {
+            if s.ui_handler.mcp.id.to_string() == connection_id {
+                s.ui_handler
+                    .session_handlers
+                    .read()
+                    .unwrap()
+                    .keys()
+                    .next()
+                    .copied()
+            } else {
+                None
+            }
+        })
     }
 
     #[inline]

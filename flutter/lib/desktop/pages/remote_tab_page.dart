@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/mcp/mcp_remote_window.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
@@ -503,6 +504,16 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           .map((e) => e.key)
           .toList()
           .join(',');
+    } else if (call.method.startsWith('mcp_')) {
+      return handleMcpWindowCall(
+          call.method,
+          call.arguments,
+          {
+            for (final e in tabController.state.value.tabs)
+              e.key: () => (e.page as RemotePage).ffi
+          },
+          tabController.closeBy,
+          tabController.jumpToByKey);
     } else if (call.method == kWindowEventGetSessionIdList) {
       return tabController.state.value.tabs
           .map((e) => '${e.key},${(e.page as RemotePage).ffi.sessionId}')
