@@ -106,8 +106,8 @@ pub struct IpcDrmCapturer {
     cur_h: usize,
     cur_fmt: Pixfmt,
     got_frame: bool,
-    // The last frame handed to the encoder: a repeat of it is dropped, as the other capturers do.
-    saved_raw_data: Vec<u8>,
+    // A rotated output turns each frame into here first, to compare it with `cur`.
+    spare: Vec<u8>,
     // When frame() last returned a frame; see REPEAT_EVERY.
     returned_at: Instant,
 }
@@ -433,7 +433,7 @@ impl IpcDrmCapturer {
                 cur_h: 0,
                 cur_fmt: Pixfmt::BGRA,
                 got_frame: false,
-                saved_raw_data: Vec::new(),
+                spare: Vec::new(),
                 returned_at: Instant::now(),
             },
             displays,
@@ -480,7 +480,7 @@ impl Drop for IpcDrmCapturer {
 impl TraitCapturer for IpcDrmCapturer {
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         let deadline = Instant::now() + timeout;
-        {
+        let repeat = {
             let mut slot = self.shared.slot.lock().unwrap();
             loop {
                 if slot.latest.is_some() || slot.ended.is_some() {
@@ -535,9 +535,14 @@ impl TraitCapturer for IpcDrmCapturer {
                         ),
                     ));
                 }
-                if t == 0 {
+                // The producer grabs on a timer, so a still screen arrives as the same bytes every
+                // tick. `cur` still holds the previous frame; the same bytes in another format are
+                // another picture.
+                let repeat = if t == 0 {
+                    let repeat = fmt == self.cur_fmt && buf == self.cur;
                     let previous = std::mem::replace(&mut self.cur, buf);
                     self.shared.slot.lock().unwrap().recycle(previous);
+                    repeat
                 } else if !matches!(fmt, Pixfmt::BGRA | Pixfmt::RGBA) {
                     // Unreachable with today's producers (the convert path emits 4-byte pixels
                     // and the CPU path hardcodes BGRA); kept so a future non-4-byte producer
@@ -554,15 +559,14 @@ impl TraitCapturer for IpcDrmCapturer {
                         ),
                     ));
                 } else {
-                    unrotate_bgra(&buf, w, h, t, &mut self.cur);
+                    unrotate_bgra(&buf, w, h, t, &mut self.spare);
+                    let repeat = fmt == self.cur_fmt && self.spare == self.cur;
+                    std::mem::swap(&mut self.cur, &mut self.spare);
                     self.shared.slot.lock().unwrap().recycle(buf);
-                }
+                    repeat
+                };
                 self.cur_w = fw;
                 self.cur_h = fh;
-                // The same bytes in another format are another picture, so not a repeat.
-                if fmt != self.cur_fmt {
-                    self.saved_raw_data.clear();
-                }
                 self.cur_fmt = fmt;
                 if !self.got_frame {
                     // Clear ONLY the streak: `rapid_builds` is for a display that delivers a first
@@ -577,6 +581,7 @@ impl TraitCapturer for IpcDrmCapturer {
                         }
                     }
                 }
+                repeat
             } else {
                 let err = slot
                     .ended
@@ -587,9 +592,7 @@ impl TraitCapturer for IpcDrmCapturer {
                 }
                 return Err(io::Error::new(io::ErrorKind::Other, err));
             }
-        }
-        // The producer grabs on a timer, so a still screen arrives as the same bytes every tick.
-        let repeat = scrap::would_block_if_equal(&mut self.saved_raw_data, &self.cur).is_err();
+        };
         if repeat && self.returned_at.elapsed() < REPEAT_EVERY {
             return Err(io::ErrorKind::WouldBlock.into());
         }
@@ -2367,7 +2370,7 @@ mod drm_capturer_tests {
             cur_h: 0,
             cur_fmt: Pixfmt::BGRA,
             got_frame: false,
-            saved_raw_data: Vec::new(),
+            spare: Vec::new(),
             returned_at: Instant::now(),
         }
     }
@@ -2899,6 +2902,12 @@ mod drm_capturer_tests {
             Ok(_) => panic!("expected a pixel-buffer frame"),
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
+        // The same scanout again: once turned it repeats the frame above, so it is dropped.
+        put_frame_with(&c, w, h, Some(0x1), &src);
+        assert!(matches!(
+            c.frame(Duration::from_millis(50)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock
+        ));
         // Hardware rotation (i915 + mutter): the scanout is already upright and is left alone.
         put_frame_with(&c, w, h, Some(0x4), &src);
         match c.frame(Duration::from_millis(50)) {
