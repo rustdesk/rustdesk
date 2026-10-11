@@ -267,6 +267,8 @@ pub enum DataKeyboard {
 #[serde(tag = "t", content = "c")]
 pub enum DataKeyboardResponse {
     GetKeyState(bool),
+    #[cfg(target_os = "linux")]
+    GetKeyStateError(String),
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

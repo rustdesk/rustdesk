@@ -23,7 +23,7 @@ use gstreamer_app::AppSink;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
-use base::platform::linux::CMD_SH;
+use base::platform::linux::{WaylandDisplayInfo, CMD_SH};
 use hbb_common::{anyhow::anyhow, bail, config, serde_json, tokio, ResultType};
 
 use super::capturable::PixelProvider;
@@ -157,6 +157,9 @@ pub struct PipeWireCapturable {
     pub position: (i32, i32),
     pub logical_size: (usize, usize),
     pub physical_size: (usize, usize),
+    // False when `physical_size` is the portal size standing in for a resolution get_res() could
+    // not read.
+    physical_size_measured: bool,
 }
 
 impl PipeWireCapturable {
@@ -168,7 +171,7 @@ impl PipeWireCapturable {
     ) -> Self {
         // alternative to get screen resolution as stream.size is not always correct ex: on fractional scaling
         // https://github.com/rustdesk/rustdesk/issues/6116#issuecomment-1817724244
-        let physical_size = get_res(Self {
+        let measured = get_res(Self {
             dbus_conn: conn.clone(),
             fd: fd.clone(),
             path: stream.path,
@@ -177,8 +180,10 @@ impl PipeWireCapturable {
             position: stream.position,
             logical_size: stream.size,
             physical_size: (0, 0),
-        })
-        .unwrap_or(stream.size);
+            physical_size_measured: false,
+        });
+        let physical_size_measured = measured.is_ok();
+        let physical_size = measured.unwrap_or(stream.size);
         *resolution.lock().unwrap() = Some(physical_size);
         Self {
             dbus_conn: conn,
@@ -189,6 +194,7 @@ impl PipeWireCapturable {
             position: stream.position,
             logical_size: stream.size,
             physical_size,
+            physical_size_measured,
         }
     }
 }
@@ -1291,6 +1297,26 @@ pub fn fill_displays(
     }
 
     if all_displays.displays.len() > 1 {
+        for (i, sd) in shared_displays.iter_mut().enumerate() {
+            if let crate::Display::WAYLAND(d) = sd {
+                let capturable = &mut d.0;
+                if let Some(origin) = reconciled_origin(
+                    capturable.position,
+                    capturable.physical_size,
+                    capturable.physical_size_measured,
+                    &all_displays.displays,
+                ) {
+                    warn!(
+                        "Position {:?} names no output of size {:?}, using {:?}.",
+                        capturable.position, capturable.physical_size, origin
+                    );
+                    capturable.position = origin;
+                    if let Some(pw_stream) = rdp_info.streams.get_mut(i) {
+                        pw_stream.position = origin;
+                    }
+                }
+            }
+        }
         sort_streams(&all_displays, shared_displays, &mut rdp_info.streams);
     }
 
@@ -1301,6 +1327,50 @@ pub fn fill_displays(
     });
 
     Ok(())
+}
+
+// The origin a stream takes when its position names no output of its size. Only a measured size
+// moves a position: when get_res() failed, the size is the portal size, which can be the mode of
+// another output and says less than the position does, whether the portal sent that position or
+// try_fill_positions restored it from its cache.
+fn reconciled_origin(
+    position: (i32, i32),
+    size: (usize, usize),
+    size_measured: bool,
+    outputs: &[WaylandDisplayInfo],
+) -> Option<(i32, i32)> {
+    if !size_measured {
+        return None;
+    }
+    corrected_origin(position, size, outputs)
+}
+
+// The origin for a stream whose position names no output of the stream's size (a rotated output
+// counts in either orientation), when exactly one output has that size. xdg-desktop-portal-hyprland reports every stream at (0, 0):
+// with no output there `sort_streams` dropped the stream, and with another output there the
+// stream took its origin and missed `try_fix_logical_size`, so the pointer landed on the wrong
+// output (#15731). With several outputs of that size the position is kept.
+fn corrected_origin(
+    position: (i32, i32),
+    size: (usize, usize),
+    outputs: &[WaylandDisplayInfo],
+) -> Option<(i32, i32)> {
+    let has_size = |o: &&WaylandDisplayInfo| {
+        let mode = (o.width as usize, o.height as usize);
+        mode == size || (o.transform % 180 != 0 && (mode.1, mode.0) == size)
+    };
+    if outputs
+        .iter()
+        .filter(has_size)
+        .any(|o| (o.x, o.y) == position)
+    {
+        return None;
+    }
+    let mut same_size = outputs.iter().filter(has_size);
+    match (same_size.next(), same_size.next()) {
+        (Some(o), None) => Some((o.x, o.y)),
+        _ => None,
+    }
 }
 
 fn try_fill_positions(
@@ -1605,6 +1675,7 @@ fn fill_multi_matched_positions_cursor(
                     position: pw_stream_with_cursor.position,
                     logical_size: pw_stream_with_cursor.size,
                     physical_size: (0, 0),
+                    physical_size_measured: false,
                 })?;
                 // Take first frame and copy owned buffer to avoid borrow across second capture
                 let (is_bgr, w, first_buf): (bool, usize, Vec<u8>) =
@@ -1731,7 +1802,89 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::stage_err;
+    use super::{corrected_origin, reconciled_origin, stage_err, WaylandDisplayInfo};
+
+    fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
+        WaylandDisplayInfo {
+            name: String::new(),
+            x,
+            y,
+            width: mode.0,
+            height: mode.1,
+            logical_size: None,
+            refresh_rate: 60,
+            transform: 0,
+        }
+    }
+
+    #[test]
+    fn a_portal_position_naming_no_output_of_its_size_moves_to_the_only_one() {
+        // 1920x1080 at the origin, 2880x1800 to its right: xdph puts the right one at (0, 0).
+        let pair = [output(0, 0, (1920, 1080)), output(1920, 0, (2880, 1800))];
+        assert_eq!(
+            corrected_origin((0, 0), (2880, 1800), &pair),
+            Some((1920, 0))
+        );
+        // A real origin is kept.
+        assert_eq!(corrected_origin((1920, 0), (2880, 1800), &pair), None);
+        // Nothing starts at the origin (the hyprland layout in #15731).
+        let three = [
+            output(0, 120, (1920, 1200)),
+            output(1920, 0, (3440, 1440)),
+            output(5360, 180, (1920, 1080)),
+        ];
+        assert_eq!(
+            corrected_origin((0, 0), (3440, 1440), &three),
+            Some((1920, 0))
+        );
+        // Two outputs of that size cannot be told apart: the position is kept.
+        let twins = [
+            output(0, 0, (2560, 1600)),
+            output(2560, 0, (1920, 1080)),
+            output(4480, 0, (1920, 1080)),
+        ];
+        assert_eq!(corrected_origin((0, 0), (1920, 1080), &twins), None);
+        // A portrait panel turned to landscape keeps its position next to a 1920x1080 output.
+        let turned = [
+            WaylandDisplayInfo {
+                transform: 90,
+                ..output(0, 0, (1080, 1920))
+            },
+            output(1920, 0, (1920, 1080)),
+        ];
+        assert_eq!(corrected_origin((0, 0), (1920, 1080), &turned), None);
+        // A rotated output that try_fill_positions could not match by its mode is found in its
+        // delivered orientation.
+        let turned_right = [
+            output(0, 0, (2560, 1440)),
+            WaylandDisplayInfo {
+                transform: 90,
+                ..output(2560, 0, (1080, 1920))
+            },
+        ];
+        assert_eq!(
+            corrected_origin((0, 0), (1920, 1080), &turned_right),
+            Some((2560, 0))
+        );
+    }
+
+    #[test]
+    fn a_cached_position_is_not_overridden_by_an_unmeasured_size() {
+        let outputs = [output(0, 0, (1440, 900)), output(1920, 0, (2880, 1800))];
+        // Restored from the cache, or sent by the portal: get_res() failed, so the size is the
+        // portal size, here the mode of the other output, and it moves nothing.
+        assert_eq!(
+            reconciled_origin((1920, 0), (1440, 900), false, &outputs),
+            None
+        );
+        // A measured size still moves a position that names no output of that size: xdph sends
+        // (0, 0) for every stream.
+        let pair = [output(0, 0, (1920, 1080)), output(1920, 0, (2880, 1800))];
+        assert_eq!(
+            reconciled_origin((0, 0), (2880, 1800), true, &pair),
+            Some((1920, 0))
+        );
+    }
 
     #[test]
     fn stage_err_keeps_the_detail_safe_for_a_placeholder() {

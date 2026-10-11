@@ -23,6 +23,10 @@ pub struct DrmDisplayInfo {
     /// alone is ambiguous across cards. Empty = the single auto-detected device.
     #[serde(default)]
     pub device: String,
+    /// The primary plane rotates its framebuffer by 90/270 in hardware, so every frame is this
+    /// mode TRANSPOSED whatever the compositor reports (gamescope's wl_output has no transform).
+    #[serde(default)]
+    pub plane_transposed: bool,
 }
 
 /// Mirrors `scrap::drm_reader::drmtap_dmabuf_desc` except `dma_buf_fd` (never serializes — it rides
@@ -280,6 +284,7 @@ fn drm_displays_from_reader(
             true
         })
         .map(|d| DrmDisplayInfo {
+            plane_transposed: plane_transposed(device, d.crtc_id),
             name: d.name,
             crtc_id: d.crtc_id,
             x: d.x,
@@ -292,6 +297,33 @@ fn drm_displays_from_reader(
         })
         .collect();
     (displays, undriven)
+}
+
+const DRM_MODE_ROTATE_90: u32 = 0x2;
+const DRM_MODE_ROTATE_270: u32 = 0x8;
+
+/// Through a reader bound to `crtc_id`: the enumerating reader is bound to whichever crtc
+/// auto-select picked.
+fn plane_transposed(device: &str, crtc_id: u32) -> bool {
+    let dev = (!device.is_empty()).then_some(device);
+    let Some(mut r) = scrap::drm_reader::DrmReader::open(dev, crtc_id) else {
+        return false;
+    };
+    let transposed = match r.query_plane_rotation() {
+        Some(m) => m & (DRM_MODE_ROTATE_90 | DRM_MODE_ROTATE_270) != 0,
+        None => {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(600),
+                debug,
+                "drm: crtc {crtc_id} ({device:?}): plane rotation unreadable; sized as unrotated"
+            );
+            false
+        }
+    };
+    if transposed {
+        log::trace!("drm: crtc {crtc_id} ({device:?}) is rotated 90/270 by its plane");
+    }
+    transposed
 }
 
 /// Active displays of every DRM device + the connected-but-undriven identities, from ONE look.
@@ -1673,6 +1705,7 @@ mod drm_conn_tests {
             active: true,
             render_node: "/dev/dri/renderD129".to_owned(),
             device: "/dev/dri/card2".to_owned(),
+            plane_transposed: false,
         };
         let wire = serde_json::to_vec(&current).unwrap();
         let back: DrmDisplayInfo = serde_json::from_slice(&wire).unwrap();
