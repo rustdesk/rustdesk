@@ -19,6 +19,7 @@ import '../../common/widgets/overlay.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/remote_input.dart';
 import '../../models/input_model.dart';
+import '../../models/mobile_text_input_utils.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
@@ -80,6 +81,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   InputModel get inputModel => gFFI.inputModel;
   SessionID get sessionId => gFFI.sessionId;
+
+  bool get _hasToolbarModifierOn =>
+      inputModel.ctrl || inputModel.alt || inputModel.shift || inputModel.command;
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
@@ -318,9 +322,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     }
 
     // Input the new string.
-    if (newStr.length > 1) {
+    if (mobileSoftKeyboardCommitUsesSeq(newStr,
+        hasModifierOn: _hasToolbarModifierOn)) {
       bind.sessionInputString(sessionId: sessionId, value: newStr);
-    } else {
+    } else if (newStr.isNotEmpty) {
       inputChar(newStr);
     }
   }
@@ -363,6 +368,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           _openKeyboardUnlocked();
           return;
         }
+        bind.sessionInputString(sessionId: sessionId, value: content);
+      } else if (mobileSoftKeyboardCommitUsesSeq(content,
+          hasModifierOn: _hasToolbarModifierOn)) {
+        // Single committed character, typical for CJK IMEs.
         bind.sessionInputString(sessionId: sessionId, value: content);
       } else {
         inputChar(content);
