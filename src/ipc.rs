@@ -2041,6 +2041,22 @@ pub async fn send_url_scheme(url: String) -> ResultType<()> {
     Ok(())
 }
 
+// Poll until a freshly spawned main process is ready to receive urls.
+#[cfg(target_os = "macos")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn wait_url_scheme_server(ms_timeout: u64) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms_timeout);
+    loop {
+        if connect(300, "_url").await.is_ok() {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
 // Emit `close` events to ipc.
 pub fn close_all_instances() -> ResultType<bool> {
     match crate::ipc::send_url_scheme(IPC_ACTION_CLOSE.to_owned()) {
