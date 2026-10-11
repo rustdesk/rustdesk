@@ -1446,7 +1446,9 @@ showSetOSPassword(
       await bind.sessionGetOption(sessionId: sessionId, arg: 'auto-login') !=
           '';
   const lockOption = 'lock-after-session-end';
-  final offerLock =
+  final peerPlatform =
+      await bind.sessionGetPlatform(sessionId: sessionId, isRemote: true);
+  final offerLock = peerPlatform != kPeerPlatformAndroid &&
       !bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: lockOption) &&
           !bind.sessionGetToggleOptionSync(
               sessionId: sessionId, arg: kOptionToggleViewOnly);
