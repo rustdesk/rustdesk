@@ -343,6 +343,7 @@ class GroupModel {
   }
 
   reset() async {
+    initialized = false;
     groupLoadError.value = '';
     deviceGroups.clear();
     users.clear();

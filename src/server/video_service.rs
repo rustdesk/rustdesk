@@ -52,6 +52,8 @@ use scrap::{
     CodecFormat, Display, EncodeInput, TraitCapturer, TraitPixelBuffer,
 };
 #[cfg(windows)]
+use std::io::ErrorKind::ConnectionReset;
+#[cfg(windows)]
 use std::sync::Once;
 use std::{
     collections::HashSet,
@@ -61,6 +63,59 @@ use std::{
 };
 
 pub const OPTION_REFRESH: &'static str = "refresh";
+
+#[cfg(windows)]
+const DXGI_RECOVERY_LIMIT: usize = 3;
+#[cfg(windows)]
+const DXGI_RECOVERY_WINDOW: Duration = Duration::from_secs(10);
+#[cfg(windows)]
+const DXGI_RECOVERY_FRAME_GRACE: Duration = Duration::from_secs(2);
+
+#[cfg(windows)]
+struct DxgiRecoveryState {
+    attempts: usize,
+    window_started: Option<Instant>,
+    restart_pending: bool,
+    fallback_pending: bool,
+}
+
+#[cfg(windows)]
+impl DxgiRecoveryState {
+    fn new() -> Self {
+        Self {
+            attempts: 0,
+            window_started: None,
+            restart_pending: false,
+            fallback_pending: false,
+        }
+    }
+
+    fn next_attempt(&mut self) -> Option<usize> {
+        if self
+            .window_started
+            .map(|started| started.elapsed() > DXGI_RECOVERY_WINDOW)
+            .unwrap_or(true)
+        {
+            self.attempts = 0;
+            self.window_started = Some(Instant::now());
+        }
+        if self.attempts >= DXGI_RECOVERY_LIMIT {
+            self.fallback_pending = true;
+            return None;
+        }
+        self.attempts += 1;
+        self.restart_pending = true;
+        Some(self.attempts)
+    }
+
+    fn take_restart_pending(&mut self) -> bool {
+        std::mem::take(&mut self.restart_pending)
+    }
+
+    fn take_fallback_pending(&mut self) -> bool {
+        std::mem::take(&mut self.fallback_pending)
+    }
+}
 
 type FrameFetchedNotifierSender = UnboundedSender<(i32, Option<Instant>)>;
 type FrameFetchedNotifierReceiver = Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>;
@@ -77,7 +132,7 @@ lazy_static::lazy_static! {
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
-    static ref SCREENSHOTS: Mutex<HashMap<usize, Screenshot>> = Default::default();
+    static ref SCREENSHOTS: Mutex<HashMap<(VideoSource, usize), Screenshot>> = Default::default();
 }
 
 struct Screenshot {
@@ -192,7 +247,7 @@ impl VideoFrameController {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum VideoSource {
     Monitor,
     Camera,
@@ -220,6 +275,8 @@ pub struct VideoService {
     sp: GenericService,
     idx: usize,
     source: VideoSource,
+    #[cfg(windows)]
+    dxgi_recovery_state: Arc<Mutex<DxgiRecoveryState>>,
 }
 
 impl Deref for VideoService {
@@ -253,6 +310,8 @@ pub fn new(source: VideoSource, idx: usize) -> GenericService {
         sp: GenericService::new(get_service_name(source, idx), true),
         idx,
         source,
+        #[cfg(windows)]
+        dxgi_recovery_state: Arc::new(Mutex::new(DxgiRecoveryState::new())),
     };
     GenericService::run(&vs, run);
     vs.sp
@@ -272,6 +331,10 @@ fn create_capturer(
     if privacy_mode_id > 0 {
         #[cfg(windows)]
         {
+            // Windows Mode 1 can cover every local monitor with overlay windows,
+            // but the legacy magnifier capture backend is still single-monitor
+            // constrained. Keep display-switch gating aligned with that backend
+            // limit, not just the overlay coverage.
             if let Some(c1) = crate::privacy_mode::win_mag::create_capturer(
                 privacy_mode_id,
                 display.origin(),
@@ -561,8 +624,24 @@ fn run(vs: VideoService) -> ResultType<()> {
     let last_portable_service_running = false;
 
     let display_idx = vs.idx;
+    #[cfg(windows)]
+    let dxgi_recovery_state = vs.dxgi_recovery_state.clone();
     let sp = vs.sp;
     let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
+    #[cfg(windows)]
+    // ACCESS_LOST marks the next successful capturer creation as a recovery. This timestamp is
+    // consumed once and temporarily holds off the normal WouldBlock-to-GDI fallback, giving the
+    // replacement DXGI capturer time to produce its first frame. Normal startup is unaffected.
+    let dxgi_recovery_started = dxgi_recovery_state
+        .lock()
+        .unwrap()
+        .take_restart_pending()
+        .then(Instant::now);
+    #[cfg(windows)]
+    if dxgi_recovery_state.lock().unwrap().take_fallback_pending() {
+        c.set_gdi();
+        log::info!("dxgi recovery exhausted, fall back to gdi");
+    }
     #[cfg(windows)]
     if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
         log::info!("disable dxgi with option, fall back to gdi");
@@ -648,6 +727,8 @@ fn run(vs: VideoService) -> ResultType<()> {
     let repeat_encode_max = 10;
     let mut encode_fail_counter = 0;
     let mut first_frame = true;
+    // Set once the encoder emits its first packet; until then it may legitimately return nothing.
+    let mut encoder_warmed_up = false;
     let capture_width = c.width;
     let capture_height = c.height;
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
@@ -664,7 +745,12 @@ fn run(vs: VideoService) -> ResultType<()> {
             &mut second_instant,
             &sp.name(),
         )?;
-        if sp.is_option_true(OPTION_REFRESH) {
+        // On macOS, a refresh here would destroy a hardware encoder that has been fed a frame but
+        // not yet produced its first packet, restarting the warm-up forever. Defer until it has;
+        // one that never does is still switched away from by max_fail_times in handle_one_frame.
+        if sp.is_option_true(OPTION_REFRESH)
+            && refresh_allowed(first_frame, encoder_warmed_up, encoder.latency_free())
+        {
             if vs.source.is_monitor() {
                 let _ = try_broadcast_display_changed(&sp, display_idx, &c, true);
             }
@@ -721,7 +807,8 @@ fn run(vs: VideoService) -> ResultType<()> {
             Ok(frame) => {
                 repeat_encode_counter = 0;
                 if frame.valid() {
-                    let screenshot = SCREENSHOTS.lock().unwrap().remove(&display_idx);
+                    let screenshot_key = (vs.source, display_idx);
+                    let screenshot = SCREENSHOTS.lock().unwrap().remove(&screenshot_key);
                     if let Some(mut screenshot) = screenshot {
                         let restore_vram = screenshot.restore_vram;
                         let (msg, w, h, data) = match &frame {
@@ -750,7 +837,10 @@ fn run(vs: VideoService) -> ResultType<()> {
                                     #[cfg(all(windows, feature = "vram"))]
                                     VRamEncoder::set_not_use(sp.name(), true);
                                     screenshot.restore_vram = true;
-                                    SCREENSHOTS.lock().unwrap().insert(display_idx, screenshot);
+                                    SCREENSHOTS
+                                        .lock()
+                                        .unwrap()
+                                        .insert(screenshot_key, screenshot);
                                     _raii.try_vram = false;
                                     bail!("SWITCH");
                                 }
@@ -774,6 +864,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                         recorder.clone(),
                         &mut encode_fail_counter,
                         &mut first_frame,
+                        &mut encoder_warmed_up,
                         capture_width,
                         capture_height,
                     )?;
@@ -796,13 +887,18 @@ fn run(vs: VideoService) -> ResultType<()> {
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
                 #[cfg(windows)]
-                if try_gdi > 0 && !c.is_gdi() {
-                    if try_gdi > 3 {
-                        c.set_gdi();
-                        try_gdi = 0;
-                        log::info!("No image, fall back to gdi");
+                if dxgi_recovery_started
+                    .map(|started| started.elapsed() >= DXGI_RECOVERY_FRAME_GRACE)
+                    .unwrap_or(true)
+                {
+                    if try_gdi > 0 && !c.is_gdi() {
+                        if try_gdi > 3 {
+                            c.set_gdi();
+                            try_gdi = 0;
+                            log::info!("No image, fall back to gdi");
+                        }
+                        try_gdi += 1;
                     }
-                    try_gdi += 1;
                 }
                 #[cfg(target_os = "linux")]
                 {
@@ -833,6 +929,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                             recorder.clone(),
                             &mut encode_fail_counter,
                             &mut first_frame,
+                            &mut encoder_warmed_up,
                             capture_width,
                             capture_height,
                         )?;
@@ -842,6 +939,13 @@ fn run(vs: VideoService) -> ResultType<()> {
                 }
             }
             Err(err) => {
+                #[cfg(windows)]
+                // The display-change check can restart capture before error handling below.
+                let recovery_attempt = if !c.is_gdi() && err.kind() == ConnectionReset {
+                    dxgi_recovery_state.lock().unwrap().next_attempt()
+                } else {
+                    None
+                };
                 // This check may be redundant, but it is better to be safe.
                 // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
                 if vs.source.is_monitor() {
@@ -850,6 +954,19 @@ fn run(vs: VideoService) -> ResultType<()> {
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
+                    if err.kind() == ConnectionReset {
+                        if let Some(attempt) = recovery_attempt {
+                            log::debug!(
+                                "dxgi access lost, restart capture: attempt {attempt}, error: {err:?}"
+                            );
+                            bail!("SWITCH");
+                        }
+                        log::warn!(
+                            "dxgi access lost after {DXGI_RECOVERY_LIMIT} restarts in {} seconds, fall back to gdi: {err:?}",
+                            DXGI_RECOVERY_WINDOW.as_secs()
+                        );
+                        dxgi_recovery_state.lock().unwrap().take_fallback_pending();
+                    }
                     c.set_gdi();
                     log::info!("dxgi error, fall back to gdi: {:?}", err);
                     continue;
@@ -1068,7 +1185,7 @@ fn get_recorder(
 
 #[cfg(target_os = "android")]
 fn check_change_scale(hardware: bool) -> ResultType<()> {
-    use hbb_common::config::keys::OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE as SCALE_SOFT;
+    use base::config::keys::OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE as SCALE_SOFT;
 
     // isStart flag is set at the end of startCapture() in Android, wait it to be set.
     let n = 60; // 3s
@@ -1126,6 +1243,12 @@ fn check_privacy_mode_changed(
 }
 
 #[inline]
+fn refresh_allowed(unfed: bool, warmed_up: bool, latency_free: bool) -> bool {
+    // Only VideoToolbox has been seen to need this; other platforms keep refreshing as before.
+    !cfg!(target_os = "macos") || unfed || warmed_up || latency_free
+}
+
+#[inline]
 fn handle_one_frame(
     display: usize,
     sp: &GenericService,
@@ -1135,6 +1258,7 @@ fn handle_one_frame(
     recorder: Arc<Mutex<Option<Recorder>>>,
     encode_fail_counter: &mut usize,
     first_frame: &mut bool,
+    encoder_warmed_up: &mut bool,
     width: usize,
     height: usize,
 ) -> ResultType<HashSet<i32>> {
@@ -1153,6 +1277,7 @@ fn handle_one_frame(
     match encoder.encode_to_message(frame, ms) {
         Ok(mut vf) => {
             *encode_fail_counter = 0;
+            *encoder_warmed_up = true;
             vf.display = display as _;
             let mut msg = Message::new();
             msg.set_video_frame(vf);
@@ -1344,9 +1469,9 @@ fn check_qos(
     Ok(())
 }
 
-pub fn set_take_screenshot(display_idx: usize, sid: String, tx: Sender) {
+pub fn set_take_screenshot(source: VideoSource, display_idx: usize, sid: String, tx: Sender) {
     SCREENSHOTS.lock().unwrap().insert(
-        display_idx,
+        (source, display_idx),
         Screenshot {
             sid,
             tx,
@@ -1415,5 +1540,23 @@ fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, da
         .send((hbb_common::tokio::time::Instant::now(), Arc::new(msg_out)))
     {
         log::error!("Failed to send screenshot, {}", e);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::refresh_allowed;
+
+    #[test]
+    fn refresh_waits_for_hw_encoder_warmup() {
+        // Deferred on macOS only; everywhere else a refresh is always allowed.
+        assert_eq!(
+            refresh_allowed(false, false, false),
+            !cfg!(target_os = "macos")
+        );
+        assert!(refresh_allowed(false, true, false));
+        assert!(refresh_allowed(false, false, true));
+        // Nothing fed yet: no warm-up to lose, and a refresh can restart a stalled capturer.
+        assert!(refresh_allowed(true, false, false));
     }
 }

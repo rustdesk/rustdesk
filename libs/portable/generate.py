@@ -2,6 +2,7 @@
 
 import os
 import optparse
+import subprocess
 from hashlib import md5
 import brotli
 import datetime
@@ -14,15 +15,29 @@ encoding = 'utf-8'
 # output: {path: (compressed_data, file_md5)}
 
 
-def generate_md5_table(folder: str, level) -> dict:
+def normalize(path: str) -> str:
+    path = path.replace('\\', '/')
+    while path.startswith('./'):
+        path = path[2:]
+    return path.lower()
+
+
+def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
     res: dict = dict()
-    curdir = os.curdir
+    skip = normalize(exclude) if exclude else None
+    excluded = False
+    # os.curdir is the literal ".", so restoring it left us inside `folder`.
+    curdir = os.getcwd()
     os.chdir(folder)
     for root, _, files in os.walk('.'):
         # remove ./
         for f in files:
             md5_generator = md5()
             full_path = os.path.join(root, f)
+            if skip and normalize(full_path) == skip:
+                print(f"Excluding {full_path}...")
+                excluded = True
+                continue
             print(f"Processing {full_path}...")
             f = open(full_path, "rb")
             content = f.read()
@@ -32,11 +47,16 @@ def generate_md5_table(folder: str, level) -> dict:
             md5_code = md5_generator.hexdigest().encode(encoding=encoding)
             res[full_path] = (content_compressed, md5_code)
     os.chdir(curdir)
+    if skip and not excluded:
+        raise ValueError(f"excluded file was not found in {folder}: {exclude}")
     return res
 
 
 def write_package_metadata(md5_table: dict, output_folder: str, exe: str):
-    output_path = os.path.join(output_folder, "data.bin")
+    write_blob(md5_table, os.path.join(output_folder, "data.bin"), exe)
+
+
+def write_blob(md5_table: dict, output_path: str, exe: str):
     with open(output_path, "wb") as f:
         f.write("rustdesk".encode(encoding=encoding))
         for path in md5_table.keys():
@@ -65,11 +85,15 @@ def write_app_metadata(output_folder: str):
     print(f"App metadata has been written to {output_path}")
 
 def build_portable(output_folder: str, target: str):
-    os.chdir(output_folder)
-    if target:
-        os.system("cargo build --release --target " + target)
-    else:
-        os.system("cargo build --release")
+    current_dir = os.getcwd()
+    try:
+        os.chdir(output_folder)
+        cmd = ["cargo", "build", "--locked", "--release"]
+        if target:
+            cmd.extend(["--target", target])
+        subprocess.run(cmd, check=True)
+    finally:
+        os.chdir(current_dir)
 
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe
@@ -87,6 +111,14 @@ if __name__ == '__main__':
                       help="the target used by cargo")
     parser.add_option("-l", "--level", dest="level", type="int",
                       help="compression level, default is 11, highest", default=11)
+    parser.add_option("--package", dest="package",
+                      help="write the per-customer blob to this path instead of "
+                           "data.bin, and skip the cargo build. Injected into the "
+                           "template's RDPKG resource so customizing needs no rebuild")
+    parser.add_option("--exclude-exe", dest="exclude_exe", action="store_true",
+                      default=False,
+                      help="omit the executable from the blob, for a template whose "
+                           "executable ships in the package instead")
     (options, args) = parser.parse_args()
     folder = options.folder or './rustdesk'
     output_folder = os.path.abspath(options.output_folder or './')
@@ -95,14 +127,29 @@ if __name__ == '__main__':
         options.executable = 'rustdesk.exe'
     if not options.executable.startswith(folder):
         options.executable = folder + '/' + options.executable
+    # Note: the simple check `options.executable.startswith(folder)` is incorrect.
+    # `python generate.py -f rustdesk -e rustdesk.exe` or `python generate.py -f rustdesk`
+    # will result the print "Executable path: ..exe".
+    # So we need to check if the executable is in the folder, and if so, concat again.
+    if os.path.exists(os.path.join(folder, options.executable)):
+        options.executable = os.path.join(folder, options.executable)
+    folder_path = os.path.abspath(folder)
     exe: str = os.path.abspath(options.executable)
-    if not exe.startswith(os.path.abspath(folder)):
+    try:
+        in_source_folder = os.path.commonpath([folder_path, exe]) == folder_path
+    except ValueError:
+        in_source_folder = False
+    if not in_source_folder:
         print("The executable must locate in source folder")
         exit(-1)
-    exe = '.' + exe[len(os.path.abspath(folder)):]
+    exe = '.' + exe[len(folder_path):]
     print("Executable path: " + exe)
     print("Compression level: " + str(options.level))
-    md5_table = generate_md5_table(folder, options.level)
-    write_package_metadata(md5_table, output_folder, exe)
-    write_app_metadata(output_folder)
-    build_portable(output_folder, options.target)
+    md5_table = generate_md5_table(
+        folder, options.level, exe if options.exclude_exe else None)
+    if options.package:
+        write_blob(md5_table, os.path.abspath(options.package), exe)
+    else:
+        write_package_metadata(md5_table, output_folder, exe)
+        write_app_metadata(output_folder)
+        build_portable(output_folder, options.target)

@@ -1,5 +1,6 @@
 use hbb_common::{
     async_recursion::async_recursion,
+    bail,
     config::{Config, Socks5Server},
     log::{self, info},
     proxy::{Proxy, ProxyScheme},
@@ -7,6 +8,7 @@ use hbb_common::{
         get_cached_tls_accept_invalid_cert, get_cached_tls_type, is_plain, upsert_tls_cache,
         TlsType,
     },
+    ResultType,
 };
 use reqwest::{blocking::Client as SyncClient, Client as AsyncClient};
 
@@ -137,6 +139,32 @@ pub fn create_http_client_with_url(url: &str) -> SyncClient {
     )
 }
 
+pub fn create_http_client_with_url_strict(url: &str) -> ResultType<SyncClient> {
+    let parsed_url = url::Url::parse(url)?;
+    if parsed_url.scheme() != "https" {
+        bail!("Strict HTTP client requires HTTPS: {}", url);
+    }
+    let proxy_conf = Config::get_socks();
+    let tls_url = get_url_for_tls(url, &proxy_conf);
+    let cached_tls_type = get_cached_tls_type(tls_url);
+    let cached_danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let can_reuse_cached_probe =
+        cached_tls_type.is_some() && cached_danger_accept_invalid_cert == Some(false);
+    let tls_type = if can_reuse_cached_probe {
+        cached_tls_type.unwrap_or(TlsType::Rustls)
+    } else {
+        TlsType::Rustls
+    };
+    Ok(create_http_client_with_url_(
+        url,
+        tls_url,
+        tls_type,
+        can_reuse_cached_probe,
+        Some(false),
+        Some(false),
+    ))
+}
+
 fn create_http_client_with_url_(
     url: &str,
     tls_url: &str,
@@ -245,6 +273,33 @@ pub async fn create_http_client_async_with_url(url: &str) -> AsyncClient {
         danger_accept_invalid_cert,
     )
     .await
+}
+
+pub async fn create_http_client_async_with_url_strict(url: &str) -> ResultType<AsyncClient> {
+    let parsed_url = url::Url::parse(url)?;
+    if parsed_url.scheme() != "https" {
+        bail!("Strict HTTP client requires HTTPS: {}", url);
+    }
+    let proxy_conf = Config::get_socks();
+    let tls_url = get_url_for_tls(url, &proxy_conf);
+    let cached_tls_type = get_cached_tls_type(tls_url);
+    let cached_danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+    let can_reuse_cached_probe =
+        cached_tls_type.is_some() && cached_danger_accept_invalid_cert == Some(false);
+    let tls_type = if can_reuse_cached_probe {
+        cached_tls_type.unwrap_or(TlsType::Rustls)
+    } else {
+        TlsType::Rustls
+    };
+    Ok(create_http_client_async_with_url_(
+        url,
+        tls_url,
+        tls_type,
+        can_reuse_cached_probe,
+        Some(false),
+        Some(false),
+    )
+    .await)
 }
 
 #[async_recursion]

@@ -3,6 +3,7 @@
 #include <Windows.h>
 #include <winspool.h>
 #include <setupapi.h>
+#include <strutil.h>
 #include <memory>
 #include <string>
 #include <functional>
@@ -18,11 +19,18 @@ namespace RemotePrinter
 {
 #define HRESULT_ERR_ELEMENT_NOT_FOUND 0x80070490
 
+    // The driver files and the driver name ship with the app under their stock names
+    // and stay fixed for every custom client. Only the printer and its port carry the
+    // app name, and that arrives at runtime so one dll serves every custom client.
     LPCWCH RD_DRIVER_INF_PATH = L"drivers\\RustDeskPrinterDriver\\RustDeskPrinterDriver.inf";
-    LPCWCH RD_PRINTER_PORT = L"RustDesk Printer";
-    LPCWCH RD_PRINTER_NAME = L"RustDesk Printer";
     LPCWCH RD_PRINTER_DRIVER_NAME = L"RustDesk v4 Printer Driver";
+    LPCWCH RD_DEFAULT_APP_NAME = L"RustDesk";
     LPCWCH XCV_MONITOR_LOCAL_PORT = L",XcvMonitor Local Port";
+
+    static std::wstring printerNameOf(const std::wstring &appName)
+    {
+        return (appName.empty() ? std::wstring(RD_DEFAULT_APP_NAME) : appName) + L" Printer";
+    }
 
     using FuncEnum = std::function<BOOL(DWORD level, LPBYTE pDriverInfo, DWORD cbBuf, LPDWORD pcbNeeded, LPDWORD pcReturned)>;
     template <typename T, typename R>
@@ -349,6 +357,42 @@ namespace RemotePrinter
         return EnumPrintersW(PRINTER_ENUM_LOCAL, NULL, level, pPrinterInfo, cbBuf, pcbNeeded, pcReturned);
     }
 
+    static HRESULT queryPrinterPresence(LPCWSTR name)
+    {
+        constexpr DWORD printerInfoLevel = 1;
+        DWORD needed = 0;
+        DWORD returned = 0;
+        if (!enumLocalPrinter(printerInfoLevel, NULL, 0, &needed, &returned))
+        {
+            const DWORD error = GetLastError();
+            if (error != ERROR_INSUFFICIENT_BUFFER || needed == 0)
+            {
+                return error == ERROR_SUCCESS ? E_FAIL : HRESULT_FROM_WIN32(error);
+            }
+        }
+        if (needed == 0)
+        {
+            return S_FALSE;
+        }
+
+        std::vector<BYTE> buffer(needed);
+        if (!enumLocalPrinter(printerInfoLevel, buffer.data(), needed, &needed, &returned))
+        {
+            const DWORD error = GetLastError();
+            return error == ERROR_SUCCESS ? E_FAIL : HRESULT_FROM_WIN32(error);
+        }
+
+        const auto printers = reinterpret_cast<const PRINTER_INFO_1W *>(buffer.data());
+        for (DWORD i = 0; i < returned; i++)
+        {
+            if (isNameEqual(name, printers[i].pName))
+            {
+                return S_OK;
+            }
+        }
+        return S_FALSE;
+    }
+
     BOOL isPrinterAdded(LPCWSTR name)
     {
         auto onData = [name](const PRINTER_INFO_1W &info)
@@ -458,8 +502,12 @@ namespace RemotePrinter
     //    We should not check the driver version because the driver is deployed with the application.
     //    It's better to uninstall the existing driver and install the driver from the application.
     // 3. Add the printer.
-    VOID installUpdatePrinter(const std::wstring &installFolder)
+    VOID installUpdatePrinter(const std::wstring &installFolder, const std::wstring &appName)
     {
+        const std::wstring printerName = printerNameOf(appName);
+        const LPCWCH RD_PRINTER_NAME = printerName.c_str();
+        const LPCWCH RD_PRINTER_PORT = printerName.c_str();
+
         const std::wstring infFile = installFolder + L"\\" + RemotePrinter::RD_DRIVER_INF_PATH;
         if (!FileExists(infFile))
         {
@@ -505,13 +553,44 @@ namespace RemotePrinter
         }
     }
 
-    VOID uninstallPrinter()
+    VOID uninstallPrinter(const std::wstring &appName)
     {
-        deletePrinter(RD_PRINTER_NAME);
+        const std::wstring printerName = printerNameOf(appName);
+
+        deletePrinter(printerName.c_str());
         WcaLog(LOGMSG_STANDARD, "Deleted the printer\n");
         uninstallDriver(RD_PRINTER_DRIVER_NAME);
         WcaLog(LOGMSG_STANDARD, "Uninstalled the printer driver\n");
-        checkDeleteLocalPort(RD_PRINTER_PORT);
+        checkDeleteLocalPort(printerName.c_str());
         WcaLog(LOGMSG_STANDARD, "Deleted the local port\n");
     }
+}
+
+extern "C" UINT __stdcall SetPrinterInstallDefault(__in MSIHANDLE hInstall)
+{
+    HRESULT hr = S_OK;
+    LPWSTR appName = NULL;
+
+    hr = WcaInitialize(hInstall, "SetPrinterInstallDefault");
+    ExitOnFailure(hr, "Failed to initialize printer detection");
+
+    hr = WcaGetProperty(L"ProductName", &appName);
+    ExitOnFailure(hr, "Failed to get the printer's application name");
+
+    hr = RemotePrinter::queryPrinterPresence(RemotePrinter::printerNameOf(appName).c_str());
+    if (FAILED(hr))
+    {
+        WcaLog(LOGMSG_STANDARD, "Failed to detect the existing printer (0x%08X); skipping printer installation.", static_cast<UINT>(hr));
+    }
+
+    if (hr != S_OK)
+    {
+        hr = WcaSetProperty(L"INSTALLPRINTER", L"0");
+        ExitOnFailure(hr, "Failed to disable printer installation");
+        WcaLog(LOGMSG_STANDARD, "The application's printer was not confirmed present; leaving printer installation disabled by default.");
+    }
+
+LExit:
+    ReleaseStr(appName);
+    return WcaFinalize(SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE);
 }

@@ -5,6 +5,23 @@
 	<Fragment>
 		<!-- Regs for shortcuts are defined in "Fragments/ShortcutProperties.wxs" -->
 		<!-- Component that persists the property values to the registry so they are available during an upgrade/modify -->
+		<Property Id="CURRENT_SHARE_RDP" Secure="yes">
+			<RegistrySearch Id="CurrentShareRdpSearch" Root="HKLM" Key="Software\$(var.Product)\InstallState\$(var.Product)" Name="share_rdp" Type="raw" />
+		</Property>
+		<Property Id="LEGACY_SHARE_RDP" Secure="yes">
+			<RegistrySearch Id="LegacyShareRdpSearch" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Name="share_rdp" Type="raw" Bitness="always64" />
+		</Property>
+		<Property Id="LEGACY_SHARE_RDP32" Secure="yes">
+			<RegistrySearch Id="LegacyShareRdp32Search" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Name="share_rdp" Type="raw" Bitness="always32" />
+		</Property>
+		<Property Id="APP_WINDOWS_INSTALLER32" Secure="yes">
+			<RegistrySearch Id="AppWindowsInstaller32Search" Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Name="WindowsInstaller" Type="raw" Bitness="always32" />
+		</Property>
+		<Property Id="SHARE_RDP" Secure="yes" />
+		<SetProperty Action="SetShareRdpFromCurrentState" Id="SHARE_RDP" Value="[CURRENT_SHARE_RDP]" After="AppSearch" Sequence="first" Condition="CURRENT_SHARE_RDP" />
+		<SetProperty Action="SetShareRdpFromLegacyState" Id="SHARE_RDP" Value="[LEGACY_SHARE_RDP]" After="SetShareRdpFromCurrentState" Sequence="first" Condition="NOT CURRENT_SHARE_RDP AND LEGACY_SHARE_RDP" />
+		<SetProperty Action="SetShareRdpFromLegacyState32" Id="SHARE_RDP" Value="[LEGACY_SHARE_RDP32]" After="SetShareRdpFromLegacyState" Sequence="first" Condition="NOT CURRENT_SHARE_RDP AND NOT LEGACY_SHARE_RDP AND LEGACY_SHARE_RDP32" />
+
 		<DirectoryRef Id="INSTALLFOLDER_INNER">
 			<Component Id="Product.Registry.InstallFolder" Guid="3196EDA7-9AEF-4705-A0C8-E3F3ECCCB153">
 				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
@@ -40,17 +57,29 @@
 				</RegistryKey>
 			</Component>
 
-			<!--For compatibility with registry values from previous versions-->
-			<Component Id="Product.Registry.UninstallApp" Guid="FC1A3D2E-5642-FBD8-CFA6-5ECAC6DE69A8">
-				<RegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" >
+			<Component Id="Product.Registry.InstallState" Guid="E310003A-C292-4851-AE20-7A9B186060CE">
+				<RegistryKey Root="HKLM" Key="Software\$(var.Product)\InstallState\$(var.Product)" ForceDeleteOnUninstall="yes">
 					<RegistryValue Type="string" Name="BuildDate" Value="$(var.BuildDate)" />
-					<RegistryValue Type="string" Name="share_rdp" Value="" />
-
-					<!--$ArpStart$-->
-					<!--$ArpEnd$-->
+					<RegistryValue Type="string" Name="share_rdp" Value="[SHARE_RDP]" />
+					<RegistryValue Type="string" Name="InstallLocation" Value="[INSTALLFOLDER_INNER]" />
+					<RegistryValue Type="integer" Name="WindowsInstaller" Value="1" />
+					<RegistryValue Type="string" Name="MsiProductCode" Value="[ProductCode]" KeyPath="yes" />
+					<!--$InstallStateStart$-->
+					<!--$InstallStateEnd$-->
 				</RegistryKey>
 			</Component>
+
 		</DirectoryRef>
+
+		<StandardDirectory Id="CommonAppDataFolder">
+			<Component Id="Product.Registry.RemoveLegacyUninstall64" Guid="7524B741-94C2-4C50-A151-DDB37860DC20" Bitness="always64" KeyPath="yes" Condition="APP_WINDOWS_INSTALLER=&quot;#1&quot;">
+				<RemoveRegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Action="removeOnInstall" />
+			</Component>
+
+			<Component Id="Product.Registry.RemoveLegacyUninstall32" Guid="CB50B9AA-B83A-4AC2-BB27-81358F0E74E6" Bitness="always32" KeyPath="yes" Condition="APP_WINDOWS_INSTALLER32=&quot;#1&quot;">
+				<RemoveRegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.Product)" Action="removeOnInstall" />
+			</Component>
+		</StandardDirectory>
 
 	</Fragment>
 </Wix>

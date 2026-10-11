@@ -1,5 +1,5 @@
 use clipboard::ClipboardFile;
-use hbb_common::message_proto::*;
+use base::message_proto::*;
 
 pub fn clip_2_msg(clip: ClipboardFile) -> Message {
     match clip {
@@ -224,6 +224,13 @@ pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipboardFile> {
     }
 }
 
+pub fn is_file_data_request(msg: &Cliprdr) -> bool {
+    matches!(
+        msg.union,
+        Some(cliprdr::Union::FormatDataRequest(_)) | Some(cliprdr::Union::FileContentsRequest(_))
+    )
+}
+
 #[cfg(feature = "unix-file-copy-paste")]
 pub mod unix_file_clip {
     use super::*;
@@ -314,7 +321,7 @@ pub mod unix_file_clip {
                 requested_format_id: _requested_format_id,
             } => {
                 log::debug!("requested format id: {}", _requested_format_id);
-                let format_data = serv_files::get_file_list_pdu();
+                let format_data = serv_files::get_file_list_pdu(conn_id);
                 if !format_data.is_empty() {
                     return vec![clip_2_msg(ClipboardFile::FormatDataResponse {
                         msg_flags: 1,
@@ -332,12 +339,16 @@ pub mod unix_file_clip {
                 log::debug!("format data response: msg_flags: {}", msg_flags);
 
                 if msg_flags != 0x1 {
-                    // return failure message?
+                    log::error!(
+                        "peer reported clipboard format data failure: {}",
+                        msg_flags
+                    );
+                    return vec![];
                 }
 
                 log::debug!("parsing file descriptors");
-                if fuse::init_fuse_context(true).is_ok() {
-                    match fuse::format_data_response_to_urls(
+                match fuse::init_fuse_context(side == ClipboardSide::Client) {
+                    Ok(()) => match fuse::format_data_response_to_urls(
                         side == ClipboardSide::Client,
                         format_data,
                         conn_id,
@@ -348,9 +359,10 @@ pub mod unix_file_clip {
                         Err(e) => {
                             log::error!("failed to parse file descriptors: {:?}", e);
                         }
+                    },
+                    Err(e) => {
+                        log::error!("failed to initialize clipboard FUSE context: {:?}", e);
                     }
-                } else {
-                    // send error message to server
                 }
             }
             ClipboardFile::FileContentsRequest {
@@ -360,7 +372,8 @@ pub mod unix_file_clip {
                 n_position_low,
                 n_position_high,
                 cb_requested,
-                ..
+                have_clip_data_id,
+                clip_data_id,
             } => {
                 log::debug!("file contents request: stream_id: {}, list_index: {}, dw_flags: {}, n_position_low: {}, n_position_high: {}, cb_requested: {}", stream_id, list_index, dw_flags, n_position_low, n_position_high, cb_requested);
                 return serv_files::read_file_contents(
@@ -371,12 +384,18 @@ pub mod unix_file_clip {
                     n_position_low,
                     n_position_high,
                     cb_requested,
+                    have_clip_data_id.then_some(clip_data_id),
                 )
                 .into_iter()
                 .map(|res| match res {
                     Ok(data) => clip_2_msg(data),
                     Err(e) => {
-                        log::error!("failed to read file contents: {:?}", e);
+                        hbb_common::throttled_log!(
+                            std::time::Duration::from_secs(5),
+                            error,
+                            "failed to read file contents: {:?}",
+                            e
+                        );
                         resp_file_contents_fail(stream_id)
                     }
                 })
@@ -386,6 +405,7 @@ pub mod unix_file_clip {
             ClipboardFile::FileContentsResponse {
                 msg_flags,
                 stream_id,
+                requested_data,
                 ..
             } => {
                 log::debug!(
@@ -393,13 +413,15 @@ pub mod unix_file_clip {
                     msg_flags,
                     stream_id,
                 );
-                if fuse::init_fuse_context(true).is_ok() {
-                    hbb_common::allow_err!(fuse::handle_file_content_response(
-                        side == ClipboardSide::Client,
-                        clip
-                    ));
-                } else {
-                    // send error message to server
+                let response = ClipboardFile::FileContentsResponse {
+                    msg_flags,
+                    stream_id,
+                    requested_data,
+                };
+                if let Err(e) =
+                    fuse::handle_file_content_response(side == ClipboardSide::Client, response)
+                {
+                    log::error!("failed to handle file contents response: {:?}", e);
                 }
             }
             ClipboardFile::NotifyCallback {
@@ -423,5 +445,54 @@ pub mod unix_file_clip {
             }
         }
         vec![]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn is_request(clip: ClipboardFile) -> bool {
+        match clip_2_msg(clip).union {
+            Some(message::Union::Cliprdr(msg)) => is_file_data_request(&msg),
+            _ => false,
+        }
+    }
+
+    #[test]
+    fn test_is_file_data_request() {
+        assert!(is_request(ClipboardFile::FormatDataRequest {
+            requested_format_id: 0,
+        }));
+        assert!(is_request(ClipboardFile::FileContentsRequest {
+            stream_id: 0,
+            list_index: 0,
+            dw_flags: 0,
+            n_position_low: 0,
+            n_position_high: 0,
+            cb_requested: 0,
+            have_clip_data_id: false,
+            clip_data_id: 0,
+        }));
+
+        // Messages that carry the peer's own clipboard files must stay allowed.
+        assert!(!is_request(ClipboardFile::MonitorReady));
+        assert!(!is_request(ClipboardFile::FormatList {
+            format_list: vec![],
+        }));
+        assert!(!is_request(ClipboardFile::FormatListResponse {
+            msg_flags: 0
+        }));
+        assert!(!is_request(ClipboardFile::FormatDataResponse {
+            msg_flags: 0,
+            format_data: vec![],
+        }));
+        assert!(!is_request(ClipboardFile::FileContentsResponse {
+            msg_flags: 0,
+            stream_id: 0,
+            requested_data: vec![],
+        }));
+        assert!(!is_request(ClipboardFile::TryEmpty));
+        assert!(!is_request(ClipboardFile::Files { files: vec![] }));
     }
 }

@@ -145,23 +145,26 @@ class Peer {
         note == other.note;
   }
 
-  Peer.copy(Peer other)
-      : this(
-            id: other.id,
-            hash: other.hash,
-            password: other.password,
-            username: other.username,
-            hostname: other.hostname,
-            platform: other.platform,
-            alias: other.alias,
-            tags: other.tags.toList(),
-            forceAlwaysRelay: other.forceAlwaysRelay,
-            rdpPort: other.rdpPort,
-            rdpUsername: other.rdpUsername,
-            loginName: other.loginName,
-            device_group_name: other.device_group_name,
-            note: other.note,
-            sameServer: other.sameServer);
+  factory Peer.copy(Peer other) {
+    final peer = Peer(
+        id: other.id,
+        hash: other.hash,
+        password: other.password,
+        username: other.username,
+        hostname: other.hostname,
+        platform: other.platform,
+        alias: other.alias,
+        tags: other.tags.toList(),
+        forceAlwaysRelay: other.forceAlwaysRelay,
+        rdpPort: other.rdpPort,
+        rdpUsername: other.rdpUsername,
+        loginName: other.loginName,
+        device_group_name: other.device_group_name,
+        note: other.note,
+        sameServer: other.sameServer);
+    peer.online = other.online;
+    return peer;
+  }
 }
 
 enum UpdateEvent { online, load }

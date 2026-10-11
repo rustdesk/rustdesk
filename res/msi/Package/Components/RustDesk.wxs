@@ -12,7 +12,7 @@
 			</Component>
 		</DirectoryRef>
 
-		<CustomAction Id="RemoveInstallFolder.SetParam" Return="check" Property="RemoveInstallFolder" Value="[INSTALLFOLDER_INNER]" />
+		<CustomAction Id="RemoveRuntimeGeneratedFiles.SetParam" Return="check" Property="RemoveRuntimeGeneratedFiles" Value="[INSTALLFOLDER_INNER]" />
 		<CustomAction Id="AddFirewallRules.SetParam" Return="check" Property="AddFirewallRules" Value="1[INSTALLFOLDER_INNER]$(var.Product).exe" />
 		<CustomAction Id="RemoveFirewallRules.SetParam" Return="check" Property="RemoveFirewallRules" Value="0[INSTALLFOLDER_INNER]$(var.Product).exe" />
 		<CustomAction Id="CreateStartService.SetParam" Return="check" Property="CreateStartService" Value="$(var.Product);&quot;[INSTALLFOLDER_INNER]$(var.Product).exe&quot; --service" />
@@ -30,7 +30,14 @@
 		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
 		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
 		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER_INNER]" />
-		<CustomAction Id="InstallPrinter.SetParam" Return="check" Property="InstallPrinter" Value="[INSTALLFOLDER_INNER]" />
+		<!-- The app name comes first and is separated by '|', which cannot occur in a
+		     Windows path nor in a validated app name. wcautil's own delimiter is a
+		     literal wide char 128 that a Formatted value cannot carry, and [~] is
+		     MSI's NUL escape rather than that delimiter, so the action parses this
+		     itself. Passing the name keeps the dll free of it, so one build serves
+		     every custom client. -->
+		<CustomAction Id="InstallPrinter.SetParam" Return="check" Property="InstallPrinter" Value="[ProductName]|[INSTALLFOLDER_INNER]" />
+		<CustomAction Id="UninstallPrinter.SetParam" Return="check" Property="UninstallPrinter" Value="[ProductName]" />
 		<InstallExecuteSequence>
 
 			<Custom Action="SetPropertyIsServiceRunning" After="InstallInitialize" Condition="Installed" />
@@ -67,7 +74,7 @@
 			Some msi packages reset the `VersionNT` value to 1000 on Windows 10.
 			https://www.advancedinstaller.com/user-guide/qa-OS-dependent-install.html -->
 			<!-- Remote printer also works on Win8.1 in my test. -->
-			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="VersionNT &gt;= 603 AND PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;" />
+			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="VersionNT &gt;= 603 AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
 			<Custom Action="InstallPrinter.SetParam" Before="InstallPrinter" Condition="VersionNT &gt;= 603" />
 
 			<!--Workaround of "fire:FirewallException". If Outbound="Yes" or Outbound="true", the following error occurs.-->
@@ -77,21 +84,22 @@
 
 			<Custom Action="AddRegSoftwareSASGeneration" Before="InstallFinalize" Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)"/>
 
-			<Custom Action="RemoveInstallFolder" Before="RemoveFiles"/>
-			<Custom Action="RemoveInstallFolder.SetParam" Before="RemoveInstallFolder"/>
-			<Custom Action="TryStopDeleteService" Before="RemoveInstallFolder.SetParam" />
+			<Custom Action="RemoveRuntimeGeneratedFiles" Before="RemoveFiles" Condition="Installed AND (REMOVE=&quot;ALL&quot; OR UPGRADINGPRODUCTCODE)"/>
+			<Custom Action="RemoveRuntimeGeneratedFiles.SetParam" Before="RemoveRuntimeGeneratedFiles" Condition="Installed AND (REMOVE=&quot;ALL&quot; OR UPGRADINGPRODUCTCODE)"/>
+			<Custom Action="TryStopDeleteService" Before="RemoveRuntimeGeneratedFiles.SetParam" />
 			<Custom Action="TryStopDeleteService.SetParam" Before="TryStopDeleteService" />
 
 			<Custom Action="RemoveFirewallRules" Before="RemoveFiles"/>
 			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFirewallRules"/>
 
-			<Custom Action="UninstallPrinter" Before="RemoveInstallFolder" Condition="VersionNT &gt;= 603" />
+			<Custom Action="UninstallPrinter" Before="RemoveRuntimeGeneratedFiles" Condition="VersionNT &gt;= 603" />
+			<Custom Action="UninstallPrinter.SetParam" Before="UninstallPrinter" Condition="VersionNT &gt;= 603" />
 
-			<Custom Action="TerminateProcesses" Before="RemoveInstallFolder"/>
+			<Custom Action="TerminateProcesses" Before="RemoveRuntimeGeneratedFiles"/>
 			<Custom Action="TerminateProcesses.SetParam" Before="TerminateProcesses"/>
-			<Custom Action="TerminateBrokers" Before="RemoveInstallFolder"/>
+			<Custom Action="TerminateBrokers" Before="RemoveRuntimeGeneratedFiles"/>
 			<Custom Action="TerminateBrokers.SetParam" Before="TerminateBrokers"/>
-			<Custom Action="RemoveAmyuniIdd" Before="RemoveInstallFolder"/>
+			<Custom Action="RemoveAmyuniIdd" Before="RemoveRuntimeGeneratedFiles"/>
 			<Custom Action="RemoveAmyuniIdd.SetParam" Before="RemoveAmyuniIdd"/>
 		</InstallExecuteSequence>
 

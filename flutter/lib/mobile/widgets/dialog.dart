@@ -12,100 +12,6 @@ void _showSuccess() {
   showToast(translate("Successful"));
 }
 
-void _showError() {
-  showToast(translate("Error"));
-}
-
-void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
-  final pw = await bind.mainGetPermanentPassword();
-  final p0 = TextEditingController(text: pw);
-  final p1 = TextEditingController(text: pw);
-  var validateLength = false;
-  var validateSame = false;
-  dialogManager.show((setState, close, context) {
-    submit() async {
-      close();
-      dialogManager.showLoading(translate("Waiting"));
-      if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
-        dialogManager.dismissAll();
-        _showSuccess();
-      } else {
-        dialogManager.dismissAll();
-        _showError();
-      }
-    }
-
-    return CustomAlertDialog(
-      title: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.password_rounded, color: MyTheme.accent),
-          Text(translate('Set your own password')).paddingOnly(left: 10),
-        ],
-      ),
-      content: Form(
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextFormField(
-              autofocus: true,
-              obscureText: true,
-              keyboardType: TextInputType.visiblePassword,
-              decoration: InputDecoration(
-                labelText: translate('Password'),
-              ),
-              controller: p0,
-              validator: (v) {
-                if (v == null) return null;
-                final val = v.trim().length > 5;
-                if (validateLength != val) {
-                  // use delay to make setState success
-                  Future.delayed(Duration(microseconds: 1),
-                      () => setState(() => validateLength = val));
-                }
-                return val
-                    ? null
-                    : translate('Too short, at least 6 characters.');
-              },
-            ).workaroundFreezeLinuxMint(),
-            TextFormField(
-              obscureText: true,
-              keyboardType: TextInputType.visiblePassword,
-              decoration: InputDecoration(
-                labelText: translate('Confirmation'),
-              ),
-              controller: p1,
-              validator: (v) {
-                if (v == null) return null;
-                final val = p0.text == v;
-                if (validateSame != val) {
-                  Future.delayed(Duration(microseconds: 1),
-                      () => setState(() => validateSame = val));
-                }
-                return val
-                    ? null
-                    : translate('The confirmation is not identical.');
-              },
-            ).workaroundFreezeLinuxMint(),
-          ])),
-      onCancel: close,
-      onSubmit: (validateLength && validateSame) ? submit : null,
-      actions: [
-        dialogButton(
-          'Cancel',
-          icon: Icon(Icons.close_rounded),
-          onPressed: close,
-          isOutline: true,
-        ),
-        dialogButton(
-          'OK',
-          icon: Icon(Icons.done_rounded),
-          onPressed: (validateLength && validateSame) ? submit : null,
-        ),
-      ],
-    );
-  });
-}
-
 void setTemporaryPasswordLengthDialog(
     OverlayDialogManager dialogManager) async {
   List<String> lengths = ['6', '8', '10'];
@@ -211,13 +117,13 @@ void showServerSettingsWithValue(
             ),
             SizedBox(width: 8),
             Expanded(
-              child: TextFormField(
+              child: serverSettingsTextFormField(
+                label: label,
                 controller: controller,
-                decoration: InputDecoration(
-                  errorText: errorMsg.isEmpty ? null : errorMsg,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                ),
+                errorMsg: errorMsg,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                showLabelText: false,
                 validator: validator,
                 autofocus: autofocus,
               ).workaroundFreezeLinuxMint(),
@@ -226,12 +132,10 @@ void showServerSettingsWithValue(
         );
       }
 
-      return TextFormField(
+      return serverSettingsTextFormField(
+        label: label,
         controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          errorText: errorMsg.isEmpty ? null : errorMsg,
-        ),
+        errorMsg: errorMsg,
         validator: validator,
       ).workaroundFreezeLinuxMint();
     }
@@ -301,6 +205,35 @@ void showServerSettingsWithValue(
       ],
     );
   });
+}
+
+TextFormField serverSettingsTextFormField({
+  required String label,
+  required TextEditingController controller,
+  required String errorMsg,
+  String? Function(String?)? validator,
+  bool autofocus = false,
+  bool showLabelText = true,
+  EdgeInsetsGeometry? contentPadding,
+}) {
+  return TextFormField(
+    controller: controller,
+    decoration: InputDecoration(
+      labelText: showLabelText ? label : null,
+      errorText: errorMsg.isEmpty ? null : errorMsg,
+      contentPadding: contentPadding,
+    ),
+    validator: validator,
+    autofocus: autofocus,
+    keyboardType: TextInputType.visiblePassword,
+    textCapitalization: TextCapitalization.none,
+    autocorrect: false,
+    enableSuggestions: false,
+    smartDashesType: SmartDashesType.disabled,
+    smartQuotesType: SmartQuotesType.disabled,
+    enableIMEPersonalizedLearning: false,
+    spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+  );
 }
 
 void setPrivacyModeDialog(

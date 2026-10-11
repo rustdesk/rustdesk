@@ -1,4 +1,7 @@
-use super::{FLAGS_FD_ATTRIBUTES, FLAGS_FD_LAST_WRITE, FLAGS_FD_UNIX_MODE, LDAP_EPOCH_DELTA};
+use super::{
+    FILE_NAME_FIELD_SIZE, FLAGS_FD_ATTRIBUTES, FLAGS_FD_LAST_WRITE, FLAGS_FD_UNIX_MODE,
+    LDAP_EPOCH_DELTA,
+};
 use crate::CliprdrError;
 use hbb_common::{
     bytes::{Buf, Bytes},
@@ -45,12 +48,41 @@ pub struct FileDescription {
     pub creation_time: SystemTime,
     pub size: u64,
     pub perm: u16,
+    /// `file_list_id()` of the list this file came from, sent back in file contents requests
+    #[serde(default)]
+    pub clip_data_id: i32,
+}
+
+/// Identifies a file list by its descriptor PDU, which both peers hold, so file contents
+/// requests can name the list they read from. FNV-1a, same as `wf_cliprdr_file_list_id()`.
+pub fn file_list_id(file_descriptor_pdu: &[u8]) -> i32 {
+    file_descriptor_pdu
+        .iter()
+        .fold(0x811c_9dc5_u32, |id, byte| {
+            (id ^ *byte as u32).wrapping_mul(0x0100_0193)
+        }) as i32
+}
+
+pub(super) fn validate_file_name(name: &str) -> Result<(), CliprdrError> {
+    if matches!(name.as_bytes(), [letter, b':', b'/', ..] if letter.is_ascii_alphabetic())
+        || name
+            .split('/')
+            .any(|component| component.is_empty() || component == ".")
+    {
+        return Err(CliprdrError::InvalidRequest {
+            description: "clipboard file name is not a normalized relative path".to_string(),
+        });
+    }
+    base::fs::validate_file_name_no_traversal(name).map_err(|error| CliprdrError::InvalidRequest {
+        description: error.to_string(),
+    })
 }
 
 impl FileDescription {
     fn parse_file_descriptor(
         bytes: &mut Bytes,
         conn_id: i32,
+        clip_data_id: i32,
     ) -> Result<FileDescription, CliprdrError> {
         let flags = bytes.get_u32_le();
         // skip reserved 32 bytes
@@ -68,13 +100,21 @@ impl FileDescription {
         // file size
         let file_size_high = bytes.get_u32_le();
         let file_size_low = bytes.get_u32_le();
-        // utf16 file name, double \0 terminated, in 520 bytes block
+        // NUL-terminated UTF-16 file name in a fixed-size field.
         // read with another pointer, and advance the main pointer
         let block = bytes.clone();
-        bytes.advance(520);
+        bytes.advance(FILE_NAME_FIELD_SIZE);
 
-        let block = &block[..520];
-        let wstr = WStr::from_utf16le(block).map_err(|e| {
+        let block = &block[..FILE_NAME_FIELD_SIZE];
+        let utf16_unit_size = std::mem::size_of::<u16>();
+        let name_end = block
+            .chunks_exact(utf16_unit_size)
+            .position(|unit| unit == [0_u8, 0_u8])
+            .ok_or_else(|| CliprdrError::InvalidRequest {
+                description: "clipboard file name is not null-terminated".to_string(),
+            })?
+            * utf16_unit_size;
+        let wstr = WStr::from_utf16le(&block[..name_end]).map_err(|e| {
             log::error!("cannot convert file descriptor path: {:?}", e);
             CliprdrError::ConversionFailure
         })?;
@@ -100,12 +140,13 @@ impl FileDescription {
             // cannot set as is...
         } else if normal {
             PERM_RWX
+        } else if directory {
+            // Windows ignores read-only and hidden on a directory; without `x` it cannot be entered.
+            PERM_RWX
         } else if readonly {
             PERM_READ
         } else if hidden {
             PERM_SELF_RO
-        } else if directory {
-            PERM_RWX
         } else {
             PERM_RW
         };
@@ -128,15 +169,19 @@ impl FileDescription {
 
         let valid_write_time = flags & FLAGS_FD_LAST_WRITE != 0;
         let last_modified = if valid_write_time && last_write_time >= LDAP_EPOCH_DELTA {
-            let last_write_time = (last_write_time - LDAP_EPOCH_DELTA) * 100;
-            let last_write_time = Duration::from_nanos(last_write_time);
+            let last_write_time = last_write_time - LDAP_EPOCH_DELTA;
+            let last_write_time = Duration::new(
+                last_write_time / 10_000_000,
+                (last_write_time % 10_000_000) as u32 * 100,
+            );
             SystemTime::UNIX_EPOCH + last_write_time
         } else {
             SystemTime::UNIX_EPOCH
         };
 
         let name = wstr.to_utf8().replace('\\', "/");
-        let name = PathBuf::from(name.trim_end_matches('\0'));
+        validate_file_name(&name)?;
+        let name = PathBuf::from(name);
 
         let desc = FileDescription {
             conn_id,
@@ -148,6 +193,7 @@ impl FileDescription {
             creation_time: last_modified,
             size,
             perm,
+            clip_data_id,
         };
 
         Ok(desc)
@@ -159,6 +205,7 @@ impl FileDescription {
         file_descriptor_pdu: Vec<u8>,
         conn_id: i32,
     ) -> Result<Vec<Self>, CliprdrError> {
+        let clip_data_id = file_list_id(&file_descriptor_pdu);
         let mut data = Bytes::from(file_descriptor_pdu);
         if data.remaining() < 4 {
             return Err(CliprdrError::InvalidRequest {
@@ -179,10 +226,158 @@ impl FileDescription {
 
         let mut files = Vec::with_capacity(count);
         for _ in 0..count {
-            let desc = Self::parse_file_descriptor(&mut data, conn_id)?;
+            let desc = Self::parse_file_descriptor(&mut data, conn_id, clip_data_id)?;
             files.push(desc);
         }
 
         Ok(files)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem::size_of;
+
+    const PDU_HEADER_SIZE: usize = size_of::<u32>();
+    const DESCRIPTOR_SIZE: usize = 592;
+    const ATTRIBUTES_OFFSET: usize = PDU_HEADER_SIZE + 36;
+    const LAST_WRITE_TIME_OFFSET: usize = PDU_HEADER_SIZE + 56;
+    const NAME_OFFSET: usize = PDU_HEADER_SIZE + 72;
+    const FILE_NAME_CODE_UNITS: usize = 260;
+    const INVALID_UTF16_UNIT: u16 = 0xdc00;
+    const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+
+    fn descriptor_pdu(name: &str) -> Vec<u8> {
+        let mut pdu = vec![0_u8; PDU_HEADER_SIZE + DESCRIPTOR_SIZE];
+        pdu[..PDU_HEADER_SIZE].copy_from_slice(&1_u32.to_le_bytes());
+        pdu[PDU_HEADER_SIZE..PDU_HEADER_SIZE + size_of::<u32>()]
+            .copy_from_slice(&FLAGS_FD_ATTRIBUTES.to_le_bytes());
+        pdu[ATTRIBUTES_OFFSET..ATTRIBUTES_OFFSET + size_of::<u32>()]
+            .copy_from_slice(&FILE_ATTRIBUTE_NORMAL.to_le_bytes());
+        for (index, unit) in name.encode_utf16().enumerate() {
+            let offset = NAME_OFFSET + index * size_of::<u16>();
+            pdu[offset..offset + size_of::<u16>()].copy_from_slice(&unit.to_le_bytes());
+        }
+        pdu
+    }
+
+    fn parse_name(name: &str) -> Result<Vec<FileDescription>, CliprdrError> {
+        FileDescription::parse_file_descriptors(descriptor_pdu(name), 0)
+    }
+
+    #[test]
+    fn rejects_unsafe_file_names() {
+        for name in [
+            "../payload",
+            "/tmp/payload",
+            "C:\\payload",
+            "folder//payload",
+            "folder/./payload",
+            "folder/",
+            "",
+            ".",
+        ] {
+            assert!(matches!(
+                parse_name(name),
+                Err(CliprdrError::InvalidRequest { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn accepts_nested_relative_file_name() {
+        let files = parse_name("folder\\nested\\file.txt").unwrap();
+        assert_eq!(files[0].name, PathBuf::from("folder/nested/file.txt"));
+    }
+
+    #[test]
+    fn ignores_data_after_null_terminator() {
+        let name = "file.txt";
+        let mut pdu = descriptor_pdu(name);
+        let padding_offset = NAME_OFFSET + (name.encode_utf16().count() + 1) * size_of::<u16>();
+        pdu[padding_offset..padding_offset + size_of::<u16>()]
+            .copy_from_slice(&INVALID_UTF16_UNIT.to_le_bytes());
+
+        let files = FileDescription::parse_file_descriptors(pdu, 0).unwrap();
+        assert_eq!(files[0].name, PathBuf::from("file.txt"));
+    }
+
+    #[test]
+    fn file_list_id_is_fnv1a() {
+        // Reference vectors; the Windows side computes the same id in C.
+        assert_eq!(file_list_id(b"") as u32, 0x811c_9dc5);
+        assert_eq!(file_list_id(b"a") as u32, 0xe40c_292c);
+        assert_eq!(file_list_id(b"foobar") as u32, 0xbf9c_f968);
+    }
+
+    #[test]
+    fn parsed_files_carry_their_list_id() {
+        let pdu = descriptor_pdu("file.txt");
+        let id = file_list_id(&pdu);
+        let files = FileDescription::parse_file_descriptors(pdu, 0).unwrap();
+        assert_eq!(files[0].clip_data_id, id);
+    }
+
+    #[test]
+    fn rejects_non_terminated_file_name() {
+        let name = "a".repeat(FILE_NAME_CODE_UNITS);
+        assert!(matches!(
+            parse_name(&name),
+            Err(CliprdrError::InvalidRequest { .. })
+        ));
+    }
+
+    fn parse_perm(attributes: u32) -> u16 {
+        let mut pdu = descriptor_pdu("folder");
+        pdu[ATTRIBUTES_OFFSET..ATTRIBUTES_OFFSET + size_of::<u32>()]
+            .copy_from_slice(&attributes.to_le_bytes());
+        FileDescription::parse_file_descriptors(pdu, 0).unwrap()[0].perm
+    }
+
+    #[test]
+    fn windows_directories_stay_searchable() {
+        const FILE_ATTRIBUTE_READONLY: u32 = 0x01;
+        const FILE_ATTRIBUTE_HIDDEN: u32 = 0x02;
+        const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+        for attributes in [
+            FILE_ATTRIBUTE_DIRECTORY,
+            FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_READONLY,
+            FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_HIDDEN,
+        ] {
+            assert_eq!(
+                parse_perm(attributes),
+                PERM_RWX,
+                "attributes {attributes:#x}"
+            );
+        }
+    }
+
+    fn parse_last_write_time(filetime: u64) -> SystemTime {
+        let mut pdu = descriptor_pdu("file.txt");
+        pdu[PDU_HEADER_SIZE..PDU_HEADER_SIZE + size_of::<u32>()]
+            .copy_from_slice(&(FLAGS_FD_ATTRIBUTES | FLAGS_FD_LAST_WRITE).to_le_bytes());
+        pdu[LAST_WRITE_TIME_OFFSET..LAST_WRITE_TIME_OFFSET + size_of::<u64>()]
+            .copy_from_slice(&filetime.to_le_bytes());
+        FileDescription::parse_file_descriptors(pdu, 0).unwrap()[0].last_modified
+    }
+
+    #[test]
+    fn decodes_last_write_time_from_windows_filetime() {
+        // 2023-11-14 22:13:20 UTC
+        assert_eq!(
+            parse_last_write_time(133_444_736_000_000_000),
+            SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000)
+        );
+        // 3000-01-01 00:00:00 UTC
+        assert_eq!(
+            parse_last_write_time(441_481_536_000_000_000),
+            SystemTime::UNIX_EPOCH + Duration::from_secs(32_503_680_000)
+        );
+        // 1969-12-31 23:59:59 UTC falls back to the Unix epoch.
+        assert_eq!(
+            parse_last_write_time(116_444_736_000_000_000 - 10_000_000),
+            SystemTime::UNIX_EPOCH
+        );
     }
 }

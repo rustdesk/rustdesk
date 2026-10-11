@@ -210,15 +210,10 @@ class ServerModel with ChangeNotifier {
       _audioOk = audioOption != 'N';
     }
 
-    // file
-    if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
-      _fileOk = false;
-      bind.mainSetOption(key: kOptionEnableFileTransfer, value: "N");
-    } else {
-      final fileOption =
-          await bind.mainGetOption(key: kOptionEnableFileTransfer);
-      _fileOk = fileOption != 'N';
-    }
+    // Android file transfer is confined to app-specific storage. Files enter
+    // and leave the workspace through Android's system document picker.
+    final fileOption = await bind.mainGetOption(key: kOptionEnableFileTransfer);
+    _fileOk = fileOption != 'N';
 
     // clipboard
     final clipOption = await bind.mainGetOption(key: kOptionEnableClipboard);
@@ -298,7 +293,7 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleAudio() async {
-    if (clients.isNotEmpty) {
+    if (clients.any((c) => !c.disconnected)) {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
     if (!_audioOk && !await AndroidPermissionManager.check(kRecordAudio)) {
@@ -316,19 +311,9 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleFile() async {
-    if (clients.isNotEmpty) {
+    if (clients.any((c) => !c.disconnected)) {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
-    if (!_fileOk &&
-        !await AndroidPermissionManager.check(kManageExternalStorage)) {
-      final res =
-          await AndroidPermissionManager.request(kManageExternalStorage);
-      if (!res) {
-        showToast(translate('Failed'));
-        return;
-      }
-    }
-
     _fileOk = !_fileOk;
     bind.mainSetOption(
         key: kOptionEnableFileTransfer,
@@ -345,7 +330,7 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleInput() async {
-    if (clients.isNotEmpty) {
+    if (clients.any((c) => !c.disconnected)) {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
     if (_inputOk) {
@@ -418,9 +403,6 @@ class ServerModel with ChangeNotifier {
       if (bind.mainGetLocalOption(key: kOptionDisableFloatingWindow) != 'Y') {
         await checkFloatingWindowPermission();
       }
-      if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
-        await AndroidPermissionManager.request(kManageExternalStorage);
-      }
       final res = await parent.target?.dialogManager
           .show<bool>((setState, close, context) {
         submit() => close(true);
@@ -469,17 +451,6 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
     // for androidUpdatekeepScreenOn only
     WakelockManager.disable(_wakelockKey);
-  }
-
-  Future<bool> setPermanentPassword(String newPW) async {
-    await bind.mainSetPermanentPassword(password: newPW);
-    await Future.delayed(Duration(milliseconds: 500));
-    final pw = await bind.mainGetPermanentPassword();
-    if (newPW == pw) {
-      return true;
-    } else {
-      return false;
-    }
   }
 
   fetchID() async {
@@ -560,10 +531,19 @@ class ServerModel with ChangeNotifier {
         if (index < 0) {
           _clients.add(client);
         } else {
+          if (_clients[index].authorized) {
+            _clients[index].privacyMode = client.privacyMode;
+            notifyListeners();
+            return;
+          }
           _clients[index].authorized = true;
+          _clients[index].privacyMode = client.privacyMode;
         }
       } else {
-        if (_clients.any((c) => c.id == client.id)) {
+        final index = _clients.indexWhere((c) => c.id == client.id);
+        if (index >= 0) {
+          _clients[index].privacyMode = client.privacyMode;
+          notifyListeners();
           return;
         }
         _clients.add(client);
@@ -740,9 +720,13 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  Future<void> closeAll() async {
-    await Future.wait(
-        _clients.map((client) => bind.cmCloseConnection(connId: client.id)));
+  /// `byOperator` false means the CM's window went away rather than a person asking for the
+  /// peers to go. The sessions end either way; only the close reason differs, and with it
+  /// whether the peer is allowed to reconnect. See `ipc::Data::CmWindowClosed`.
+  Future<void> closeAll({bool byOperator = true}) async {
+    await Future.wait(_clients.map((client) => byOperator
+        ? bind.cmCloseConnection(connId: client.id)
+        : bind.cmCloseConnectionWindow(connId: client.id)));
     _clients.clear();
     tabController.state.value.tabs.clear();
     if (isAndroid) androidUpdatekeepScreenOn();
@@ -829,6 +813,7 @@ class Client {
   bool restart = false;
   bool recording = false;
   bool blockInput = false;
+  bool privacyMode = false;
   bool disconnected = false;
   bool fromSwitch = false;
   bool inVoiceCall = false;
@@ -857,6 +842,7 @@ class Client {
     restart = json['restart'];
     recording = json['recording'];
     blockInput = json['block_input'];
+    privacyMode = json['privacy_mode'] ?? privacyMode;
     disconnected = json['disconnected'];
     fromSwitch = json['from_switch'];
     inVoiceCall = json['in_voice_call'];
@@ -881,6 +867,7 @@ class Client {
     data['restart'] = restart;
     data['recording'] = recording;
     data['block_input'] = blockInput;
+    data['privacy_mode'] = privacyMode;
     data['disconnected'] = disconnected;
     data['from_switch'] = fromSwitch;
     data['in_voice_call'] = inVoiceCall;

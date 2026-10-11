@@ -29,6 +29,80 @@ void try_set_transparent(GtkWindow* window, GdkScreen* screen, FlView* view);
 
 extern bool gIsConnectionManager;
 
+// --- Side mouse button support (back/forward) ---
+// Flutter's Linux embedder doesn't deliver X11 button 8/9 events to Dart.
+// We intercept them via GDK and forward through a dedicated platform channel.
+
+static const char* kSideButtonChannelName = "org.rustdesk.rustdesk/side_buttons";
+
+static gboolean on_side_button_event(GtkWidget* widget, GdkEventButton* event, gpointer user_data) {
+  if (event->button != 8 && event->button != 9) {
+    return FALSE;
+  }
+  // Ignore GDK_2BUTTON_PRESS / GDK_3BUTTON_PRESS (double/triple-click synthetic
+  // events) - only handle real press and release.
+  if (event->type != GDK_BUTTON_PRESS && event->type != GDK_BUTTON_RELEASE) {
+    return FALSE;
+  }
+
+  FlMethodChannel* channel = FL_METHOD_CHANNEL(user_data);
+  if (channel == NULL) return FALSE;
+
+  g_autoptr(FlValue) args = fl_value_new_map();
+  fl_value_set_string_take(args, "button",
+    fl_value_new_string(event->button == 8 ? "back" : "forward"));
+  fl_value_set_string_take(args, "type",
+    fl_value_new_string(event->type == GDK_BUTTON_PRESS ? "down" : "up"));
+
+  fl_method_channel_invoke_method(channel, "onSideMouseButton", args,
+    NULL, NULL, NULL);
+
+  return TRUE;
+}
+
+static FlMethodChannel* side_buttons_create_channel(FlEngine* engine) {
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  return fl_method_channel_new(
+    fl_engine_get_binary_messenger(engine),
+    kSideButtonChannelName,
+    FL_METHOD_CODEC(codec));
+}
+
+static void side_buttons_channel_destroy(gpointer data) {
+  g_object_unref(data);
+}
+
+static void side_buttons_init_for_window(GtkWindow* window, FlMethodChannel* channel) {
+  // Guard against double-initialization (would leave dangling signal user_data).
+  if (g_object_get_data(G_OBJECT(window), "side-buttons-channel") != NULL) return;
+
+  gtk_widget_add_events(GTK_WIDGET(window),
+    GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK);
+  // Store channel on the window so it stays alive and is freed with the window.
+  g_object_set_data_full(G_OBJECT(window), "side-buttons-channel",
+    g_object_ref(channel), side_buttons_channel_destroy);
+  g_signal_connect(window, "button-press-event",
+    G_CALLBACK(on_side_button_event), channel);
+  g_signal_connect(window, "button-release-event",
+    G_CALLBACK(on_side_button_event), channel);
+}
+
+static void on_subwindow_created(FlPluginRegistry* registry) {
+#if defined(GDK_WINDOWING_WAYLAND) && defined(HAS_KEYBOARD_SHORTCUTS_INHIBIT)
+  wayland_shortcuts_inhibit_init_for_subwindow(registry);
+#endif
+  // Set up side button forwarding for sub-windows.
+  if (registry == NULL || !FL_IS_VIEW(registry)) return;
+  FlView* view = FL_VIEW(registry);
+  GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(view));
+  if (toplevel != NULL && GTK_IS_WINDOW(toplevel)) {
+    FlMethodChannel* channel = side_buttons_create_channel(fl_view_get_engine(view));
+    if (channel == NULL) return;
+    side_buttons_init_for_window(GTK_WINDOW(toplevel), channel);
+    g_object_unref(channel);  // window now owns a ref via g_object_set_data_full
+  }
+}
+
 GtkWidget *find_gl_area(GtkWidget *widget);
 
 // Implements GApplication::activate.
@@ -96,12 +170,12 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_show(GTK_WIDGET(window));
   gtk_widget_show(GTK_WIDGET(view));
 
-#if defined(GDK_WINDOWING_WAYLAND) && defined(HAS_KEYBOARD_SHORTCUTS_INHIBIT)
-  // Register callback for sub-windows created by desktop_multi_window plugin
-  // Only sub-windows (remote windows) need keyboard shortcuts inhibition
+  // Register callback for sub-windows created by desktop_multi_window plugin.
+  // Handles both Wayland shortcuts inhibition (guarded inside) and side button
+  // forwarding. Safe to call on X11-only builds - the plugin just stores the
+  // callback pointer regardless of windowing system.
   desktop_multi_window_plugin_set_window_created_callback(
-      (WindowCreatedCallback)wayland_shortcuts_inhibit_init_for_subwindow);
-#endif
+      (WindowCreatedCallback)on_subwindow_created);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
@@ -115,6 +189,11 @@ static void my_application_activate(GApplication* application) {
     host_channel_call_handler,
     self,
     nullptr);
+
+  // Forward side mouse button events (back/forward) to Dart on the main window.
+  FlMethodChannel* side_channel = side_buttons_create_channel(fl_view_get_engine(view));
+  side_buttons_init_for_window(window, side_channel);
+  g_object_unref(side_channel);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

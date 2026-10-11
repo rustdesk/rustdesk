@@ -1,8 +1,10 @@
+# FFmpeg 7.1.1 includes the HEVC WPP slice-thread deadlock fix:
+# https://github.com/FFmpeg/FFmpeg/commit/79c47dfd25f101b6842bbec8c6ffef8d5077c3ae
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO ffmpeg/ffmpeg
     REF "n${VERSION}"
-    SHA512 3b273769ef1a1b63aed0691eef317a760f8c83b1d0e1c232b67bbee26db60b4864aafbc88df0e86d6bebf07185bbd057f33e2d5258fde6d97763b9994cd48b6f
+    SHA512 6b9a5ee501be41d6abc7579a106263b31f787321cbc45dedee97abf992bf8236cdb2394571dd256a74154f4a20018d429ae7e7f0409611ddc4d6f529d924d175
     HEAD_REF master
     PATCHES
     0001-create-lib-libraries.patch
@@ -87,7 +89,7 @@ if(VCPKG_HOST_IS_WINDOWS)
     vcpkg_acquire_msys(MSYS_ROOT PACKAGES automake1.16)
     set(SHELL "${MSYS_ROOT}/usr/bin/bash.exe")
     vcpkg_add_to_path("${MSYS_ROOT}/usr/share/automake-1.16")
-    string(APPEND OPTIONS " --pkg-config=${CURRENT_HOST_INSTALLED_DIR}/tools/pkgconf/pkgconf${VCPKG_HOST_EXECUTABLE_SUFFIX}")
+    string(APPEND OPTIONS " --pkg-config=${CURRENT_HOST_INSTALLED_DIR}/tools/pkgconf/pkgconf${VCPKG_HOST_EXECUTABLE_SUFFIX} ")
 else()
     find_program(SHELL bash)
 endif()
@@ -130,14 +132,18 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
 --cc=cl \
 --enable-gpl \
 --enable-d3d11va \
---enable-cuda \
---enable-ffnvcodec \
---enable-hwaccel=h264_nvdec \
---enable-hwaccel=hevc_nvdec \
 --enable-hwaccel=h264_d3d11va \
 --enable-hwaccel=hevc_d3d11va \
 --enable-hwaccel=h264_d3d11va2 \
 --enable-hwaccel=hevc_d3d11va2 \
+")
+
+    if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86" OR VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
+        string(APPEND OPTIONS "\
+--enable-cuda \
+--enable-ffnvcodec \
+--enable-hwaccel=h264_nvdec \
+--enable-hwaccel=hevc_nvdec \
 --enable-amf \
 --enable-encoder=h264_amf \
 --enable-encoder=hevc_amf \
@@ -147,6 +153,7 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
 --enable-encoder=h264_qsv \
 --enable-encoder=hevc_qsv \
 ")
+    endif()
 
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
         set(LIB_MACHINE_ARG /machine:x86)
@@ -154,6 +161,9 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
     elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
         set(LIB_MACHINE_ARG /machine:x64)
         string(APPEND OPTIONS " --arch=x86_64")
+    elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
+        set(LIB_MACHINE_ARG /machine:arm64)
+        string(APPEND OPTIONS " --arch=aarch64 --enable-cross-compile")
     else()
         message(FATAL_ERROR "Unsupported target architecture")
     endif()

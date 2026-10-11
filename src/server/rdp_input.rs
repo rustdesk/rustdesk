@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod client {
-    use hbb_common::platform::linux::is_kde;
+    use base::platform::linux::{DISPLAY_DESKTOP_KDE, XDG_CURRENT_DESKTOP};
 
     use super::*;
 
@@ -118,6 +118,23 @@ pub mod client {
         }
 
         fn key_sequence(&mut self, s: &str) {
+            if s.is_empty() {
+                return;
+            }
+
+            // Keep ordering deterministic:
+            // - pure ASCII printable: send via Portal keysym
+            // - any non-ASCII present (including mixed ASCII/non-ASCII): send whole
+            //   sequence via clipboard as one atomic paste
+            let ascii_only = s.chars().all(|c| {
+                let keysym = char_to_keysym(c);
+                can_input_via_keysym(c, keysym)
+            });
+            if !ascii_only {
+                input_text_via_clipboard(s, self.conn.clone(), &self.session);
+                return;
+            }
+
             for c in s.chars() {
                 let keysym = char_to_keysym(c);
                 // ASCII characters: use keysym
@@ -128,9 +145,6 @@ pub mod client {
                     if let Err(e) = send_keysym(keysym, false, self.conn.clone(), &self.session) {
                         log::error!("Failed to send keysym up: {:?}", e);
                     }
-                } else {
-                    // Non-ASCII: use clipboard
-                    input_text_via_clipboard(&c.to_string(), self.conn.clone(), &self.session);
                 }
             }
         }
@@ -167,8 +181,7 @@ pub mod client {
                 // ASCII characters: send keysym up if we also sent it on key_down
                 let keysym = char_to_keysym(chr);
                 if can_input_via_keysym(chr, keysym) {
-                    if let Err(e) = send_keysym(keysym, false, self.conn.clone(), &self.session)
-                    {
+                    if let Err(e) = send_keysym(keysym, false, self.conn.clone(), &self.session) {
                         log::error!("Failed to send keysym up: {:?}", e);
                     }
                 }
@@ -289,6 +302,19 @@ pub mod client {
         }
     }
 
+    fn desktop_is_niri(desktop: &str) -> bool {
+        desktop
+            .split(':')
+            .any(|name| name.eq_ignore_ascii_case("niri"))
+    }
+
+    lazy_static::lazy_static! {
+        static ref SHOULD_SCALE_POINTER_COORDINATES: bool =
+            std::env::var(XDG_CURRENT_DESKTOP)
+                .map(|desktop| desktop == DISPLAY_DESKTOP_KDE || desktop_is_niri(&desktop))
+                .unwrap_or(false);
+    }
+
     pub struct RdpInputMouse {
         conn: Arc<SyncConnection>,
         session: Path<'static>,
@@ -314,7 +340,7 @@ pub mod client {
             // For Ubuntu 24.04(Gnome 46), (x,y) is restricted from (0,0) to (400,300), but the actual range in screen is:
             // Logic coordinate from (0,0) to (200x150).
             // Or physical coordinate from (0,0) to (400,300).
-            let scale = if is_kde() {
+            let scale = if *SHOULD_SCALE_POINTER_COORDINATES {
                 if resolution.0 == 0 || stream.get_size().0 == 0 {
                     Some(1.0f64)
                 } else {
@@ -332,6 +358,19 @@ pub mod client {
                 scale,
                 position: (pos.0 as f64, pos.1 as f64),
             })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::desktop_is_niri;
+
+        #[test]
+        fn detects_niri_in_desktop_list() {
+            assert!(desktop_is_niri("niri"));
+            assert!(desktop_is_niri("NIRI"));
+            assert!(desktop_is_niri("GNOME:niri"));
+            assert!(!desktop_is_niri("GNOME"));
         }
     }
 

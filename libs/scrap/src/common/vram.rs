@@ -9,12 +9,11 @@ use crate::{
     hwcodec::HwCodecConfig,
     AdapterDevice, CodecFormat, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
+use base::message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use hbb_common::{
     anyhow::{anyhow, bail, Context},
     bytes::Bytes,
-    log,
-    message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
-    ResultType,
+    log, ResultType,
 };
 use hwcodec::{
     common::{DataFormat, Driver, MAX_GOP},
@@ -98,7 +97,7 @@ impl EncoderApi for VRamEncoder {
         &mut self,
         frame: EncodeInput,
         ms: i64,
-    ) -> ResultType<hbb_common::message_proto::VideoFrame> {
+    ) -> ResultType<base::message_proto::VideoFrame> {
         let (texture, rotation) = frame.texture()?;
         if rotation != 0 {
             // to-do: support rotation
@@ -119,12 +118,15 @@ impl EncoderApi for VRamEncoder {
             });
         }
         if frames.len() > 0 {
-            // This kind of problem is occurred after a period of time when using AMD encoding,
+            // This kind of problem is occurred after a period of time when using the AMD SDK,
             // the encoding length is fixed at about 40, and the picture is still
             const MIN_BAD_LEN: usize = 100;
             const MAX_BAD_COUNTER: usize = 30;
             let this_frame_len = frames[0].data.len();
-            if this_frame_len < MIN_BAD_LEN && this_frame_len == self.last_frame_len {
+            if self.ctx.f.driver == Driver::AMF
+                && this_frame_len < MIN_BAD_LEN
+                && this_frame_len == self.last_frame_len
+            {
                 self.same_bad_len_counter += 1;
                 if self.same_bad_len_counter >= MAX_BAD_COUNTER {
                     log::info!(

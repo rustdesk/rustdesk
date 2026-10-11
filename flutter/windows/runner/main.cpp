@@ -14,6 +14,7 @@
 typedef char** (*FUNC_RUSTDESK_CORE_MAIN)(int*);
 typedef void (*FUNC_RUSTDESK_FREE_ARGS)( char**, int);
 typedef int (*FUNC_RUSTDESK_GET_APP_NAME)(wchar_t*, int);
+typedef int (*FUNC_RUSTDESK_IS_DISABLE_INSTALLATION)();
 /// Note: `--server`, `--service` are already handled in [core_main.rs].
 const std::vector<std::string> parameters_white_list = {"--install", "--cm"};
 
@@ -62,6 +63,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
   std::vector<std::string> rust_args(c_args, c_args + args_len);
   free_c_args(c_args, args_len);
+  FUNC_RUSTDESK_IS_DISABLE_INSTALLATION rustdesk_is_disable_installation =
+      (FUNC_RUSTDESK_IS_DISABLE_INSTALLATION)GetProcAddress(hInstance, "rustdesk_is_disable_installation");
+  bool is_disable_installation =
+      rustdesk_is_disable_installation && rustdesk_is_disable_installation() != 0;
+  const auto installParam = std::string("--install");
+  // Flutter reads the original process command line, not only rust_args, so
+  // remove the `--install` injected by the portable wrapper here as well. This
+  // also lets `no-install.exe` continue as a portable app when installation is
+  // disabled. See: https://github.com/rustdesk/rustdesk-server-pro/issues/991#issuecomment-4978376890
+  if (is_disable_installation) {
+    command_line_arguments.erase(
+        std::remove(command_line_arguments.begin(),
+                    command_line_arguments.end(),
+                    installParam),
+        command_line_arguments.end());
+  }
 
   std::wstring app_name = L"RustDesk";
   FUNC_RUSTDESK_GET_APP_NAME get_rustdesk_app_name = (FUNC_RUSTDESK_GET_APP_NAME)GetProcAddress(hInstance, "get_rustdesk_app_name");
@@ -87,6 +104,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     }
     if (!allow_multiple_instances) {
       if (!command_line_arguments.empty()) {
+        // The process launched by the browser owns the foreground permission.
+        // Transfer it to the existing RustDesk process before dispatching the
+        // URI so that it can bring an existing session to the foreground.
+        DWORD pid = 0;
+        ::GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != 0) {
+          ::AllowSetForegroundWindow(pid);
+        }
         // Dispatch command line arguments
         DispatchToUniLinksDesktop(hwnd);
       } else {
@@ -118,7 +143,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     is_cm_page = true;
   }
   bool is_install_page = false;
-  auto installParam = std::string("--install");
   if (!command_line_arguments.empty() && command_line_arguments.front().compare(0, installParam.size(), installParam.c_str()) == 0) {
     is_install_page = true;
   }

@@ -1,15 +1,47 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:xterm/xterm.dart';
 
+import 'input_modifier_utils.dart';
 import 'model.dart';
 import 'platform_model.dart';
+import 'rustdesk_terminal.dart';
+import 'terminal_copy_shortcut.dart';
+import 'terminal_mouse_handler.dart';
+
+bool canConfigureTerminalClipboardPermission({
+  required bool settingsDisabled,
+  required bool optionFixed,
+}) =>
+    !settingsDisabled && !optionFixed;
+
+bool canHandleTerminalClipboardWriteRequest({
+  required String localOption,
+  required bool canConfigurePermission,
+}) =>
+    canConfigurePermission || localOption == kTerminalClipboardWriteAllowed;
+
+TerminalClipboardWritePermission terminalClipboardWritePermission(
+  String localOption, {
+  required bool remoteClipboardEnabled,
+  bool canRequestConsent = true,
+}) {
+  if (!remoteClipboardEnabled) {
+    return TerminalClipboardWritePermission.denied;
+  }
+  if (localOption == kTerminalClipboardWriteAllowed) {
+    return TerminalClipboardWritePermission.allowed;
+  }
+  if (localOption == kTerminalClipboardWriteUnconfigured && canRequestConsent) {
+    return TerminalClipboardWritePermission.unconfigured;
+  }
+  return TerminalClipboardWritePermission.denied;
+}
 
 class TerminalModel with ChangeNotifier {
   final String id; // peer id
@@ -23,31 +55,96 @@ class TerminalModel with ChangeNotifier {
 
   bool _disposed = false;
 
+  /// Callback to check whether Ctrl modifier lock is currently active.
+  /// When active, keyboard input is mapped to control codes (e.g. 'b' → \x02).
+  bool Function()? isCtrlLocked;
+
+  /// Callback to clear Ctrl lock after a key is pressed (one-shot mode).
+  void Function()? clearCtrlLock;
+
+  /// Callback to check whether Alt modifier lock is currently active.
+  bool Function()? isAltLocked;
+
+  /// Callback to clear Alt lock after a key is pressed (one-shot mode).
+  void Function()? clearAltLock;
+
   final _inputBuffer = <String>[];
+
+  /// Exposes buffered input only for lifecycle regression tests.
+  @visibleForTesting
+  int get debugBufferedInputCount => _inputBuffer.length;
+
   // Buffer for output data received before terminal view has valid dimensions.
   // This prevents NaN errors when writing to terminal before layout is complete.
   final _pendingOutputChunks = <String>[];
+  final _pendingOutputSuppressFlags = <bool>[];
   int _pendingOutputSize = 0;
   static const int _kMaxOutputBufferChars = 8 * 1024;
   // View ready state: true when terminal has valid dimensions, safe to write
   bool _terminalViewReady = false;
-
-  bool get isPeerWindows => parent.ffiModel.pi.platform == kPeerPlatformWindows;
+  bool _markViewReadyScheduled = false;
+  bool _suppressTerminalOutput = false;
+  bool _suppressNextTerminalDataOutput = false;
 
   void Function(int w, int h, int pw, int ph)? onResizeExternal;
 
+  /// Called when the terminal session ends (shell exits).
+  /// The listener (typically TerminalPage) can use this to auto-close the tab/page.
+  VoidCallback? onClosed;
+
+  ValueChanged<String>? onClipboardWriteBlocked;
+  ValueChanged<String>? onClipboardWriteSucceeded;
+
   Future<void> _handleInput(String data) async {
-    // If we press the `Enter` button on Android,
-    // `data` can be '\r' or '\n' when using different keyboards.
-    // Android -> Windows. '\r' works, but '\n' does not. '\n' is just a newline.
-    // Android -> Linux. Both '\r' and '\n' work as expected (execute a command).
-    // So when we receive '\n', we may need to convert it to '\r' to ensure compatibility.
-    // Desktop -> Desktop works fine.
-    // Check if we are on mobile or web(mobile), and convert '\n' to '\r'.
-    final isMobileOrWebMobile = (isMobile || (isWeb && !isWebDesktop));
-    if (isMobileOrWebMobile && isPeerWindows && data == '\n') {
-      data = '\r';
+    // xterm can complete asynchronous input after the Flutter page has gone
+    // away. Stop before reading or clearing widget-owned modifier state.
+    if (_disposed) return;
+
+    // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
+    // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
+    // - Peer Windows: '\r' works, '\n' is just a newline.
+    // - Peer Linux: canonical-mode shells accept both, but raw-mode apps
+    //   (readline, prompt_toolkit, vim, TUI frameworks) expect '\r'.
+    // - Peer macOS: same as Linux, raw-mode apps expect '\r'
+    //   (https://github.com/rustdesk/rustdesk/issues/14907).
+    // So on mobile / web-mobile, normalize the original lone '\n' to '\r'
+    // before modifier mappings. This keeps Ctrl+J mapped to LF instead of
+    // having the generated control code rewritten to CR afterward.
+    // Multi-character keyboard payloads, such as terminal escape sequences,
+    // remain unchanged. Paste input follows a separate preprocessing path.
+    final ctrlLocked = isCtrlLocked?.call() ?? false;
+    final altLocked = isAltLocked?.call() ?? false;
+    final modifiersActive = ctrlLocked || altLocked;
+    // Use the same predicate for transformation and consumption. Control keys
+    // and escape sequences must not silently consume a pending one-shot lock.
+    final shouldConsumeModifiers =
+        modifiersActive && shouldApplyTerminalInputModifiers(data);
+    data = prepareTerminalInputPayload(
+      data,
+      // IME soft-keyboard paste prompts currently arrive from xterm as normal
+      // text input with no paste-origin metadata. Keep them on the keyboard path;
+      // clipboard-content heuristics can misclassify ordinary typing.
+      source: TerminalInputSource.keyboard,
+      isMobileOrWebMobile: isMobile || (isWeb && !isWebDesktop),
+      bracketedPasteMode: terminal.bracketedPasteMode,
+      ctrlLocked: ctrlLocked,
+      altLocked: altLocked,
+    );
+    if (shouldConsumeModifiers) {
+      if (ctrlLocked) clearCtrlLock?.call();
+      if (altLocked) clearAltLock?.call();
     }
+    return _sendInputPayload(data);
+  }
+
+  /// Sends an already prepared payload without applying keyboard semantics.
+  /// Both normal input and paste use this transport path after their source-
+  /// specific preprocessing has completed.
+  Future<void> _sendInputPayload(String data) async {
+    // Clipboard reads and native sends may complete after the terminal page has
+    // closed. Never send or re-buffer input once this model is disposed.
+    if (_disposed) return;
+
     if (_terminalOpened) {
       // Send user input to remote terminal
       try {
@@ -66,11 +163,27 @@ class TerminalModel with ChangeNotifier {
   }
 
   TerminalModel(this.parent, [this.terminalId = 0]) : id = parent.id {
-    terminal = Terminal(maxLines: 10000);
+    terminal = RustDeskTerminal(
+      maxLines: 10000,
+      onClipboardWrite: writeTerminalClipboard,
+      clipboardWritePermission: () => terminalClipboardWritePermission(
+        bind.mainGetLocalOption(key: kOptionAllowTerminalClipboardWrite),
+        remoteClipboardEnabled:
+            parent.ffiModel.permissions['clipboard'] != false,
+        canRequestConsent: onClipboardWriteBlocked != null,
+      ),
+      onClipboardWriteBlocked: (text) => onClipboardWriteBlocked?.call(text),
+      onClipboardWriteSucceeded: (text) =>
+          onClipboardWriteSucceeded?.call(text),
+    );
+    terminal.mouseHandler = const WheelButtonFixMouseHandler();
     terminalController = TerminalController();
 
     // Setup terminal callbacks
-    terminal.onOutput = _handleInput;
+    terminal.onOutput = (data) {
+      if (_suppressTerminalOutput) return;
+      _handleInput(data);
+    };
 
     terminal.onResize = (w, h, pw, ph) async {
       // Validate all dimensions before using them
@@ -84,7 +197,7 @@ class TerminalModel with ChangeNotifier {
         // Mark terminal view as ready and flush any buffered output on first valid resize.
         // Must be after onResizeExternal so the view layer has valid dimensions before flushing.
         if (!_terminalViewReady) {
-          _markViewReady();
+          _scheduleMarkViewReady();
         }
 
         if (_terminalOpened) {
@@ -110,14 +223,16 @@ class TerminalModel with ChangeNotifier {
   void onReady() {
     parent.dialogManager.dismissAll();
 
-    // Fire and forget - don't block onReady
-    openTerminal().catchError((e) {
+    // Fire and forget - don't block onReady. If the transport reconnects while
+    // this model is still open, re-send OpenTerminal so the remote service marks
+    // the persistent session active again and resumes output streaming.
+    openTerminal(force: _terminalOpened).catchError((e) {
       debugPrint('[TerminalModel] Error opening terminal: $e');
     });
   }
 
-  Future<void> openTerminal() async {
-    if (_terminalOpened) return;
+  Future<void> openTerminal({bool force = false}) async {
+    if (_terminalOpened && !force) return;
     // Request the remote side to open a terminal with default shell
     // The remote side will decide which shell to use based on its OS
 
@@ -161,6 +276,18 @@ class TerminalModel with ChangeNotifier {
 
   Future<void> sendVirtualKey(String data) async {
     return _handleInput(data);
+  }
+
+  Future<void> pasteText(String data) async {
+    final payload = prepareTerminalInputPayload(
+      data,
+      source: TerminalInputSource.paste,
+      isMobileOrWebMobile: false,
+      bracketedPasteMode: terminal.bracketedPasteMode,
+      ctrlLocked: false,
+      altLocked: false,
+    );
+    return _sendInputPayload(payload);
   }
 
   Future<void> closeTerminal() async {
@@ -237,6 +364,33 @@ class TerminalModel with ChangeNotifier {
     }
   }
 
+  static int getExitCodeFromEvt(Map<String, dynamic> evt) {
+    if (evt.containsKey('exit_code')) {
+      final v = evt['exit_code'];
+      if (v is int) {
+        // Desktop and mobile send exit_code as an int
+        return v;
+      } else if (v is String) {
+        // Web sends exit_code as a string
+        final parsed = int.tryParse(v);
+        if (parsed != null) {
+          return parsed;
+        } else {
+          debugPrint(
+              '[TerminalModel] Failed to parse exit_code as integer: $v. Expected a numeric string.');
+          return 0;
+        }
+      } else {
+        debugPrint(
+            '[TerminalModel] Unexpected exit_code type: ${v.runtimeType}, value: $v. Expected int or String.');
+        return 0;
+      }
+    } else {
+      debugPrint('[TerminalModel] Event does not contain exit_code');
+      return 0;
+    }
+  }
+
   void handleTerminalResponse(Map<String, dynamic> evt) {
     final String? type = evt['type'];
     final int evtTerminalId = getTerminalIdFromEvt(evt);
@@ -275,9 +429,12 @@ class TerminalModel with ChangeNotifier {
     if (success) {
       _terminalOpened = true;
 
-      // On reconnect ("Reconnected to existing terminal"), server may replay recent output.
-      // If this TerminalView instance is reused (not rebuilt), duplicate lines can appear.
-      // We intentionally accept this tradeoff for now to keep logic simple.
+      // On reconnect, the server may replay recent output. That replay can include
+      // terminal queries like DSR/DA; xterm answers them through onOutput as
+      // "^[[1;1R^[[2;2R^[[>0;0;0c", which must not be sent back to the peer.
+      final replayTerminalOutput = evt['replay_terminal_output'];
+      _suppressNextTerminalDataOutput = replayTerminalOutput == true ||
+          message == 'Reconnected to existing terminal with pending output';
 
       // Fallback: if terminal view is not yet ready but already has valid
       // dimensions (e.g. layout completed before open response arrived),
@@ -285,7 +442,7 @@ class TerminalModel with ChangeNotifier {
       if (!_terminalViewReady &&
           terminal.viewWidth > 0 &&
           terminal.viewHeight > 0) {
-        _markViewReady();
+        _scheduleMarkViewReady();
       }
 
       // Process any buffered input
@@ -297,12 +454,16 @@ class TerminalModel with ChangeNotifier {
       });
 
       final persistentSessions =
-          evt['persistent_sessions'] as List<dynamic>? ?? [];
+          (evt['persistent_sessions'] as List<dynamic>? ?? [])
+              .whereType<int>()
+              .where((id) => !parent.terminalModels.containsKey(id))
+              .toList();
       if (kWindowId != null && persistentSessions.isNotEmpty) {
         DesktopMultiWindow.invokeMethod(
             kWindowId!,
             kWindowEventRestoreTerminalSessions,
             jsonEncode({
+              'peer_id': id,
               'persistent_sessions': persistentSessions,
             }));
       }
@@ -332,6 +493,8 @@ class TerminalModel with ChangeNotifier {
     final data = evt['data'];
 
     if (data != null) {
+      final suppressTerminalOutput = _suppressNextTerminalDataOutput;
+      _suppressNextTerminalDataOutput = false;
       try {
         String text = '';
         if (data is String) {
@@ -351,7 +514,7 @@ class TerminalModel with ChangeNotifier {
           return;
         }
 
-        _writeToTerminal(text);
+        _writeToTerminal(text, suppressTerminalOutput: suppressTerminalOutput);
       } catch (e) {
         debugPrint('[TerminalModel] Failed to process terminal data: $e');
       }
@@ -361,7 +524,10 @@ class TerminalModel with ChangeNotifier {
   /// Write text to terminal, buffering if the view is not yet ready.
   /// All terminal output should go through this method to avoid NaN errors
   /// from writing before the terminal view has valid layout dimensions.
-  void _writeToTerminal(String text) {
+  void _writeToTerminal(
+    String text, {
+    bool suppressTerminalOutput = false,
+  }) {
     if (!_terminalViewReady) {
       // If a single chunk exceeds the cap, keep only its tail.
       // Note: truncation may split a multi-byte ANSI escape sequence,
@@ -373,34 +539,73 @@ class TerminalModel with ChangeNotifier {
         _pendingOutputChunks
           ..clear()
           ..add(truncated);
+        _pendingOutputSuppressFlags
+          ..clear()
+          ..add(suppressTerminalOutput);
         _pendingOutputSize = truncated.length;
       } else {
         _pendingOutputChunks.add(text);
+        _pendingOutputSuppressFlags.add(suppressTerminalOutput);
         _pendingOutputSize += text.length;
         // Drop oldest chunks if exceeds limit (whole chunks to preserve ANSI sequences)
         while (_pendingOutputSize > _kMaxOutputBufferChars &&
             _pendingOutputChunks.length > 1) {
           final removed = _pendingOutputChunks.removeAt(0);
+          _pendingOutputSuppressFlags.removeAt(0);
           _pendingOutputSize -= removed.length;
         }
       }
       return;
     }
-    terminal.write(text);
+    _writeTerminalChunk(text, suppressTerminalOutput: suppressTerminalOutput);
   }
 
   void _flushOutputBuffer() {
     if (_pendingOutputChunks.isEmpty) return;
     debugPrint(
         '[TerminalModel] Flushing $_pendingOutputSize buffered chars (${_pendingOutputChunks.length} chunks)');
-    for (final chunk in _pendingOutputChunks) {
-      terminal.write(chunk);
+    for (var i = 0; i < _pendingOutputChunks.length; i++) {
+      _writeTerminalChunk(
+        _pendingOutputChunks[i],
+        suppressTerminalOutput: _pendingOutputSuppressFlags[i],
+      );
     }
     _pendingOutputChunks.clear();
+    _pendingOutputSuppressFlags.clear();
     _pendingOutputSize = 0;
   }
 
+  void _writeTerminalChunk(
+    String text, {
+    required bool suppressTerminalOutput,
+  }) {
+    if (!suppressTerminalOutput) {
+      terminal.write(text);
+      return;
+    }
+    final previous = _suppressTerminalOutput;
+    _suppressTerminalOutput = true;
+    try {
+      terminal.write(text);
+    } finally {
+      _suppressTerminalOutput = previous;
+    }
+  }
+
   /// Mark terminal view as ready and flush buffered output.
+  void _scheduleMarkViewReady() {
+    if (_disposed || _terminalViewReady || _markViewReadyScheduled) return;
+    _markViewReadyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _markViewReadyScheduled = false;
+      if (_disposed || _terminalViewReady) return;
+      if (terminal.viewWidth > 0 && terminal.viewHeight > 0) {
+        _markViewReady();
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   void _markViewReady() {
     if (_terminalViewReady) return;
     _terminalViewReady = true;
@@ -408,10 +613,12 @@ class TerminalModel with ChangeNotifier {
   }
 
   void _handleTerminalClosed(Map<String, dynamic> evt) {
-    final int exitCode = evt['exit_code'] ?? 0;
+    final int exitCode = getExitCodeFromEvt(evt);
     _writeToTerminal('\r\nTerminal closed with exit code: $exitCode\r\n');
     _terminalOpened = false;
     notifyListeners();
+    // Auto-close the tab/page
+    onClosed?.call();
   }
 
   void _handleTerminalError(Map<String, dynamic> evt) {
@@ -423,10 +630,23 @@ class TerminalModel with ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    terminal.onOutput = null;
+    terminal.onResize = null;
+    isCtrlLocked = null;
+    clearCtrlLock = null;
+    isAltLocked = null;
+    clearAltLock = null;
+    onResizeExternal = null;
+    onClosed = null;
+    onClipboardWriteBlocked = null;
+    onClipboardWriteSucceeded = null;
     // Clear buffers to free memory
     _inputBuffer.clear();
     _pendingOutputChunks.clear();
+    _pendingOutputSuppressFlags.clear();
     _pendingOutputSize = 0;
+    _markViewReadyScheduled = false;
+    _suppressNextTerminalDataOutput = false;
     // Terminal cleanup is handled server-side when service closes
     super.dispose();
   }

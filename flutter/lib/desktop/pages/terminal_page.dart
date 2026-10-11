@@ -5,7 +5,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
-import 'package:xterm/xterm.dart';
+import 'package:flutter_hbb/models/terminal_mouse_handler.dart';
 import 'terminal_connection_manager.dart';
 
 class TerminalPage extends StatefulWidget {
@@ -19,6 +19,8 @@ class TerminalPage extends StatefulWidget {
     required this.tabKey,
     this.forceRelay,
     this.connToken,
+    this.onClipboardWriteBlocked,
+    this.onClipboardWriteSucceeded,
   }) : super(key: key);
   final String id;
   final String? password;
@@ -26,7 +28,10 @@ class TerminalPage extends StatefulWidget {
   final bool? forceRelay;
   final bool? isSharedPassword;
   final String? connToken;
+  final ValueChanged<String>? onClipboardWriteBlocked;
+  final ValueChanged<String>? onClipboardWriteSucceeded;
   final int terminalId;
+
   /// Tab key for focus management, passed from parent to avoid duplicate construction
   final String tabKey;
   final SimpleWrapper<State<TerminalPage>?> _lastState = SimpleWrapper(null);
@@ -43,6 +48,9 @@ class TerminalPage extends StatefulWidget {
 
 class _TerminalPageState extends State<TerminalPage>
     with AutomaticKeepAliveClientMixin {
+  static const EdgeInsets _defaultTerminalPadding =
+      EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
+
   late FFI _ffi;
   late TerminalModel _terminalModel;
   double? _cellHeight;
@@ -67,6 +75,8 @@ class _TerminalPageState extends State<TerminalPage>
 
     // Create terminal model with specific terminal ID
     _terminalModel = TerminalModel(_ffi, widget.terminalId);
+    _terminalModel.onClipboardWriteBlocked = widget.onClipboardWriteBlocked;
+    _terminalModel.onClipboardWriteSucceeded = widget.onClipboardWriteSucceeded;
     debugPrint(
         '[TerminalPage] Terminal model created for terminal ${widget.terminalId}');
 
@@ -90,6 +100,13 @@ class _TerminalPageState extends State<TerminalPage>
 
     // Register this terminal model with FFI for event routing
     _ffi.registerTerminalModel(widget.terminalId, _terminalModel);
+
+    // Auto-close tab when shell exits
+    _terminalModel.onClosed = () {
+      if (mounted) {
+        widget.tabController.closeBy(widget.tabKey);
+      }
+    };
 
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -155,13 +172,27 @@ class _TerminalPageState extends State<TerminalPage>
   // extra space left after dividing the available height by the height of a single
   // terminal row (`_cellHeight`) and distributing it evenly as top and bottom padding.
   EdgeInsets _calculatePadding(double heightPx) {
-    if (_cellHeight == null) {
-      return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
+    final cellHeight = _cellHeight;
+    if (!heightPx.isFinite ||
+        heightPx <= 0 ||
+        cellHeight == null ||
+        !cellHeight.isFinite ||
+        cellHeight <= 0) {
+      return _defaultTerminalPadding;
     }
-    final rows = (heightPx / _cellHeight!).floor();
-    final extraSpace = heightPx - rows * _cellHeight!;
+    final rows = (heightPx / cellHeight).floor();
+    if (rows <= 0) {
+      return _defaultTerminalPadding;
+    }
+    final extraSpace = heightPx - rows * cellHeight;
+    if (!extraSpace.isFinite || extraSpace < 0) {
+      return _defaultTerminalPadding;
+    }
     final topBottom = extraSpace / 2.0;
-    return EdgeInsets.symmetric(horizontal: 5.0, vertical: topBottom);
+    return EdgeInsets.symmetric(
+      horizontal: _defaultTerminalPadding.horizontal / 2,
+      vertical: topBottom,
+    );
   }
 
   @override
@@ -172,7 +203,7 @@ class _TerminalPageState extends State<TerminalPage>
       body: LayoutBuilder(
         builder: (context, constraints) {
           final heightPx = constraints.maxHeight;
-          return TerminalView(
+          return TerminalMouseInteraction(
             _terminalModel.terminal,
             controller: _terminalModel.terminalController,
             focusNode: _terminalFocusNode,

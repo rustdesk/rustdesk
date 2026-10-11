@@ -148,7 +148,6 @@ Hãy đảm bảo rằng bạn đang chạy các lệnh này từ gốc của th
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: giao tiếp với [rustdesk-server](https://github.com/rustdesk/rustdesk-server), đợi kết nối trực tiếp (TCP hole punching) hoặc kết nối được chuyển tiếp.
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: mã nguồn riêng cho mỗi nền tảng
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Mã Flutter dành máy tính và điện thoại
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Mã JavaScript dành cho giao diện trên web bằng Flutter
 
 ## Snapshot
 

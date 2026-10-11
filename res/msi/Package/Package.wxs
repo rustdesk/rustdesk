@@ -13,7 +13,14 @@
 		<PropertyRef Id="AddRemovePropertiesFile" />
 
 		<Media Id="1" Cabinet="cab1.cab" EmbedCab="yes" CompressionLevel="high" />
+		<!--$Media2Start$-->
+		<!-- preprocess.py in template mode adds a second cabinet here, holding only
+		     the files that differ per customer, so a custom client can be produced by
+		     rebuilding that small cabinet instead of the whole package. The shipped
+		     msi is built without template mode and keeps a single cabinet. -->
+		<!--$Media2End$-->
 		<Icon Id="AppIcon" SourceFile="Resources\icon.ico" />
+		<CustomAction Id="BlockSelfInstalledApp" Error="!(loc.AnotherAppDialogDescription)" />
 
 		<!-- User Interface -->
 		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
@@ -22,10 +29,11 @@
 		<UIRef Id="WixUI_ErrorProgressText" />
 
 		<InstallUISequence>
-			<Show Dialog="UI_AnotherAppDialog" Before="WelcomeDlg" Condition="Not installed AND APP_WINDOWS_INSTALLER=&quot;#0&quot;"/>
+			<Show Dialog="UI_AnotherAppDialog" Before="WelcomeDlg" Condition="NOT Installed AND (APP_WINDOWS_INSTALLER=&quot;#0&quot; OR APP_WINDOWS_INSTALLER32=&quot;#0&quot;)"/>
 		</InstallUISequence>
 
 		<InstallExecuteSequence>
+			<Custom Action="BlockSelfInstalledApp" After="AppSearch" Condition="NOT Installed AND (APP_WINDOWS_INSTALLER=&quot;#0&quot; OR APP_WINDOWS_INSTALLER32=&quot;#0&quot;)" />
 			<InstallExecute After="RemoveExistingProducts" />
 
 			<!--Only do InstallValidate if is not Uninstall-->
@@ -45,7 +53,9 @@
 			<ComponentRef Id="Product.Registry.CommandPlay" />
 			<ComponentRef Id="Product.Registry.URLProtocol" />
 			<ComponentRef Id="Product.Registry.Command" />
-			<ComponentRef Id="Product.Registry.UninstallApp" />
+			<ComponentRef Id="Product.Registry.InstallState" />
+			<ComponentRef Id="Product.Registry.RemoveLegacyUninstall64" />
+			<ComponentRef Id="Product.Registry.RemoveLegacyUninstall32" />
 			<ComponentRef Id="App.StartMenu" />
 			<ComponentRef Id="Product.Registry.PersistedStartMenuShortcutProperties1" />
 			<ComponentRef Id="Product.Registry.PersistedStartMenuShortcutProperties0" />

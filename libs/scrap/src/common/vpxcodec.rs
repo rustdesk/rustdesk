@@ -5,8 +5,8 @@
 
 use hbb_common::anyhow::{anyhow, Context};
 use hbb_common::log;
-use hbb_common::message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use hbb_common::ResultType;
+use base::message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 
 use crate::codec::{base_bitrate, codec_thread_num, EncoderApi};
 use crate::{EncodeInput, EncodeYuvFormat, GoogleImage, Pixfmt, STRIDE_ALIGN};

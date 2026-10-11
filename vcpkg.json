@@ -21,8 +21,9 @@
       "host": false
     },
     {
-      "name": "oboe",
-      "platform": "android"
+      "name": "libsodium",
+      "host": false,
+      "platform": "windows & arm64"
     },
     {
       "name": "opus",
@@ -64,15 +65,15 @@
       "features": [
         {
           "name": "amf",
-          "platform": "((windows | linux) & static)"
+          "platform": "(((windows & !arm) | linux) & static)"
         },
         {
           "name": "nvcodec",
-          "platform": "((windows | linux) & static)"
+          "platform": "(((windows & !arm) | linux) & static)"
         },
         {
           "name": "qsv",
-          "platform": "(windows & static)"
+          "platform": "(windows & !arm & static)"
         }
       ],
       "platform": "((windows | (linux & !arm32) | osx) & static)"
@@ -86,10 +87,13 @@
   "vcpkg-configuration": {
     "default-registry": {
       "kind": "builtin",
-      "baseline": "120deac3062162151622ca4860575a33844ba10b"
+      "baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
     },
     "overlay-ports": [
       "./res/vcpkg"
+    ],
+    "overlay-triplets": [
+      "./res/vcpkg-triplets"
     ]
   },
   "overrides": [

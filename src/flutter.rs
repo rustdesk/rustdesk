@@ -10,9 +10,10 @@ use hbb_common::dlopen::{
     Error as LibError,
 };
 use hbb_common::{
-    anyhow::anyhow, bail, config::LocalConfig, get_version_number, log, message_proto::*,
+    anyhow::anyhow, bail, config::LocalConfig, get_version_number, log,
     rendezvous_proto::ConnType, ResultType,
 };
+use base::message_proto::*;
 use serde::Serialize;
 use serde_json::json;
 #[cfg(target_os = "windows")]
@@ -104,6 +105,16 @@ fn load_plugin_in_app_path(dll_name: &str) -> Result<Library, LibError> {
 #[cfg(not(windows))]
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main() -> bool {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        use hbb_common::libc;
+
+        // Native runners bypass Rust's startup, which normally ignores SIGPIPE.
+        if unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) } == libc::SIG_ERR {
+            eprintln!("Failed to ignore SIGPIPE: {}", std::io::Error::last_os_error());
+            std::process::exit(1);
+        }
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if crate::core_main::core_main().is_some() {
         return true;
@@ -134,6 +145,12 @@ pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_c
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return std::ptr::null_mut() as _;
+}
+
+#[cfg(windows)]
+#[no_mangle]
+pub extern "C" fn rustdesk_is_disable_installation() -> c_int {
+    hbb_common::config::is_disable_installation() as c_int
 }
 
 // https://gist.github.com/iskakaushik/1c5b8aa75c77479c33c4320913eebef6
@@ -219,8 +236,6 @@ pub struct FlutterHandler {
     session_handlers: Arc<RwLock<HashMap<SessionID, SessionHandler>>>,
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
     peer_info: Arc<RwLock<PeerInfo>>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
     use_texture_render: Arc<AtomicBool>,
 }
 
@@ -230,8 +245,6 @@ impl Default for FlutterHandler {
             session_handlers: Default::default(),
             display_rgbas: Default::default(),
             peer_info: Default::default(),
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            hooks: Default::default(),
             use_texture_render: Arc::new(
                 AtomicBool::new(crate::ui_interface::use_texture_render()),
             ),
@@ -630,30 +643,6 @@ impl FlutterHandler {
         serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())
     }
 
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub(crate) fn add_session_hook(&self, key: String, hook: SessionHook) -> bool {
-        let mut hooks = self.hooks.write().unwrap();
-        if hooks.contains_key(&key) {
-            // Already has the hook with this key.
-            return false;
-        }
-        let _ = hooks.insert(key, hook);
-        true
-    }
-
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub(crate) fn remove_session_hook(&self, key: &String) -> bool {
-        let mut hooks = self.hooks.write().unwrap();
-        if !hooks.contains_key(key) {
-            // The hook with this key does not found.
-            return false;
-        }
-        let _ = hooks.remove(key);
-        true
-    }
-
     pub fn update_use_texture_render(&self) {
         self.use_texture_render
             .store(crate::ui_interface::use_texture_render(), Ordering::Relaxed);
@@ -662,23 +651,21 @@ impl FlutterHandler {
 }
 
 impl InvokeUiSession for FlutterHandler {
+    // On the event stream, so that it keeps its order with the cursor_id events around it.
     fn set_cursor_data(&self, cd: CursorData) {
-        let colors = hbb_common::compress::decompress(&cd.colors);
-        self.push_event(
-            "cursor_data",
-            &[
-                ("id", &cd.id.to_string()),
-                ("hotx", &cd.hotx.to_string()),
-                ("hoty", &cd.hoty.to_string()),
-                ("width", &cd.width.to_string()),
-                ("height", &cd.height.to_string()),
-                (
-                    "colors",
-                    &serde_json::ser::to_string(&colors).unwrap_or("".to_owned()),
-                ),
-            ],
-            &[],
-        );
+        let colors = cd.colors.to_vec();
+        for session in self.session_handlers.read().unwrap().values() {
+            if let Some(stream) = &session.event_stream {
+                stream.add(EventToUI::Cursor {
+                    id: cd.id.to_string(),
+                    hotx: cd.hotx,
+                    hoty: cd.hoty,
+                    width: cd.width,
+                    height: cd.height,
+                    colors: colors.clone(),
+                });
+            }
+        }
     }
 
     fn set_cursor_id(&self, id: String) {
@@ -1124,7 +1111,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     fn handle_terminal_response(&self, response: TerminalResponse) {
-        use hbb_common::message_proto::terminal_response::Union;
+        use base::message_proto::terminal_response::Union;
 
         match response.union {
             Some(Union::Opened(opened)) => {
@@ -1135,6 +1122,10 @@ impl InvokeUiSession for FlutterHandler {
                     ("message", json!(&opened.message)),
                     ("pid", json!(opened.pid)),
                     ("service_id", json!(&opened.service_id)),
+                    (
+                        "replay_terminal_output",
+                        json!(opened.replay_terminal_output),
+                    ),
                 ];
                 if !opened.persistent_sessions.is_empty() {
                     event_data.push(("persistent_sessions", json!(opened.persistent_sessions)));
@@ -1184,15 +1175,6 @@ impl InvokeUiSession for FlutterHandler {
 impl FlutterHandler {
     #[inline]
     fn on_rgba_soft_render(&self, display: usize, rgba: &mut scrap::ImageRgb) {
-        // Give a chance for plugins or etc to hook a rgba data.
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        for (key, hook) in self.hooks.read().unwrap().iter() {
-            match hook {
-                SessionHook::OnSessionRgba(cb) => {
-                    cb(key.to_owned(), rgba);
-                }
-            }
-        }
         // If the current rgba is not fetched by flutter, i.e., is valid.
         // We give up sending a new event to flutter.
         let mut rgba_write_lock = self.display_rgbas.write().unwrap();
@@ -1433,7 +1415,8 @@ fn try_send_close_event(event_stream: &Option<StreamSink<EventToUI>>) {
 pub fn update_text_clipboard_required() {
     let is_required = sessions::get_sessions()
         .iter()
-        .any(|s| s.is_text_clipboard_required());
+        .filter(|s| s.connection_round_state.lock().unwrap().is_connected())
+        .any(|s| s.is_default() && s.is_text_clipboard_required());
     #[cfg(target_os = "android")]
     let _ = scrap::android::ffi::call_clipboard_manager_enable_client_clipboard(is_required);
     Client::set_is_text_clipboard_required(is_required);
@@ -1443,13 +1426,33 @@ pub fn update_text_clipboard_required() {
 pub fn update_file_clipboard_required() {
     let is_required = sessions::get_sessions()
         .iter()
-        .any(|s| s.is_file_clipboard_required());
+        .filter(|s| s.connection_round_state.lock().unwrap().is_connected())
+        .any(|s| s.is_default() && s.is_file_clipboard_required());
     Client::set_is_file_clipboard_required(is_required);
 }
 
 #[cfg(not(target_os = "ios"))]
 pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
+    send_clipboard_msg_impl(msg, _is_file, None);
+}
+
+// `except_session_id` is the session the content came from, to avoid sending it back.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn send_clipboard_msg_to_other_sessions(msg: Message, except_session_id: u64) {
+    send_clipboard_msg_impl(msg, false, Some(except_session_id));
+}
+
+#[cfg(not(target_os = "ios"))]
+fn send_clipboard_msg_impl(msg: Message, _is_file: bool, except_session_id: Option<u64>) {
     for s in sessions::get_sessions() {
+        if !s.is_default() {
+            continue;
+        }
+        if let Some(except_session_id) = except_session_id {
+            if s.lc.read().unwrap().session_id == except_session_id {
+                continue;
+            }
+        }
         #[cfg(feature = "unix-file-copy-paste")]
         if _is_file {
             if crate::is_support_file_copy_paste_num(s.lc.read().unwrap().version)
@@ -1576,20 +1579,8 @@ pub mod connection_manager {
         }
     }
 
-    #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn start_cm_no_ui() {
-        start_listen_ipc(false);
-    }
-
-    #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn start_listen_ipc_thread() {
-        start_listen_ipc(true);
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn start_listen_ipc(new_thread: bool) {
+    fn start_listen_ipc() {
         use crate::ui_cm_interface::{start_ipc, ConnectionManager};
 
         #[cfg(target_os = "linux")]
@@ -1598,17 +1589,13 @@ pub mod connection_manager {
         let cm = ConnectionManager {
             ui_handler: FlutterHandler {},
         };
-        if new_thread {
-            std::thread::spawn(move || start_ipc(cm));
-        } else {
-            start_ipc(cm);
-        }
+        std::thread::spawn(move || start_ipc(cm));
     }
 
     #[inline]
     pub fn cm_init() {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        start_listen_ipc_thread();
+        start_listen_ipc();
     }
 
     #[cfg(target_os = "android")]
@@ -1950,12 +1937,6 @@ pub fn session_on_waiting_for_image_dialog_show(session_id: SessionID) {
     }
 }
 
-/// Hooks for session.
-#[derive(Clone)]
-pub enum SessionHook {
-    OnSessionRgba(fn(String, &mut scrap::ImageRgb)),
-}
-
 #[inline]
 pub fn get_cur_session() -> Option<FlutterSession> {
     sessions::get_session_by_session_id(&*CUR_SESSION_ID.read().unwrap())
@@ -2116,6 +2097,45 @@ pub mod sessions {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         update_session_count_to_server();
         s
+    }
+
+    /// Close every client session, returning how many peer sessions were closed.
+    ///
+    /// Used when the UI is gone but the process keeps running, e.g. the Android
+    /// task is swiped away from recents while a foreground service keeps the
+    /// process alive. The orphaned `io_loop` would otherwise keep answering
+    /// `TestDelay`, so the peer never hits its inactivity timeout and the
+    /// session stays established with no way to close it.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    pub fn close_all_sessions() -> usize {
+        // Release held keys before draining: the release path sends through
+        // `get_cur_session()`, which resolves against SESSIONS, so draining
+        // first would take TO_RELEASE and then silently drop every key-up,
+        // leaving the key stuck on the controlled side. A no-op when nothing
+        // is held.
+        crate::keyboard::release_remote_keys("map");
+        // Drain so the map lock is released before closing each session.
+        let sessions: Vec<FlutterSession> = SESSIONS
+            .write()
+            .unwrap()
+            .drain()
+            .map(|(_, session)| session)
+            .collect();
+        for session in sessions.iter() {
+            let session_ids: Vec<SessionID> = session
+                .ui_handler
+                .session_handlers
+                .read()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect();
+            for session_id in session_ids {
+                session.close_event_stream(session_id);
+            }
+            session.close();
+        }
+        sessions.len()
     }
 
     /// Check if removing a session by session_id would result in removing the entire peer.
@@ -2291,6 +2311,16 @@ pub mod sessions {
     pub fn has_sessions_running(conn_type: ConnType) -> bool {
         SESSIONS.read().unwrap().iter().any(|((_, r#type), s)| {
             *r#type == conn_type && s.session_handlers.read().unwrap().len() != 0
+        })
+    }
+
+    #[inline]
+    #[cfg(not(target_os = "ios"))]
+    pub fn has_connected_sessions_running(conn_type: ConnType) -> bool {
+        SESSIONS.read().unwrap().iter().any(|((_, r#type), s)| {
+            *r#type == conn_type
+                && s.session_handlers.read().unwrap().len() != 0
+                && s.connection_round_state.lock().unwrap().is_connected()
         })
     }
 }

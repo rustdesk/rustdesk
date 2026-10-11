@@ -17,6 +17,7 @@ import '../../common/widgets/login.dart';
 import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../widgets/deploy_dialog.dart';
 import '../widgets/dialog.dart';
 import 'home_page.dart';
 import 'scan_page.dart';
@@ -77,6 +78,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _enableAbr = false;
   var _denyLANDiscovery = false;
   var _onlyWhiteList = false;
+  var _onlyIdWhiteList = false;
   var _enableDirectIPAccess = false;
   var _enableRecordSession = false;
   var _enableHardwareCodec = false;
@@ -88,16 +90,19 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _directAccessPort = "";
   var _fingerprint = "";
   var _buildDate = "";
+  var _myId = "";
   var _autoDisconnectTimeout = "";
   var _hideServer = false;
   var _hideProxy = false;
   var _hideNetwork = false;
   var _hideWebSocket = false;
   var _enableTrustedDevices = false;
+  var _enableTcpPunch = false;
   var _enableUdpPunch = false;
   var _allowInsecureTlsFallback = false;
   var _disableUdp = false;
   var _enableIpv6Punch = false;
+  var _enableWebrtc = false;
   var _isUsingPublicServer = false;
   var _allowAskForNoteAtEndOfConnection = false;
   var _preventSleepWhileConnected = true;
@@ -108,6 +113,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _denyLANDiscovery = !option2bool(kOptionEnableLanDiscovery,
         bind.mainGetOptionSync(key: kOptionEnableLanDiscovery));
     _onlyWhiteList = whitelistNotEmpty();
+    _onlyIdWhiteList = idWhitelistNotEmpty();
     _enableDirectIPAccess = option2bool(
         kOptionDirectServer, bind.mainGetOptionSync(key: kOptionDirectServer));
     _enableRecordSession = option2bool(kOptionEnableRecordSession,
@@ -137,8 +143,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y' ||
             isWeb;
     _enableTrustedDevices = mainGetBoolOptionSync(kOptionEnableTrustedDevices);
+    _enableTcpPunch = mainGetLocalBoolOptionSync(kOptionEnableTcpPunch);
     _enableUdpPunch = mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
     _enableIpv6Punch = mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
+    _enableWebrtc = mainGetLocalBoolOptionSync(kOptionEnableWebrtc);
     _allowAskForNoteAtEndOfConnection =
         mainGetLocalBoolOptionSync(kOptionAllowAskForNoteAtEndOfConnection);
     _preventSleepWhileConnected =
@@ -214,6 +222,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (_buildDate != buildDate) {
         update = true;
         _buildDate = buildDate;
+      }
+
+      final myId = await bind.mainGetMyId();
+      if (_myId != myId) {
+        update = true;
+        _myId = myId;
       }
 
       final isUsingPublicServer = await bind.mainIsUsingPublicServer();
@@ -397,6 +411,29 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           }
 
           changeWhiteList(callback: update);
+        },
+      ),
+      SettingsTile.switchTile(
+        title: Row(children: [
+          Expanded(child: Text(translate('Use ID whitelisting'))),
+          Offstage(
+                  offstage: !_onlyIdWhiteList,
+                  child: const Icon(Icons.warning_amber_rounded,
+                      color: Color.fromARGB(255, 255, 204, 0)))
+              .marginOnly(left: 5)
+        ]),
+        initialValue: _onlyIdWhiteList,
+        onToggle: (_) async {
+          update() async {
+            final onlyIdWhiteList = idWhitelistNotEmpty();
+            if (onlyIdWhiteList != _onlyIdWhiteList) {
+              setState(() {
+                _onlyIdWhiteList = onlyIdWhiteList;
+              });
+            }
+          }
+
+          changeIdWhiteList(callback: update);
         },
       ),
       SettingsTile.switchTile(
@@ -728,6 +765,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 onPressed: (context) {
                   changeSocks5Proxy();
                 }),
+          if (isAndroid && !bind.isOutgoingOnly())
+            SettingsTile(
+                title: Text(translate('Deploy')),
+                leading: Icon(Icons.cloud_upload),
+                onPressed: (context) {
+                  showDeployDialog();
+                }),
           if (!disabledSettings && !_hideNetwork && !_hideWebSocket)
             SettingsTile.switchTile(
               title: Text(translate('Use WebSocket')),
@@ -777,29 +821,63 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ),
           if (!incomingOnly)
             SettingsTile.switchTile(
+              title: Text(translate('Enable TCP hole punching')),
+              initialValue: _enableTcpPunch,
+              onToggle: isOptionFixed(kOptionEnableTcpPunch)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(kOptionEnableTcpPunch, v);
+                      final newValue =
+                          mainGetLocalBoolOptionSync(kOptionEnableTcpPunch);
+                      setState(() {
+                        _enableTcpPunch = newValue;
+                      });
+                    },
+            ),
+          if (!incomingOnly)
+            SettingsTile.switchTile(
               title: Text(translate('Enable UDP hole punching')),
               initialValue: _enableUdpPunch,
-              onToggle: (v) async {
-                await mainSetLocalBoolOption(kOptionEnableUdpPunch, v);
-                final newValue =
-                    mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
-                setState(() {
-                  _enableUdpPunch = newValue;
-                });
-              },
+              onToggle: isOptionFixed(kOptionEnableUdpPunch)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(kOptionEnableUdpPunch, v);
+                      final newValue =
+                          mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
+                      setState(() {
+                        _enableUdpPunch = newValue;
+                      });
+                    },
             ),
           if (!incomingOnly)
             SettingsTile.switchTile(
               title: Text(translate('Enable IPv6 P2P connection')),
               initialValue: _enableIpv6Punch,
-              onToggle: (v) async {
-                await mainSetLocalBoolOption(kOptionEnableIpv6Punch, v);
-                final newValue =
-                    mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
-                setState(() {
-                  _enableIpv6Punch = newValue;
-                });
-              },
+              onToggle: isOptionFixed(kOptionEnableIpv6Punch)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(kOptionEnableIpv6Punch, v);
+                      final newValue =
+                          mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
+                      setState(() {
+                        _enableIpv6Punch = newValue;
+                      });
+                    },
+            ),
+          if (!incomingOnly)
+            SettingsTile.switchTile(
+              title: Text(translate('Enable WebRTC P2P connection')),
+              initialValue: _enableWebrtc,
+              onToggle: isOptionFixed(kOptionEnableWebrtc)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(kOptionEnableWebrtc, v);
+                      final newValue =
+                          mainGetLocalBoolOptionSync(kOptionEnableWebrtc);
+                      setState(() {
+                        _enableWebrtc = newValue;
+                      });
+                    },
             ),
           SettingsTile(
               title: Text(translate('Language')),
@@ -974,6 +1052,14 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                     child: Text(_fingerprint),
                   ),
                   leading: Icon(Icons.fingerprint)),
+            SettingsTile(
+                onPressed: (context) => onCopyId(_myId),
+                title: Text(translate("ID")),
+                value: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(_myId),
+                ),
+                leading: Icon(Icons.perm_identity)),
             SettingsTile(
               title: Text(translate("Privacy Statement")),
               onPressed: (context) =>
@@ -1221,16 +1307,18 @@ class __DisplayPageState extends State<_DisplayPage> {
   }
 
   SettingsTile otherRow(String label, String key) {
-    final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
-    final isOptFixed = isOptionFixed(key);
+    final value = getOtherDefaultSettingOption(key) == 'Y';
+    final isOptFixed = isOtherDefaultSettingReadOnly(key);
     return SettingsTile.switchTile(
       initialValue: value,
       title: Text(translate(label)),
       onToggle: isOptFixed
           ? null
           : (b) async {
-              await bind.mainSetUserDefaultOption(
-                  key: key, value: b ? 'Y' : defaultOptionNo);
+              await setOtherDefaultSettingOption(
+                key,
+                b ? 'Y' : defaultOptionNo,
+              );
               setState(() {});
             },
     );

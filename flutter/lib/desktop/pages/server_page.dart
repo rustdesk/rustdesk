@@ -22,6 +22,14 @@ import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 
+/// Set only by this window's own close control, and only once the user has confirmed. Any other
+/// way the window can go - a session logout closing every window, the window manager, a native
+/// title-bar button this app does not draw - leaves it false, which is the honest answer:
+/// nothing in that close says who asked for it. It lives at file scope because the control that
+/// sets it (`ConnectionManagerState`) and the handler that reads it (`_DesktopServerPageState`)
+/// are different widgets.
+bool _cmClosedByOperator = false;
+
 class DesktopServerPage extends StatefulWidget {
   const DesktopServerPage({Key? key}) : super(key: key);
 
@@ -55,7 +63,10 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void onWindowClose() {
-    Future.wait([gFFI.serverModel.closeAll(), gFFI.close()]).then((_) {
+    // Other platforms keep the old behaviour exactly: the ambiguity this guards against is a
+    // Linux session logout, which closes every window in the session.
+    final byOperator = _cmClosedByOperator || !isLinux;
+    Future.wait([gFFI.serverModel.closeAll(byOperator: byOperator), gFFI.close()]).then((_) {
       if (isMacOS) {
         RdPlatformChannel.instance.terminate();
       } else {
@@ -327,6 +338,7 @@ class ConnectionManagerState extends State<ConnectionManager>
     var tabController = gFFI.serverModel.tabController;
     final connLength = tabController.length;
     if (connLength <= 1) {
+      _cmClosedByOperator = true;
       windowManager.close();
       return true;
     } else {
@@ -338,6 +350,9 @@ class ConnectionManagerState extends State<ConnectionManager>
         res = await closeConfirmDialog();
       }
       if (res) {
+        // After the dialog, never before it: an external close while it is open must not
+        // inherit an intent the user had not expressed yet.
+        _cmClosedByOperator = true;
         windowManager.close();
       }
       return res;
@@ -495,14 +510,14 @@ class _CmHeaderState extends State<_CmHeader>
                 if (client.type_() == ClientType.file)
                   FittedBox(
                     child: Text(
-                      translate("File Transfer"),
+                      translate("Transfer file"),
                       style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ),
                 if (client.type_() == ClientType.camera)
                   FittedBox(
                     child: Text(
-                      translate("View Camera"),
+                      translate("View camera"),
                       style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ),
@@ -610,19 +625,24 @@ class _PrivilegeBoard extends StatefulWidget {
 class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   late final client = widget.client;
   Widget buildPermissionIcon(bool enabled, IconData iconData,
-      Function(bool)? onTap, String tooltipText) {
+      Function(bool)? onTap, String tooltipText,
+      {required bool canModify}) {
     return Tooltip(
       message: "$tooltipText: ${enabled ? "ON" : "OFF"}",
       waitDuration: Duration.zero,
       child: Container(
         decoration: BoxDecoration(
-          color: enabled ? MyTheme.accent : Colors.grey[700],
+          color: enabled
+              ? (canModify ? MyTheme.accent : MyTheme.accent.withOpacity(0.6))
+              : Colors.grey[700],
           borderRadius: BorderRadius.circular(10.0),
         ),
         padding: EdgeInsets.all(8.0),
         child: InkWell(
-          onTap: () =>
-              checkClickTime(widget.client.id, () => onTap?.call(!enabled)),
+          onTap: canModify
+              ? () =>
+                  checkClickTime(widget.client.id, () => onTap?.call(!enabled))
+              : null,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -643,6 +663,9 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   Widget build(BuildContext context) {
     final crossAxisCount = 4;
     final spacing = 10.0;
+    final canModifyPermission =
+        bind.mainGetBuildinOption(key: kOptionEnablePermChangeInAcceptWindow) !=
+            'N';
     return Container(
       width: double.infinity,
       height: 160.0,
@@ -689,6 +712,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                           });
                         },
                         translate('Enable audio'),
+                        canModify: canModifyPermission,
                       ),
                       buildPermissionIcon(
                         client.recording,
@@ -703,6 +727,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                           });
                         },
                         translate('Enable recording session'),
+                        canModify: canModifyPermission,
                       ),
                     ]
                   : [
@@ -719,6 +744,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                           });
                         },
                         translate('Enable keyboard/mouse'),
+                        canModify: canModifyPermission,
                       ),
                       buildPermissionIcon(
                         client.clipboard,
@@ -733,6 +759,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                           });
                         },
                         translate('Enable clipboard'),
+                        canModify: canModifyPermission,
                       ),
                       buildPermissionIcon(
                         client.audio,
@@ -747,6 +774,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                           });
                         },
                         translate('Enable audio'),
+                        canModify: canModifyPermission,
                       ),
                       buildPermissionIcon(
                         client.file,
@@ -761,6 +789,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                           });
                         },
                         translate('Enable file copy and paste'),
+                        canModify: canModifyPermission,
                       ),
                       buildPermissionIcon(
                         client.restart,
@@ -775,6 +804,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                           });
                         },
                         translate('Enable remote restart'),
+                        canModify: canModifyPermission,
                       ),
                       buildPermissionIcon(
                         client.recording,
@@ -789,6 +819,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                           });
                         },
                         translate('Enable recording session'),
+                        canModify: canModifyPermission,
                       ),
                       // only windows support block input
                       if (isWindows)
@@ -805,6 +836,23 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                             });
                           },
                           translate('Enable blocking user input'),
+                          canModify: canModifyPermission,
+                        ),
+                      if (bind.mainSupportedPrivacyModeImpls() != '[]')
+                        buildPermissionIcon(
+                          client.privacyMode,
+                          Icons.visibility_off,
+                          (enabled) {
+                            bind.cmSwitchPermission(
+                                connId: client.id,
+                                name: "privacy_mode",
+                                enabled: enabled);
+                            setState(() {
+                              client.privacyMode = enabled;
+                            });
+                          },
+                          translate('Enable privacy mode'),
+                          canModify: canModifyPermission,
                         )
                     ],
             ),
@@ -1025,7 +1073,10 @@ class _CmControlPanel extends StatelessWidget {
     final model = Provider.of<ServerModel>(context);
     final showElevation = canElevate &&
         model.showElevation &&
-        client.type_() == ClientType.remote;
+        client.type_() == ClientType.remote &&
+        bind.mainGetBuildinOption(
+                key: kOptionHideElevateButtonInAcceptWindow) !=
+            'Y';
     final showAccept = model.approveMode != 'password';
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,

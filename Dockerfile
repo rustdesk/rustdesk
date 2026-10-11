@@ -1,4 +1,4 @@
-FROM debian:bullseye-slim
+FROM debian:trixie-slim
 
 WORKDIR /
 ARG DEBIAN_FRONTEND=noninteractive
@@ -19,7 +19,6 @@ RUN apt update -y && \
         libxcb-shape0-dev \
         libxcb-xfixes0-dev \
         libasound2-dev \
-        libpam0g-dev \
         libpulse-dev \
         make \
         wget \
