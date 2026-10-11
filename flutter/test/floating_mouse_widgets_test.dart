@@ -4,14 +4,18 @@ import 'dart:convert';
 import 'dart:js' as js;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart' as common;
+import 'package:flutter_hbb/mobile/pages/remote_page.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Input extends Fake implements InputModel {
   final scrollDirections = <int>[];
   final pressedButtons = <MouseButtons>[];
+  final releasedButtons = <MouseButtons>[];
 
   @override
   Future<void> scroll(int y) async {
@@ -24,7 +28,9 @@ class _Input extends Fake implements InputModel {
   }
 
   @override
-  Future<void> tapUp(MouseButtons button) async {}
+  Future<void> tapUp(MouseButtons button) async {
+    releasedButtons.add(button);
+  }
 }
 
 class _Cursor extends Fake implements CursorModel {
@@ -39,6 +45,9 @@ class _Cursor extends Fake implements CursorModel {
 
   @override
   void removeBlockedRect(Rect rect) => blockedRects.remove(rect);
+
+  @override
+  Future<void> syncCursorPosition() async {}
 }
 
 class _VirtualMouseMode extends ChangeNotifier implements VirtualMouseMode {
@@ -77,18 +86,29 @@ void _expectInside(Rect child, Rect viewport) {
 
 void main() {
   final savedPositions = <String, String>{};
+  final inputKeys = <String>[];
 
   setUp(() {
     savedPositions.clear();
-    js.context['getByName'] =
-        js.allowInterop((String type, String key) => savedPositions[key] ?? '');
-    js.context['setByName'] = js.allowInterop((String type, String value) {
-      final option = jsonDecode(value) as Map<String, dynamic>;
-      savedPositions[option['name'] as String] = option['value'] as String;
+    inputKeys.clear();
+    KeyboardVisibilityTesting.setVisibilityForTesting(false);
+    js.context['isMobile'] = js.allowInterop(() => true);
+    js.context['getByName'] = js.allowInterop((String type, [String? key]) {
+      if (type == 'translate') return jsonDecode(key!)['text'];
+      return savedPositions[key] ?? '';
+    });
+    js.context['setByName'] = js.allowInterop((String type, dynamic value) {
+      if (type == 'option:flutter:local') {
+        final option = jsonDecode(value as String) as Map<String, dynamic>;
+        savedPositions[option['name'] as String] = option['value'] as String;
+      } else if (type == 'input_key') {
+        inputKeys.add(jsonDecode(value as String)['name'] as String);
+      }
     });
   });
 
   tearDown(() {
+    js.context.deleteProperty('isMobile');
     js.context.deleteProperty('getByName');
     js.context.deleteProperty('setByName');
   });
@@ -224,6 +244,127 @@ void main() {
     _expectInside(tester.getRect(lowerControl), viewport);
     await tester.tap(lowerControl);
     expect((ffi.inputModel as _Input).scrollDirections, contains(-1));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  testWidgets('lower wheel control remains tappable in a narrow viewport',
+      (tester) async {
+    setViewSize(tester, const Size(240, 200));
+    final ffi = _FFI();
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+
+    final lowerControl = find.byIcon(Icons.keyboard_arrow_down);
+    await tester.tap(lowerControl, warnIfMissed: false);
+    expect((ffi.inputModel as _Input).scrollDirections, [-1]);
+    expect((ffi.inputModel as _Input).pressedButtons, isEmpty);
+    final wheel = tester.getRect(find.byType(FloatingWheel));
+    for (final button in find.byType(FloatingLeftRightButton).evaluate()) {
+      expect(tester.getRect(find.byWidget(button.widget)).overlaps(wheel),
+          isFalse);
+    }
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 60));
+  });
+
+  testWidgets('keyboard shortcuts remain tappable above floating controls',
+      (tester) async {
+    final wasTest = common.isTest;
+    common.isTest = true;
+    addTearDown(() => common.isTest = wasTest);
+    await common.initGlobalFFI();
+    common.gFFI.ffiModel.pi.platform = 'Windows';
+    KeyboardVisibilityTesting.setVisibilityForTesting(true);
+    addTearDown(() => KeyboardVisibilityTesting.setVisibilityForTesting(false));
+    setViewSize(tester, const Size(800, 120));
+    final ffi = _FFI();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Stack(children: [
+          KeyHelpTools(keyboardIsVisible: true, showGestureHelp: false),
+          FloatingMouseWidgets(ffi: ffi),
+        ]),
+      ),
+    ));
+    await tester.pump();
+
+    await tester.tap(find.text('PgDn'), warnIfMissed: false);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(inputKeys, ['VK_NEXT']);
+    expect((ffi.inputModel as _Input).pressedButtons, isEmpty);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('closing the keyboard restores saved floating controls',
+      (tester) async {
+    const savedLeft = '{"x":120.0,"y":300.0}';
+    const savedRight = '{"x":220.0,"y":300.0}';
+    savedPositions['ll-mouse-btn-pos'] = savedLeft;
+    savedPositions['rl-mouse-btn-pos'] = savedRight;
+    setViewSize(tester, const Size(800, 400));
+    final ffi = _FFI();
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+
+    KeyboardVisibilityTesting.setVisibilityForTesting(true);
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 0);
+    expect(find.byType(FloatingWheel), findsNothing);
+    expect(find.byType(FloatingLeftRightButton), findsNothing);
+    expect((ffi.cursorModel as _Cursor).blockedRects, isEmpty);
+
+    KeyboardVisibilityTesting.setVisibilityForTesting(false);
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    final leftButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+    final rightButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
+    expect(tester.getRect(leftButton).topLeft, const Offset(120, 300));
+    expect(tester.getRect(rightButton).topLeft, const Offset(220, 300));
+    expect(find.byType(FloatingWheel), findsOneWidget);
+    expect(savedPositions['ll-mouse-btn-pos'], savedLeft);
+    expect(savedPositions['rl-mouse-btn-pos'], savedRight);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  for (final button in [MouseButtons.left, MouseButtons.wheel]) {
+    testWidgets('opening the keyboard releases a held $button', (tester) async {
+      setViewSize(tester, const Size(800, 400));
+      final ffi = _FFI();
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+      final control = button == MouseButtons.wheel
+          ? find.byType(FloatingWheel)
+          : find.byWidgetPredicate(
+              (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+      final gesture = await tester.startGesture(tester.getCenter(control));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect((ffi.inputModel as _Input).pressedButtons, [button]);
+
+      KeyboardVisibilityTesting.setVisibilityForTesting(true);
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 0);
+      expect((ffi.inputModel as _Input).releasedButtons, [button]);
+      await gesture.up();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+  }
+
+  testWidgets('opening the keyboard releases a held button after movement',
+      (tester) async {
+    setViewSize(tester, const Size(800, 400));
+    final ffi = _FFI();
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    final leftButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+    final gesture = await tester.startGesture(tester.getCenter(leftButton));
+    await tester.pump(const Duration(milliseconds: 250));
+    await gesture.moveBy(const Offset(1, 0));
+    expect((ffi.inputModel as _Input).pressedButtons, [MouseButtons.left]);
+
+    KeyboardVisibilityTesting.setVisibilityForTesting(true);
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 0);
+    expect((ffi.inputModel as _Input).releasedButtons, [MouseButtons.left]);
+    await gesture.up();
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 1));
   });

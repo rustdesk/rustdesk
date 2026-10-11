@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/remote_input.dart';
@@ -74,6 +75,11 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
   Widget build(BuildContext context) {
     final virtualMouseMode = _virtualMouseMode;
     if (!virtualMouseMode.showVirtualMouse) {
+      return const Offstage();
+    }
+    if (KeyboardVisibilityController().isVisible) {
+      _cursorModel.blockEvents = false;
+      isSpecialHoldDragActive = false;
       return const Offstage();
     }
     return LayoutBuilder(
@@ -175,6 +181,7 @@ class _FloatingWheelState extends State<FloatingWheel> {
   @override
   void dispose() {
     _scrollTimer?.cancel();
+    if (_isMidDown) _inputModel.tapUp(MouseButtons.wheel);
     if (_lastBlockedRect != null) {
       _cursorModel.removeBlockedRect(_lastBlockedRect!);
     }
@@ -209,8 +216,12 @@ class _FloatingWheelState extends State<FloatingWheel> {
       IconData iconData) {
     return Listener(
       onPointerDown: onPointerDown,
-      onPointerUp: onPointerUp,
-      onPointerCancel: onPointerCancel,
+      onPointerUp: (event) {
+        if (mounted) onPointerUp(event);
+      },
+      onPointerCancel: (event) {
+        if (mounted) onPointerCancel(event);
+      },
       child: Container(
         width: _wheelWidth,
         height: 55,
@@ -283,12 +294,14 @@ class _FloatingWheelState extends State<FloatingWheel> {
               _inputModel.tapDown(MouseButtons.wheel);
             },
             onPointerUp: (event) {
+              if (!mounted) return;
               setState(() {
                 _isMidDown = false;
               });
               _inputModel.tapUp(MouseButtons.wheel);
             },
             onPointerCancel: (event) {
+              if (!mounted) return;
               setState(() {
                 _isMidDown = false;
               });
@@ -437,6 +450,9 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     if (_lastBlockedRect != null) {
       _cursorModel.removeBlockedRect(_lastBlockedRect!);
     }
+    if (_isDown && _tapDownTimer == null) {
+      _inputModel.tapUp(_isLeft ? MouseButtons.left : MouseButtons.right);
+    }
     _tapDownTimer?.cancel();
     _trySavePosition();
     super.dispose();
@@ -503,8 +519,15 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
 
   Offset _defaultPosition(bool isLeft) {
     final size = widget.viewportSize;
-    return Offset(_getOffsetX(size.width, isLeft),
-        size.height - _kSpaceToVerticalEdge - _kLeftRightButtonHeight);
+    final y = size.height - _kSpaceToVerticalEdge - _kLeftRightButtonHeight;
+    final wheelLeft = size.width - _wheelWidth - _kSpaceToHorizontalEdge;
+    final wheelBottom = min(size.height, (size.height + _wheelHeight) / 2);
+    if (_getOffsetX(size.width, false) + _kLeftRightButtonWidth > wheelLeft &&
+        y < wheelBottom) {
+      return Offset(_kSpaceToHorizontalEdge,
+          y - (isLeft ? _kLeftRightButtonHeight + _kSpaceToVerticalEdge : 0));
+    }
+    return Offset(_getOffsetX(size.width, isLeft), y);
   }
 
   Offset _savedOrDefaultPosition(Orientation ori, bool isLeft) {
@@ -582,6 +605,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   }
 
   void _onBodyPointerMoveUpdate(PointerMoveEvent event) {
+    if (!mounted) return;
     _cursorModel.blockEvents = true;
     // If move, it's a drag, not a tap.
     _isDragging = true;
