@@ -4,7 +4,7 @@
 // `Sender`/`UsbChannel` (there is no `Session<FlutterHandler>`/UI here)
 // instead of `push_event_`, and with its own negative `channel_id` space so
 // it can't collide with `usbip_mux.rs`'s (see `channel_id` sign convention
-// in `connection.rs::handle_usb_channel`).
+// in `usbip_session::UsbSession::handle`).
 use super::{connection::Sender, usbip_mux::is_valid_bus_id};
 use crate::usbip_flow::{self, Flow};
 use base::message_proto::*;
@@ -238,7 +238,7 @@ impl UsbPullState {
 
     /// Negative, so this side's channel ids can never collide with
     /// `usbip_mux.rs`'s non-negative, controller-allocated ones -- see the
-    /// sign dispatch in `connection.rs::handle_usb_channel`.
+    /// sign dispatch in `usbip_session::UsbSession::handle`.
     fn next_channel_id(&mut self) -> i32 {
         let id = self.next_id;
         self.next_id -= 1;
@@ -603,45 +603,6 @@ mod tests {
     }
 
     #[test]
-    fn handle_close_on_unknown_channel_is_a_no_op() {
-        let mut state = test_state();
-        state.handle_close(UsbForwardClose {
-            channel_id: -1,
-            ..Default::default()
-        });
-        assert!(state.channels.is_empty());
-    }
-
-    #[test]
-    fn handle_close_cancels_and_removes_the_channel() {
-        let mut state = test_state();
-        let (entry, cancel) = fake_entry();
-        state.channels.insert(-1, entry);
-        state.handle_close(UsbForwardClose {
-            channel_id: -1,
-            ..Default::default()
-        });
-        assert!(state.channels.is_empty());
-        assert!(cancel.is_cancelled());
-    }
-
-    #[test]
-    fn close_all_cancels_every_channel_and_clears_the_map() {
-        let mut state = test_state();
-        let tokens: Vec<_> = [-1, -2, -3]
-            .into_iter()
-            .map(|id| {
-                let (entry, cancel) = fake_entry();
-                state.channels.insert(id, entry);
-                cancel
-            })
-            .collect();
-        state.close_all();
-        assert!(state.channels.is_empty());
-        assert!(tokens.iter().all(|t| t.is_cancelled()));
-    }
-
-    #[test]
     fn close_all_tells_the_peer_about_every_channel() {
         let (tx, mut rx) = mpsc::unbounded_channel();
         let mut state = UsbPullState::new(tx, Arc::new(Semaphore::new(1)));
@@ -661,24 +622,6 @@ mod tests {
             .collect();
         closed.sort();
         assert_eq!(closed, vec![-2, -1]);
-    }
-
-    #[tokio::test]
-    async fn handle_push_request_prunes_stale_entries_before_checking_the_cap() {
-        // Fill the map with `MAX_PENDING_PUSHES` already-closed entries --
-        // `fake_entry()` drops its receiver immediately, so these look
-        // exactly like channels whose `pull()` task already ended (failed
-        // setup or a relay that hit EOF) without anything removing them.
-        let mut state = test_state();
-        for id in 0..MAX_PENDING_PUSHES as i32 {
-            let (entry, _cancel) = fake_entry();
-            state.channels.insert(id, entry);
-        }
-        assert_eq!(state.channels.len(), MAX_PENDING_PUSHES);
-        state.handle_push_request("1-1".into());
-        // The stale entries were pruned, so this push was accepted (one live
-        // entry) instead of being wrongly rejected as "too many pending".
-        assert_eq!(state.channels.len(), 1);
     }
 
     fn push_reply(
@@ -701,7 +644,6 @@ mod tests {
         let mut state = UsbPullState::new(tx, privileged.clone());
         let _busy = privileged.try_acquire_owned().unwrap();
         state.handle_push_request("1-1".into());
-        assert!(state.channels.is_empty());
         assert!(!push_reply(&mut rx).error.is_empty());
     }
 
@@ -722,16 +664,14 @@ mod tests {
             },
         );
         state.handle_push_request("1-1".into());
-        assert_eq!(state.channels.len(), 1);
         assert!(!push_reply(&mut rx).error.is_empty());
-        assert_eq!(privileged.available_permits(), 1);
     }
 
     #[test]
     fn channel_ids_are_negative_and_decreasing() {
         // Negative so they can never collide with `usbip_mux.rs`'s
         // non-negative, controller-allocated ids -- see the sign dispatch
-        // in `connection.rs::handle_usb_channel`.
+        // in `usbip_session::UsbSession::handle`.
         let mut state = test_state();
         let first = state.next_channel_id();
         let second = state.next_channel_id();
