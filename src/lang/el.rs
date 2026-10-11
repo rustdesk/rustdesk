@@ -821,6 +821,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("No USB devices", "Δεν υπάρχουν συσκευές USB"),
         ("Use my devices on the remote computer", ""),
         ("Use remote devices on this computer", ""),
-        ("Forwarding", "")
+        ("Forwarding", ""),
+        ("Confirm on the remote computer if asked", ""),
+        ("Confirm on this computer and on the remote computer if asked", "")
     ].iter().cloned().collect();
 }

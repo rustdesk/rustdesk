@@ -616,7 +616,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(
       TTextMenu(
           child: Text('${translate('USB forwarding')} (beta)'),
-          onPressed: () => showUsbForwardingDialog(ffi)),
+          onPressed: () => toggleUsbForwardingWindow(context, ffi)),
     );
   }
   // note
