@@ -98,7 +98,7 @@ fn check_picture(
 
 #[test]
 #[ignore = "requires hardware H.264/H.265 encoders; run explicitly on GPU hosts"]
-fn hardware_repeats_own_pixels_preserve_watchdog_and_reset_on_recreation() {
+fn hardware_repeats_own_pixels_and_reset_on_recreation() {
     unsafe {
         let mut raw_factory = ptr::null_mut();
         assert_eq!(
@@ -177,8 +177,6 @@ fn hardware_repeats_own_pixels_preserve_watchdog_and_reset_on_recreation() {
                             format,
                             ctx,
                             bitrate: 1000,
-                            last_frame_len: 0,
-                            same_bad_len_counter: 0,
                         };
                         assert!(encoder.encode_to_message(EncodeInput::Repeat, 0).is_err());
                         assert!(encoder
@@ -213,15 +211,11 @@ fn hardware_repeats_own_pixels_preserve_watchdog_and_reset_on_recreation() {
                         );
                         (*context.0).Flush();
                         drop(source);
-                        encoder.same_bad_len_counter = 7;
-                        encoder.last_frame_len = 42;
                         for count in 1..=100 {
                             let pts = count * 100;
                             let frame =
                                 encoder.encode_to_message(EncodeInput::Repeat, pts).unwrap();
                             check_picture(&mut decoder, frame, width, height, false, pts);
-                            assert_eq!(encoder.same_bad_len_counter, 7);
-                            assert_eq!(encoder.last_frame_len, 42);
                         }
 
                         let source = texture(device.0, width, height, 224);

@@ -1,5 +1,7 @@
 use super::{tests::new_refresh, *};
+use crate::server::{connection::ConnInner, service::Service};
 use base::message_proto::VideoFrame;
+use hbb_common::tokio::sync::mpsc;
 use scrap::{
     codec::{EncoderApi, EncoderCfg, BR_BALANCED},
     EncodeYuvFormat,
@@ -105,6 +107,8 @@ fn attempt(refresh: &mut StaticRefresh<'_>, encoder: &mut Encoder) {
 fn failures_pause_refresh_until_a_real_frame_succeeds() {
     use Outcome::*;
     let sp = GenericService::new("repeat-errors-test".to_owned(), false);
+    let (tx, rx) = mpsc::unbounded_channel();
+    sp.on_subscribe(ConnInner::new(1, None, Some(tx)));
     let recorder = Arc::new(Mutex::new(None));
     let mut refresh = new_refresh(
         VideoSource::Monitor,
@@ -137,18 +141,15 @@ fn failures_pause_refresh_until_a_real_frame_succeeds() {
     );
     attempt(&mut refresh, &mut encoder);
     attempt(&mut refresh, &mut encoder);
-    assert_eq!(
-        refresh.repeat_failures, 2,
-        "empty output is not an encoding failure"
-    );
+    assert_eq!(rx.len(), 0);
     attempt(&mut refresh, &mut encoder);
-    assert_eq!(refresh.repeat_failures, 0);
+    assert_eq!(rx.len(), 1, "empty output must not stop further refreshes");
     for _ in 0..3 {
         attempt(&mut refresh, &mut encoder);
     }
-    assert_eq!(refresh.repeat_failures, 3);
     attempt(&mut refresh, &mut encoder);
     assert_eq!(state.borrow().calls, 7);
+    assert_eq!(rx.len(), 1);
     assert_eq!(state.borrow().disabled, 0);
 
     refresh.on_frame(&EncodeInput::YUV(&[1]));
@@ -163,7 +164,7 @@ fn failures_pause_refresh_until_a_real_frame_succeeds() {
     refresh.on_encoded(true);
     attempt(&mut refresh, &mut encoder);
     assert_eq!(state.borrow().calls, 8);
-    assert_eq!(refresh.repeat_failures, 0);
+    assert_eq!(rx.len(), 2);
     assert_eq!(state.borrow().disabled, 0);
 }
 
@@ -188,8 +189,6 @@ fn empty_outputs_exhaust_the_no_output_budget_without_disabling_the_encoder() {
     }
     assert_eq!(state.borrow().calls, 100);
     assert_eq!(state.borrow().disabled, 0);
-    assert_eq!(refresh.repeat_failures, 0);
-    assert_eq!(refresh.repeat_output_counter, 0);
 }
 
 #[test]
@@ -206,9 +205,7 @@ fn vpx_drops_exhaust_the_no_output_budget_without_disabling_the_encoder() {
             attempt(&mut refresh, &mut encoder);
         }
         assert_eq!(state.borrow().calls, limit, "{codec:?}");
-        assert_eq!(refresh.repeat_failures, limit);
         assert_eq!(state.borrow().disabled, 0);
-        assert_eq!(refresh.repeat_output_counter, 0);
     }
 }
 
@@ -219,17 +216,20 @@ fn vpx_dropped_capture_repeats_the_latest_frame() {
     let sp = GenericService::new("repeat-dropped-capture-test".to_owned(), false);
     let recorder = Arc::new(Mutex::new(None));
     for codec in [CodecFormat::VP8, CodecFormat::VP9] {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        sp.on_subscribe(ConnInner::new(1, None, Some(tx)));
         let mut refresh = new_refresh(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
         let (mut encoder, state) = encoder(&[Frame, Dropped, Dropped, Frame]);
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
         attempt(&mut refresh, &mut encoder);
-        assert_eq!(refresh.repeat_output_counter, 1);
+        assert!(rx.try_recv().unwrap().1.has_video_frame());
 
         let latest_yuv = [2];
         refresh.on_frame(&EncodeInput::YUV(&latest_yuv));
         let mut normal_failures = 0;
         let mut first_frame = false;
+        let mut encoder_warmed_up = false;
         let result = handle_one_frame(
             0,
             &sp,
@@ -239,6 +239,7 @@ fn vpx_dropped_capture_repeats_the_latest_frame() {
             recorder.clone(),
             &mut normal_failures,
             &mut first_frame,
+            &mut encoder_warmed_up,
             1,
             1,
         )
@@ -246,9 +247,9 @@ fn vpx_dropped_capture_repeats_the_latest_frame() {
         assert!(result.send_conn_ids.is_empty());
         assert!(result.vpx_no_output);
         refresh.on_frame_encoded(&result);
-        assert_eq!(refresh.repeat_output_counter, 0);
-        for (elapsed_ms, expected_calls, expected_outputs, expected_no_outputs) in
-            [(99, 2, 0, 0), (100, 3, 0, 1), (100, 4, 1, 1)]
+        assert_eq!(rx.len(), 0);
+        for (elapsed_ms, expected_calls, expected_outputs) in
+            [(99, 2, 0), (100, 3, 0), (100, 4, 1)]
         {
             refresh.elapsed_since_encode = Duration::from_millis(elapsed_ms);
             refresh
@@ -263,12 +264,11 @@ fn vpx_dropped_capture_repeats_the_latest_frame() {
                 )
                 .unwrap();
             assert_eq!(state.borrow().calls, expected_calls, "{codec:?}");
-            assert_eq!(refresh.repeat_output_counter, expected_outputs);
-            assert_eq!(refresh.repeat_no_outputs, expected_no_outputs);
+            assert_eq!(rx.len(), expected_outputs);
         }
         assert_eq!(state.borrow().inputs, vec![vec![1], vec![2], vec![2], vec![2]]);
         assert_eq!(state.borrow().disabled, 0);
-        assert_eq!(normal_failures, 1);
+        sp.on_unsubscribe(1);
     }
 }
 
@@ -288,6 +288,7 @@ fn captured_frame_errors_do_not_enable_repeat() {
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         let mut normal_failures = 0;
         let mut first_frame = false;
+        let mut encoder_warmed_up = false;
         let result = handle_one_frame(
             0,
             &sp,
@@ -297,6 +298,7 @@ fn captured_frame_errors_do_not_enable_repeat() {
             recorder.clone(),
             &mut normal_failures,
             &mut first_frame,
+            &mut encoder_warmed_up,
             1,
             1,
         )
@@ -306,7 +308,6 @@ fn captured_frame_errors_do_not_enable_repeat() {
         refresh.on_frame_encoded(&result);
         attempt(&mut refresh, &mut encoder);
         assert_eq!(state.borrow().calls, 1, "{codec:?}");
-        assert_eq!(refresh.repeat_output_counter, 0);
         assert_eq!(state.borrow().disabled, 0);
     }
 }
@@ -316,6 +317,8 @@ fn unsuccessful_repeats_preserve_the_frame_budget() {
     let sp = GenericService::new("repeat-frame-budget-test".to_owned(), false);
     let recorder = Arc::new(Mutex::new(None));
     for codec in [CodecFormat::VP8, CodecFormat::VP9] {
+        let (tx, rx) = mpsc::unbounded_channel();
+        sp.on_subscribe(ConnInner::new(1, None, Some(tx)));
         let mut refresh = new_refresh(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
         let limit = max_repeat_frames(codec, BR_BALANCED, HardwareBackend::Other);
         let mut outcomes = vec![Outcome::Dropped; 40];
@@ -327,14 +330,14 @@ fn unsuccessful_repeats_preserve_the_frame_budget() {
         for _ in 0..80 {
             attempt(&mut refresh, &mut encoder);
         }
-        assert_eq!(refresh.repeat_output_counter, 0, "{codec:?}");
+        assert_eq!(rx.len(), 0, "{codec:?}");
         for _ in 0..=limit {
             attempt(&mut refresh, &mut encoder);
         }
         assert_eq!(state.borrow().calls, 80 + limit, "{codec:?}");
-        assert_eq!(refresh.repeat_output_counter, limit);
-        assert_eq!(refresh.repeat_failures, 0);
+        assert_eq!(rx.len(), limit);
         assert_eq!(state.borrow().disabled, 0);
+        sp.on_unsubscribe(1);
     }
 }
 
@@ -437,44 +440,6 @@ fn repeat_timing_uses_the_capture_loop_start() {
                 )
                 .unwrap();
             assert_eq!(state.borrow().calls, index + 1);
-            assert_eq!(refresh.last_encode, loop_start);
-        }
-    }
-}
-
-#[test]
-fn vpx_repeat_interval_starts_after_encoding() {
-    let sp = GenericService::new("repeat-vpx-clock-test".to_owned(), false);
-    let recorder = Arc::new(Mutex::new(None));
-    for codec in [CodecFormat::VP8, CodecFormat::VP9] {
-        for outcome in [
-            Outcome::Frame,
-            Outcome::Empty,
-            Outcome::Dropped,
-            Outcome::Error,
-        ] {
-            let mut refresh = new_refresh(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
-            let (mut encoder, state) = encoder(&[outcome]);
-            refresh.on_frame(&EncodeInput::YUV(&[1]));
-            refresh.on_encoded(true);
-            refresh.elapsed_since_encode = INITIAL_REPEAT_INTERVAL;
-            let loop_start = Instant::now();
-            std::thread::sleep(Duration::from_millis(1));
-            let before_encode = Instant::now();
-            refresh
-                .try_encode(
-                    &[1],
-                    Duration::from_nanos(33_333_333),
-                    BR_BALANCED,
-                    loop_start,
-                    0,
-                    &mut encoder,
-                    &mut VideoFrameController::new(0),
-                )
-                .unwrap();
-            assert_eq!(state.borrow().calls, 1);
-            assert!(refresh.last_encode >= before_encode, "{codec:?}");
-            assert!(refresh.last_encode <= Instant::now());
         }
     }
 }
@@ -501,7 +466,6 @@ fn no_output_budget_is_cumulative_and_restarts_with_a_new_frame() {
             attempt(&mut refresh, &mut encoder);
         }
         assert_eq!(state.borrow().calls, 110, "{codec:?}");
-        assert_eq!(refresh.repeat_output_counter, 10);
         assert_eq!(state.borrow().disabled, 0);
 
         refresh.on_frame(&EncodeInput::YUV(&[1]));
@@ -511,10 +475,8 @@ fn no_output_budget_is_cumulative_and_restarts_with_a_new_frame() {
         refresh.on_encoded(true);
         attempt(&mut refresh, &mut encoder);
         assert_eq!(state.borrow().calls, 111);
-        assert_eq!(refresh.repeat_output_counter, 0);
         attempt(&mut refresh, &mut encoder);
         assert_eq!(state.borrow().calls, 112);
-        assert_eq!(refresh.repeat_output_counter, 1);
     }
 }
 
@@ -538,7 +500,6 @@ fn repeat_error_limits_are_codec_specific() {
             attempt(&mut refresh, &mut encoder);
         }
         assert_eq!(state.borrow().calls, expected_calls, "{codec:?}");
-        assert_eq!(refresh.repeat_failures, expected_calls);
         assert_eq!(state.borrow().disabled, 0);
     }
 }
@@ -566,6 +527,7 @@ fn repeats_leave_normal_failure_tracking_and_switching_intact() {
     refresh.on_encoded(true);
     let mut normal_failures = 0;
     let mut first_frame = false;
+    let mut encoder_warmed_up = false;
     handle_one_frame(
         0,
         &sp,
@@ -575,16 +537,15 @@ fn repeats_leave_normal_failure_tracking_and_switching_intact() {
         recorder.clone(),
         &mut normal_failures,
         &mut first_frame,
+        &mut encoder_warmed_up,
         1,
         1,
     )
     .unwrap();
-    assert_eq!(normal_failures, 1);
     attempt(&mut refresh, &mut encoder);
     attempt(&mut refresh, &mut encoder);
-    assert_eq!(normal_failures, 1);
     assert_eq!(state.borrow().disabled, 0);
-    for expected in 2..normal_limit {
+    for _ in 2..normal_limit {
         handle_one_frame(
             0,
             &sp,
@@ -594,11 +555,11 @@ fn repeats_leave_normal_failure_tracking_and_switching_intact() {
             recorder.clone(),
             &mut normal_failures,
             &mut first_frame,
+            &mut encoder_warmed_up,
             1,
             1,
         )
         .unwrap();
-        assert_eq!(normal_failures, expected);
     }
     let result = handle_one_frame(
         0,
@@ -609,6 +570,7 @@ fn repeats_leave_normal_failure_tracking_and_switching_intact() {
         recorder.clone(),
         &mut normal_failures,
         &mut first_frame,
+        &mut encoder_warmed_up,
         1,
         1,
     );

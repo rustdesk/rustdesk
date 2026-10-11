@@ -1,6 +1,6 @@
 use super::{GenericService, VideoFrameController, VideoSource};
 use base::message_proto::Message;
-use hbb_common::{bail, log, ResultType};
+use hbb_common::{bail, ResultType};
 use scrap::{
     codec::{Encoder, EncoderCfg, BR_BALANCED, BR_BEST, BR_SPEED},
     record::Recorder,
@@ -245,10 +245,20 @@ impl<'a> StaticRefresh<'a> {
                 Err(error) => {
                     self.repeat_no_outputs += 1;
                     self.repeat_failures += 1;
-                    log::debug!(
-                        "static refresh failed ({}): {error:?}",
-                        self.repeat_failures
-                    );
+                    if error.is::<scrap::VpxNoOutput>() {
+                        hbb_common::throttled_log!(
+                            Duration::from_secs(60),
+                            trace,
+                            "static refresh produced no output: {error:?}"
+                        );
+                    } else {
+                        hbb_common::throttled_log!(
+                            Duration::from_secs(60),
+                            debug,
+                            "static refresh failed ({}): {error:?}",
+                            self.repeat_failures
+                        );
+                    }
                     return Ok(());
                 }
             };
@@ -273,7 +283,9 @@ impl<'a> StaticRefresh<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server::{connection::ConnInner, service::Service};
     use base::message_proto::VideoFrame;
+    use hbb_common::tokio::sync::mpsc;
     use scrap::{
         codec::{EncoderApi, EncoderCfg, BR_BALANCED},
         vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
@@ -543,6 +555,37 @@ mod tests {
         assert_eq!(calls.get(), 0);
     }
 
+    fn assert_output_budget(
+        refresh: &mut StaticRefresh<'_>,
+        sp: &GenericService,
+        quality: f32,
+        expected: usize,
+    ) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        sp.on_subscribe(ConnInner::new(1, None, Some(tx)));
+        let mut encoder = Encoder {
+            codec: Box::new(CountingEncoder(Rc::new(Cell::new(0)))),
+        };
+        refresh.on_frame(&EncodeInput::YUV(&[1]));
+        refresh.on_encoded(true);
+        for _ in 0..=expected {
+            refresh.elapsed_since_encode = Duration::from_secs(1);
+            refresh
+                .try_encode(
+                    &[1],
+                    Duration::from_millis(33),
+                    quality,
+                    Instant::now(),
+                    0,
+                    &mut encoder,
+                    &mut VideoFrameController::new(0),
+                )
+                .unwrap();
+        }
+        assert_eq!(rx.len(), expected);
+        sp.on_unsubscribe(1);
+    }
+
     #[test]
     fn quality_bands_stop_each_backend_at_its_output_budget() {
         let sp = GenericService::new("repeat-quality-test".to_owned(), false);
@@ -568,12 +611,6 @@ mod tests {
             ] {
                 let mut refresh = new_refresh(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
                 refresh.hardware_backend = backend;
-                let calls = Rc::new(Cell::new(0));
-                let mut encoder = Encoder {
-                    codec: Box::new(CountingEncoder(Rc::clone(&calls))),
-                };
-                refresh.on_frame(&EncodeInput::YUV(&[1]));
-                refresh.on_encoded(true);
                 for quality in [
                     0.1,
                     BR_BEST,
@@ -583,24 +620,7 @@ mod tests {
                     BR_BEST + 0.1,
                 ] {
                     let limit = max_repeat_frames(codec, quality, backend);
-                    refresh.repeat_output_counter = limit - 1;
-                    let before = calls.get();
-                    for _ in 0..2 {
-                        refresh.elapsed_since_encode = Duration::from_secs(1);
-                        refresh
-                            .try_encode(
-                                &[1],
-                                Duration::from_millis(33),
-                                quality,
-                                Instant::now(),
-                                0,
-                                &mut encoder,
-                                &mut VideoFrameController::new(0),
-                            )
-                            .unwrap();
-                    }
-                    assert_eq!(calls.get(), before + 1, "{codec:?} {backend:?} {quality}");
-                    assert_eq!(refresh.repeat_output_counter, limit);
+                    assert_output_budget(&mut refresh, &sp, quality, limit);
                 }
             }
         }
@@ -661,7 +681,7 @@ mod tests {
             } else {
                 CodecFormat::H264
             };
-            let refresh = StaticRefresh::new(
+            let mut refresh = StaticRefresh::new(
                 VideoSource::Monitor,
                 codec_format,
                 &config,
@@ -671,7 +691,10 @@ mod tests {
                 1920,
                 1080,
             );
-            assert_eq!(refresh.hardware_backend, expected);
+            for quality in [0.1, BR_SPEED, BR_BALANCED, BR_BEST] {
+                let limit = max_repeat_frames(codec_format, quality, expected);
+                assert_output_budget(&mut refresh, &sp, quality, limit);
+            }
         }
     }
 
@@ -700,7 +723,7 @@ mod tests {
                 }))
                 .unwrap(),
             });
-            let refresh = StaticRefresh::new(
+            let mut refresh = StaticRefresh::new(
                 VideoSource::Monitor,
                 CodecFormat::H264,
                 &config,
@@ -710,7 +733,10 @@ mod tests {
                 1920,
                 1080,
             );
-            assert_eq!(refresh.hardware_backend, expected);
+            for quality in [0.1, BR_SPEED, BR_BALANCED, BR_BEST] {
+                let limit = max_repeat_frames(CodecFormat::H264, quality, expected);
+                assert_output_budget(&mut refresh, &sp, quality, limit);
+            }
         }
     }
 }
