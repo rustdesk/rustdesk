@@ -25,6 +25,7 @@ import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
+import 'package:flutter_hbb/models/usbip_model.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/http_service.dart' as http;
@@ -366,6 +367,16 @@ class FfiModel with ChangeNotifier {
             .receive(int.parse(evt['id'] as String), evt['text'] ?? '');
       } else if (name == 'terminal_response') {
         parent.target?.routeTerminalResponse(evt);
+      } else if (name == 'usb_device_list') {
+        parent.target?.usbipModel.updateDeviceList(evt);
+      } else if (name == 'usb_bind_result') {
+        parent.target?.usbipModel.handleBindResult(evt);
+      } else if (name == 'usb_attached') {
+        parent.target?.usbipModel.handleAttached(evt);
+      } else if (name == 'usb_local_device_list') {
+        parent.target?.usbipModel.updateLocalDeviceList(evt);
+      } else if (name == 'usb_push_result') {
+        parent.target?.usbipModel.handlePushResult(evt);
       } else if (name == 'file_dir') {
         parent.target?.fileModel.receiveFileDir(evt);
       } else if (name == 'empty_dirs') {
@@ -896,6 +907,13 @@ class FfiModel with ChangeNotifier {
             (type == 'restarting-show' && title == 'Connecting...'))) {
       _androidDocumentPickerInterruptedConnection = true;
       return;
+    }
+
+    // A dead peer never answers the usbip request this session may be
+    // waiting on -- clear it so the USB dialog's buttons don't stay
+    // disabled forever.
+    if (title == 'Connection Error') {
+      parent.target?.usbipModel.clearPendingOnDisconnect();
     }
 
     // Disable relative mouse mode on any error-type message to ensure cursor is released.
@@ -1453,6 +1471,7 @@ class FfiModel with ChangeNotifier {
       }
       Map<String, dynamic> features = json.decode(evt['features']);
       _pi.features.privacyMode = features['privacy_mode'] == true;
+      _pi.features.usbip = features['usbip'] == true;
       if (!isCache) {
         handleResolutions(peerId, evt["resolutions"]);
       }
@@ -4048,6 +4067,7 @@ class FFI {
   late final ElevationModel elevationModel; // session
   late final CmFileModel cmFileModel; // cm
   late final TextureModel textureModel; //session
+  late final UsbipModel usbipModel; // session
   late final Peers recentPeersModel; // global
   late final Peers favoritePeersModel; // global
   late final Peers lanPeersModel; // global
@@ -4077,6 +4097,7 @@ class FFI {
     elevationModel = ElevationModel(WeakReference(this));
     cmFileModel = CmFileModel(WeakReference(this));
     textureModel = TextureModel(WeakReference(this));
+    usbipModel = UsbipModel(WeakReference(this));
     recentPeersModel = Peers(
         name: PeersModelName.recent,
         loadEvent: LoadEvent.recent,
@@ -4496,6 +4517,7 @@ class Resolution {
 
 class Features {
   bool privacyMode = false;
+  bool usbip = false;
 }
 
 const kInvalidDisplayIndex = -1;

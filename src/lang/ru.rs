@@ -780,6 +780,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk не удалось загрузить компонент GStreamer, необходимый для захвата экрана ({})"),
         ("Relay fallback delay in seconds", "Задержка перед переходом на ретранслятор в секундах"),
         ("relay-fallback-delay-tip", "Сколько времени уже установленное соединение через ретранслятор ждёт прямое соединение WebRTC, прежде чем будет использовано вместо него. Увеличьте, чтобы дать медленному прямому соединению больше времени; уменьшите, чтобы быстрее переходить на ретранслятор в сетях, где прямое соединение невозможно. Оставьте пустым для значения по умолчанию 2.5 секунды."),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Чтобы начать голосовой вызов, включите \"Захват аудио\" на странице \"Демонстрация экрана\".")
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Чтобы начать голосовой вызов, включите \"Захват аудио\" на странице \"Демонстрация экрана\"."),
+        ("Enable USB forwarding", "Включить проброс USB"),
+        ("USB forwarding", "Проброс USB"),
+        ("Loading...", "Загрузка..."),
+        ("No USB devices", "Нет USB-устройств"),
+        ("Use my devices on the remote computer", "Использовать мои устройства на удалённом компьютере"),
+        ("Use remote devices on this computer", "Использовать устройства удалённого компьютера на этом компьютере"),
+        ("Forwarding", "Проброшено"),
+        ("Confirm on the remote computer if asked", "При запросе подтвердите на удалённом компьютере"),
+        ("Confirm on this computer and on the remote computer if asked", "При запросе подтвердите на этом и на удалённом компьютере")
     ].iter().cloned().collect();
 }

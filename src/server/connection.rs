@@ -365,6 +365,8 @@ pub struct Connection {
     file_transfer: Option<(String, bool)>,
     view_camera: bool,
     terminal: bool,
+    #[cfg(target_os = "linux")]
+    usbip: Option<super::usbip_session::UsbSession>,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
     port_forward_mux: Option<super::port_forward_mux::PortForwardMux>,
     port_forward_address: String,
@@ -581,6 +583,8 @@ impl Connection {
             file_transfer: None,
             view_camera: false,
             terminal: false,
+            #[cfg(target_os = "linux")]
+            usbip: None,
             port_forward_socket: None,
             port_forward_mux: None,
             port_forward_address: "".to_owned(),
@@ -1168,6 +1172,8 @@ impl Connection {
                     #[cfg(windows)]
                     conn.portable_check();
                     raii::AuthedConnID::check_wake_lock_on_setting_changed();
+                    #[cfg(target_os = "linux")]
+                    conn.revoke_usb_if_not_permitted();
                     if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
                         if instant.elapsed().as_secs() > minute * 60 {
                             conn.send_close_reason_no_retry("Connection failed due to inactivity").await;
@@ -2081,12 +2087,14 @@ impl Connection {
         {
             terminal = terminal && portable_pty::win::check_support().is_ok();
         }
+        let usbip = cfg!(target_os = "linux");
         pi.username = username;
         pi.sas_enabled = sas_enabled;
         pi.features = Some(Features {
             privacy_mode: privacy_mode::is_privacy_mode_supported(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             terminal,
+            usbip,
             ..Default::default()
         })
         .into();
@@ -2390,6 +2398,25 @@ impl Connection {
         });
     }
 
+    #[cfg(target_os = "linux")]
+    fn handle_usb_channel(&mut self, ch: UsbChannel) {
+        if self.authed_conn_type() != Some(AuthConnType::Remote) {
+            return;
+        }
+        let control_permissions = &self.control_permissions;
+        super::usbip_session::handle_channel(&mut self.usbip, self.inner.tx.as_ref(), ch, || {
+            Self::permission(keys::OPTION_ALLOW_USBIP, control_permissions)
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    fn revoke_usb_if_not_permitted(&mut self) {
+        let control_permissions = &self.control_permissions;
+        super::usbip_session::revoke_unless_permitted(&mut self.usbip, || {
+            Self::permission(keys::OPTION_ALLOW_USBIP, control_permissions)
+        });
+    }
+
     #[inline]
     fn send_fs(&mut self, data: ipc::FS) {
         self.send_to_cm(ipc::Data::FS(data));
@@ -2674,6 +2701,7 @@ impl Connection {
                 keys::OPTION_ENABLE_RECORD_SESSION => Some(Permission::recording),
                 keys::OPTION_ENABLE_BLOCK_INPUT => Some(Permission::block_input),
                 keys::OPTION_ENABLE_PRIVACY_MODE => Some(Permission::privacy_mode),
+                keys::OPTION_ALLOW_USBIP => Some(Permission::usb),
                 _ => None,
             };
             if let Some(permission) = permission {
@@ -4064,6 +4092,8 @@ impl Connection {
                     }
                 }
                 Some(message::Union::PortForwardChannel(ch)) => self.handle_port_forward_channel(ch),
+                #[cfg(target_os = "linux")]
+                Some(message::Union::UsbChannel(ch)) => self.handle_usb_channel(ch),
                 Some(message::Union::TerminalAction(action)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     allow_err!(self.handle_terminal_action(action).await);
@@ -5280,6 +5310,10 @@ impl Connection {
         self.port_forward_socket.take();
         if let Some(mut mux) = self.port_forward_mux.take() {
             mux.close_all();
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(mut usbip) = self.usbip.take() {
+            usbip.close_all();
         }
     }
 
