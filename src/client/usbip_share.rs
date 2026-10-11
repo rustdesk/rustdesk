@@ -407,33 +407,39 @@ impl Session<FlutterHandler> {
                 );
                 return;
             }
-            // A device the CLI or another session already shared is pushed as
-            // it is (`usbip bind` would fail on it) and stays shared afterwards.
-            let bound = !shared_bus_ids().contains(&bus_id);
-            if !bound {
-                log::info!("usb push: {} is already shared, pushing it as is", bus_id);
-            } else {
-                log::info!("usb push: sharing {} before push", bus_id);
-                if !bind_device(&bus_id, true) {
-                    log::error!("usb push: failed to share {} locally, not pushing", bus_id);
-                    session.push_event_(
-                        "usb_push_result",
-                        &[
-                            ("bus_id", json!(&bus_id)),
-                            ("error", json!(format!("Failed to share {}", bus_id))),
-                        ],
-                        &[],
-                        &[],
-                    );
-                    return;
-                }
+            // Whoever shared it (the CLI or another session) may unshare it
+            // under the peer, so it is not taken over.
+            if shared_bus_ids().contains(&bus_id) {
+                log::info!("usb push: {} is already shared outside this session, refusing", bus_id);
+                session.push_event_(
+                    "usb_push_result",
+                    &[
+                        ("bus_id", json!(&bus_id)),
+                        ("error", json!("The USB device is already shared outside this session")),
+                    ],
+                    &[],
+                    &[],
+                );
+                return;
+            }
+            log::info!("usb push: sharing {} before push", bus_id);
+            if !bind_device(&bus_id, true) {
+                log::error!("usb push: failed to share {} locally, not pushing", bus_id);
+                session.push_event_(
+                    "usb_push_result",
+                    &[
+                        ("bus_id", json!(&bus_id)),
+                        ("error", json!(format!("Failed to share {}", bus_id))),
+                    ],
+                    &[],
+                    &[],
+                );
+                return;
             }
             log::info!("usb push: shared {}, asking peer to attach", bus_id);
-            if !session.ui_handler.usb.share_owned_add(bus_id.clone(), bound) {
+            if !session.ui_handler.usb.share_owned_add(bus_id.clone()) {
                 log::info!("usb push: session closed while sharing {}", bus_id);
-                if bound {
-                    unbind_device_when_released(&bus_id);
-                }
+                unbind_device_when_released(&bus_id);
                 return;
             }
             session.ui_handler.usb.share_pending_add(bus_id.clone());
@@ -461,7 +467,7 @@ impl Session<FlutterHandler> {
         let release = self.ui_handler.usb.share_release_begin(&bus_id);
         let session = self.clone();
         std::thread::spawn(move || {
-            let released = release.map(|bound| release_push(&session.ui_handler.usb, &bus_id, bound));
+            let released = release.then(|| release_push(&session.ui_handler.usb, &bus_id));
             let error = match released {
                 Some(false) => {
                     log::error!("usb push: failed to unshare {} after unpush", bus_id);
@@ -483,10 +489,10 @@ impl Session<FlutterHandler> {
 }
 
 /// Finishes undoing a push that `share_release_begin` started: unbinds
-/// `bus_id` if this session bound it, and keeps it recorded if that fails,
-/// so a retry or closing the session can still release it. Blocking.
-pub(crate) fn release_push(state: &UsbClientState, bus_id: &str, bound: bool) -> bool {
-    let released = !bound || unbind_device_when_released(bus_id);
+/// `bus_id`, and keeps it recorded if that fails, so a retry or closing the
+/// session can still release it. Blocking.
+pub(crate) fn release_push(state: &UsbClientState, bus_id: &str) -> bool {
+    let released = unbind_device_when_released(bus_id);
     state.share_release_end(bus_id, released);
     released
 }

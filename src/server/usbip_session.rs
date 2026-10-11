@@ -96,6 +96,50 @@ impl UsbSession {
     }
 }
 
+/// A `UsbChannel` frame on an authorized desktop connection. USB state exists
+/// only while the permission does: a control request without it is refused
+/// and ends any USB forwarding the session had.
+pub fn handle_channel(
+    session: &mut Option<UsbSession>,
+    tx: Option<&Sender>,
+    ch: UsbChannel,
+    permitted: impl Fn() -> bool,
+) {
+    let Some(tx) = tx else {
+        return;
+    };
+    let data = matches!(
+        ch.union,
+        Some(usb_channel::Union::Data(_)) | Some(usb_channel::Union::WindowUpdate(_))
+    );
+    if !data && !permitted() {
+        if let Some(mut session) = session.take() {
+            session.close_all();
+        }
+        UsbSession::refuse(tx, ch);
+        return;
+    }
+    if session.is_none() {
+        if data {
+            return;
+        }
+        *session = Some(UsbSession::new(tx.clone()));
+    }
+    if let Some(session) = session.as_mut() {
+        session.handle(ch, permitted);
+    }
+}
+
+/// Ends all USB forwarding once the permission is withdrawn.
+pub fn revoke_unless_permitted(session: &mut Option<UsbSession>, permitted: impl FnOnce() -> bool) {
+    if session.is_some() && !permitted() {
+        log::info!("USB forwarding permission withdrawn, closing USB forwarding");
+        if let Some(mut session) = session.take() {
+            session.close_all();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
