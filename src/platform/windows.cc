@@ -604,34 +604,14 @@ extern "C"
         return rdp_or_console;
     }
 
-    BOOL is_session_locked(DWORD session_id)
-    {
-        if (session_id == 0xFFFFFFFF) {
-            return FALSE;
-        }
-        PWTSINFOEXW pInfo = NULL;
-        DWORD bytes = 0;
-        BOOL locked = FALSE;
-        if (WTSQuerySessionInformationW(
-                WTS_CURRENT_SERVER_HANDLE,
-                session_id,
-                WTSSessionInfoEx,
-                (LPWSTR *)&pInfo,
-                &bytes)) {
-            if (pInfo && pInfo->Level == 1) {
-                locked = (pInfo->Data.WTSInfoExLevel1.SessionFlags == WTS_SESSIONSTATE_LOCK);
-            }
-            if (pInfo) {
-                WTSFreeMemory(pInfo);
-            }
-        }
-        return locked;
-    }
-
     // WTSInfoExLevel1.SessionFlags, or WTS_SESSIONSTATE_UNKNOWN when it cannot be read.
     DWORD get_session_flags(DWORD session_id)
     {
         DWORD flags = WTS_SESSIONSTATE_UNKNOWN;
+        // WTS_CURRENT_SESSION, which would query the caller's session instead.
+        if (session_id == 0xFFFFFFFF) {
+            return flags;
+        }
         PWTSINFOEXW pInfo = NULL;
         DWORD bytes = 0;
         if (WTSQuerySessionInformationW(

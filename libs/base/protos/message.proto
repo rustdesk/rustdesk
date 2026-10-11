@@ -84,6 +84,8 @@ message LoginRequest {
   string my_platform = 13;
   bytes hwid = 14;
   string avatar = 17;
+  // The client types the saved OS password once logged in (Auto Login).
+  bool auto_login = 18;
 }
 
 message Terminal {
@@ -134,6 +136,8 @@ message PeerInfo {
   // NOTE: Only support one-level dictionaries (for peer to update), and the key is of type string.
   string platform_additions = 12;
   WindowsSessions windows_sessions = 13;
+  // Answers LoginRequest.auto_login: the peer cannot confirm it is at a logon or lock screen.
+  bool skip_auto_login = 14;
 }
 
 message WindowsSession {  

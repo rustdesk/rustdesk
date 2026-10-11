@@ -3056,7 +3056,9 @@ impl LoginConfigHandler {
         let a = !self.get_option("auto-login").is_empty();
         let p = self.get_option("os-password");
         if !p.is_empty() && l && a {
-            if self.peer_reports_not_logon_screen() {
+            // The peer answers when it handles the login, so its screen can still lock or unlock
+            // before the password is typed.
+            if self.peer_info.as_ref().is_some_and(|pi| pi.skip_auto_login) {
                 log::info!("Skip auto login, the peer is not at the logon or lock screen");
                 return "".to_owned();
             }
@@ -3064,19 +3066,6 @@ impl LoginConfigHandler {
         } else {
             "".to_owned()
         }
-    }
-
-    // Peers that don't report `is_logon_screen` (older ones, Linux) keep auto-login. The value is
-    // taken when the peer answers the login, so the screen can still lock or unlock before the
-    // password is typed.
-    fn peer_reports_not_logon_screen(&self) -> bool {
-        let Some(pi) = self.peer_info.as_ref() else {
-            return false;
-        };
-        serde_json::from_str::<serde_json::Value>(&pi.platform_additions)
-            .ok()
-            .and_then(|v| v.get("is_logon_screen")?.as_bool())
-            == Some(false)
     }
 
     /// Load [`PeerConfig`].
@@ -3886,6 +3875,11 @@ impl LoginConfigHandler {
         } else {
             Default::default()
         };
+        // The conditions of `should_auto_login()`, minus the peer's answer to this request.
+        let auto_login = self.conn_type == ConnType::DEFAULT_CONN
+            && self.lock_after_session_end.v
+            && !self.get_option("auto-login").is_empty()
+            && !self.get_option("os-password").is_empty();
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -3898,6 +3892,7 @@ impl LoginConfigHandler {
             os_login,
             hwid,
             avatar,
+            auto_login,
             ..Default::default()
         };
         match self.conn_type {
@@ -5243,26 +5238,28 @@ mod auto_login_tests {
     use super::*;
 
     #[test]
-    fn auto_login_skips_a_peer_that_reports_no_logon_screen() {
+    fn auto_login_asks_the_peer_and_skips_when_told() {
         let mut lc = LoginConfigHandler::default();
-        lc.config.lock_after_session_end.v = true;
-        lc.config
-            .options
-            .insert("os-password".to_owned(), "os-pass".to_owned());
-        lc.config
-            .options
-            .insert("auto-login".to_owned(), "Y".to_owned());
-        let mut with_additions = |additions: &str| {
-            lc.peer_info = Some(PeerInfo {
-                platform_additions: additions.to_owned(),
-                ..Default::default()
-            });
-            lc.should_auto_login()
+        let asks = |lc: &LoginConfigHandler| {
+            lc.create_login_msg(String::new(), String::new(), vec![])
+                .login_request()
+                .auto_login
         };
-        assert_eq!(with_additions(r#"{"is_logon_screen":false}"#), "");
-        assert_eq!(with_additions(r#"{"is_logon_screen":true}"#), "os-pass");
-        assert_eq!(with_additions(r#"{"is_installed":true}"#), "os-pass");
-        assert_eq!(with_additions(""), "os-pass");
+        assert!(!asks(&lc));
+
+        lc.config.lock_after_session_end.v = true;
+        for (k, v) in [("os-password", "os-pass"), ("auto-login", "Y")] {
+            lc.config.options.insert(k.to_owned(), v.to_owned());
+        }
+        assert!(asks(&lc));
+
+        lc.peer_info = Some(PeerInfo::default());
+        assert_eq!(lc.should_auto_login(), "os-pass");
+        lc.peer_info = Some(PeerInfo {
+            skip_auto_login: true,
+            ..Default::default()
+        });
+        assert_eq!(lc.should_auto_login(), "");
     }
 }
 

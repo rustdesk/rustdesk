@@ -565,7 +565,6 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
     fn get_current_session(rdp: BOOL) -> DWORD;
-    fn is_session_locked(session_id: DWORD) -> BOOL;
     fn LaunchProcessWin(
         cmd: *const u16,
         session_id: DWORD,
@@ -1269,7 +1268,7 @@ pub fn is_locked() -> bool {
     let Some(session_id) = get_current_process_session_id() else {
         return false;
     };
-    unsafe { is_session_locked(session_id) == TRUE }
+    is_session_locked_flag(session_id) == Some(true)
 }
 
 #[inline]
