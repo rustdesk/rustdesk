@@ -52,8 +52,6 @@ pub struct VRamEncoder {
     pub format: DataFormat,
     ctx: EncodeContext,
     bitrate: u32,
-    last_frame_len: usize,
-    same_bad_len_counter: usize,
 }
 
 impl EncoderApi for VRamEncoder {
@@ -87,8 +85,6 @@ impl EncoderApi for VRamEncoder {
                         ctx,
                         format: config.feature.data_format,
                         bitrate,
-                        last_frame_len: 0,
-                        same_bad_len_counter: 0,
                     }),
                     Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
                 }
