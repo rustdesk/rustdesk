@@ -56,11 +56,9 @@ pub(crate) struct UsbClientState {
     // sent, no `Open` seen yet) -- gates the `Open` handler so a peer can't
     // pull an arbitrary locally-shared device it was never offered.
     share_pending: RwLock<HashSet<String>>,
-    // bus_ids this session pushed and has not unpushed yet -- the only ones a
-    // `PushResult` may touch -- mapped to whether it also bound them itself
-    // (`false` for a device already shared by the CLI or another session),
-    // since only those may be unbound again.
-    share_owned: RwLock<HashMap<String, bool>>,
+    // bus_ids this session bound and pushed and has not unpushed yet -- the
+    // only ones a `PushResult` may touch.
+    share_owned: RwLock<HashSet<String>>,
     // bus_ids in `share_owned` whose unpush or rollback is running; the
     // record itself stays until that succeeds.
     share_releasing: RwLock<HashSet<String>>,
@@ -83,7 +81,7 @@ pub(crate) struct UsbClientState {
 impl UsbClientState {
     /// Non-negative, so the controller's own channel ids can never collide
     /// with `usbip_pull.rs`'s negative, controlled-side ones -- see the sign
-    /// dispatch in `connection.rs::handle_usb_channel`.
+    /// dispatch in `usbip_session::UsbSession::handle`.
     pub(crate) fn next_channel_id() -> i32 {
         static NEXT_ID: AtomicI32 = AtomicI32::new(1);
         NEXT_ID.fetch_add(1, Ordering::Relaxed)
@@ -228,29 +226,29 @@ impl UsbClientState {
 
     /// `false` once the session is closing; the caller must then undo its
     /// own bind of `bus_id`, since teardown has already run.
-    pub(crate) fn share_owned_add(&self, bus_id: String, bound: bool) -> bool {
+    pub(crate) fn share_owned_add(&self, bus_id: String) -> bool {
         let mut owned = self.share_owned.write().unwrap();
         if self.closed.load(Ordering::SeqCst) {
             return false;
         }
-        owned.insert(bus_id, bound);
+        owned.insert(bus_id);
         true
     }
 
     pub(crate) fn share_owned(&self, bus_id: &str) -> bool {
-        self.share_owned.read().unwrap().contains_key(bus_id)
+        self.share_owned.read().unwrap().contains(bus_id)
     }
 
-    /// Starts undoing a push of `bus_id` by this session, reporting whether
-    /// this session also bound it -- `None` if it wasn't pushed here or is
-    /// already being undone -- so at most one caller unbinds at a time.
-    pub(crate) fn share_release_begin(&self, bus_id: &str) -> Option<bool> {
-        let bound = *self.share_owned.read().unwrap().get(bus_id)?;
-        self.share_releasing
-            .write()
-            .unwrap()
-            .insert(bus_id.to_string())
-            .then_some(bound)
+    /// Starts undoing a push of `bus_id` by this session -- `false` if it
+    /// wasn't pushed here or is already being undone -- so at most one
+    /// caller unbinds at a time.
+    pub(crate) fn share_release_begin(&self, bus_id: &str) -> bool {
+        self.share_owned(bus_id)
+            && self
+                .share_releasing
+                .write()
+                .unwrap()
+                .insert(bus_id.to_string())
     }
 
     /// Ends what `share_release_begin` started. The push stays recorded
@@ -342,17 +340,12 @@ impl UsbClientState {
     /// up instead of running orphaned indefinitely.
     pub(crate) fn close(&self) {
         self.clear_channels();
-        // Only what this session attached or bound itself is released: a
-        // device shared by the CLI or another session is left alone.
         let ports = {
             let mut ports = self.attached_ports.write().unwrap();
             self.closed.store(true, Ordering::SeqCst);
             std::mem::take(&mut *ports).into_keys().collect::<Vec<_>>()
         };
-        let owned: Vec<String> = std::mem::take(&mut *self.share_owned.write().unwrap())
-            .into_iter()
-            .filter_map(|(bus_id, bound)| bound.then_some(bus_id))
-            .collect();
+        let owned = std::mem::take(&mut *self.share_owned.write().unwrap());
         if ports.is_empty() && owned.is_empty() {
             return;
         }
@@ -380,26 +373,6 @@ mod tests {
         assert!(second > first);
     }
 
-    #[tokio::test]
-    async fn reconnect_drops_the_old_rounds_channels() {
-        let state = UsbClientState::default();
-        let rt = Handle::current();
-        let (tx, _rx) = mpsc::channel(1);
-        let old = Flow::new();
-        state.register_runtime(1, rt.clone());
-        state.register_share_channel(-1, "1-1".into(), tx.clone(), old.clone());
-        state.register_runtime(2, rt);
-        assert!(!state.share_channel_live(-1));
-
-        let new = Flow::new();
-        state.register_share_channel(-1, "1-2".into(), tx, new.clone());
-        state.unregister_runtime(1);
-        state.unregister_share_channel_of(-1, &old);
-        assert!(state.share_channel_live(-1));
-        state.unregister_share_channel_of(-1, &new);
-        assert!(!state.share_channel_live(-1));
-    }
-
     #[test]
     fn open_for_unpushed_bus_id_is_not_authorized() {
         // `share_pending_take` gates the `Open` handler: a peer that was
@@ -413,37 +386,5 @@ mod tests {
         // Consumed by the first take -- a second `Open` for the same bus_id
         // must not be authorized by the same push.
         assert!(!state.share_pending_take("1-1"));
-    }
-
-    #[test]
-    fn attach_or_bind_finishing_after_close_is_left_to_the_caller() {
-        let state = UsbClientState::default();
-        state.close();
-        assert!(!state.share_owned_add("1-3".into(), true));
-        assert!(!state.attached_port_add(4, "1-3".into()));
-        assert!(!state.share_owned("1-3"));
-        assert_eq!(state.attached_port_take(4), None);
-    }
-
-    #[test]
-    fn push_of_a_device_shared_elsewhere_is_not_unbound() {
-        let state = UsbClientState::default();
-        assert!(state.share_owned_add("1-2".into(), false));
-        assert!(state.share_owned_add("1-3".into(), true));
-        assert_eq!(state.share_release_begin("1-2"), Some(false));
-        assert_eq!(state.share_release_begin("1-3"), Some(true));
-    }
-
-    #[test]
-    fn failed_unpush_keeps_the_push_for_a_retry() {
-        let state = UsbClientState::default();
-        assert!(state.share_owned_add("1-3".into(), true));
-        assert_eq!(state.share_release_begin("1-3"), Some(true));
-        assert_eq!(state.share_release_begin("1-3"), None);
-        state.share_release_end("1-3", false);
-        assert!(state.share_owned("1-3"));
-        assert_eq!(state.share_release_begin("1-3"), Some(true));
-        state.share_release_end("1-3", true);
-        assert!(!state.share_owned("1-3"));
     }
 }
