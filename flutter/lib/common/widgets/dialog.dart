@@ -1445,6 +1445,13 @@ showSetOSPassword(
   var autoLogin =
       await bind.sessionGetOption(sessionId: sessionId, arg: 'auto-login') !=
           '';
+  const lockOption = 'lock-after-session-end';
+  final peerPlatform =
+      await bind.sessionGetPlatform(sessionId: sessionId, isRemote: true);
+  final offerLock = peerPlatform != kPeerPlatformAndroid &&
+      !bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: lockOption) &&
+          !bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: kOptionToggleViewOnly);
   controller.text = osPassword;
   dialogManager.show((setState, close, context) {
     closeWithCallback([dynamic]) {
@@ -1460,6 +1467,14 @@ showSetOSPassword(
           sessionId: sessionId,
           name: 'auto-login',
           value: autoLogin ? 'Y' : '');
+      if (autoLogin &&
+          offerLock &&
+          !bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: kOptionToggleViewOnly) &&
+          !bind.sessionGetToggleOptionSync(
+              sessionId: sessionId, arg: lockOption)) {
+        bind.sessionToggleOption(sessionId: sessionId, value: lockOption);
+      }
       if (text != '' && login) {
         bind.sessionInputOsPassword(sessionId: sessionId, value: text);
       }
@@ -1491,6 +1506,20 @@ showSetOSPassword(
               setState(() => autoLogin = v);
             },
           ),
+          // Auto login only runs when the session locks on end.
+          if (autoLogin && offerLock)
+            CheckboxListTile(
+              contentPadding: const EdgeInsets.all(0),
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                translate('Lock after session end'),
+              ),
+              value: true,
+              onChanged: (v) {
+                if (v == false) setState(() => autoLogin = false);
+              },
+            ),
         ],
       ),
       actions: [
