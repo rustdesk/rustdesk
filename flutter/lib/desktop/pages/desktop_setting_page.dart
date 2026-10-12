@@ -3117,8 +3117,6 @@ class _CountDownButtonState extends State<_CountDownButton> {
 
 void changeSocks5Proxy() async {
   var socks = await bind.mainGetSocks();
-  final initialWsProxy = mainGetBoolOptionSync(kOptionAllowWebSocketProxy);
-  var wsProxy = initialWsProxy;
 
   String proxy = '';
   String proxyMsg = '';
@@ -3138,7 +3136,6 @@ void changeSocks5Proxy() async {
   // The following option is a not real key, it is just used for custom client advanced settings.
   const String optionProxyUrl = "proxy-url";
   final isOptFixed = isOptionFixed(optionProxyUrl);
-  final isWsProxyFixed = isOptionFixed(kOptionAllowWebSocketProxy);
 
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close, context) {
@@ -3177,9 +3174,6 @@ void changeSocks5Proxy() async {
       if (!isOptFixed && proxyChanged) {
         await bind.mainSetSocks(
             proxy: proxy, username: username, password: password);
-      }
-      if (!isWsProxyFixed && wsProxy != initialWsProxy) {
-        await mainSetBoolOption(kOptionAllowWebSocketProxy, wsProxy);
       }
       close();
     }
@@ -3281,15 +3275,6 @@ void changeSocks5Proxy() async {
                 ),
               ],
             ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(translate('Use this proxy for WebSocket')),
-              value: wsProxy,
-              onChanged: isWsProxyFixed || isInProgress
-                  ? null
-                  : (value) => setState(() => wsProxy = value ?? false),
-            ),
             // NOT use Offstage to wrap LinearProgressIndicator
             if (isInProgress)
               const LinearProgressIndicator().marginOnly(top: 8),
@@ -3298,7 +3283,7 @@ void changeSocks5Proxy() async {
       ),
       actions: [
         dialogButton('Cancel', onPressed: close, isOutline: true),
-        if (!isOptFixed || !isWsProxyFixed) dialogButton('OK', onPressed: submit),
+        if (!isOptFixed) dialogButton('OK', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,

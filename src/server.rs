@@ -15,7 +15,7 @@ use hbb_common::{
     allow_err,
     anyhow::Context,
     bail,
-    config::{ws_use_proxy, Config, CONNECT_TIMEOUT, RELAY_PORT},
+    config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     protobuf::{Enum, Message as _},
     rendezvous_proto::*,
@@ -406,8 +406,7 @@ async fn create_relay_connection_(
 ) -> ResultType<()> {
     // The proxy's address family does not constrain the relay target.
     let relay_server = crate::check_port(relay_server, RELAY_PORT);
-    let use_ws_proxy =
-        Config::is_proxy() && ws_use_proxy() && is_ws_endpoint(&check_ws(&relay_server));
+    let use_ws_proxy = Config::is_proxy() && is_ws_endpoint(&check_ws(&relay_server));
     let mut stream = socket_client::connect_tcp(
         socket_client::ipv4_to_ipv6(relay_server, ipv4 || use_ws_proxy),
         CONNECT_TIMEOUT,

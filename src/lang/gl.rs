@@ -781,6 +781,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay fallback delay in seconds", "Atraso antes de usar o relé en segundos"),
         ("relay-fallback-delay-tip", "Canto tempo agarda unha conexión de relé xa establecida pola conexión directa WebRTC antes de usarse no seu lugar. Auménteo para darlle máis tempo a unha conexión directa lenta; redúzao para recorrer antes ao relé en redes onde non é posible unha conexión directa. Déixeo baleiro para o valor predeterminado de 2.5 segundos."),
         ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", ""),
-        ("Use this proxy for WebSocket", "Usar este proxy para WebSocket"),
     ].iter().cloned().collect();
 }
