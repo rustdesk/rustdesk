@@ -1734,12 +1734,12 @@ pub fn get_trusted_devices() -> hbb_common::ResultType<String> {
 }
 
 #[cfg(feature = "flutter")]
-pub fn remove_trusted_devices(json: &str) {
-    let hwids = serde_json::from_str::<Vec<Bytes>>(json).unwrap_or_default();
+pub fn remove_trusted_devices(json: &str) -> hbb_common::ResultType<()> {
+    let record_ids = serde_json::from_str::<Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>>(json)?;
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    Config::remove_trusted_devices(&hwids);
+    return crate::trusted_devices::remove(&record_ids);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    ipc::remove_trusted_devices(hwids);
+    return ipc::remove_trusted_devices(record_ids);
 }
 
 #[cfg(feature = "flutter")]

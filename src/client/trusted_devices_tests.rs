@@ -18,6 +18,35 @@ async fn legacy_trust_checkbox_does_not_send_machine_identifier() {
         "legacy trust must not send a machine identifier as a credential"
     );
     verified_channel_and_negative_validation_control_tokens(&login).await;
+    corrupt_credentials_do_not_block_password_login(&login).await;
+}
+
+async fn corrupt_credentials_do_not_block_password_login(login: &LoginConfigHandler) {
+    use crate::trusted_devices::client::Session;
+    let path = std::fs::read_dir(Config::path("trusted-device-v2"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.extension().is_some_and(|value| value == "json"))
+        .unwrap();
+    let saved = std::fs::read(&path).unwrap();
+    std::fs::write(&path, b"invalid cached credential").unwrap();
+    let mut trust = Session::new(login, true, Some(&[1; 32])).unwrap();
+    let request = login.create_login_msg(String::new(), String::new(), vec![1; 32]);
+    let outgoing = trust.login(request.clone()).await;
+    let stored = std::fs::read(&path).unwrap();
+    std::fs::write(&path, saved).unwrap();
+    assert_eq!(outgoing.unwrap(), request);
+    assert_eq!(stored, b"invalid cached credential");
+    let mut response = LoginResponse::new();
+    response.set_error(REQUIRE_2FA.into());
+    response.trusted_device_v2_supported = true;
+    assert!(!trust.response(&response).await.unwrap());
+    let mut auth = Message::new();
+    auth.set_auth_2fa(Auth2FA {
+        trust_this_device: true,
+        ..Default::default()
+    });
+    assert!(!trust.outgoing(auth).auth_2fa().trust_this_device);
 }
 
 async fn verified_channel_and_negative_validation_control_tokens(login: &LoginConfigHandler) {

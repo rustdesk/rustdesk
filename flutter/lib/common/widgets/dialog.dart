@@ -2793,12 +2793,24 @@ void checkUnlockPinDialog(String correctPin, Function() passCallback) {
   });
 }
 
-void confrimDeleteTrustedDevicesDialog(RxList<TrustedDevice> trustedDevices) {
+void confrimDeleteTrustedDevicesDialog(
+    RxList<TrustedDevice> trustedDevices, RxList<Uint8List> selectedDevices) {
   CommonConfirmDialog(gFFI.dialogManager, '${translate('Confirm Delete')}?',
       () async {
+    if (selectedDevices.isEmpty) return;
     try {
-      await bind.mainClearTrustedDevices();
-      trustedDevices.clear();
+      if (selectedDevices.length == trustedDevices.length) {
+        await bind.mainClearTrustedDevices();
+        trustedDevices.clear();
+        selectedDevices.clear();
+      } else {
+        final json = jsonEncode(selectedDevices.map((e) => e.toList()).toList());
+        await bind.mainRemoveTrustedDevices(json: json);
+        trustedDevices.removeWhere((element) {
+          return selectedDevices.contains(element.recordId);
+        });
+        selectedDevices.clear();
+      }
     } catch (error) {
       showToast(error.toString());
     }
@@ -2813,17 +2825,23 @@ void manageTrustedDeviceDialog() async {
     showToast(error.toString());
     return;
   }
+  RxList<Uint8List> selectedDevices = RxList.empty();
   gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate("Manage trusted devices")),
-      content: trustedDevicesTable(trustedDevices),
+      content: trustedDevicesTable(trustedDevices, selectedDevices),
       actions: [
-        dialogButton(translate("Clear"),
-                onPressed: () {
-                  confrimDeleteTrustedDevicesDialog(trustedDevices);
-                },
+        Obx(() => dialogButton(translate("Delete"),
+                onPressed: selectedDevices.isEmpty
+                    ? null
+                    : () {
+                        confrimDeleteTrustedDevicesDialog(
+                          trustedDevices,
+                          selectedDevices,
+                        );
+                      },
                 isOutline: false)
-            .marginOnly(top: 12),
+            .marginOnly(top: 12)),
         dialogButton(translate("Close"), onPressed: close, isOutline: true)
             .marginOnly(top: 12),
       ],
@@ -2833,12 +2851,15 @@ void manageTrustedDeviceDialog() async {
 }
 
 class TrustedDevice {
+  late final Uint8List recordId;
   late final int time;
   late final String id;
   late final String name;
   late final String platform;
 
   TrustedDevice.fromJson(Map<String, dynamic> json) {
+    final recordIdList = json['record_id'] as List<dynamic>;
+    recordId = Uint8List.fromList(recordIdList.cast<int>());
     time = json['time'];
     id = json['id'];
     name = json['name'];
@@ -2867,10 +2888,39 @@ class TrustedDevice {
   }
 }
 
-Widget trustedDevicesTable(RxList<TrustedDevice> devices) {
+Widget trustedDevicesTable(
+    RxList<TrustedDevice> devices, RxList<Uint8List> selectedDevices) {
+  RxBool selectAll = false.obs;
+  setSelectAll() {
+    if (selectedDevices.isNotEmpty &&
+        selectedDevices.length == devices.length) {
+      selectAll.value = true;
+    } else {
+      selectAll.value = false;
+    }
+  }
+
+  devices.listen((_) {
+    setSelectAll();
+  });
+  selectedDevices.listen((_) {
+    setSelectAll();
+  });
   return FittedBox(
     child: Obx(() => DataTable(
           columns: [
+            DataColumn(
+                label: Checkbox(
+              value: selectAll.value,
+              onChanged: (value) {
+                if (value == true) {
+                  selectedDevices.clear();
+                  selectedDevices.addAll(devices.map((e) => e.recordId));
+                } else {
+                  selectedDevices.clear();
+                }
+              },
+            )),
             DataColumn(label: Text(translate('Platform'))),
             DataColumn(label: Text(translate('ID'))),
             DataColumn(label: Text(translate('Username'))),
@@ -2878,6 +2928,18 @@ Widget trustedDevicesTable(RxList<TrustedDevice> devices) {
           ],
           rows: devices.map((device) {
             return DataRow(cells: [
+              DataCell(Checkbox(
+                value: selectedDevices.contains(device.recordId),
+                onChanged: (value) {
+                  if (value == null) return;
+                  if (value) {
+                    selectedDevices.remove(device.recordId);
+                    selectedDevices.add(device.recordId);
+                  } else {
+                    selectedDevices.remove(device.recordId);
+                  }
+                },
+              )),
               DataCell(Text(device.platform)),
               DataCell(Text(device.id)),
               DataCell(Text(device.name)),

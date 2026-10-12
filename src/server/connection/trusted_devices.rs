@@ -1,5 +1,6 @@
 use super::{ConnAuditPrimaryAuth, ConnAuditTwoFactor, Connection};
 use crate::trusted_devices::{
+    authority::Unavailable,
     host::{self, LoginProof},
     DeviceInfo,
 };
@@ -30,7 +31,7 @@ impl Connection {
         };
         match host::begin(proof).await {
             Ok(Some((attempt, valid, totp))) => {
-                self.trusted_device = Some(attempt);
+                self.trusted_device = attempt;
                 self.require_2fa = Some(totp);
                 if valid {
                     self.require_2fa = None;
@@ -50,6 +51,12 @@ impl Connection {
         if let Some(attempt) = self.trusted_device.as_ref() {
             if let Err(error) = attempt.check().await {
                 self.trusted_device = None;
+                if self.conn_audit_two_factor == ConnAuditTwoFactor::Totp
+                    && error.is::<Unavailable>()
+                {
+                    host::log_unavailable(&error);
+                    return true;
+                }
                 self.send_login_error(error).await;
                 self.on_close("Trusted-device authentication failed", false)
                     .await;
@@ -80,6 +87,12 @@ impl Connection {
                 true
             }
             Err(error) => {
+                if self.conn_audit_two_factor == ConnAuditTwoFactor::Totp
+                    && error.is::<Unavailable>()
+                {
+                    host::log_unavailable(&error);
+                    return true;
+                }
                 self.send_login_error(error).await;
                 self.on_close("Trusted-device enrollment failed", false)
                     .await;

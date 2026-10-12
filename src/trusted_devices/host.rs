@@ -21,7 +21,9 @@ pub struct Attempt {
     pub enroll: bool,
 }
 
-pub async fn begin(proof: LoginProof) -> ResultType<Option<(Attempt, bool, totp_rs::TOTP)>> {
+pub async fn begin(
+    proof: LoginProof,
+) -> ResultType<Option<(Option<Attempt>, bool, totp_rs::TOTP)>> {
     let verifier = token_verifier(&proof.token);
     let settings = super::config::update(move || {
         let settings = super::config::snapshot()?;
@@ -36,20 +38,30 @@ pub async fn begin(proof: LoginProof) -> ResultType<Option<(Attempt, bool, totp_
     let Some((scope, totp)) = settings else {
         return Ok(None);
     };
-    let Response::Begun(ticket, valid) =
-        authority::request(Request::Begin { scope, verifier }).await?
-    else {
-        bail!("Invalid trusted-device authorization response");
+    let (ticket, valid) = match authority::request(Request::Begin { scope, verifier }).await {
+        Ok(Response::Begun(ticket, valid)) => (ticket, valid),
+        Err(error) if error.is::<authority::Unavailable>() => {
+            log_unavailable(&error);
+            return Ok(Some((None, false, totp)));
+        }
+        Err(error) => return Err(error),
+        _ => bail!("Invalid trusted-device authorization response"),
     };
     Ok(Some((
-        Attempt {
+        Some(Attempt {
             ticket,
             verifier: if valid { verifier } else { None },
             enroll: false,
-        },
+        }),
         valid,
         totp,
     )))
+}
+
+pub fn log_unavailable(error: &hbb_common::anyhow::Error) {
+    const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+    hbb_common::throttled_log!(LOG_INTERVAL, warn,
+        "Trusted-device authority unavailable; continuing password/TOTP without trusted devices: {error:#}");
 }
 
 impl Attempt {

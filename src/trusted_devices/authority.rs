@@ -2,6 +2,17 @@ use super::{DeviceInfo, Ticket, TOKEN_BYTES};
 use hbb_common::{bail, get_time, ResultType};
 use serde_derive::{Deserialize, Serialize};
 
+#[derive(Debug)]
+pub struct Unavailable(pub hbb_common::anyhow::Error);
+
+impl std::fmt::Display for Unavailable {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.0)
+    }
+}
+
+impl std::error::Error for Unavailable {}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Request {
     Begin {
@@ -19,6 +30,7 @@ pub enum Request {
     },
     List,
     Clear,
+    Remove(Vec<[u8; TOKEN_BYTES]>),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -26,6 +38,7 @@ pub enum Response {
     Begun(Ticket, bool),
     Done,
     Devices(String),
+    Unavailable(String),
 }
 
 impl std::fmt::Debug for Request {
@@ -48,12 +61,23 @@ pub async fn request(request: Request) -> ResultType<Response> {
         let mut connection = connect_trusted_device_service(TIMEOUT_MS).await?;
         connection
             .send(&Data::TrustedDeviceRequest(Box::new(request)))
-            .await?;
-        return match connection.next_timeout(TIMEOUT_MS).await? {
+            .await
+            .map_err(Unavailable)?;
+        return match connection
+            .next_timeout(TIMEOUT_MS)
+            .await
+            .map_err(Unavailable)?
+        {
+            Some(Data::TrustedDeviceResponse(Ok(Response::Unavailable(error)))) => {
+                Err(Unavailable(hbb_common::anyhow::anyhow!(error)).into())
+            }
             Some(Data::TrustedDeviceResponse(result)) => {
                 result.map_err(|error| hbb_common::anyhow::anyhow!(error))
             }
-            _ => bail!("The system service did not confirm the trusted-device operation"),
+            _ => Err(Unavailable(hbb_common::anyhow::anyhow!(
+                "The system service did not confirm the trusted-device operation"
+            ))
+            .into()),
         };
     }
     super::config::update(move || handle(request)).await
@@ -66,6 +90,10 @@ pub fn handle(request: Request) -> ResultType<Response> {
             return Ok(Response::Done);
         }
         Request::List => return super::devices().map(Response::Devices),
+        Request::Remove(record_ids) => {
+            super::remove(&record_ids)?;
+            return Ok(Response::Done);
+        }
         _ => {}
     }
     let storage = super::storage()?;
@@ -100,7 +128,7 @@ pub fn handle(request: Request) -> ResultType<Response> {
                     ..info
                 },
             )?;
-            storage.write(&grants)?;
+            storage.write(&grants).map_err(Unavailable)?;
             Ok(Response::Done)
         }
         _ => bail!("Invalid trusted-device authorization operation"),
@@ -112,5 +140,12 @@ pub async fn manage(clear: bool) -> ResultType<String> {
         Response::Done if clear => Ok(String::new()),
         Response::Devices(devices) if !clear => Ok(devices),
         _ => bail!("Invalid trusted-device management response"),
+    }
+}
+
+pub async fn remove(record_ids: Vec<[u8; TOKEN_BYTES]>) -> ResultType<()> {
+    match request(Request::Remove(record_ids)).await? {
+        Response::Done => Ok(()),
+        _ => bail!("Invalid trusted-device removal response"),
     }
 }

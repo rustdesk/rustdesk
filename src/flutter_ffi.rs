@@ -2643,7 +2643,7 @@ pub fn main_get_trusted_devices() -> hbb_common::anyhow::Result<String> {
     get_trusted_devices()
 }
 
-pub fn main_remove_trusted_devices(json: String) {
+pub fn main_remove_trusted_devices(json: String) -> hbb_common::anyhow::Result<()> {
     remove_trusted_devices(&json)
 }
 

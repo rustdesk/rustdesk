@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
@@ -1338,6 +1339,7 @@ class _ManageTrustedDevices extends StatefulWidget {
 
 class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
   RxList<TrustedDevice> trustedDevices = RxList.empty(growable: true);
+  RxList<Uint8List> selectedDevices = RxList.empty();
 
   @override
   Widget build(BuildContext context) {
@@ -1346,11 +1348,14 @@ class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
         title: Text(translate('Manage trusted devices')),
         centerTitle: true,
         actions: [
-          IconButton(
+          Obx(() => IconButton(
               icon: Icon(Icons.delete, color: Colors.white),
-              onPressed: () {
-                confrimDeleteTrustedDevicesDialog(trustedDevices);
-              })
+              onPressed: selectedDevices.isEmpty
+                  ? null
+                  : () {
+                      confrimDeleteTrustedDevicesDialog(
+                          trustedDevices, selectedDevices);
+                    }))
         ],
       ),
       body: FutureBuilder(
@@ -1364,7 +1369,7 @@ class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
             }
             final devices = snapshot.data as List<TrustedDevice>;
             trustedDevices = devices.obs;
-            return trustedDevicesTable(trustedDevices);
+            return trustedDevicesTable(trustedDevices, selectedDevices);
           }),
     );
   }

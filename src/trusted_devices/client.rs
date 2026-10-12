@@ -83,9 +83,18 @@ impl Session {
             (self.credentials.clone(), message.union.as_mut())
         {
             if !request.password.is_empty() {
-                let token = tokio::task::spawn_blocking(move || credentials.load())
-                    .await??
-                    .unwrap_or_default();
+                request.trusted_device_v2_token.clear();
+                let token = match tokio::task::spawn_blocking(move || credentials.load()).await? {
+                    Ok(token) => token.unwrap_or_default(),
+                    Err(error) => {
+                        self.credentials = None;
+                        const LOG_INTERVAL: std::time::Duration =
+                            std::time::Duration::from_secs(30);
+                        hbb_common::throttled_log!(LOG_INTERVAL, warn,
+                            "Trusted-device credential unavailable; using normal authentication for this connection: {error}");
+                        return Ok(message);
+                    }
+                };
                 self.submitted = token.clone();
                 request.trusted_device_v2_token = token.into();
             }

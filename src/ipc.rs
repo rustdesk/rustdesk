@@ -141,7 +141,8 @@ pub async fn connect_service(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnC
 pub(crate) async fn connect_trusted_device_service(
     ms_timeout: u64,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
-    let connection = connect_service(ms_timeout).await?;
+    let connection = connect_service(ms_timeout).await
+        .map_err(crate::trusted_devices::authority::Unavailable)?;
     if connection.peer_uid() != Some(0) {
         bail!("Trusted-device system service is not an authenticated root peer");
     }
@@ -493,7 +494,7 @@ pub enum Data {
     // Although the key is not necessary, it is used to avoid hardcoding the key.
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
-    RemoveTrustedDevices(Vec<Bytes>),
+    RemoveTrustedDevices(Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>),
     ClearTrustedDevices,
     TrustedDevicesV2 { clear: bool, result: Option<Result<String, String>> },
     TrustedDeviceRequest(Box<crate::trusted_devices::authority::Request>),
@@ -1240,7 +1241,9 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
         }
         Data::RemoveTrustedDevices(v) => {
-            Config::remove_trusted_devices(&v);
+            let result = crate::trusted_devices::authority::remove(v).await
+                .map(|_| String::new()).map_err(|error| error.to_string());
+            allow_err!(stream.send(&Data::TrustedDevicesV2 { clear: false, result: Some(result) }).await);
         }
         Data::ClearTrustedDevices => {
             allow_err!(crate::trusted_devices::authority::manage(true).await);
@@ -1251,8 +1254,12 @@ async fn handle(data: Data, stream: &mut Connection) {
             allow_err!(stream.send(&Data::TrustedDevicesV2 { clear, result: Some(result) }).await);
         }
         Data::TrustedDeviceRequest(request) => {
-            let result = crate::trusted_devices::config::update(move || crate::trusted_devices::authority::handle(*request)).await
-                .map_err(|error| error.to_string());
+            let result = match crate::trusted_devices::config::update(move || crate::trusted_devices::authority::handle(*request)).await {
+                Err(error) if error.is::<crate::trusted_devices::authority::Unavailable>() => {
+                    Ok(crate::trusted_devices::authority::Response::Unavailable(error.to_string()))
+                }
+                result => result.map_err(|error| error.to_string()),
+            };
             allow_err!(stream.send(&Data::TrustedDeviceResponse(result)).await);
         }
         Data::InstallOption(opt) => match opt {
@@ -1859,27 +1866,26 @@ pub fn get_unlock_pin() -> String {
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_trusted_devices() -> ResultType<String> {
-    trusted_devices_v2(false)
+    trusted_devices_v2(Data::TrustedDevicesV2 { clear: false, result: None })
 }
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn remove_trusted_devices(hwids: Vec<Bytes>) {
-    Config::remove_trusted_devices(&hwids);
-    allow_err!(set_data(&Data::RemoveTrustedDevices(hwids)));
+pub fn remove_trusted_devices(record_ids: Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>) -> ResultType<()> {
+    trusted_devices_v2(Data::RemoveTrustedDevices(record_ids)).map(|_| ())
 }
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn clear_trusted_devices() -> ResultType<()> {
-    trusted_devices_v2(true).map(|_| ())
+    trusted_devices_v2(Data::TrustedDevicesV2 { clear: true, result: None }).map(|_| ())
 }
 
 #[cfg(feature = "flutter")]
 #[tokio::main(flavor = "current_thread")]
-async fn trusted_devices_v2(clear: bool) -> ResultType<String> {
+async fn trusted_devices_v2(data: Data) -> ResultType<String> {
     let mut connection = connect(1000, "").await?;
-    connection.send(&Data::TrustedDevicesV2 { clear, result: None }).await?;
+    connection.send(&data).await?;
     match connection.next_timeout(1000).await? {
         Some(Data::TrustedDevicesV2 { result: Some(result), .. }) => result.map_err(|error| hbb_common::anyhow::anyhow!(error)),
         _ => bail!("The host did not confirm the trusted-device operation"),
