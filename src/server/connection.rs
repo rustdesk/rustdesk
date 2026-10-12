@@ -6156,6 +6156,7 @@ impl Connection {
             Some(message::Union::TerminalAction(_)) => "terminal_action",
             Some(message::Union::TerminalResponse(_)) => "terminal_response",
             Some(message::Union::PortForwardChannel(_)) => "port_forward_channel",
+            Some(message::Union::OsLogin(_)) => "os_login",
             Some(message::Union::Misc(misc)) => Self::misc_message_family(misc),
             Some(_) => "message.other",
             None => "empty",
