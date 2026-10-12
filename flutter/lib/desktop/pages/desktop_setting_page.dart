@@ -3153,11 +3153,8 @@ void changeSocks5Proxy() async {
       proxy = proxyController.text.trim();
       username = userController.text.trim();
       password = pwdController.text.trim();
-      final proxyChanged = socks.length == 3
-          ? proxy != socks[0] || username != socks[1] || password != socks[2]
-          : proxy.isNotEmpty || username.isNotEmpty || password.isNotEmpty;
 
-      if (!isOptFixed && proxyChanged && proxy.isNotEmpty) {
+      if (proxy.isNotEmpty) {
         String domainPort = proxy;
         if (domainPort.contains('://')) {
           domainPort = domainPort.split('://')[1];
@@ -3171,10 +3168,8 @@ void changeSocks5Proxy() async {
           return;
         }
       }
-      if (!isOptFixed && proxyChanged) {
-        await bind.mainSetSocks(
-            proxy: proxy, username: username, password: password);
-      }
+      await bind.mainSetSocks(
+          proxy: proxy, username: username, password: password);
       close();
     }
 

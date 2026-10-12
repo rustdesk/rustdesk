@@ -471,8 +471,8 @@ function open_proxy_dialog() {
                 var proxy = (res.proxy || "").trim();
                 var username = (res.username || "").trim();
                 var password = (res.password || "").trim();
-                var proxy_changed = !is_opt_fixed && (proxy != old_proxy || username != old_username || password != old_password);
-                if (proxy_changed && proxy) {
+                if (proxy == old_proxy && username == old_username && password == old_password) return;
+                if (proxy) {
                     var domain_port = proxy;
                     var protocol_index = domain_port.indexOf('://');
                     if (protocol_index !== -1) {
@@ -481,7 +481,7 @@ function open_proxy_dialog() {
                     var err = handler.test_if_valid_server(domain_port, false);
                     if (err) { if (typeof show_progress === 'function') show_progress(false, translate("Server") + ": " + err); return; }
                 }
-                if (proxy_changed) handler.set_socks(proxy, username, password);
+                handler.set_socks(proxy, username, password);
                 if (typeof show_progress === 'function') show_progress(-1);
             }, 240, get_msgbox_width());
 }
