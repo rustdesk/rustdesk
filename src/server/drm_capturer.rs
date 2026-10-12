@@ -90,9 +90,10 @@ struct Shared {
     pace: Mutex<EncoderPace>,
 }
 
-/// The encoder's own time per frame: from one frame() call to the next, less what the call spent
-/// waiting for a frame, smoothed. Work inside frame() (a rotation) counts; the wait does not, so a
-/// late producer cannot talk its own demand down.
+/// The encoder's own time per frame: from a frame() call that returned a frame to the next call,
+/// less what the call spent waiting for it, smoothed. Work inside frame() (a rotation) counts; the
+/// wait does not, so a late producer cannot talk its own demand down. A call that returned no frame
+/// (a dropped repeat, a timeout) left the encoder nothing to do, so the time after it is no sample.
 #[derive(Default)]
 struct EncoderPace {
     last_call: Option<Instant>,
@@ -101,8 +102,8 @@ struct EncoderPace {
 }
 
 impl EncoderPace {
-    fn on_call(&mut self, now: Instant) {
-        if let Some(prev) = self.last_call {
+    fn on_call(&mut self, now: Instant, returned_at: Instant) {
+        if let Some(prev) = self.last_call.filter(|&prev| returned_at > prev) {
             let sample = now
                 .saturating_duration_since(prev)
                 .saturating_sub(self.last_wait)
@@ -556,7 +557,7 @@ impl TraitCapturer for IpcDrmCapturer {
         // the rate the producer is asked for.
         {
             let mut pace = self.shared.pace.lock().unwrap();
-            pace.on_call(Instant::now());
+            pace.on_call(Instant::now(), self.returned_at);
             let demand = demand_fps_of(timeout, pace.busy);
             self.shared.demand_fps.store(demand, Ordering::Relaxed);
         }
