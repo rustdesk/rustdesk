@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
@@ -357,10 +356,15 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           onToggle: isOptionFixed(kOptionEnableTrustedDevices)
               ? null
               : (v) async {
-                  mainSetBoolOption(kOptionEnableTrustedDevices, v);
-                  setState(() {
-                    _enableTrustedDevices = v;
-                  });
+                  try {
+                    await mainSetBoolOption(kOptionEnableTrustedDevices, v);
+                    if (!mounted) return;
+                    setState(() {
+                      _enableTrustedDevices = v;
+                    });
+                  } catch (error) {
+                    showToast(error.toString());
+                  }
                 },
         ),
       if (enable2fa && _enableTrustedDevices)
@@ -1334,7 +1338,6 @@ class _ManageTrustedDevices extends StatefulWidget {
 
 class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
   RxList<TrustedDevice> trustedDevices = RxList.empty(growable: true);
-  RxList<Uint8List> selectedDevices = RxList.empty();
 
   @override
   Widget build(BuildContext context) {
@@ -1343,14 +1346,11 @@ class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
         title: Text(translate('Manage trusted devices')),
         centerTitle: true,
         actions: [
-          Obx(() => IconButton(
+          IconButton(
               icon: Icon(Icons.delete, color: Colors.white),
-              onPressed: selectedDevices.isEmpty
-                  ? null
-                  : () {
-                      confrimDeleteTrustedDevicesDialog(
-                          trustedDevices, selectedDevices);
-                    }))
+              onPressed: () {
+                confrimDeleteTrustedDevicesDialog(trustedDevices);
+              })
         ],
       ),
       body: FutureBuilder(
@@ -1364,7 +1364,7 @@ class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
             }
             final devices = snapshot.data as List<TrustedDevice>;
             trustedDevices = devices.obs;
-            return trustedDevicesTable(trustedDevices, selectedDevices);
+            return trustedDevicesTable(trustedDevices);
           }),
     );
   }

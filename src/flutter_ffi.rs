@@ -1004,7 +1004,10 @@ pub fn main_get_error() -> String {
     get_error()
 }
 
-pub fn main_set_option(key: String, value: String) {
+pub fn main_set_option(key: String, value: String) -> hbb_common::anyhow::Result<()> {
+    if key == "2fa" || key == keys::OPTION_ENABLE_TRUSTED_DEVICES {
+        return set_auth_option(key, value);
+    }
     #[cfg(target_os = "android")]
     {
         let is_permission_option = key.eq(keys::OPTION_ENABLE_CLIPBOARD)
@@ -1023,7 +1026,7 @@ pub fn main_set_option(key: String, value: String) {
                 key,
                 value
             );
-            return;
+            return Ok(());
         }
     }
     #[cfg(target_os = "android")]
@@ -1062,6 +1065,7 @@ pub fn main_set_option(key: String, value: String) {
     } else {
         set_option(key, value.clone());
     }
+    Ok(())
 }
 
 pub fn main_get_options() -> String {
@@ -1072,7 +1076,7 @@ pub fn main_get_options_sync() -> SyncReturn<String> {
     SyncReturn(get_options())
 }
 
-pub fn main_set_options(json: String) {
+pub fn main_set_options(json: String) -> hbb_common::anyhow::Result<()> {
     let mut map: HashMap<String, String> = serde_json::from_str(&json).unwrap_or(HashMap::new());
     #[cfg(target_os = "android")]
     {
@@ -1097,8 +1101,9 @@ pub fn main_set_options(json: String) {
         }
     }
     if !map.is_empty() {
-        set_options(map)
+        try_set_options(map)?;
     }
+    Ok(())
 }
 
 pub fn main_test_if_valid_server(server: String, test_with_proxy: bool) -> String {
@@ -2634,7 +2639,7 @@ pub fn main_check_hwcodec() {
     check_hwcodec()
 }
 
-pub fn main_get_trusted_devices() -> String {
+pub fn main_get_trusted_devices() -> hbb_common::anyhow::Result<String> {
     get_trusted_devices()
 }
 
@@ -2642,7 +2647,7 @@ pub fn main_remove_trusted_devices(json: String) {
     remove_trusted_devices(&json)
 }
 
-pub fn main_clear_trusted_devices() {
+pub fn main_clear_trusted_devices() -> hbb_common::anyhow::Result<()> {
     clear_trusted_devices()
 }
 

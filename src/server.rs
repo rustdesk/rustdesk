@@ -643,6 +643,7 @@ pub fn check_zombie() {
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tokio::main]
 pub async fn start_server(_is_server: bool) {
+    allow_err!(crate::trusted_devices::initialize());
     crate::RendezvousMediator::start_all().await;
 }
 
@@ -707,6 +708,7 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         wait_initial_config_sync().await;
+        allow_err!(crate::trusted_devices::initialize());
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
         #[cfg(feature = "hwcodec")]
@@ -720,10 +722,10 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                         match data {
                             Data::SyncConfig(Some(configs)) => {
                                 let (config, config2) = *configs;
-                                if Config::set(config) {
+                                if crate::trusted_devices::config::set_config(config).map_err(|error| crate::trusted_devices::config::log_sync_error(error)).unwrap_or(false) {
                                     log::info!("config synced");
                                 }
-                                if Config2::set(config2) {
+                                if crate::trusted_devices::config::set_config2(config2).map_err(|error| crate::trusted_devices::config::log_sync_error(error)).unwrap_or(false) {
                                     log::info!("config2 synced");
                                 }
                             }
@@ -846,14 +848,16 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                     let _chk_pk = crate::CheckIfResendPk::new();
                                     if !config.is_empty() {
                                         if cfg0.0 != config {
-                                            cfg0.0 = config.clone();
-                                            Config::set(config);
-                                            log::info!("sync config from root");
+                                            match crate::trusted_devices::config::set_config(config.clone()) {
+                                                Ok(_) => { cfg0.0 = config; log::info!("sync config from root"); }
+                                                Err(error) => crate::trusted_devices::config::log_sync_error(error),
+                                            }
                                         }
                                         if cfg0.1 != config2 {
-                                            cfg0.1 = config2.clone();
-                                            Config2::set(config2);
-                                            log::info!("sync config2 from root");
+                                            match crate::trusted_devices::config::set_config2(config2.clone()) {
+                                                Ok(_) => { cfg0.1 = config2; log::info!("sync config2 from root"); }
+                                                Err(error) => crate::trusted_devices::config::log_sync_error(error),
+                                            }
                                         }
                                     } else {
                                         // only on macos, because this issue was only reproduced on macos
@@ -904,9 +908,14 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                 }
                             }
                             _ => {
-                                cfg0 = cfg;
-                                conn.next_timeout(1000).await.ok();
-                                is_root_config_empty = false;
+                                match conn.next_timeout(1000).await {
+                                    Ok(Some(Data::SyncConfig(None))) => {
+                                        cfg0 = cfg;
+                                        is_root_config_empty = false;
+                                    }
+                                    Ok(Some(Data::SecurityConfigError(error))) => crate::trusted_devices::config::log_sync_error(error),
+                                    _ => crate::trusted_devices::config::log_sync_error("Host did not confirm configuration sync"),
+                                }
                             }
                         }
                     }
