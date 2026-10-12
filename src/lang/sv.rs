@@ -637,7 +637,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("upgrade_remote_rustdesk_client_to_{}_tip", "Uppgradera RustDesk-klienten till version {} eller senare på fjärrsidan!"),
         ("d3d_render_tip", "När D3D-rendering är aktiverat kan fjärrstyrningsskärmen vara svart på vissa maskiner."),
         ("Use D3D rendering", "Använd D3D rendering"),
-        ("Printer", "Skrivarer"),
+        ("Printer", "Skrivare"),
         ("printer-os-requirement-tip", "Funktionen för utgående utskrift kräver Windows 10 eller senare."),
         ("printer-requires-installed-{}-client-tip", "För att kunna använda fjärrutskrift måste {} vara installerat på den här enheten."),
         ("printer-{}-not-installed-tip", "Skrivaren {} är inte installerad."),
