@@ -17,12 +17,20 @@ class _FakeFFI implements FFI {
 }
 
 void main() {
-  test('the quality monitor names the WebRTC transport only on web', () {
+  test('the quality monitor reports the current connection mode', () {
     final ffi = _FakeFFI();
-    ffi.ffiModel.cachedPeerData.streamType = 'WebRTC';
     final model = QualityMonitorModel(WeakReference(ffi));
-    // Off the web the session tab's tooltip already names the transport.
-    expect(isWeb, isFalse);
-    expect(model.webrtcTransport, isNull);
+
+    expect(model.connectionType, isNull);
+
+    ffi.ffiModel.setConnectionType('peer', true, true, 'UDP');
+    expect(
+        model.connectionType,
+        '${translate("Direct and encrypted connection")} (UDP)');
+
+    ffi.ffiModel.setConnectionType('peer', true, false, 'Relay');
+    expect(
+        model.connectionType,
+        '${translate("Relayed and encrypted connection")} (TCP)');
   });
 }

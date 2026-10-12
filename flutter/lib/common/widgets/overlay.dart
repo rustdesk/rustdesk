@@ -594,21 +594,19 @@ class QualityMonitor extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _row("Connection",
+                          qualityMonitorModel.connectionType ?? '-'),
                       _row("Speed", qualityMonitorModel.data.speed ?? '-'),
                       _row("FPS", qualityMonitorModel.data.fps ?? '-'),
-                      // let delay be 0 if fps is 0
                       _row(
-                          "Delay",
-                          "${qualityMonitorModel.data.delay == null ? '-' : (qualityMonitorModel.data.fps ?? "").replaceAll(' ', '').replaceAll('0', '').isEmpty ? 0 : qualityMonitorModel.data.delay}ms",
+                          "RTT",
+                          "${qualityMonitorModel.data.delay ?? '-'}ms",
                           rightColor: Colors.green),
                       _row("Target Bitrate",
                           "${qualityMonitorModel.data.targetBitrate ?? '-'}kb"),
                       _row(
                           "Codec", qualityMonitorModel.data.codecFormat ?? '-'),
                       _row("Chroma", qualityMonitorModel.data.chroma ?? '-'),
-                      if (qualityMonitorModel.webrtcTransport != null)
-                        _row("Transport",
-                            qualityMonitorModel.webrtcTransport!),
                     ],
                   ),
                 )
