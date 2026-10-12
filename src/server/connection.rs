@@ -2020,17 +2020,6 @@ impl Connection {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
         }
 
-        // A client's auto-login types the OS password into whatever has focus.
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
-        if self.lr.auto_login {
-            pi.skip_auto_login = !tokio::task::spawn_blocking(crate::platform::is_logon_screen)
-                .await
-                .unwrap_or_else(|e| {
-                    log::error!("Failed to check the logon screen: {}", e);
-                    false
-                });
-        }
-
         if self.is_port_forward() {
             pi.features = Some(Features {
                 port_forward_mux: self.port_forward_mux.is_some(),
@@ -2472,6 +2461,41 @@ impl Connection {
         // to-do: if is the legacy mode, and the key is function key "LockScreen".
         // Switch to the primary display.
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
+    }
+
+    // Auto Login: the password and Return the client would otherwise type itself, typed only if a
+    // check right before finds the logon or lock screen.
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    async fn type_auto_login_password(&self, password: String) {
+        // A peer can send this at any rate, hence the throttled logs.
+        let at_logon_screen = tokio::task::spawn_blocking(crate::platform::is_logon_screen)
+            .await
+            .unwrap_or_else(|e| {
+                hbb_common::throttled_log!(
+                    Duration::from_secs(60),
+                    error,
+                    "Failed to check the logon screen: {}",
+                    e
+                );
+                false
+            });
+        if !at_logon_screen {
+            hbb_common::throttled_log!(
+                Duration::from_secs(60),
+                info,
+                "Auto login dropped, not at the logon or lock screen"
+            );
+            return;
+        }
+        let mut key_event = KeyEvent::new();
+        key_event.mode = KeyboardMode::Legacy.into();
+        key_event.press = true;
+        key_event.set_seq(password);
+        self.input_key(key_event.clone(), false);
+        key_event.set_control_key(ControlKey::Return);
+        CLICK_TIME.store(get_time(), Ordering::SeqCst);
+        MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
+        self.input_key(key_event, true);
     }
 
     fn verify_h1(&self, h1: &[u8]) -> bool {
@@ -3363,6 +3387,13 @@ impl Connection {
                         } else {
                             self.input_key(me, false);
                         }
+                    }
+                    self.update_auto_disconnect_timer();
+                }
+                #[cfg(any(target_os = "windows", target_os = "macos"))]
+                Some(message::Union::OsLogin(login)) => {
+                    if self.peer_keyboard_enabled() {
+                        self.type_auto_login_password(login.password).await;
                     }
                     self.update_auto_disconnect_timer();
                 }

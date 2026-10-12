@@ -3056,12 +3056,6 @@ impl LoginConfigHandler {
         let a = !self.get_option("auto-login").is_empty();
         let p = self.get_option("os-password");
         if !p.is_empty() && l && a {
-            // The peer answers when it handles the login, so its screen can still lock or unlock
-            // before the password is typed.
-            if self.peer_info.as_ref().is_some_and(|pi| pi.skip_auto_login) {
-                log::info!("Skip auto login, the peer is not at the logon or lock screen");
-                return "".to_owned();
-            }
             p
         } else {
             "".to_owned()
@@ -3875,11 +3869,6 @@ impl LoginConfigHandler {
         } else {
             Default::default()
         };
-        // The conditions of `should_auto_login()`, minus the peer's answer to this request.
-        let auto_login = self.conn_type == ConnType::DEFAULT_CONN
-            && self.lock_after_session_end.v
-            && !self.get_option("auto-login").is_empty()
-            && !self.get_option("os-password").is_empty();
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -3892,7 +3881,6 @@ impl LoginConfigHandler {
             os_login,
             hwid,
             avatar,
-            auto_login,
             ..Default::default()
         };
         match self.conn_type {
@@ -4477,6 +4465,32 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     key_event.set_control_key(ControlKey::Return);
     msg_out.set_key_event(key_event);
     interface.send(Data::Message(msg_out));
+}
+
+/// Auto Login. A peer that can check for its logon or lock screen gets the password and types it
+/// itself, only if it is there right then. Keys typed from here land in whatever has focus if the
+/// screen is not locked by the time they arrive.
+pub fn auto_login(p: String, pi: &PeerInfo, interface: impl Interface) {
+    if !is_peer_handling_os_login(pi) {
+        input_os_password(p, true, interface);
+        return;
+    }
+    std::thread::spawn(move || {
+        activate_os(&interface, true);
+        std::thread::sleep(Duration::from_millis(1200));
+        let mut msg_out = Message::new();
+        msg_out.set_os_login(OSLogin {
+            password: p,
+            ..Default::default()
+        });
+        interface.send(Data::Message(msg_out));
+    });
+}
+
+/// Windows and macOS peers from the 1.5.1 release handle `os_login`.
+fn is_peer_handling_os_login(pi: &PeerInfo) -> bool {
+    (pi.platform == crate::common::PLATFORM_WINDOWS || pi.platform == crate::common::PLATFORM_MACOS)
+        && hbb_common::get_version_number(&pi.version) >= hbb_common::get_version_number("1.5.1")
 }
 
 #[derive(Copy, Clone)]
@@ -5230,36 +5244,6 @@ mod port_forward_mux_tests {
         assert!(!asks(&lc));
         lc.port_forward_multiplex = true;
         assert!(asks(&lc));
-    }
-}
-
-#[cfg(test)]
-mod auto_login_tests {
-    use super::*;
-
-    #[test]
-    fn auto_login_asks_the_peer_and_skips_when_told() {
-        let mut lc = LoginConfigHandler::default();
-        let asks = |lc: &LoginConfigHandler| {
-            lc.create_login_msg(String::new(), String::new(), vec![])
-                .login_request()
-                .auto_login
-        };
-        assert!(!asks(&lc));
-
-        lc.config.lock_after_session_end.v = true;
-        for (k, v) in [("os-password", "os-pass"), ("auto-login", "Y")] {
-            lc.config.options.insert(k.to_owned(), v.to_owned());
-        }
-        assert!(asks(&lc));
-
-        lc.peer_info = Some(PeerInfo::default());
-        assert_eq!(lc.should_auto_login(), "os-pass");
-        lc.peer_info = Some(PeerInfo {
-            skip_auto_login: true,
-            ..Default::default()
-        });
-        assert_eq!(lc.should_auto_login(), "");
     }
 }
 
