@@ -724,9 +724,9 @@ pub(super) fn get_capturer_for_display(
     // render-node-absent seat or a convert failure on the unprivileged side) must NOT propagate out
     // and restart-loop this per-display video service. Instead fall THROUGH to PipeWire for just this
     // display; the other DRM outputs keep streaming over DRM.
-    // The ONE gate that keeps the probing form on purpose: this runs on the plain video thread,
+    // Like the login, this gate keeps the probing form on purpose: it runs on the video thread,
     // not an async executor, and it is the capture-build path, so a definitive verdict is worth
-    // seconds here. It is also what makes a cold cache recoverable at all -- warm_availability
+    // seconds here. With the login it is what makes a cold cache recoverable -- warm_availability
     // gives up after its attempts, so if EVERY gate were cache-only a --server that started
     // before the root service would never see DRM again for the rest of its life.
     #[cfg(feature = "drm")]

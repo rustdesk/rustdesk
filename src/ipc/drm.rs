@@ -23,6 +23,10 @@ pub struct DrmDisplayInfo {
     /// alone is ambiguous across cards. Empty = the single auto-detected device.
     #[serde(default)]
     pub device: String,
+    /// The primary plane rotates its framebuffer by 90/270 in hardware, so every frame is this
+    /// mode TRANSPOSED whatever the compositor reports (gamescope's wl_output has no transform).
+    #[serde(default)]
+    pub plane_transposed: bool,
 }
 
 /// Mirrors `scrap::drm_reader::drmtap_dmabuf_desc` except `dma_buf_fd` (never serializes — it rides
@@ -290,6 +294,7 @@ fn drm_displays_from_reader(
             true
         })
         .map(|d| DrmDisplayInfo {
+            plane_transposed: plane_transposed(device, d.crtc_id),
             name: d.name,
             crtc_id: d.crtc_id,
             x: d.x,
@@ -302,6 +307,33 @@ fn drm_displays_from_reader(
         })
         .collect();
     (displays, undriven)
+}
+
+const DRM_MODE_ROTATE_90: u32 = 0x2;
+const DRM_MODE_ROTATE_270: u32 = 0x8;
+
+/// Through a reader bound to `crtc_id`: the enumerating reader is bound to whichever crtc
+/// auto-select picked.
+fn plane_transposed(device: &str, crtc_id: u32) -> bool {
+    let dev = (!device.is_empty()).then_some(device);
+    let Some(mut r) = scrap::drm_reader::DrmReader::open(dev, crtc_id) else {
+        return false;
+    };
+    let transposed = match r.query_plane_rotation() {
+        Some(m) => m & (DRM_MODE_ROTATE_90 | DRM_MODE_ROTATE_270) != 0,
+        None => {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(600),
+                debug,
+                "drm: crtc {crtc_id} ({device:?}): plane rotation unreadable; sized as unrotated"
+            );
+            false
+        }
+    };
+    if transposed {
+        log::trace!("drm: crtc {crtc_id} ({device:?}) is rotated 90/270 by its plane");
+    }
+    transposed
 }
 
 /// Active displays of every DRM device + the connected-but-undriven identities, from ONE look.
@@ -924,6 +956,20 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let mut conn = dup_to_drm_conn(&stream)?;
     drop(stream);
 
+    let wake = match conn.recv_msg_timeout2(3_000).await {
+        Some(Ok((Data::DrmHello { wake }, _fd))) => wake,
+        Some(Ok((_, _fd))) => {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(5),
+                info,
+                "drm: peer did not open with DrmHello; closing"
+            );
+            return Ok(());
+        }
+        Some(Err(e)) => return Err(e),
+        None => return Ok(()),
+    };
+
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
     let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool)>();
     let stop = Arc::new(AtomicBool::new(false));
@@ -935,7 +981,16 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let worker_demand = demand_fps.clone();
     std::thread::Builder::new()
         .name("drm-capture".into())
-        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate, worker_demand))
+        .spawn(move || {
+            drm_capture_worker(
+                frame_tx,
+                crtc_rx,
+                worker_stop,
+                worker_gate,
+                worker_demand,
+                wake,
+            )
+        })
         .map_err(|err| anyhow::anyhow!("could not spawn the drm capture worker: {err}"))?;
 
     let displays = match frame_rx.recv().await {
@@ -1219,13 +1274,22 @@ fn drm_capture_worker(
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
     demand_fps: std::sync::Arc<std::sync::atomic::AtomicU8>,
+    wake: bool,
 ) {
     use std::sync::atomic::Ordering;
 
     let t_conn = std::time::Instant::now();
 
     // Enumerate FRESH rather than serve the cache: a cached display may no longer be driven.
-    let displays = drm_enumerate_settled("a consumer connected");
+    let displays = if wake {
+        drm_enumerate_settled("a consumer connected")
+    } else {
+        let (displays, _undriven) = drm_enumerate_all_displays();
+        // Seen lit, a connector a failed wake gave up on is wakeable again.
+        #[cfg(feature = "drm-wake")]
+        drm_wakeable_undriven(&displays, &_undriven);
+        displays
+    };
     if frame_tx
         .blocking_send(DrmProducerMsg::Displays(displays))
         .is_err()
@@ -1845,6 +1909,7 @@ mod drm_conn_tests {
             active: true,
             render_node: "/dev/dri/renderD129".to_owned(),
             device: "/dev/dri/card2".to_owned(),
+            plane_transposed: false,
         };
         let wire = serde_json::to_vec(&current).unwrap();
         let back: DrmDisplayInfo = serde_json::from_slice(&wire).unwrap();
