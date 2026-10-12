@@ -79,6 +79,10 @@ pub fn core_main() -> Option<CoreMainAction> {
             {
                 _is_flutter_invoke_new_connection = true;
             }
+            if cfg!(all(windows, feature = "flutter")) && arg == "--show-ui" {
+                // The tray requests visibility; the core still performs a normal startup.
+                continue;
+            }
             if arg == "--elevate" {
                 _is_elevate = true;
             } else if arg == "--run-as-system" {
@@ -101,8 +105,9 @@ pub fn core_main() -> Option<CoreMainAction> {
         // Because `--server` process is the System user's process. We can't get the arguments in `check_process()`.
         // We can assume that self service running means the server is also running on Windows.
         #[cfg(target_os = "windows")]
-        let should_check_start_tray = crate::platform::is_self_service_running()
-            && crate::platform::is_cur_exe_the_installed();
+        let should_check_start_tray = cfg!(feature = "flutter")
+            || (crate::platform::is_self_service_running()
+                && crate::platform::is_cur_exe_the_installed());
         if should_check_start_tray && !crate::check_process("--tray", true) {
             #[cfg(target_os = "linux")]
             hbb_common::allow_err!(crate::platform::check_autostart_config());

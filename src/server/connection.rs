@@ -1507,7 +1507,17 @@ impl Connection {
         if !self.check_whitelist(&addr).await {
             return false;
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(all(target_os = "windows", feature = "flutter"))]
+        if Config::get_option("allow-only-conn-window-open") == "Y"
+            && !crate::platform::windows::client_window::is_open()
+        {
+            self.send_login_error("The main window is not open").await;
+            return false;
+        }
+        #[cfg(not(any(
+            target_os = "android", target_os = "ios",
+            all(target_os = "windows", feature = "flutter")
+        )))]
         if crate::is_server() && Config::get_option("allow-only-conn-window-open") == "Y" {
             if !crate::check_process("", !crate::platform::is_root()) {
                 self.send_login_error("The main window is not open").await;

@@ -29,6 +29,7 @@ import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'mobile/widgets/deploy_dialog.dart';
 import 'models/platform_model.dart';
+import 'desktop/windows_client_window.dart';
 
 /// Basic window and launch properties.
 int? kWindowId;
@@ -151,17 +152,22 @@ void runMainApp(bool startService) async {
 
   // Set window option.
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
-      isMainWindow: true, alwaysOnTop: alwaysOnTop);
+      isMainWindow: true,
+      alwaysOnTop: alwaysOnTop,
+      skipTaskbar: isWindows);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     // Restore the location of the main window before window hide or show.
-    await restoreWindowPosition(WindowType.Main);
+    await restoreWindowPosition(WindowType.Main,
+        restoreMaximized: !isWindows || kBootArgs.contains('--show-ui'));
     // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
     final handledByUniLinks = await initUniLinks();
     debugPrint("handled by uni links: $handledByUniLinks");
-    if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs)) {
+    if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs) ||
+        (isWindows && !kBootArgs.contains('--show-ui'))) {
       windowManager.hide();
     } else {
       windowManager.show();
+      if (isWindows) await windowManager.setSkipTaskbar(false);
       windowManager.focus();
       // Move registration of active main window here to prevent from async visible check.
       rustDeskWinManager.registerActiveWindow(kWindowMainId);
@@ -289,13 +295,14 @@ void runConnectionManagerScreen() async {
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
-  final hide = await bind.cmGetConfig(name: "hide_cm") == 'true';
+  final hide = isWindows || await bind.cmGetConfig(name: "hide_cm") == 'true';
   gFFI.serverModel.hideCm = hide;
   if (hide) {
     await hideCmWindow(isStartup: true);
   } else {
     await showCmWindow(isStartup: true);
   }
+  if (isWindows) await gFFI.serverModel.updateClientState();
   setResizable(false);
   // Start the uni links handler and redirect links to Native, not for Flutter.
   listenUniLinks(handleByFlutter: false);
@@ -304,6 +311,13 @@ void runConnectionManagerScreen() async {
 bool _isCmReadyToShow = false;
 
 showCmWindow({bool isStartup = false}) async {
+  if (isWindows) {
+    if (_isCmReadyToShow) {
+      await showWindowsApprovalWindow(gFFI.serverModel.clients,
+          elevation: gFFI.serverModel.showElevation);
+    }
+    return;
+  }
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: kConnectionManagerWindowSizeClosedChat, alwaysOnTop: true);
@@ -331,6 +345,18 @@ showCmWindow({bool isStartup = false}) async {
 }
 
 hideCmWindow({bool isStartup = false}) async {
+  if (isWindows) {
+    if (isStartup) {
+      await windowManager.waitUntilReadyToShow(
+          getHiddenTitleBarWindowOptions(
+              size: kConnectionManagerWindowSizeClosedChat, skipTaskbar: true),
+          null);
+      await windowManager.setOpacity(1);
+      _isCmReadyToShow = true;
+    }
+    if (_isCmReadyToShow) await hideWindowsClientWindow();
+    return;
+  }
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: kConnectionManagerWindowSizeClosedChat);
@@ -402,7 +428,8 @@ WindowOptions getHiddenTitleBarWindowOptions(
     {bool isMainWindow = false,
     Size? size,
     bool center = false,
-    bool? alwaysOnTop}) {
+    bool? alwaysOnTop,
+    bool skipTaskbar = false}) {
   var defaultTitleBarStyle = TitleBarStyle.hidden;
   // we do not hide titlebar on win7 because of the frame overflow.
   if (kUseCompatibleUiMode) {
@@ -412,7 +439,7 @@ WindowOptions getHiddenTitleBarWindowOptions(
     size: size,
     center: center,
     backgroundColor: (isMacOS && isMainWindow) ? null : Colors.transparent,
-    skipTaskbar: false,
+    skipTaskbar: skipTaskbar,
     titleBarStyle: defaultTitleBarStyle,
     alwaysOnTop: alwaysOnTop,
   );

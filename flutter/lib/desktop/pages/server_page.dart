@@ -17,6 +17,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../common.dart';
+import '../windows_client_window.dart';
 import '../../common/widgets/chat_page.dart';
 import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
@@ -63,6 +64,10 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void onWindowClose() {
+    if (isWindows && gFFI.serverModel.clients.isNotEmpty) {
+      hideWindowsClientWindow();
+      return;
+    }
     // Other platforms keep the old behaviour exactly: the ambiguity this guards against is a
     // Linux session logout, which closes every window in the session.
     final byOperator = _cmClosedByOperator || !isLinux;
@@ -335,6 +340,10 @@ class ConnectionManagerState extends State<ConnectionManager>
   }
 
   Future<bool> handleWindowCloseButton() async {
+    if (isWindows) {
+      await hideWindowsClientWindow();
+      return false;
+    }
     var tabController = gFFI.serverModel.tabController;
     final connLength = tabController.length;
     if (connLength <= 1) {

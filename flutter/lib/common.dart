@@ -2024,7 +2024,10 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 //
 // display is used to set the offset of the window in individual display mode.
 Future<bool> restoreWindowPosition(WindowType type,
-    {int? windowId, String? peerId, int? display}) async {
+    {int? windowId,
+    String? peerId,
+    int? display,
+    bool restoreMaximized = true}) async {
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -2114,7 +2117,8 @@ Future<bool> restoreWindowPosition(WindowType type,
       }
       if (lpos.isMaximized == true) {
         await restorePos();
-        if (!(bind.isIncomingOnly() || bind.isOutgoingOnly())) {
+        if (restoreMaximized &&
+            !(bind.isIncomingOnly() || bind.isOutgoingOnly())) {
           await windowManager.maximize();
         }
       } else {

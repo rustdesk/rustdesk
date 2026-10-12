@@ -20,6 +20,15 @@ const std::vector<std::string> parameters_white_list = {"--install", "--cm"};
 
 const wchar_t* getWindowClassName();
 
+BOOL CALLBACK ShowConnectionManager(HWND hwnd, LPARAM parameter) {
+  const auto* property = reinterpret_cast<const wchar_t*>(parameter);
+  if (GetPropW(hwnd, property)) {
+    ShowWindowAsync(hwnd, SW_RESTORE);
+    SetForegroundWindow(hwnd);
+  }
+  return TRUE;
+}
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command)
 {
@@ -89,6 +98,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     }
   }
 
+  const bool show_ui = std::find(command_line_arguments.begin(),
+      command_line_arguments.end(), "--show-ui") != command_line_arguments.end();
+  const std::wstring cm_property = app_name + L" - Connection Manager";
+  if (show_ui) {
+    EnumWindows(ShowConnectionManager,
+                reinterpret_cast<LPARAM>(cm_property.c_str()));
+  }
+
   // Uri links dispatch
   HWND hwnd = ::FindWindowW(getWindowClassName(), app_name.c_str());
   if (hwnd != NULL) {
@@ -103,7 +120,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                     whitelist_param) != command_line_arguments.end();
     }
     if (!allow_multiple_instances) {
-      if (!command_line_arguments.empty()) {
+      if (show_ui) {
+        ::ShowWindowAsync(hwnd, SW_RESTORE);
+        ::SetForegroundWindow(hwnd);
+      } else if (!command_line_arguments.empty()) {
         // The process launched by the browser owns the foreground permission.
         // Transfer it to the existing RustDesk process before dispatching the
         // URI so that it can bring an existing session to the foreground.
@@ -114,11 +134,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
         }
         // Dispatch command line arguments
         DispatchToUniLinksDesktop(hwnd);
-      } else {
-        // Not called with arguments, or just open the app shortcut on desktop.
-        // So we just show the main window instead.
-        ::ShowWindow(hwnd, SW_NORMAL);
-        ::SetForegroundWindow(hwnd);
       }
       return EXIT_FAILURE;
     }
@@ -177,6 +192,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
   if (!window.CreateAndShow(window_title, origin, size, !is_cm_page)) {
       return EXIT_FAILURE;
+  }
+  if (!is_install_page) {
+    SetPropW(window.GetHandle(), L"RustDeskClientWindow",
+             reinterpret_cast<HANDLE>(1));
+  }
+  if (is_cm_page) {
+    SetPropW(window.GetHandle(), cm_property.c_str(), reinterpret_cast<HANDLE>(1));
+  } else if (!is_install_page) {
+    SetPropW(window.GetHandle(), L"RustDeskMainWindow", reinterpret_cast<HANDLE>(1));
   }
   window.SetQuitOnClose(true);
 

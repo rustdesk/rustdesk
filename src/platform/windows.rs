@@ -96,6 +96,8 @@ use windows_service::{
 };
 use winreg::{enums::*, RegKey};
 
+#[cfg(feature = "flutter")]
+pub(crate) mod client_window;
 mod acl;
 mod installer_handoff;
 mod installer_shell;
