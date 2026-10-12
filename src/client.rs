@@ -2839,7 +2839,6 @@ pub struct LoginConfigHandler {
     pub save_ab_password_to_recent: bool, // true: connected with ab password
     pub other_server: Option<(String, String, String)>,
     pub custom_fps: Arc<Mutex<Option<usize>>>,
-    pub last_auto_fps: Option<usize>,
     pub adapter_luid: Option<i64>,
     pub mark_unsupported: Vec<CodecFormat>,
     pub selected_windows_session_id: Option<u32>,
@@ -3567,7 +3566,6 @@ impl LoginConfigHandler {
             self.save_config(config);
         }
         *self.custom_fps.lock().unwrap() = Some(fps as _);
-        self.last_auto_fps = None;
         msg_out
     }
 
@@ -3625,7 +3623,6 @@ impl LoginConfigHandler {
     /// * `username` - The name of the peer.
     /// * `pi` - The peer info.
     pub fn handle_peer_info(&mut self, pi: &PeerInfo) {
-        self.last_auto_fps = None;
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
@@ -4923,6 +4920,7 @@ pub enum Data {
     RejectInsecureConnection,
     Login((String, String, String, bool)),
     Message(Message),
+    AutoFps(usize),
     SendFiles((i32, JobType, String, String, i32, bool, bool)),
     RemoveDirAll((i32, String, bool, bool)),
     ConfirmDeleteFiles((i32, i32)),

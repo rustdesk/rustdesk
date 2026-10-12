@@ -93,6 +93,7 @@ pub struct Remote<T: InvokeUiSession> {
     elevation_requested: bool,
     peer_info: ParsedPeerInfo,
     video_threads: HashMap<usize, VideoThread>,
+    last_auto_fps: Option<usize>,
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
     sent_close_reason: bool,
@@ -142,6 +143,7 @@ impl<T: InvokeUiSession> Remote<T> {
             elevation_requested: false,
             peer_info: Default::default(),
             video_threads: Default::default(),
+            last_auto_fps: None,
             chroma: Default::default(),
             last_record_state: false,
             sent_close_reason: false,
@@ -643,6 +645,9 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::Message(msg) => {
                 match &msg.union {
                     Some(message::Union::Misc(misc)) => match misc.union {
+                        Some(misc::Union::Option(ref option)) if option.custom_fps > 0 => {
+                            self.last_auto_fps = None;
+                        }
                         Some(misc::Union::RefreshVideo(_)) => {
                             self.video_threads.iter().for_each(|(_, v)| {
                                 *v.discard_queue.write().unwrap() = true;
@@ -658,6 +663,34 @@ impl<T: InvokeUiSession> Remote<T> {
                     _ => {}
                 }
                 allow_err!(peer.send(&msg).await);
+            }
+            Data::AutoFps(auto_fps) => {
+                let custom_fps = *self.handler.lc.read().unwrap().custom_fps.lock().unwrap();
+                let mut custom_fps = custom_fps.unwrap_or(30);
+                if custom_fps < 5 || custom_fps > 120 {
+                    custom_fps = 30;
+                }
+                if auto_fps > custom_fps {
+                    self.last_auto_fps = None;
+                    return true;
+                }
+                if self.last_auto_fps == Some(auto_fps) {
+                    return true;
+                }
+                let mut misc = Misc::new();
+                misc.set_option(OptionMessage {
+                    custom_fps: auto_fps as _,
+                    ..Default::default()
+                });
+                let mut msg = Message::new();
+                msg.set_misc(misc);
+                match peer.send(&msg).await {
+                    Ok(()) => {
+                        log::info!("Set fps to {}", auto_fps);
+                        self.last_auto_fps = Some(auto_fps);
+                    }
+                    Err(err) => log::error!("Failed to set automatic fps to {}: {}", auto_fps, err),
+                }
             }
             Data::SendFiles((id, r#type, path, to, file_num, include_hidden, is_remote)) => {
                 log::info!("send files, is remote {}", is_remote);
@@ -1273,7 +1306,7 @@ impl<T: InvokeUiSession> Remote<T> {
         if limited_fps > custom_fps {
             limited_fps = custom_fps;
         }
-        let last_auto_fps = self.handler.lc.read().unwrap().last_auto_fps.clone();
+        let last_auto_fps = self.last_auto_fps;
         let displays = self.video_threads.keys().cloned().collect::<Vec<_>>();
         let mut fps_trending = |display: usize| {
             let thread = self.video_threads.get_mut(&display)?;
@@ -1312,16 +1345,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 auto_fps = 1;
             }
             if Some(auto_fps) != last_auto_fps {
-                let mut misc = Misc::new();
-                misc.set_option(OptionMessage {
-                    custom_fps: auto_fps as _,
-                    ..Default::default()
-                });
-                let mut msg = Message::new();
-                msg.set_misc(misc);
-                self.sender.send(Data::Message(msg)).ok();
-                log::info!("Set fps to {}", auto_fps);
-                self.handler.lc.write().unwrap().last_auto_fps = Some(auto_fps);
+                allow_err!(self.sender.send(Data::AutoFps(auto_fps)));
             }
         }
         // send refresh
@@ -2192,6 +2216,7 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn set_peer_info(&mut self, pi: &PeerInfo) {
+        self.last_auto_fps = None;
         self.peer_info.platform = pi.platform.clone();
 
         // Check features field for terminal support
