@@ -5,7 +5,7 @@ use hbb_common::{
     bail,
     config::Config,
     password_security::symmetric_crypt,
-    sodiumoxide::{crypto::hash::sha256, hex, utils},
+    sodiumoxide::{crypto::hash::sha256, hex},
     tokio, ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
@@ -14,7 +14,6 @@ use std::{convert::TryInto, path::PathBuf};
 #[derive(Default)]
 pub struct Session {
     credentials: Option<Credentials>,
-    submitted: Vec<u8>,
     supported: bool,
     requested: bool,
 }
@@ -76,7 +75,6 @@ impl Session {
     }
 
     pub async fn login(&mut self, mut message: Message) -> ResultType<Message> {
-        self.submitted.clear();
         self.supported = false;
         self.requested = false;
         if let (Some(credentials), Some(message::Union::LoginRequest(request))) =
@@ -95,7 +93,6 @@ impl Session {
                         return Ok(message);
                     }
                 };
-                self.submitted = token.clone();
                 request.trusted_device_v2_token = token.into();
             }
         }
@@ -115,14 +112,7 @@ impl Session {
         let Some(credentials) = self.credentials.clone() else {
             return Ok(false);
         };
-        if matches!(response.union.as_ref(), Some(login_response::Union::Error(error)) if error == crate::client::REQUIRE_2FA)
-            && self.supported
-            && !self.submitted.is_empty()
-        {
-            let submitted = self.submitted.clone();
-            tokio::task::spawn_blocking(move || credentials.forget_if_matches(&submitted))
-                .await??;
-        } else if matches!(response.union, Some(login_response::Union::PeerInfo(_))) {
+        if matches!(response.union, Some(login_response::Union::PeerInfo(_))) {
             let token = response.trusted_device_v2_token.to_vec();
             if self.requested && token.is_empty() {
                 bail!("Login succeeded, but the host did not remember this device");
@@ -171,10 +161,6 @@ impl Credentials {
 
     pub fn load(&self) -> ResultType<Option<Vec<u8>>> {
         let storage = Storage::lock(&self.path)?;
-        self.load_from(&storage)
-    }
-
-    fn load_from(&self, storage: &Storage) -> ResultType<Option<Vec<u8>>> {
         let saved: Option<SavedToken> = storage.read()?;
         let Some(saved) = saved.filter(|saved| saved.issuer == self.issuer) else {
             return Ok(None);
@@ -198,16 +184,5 @@ impl Credentials {
             ciphertext,
         };
         Storage::lock(&self.path)?.write(&Some(saved))
-    }
-
-    pub fn forget_if_matches(&self, submitted: &[u8]) -> ResultType<()> {
-        let storage = Storage::lock(&self.path)?;
-        if self
-            .load_from(&storage)?
-            .is_some_and(|stored| utils::memcmp(&stored, submitted))
-        {
-            storage.write(&Option::<SavedToken>::None)?;
-        }
-        Ok(())
     }
 }

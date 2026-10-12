@@ -8,6 +8,14 @@ use std::{fs, path::PathBuf};
 
 const PASSWORD: &str = "permanent-test-password";
 
+pub(crate) fn initialize_config() {
+    static INITIALIZED: std::sync::Once = std::sync::Once::new();
+    INITIALIZED.call_once(|| {
+        *hbb_common::config::APP_NAME.write().unwrap() =
+            format!("RustDeskV2Test{}", uuid::Uuid::new_v4());
+    });
+}
+
 fn proof(password: &str, token: &[u8]) -> host::LoginProof {
     let salt = Config::get_effective_permanent_password_salt();
     let challenge = "trusted-device-test".to_owned();
@@ -22,8 +30,7 @@ fn proof(password: &str, token: &[u8]) -> host::LoginProof {
 }
 
 fn configure() -> std::collections::HashMap<String, String> {
-    *hbb_common::config::APP_NAME.write().unwrap() =
-        format!("RustDeskV2Test{}", uuid::Uuid::new_v4());
+    initialize_config();
     let totp = crate::auth_2fa::TOTPInfo {
         name: "test".into(),
         secret: vec![1; 20],
@@ -178,6 +185,7 @@ fn only_original_tokens_satisfy_trust_and_use_does_not_refresh_expiry() {
 
 #[test]
 fn controller_credentials_are_bound_and_storage_errors_surface() {
+    initialize_config();
     let path = test_path();
     let credentials = Credentials::new(path.clone(), "server-a".into(), &[1; TOKEN_BYTES]).unwrap();
     let token = random_token().unwrap();
@@ -193,10 +201,6 @@ fn controller_credentials_are_bound_and_storage_errors_surface() {
             .unwrap()
             .is_none());
     }
-    credentials.forget_if_matches(&[0; TOKEN_BYTES]).unwrap();
-    assert!(credentials.load().unwrap().is_some());
-    credentials.forget_if_matches(&token).unwrap();
-    assert!(credentials.load().unwrap().is_none());
     fs::write(&path, b"invalid credential file").unwrap();
     assert!(credentials.load().is_err());
     let directory = test_path();

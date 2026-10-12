@@ -5,7 +5,7 @@ pub mod host;
 mod storage;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use hbb_common::{
     anyhow::anyhow,
