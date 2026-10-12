@@ -27,6 +27,11 @@ const BODY_READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// A repeat of the frame returned last goes out anyway once this much time has passed since
 /// then: a frame whose encode failed reaches the encoder again, even if nothing moves.
 const REPEAT_EVERY: Duration = Duration::from_secs(1);
+/// After this long without a new frame the screen reads as still, and the producer is asked for at
+/// most STILL_FPS, its old 33 ms tick: grabbing a still screen faster only feeds frame() repeats to
+/// drop. Three of those ticks, so a producer paced at STILL_FPS in motion never reads as still.
+const STILL_AFTER: Duration = Duration::from_millis(100);
+const STILL_FPS: u8 = 30;
 
 struct FrameSlot {
     // Row stride is `pixels.len() / height`, possibly padded; the format and the plane rotation
@@ -558,7 +563,10 @@ impl TraitCapturer for IpcDrmCapturer {
         {
             let mut pace = self.shared.pace.lock().unwrap();
             pace.on_call(Instant::now(), self.returned_at);
-            let demand = demand_fps_of(timeout, pace.busy);
+            let mut demand = demand_fps_of(timeout, pace.busy);
+            if self.returned_at.elapsed() >= STILL_AFTER {
+                demand = demand.min(STILL_FPS);
+            }
             self.shared.demand_fps.store(demand, Ordering::Relaxed);
         }
         let deadline = Instant::now() + timeout;
