@@ -20,6 +20,7 @@ windows = { version = "0.61", features = [
     "Wdk_System",
     "Wdk_System_SystemServices",
     "Win32",
+    "Win32_Storage_FileSystem",
     "Win32_System",
     "Win32_System_SystemInformation",
 ] }
@@ -35,5 +36,4 @@ FileDescription = "RustDesk Remote Desktop"
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
 winapi = { version = "0.3", features = [ "winnt", "pdh", "synchapi" ] }
-
 
