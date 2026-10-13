@@ -5,6 +5,7 @@ import 'dart:js' as js;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart' as common;
+import 'package:flutter_hbb/common/widgets/remote_input.dart';
 import 'package:flutter_hbb/mobile/pages/remote_page.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/models/input_model.dart';
@@ -33,26 +34,23 @@ class _Input extends Fake implements InputModel {
   }
 }
 
-class _Cursor extends Fake implements CursorModel {
-  @override
-  final blockedRects = <Rect>[];
-
-  @override
-  set blockEvents(bool value) {}
-
-  @override
-  void addBlockedRect(Rect rect) => blockedRects.add(rect);
-
-  @override
-  void removeBlockedRect(Rect rect) => blockedRects.remove(rect);
+class _Cursor extends CursorModel {
+  _Cursor(FFI ffi) : super(WeakReference(ffi));
 
   @override
   Future<void> syncCursorPosition() async {}
 }
 
 class _VirtualMouseMode extends ChangeNotifier implements VirtualMouseMode {
+  bool _showVirtualMouse = true;
+
   @override
-  bool get showVirtualMouse => true;
+  bool get showVirtualMouse => _showVirtualMouse;
+
+  void hide() {
+    _showVirtualMouse = false;
+    notifyListeners();
+  }
 
   @override
   bool get showVirtualJoystick => false;
@@ -63,18 +61,21 @@ class _VirtualMouseMode extends ChangeNotifier implements VirtualMouseMode {
 
 class _Peer extends Fake implements FfiModel {
   @override
-  final virtualMouseMode = _VirtualMouseMode();
+  bool get touchMode => false;
+
+  @override
+  final _VirtualMouseMode virtualMouseMode = _VirtualMouseMode();
 }
 
 class _FFI extends Fake implements FFI {
   @override
-  final ffiModel = _Peer();
+  final _Peer ffiModel = _Peer();
 
   @override
   final inputModel = _Input();
 
   @override
-  final cursorModel = _Cursor();
+  late final cursorModel = _Cursor(this);
 }
 
 void _expectInside(Rect child, Rect viewport) {
@@ -267,6 +268,68 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
   });
 
+  for (final size in [const Size(120, 400), const Size(240, 100)]) {
+    testWidgets('all three controls stay separate and usable at $size',
+        (tester) async {
+      setViewSize(tester, size);
+      final ffi = _FFI();
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+      final viewport = tester.getRect(find.byKey(const Key('mouse viewport')));
+      final wheel = tester.getRect(find.byType(FloatingWheel));
+      final left = find.byWidgetPredicate(
+          (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+      final right = find.byWidgetPredicate(
+          (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
+      final leftRect = tester.getRect(left);
+      final rightRect = tester.getRect(right);
+      for (final rect in [wheel, leftRect, rightRect]) {
+        _expectInside(rect, viewport);
+      }
+      expect(leftRect.overlaps(rightRect), isFalse);
+      expect(leftRect.overlaps(wheel), isFalse);
+      expect(rightRect.overlaps(wheel), isFalse);
+      await tester.tap(left);
+      await tester.tap(right);
+      await tester.tap(find.byIcon(Icons.keyboard_arrow_down));
+      await tester.pump(const Duration(milliseconds: 60));
+      expect((ffi.inputModel as _Input).pressedButtons,
+          [MouseButtons.left, MouseButtons.right]);
+      expect((ffi.inputModel as _Input).releasedButtons,
+          [MouseButtons.left, MouseButtons.right]);
+      expect((ffi.inputModel as _Input).scrollDirections, [-1]);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('an undersized viewport hides click targets until they fit',
+      (tester) async {
+    const savedLeft = '{"x":120.0,"y":300.0}';
+    const savedRight = '{"x":220.0,"y":300.0}';
+    savedPositions['ll-mouse-btn-pos'] = savedLeft;
+    savedPositions['rl-mouse-btn-pos'] = savedRight;
+    setViewSize(tester, const Size(800, 400));
+    final ffi = _FFI();
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 730);
+
+    expect(find.byType(FloatingLeftRightButton).hitTestable(), findsNothing);
+    expect(ffi.cursorModel.blockedRects, [const Rect.fromLTWH(0, 0, 50, 120)]);
+    await tester.tap(find.byIcon(Icons.keyboard_arrow_down));
+    expect((ffi.inputModel as _Input).scrollDirections, [-1]);
+    expect((ffi.inputModel as _Input).pressedButtons, isEmpty);
+
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    final left = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+    final right = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
+    expect(tester.getRect(left).topLeft, const Offset(120, 300));
+    expect(tester.getRect(right).topLeft, const Offset(220, 300));
+    expect(savedPositions['ll-mouse-btn-pos'], savedLeft);
+    expect(savedPositions['rl-mouse-btn-pos'], savedRight);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('keyboard shortcuts remain tappable above floating controls',
       (tester) async {
     final wasTest = common.isTest;
@@ -327,15 +390,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   });
 
-  for (final button in [MouseButtons.left, MouseButtons.wheel]) {
+  for (final button in [
+    MouseButtons.left,
+    MouseButtons.right,
+    MouseButtons.wheel
+  ]) {
     testWidgets('opening the keyboard releases a held $button', (tester) async {
       setViewSize(tester, const Size(800, 400));
       final ffi = _FFI();
       await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
       final control = button == MouseButtons.wheel
           ? find.byType(FloatingWheel)
-          : find.byWidgetPredicate(
-              (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+          : find.byWidgetPredicate((widget) =>
+              widget is FloatingLeftRightButton &&
+              widget.isLeft == (button == MouseButtons.left));
       final gesture = await tester.startGesture(tester.getCenter(control));
       await tester.pump(const Duration(milliseconds: 250));
       expect((ffi.inputModel as _Input).pressedButtons, [button]);
@@ -367,6 +435,104 @@ void main() {
     await gesture.up();
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  for (final button in [MouseButtons.left, MouseButtons.right]) {
+    testWidgets('hiding an early $button drag sends no unmatched release',
+        (tester) async {
+      setViewSize(tester, const Size(800, 400));
+      final ffi = _FFI();
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+      final control = find.byWidgetPredicate((widget) =>
+          widget is FloatingLeftRightButton &&
+          widget.isLeft == (button == MouseButtons.left));
+      final gesture = await tester.startGesture(tester.getCenter(control));
+      await tester.pump(const Duration(milliseconds: 100));
+      await gesture.moveBy(const Offset(5, 0));
+      expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
+
+      KeyboardVisibilityTesting.setVisibilityForTesting(true);
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 0);
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect((ffi.inputModel as _Input).pressedButtons, isEmpty);
+      expect((ffi.inputModel as _Input).releasedButtons, isEmpty);
+      expect(ffi.cursorModel.shouldBlock(1, 1), isFalse);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('hiding after a completed $button hold does not release twice',
+        (tester) async {
+      setViewSize(tester, const Size(800, 400));
+      final ffi = _FFI();
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+      final control = find.byWidgetPredicate((widget) =>
+          widget is FloatingLeftRightButton &&
+          widget.isLeft == (button == MouseButtons.left));
+      final gesture = await tester.startGesture(tester.getCenter(control));
+      await tester.pump(const Duration(milliseconds: 250));
+      await gesture.up();
+      ffi.ffiModel.virtualMouseMode.hide();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
+      expect((ffi.inputModel as _Input).pressedButtons, [button]);
+      expect((ffi.inputModel as _Input).releasedButtons, [button]);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  for (final hold in [false, true]) {
+    testWidgets('disabling virtual mouse clears a drag (held: $hold)',
+        (tester) async {
+      setViewSize(tester, const Size(800, 400));
+      final ffi = _FFI();
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+      final left = find.byWidgetPredicate(
+          (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+      final gesture = await tester.startGesture(tester.getCenter(left));
+      await tester.pump(Duration(milliseconds: hold ? 250 : 100));
+      await gesture.moveBy(const Offset(5, 0));
+      expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
+      expect(isSpecialHoldDragActive, hold);
+
+      ffi.ffiModel.virtualMouseMode.hide();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.byType(FloatingWheel), findsNothing);
+      expect(find.byType(FloatingLeftRightButton), findsNothing);
+      expect(ffi.cursorModel.blockedRects, isEmpty);
+      expect(ffi.cursorModel.shouldBlock(1, 1), isFalse);
+      expect(isSpecialHoldDragActive, isFalse);
+      await gesture.up();
+      expect((ffi.inputModel as _Input).pressedButtons,
+          hold ? [MouseButtons.left] : isEmpty);
+      expect((ffi.inputModel as _Input).releasedButtons,
+          hold ? [MouseButtons.left] : isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('shrinking away a held button releases input blocking',
+      (tester) async {
+    setViewSize(tester, const Size(800, 400));
+    final ffi = _FFI();
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    final left = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+    final gesture = await tester.startGesture(tester.getCenter(left));
+    await tester.pump(const Duration(milliseconds: 250));
+    await gesture.moveBy(const Offset(5, 0));
+    expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
+
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 730);
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byType(FloatingLeftRightButton), findsNothing);
+    expect(ffi.cursorModel.shouldBlock(60, 1), isFalse);
+    expect(isSpecialHoldDragActive, isFalse);
+    expect((ffi.inputModel as _Input).pressedButtons, [MouseButtons.left]);
+    expect((ffi.inputModel as _Input).releasedButtons, [MouseButtons.left]);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('clamped saved buttons remain separate from the wheel',
