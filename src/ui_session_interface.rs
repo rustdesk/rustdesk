@@ -23,7 +23,7 @@ use hbb_common::{
         sync::mpsc,
         time::{Duration as TokioDuration, Instant},
     },
-    whoami, Stream,
+    whoami, SessionID, Stream,
 };
 use rdev::{Event, EventType::*, KeyCode};
 #[cfg(all(feature = "vram", feature = "flutter"))]
@@ -921,6 +921,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(any(target_os = "ios"))]
     pub fn handle_flutter_raw_key_event(
         &self,
+        _session_id: SessionID,
         _keyboard_mode: &str,
         _name: &str,
         _platform_code: i32,
@@ -933,6 +934,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(any(target_os = "ios")))]
     pub fn handle_flutter_raw_key_event(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         name: &str,
         platform_code: i32,
@@ -944,6 +946,7 @@ impl<T: InvokeUiSession> Session<T> {
             self._handle_key_flutter_simulation(keyboard_mode, platform_code, down_or_up);
         } else {
             self._handle_raw_key_non_flutter_simulation(
+                session_id,
                 keyboard_mode,
                 platform_code,
                 position_code,
@@ -956,6 +959,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(any(target_os = "ios")))]
     fn _handle_raw_key_non_flutter_simulation(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         platform_code: i32,
         position_code: i32,
@@ -989,11 +993,18 @@ impl<T: InvokeUiSession> Session<T> {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
         };
-        keyboard::client::process_event_with_session(keyboard_mode, &event, Some(lock_modes), self);
+        keyboard::client::process_event_with_session(
+            keyboard_mode,
+            &event,
+            Some(lock_modes),
+            self,
+            session_id,
+        );
     }
 
     pub fn handle_flutter_key_event(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         character: &str,
         usb_hid: i32,
@@ -1004,6 +1015,7 @@ impl<T: InvokeUiSession> Session<T> {
             self._handle_key_flutter_simulation(keyboard_mode, usb_hid, down_or_up);
         } else {
             self._handle_key_non_flutter_simulation(
+                session_id,
                 keyboard_mode,
                 character,
                 usb_hid,
@@ -1039,6 +1051,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     fn _handle_key_non_flutter_simulation(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         character: &str,
         usb_hid: i32,
@@ -1100,7 +1113,13 @@ impl<T: InvokeUiSession> Session<T> {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
         };
-        keyboard::client::process_event_with_session(keyboard_mode, &event, Some(lock_modes), self);
+        keyboard::client::process_event_with_session(
+            keyboard_mode,
+            &event,
+            Some(lock_modes),
+            self,
+            session_id,
+        );
     }
 
     // flutter only TODO new input
@@ -1949,7 +1968,9 @@ impl<T: InvokeUiSession> Session<T> {
         self.send_key_event(&crate::keyboard::client::event_lock_screen());
     }
     pub fn ctrl_alt_del(&self) {
-        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
+        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del(
+            &self.peer_platform(),
+        ));
     }
 }
 
