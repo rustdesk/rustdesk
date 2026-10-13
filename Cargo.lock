@@ -3740,6 +3740,7 @@ dependencies = [
  "webpki-roots 1.0.9",
  "webrtc",
  "whoami",
+ "windows 0.61.1",
  "x11 2.21.0",
  "zstd",
 ]

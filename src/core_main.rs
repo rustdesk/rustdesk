@@ -747,6 +747,8 @@ fn import_config(path: &str) {
         log::info!("Empty source config, skipped");
         return;
     }
+    // Revoking grants for Config also updates Config2's modification time.
+    let import_config2 = get_modified_time(&path2) > get_modified_time(&Config2::file());
     if get_modified_time(&path) > get_modified_time(&Config::file())
         && get_modified_time(&path) < get_exe_time()
     {
@@ -755,8 +757,8 @@ fn import_config(path: &str) {
         }
     }
     let config2: Config2 = load_path(path2.into());
-    if get_modified_time(&path2) > get_modified_time(&Config2::file()) {
-        if let Err(error) = crate::trusted_devices::config::import(|| store_path(Config2::file(), config2).map_err(Into::into)) {
+    if import_config2 {
+        if let Err(error) = crate::trusted_devices::config::import(|| store_path(Config2::file(), config2.without_trusted_devices_v2()).map_err(Into::into)) {
             log::error!("Config import failed: {error}");
         }
     }
@@ -916,6 +918,57 @@ fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_config_preserves_password_and_two_factor_settings() {
+        use hbb_common::config::{load_path, Config, Config2};
+        use std::{fs, process::Command, time::UNIX_EPOCH};
+
+        const CHILD: &str = "RUSTDESK_TEST_CONFIG_IMPORT";
+        if std::env::var_os(CHILD).is_none() {
+            assert!(Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "core_main::tests::import_config_preserves_password_and_two_factor_settings",
+                ])
+                .env(CHILD, "1")
+                .status()
+                .unwrap()
+                .success());
+            return;
+        }
+        crate::trusted_devices::tests::initialize_config();
+        let source = Config::path("import.toml");
+        let source2 = Config::path("import2.toml");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        fs::write(
+            &source,
+            "id = '123456789'\npassword = 'test-password'\nkey_pair = [[1], [2]]\n",
+        )
+        .unwrap();
+        fs::write(&source2, "[options]\n2fa = 'test-2fa'\n").unwrap();
+        let modified = UNIX_EPOCH + std::time::Duration::from_secs(1);
+        for path in [&source, &source2] {
+            fs::OpenOptions::new()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_times(fs::FileTimes::new().set_modified(modified))
+                .unwrap();
+        }
+
+        import_config(source.to_str().unwrap());
+        let imported: Config = load_path(Config::file());
+        assert_eq!(
+            serde_json::to_value(imported).unwrap()["password"],
+            "test-password"
+        );
+        let imported: Config2 = load_path(Config2::file());
+        assert_eq!(
+            imported.options.get("2fa").map(String::as_str),
+            Some("test-2fa")
+        );
+    }
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| value.to_string()).collect()

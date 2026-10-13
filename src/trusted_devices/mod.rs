@@ -10,12 +10,12 @@ pub(crate) mod tests;
 use hbb_common::{
     anyhow::anyhow,
     bail,
-    config::Config,
+    config::Config2,
     sodiumoxide::{crypto::hash::sha256, randombytes, utils},
     ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
-use storage::Storage;
+use storage::GrantsStorage;
 
 pub const TOKEN_BYTES: usize = 32;
 pub const LIFETIME_MILLIS: i64 = 30 * 24 * 60 * 60 * 1000;
@@ -153,11 +153,11 @@ pub fn random_token() -> ResultType<[u8; TOKEN_BYTES]> {
     Ok(token)
 }
 
-fn storage() -> ResultType<Storage> {
-    Ok(Storage::lock(&Config::path("trusted-devices-v2.json")).map_err(authority::Unavailable)?)
+fn storage() -> ResultType<GrantsStorage> {
+    Ok(GrantsStorage::lock().map_err(authority::Unavailable)?)
 }
 
-fn load_grants(storage: &Storage, scope: &[u8; TOKEN_BYTES]) -> ResultType<Grants> {
+fn load_grants(storage: &GrantsStorage, scope: &[u8; TOKEN_BYTES]) -> ResultType<Grants> {
     let mut grants: Grants = storage.read().map_err(authority::Unavailable)?;
     if !storage.exists().map_err(authority::Unavailable)? {
         grants.revoke(Some(*scope))?;
@@ -195,11 +195,13 @@ pub fn remove(record_ids: &[[u8; TOKEN_BYTES]]) -> ResultType<()> {
 }
 
 pub fn initialize() -> ResultType<()> {
-    let path = Config::path("trusted-devices-v2.json");
-    if !path.try_exists()? {
+    if !Config2::file().try_exists()? {
         return Ok(());
     }
     let storage = storage()?;
+    if !storage.exists()? {
+        return Ok(());
+    }
     let mut grants: Grants = storage.read()?;
     let current = config::snapshot()?;
     if !grants.matches_scope(&current.scope) {

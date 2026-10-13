@@ -3,7 +3,10 @@ use super::{
     LIFETIME_MILLIS, TOKEN_BYTES,
 };
 use base::config::keys;
-use hbb_common::{config::Config, sodiumoxide::crypto::hash::sha256};
+use hbb_common::{
+    config::{Config, Config2},
+    sodiumoxide::crypto::hash::sha256,
+};
 use std::{fs, path::PathBuf};
 
 const PASSWORD: &str = "permanent-test-password";
@@ -48,12 +51,20 @@ fn configure() -> std::collections::HashMap<String, String> {
 #[hbb_common::tokio::test]
 async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     let mut options = configure();
+    assert_eq!(authority::manage(false).await.unwrap(), "[]");
     assert!(host::begin(proof("wrong-password", &[])).await.is_err());
     let (enrollment, valid, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
     let mut enrollment = enrollment.unwrap();
     assert!(!valid);
     enrollment.enroll = true;
     let token = enrollment.finish(DeviceInfo::default()).await.unwrap();
+    // Installing copies Config2, without the former standalone grant file.
+    let old_store = Config::path("trusted-devices-v2.json");
+    if old_store.exists() {
+        let saved = test_path();
+        fs::create_dir_all(saved.parent().unwrap()).unwrap();
+        fs::rename(&old_store, saved).unwrap();
+    }
     let (trusted, valid, _) = host::begin(proof(PASSWORD, &token)).await.unwrap().unwrap();
     let trusted = trusted.unwrap();
     assert!(valid);
@@ -62,11 +73,16 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     let mut pending = pending.unwrap();
     pending.enroll = true;
     options.insert(keys::OPTION_ENABLE_TRUSTED_DEVICES.into(), "N".into());
-    config::set_options(options.clone()).unwrap();
+    let disabled = options.clone();
+    config::update_auth(true, move || config::set_options(disabled))
+        .await
+        .unwrap();
     assert!(trusted.check().await.is_err());
     assert!(pending.finish(DeviceInfo::default()).await.is_err());
     options.insert(keys::OPTION_ENABLE_TRUSTED_DEVICES.into(), "Y".into());
-    config::set_options(options).unwrap();
+    config::update_auth(true, move || config::set_options(options))
+        .await
+        .unwrap();
     assert!(
         !host::begin(proof(PASSWORD, &token))
             .await
@@ -79,12 +95,11 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
 }
 
 async fn unavailable_grants_keep_password_totp_available() {
-    let path = Config::path("trusted-devices-v2.json");
-    let saved = fs::read(&path).unwrap();
-    fs::write(&path, b"invalid grant store").unwrap();
+    let saved = Config2::get_trusted_devices_v2().unwrap();
+    Config2::set_trusted_devices_v2("invalid grant store".into()).unwrap();
     assert!(host::begin(proof("wrong-password", &[])).await.is_err());
     let login = host::begin(proof(PASSWORD, &[])).await;
-    fs::write(&path, saved).unwrap();
+    Config2::set_trusted_devices_v2(saved).unwrap();
     let (attempt, valid, _) = login.unwrap().unwrap();
     assert!(attempt.is_none());
     assert!(!valid);
@@ -120,6 +135,7 @@ async fn service_operations_share_and_revoke_persisted_grants() {
     assert!(valid);
     let remaining = remaining.unwrap();
     remaining.check().await.unwrap();
+    let stale_config: Config2 = hbb_common::config::load_path(Config2::file());
     assert_eq!(
         serde_json::from_str::<Vec<DeviceInfo>>(&authority::manage(false).await.unwrap())
             .unwrap()
@@ -127,11 +143,26 @@ async fn service_operations_share_and_revoke_persisted_grants() {
         1
     );
     authority::manage(true).await.unwrap();
+    // Neither configuration sync nor another process's settings may restore grants.
+    config::set_config2(stale_config.clone()).unwrap();
+    Config::set_option("trusted-device-test-option".into(), "Y".into());
     assert!(remaining.check().await.is_err());
     assert!(pending.finish(DeviceInfo::default()).await.is_err());
     let login = host::begin(proof(PASSWORD, &other_token)).await.unwrap();
     assert!(!login.unwrap().1);
     assert_eq!(authority::manage(false).await.unwrap(), "[]");
+    config::import(|| {
+        hbb_common::config::store_path(Config2::file(), stale_config.without_trusted_devices_v2())
+    })
+    .unwrap();
+    super::initialize().unwrap();
+    assert!(
+        !host::begin(proof(PASSWORD, &other_token))
+            .await
+            .unwrap()
+            .unwrap()
+            .1
+    );
 }
 
 const NOW: i64 = 1_700_000_000_000;

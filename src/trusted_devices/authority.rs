@@ -53,11 +53,36 @@ impl std::fmt::Debug for Response {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(super) fn uses_service() -> ResultType<bool> {
+    if crate::platform::is_root() || !crate::platform::is_installed() {
+        return Ok(false);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use hbb_common::anyhow::Context;
+        // The app bundle may be installed without its optional background service.
+        return std::path::Path::new(&format!(
+            "/Library/LaunchDaemons/{}_service.plist",
+            crate::get_full_name()
+        ))
+        .try_exists()
+        .context("Inspect trusted-device system service registration");
+    }
+    #[cfg(target_os = "linux")]
+    Ok(true)
+}
+
 pub async fn request(request: Request) -> ResultType<Response> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if crate::platform::is_installed() && !crate::platform::is_root() {
+    if uses_service()? {
         use crate::ipc::{connect_trusted_device_service, Data};
         const TIMEOUT_MS: u64 = 1000;
+        // Revoke the inactive user copy before the service acknowledges management.
+        if matches!(&request, Request::Clear | Request::Remove(_)) {
+            let local = request.clone();
+            super::config::update(move || handle(local)).await?;
+        }
         let mut connection = connect_trusted_device_service(TIMEOUT_MS).await?;
         connection
             .send(&Data::TrustedDeviceRequest(Box::new(request)))

@@ -36,7 +36,7 @@ pub async fn update_auth<T: Send + 'static>(
     }
     let result = update(apply).await?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if affected && crate::platform::is_installed() && !crate::platform::is_root() {
+    if affected && super::authority::uses_service()? {
         sync_auth_to_service().await?;
     }
     Ok(result)
@@ -215,11 +215,9 @@ pub fn changes_authentication(options: &HashMap<String, String>) -> bool {
 
 pub fn import(apply: impl FnOnce() -> ResultType<()>) -> ResultType<()> {
     let storage = super::storage()?;
-    if storage.exists()? {
-        let mut grants = super::Grants::default();
-        grants.revoke(None)?;
-        storage.write(&grants)?;
-    }
+    let mut grants = super::Grants::default();
+    grants.revoke(None)?;
+    storage.write(&grants)?;
     // Imported files become the runtime settings when the host next starts.
     apply()
 }
