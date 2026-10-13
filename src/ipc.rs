@@ -872,6 +872,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                     {
                         // our launchagent interval is 1 second
                         hbb_common::sleep(1.5).await;
+                        release_url_ipc_for_restart();
                         std::process::Command::new("open")
                             .arg("-n")
                             .arg(&format!("/Applications/{}.app", crate::get_app_name()))
@@ -2264,6 +2265,12 @@ async fn handle_wayland_screencast_restore_token(
     return Ok(None);
 }
 
+/// Let the main process this one starts with `open -n` take the url ipc socket while this one exits.
+#[cfg(target_os = "macos")]
+pub fn release_url_ipc_for_restart() {
+    ipc_fs::release_own_ipc_socket("_url");
+}
+
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
     if let Ok(mut c) = connect(1000, "").await {
@@ -2278,6 +2285,54 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 mod test {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use super::*;
+
+    // A main process that restarts itself releases its url socket first. Otherwise the new copy
+    // finds the socket taken, takes itself for a duplicate and exits, and no window is left.
+    #[cfg(target_os = "macos")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_released_socket_goes_to_the_restarted_copy() {
+        use std::time::Duration;
+        let postfix = format!("_test_release_{}", std::process::id());
+        let path = Config::ipc_path(&postfix);
+        let cleanup = || {
+            for file in [
+                path.clone(),
+                format!("{}.pid", path),
+                format!("{}.lock", path),
+            ] {
+                let _ = std::fs::remove_file(file);
+            }
+        };
+        cleanup();
+
+        let mut old = new_listener(&postfix).await.unwrap();
+        assert!(
+            new_listener(&postfix).await.is_err(),
+            "a live socket must stay taken"
+        );
+        // That failed start probed the old socket; take the probe off its queue.
+        let _ = tokio::time::timeout(Duration::from_millis(300), old.next()).await;
+        ipc_fs::release_own_ipc_socket(&postfix);
+        let mut new = new_listener(&postfix)
+            .await
+            .expect("the released socket stayed taken");
+        let _client = connect(1000, &postfix).await.unwrap();
+        assert!(
+            matches!(
+                tokio::time::timeout(Duration::from_secs(2), new.next()).await,
+                Ok(Some(Ok(_)))
+            ),
+            "the new listener got no connection"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(300), old.next())
+                .await
+                .is_err(),
+            "the old listener still got a connection"
+        );
+        drop((old, new));
+        cleanup();
+    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]

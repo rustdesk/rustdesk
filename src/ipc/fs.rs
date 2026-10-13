@@ -432,6 +432,21 @@ pub(crate) fn get_pid_file(postfix: &str) -> String {
     format!("{}.pid", path)
 }
 
+// A main process that restarts itself with `open -n` still owns its sockets until it exits, so the
+// new copy would find them taken. Unlinking the socket lets the new copy bind the path while this
+// process keeps serving the unlinked one until it exits. Only the owner recorded in the pid file
+// may do this, or a process that is not the main one would cut the main one off.
+#[cfg(target_os = "macos")]
+pub(crate) fn release_own_ipc_socket(postfix: &str) {
+    let pid_file = std::path::PathBuf::from(get_pid_file(postfix));
+    if read_pid_file_secure(&pid_file) != Some(std::process::id() as usize) {
+        return;
+    }
+    if let Err(err) = remove_ipc_socket_via_secure_parent_fd(postfix) {
+        log::warn!("Failed to release ipc{} socket: {}", postfix, err);
+    }
+}
+
 // Purpose:
 // - Write current process pid to pid file without following attacker-controlled symlinks.
 // - Ensure the pid file is a regular file owned by the opened inode path.

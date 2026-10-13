@@ -464,6 +464,7 @@ pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
                         .status()
                         .ok();
                     if show_new_window {
+                        crate::ipc::release_url_ipc_for_restart();
                         std::process::Command::new("open")
                             .arg("-n")
                             .arg(&format!("/Applications/{}.app", crate::get_app_name()))
@@ -2092,6 +2093,50 @@ pub(crate) fn get_bundle_id() -> Option<String> {
             .to_string();
         Some(bundle_id_str)
     }
+}
+
+pub fn handle_url_scheme(url: String) {
+    if let Err(err) = crate::ipc::send_url_scheme(url.clone()) {
+        log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
+        match crate::run_me(vec![url]) {
+            // Reaped like the other server-side `run_me` calls, or it stays a zombie under `--server`.
+            Ok(child) => crate::server::CHILD_PROCESS.lock().unwrap().push(child),
+            Err(err) => log::error!("Failed to start a new main process: {}", err),
+        }
+    }
+}
+
+// `new_listener` unlinks the socket when its owner is gone, so `AddrInUse` means another main
+// process owns the url ipc server and this one is a redundant copy that would otherwise stay
+// alive as a second tray icon nothing cleans up.
+pub async fn exit_if_url_server_is_taken(err: &hbb_common::anyhow::Error) {
+    use crate::ipc::Data;
+    let addr_in_use = err
+        .downcast_ref::<std::io::Error>()
+        .map(|e| e.kind() == std::io::ErrorKind::AddrInUse)
+        .unwrap_or(false);
+    if !addr_in_use {
+        return;
+    }
+    // An empty url is meaningful too: the owner raises its main window on it. Anything else,
+    // such as `--connect`, is not a url the owner can handle, so this copy keeps running.
+    let url = std::env::args().nth(1).unwrap_or_default();
+    if !url.is_empty() && !url.starts_with(&crate::common::get_uri_prefix()) {
+        return;
+    }
+    let forwarded = match crate::ipc::connect(1_000, "_url").await {
+        Ok(mut conn) => conn.send(&Data::UrlLink(url)).await,
+        Err(err) => Err(err),
+    };
+    // Exit only when the owner got the url, or nothing would be left to handle it.
+    if let Err(err) = forwarded {
+        log::warn!("Failed to forward the url, keeping this copy: {}", err);
+        return;
+    }
+    log::info!("Url ipc server is owned by another main process, exiting this copy");
+    // `_exit` skips destructors and atexit handlers: `process::exit` here runs teardown under
+    // live Flutter threads and aborts. This copy owns nothing yet.
+    unsafe { hbb_common::libc::_exit(0) }
 }
 
 #[cfg(test)]
