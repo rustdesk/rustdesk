@@ -725,6 +725,10 @@ pub fn core_main() -> Option<CoreMainAction> {
     if args.is_empty() && !crate::platform::is_self_service_running() {
         flutter_args.push("--show-ui".to_owned());
     }
+    #[cfg(all(windows, feature = "flutter"))]
+    if crate::platform::windows::client_window::enabled() {
+        flutter_args.push("--rd4-ui".to_owned());
+    }
     //_async_logger_holder.map(|x| x.flush());
     #[cfg(feature = "flutter")]
     return Some(CoreMainAction::StartUi(flutter_args));

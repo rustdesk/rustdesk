@@ -1509,7 +1509,11 @@ impl Connection {
         }
         #[cfg(all(target_os = "windows", feature = "flutter"))]
         if Config::get_option("allow-only-conn-window-open") == "Y"
-            && !crate::platform::windows::client_window::is_open()
+            && if crate::platform::windows::client_window::enabled() {
+                !crate::platform::windows::client_window::is_open()
+            } else {
+                crate::is_server() && !crate::check_process("", !crate::platform::is_root())
+            }
         {
             self.send_login_error("The main window is not open").await;
             return false;

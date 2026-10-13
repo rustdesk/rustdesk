@@ -98,6 +98,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     }
   }
 
+  const bool rd4_ui = std::find(rust_args.begin(), rust_args.end(),
+      "--rd4-ui") != rust_args.end();
   const bool show_ui = std::find(command_line_arguments.begin(),
       command_line_arguments.end(), "--show-ui") != command_line_arguments.end();
   const std::wstring cm_property = app_name + L" - Connection Manager";
@@ -120,7 +122,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                     whitelist_param) != command_line_arguments.end();
     }
     if (!allow_multiple_instances) {
-      if (show_ui || command_line_arguments.empty()) {
+      if (show_ui || (rd4_ui && command_line_arguments.empty())) {
         ::ShowWindowAsync(hwnd, SW_RESTORE);
         ::SetForegroundWindow(hwnd);
       } else if (!command_line_arguments.empty()) {
@@ -134,6 +136,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
         }
         // Dispatch command line arguments
         DispatchToUniLinksDesktop(hwnd);
+      } else {
+        ::ShowWindow(hwnd, SW_NORMAL);
+        ::SetForegroundWindow(hwnd);
       }
       return EXIT_FAILURE;
     }
@@ -162,6 +167,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     is_install_page = true;
   }
 
+  command_line_arguments.erase(
+      std::remove(command_line_arguments.begin(), command_line_arguments.end(), "--rd4-ui"),
+      command_line_arguments.end());
   command_line_arguments.insert(command_line_arguments.end(), rust_args.begin(), rust_args.end());
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
@@ -193,13 +201,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!window.CreateAndShow(window_title, origin, size, !is_cm_page)) {
       return EXIT_FAILURE;
   }
-  if (!is_install_page) {
+  if (rd4_ui && !is_install_page) {
     SetPropW(window.GetHandle(), L"RustDeskClientWindow",
              reinterpret_cast<HANDLE>(1));
   }
-  if (is_cm_page) {
+  if (rd4_ui && is_cm_page) {
     SetPropW(window.GetHandle(), cm_property.c_str(), reinterpret_cast<HANDLE>(1));
-  } else if (!is_install_page) {
+  } else if (rd4_ui && !is_install_page) {
     SetPropW(window.GetHandle(), L"RustDeskMainWindow", reinterpret_cast<HANDLE>(1));
   }
   window.SetQuitOnClose(true);

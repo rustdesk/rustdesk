@@ -512,7 +512,7 @@ class ServerModel with ChangeNotifier {
     if (desktopType == DesktopType.cm) {
       if (_clients.isEmpty) {
         hideCmWindow();
-      } else if (isWindows || !hideCm) {
+      } else if ((isWindows && kBootArgs.contains('--rd4-ui')) || !hideCm) {
         showCmWindow();
       }
     }
@@ -556,7 +556,7 @@ class ServerModel with ChangeNotifier {
         _clients.removeAt(index_disconnected);
         tabController.remove(index_disconnected);
       }
-      if (desktopType == DesktopType.cm && (isWindows || !hideCm)) {
+      if (desktopType == DesktopType.cm && ((isWindows && kBootArgs.contains('--rd4-ui')) || !hideCm)) {
         showCmWindow();
       }
       scrollToBottom();
@@ -576,10 +576,10 @@ class ServerModel with ChangeNotifier {
         onTap: () {},
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
-      if (!isWindows && !hideCm) windowOnTop(null);
+      if (!(isWindows && kBootArgs.contains('--rd4-ui')) && !hideCm) windowOnTop(null);
     });
     // Only do the hidden task when on Desktop.
-    if (client.authorized && isDesktop && !isWindows) {
+    if (client.authorized && isDesktop && !(isWindows && kBootArgs.contains('--rd4-ui'))) {
       cmHiddenTimer = Timer(const Duration(seconds: 3), () {
         if (!hideCm) windowManager.minimize();
         cmHiddenTimer = null;
@@ -740,7 +740,7 @@ class ServerModel with ChangeNotifier {
   void setShowElevation(bool show) {
     if (_showElevation != show) {
       _showElevation = show;
-      if (isWindows && show && desktopType == DesktopType.cm) showCmWindow();
+      if (isWindows && kBootArgs.contains('--rd4-ui') && show && desktopType == DesktopType.cm) showCmWindow();
       notifyListeners();
     }
   }
@@ -758,7 +758,7 @@ class ServerModel with ChangeNotifier {
           } else {
             // Has incoming phone call, let's set the window on top.
             Future.delayed(Duration.zero, () {
-              if (isWindows) {
+              if (isWindows && kBootArgs.contains('--rd4-ui')) {
                 showCmWindow();
                 return;
               }

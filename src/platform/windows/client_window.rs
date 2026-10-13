@@ -10,6 +10,10 @@ use winapi::{
     },
 };
 
+pub(crate) fn enabled() -> bool {
+    hbb_common::config::Config::get_option(base::config::keys::OPTION_HIDE_CLIENT_WINDOW) == "Y"
+}
+
 pub(crate) fn is_open() -> bool {
     struct Context {
         executable: PathBuf,

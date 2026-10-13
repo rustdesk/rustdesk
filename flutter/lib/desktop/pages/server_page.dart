@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
@@ -64,7 +65,8 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void onWindowClose() {
-    if (isWindows && gFFI.serverModel.clients.isNotEmpty) {
+    if (isWindows && kBootArgs.contains('--rd4-ui') &&
+        gFFI.serverModel.clients.isNotEmpty) {
       hideWindowsClientWindow();
       return;
     }
@@ -340,7 +342,7 @@ class ConnectionManagerState extends State<ConnectionManager>
   }
 
   Future<bool> handleWindowCloseButton() async {
-    if (isWindows) {
+    if (isWindows && kBootArgs.contains('--rd4-ui')) {
       await hideWindowsClientWindow();
       return false;
     }

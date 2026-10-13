@@ -115,7 +115,14 @@ fn make_tray() -> hbb_common::ResultType<()> {
             // Do not use "start uni link" way, it may not work on some Windows, and pop out error
             // dialog, I found on one user's desktop, but no idea why, Windows is shit.
             // Use `run_me` instead.
-            crate::run_me::<&str>(vec!["--show-ui"]).ok();
+            #[cfg(feature = "flutter")]
+            if crate::platform::windows::client_window::enabled() {
+                crate::run_me::<&str>(vec!["--show-ui"]).ok();
+            } else {
+                crate::run_me::<&str>(vec![]).ok();
+            }
+            #[cfg(not(feature = "flutter"))]
+            crate::run_me::<&str>(vec![]).ok();
         }
         #[cfg(target_os = "linux")]
         {

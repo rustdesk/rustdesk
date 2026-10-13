@@ -150,7 +150,7 @@ void runMainApp(bool startService) async {
         bind.mainGetBuildinOption(key: "main-window-always-on-top") == 'Y';
   }
 
-  final hideWindowsMain = isWindows && bind.mainIsInstalled();
+  final hideWindowsMain = isWindows && kBootArgs.contains('--rd4-ui') && bind.mainIsInstalled();
   // Set window option.
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
       isMainWindow: true,
@@ -296,14 +296,17 @@ void runConnectionManagerScreen() async {
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
-  final hide = isWindows || await bind.cmGetConfig(name: "hide_cm") == 'true';
+  final hide = (isWindows && kBootArgs.contains('--rd4-ui')) ||
+      await bind.cmGetConfig(name: "hide_cm") == 'true';
   gFFI.serverModel.hideCm = hide;
   if (hide) {
     await hideCmWindow(isStartup: true);
   } else {
     await showCmWindow(isStartup: true);
   }
-  if (isWindows) await gFFI.serverModel.updateClientState();
+  if (isWindows && kBootArgs.contains('--rd4-ui')) {
+    await gFFI.serverModel.updateClientState();
+  }
   setResizable(false);
   // Start the uni links handler and redirect links to Native, not for Flutter.
   listenUniLinks(handleByFlutter: false);
@@ -312,7 +315,7 @@ void runConnectionManagerScreen() async {
 bool _isCmReadyToShow = false;
 
 showCmWindow({bool isStartup = false}) async {
-  if (isWindows) {
+  if (isWindows && kBootArgs.contains('--rd4-ui')) {
     if (_isCmReadyToShow) {
       await showWindowsApprovalWindow(gFFI.serverModel.clients,
           elevation: gFFI.serverModel.showElevation);
@@ -346,7 +349,7 @@ showCmWindow({bool isStartup = false}) async {
 }
 
 hideCmWindow({bool isStartup = false}) async {
-  if (isWindows) {
+  if (isWindows && kBootArgs.contains('--rd4-ui')) {
     if (isStartup) {
       await windowManager.waitUntilReadyToShow(
           getHiddenTitleBarWindowOptions(
