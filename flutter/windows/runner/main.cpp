@@ -120,7 +120,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                     whitelist_param) != command_line_arguments.end();
     }
     if (!allow_multiple_instances) {
-      if (show_ui) {
+      if (show_ui || command_line_arguments.empty()) {
         ::ShowWindowAsync(hwnd, SW_RESTORE);
         ::SetForegroundWindow(hwnd);
       } else if (!command_line_arguments.empty()) {

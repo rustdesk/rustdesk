@@ -2834,6 +2834,8 @@ Future<void> onActiveWindowChanged() async {
   print(
       "[MultiWindowHandler] active window changed: ${rustDeskWinManager.getActiveWindows()}");
   if (rustDeskWinManager.getActiveWindows().isEmpty) {
+    // Installed Windows clients remain available through the service tray.
+    if (isWindows && bind.mainIsInstalled()) return;
     // close all sub windows
     try {
       if (isLinux) {

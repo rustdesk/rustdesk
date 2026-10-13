@@ -150,20 +150,21 @@ void runMainApp(bool startService) async {
         bind.mainGetBuildinOption(key: "main-window-always-on-top") == 'Y';
   }
 
+  final hideWindowsMain = isWindows && bind.mainIsInstalled();
   // Set window option.
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
       isMainWindow: true,
       alwaysOnTop: alwaysOnTop,
-      skipTaskbar: isWindows);
+      skipTaskbar: hideWindowsMain);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     // Restore the location of the main window before window hide or show.
     await restoreWindowPosition(WindowType.Main,
-        restoreMaximized: !isWindows || kBootArgs.contains('--show-ui'));
+        restoreMaximized: !hideWindowsMain || kBootArgs.contains('--show-ui'));
     // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
     final handledByUniLinks = await initUniLinks();
     debugPrint("handled by uni links: $handledByUniLinks");
     if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs) ||
-        (isWindows && !kBootArgs.contains('--show-ui'))) {
+        (hideWindowsMain && !kBootArgs.contains('--show-ui'))) {
       windowManager.hide();
     } else {
       windowManager.show();
