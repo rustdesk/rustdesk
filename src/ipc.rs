@@ -1192,8 +1192,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                 }
             } else if value == "clear" {
                 set_local_option(key.clone(), "".to_owned());
+                // The session slot is held while a portal request waits for the user, and this ipc
+                // listener runs on one thread: wait for the slot off it, then close what the
+                // request brings back.
                 #[cfg(target_os = "linux")]
-                scrap::wayland::pipewire::close_session();
+                allow_err!(
+                    hbb_common::tokio::task::spawn_blocking(
+                        scrap::wayland::pipewire::close_session
+                    )
+                    .await
+                );
                 Some("".to_owned())
             } else {
                 None

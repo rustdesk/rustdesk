@@ -463,7 +463,9 @@ pub(super) fn is_inited() -> Option<Message> {
         if super::drm_capturer::is_available_cached() {
             return None;
         }
-        if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
+        // try_read: an init waiting for the portal's picker holds the write lock, and this runs on
+        // every desktop login. Busy (that init, or clear()) answers not inited yet.
+        if !matches!(CAP_DISPLAY_INFO.try_read(), Ok(map) if !map.is_empty()) {
             let mut msg_out = Message::new();
             let res = MessageBox {
                 msgtype: "nook-nocancel-hasclose".to_owned(),
@@ -482,7 +484,17 @@ pub(super) fn is_inited() -> Option<Message> {
 
 pub(super) async fn check_init() -> ResultType<()> {
     if !is_x11() {
-        if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
+        // try_read for the same reason as is_inited; when busy, the same look waits off the worker.
+        let looked = CAP_DISPLAY_INFO.try_read().map(|map| map.is_empty()).ok();
+        let empty = match looked {
+            Some(empty) => empty,
+            None => hbb_common::tokio::task::spawn_blocking(|| {
+                CAP_DISPLAY_INFO.read().unwrap().is_empty()
+            })
+            .await
+            .map_err(|err| anyhow::anyhow!("Wayland display state task failed: {err}"))?,
+        };
+        if empty {
             if crate::input_service::wayland_use_uinput() {
                 // The cached layout may predate compositor changes made while no session
                 // was active, https://github.com/rustdesk/rustdesk/issues/15601
@@ -568,65 +580,77 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
             }
 
-            let mut lock = CAP_DISPLAY_INFO.write().unwrap();
-            if lock.is_empty() {
-                // Check if PipeWire is already initialized to prevent duplicate recorder creation
-                if *PIPEWIRE_INITIALIZED.read().unwrap() {
-                    log::warn!("wayland_diag: Preventing duplicate PipeWire initialization");
-                    return Ok(());
-                }
+            // The portal can wait minutes for the user to answer its picker, under the write lock:
+            // it serializes inits and orders them with clear(). Wait on a blocking thread, so no
+            // tokio worker is parked meanwhile.
+            hbb_common::tokio::task::spawn_blocking(init_displays)
+                .await
+                .map_err(|err| anyhow::anyhow!("Wayland display init task failed: {err}"))??;
+        }
+    }
+    Ok(())
+}
 
-                let mut all = Display::all()?;
-                log::debug!("Initializing displays with fill_displays()");
-                {
-                    let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
-                    let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
-                    fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)
-                        .map_err(map_staged_err)?;
-                }
-                log::debug!("Attempting to fix logical size with try_fix_logical_size()");
-                try_fix_logical_size(&mut all);
-                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
-                let num = all.len();
-                let primary = super::display_service::get_primary_2(&all);
-                let mut displays = super::display_service::update_sync_displays(&all);
-                for display in displays.iter_mut() {
-                    display.cursor_embedded = is_cursor_embedded();
-                }
+/// The part of `check_init` under the CAP_DISPLAY_INFO write lock, the wait for the user while the
+/// portal's picker is open included. Blocking.
+fn init_displays() -> ResultType<()> {
+    let mut lock = CAP_DISPLAY_INFO.write().unwrap();
+    if lock.is_empty() {
+        // Check if PipeWire is already initialized to prevent duplicate recorder creation
+        if *PIPEWIRE_INITIALIZED.read().unwrap() {
+            log::warn!("wayland_diag: Preventing duplicate PipeWire initialization");
+            return Ok(());
+        }
 
-                let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
-                for d in &all {
-                    rects.push((d.origin(), d.width(), d.height()));
-                }
+        let mut all = Display::all()?;
+        log::debug!("Initializing displays with fill_displays()");
+        {
+            let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
+            let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
+            fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)
+                .map_err(map_staged_err)?;
+        }
+        log::debug!("Attempting to fix logical size with try_fix_logical_size()");
+        try_fix_logical_size(&mut all);
+        *PIPEWIRE_INITIALIZED.write().unwrap() = true;
+        let num = all.len();
+        let primary = super::display_service::get_primary_2(&all);
+        let mut displays = super::display_service::update_sync_displays(&all);
+        for display in displays.iter_mut() {
+            display.cursor_embedded = is_cursor_embedded();
+        }
 
-                log::debug!(
-                    "#displays={}, primary={}, rects: {:?}, cpus={}/{}",
-                    num,
-                    primary,
-                    rects,
-                    num_cpus::get_physical(),
-                    num_cpus::get()
-                );
+        let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
+        for d in &all {
+            rects.push((d.origin(), d.width(), d.height()));
+        }
 
-                // Create individual CapDisplayInfo for each display with its own capturer
-                for (idx, display) in all.into_iter().enumerate() {
-                    // No `with_context` here: the peer is shown `format!("{}", err)`, which
-                    // renders only the outermost layer, and the mapped reason is the inner one.
-                    let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
-                    let capturer = CapturerPtr(capturer);
+        log::debug!(
+            "#displays={}, primary={}, rects: {:?}, cpus={}/{}",
+            num,
+            primary,
+            rects,
+            num_cpus::get_physical(),
+            num_cpus::get()
+        );
 
-                    let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
-                        rects: rects.clone(),
-                        displays: displays.clone(),
-                        num,
-                        primary,
-                        current: idx,
-                        capturer,
-                    }));
+        // Create individual CapDisplayInfo for each display with its own capturer
+        for (idx, display) in all.into_iter().enumerate() {
+            // No `with_context` here: the peer is shown `format!("{}", err)`, which
+            // renders only the outermost layer, and the mapped reason is the inner one.
+            let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
+            let capturer = CapturerPtr(capturer);
 
-                    lock.insert(idx, cap_display_info as u64);
-                }
-            }
+            let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
+                rects: rects.clone(),
+                displays: displays.clone(),
+                num,
+                primary,
+                current: idx,
+                capturer,
+            }));
+
+            lock.insert(idx, cap_display_info as u64);
         }
     }
     Ok(())
@@ -655,17 +679,22 @@ pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, 
         }
     }
     check_init().await?;
-    // Keep one read guard so clear/reinitialization cannot split these across cache snapshots.
-    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-    if let Some(addr) = cap_map.values().next() {
-        let cap_display_info: *const CapDisplayInfo = *addr as _;
-        unsafe {
-            let cap_display_info = &*cap_display_info;
-            Ok((cap_display_info.displays.clone(), cap_display_info.primary))
+    // The read can wait for an init another thread started since: off the worker too.
+    hbb_common::tokio::task::spawn_blocking(|| -> ResultType<(Vec<DisplayInfo>, usize)> {
+        // Keep one read guard so clear/reinitialization cannot split these across cache snapshots.
+        let cap_map = CAP_DISPLAY_INFO.read().unwrap();
+        if let Some(addr) = cap_map.values().next() {
+            let cap_display_info: *const CapDisplayInfo = *addr as _;
+            unsafe {
+                let cap_display_info = &*cap_display_info;
+                Ok((cap_display_info.displays.clone(), cap_display_info.primary))
+            }
+        } else {
+            bail!("Failed to get capturer display info");
         }
-    } else {
-        bail!("Failed to get capturer display info");
-    }
+    })
+    .await
+    .map_err(|err| anyhow::anyhow!("Wayland display info task failed: {err}"))?
 }
 
 pub fn clear() {

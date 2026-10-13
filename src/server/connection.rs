@@ -7057,8 +7057,17 @@ mod raii {
                 display_service::restore_resolutions();
                 #[cfg(windows)]
                 let _ = virtual_display_manager::reset_all();
+                // The session slot is held while a portal request waits for the user, and this
+                // can drop on a tokio worker: close off it.
                 #[cfg(target_os = "linux")]
-                scrap::wayland::pipewire::try_close_session();
+                if !crate::platform::linux::is_x11() {
+                    if let Err(err) = std::thread::Builder::new()
+                        .name("portal-session-close".into())
+                        .spawn(scrap::wayland::pipewire::try_close_session)
+                    {
+                        log::error!("Failed to spawn the portal session close: {err}");
+                    }
+                }
             }
             Self::check_wake_lock();
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
