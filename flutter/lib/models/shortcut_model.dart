@@ -397,7 +397,7 @@ void registerSessionShortcutActions(
         !allowDisplaySwitchInPrivacyMode(pi, privacyMode)) {
       return;
     }
-    if (pi.displays.length <= 1) return;
+    if (!pi.isSupportMultiDisplay || pi.displays.length <= 1) return;
     if (pi.currentDisplay == kAllDisplayValue) return;
     openDisplay(kAllDisplayValue, pi);
   });
