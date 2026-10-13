@@ -4467,6 +4467,32 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     interface.send(Data::Message(msg_out));
 }
 
+/// Auto Login. A peer that can check for its logon or lock screen gets the password and types it
+/// itself, only if it is there right then. Keys typed from here land in whatever has focus if the
+/// screen is not locked by the time they arrive.
+pub fn auto_login(p: String, pi: &PeerInfo, interface: impl Interface) {
+    if !is_peer_handling_os_login(pi) {
+        input_os_password(p, true, interface);
+        return;
+    }
+    std::thread::spawn(move || {
+        activate_os(&interface, true);
+        std::thread::sleep(Duration::from_millis(1200));
+        let mut msg_out = Message::new();
+        msg_out.set_os_login(OSLogin {
+            password: p,
+            ..Default::default()
+        });
+        interface.send(Data::Message(msg_out));
+    });
+}
+
+/// Windows and macOS peers from the 1.5.1 release handle `os_login`.
+fn is_peer_handling_os_login(pi: &PeerInfo) -> bool {
+    (pi.platform == crate::common::PLATFORM_WINDOWS || pi.platform == crate::common::PLATFORM_MACOS)
+        && hbb_common::get_version_number(&pi.version) >= hbb_common::get_version_number("1.5.1")
+}
+
 #[derive(Copy, Clone)]
 struct LoginErrorMsgBox {
     msgtype: &'static str,

@@ -1832,7 +1832,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 self.try_change_init_resolution(pi.current_display);
                 let p = self.lc.read().unwrap().should_auto_login();
                 if !p.is_empty() {
-                    input_os_password(p, true, self.clone());
+                    crate::client::auto_login(p, &pi, self.clone());
                 }
             }
             let current = &pi.displays[pi.current_display as usize];
