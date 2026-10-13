@@ -5835,4 +5835,13 @@ mod kx_tests {
         assert_eq!(seen.picked, 0);
         assert!(seen.decrypted && decrypted);
     }
+
+    #[tokio::test]
+    async fn test_a_pick_lowered_in_transit_decrypts_nothing() {
+        // The controlled side takes 0 from a controller without versions, so a lowered pick is
+        // caught by the keys disagreeing on the first application message, not before.
+        let (seen, decrypted) = handshake(KX_VERSION_LATEST, Some(0)).await;
+        assert_eq!(seen.picked, 1);
+        assert!(!seen.decrypted && !decrypted);
+    }
 }
