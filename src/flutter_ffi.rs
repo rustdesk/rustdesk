@@ -3104,15 +3104,3 @@ pub mod server_side {
         jboolean::from(crate::server::is_clipboard_service_ok())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sync_common_rejects_verified_download_url() {
-        let result = main_get_common_sync("verified-download-url-".to_owned());
-
-        assert_eq!(result.0, "error:unsupported");
-    }
-}

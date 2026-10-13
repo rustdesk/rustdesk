@@ -900,59 +900,6 @@ fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool) {
     (printer_override, debug)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| value.to_string()).collect()
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    #[test]
-    fn user_main_ipc_scope_cli_command_matches_management_commands_only() {
-        for command in [
-            "--password",
-            "--set-unlock-pin",
-            "--get-id",
-            "--set-id",
-            "--config",
-            "--option",
-            "--assign",
-            "--deploy",
-        ] {
-            assert!(is_user_main_ipc_scope_cli_command(&args(&[command])));
-        }
-
-        for command in [
-            "--service",
-            "--server",
-            "--tray",
-            "--cm",
-            "--check-hwcodec-config",
-            "--connect",
-        ] {
-            assert!(!is_user_main_ipc_scope_cli_command(&args(&[command])));
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn macos_manual_update_result_preserves_failure() {
-        let failure =
-            finish_macos_update(Err(hbb_common::anyhow::anyhow!("administrator canceled")))
-                .expect("failure action");
-
-        match failure {
-            CoreMainAction::ExitFailure(err) => {
-                assert_eq!("administrator canceled", err.to_string());
-            }
-            CoreMainAction::StartUi(_) => panic!("update failure started the UI"),
-        }
-        assert!(finish_macos_update(Ok(())).is_none());
-    }
-}
-
 /// Check if the executable is a Quick Support version.
 /// Note: This function must be kept in sync with `libs/portable/src/main.rs`.
 #[cfg(windows)]

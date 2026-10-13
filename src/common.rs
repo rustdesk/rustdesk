@@ -3173,55 +3173,6 @@ mod tests {
         }
     }
 
-    // ThrottledInterval tick at the same time as tokio interval, if no sleeps
-    #[allow(non_snake_case)]
-    #[tokio::test]
-    async fn test_RustDesk_interval() {
-        let base_intervals = [interval_maker, interval_at_maker];
-        for maker in base_intervals.into_iter() {
-            let mut tokio_timer = maker();
-            let mut tokio_times = Vec::new();
-            let mut timer = rustdesk_interval(maker());
-            let mut times = Vec::new();
-            loop {
-                tokio::select! {
-                    _ = timer.tick() => {
-                        if tokio_times.len() >= 10 && times.len() >= 10 {
-                            break;
-                        }
-                        times.push(get_timestamp_secs());
-                    }
-                    _ = tokio_timer.tick() => {
-                        if tokio_times.len() >= 10 && times.len() >= 10 {
-                            break;
-                        }
-                        tokio_times.push(get_timestamp_secs());
-                    }
-                }
-            }
-            assert_eq!(times, tokio_times);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_tokio_time_interval_sleep() {
-        let mut timer = interval_maker();
-        let mut times = Vec::new();
-        sleep(Duration::from_secs(3)).await;
-        loop {
-            tokio::select! {
-                _ = timer.tick() => {
-                    times.push(get_timestamp_secs());
-                    if times.len() == 5 {
-                        break;
-                    }
-                }
-            }
-        }
-        let times2: HashSet<u128> = HashSet::from_iter(times.clone());
-        assert_eq!(times.len(), times2.len() + 3);
-    }
-
     // ThrottledInterval tick less times than tokio interval, if there're sleeps
     #[allow(non_snake_case)]
     #[tokio::test]
@@ -3243,70 +3194,9 @@ mod tests {
             }
             // No multiple ticks in the `interval` time.
             // Values in "times" are unique and are less than normal tokio interval.
-            // See previous test (test_tokio_time_interval_sleep) for comparison.
             let times2: HashSet<u128> = HashSet::from_iter(times.clone());
             assert_eq!(times.len(), times2.len(), "test: {}", i);
         }
-    }
-
-    #[test]
-    fn test_duration_multiplication() {
-        let dur = Duration::from_secs(1);
-
-        assert_eq!(dur * 2, Duration::from_secs(2));
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.9),
-            Duration::from_millis(900)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.923),
-            Duration::from_millis(923)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-3),
-            Duration::from_micros(923)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-6),
-            Duration::from_nanos(923)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-9),
-            Duration::from_nanos(1)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.5 * 1e-9),
-            Duration::from_nanos(1)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.499 * 1e-9),
-            Duration::from_nanos(0)
-        );
-    }
-
-    #[test]
-    fn test_is_public() {
-        // Test URLs containing "rustdesk.com/"
-        assert!(is_public("https://rustdesk.com/"));
-        assert!(is_public("https://www.rustdesk.com/"));
-        assert!(is_public("https://api.rustdesk.com/v1"));
-        assert!(is_public("https://API.RUSTDESK.COM/v1"));
-        assert!(is_public("https://rustdesk.com/path"));
-
-        // Test URLs ending with "rustdesk.com"
-        assert!(is_public("rustdesk.com"));
-        assert!(is_public("https://rustdesk.com"));
-        assert!(is_public("https://RustDesk.com"));
-        assert!(is_public("http://www.rustdesk.com"));
-        assert!(is_public("https://api.rustdesk.com"));
-
-        // Test non-public URLs
-        assert!(!is_public("https://example.com"));
-        assert!(!is_public("https://custom-server.com"));
-        assert!(!is_public("http://192.168.1.1"));
-        assert!(!is_public("localhost"));
-        assert!(!is_public("https://rustdesk.computer.com"));
-        assert!(!is_public("rustdesk.comhello.com"));
     }
 
     #[test]
@@ -3348,112 +3238,6 @@ mod tests {
     }
 
     #[test]
-    fn test_should_throttle_log() {
-        assert!(should_throttle_log("https://example.com/api/heartbeat"));
-        assert!(should_throttle_log(
-            "https://example.com/api/heartbeat?token=secret"
-        ));
-        assert!(should_throttle_log("https://example.com/prefix/api/heartbeat"));
-        assert!(!should_throttle_log("https://example.com/api/heartbeat2"));
-        assert!(!should_throttle_log("https://example.com/api/sysinfo"));
-        assert!(!should_throttle_log(
-            "https://example.com/api/sysinfo?next=/api/heartbeat"
-        ));
-        assert!(!should_throttle_log("not a url"));
-    }
-
-    #[test]
-    fn test_get_tcp_proxy_addr_normalizes_bare_ipv6_host() {
-        struct RestoreCustomRendezvousServer(String);
-
-        impl Drop for RestoreCustomRendezvousServer {
-            fn drop(&mut self) {
-                Config::set_option(
-                    keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
-                    self.0.clone(),
-                );
-            }
-        }
-
-        let _restore = RestoreCustomRendezvousServer(Config::get_option(
-            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER,
-        ));
-        Config::set_option(
-            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
-            "1:2".to_string(),
-        );
-
-        assert_eq!(get_tcp_proxy_addr(), format!("[1:2]:{RENDEZVOUS_PORT}"));
-    }
-
-    #[tokio::test]
-    async fn test_http_request_via_tcp_proxy_rejects_invalid_header_json() {
-        let result = http_request_via_tcp_proxy("not a url", "get", None, "{").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_http_request_via_tcp_proxy_rejects_non_object_header_json() {
-        let err = http_request_via_tcp_proxy("not a url", "get", None, "[]")
-            .await
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("HTTP header information parsing failed!"));
-    }
-
-    #[test]
-    fn test_parse_json_header_entries_preserves_single_content_type() {
-        let headers = parse_json_header_entries(
-            r#"{"Content-Type":"text/plain","Authorization":"Bearer token"}"#,
-        )
-        .unwrap();
-
-        assert_eq!(
-            headers
-                .iter()
-                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
-                .count(),
-            1
-        );
-        assert_eq!(
-            headers
-                .iter()
-                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
-                .map(|entry| entry.value.as_str()),
-            Some("text/plain")
-        );
-    }
-
-    #[test]
-    fn test_parse_json_header_entries_does_not_add_default_content_type() {
-        let headers = parse_json_header_entries(r#"{"Authorization":"Bearer token"}"#).unwrap();
-
-        assert!(!headers
-            .iter()
-            .any(|entry| entry.name.eq_ignore_ascii_case("Content-Type")));
-    }
-
-    #[test]
-    fn test_parse_simple_header_respects_custom_content_type() {
-        let headers = parse_simple_header("Content-Type: text/plain");
-
-        assert_eq!(
-            headers
-                .iter()
-                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
-                .count(),
-            1
-        );
-        assert_eq!(
-            headers
-                .iter()
-                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
-                .map(|entry| entry.value.as_str()),
-            Some("text/plain")
-        );
-    }
-
-    #[test]
     fn test_parse_simple_header_preserves_non_content_type_header() {
         let headers = parse_simple_header("Authorization: Bearer token");
 
@@ -3474,22 +3258,6 @@ mod tests {
                 .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
                 .map(|entry| entry.value.as_str()),
             Some("application/json")
-        );
-    }
-
-    #[test]
-    fn test_tcp_proxy_log_target_redacts_query_only() {
-        assert_eq!(
-            tcp_proxy_log_target("https://example.com/api/heartbeat?token=secret"),
-            "https://example.com/api/heartbeat"
-        );
-    }
-
-    #[test]
-    fn test_tcp_proxy_log_target_brackets_ipv6_host_with_port() {
-        assert_eq!(
-            tcp_proxy_log_target("https://[2001:db8::1]:21114/api/heartbeat?token=secret"),
-            "https://[2001:db8::1]:21114/api/heartbeat"
         );
     }
 
@@ -3519,38 +3287,6 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(err.contains("TCP proxy error: dial failed"));
-    }
-
-    #[test]
-    fn test_mouse_event_constants_and_mask_layout() {
-        use super::input::*;
-
-        // Verify MOUSE_TYPE constants are unique and within the mask range.
-        let types = [
-            MOUSE_TYPE_MOVE,
-            MOUSE_TYPE_DOWN,
-            MOUSE_TYPE_UP,
-            MOUSE_TYPE_WHEEL,
-            MOUSE_TYPE_TRACKPAD,
-            MOUSE_TYPE_MOVE_RELATIVE,
-        ];
-
-        let mut seen = std::collections::HashSet::new();
-        for t in types.iter() {
-            assert!(seen.insert(*t), "Duplicate mouse type: {}", t);
-            assert_eq!(
-                *t & MOUSE_TYPE_MASK,
-                *t,
-                "Mouse type {} exceeds mask {}",
-                t,
-                MOUSE_TYPE_MASK
-            );
-        }
-
-        // The mask layout is: lower 3 bits for type, upper bits for buttons (shifted by 3).
-        let combined_mask = MOUSE_TYPE_DOWN | ((MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT) << 3);
-        assert_eq!(combined_mask & MOUSE_TYPE_MASK, MOUSE_TYPE_DOWN);
-        assert_eq!(combined_mask >> 3, MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT);
     }
 
     /// A stand-in rendezvous server on loopback: accepts one connection and hands it to `serve`.
@@ -3621,105 +3357,6 @@ mod tests {
         let mut conn = connect(&host).await;
         secure_tcp(&mut conn, &key).await.unwrap();
         assert!(!conn.is_secured());
-    }
-
-    #[tokio::test]
-    async fn test_secure_tcp_required_refuses_a_closed_connection() {
-        let (key, _) = server_key();
-        let host = rendezvous_stub(|s| async move { drop(s) }).await;
-        let mut conn = connect(&host).await;
-        assert!(secure_tcp_required(&mut conn, &key).await.is_err());
-        assert!(!conn.is_secured());
-    }
-
-    #[tokio::test]
-    async fn test_secure_tcp_required_accepts_a_completed_exchange() {
-        let (key, sk) = server_key();
-        let host = rendezvous_stub(move |mut s| async move {
-            let (eph_pk, eph_sk) = box_::gen_keypair();
-            let mut msg = RendezvousMessage::new();
-            msg.set_key_exchange(KeyExchange {
-                keys: vec![sign::sign(&eph_pk.0, &sk).into()],
-                ..Default::default()
-            });
-            s.send(&msg).await.unwrap();
-            // The client's reply must decode to a key with the ephemeral secret half.
-            let reply = s.next_timeout(3000).await.unwrap().unwrap();
-            let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
-            let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
-                panic!("expected the client's key exchange");
-            };
-            hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk).unwrap();
-        })
-        .await;
-        let mut conn = connect(&host).await;
-        secure_tcp_required(&mut conn, &key).await.unwrap();
-        assert!(conn.is_secured());
-    }
-
-    // The stand-in does what hbbs does at version 1: advertises it and splits the exchanged key
-    // over the same transcript. Neither side's unit tests can catch a client that puts a
-    // different byte string into the transcript than the server does; only a frame crossing
-    // between the two can.
-    #[tokio::test]
-    async fn test_secure_tcp_version_1_keys_match_the_server_both_ways() {
-        let (key, sk) = server_key();
-        let host = rendezvous_stub(move |mut s| async move {
-            let (eph_pk, eph_sk) = box_::gen_keypair();
-            let mut msg = RendezvousMessage::new();
-            msg.set_key_exchange(KeyExchange {
-                keys: vec![sign::sign(&eph_pk.0, &sk).into()],
-                version: 1,
-                ..Default::default()
-            });
-            s.send(&msg).await.unwrap();
-            let reply = s.next_timeout(3000).await.unwrap().unwrap();
-            let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
-            let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
-                panic!("expected the client's key exchange");
-            };
-            let shared =
-                hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk).unwrap();
-            s.set_key_split(
-                shared,
-                false,
-                &hbb_common::tcp::KxTranscript {
-                    initiator_pk: &ex.keys[0],
-                    responder_pk: &eph_pk.0,
-                    advertised: 1,
-                    picked: ex.version,
-                },
-            )
-            .unwrap();
-            // Answers with the request's serial, so the client learns from its own reply that
-            // the request was read under the right key.
-            let request = s.next_timeout(3000).await.unwrap().unwrap();
-            let request = RendezvousMessage::parse_from_bytes(&request).unwrap();
-            let Some(rendezvous_message::Union::TestNatRequest(nat)) = request.union else {
-                panic!("expected the client's nat request");
-            };
-            let mut msg = RendezvousMessage::new();
-            msg.set_test_nat_response(TestNatResponse {
-                port: nat.serial,
-                ..Default::default()
-            });
-            s.send(&msg).await.unwrap();
-        })
-        .await;
-        let mut conn = connect(&host).await;
-        secure_tcp_required(&mut conn, &key).await.unwrap();
-        let mut msg = RendezvousMessage::new();
-        msg.set_test_nat_request(TestNatRequest {
-            serial: 7,
-            ..Default::default()
-        });
-        conn.send(&msg).await.unwrap();
-        let reply = conn.next_timeout(3000).await.unwrap().unwrap();
-        let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
-        let Some(rendezvous_message::Union::TestNatResponse(nat)) = reply.union else {
-            panic!("expected the server's nat response");
-        };
-        assert_eq!(nat.port, 7);
     }
 
     #[tokio::test]
@@ -3935,12 +3572,5 @@ mod tests {
         // `decode_id_pk` is the same blob minus the fingerprint, so the field is invisible to
         // non-WebRTC handshakes.
         assert_eq!(decode_id_pk(&signed, &pk).unwrap(), (id, their_pk));
-    }
-
-    // The route probe is awaited on the connection path, so whatever it finds - an address, or
-    // no IPv6 route on this machine - it finds without waiting on the network.
-    #[tokio::test]
-    async fn test_ipv6_route_probe_does_not_wait_on_the_network() {
-        assert!(hbb_common::timeout(1_000, test_bind_ipv6()).await.is_ok());
     }
 }

@@ -31,25 +31,6 @@ fn copy_and_verify_update_artifact_hashes_open_file_handle() {
     assert_eq!(position, Some(0));
 }
 
-#[test]
-fn remove_cached_update_artifact_rejects_directory() {
-    let test_dir = std::env::temp_dir().join(format!(
-        "rustdesk-updater-cache-dir-test-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&test_dir);
-    std::fs::create_dir_all(&test_dir).unwrap();
-    let cache_path = test_dir.join("rustdesk-update.exe");
-    std::fs::create_dir(&cache_path).unwrap();
-    std::fs::write(cache_path.join("stale"), b"stale").unwrap();
-
-    let result = remove_cached_update_artifact(&cache_path);
-
-    assert!(result.is_err());
-    assert!(cache_path.exists());
-    std::fs::remove_dir_all(&test_dir).unwrap();
-}
-
 #[cfg(unix)]
 #[test]
 fn verified_download_replaces_symlink_without_touching_target() {

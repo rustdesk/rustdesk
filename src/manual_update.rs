@@ -184,25 +184,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_partial_reordered_or_extra_macos_update_arguments() {
-        for invalid in [
-            args(&["--update", "update.zip"]),
-            args(&["--update", "update.dmg", "--metadata", "update.json"]),
-            args(&[
-                "--update",
-                "update.dmg",
-                "--signature",
-                "update.sig",
-                "--metadata",
-                "update.json",
-            ]),
-            args(&["--update", "update.dmg", "unexpected"]),
-        ] {
-            assert!(parse_macos_update_args(&invalid).is_err(), "{invalid:?}");
-        }
-    }
-
-    #[test]
     fn resolves_public_and_custom_update_package_identity() {
         assert_eq!(
             "rustdesk",

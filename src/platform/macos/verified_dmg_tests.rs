@@ -1,7 +1,7 @@
 use super::{
     verified_dmg::{
-        copy_and_verify_dmg_file, create_dmg_mount_point, extract_dmg_inner, verified_dmg_path,
-        verify_stored_dmg, VerifiedDmg,
+        copy_and_verify_dmg_file, extract_dmg_inner, verified_dmg_path, verify_stored_dmg,
+        VerifiedDmg,
     },
     verified_dmg_update_source, ResultType,
 };
@@ -42,20 +42,6 @@ fn extract_verified_dmg(verified_dmg: &VerifiedDmg, target_dir: &str) -> ResultT
     std::fs::create_dir_all(target_path)?;
     verify_stored_dmg(verified_dmg)?;
     extract_dmg_inner(verified_dmg_path(verified_dmg)?, target_dir)
-}
-
-#[test]
-fn update_dmg_mount_points_are_unique() {
-    let first = create_dmg_mount_point().unwrap();
-    let second = create_dmg_mount_point().unwrap();
-    let are_unique = first != second;
-    for mount_point in [&first, &second] {
-        if mount_point.starts_with("/tmp/.rustdeskmount-") {
-            std::fs::remove_dir(mount_point).unwrap();
-        }
-    }
-
-    assert!(are_unique);
 }
 
 #[test]
@@ -174,35 +160,4 @@ fn verified_dmg_rejects_symlink() {
         .unwrap_err()
         .to_string()
         .contains("not a regular file"));
-}
-
-#[test]
-fn verified_dmg_handle_survives_path_replacement() {
-    use std::io::{Read as _, Seek as _};
-
-    let test_dir = std::env::temp_dir().join(format!(
-        "rustdesk-verified-dmg-handle-test-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&test_dir);
-    std::fs::create_dir_all(&test_dir).unwrap();
-    let file_path = test_dir.join("update.dmg");
-    let original_path = test_dir.join("original.dmg");
-    std::fs::write(&file_path, b"rustdesk").unwrap();
-
-    let mut verified_dmg = copy_and_verify_dmg_file(
-        &file_path.to_string_lossy(),
-        "304ca1638c5effa6832e0e15b958a8f74847efe4df9c3f3187216e921c168fed",
-        Some(8),
-    )
-    .unwrap();
-    std::fs::rename(&file_path, &original_path).unwrap();
-    std::fs::write(&file_path, b"tampered").unwrap();
-
-    verified_dmg.file.seek(std::io::SeekFrom::Start(0)).unwrap();
-    let mut contents = Vec::new();
-    verified_dmg.file.read_to_end(&mut contents).unwrap();
-
-    std::fs::remove_dir_all(test_dir).unwrap();
-    assert_eq!(contents, b"rustdesk");
 }

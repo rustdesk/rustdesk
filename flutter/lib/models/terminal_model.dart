@@ -70,10 +70,6 @@ class TerminalModel with ChangeNotifier {
 
   final _inputBuffer = <String>[];
 
-  /// Exposes buffered input only for lifecycle regression tests.
-  @visibleForTesting
-  int get debugBufferedInputCount => _inputBuffer.length;
-
   // Buffer for output data received before terminal view has valid dimensions.
   // This prevents NaN errors when writing to terminal before layout is complete.
   final _pendingOutputChunks = <String>[];

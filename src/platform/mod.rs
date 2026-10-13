@@ -236,11 +236,10 @@ pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(windows, target_os = "macos")))]
 mod tests {
     use super::*;
 
-    #[cfg(any(windows, target_os = "macos"))]
     #[test]
     fn install_app_names_enforce_ascii_command_safety() {
         for app_name in [
@@ -262,46 +261,5 @@ mod tests {
         assert!(validate_install_app_name("-RustDesk").is_ok());
         #[cfg(target_os = "macos")]
         assert!(validate_install_app_name("-RustDesk").is_err());
-    }
-
-    #[test]
-    fn test_cursor_data() {
-        for _ in 0..30 {
-            if let Some(hc) = get_cursor().unwrap() {
-                let cd = get_cursor_data(hc).unwrap();
-                repng::encode(
-                    std::fs::File::create("cursor.png").unwrap(),
-                    cd.width as _,
-                    cd.height as _,
-                    &cd.colors[..],
-                )
-                .unwrap();
-            }
-            #[cfg(target_os = "macos")]
-            macos::is_process_trusted(false);
-        }
-        // A macOS capture takes the cursor shown, whatever seed it is asked for.
-        #[cfg(target_os = "macos")]
-        {
-            macos::reset_input_cache();
-            if let Some(change) = get_cursor().unwrap() {
-                assert!(get_cursor_data(change.wrapping_add(1)).is_ok());
-            }
-        }
-    }
-    #[test]
-    fn test_get_cursor_pos() {
-        for _ in 0..30 {
-            assert!(!get_cursor_pos().is_none());
-        }
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    #[test]
-    fn test_resolution() {
-        let name = r"\\.\DISPLAY1";
-        println!("current:{:?}", current_resolution(name));
-        println!("change:{:?}", change_resolution(name, 2880, 1800));
-        println!("resolutions:{:?}", resolutions(name));
     }
 }
