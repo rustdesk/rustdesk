@@ -3088,6 +3088,53 @@ mod drm_capturer_tests {
     }
 
     #[test]
+    fn a_dropped_repeat_or_a_timeout_is_no_encoder_time() {
+        // An encoder that takes 50 ms a frame, then a still screen: repeats and timeouts, each
+        // followed by the rest of its spf asleep, as video_service does. That sleep is not encoding.
+        let spf = Duration::from_secs_f32(1. / 60.);
+        let (a, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let (b, _, _) = px_frame(&[&[1, 2, 3], &[4, 5, 7]], 0);
+        let mut c = capturer_with(Some((w, h)));
+        for i in 0..12 {
+            put_frame_with(&c, w, h, None, if i % 2 == 0 { &a } else { &b });
+            assert!(c.frame(spf).is_ok());
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let encoding = c.shared.demand_fps.load(Ordering::Relaxed);
+        for i in 0..20 {
+            let t = Instant::now();
+            if i % 2 == 0 {
+                put_frame_with(&c, w, h, None, &b);
+            }
+            assert!(c.frame(spf).is_err());
+            std::thread::sleep(spf.saturating_sub(t.elapsed()));
+        }
+        let _ = c.frame(spf);
+        let still = c.shared.demand_fps.load(Ordering::Relaxed);
+        assert!(still <= encoding + 1, "{encoding} -> {still}");
+    }
+
+    #[test]
+    fn a_still_screen_asks_for_the_old_tick_until_a_new_frame() {
+        let spf = Duration::from_secs_f32(1. / 60.);
+        let (a, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let (b, _, _) = px_frame(&[&[1, 2, 3], &[4, 5, 7]], 0);
+        let mut c = capturer_with(Some((w, h)));
+        let demand = |c: &mut IpcDrmCapturer| {
+            let _ = c.frame(spf);
+            c.shared.demand_fps.load(Ordering::Relaxed)
+        };
+        put_frame_with(&c, w, h, None, &a);
+        assert!(c.frame(spf).is_ok());
+        assert_eq!(demand(&mut c), 60);
+        std::thread::sleep(STILL_AFTER);
+        assert_eq!(demand(&mut c), STILL_FPS);
+        put_frame_with(&c, w, h, None, &b);
+        assert!(c.frame(spf).is_ok());
+        assert_eq!(demand(&mut c), 60);
+    }
+
+    #[test]
     fn the_same_bytes_in_another_format_are_not_a_repeat() {
         // Blue as BGRA, red as RGBA.
         let px = [255u8, 0, 0, 255];
