@@ -65,7 +65,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void onWindowClose() {
-    if (isWindows && kBootArgs.contains('--rd4-ui') &&
+    if (isWindows && kBootArgs.contains('--hidden-client-window-mode') &&
         gFFI.serverModel.clients.isNotEmpty) {
       hideWindowsClientWindow();
       return;
@@ -342,7 +342,7 @@ class ConnectionManagerState extends State<ConnectionManager>
   }
 
   Future<bool> handleWindowCloseButton() async {
-    if (isWindows && kBootArgs.contains('--rd4-ui')) {
+    if (isWindows && kBootArgs.contains('--hidden-client-window-mode')) {
       await hideWindowsClientWindow();
       return false;
     }

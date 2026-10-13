@@ -740,7 +740,7 @@ pub fn core_main() -> Option<CoreMainAction> {
     }
     #[cfg(all(windows, feature = "flutter"))]
     if crate::platform::windows::client_window::enabled() {
-        flutter_args.push("--rd4-ui".to_owned());
+        flutter_args.push("--hidden-client-window-mode".to_owned());
     }
     //_async_logger_holder.map(|x| x.flush());
     #[cfg(feature = "flutter")]

@@ -150,7 +150,7 @@ void runMainApp(bool startService) async {
         bind.mainGetBuildinOption(key: "main-window-always-on-top") == 'Y';
   }
 
-  final hideWindowsMain = isWindows && kBootArgs.contains('--rd4-ui') && bind.mainIsInstalled();
+  final hideWindowsMain = isWindows && kBootArgs.contains('--hidden-client-window-mode') && bind.mainIsInstalled();
   // Set window option.
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
       isMainWindow: true,
@@ -296,7 +296,7 @@ void runConnectionManagerScreen() async {
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
-  final hide = (isWindows && kBootArgs.contains('--rd4-ui')) ||
+  final hide = (isWindows && kBootArgs.contains('--hidden-client-window-mode')) ||
       await bind.cmGetConfig(name: "hide_cm") == 'true';
   gFFI.serverModel.hideCm = hide;
   if (hide) {
@@ -304,7 +304,7 @@ void runConnectionManagerScreen() async {
   } else {
     await showCmWindow(isStartup: true);
   }
-  if (isWindows && kBootArgs.contains('--rd4-ui')) {
+  if (isWindows && kBootArgs.contains('--hidden-client-window-mode')) {
     await gFFI.serverModel.updateClientState();
   }
   setResizable(false);
@@ -315,7 +315,7 @@ void runConnectionManagerScreen() async {
 bool _isCmReadyToShow = false;
 
 showCmWindow({bool isStartup = false}) async {
-  if (isWindows && kBootArgs.contains('--rd4-ui')) {
+  if (isWindows && kBootArgs.contains('--hidden-client-window-mode')) {
     if (_isCmReadyToShow) {
       await showWindowsApprovalWindow(gFFI.serverModel.clients,
           elevation: gFFI.serverModel.showElevation);
@@ -349,7 +349,7 @@ showCmWindow({bool isStartup = false}) async {
 }
 
 hideCmWindow({bool isStartup = false}) async {
-  if (isWindows && kBootArgs.contains('--rd4-ui')) {
+  if (isWindows && kBootArgs.contains('--hidden-client-window-mode')) {
     if (isStartup) {
       await windowManager.waitUntilReadyToShow(
           getHiddenTitleBarWindowOptions(

@@ -412,7 +412,7 @@ class ChatModel with ChangeNotifier {
         return;
       }
       if (isDesktop) {
-        if (!isWindows || !kBootArgs.contains('--rd4-ui') ||
+        if (!isWindows || !kBootArgs.contains('--hidden-client-window-mode') ||
             await windowManager.isVisible()) windowOnTop(null);
         // disable auto jumpTo other tab when hasFocus, and mark unread message
         final currentSelectedTab =

@@ -81,7 +81,7 @@ mod tests {
             let window = CreateWindowExW(
                 0,
                 super::super::wide_string("STATIC").as_ptr(),
-                super::super::wide_string("RD-4 visibility test").as_ptr(),
+                super::super::wide_string("Client window visibility test").as_ptr(),
                 WS_OVERLAPPEDWINDOW,
                 0,
                 0,
