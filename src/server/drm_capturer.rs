@@ -99,15 +99,25 @@ struct Shared {
 /// less what the call spent waiting for it, smoothed. Work inside frame() (a rotation) counts; the
 /// wait does not, so a late producer cannot talk its own demand down. A call that returned no frame
 /// (a dropped repeat, a timeout) left the encoder nothing to do, so the time after it is no sample.
+/// The samples also hold the sleep video_service paces itself with, so a shorter spf starts over.
 #[derive(Default)]
 struct EncoderPace {
     last_call: Option<Instant>,
     last_wait: Duration,
     busy: Option<Duration>,
+    spf: Duration,
 }
 
 impl EncoderPace {
-    fn on_call(&mut self, now: Instant, returned_at: Instant) {
+    /// The rate to ask the producer for at a frame() call at `now` with `spf`, the last frame
+    /// having been returned at `returned_at`.
+    fn demand(&mut self, now: Instant, returned_at: Instant, spf: Duration) -> u8 {
+        if spf < self.spf {
+            // The sample that spans the change holds the old sleep too.
+            self.busy = None;
+            self.last_call = None;
+        }
+        self.spf = spf;
         if let Some(prev) = self.last_call.filter(|&prev| returned_at > prev) {
             let sample = now
                 .saturating_duration_since(prev)
@@ -117,6 +127,12 @@ impl EncoderPace {
         }
         self.last_call = Some(now);
         self.last_wait = Duration::ZERO;
+        let demand = demand_fps_of(spf, self.busy);
+        if now.saturating_duration_since(returned_at) >= STILL_AFTER {
+            demand.min(STILL_FPS)
+        } else {
+            demand
+        }
     }
 }
 
@@ -560,15 +576,13 @@ impl TraitCapturer for IpcDrmCapturer {
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         // video_service passes its spf as the timeout: that, and how busy it is between calls, is
         // the rate the producer is asked for.
-        {
-            let mut pace = self.shared.pace.lock().unwrap();
-            pace.on_call(Instant::now(), self.returned_at);
-            let mut demand = demand_fps_of(timeout, pace.busy);
-            if self.returned_at.elapsed() >= STILL_AFTER {
-                demand = demand.min(STILL_FPS);
-            }
-            self.shared.demand_fps.store(demand, Ordering::Relaxed);
-        }
+        let demand =
+            self.shared
+                .pace
+                .lock()
+                .unwrap()
+                .demand(Instant::now(), self.returned_at, timeout);
+        self.shared.demand_fps.store(demand, Ordering::Relaxed);
         let deadline = Instant::now() + timeout;
         let repeat = {
             let waited = WaitStamp(&self.shared.pace, Instant::now());
