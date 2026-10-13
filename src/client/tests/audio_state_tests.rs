@@ -2,7 +2,6 @@ use super::{create_audio_resampler, AudioDecoder, AudioFormat, AudioFrame, Audio
 use cpal::traits::StreamTrait;
 use hbb_common::{anyhow::anyhow, ResultType};
 use magnum_opus::{Application::LowDelay, Encoder};
-use ringbuf::Rb;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,

@@ -2,7 +2,6 @@ use super::{
     AudioPlaybackConfig, AudioPlaybackError, AudioPlaybackRecovery, AudioPlaybackStatus,
     AudioPlaybackWriter,
 };
-use ringbuf::{ring_buffer::RbBase, Rb};
 use std::{
     sync::{atomic::Ordering, mpsc, Arc, Mutex},
     time::Duration,
@@ -22,7 +21,8 @@ const MAX_SAMPLE_STEP: f32 = 0.01;
 fn writing_audio_observes_discard_and_releases_buffer_lock() {
     const INPUT: [f32; 4] = [0.1, 0.2, 0.3, 0.4];
     const GENERATION: usize = 7;
-    let buffer = Arc::new(Mutex::new(ringbuf::HeapRb::new(INPUT.len())));
+    let (mut producer, consumer) = ringbuf::HeapRb::new(INPUT.len()).split();
+    let buffer = Arc::new(Mutex::new(consumer));
     let generation = Arc::new(super::AtomicUsize::new(0));
     let config = AudioPlaybackConfig {
         sample_rate: SAMPLE_RATE,
@@ -30,8 +30,8 @@ fn writing_audio_observes_discard_and_releases_buffer_lock() {
     };
     let mut writer = AudioPlaybackWriter::new(config, buffer.clone(), generation.clone()).unwrap();
     {
-        let mut buffer = buffer.lock().unwrap();
-        buffer.push_slice(&INPUT);
+        let _buffer = buffer.lock().unwrap();
+        producer.push_slice(&INPUT);
         generation.store(GENERATION, Ordering::Relaxed);
     }
     let mut output = [0.0_f32; INPUT.len()];
@@ -40,7 +40,7 @@ fn writing_audio_observes_discard_and_releases_buffer_lock() {
 
     assert_eq!(writer.buffered_input, INPUT);
     assert_eq!(writer.observed_discontinuity_generation, GENERATION);
-    assert_eq!(buffer.try_lock().unwrap().occupied_len(), 0);
+    assert_eq!(buffer.try_lock().unwrap().len(), 0);
 }
 
 fn maximum_sample_step(samples: &[f32]) -> f32 {
@@ -124,12 +124,10 @@ const DISCARD_GENERATION: usize = 1;
 
 fn write_while_buffer_is_locked(
     mut writer: AudioPlaybackWriter,
-    buffer: &Arc<Mutex<ringbuf::HeapRb<f32>>>,
+    buffer: &Arc<Mutex<ringbuf::HeapConsumer<f32>>>,
     generation: &Arc<super::AtomicUsize>,
 ) -> (AudioPlaybackWriter, [f32; CALLBACK_SAMPLES]) {
-    let mut guard = buffer.lock().unwrap();
-    let queued = OPPOSITE_ACTIVE_FRAME.repeat(ACTIVE_FRAMES);
-    guard.push_slice(&queued);
+    let guard = buffer.lock().unwrap();
     generation.store(DISCARD_GENERATION, Ordering::Relaxed);
     let (completed_tx, completed_rx) = mpsc::channel();
     let callback = std::thread::spawn(move || {
@@ -140,35 +138,38 @@ fn write_while_buffer_is_locked(
         completed_tx.send((writer, output)).unwrap();
     });
     let completed = completed_rx.recv_timeout(CALLBACK_TIMEOUT);
-    let retained = guard.occupied_len();
+    let retained = guard.len();
     drop(guard);
     callback.join().unwrap();
     let result = completed.expect("playback callback waited for the buffer owner");
-    assert_eq!(retained, queued.len());
+    assert_eq!(retained, ACTIVE_FRAMES * CHANNELS);
     result
 }
 
 #[test]
 fn playback_contention_preserves_queued_audio_and_recovers_after_release() {
     let samples = ACTIVE_FRAMES * CHANNELS;
-    let buffer = Arc::new(Mutex::new(ringbuf::HeapRb::new(samples)));
+    let (mut producer, consumer) = ringbuf::HeapRb::new(samples).split();
+    let buffer = Arc::new(Mutex::new(consumer));
     let generation = Arc::new(super::AtomicUsize::new(0));
     let config = AudioPlaybackConfig {
         sample_rate: SAMPLE_RATE,
         channels: CHANNELS,
     };
     let mut writer = AudioPlaybackWriter::new(config, buffer.clone(), generation.clone()).unwrap();
-    buffer
-        .lock()
-        .unwrap()
-        .push_slice(&ACTIVE_FRAME.repeat(ACTIVE_FRAMES));
+    producer.push_slice(&ACTIVE_FRAME.repeat(ACTIVE_FRAMES));
     let mut output = vec![0.0; samples];
     writer.write_output(&mut output);
     assert_eq!(&output[samples - CHANNELS..], &ACTIVE_FRAME);
 
+    producer.push_slice(&OPPOSITE_ACTIVE_FRAME.repeat(ACTIVE_FRAMES));
     let (mut writer, gap) = write_while_buffer_is_locked(writer, &buffer, &generation);
 
     assert_eq!(writer.status.contentions.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        writer.status.missing_samples.load(Ordering::Relaxed),
+        CALLBACK_SAMPLES
+    );
     assert!(writer.status.ready.load(Ordering::Acquire));
     assert_eq!(writer.observed_discontinuity_generation, 0);
     assert!(maximum_sample_step(&gap) <= MAX_SAMPLE_STEP);
@@ -185,12 +186,13 @@ fn playback_contention_preserves_queued_audio_and_recovers_after_release() {
     );
     assert_eq!(writer.observed_discontinuity_generation, DISCARD_GENERATION);
     assert_eq!(&output[samples - CHANNELS..], &OPPOSITE_ACTIVE_FRAME);
-    assert_eq!(buffer.lock().unwrap().occupied_len(), 0);
+    assert_eq!(buffer.lock().unwrap().len(), 0);
 }
 
 #[test]
 fn poisoned_playback_buffer_reports_once_without_panicking_in_the_callback() {
-    let buffer = Arc::new(Mutex::new(ringbuf::HeapRb::new(CALLBACK_SAMPLES)));
+    let (_producer, consumer) = ringbuf::HeapRb::new(CALLBACK_SAMPLES).split();
+    let buffer = Arc::new(Mutex::new(consumer));
     let config = AudioPlaybackConfig {
         sample_rate: SAMPLE_RATE,
         channels: CHANNELS,
@@ -225,8 +227,12 @@ fn contention_counts_accumulate_until_the_next_report() {
     let status = AudioPlaybackStatus::default();
     status.report_errors();
     status.contentions.fetch_add(1, Ordering::Relaxed);
+    status
+        .missing_samples
+        .fetch_add(CALLBACK_SAMPLES, Ordering::Relaxed);
     status.report_errors();
     assert_eq!(status.contentions.load(Ordering::Relaxed), 0);
+    assert_eq!(status.missing_samples.load(Ordering::Relaxed), 0);
 
     let mut total = 0;
     for callbacks in [3, 7, 2] {
