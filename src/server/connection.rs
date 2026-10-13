@@ -7063,7 +7063,18 @@ mod raii {
                 if !crate::platform::linux::is_x11() {
                     if let Err(err) = std::thread::Builder::new()
                         .name("portal-session-close".into())
-                        .spawn(scrap::wayland::pipewire::try_close_session)
+                        .spawn(|| {
+                            // A remote that came in since the count above keeps the session, as
+                            // when the close ran on the dropping thread right after the count.
+                            let remote = AUTHED_CONNS
+                                .lock()
+                                .unwrap()
+                                .iter()
+                                .any(|c| c.conn_type == AuthConnType::Remote);
+                            if !remote {
+                                scrap::wayland::pipewire::try_close_session();
+                            }
+                        })
                     {
                         // A peer can drop connections at any rate.
                         hbb_common::throttled_log!(
