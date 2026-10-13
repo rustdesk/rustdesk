@@ -134,6 +134,31 @@ void main() {
     expect(controller.directory.value.path, '/same');
   });
 
+  test('same-path requests with different hidden options are serialized',
+      () async {
+    final sent = <_SentRead>[];
+    final fileFetcher = FileFetcher(
+      () => _sessionId,
+      readRemoteDirectory: (_, path, includeHidden) async {
+        sent.add(_SentRead(path, includeHidden));
+      },
+    );
+
+    final first = fileFetcher.fetchDirectory('/same', false, false);
+    final second = fileFetcher.fetchDirectory('/same', false, true);
+
+    await Future<void>.delayed(Duration.zero);
+    expect(sent.map((request) => request.includeHidden), [false]);
+
+    fileFetcher.tryCompleteTask(_directoryJson('/same'), 'false');
+    expect((await first).path, '/same');
+    await Future<void>.delayed(Duration.zero);
+    expect(sent.map((request) => request.includeHidden), [false, true]);
+
+    fileFetcher.tryCompleteTask(_directoryJson('/same'), 'false');
+    expect((await second).path, '/same');
+  });
+
   test('navigation ignores stale directory responses', () async {
     final fileFetcher = FileFetcher(
       () => _sessionId,

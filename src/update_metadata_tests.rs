@@ -146,6 +146,33 @@ fn rejects_schema_policy_artifact_and_url_mismatches() {
 }
 
 #[test]
+fn rejects_artifact_file_name_path_components() {
+    for file_name in [
+        "",
+        "nested/rustdesk.exe",
+        r"nested\rustdesk.exe",
+        "..",
+        "rust desk.exe",
+        "rustdesk*.exe",
+        "rustdesk\n.exe",
+        "rüstdesk.exe",
+    ] {
+        let mut invalid_metadata = metadata();
+        invalid_metadata["artifacts"][0]["file_name"] = json!(file_name);
+        invalid_metadata["artifacts"][0]["url"] = json!(format!(
+            "https://github.com/rustdesk/rustdesk/releases/download/v1.4.6/{file_name}"
+        ));
+        let fixture = sign_fixture(invalid_metadata, KEY_ID);
+
+        let error = verify_with_query(&fixture, &query())
+            .err()
+            .expect("invalid file name");
+
+        assert_eq!("invalid update artifact file name", error.to_string());
+    }
+}
+
+#[test]
 fn verifies_metadata_generated_by_python_release_script_fixture() {
     const PYTHON_KEY_ID: &str = "python-test-ed25519-main";
     let metadata = br#"{"schema_version":1,"app":"rustdesk","package_id":"rustdesk","version":"1.4.6","release_id":"v1.4.6","published_at":"2026-05-14T00:00:00Z","signature_key_id":"python-test-ed25519-main","artifacts":[{"platform":"windows","arch":"x86_64","format":"exe","url":"https://github.com/rustdesk/rustdesk/releases/download/v1.4.6/rustdesk-1.4.6-x86_64.exe","file_name":"rustdesk-1.4.6-x86_64.exe","size":8,"sha256":"304ca1638c5effa6832e0e15b958a8f74847efe4df9c3f3187216e921c168fed"}]}"#;

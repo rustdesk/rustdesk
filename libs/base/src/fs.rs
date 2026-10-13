@@ -1669,6 +1669,15 @@ mod tests {
     }
 
     #[test]
+    fn set_files_rejects_empty_name_in_multi_file_transfer() {
+        let mut job = new_validation_job(102);
+        let err = job
+            .set_files(vec![new_file_entry(""), new_file_entry("ok.txt")])
+            .expect_err("empty name in multi-file transfer must be rejected");
+        assert_err_contains(err, "empty file name");
+    }
+
+    #[test]
     fn set_files_rejects_mixed_entries_when_one_is_traversal() {
         let mut job = new_validation_job(104);
         let err = job

@@ -5379,6 +5379,24 @@ pub mod peer_online {
 
         bail!("Failed to query online states, no online response");
     }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::client::Client;
+        use hbb_common::rendezvous_proto::IceCandidate;
+
+        #[test]
+        fn accepts_webrtc_ice_by_session_key_only() {
+            let ice = IceCandidate {
+                session_key: "session-a".to_owned(),
+                candidate: "candidate-json".to_owned(),
+                ..Default::default()
+            };
+
+            assert!(Client::is_expected_webrtc_ice_candidate(&ice, "session-a"));
+            assert!(!Client::is_expected_webrtc_ice_candidate(&ice, "session-b"));
+        }
+    }
 }
 
 async fn test_udp_uat(

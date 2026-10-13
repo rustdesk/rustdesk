@@ -245,4 +245,34 @@ mod tests {
             Some(Ok(data)) => panic!("unexpected data after close: {:?}", data),
         }
     }
+
+    // A writer that queues many frames and closes immediately must not cost the
+    // reader any of them: every frame arrives intact, in order, before end-of-stream.
+    // This is the client-side pin for the kcp-sys close-tail-drain semantics, through
+    // the real BytesCodec framing rustdesk sessions use.
+    #[tokio::test]
+    async fn test_kcp_stream_close_delivers_all_frames() {
+        let ((_guard_a, mut tx), (_guard_b, mut rx)) = establish().await;
+
+        const N: usize = 50;
+        let payload = vec![7u8; 32 * 1024];
+        for _ in 0..N {
+            tx.send_bytes(Bytes::from(payload.clone())).await.unwrap();
+        }
+        drop(tx);
+
+        let mut got = 0usize;
+        loop {
+            match rx.next_timeout(10_000).await {
+                Some(Ok(data)) => {
+                    assert_eq!(data.len(), payload.len(), "frame boundary broken");
+                    assert!(data.iter().all(|&b| b == 7), "frame content corrupted");
+                    got += 1;
+                }
+                // BrokenPipe (kcp reader end) or timeout-None both end the stream.
+                None | Some(Err(_)) => break,
+            }
+        }
+        assert_eq!(got, N, "graceful close lost frames");
+    }
 }

@@ -893,6 +893,15 @@ mod hotspot_guess_tests {
         ]);
         assert_eq!(infer_hotspot(&px, w, h), (0, 3));
     }
+
+    /// The elongation rule stays ahead of the mirror test, so a bar that is NOT symmetric still
+    /// keeps its centre. Nothing in the installed theme is shaped like this - its two I-beams are
+    /// both symmetric - but a custom cursor can be, and this is the rustdesk#16242 round-one fix.
+    #[test]
+    fn an_elongated_shape_keeps_its_centre_even_when_it_is_lopsided() {
+        let (px, w, h) = sprite(&["##########.", "#####......", "##########."]);
+        assert_eq!(infer_hotspot(&px, w, h), (4, 1));
+    }
 }
 
 /// DRM_MODE_ROTATE_0: the `rotation` bitmask of a plane that turned nothing.
