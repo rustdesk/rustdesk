@@ -514,13 +514,26 @@ pub fn core_main() -> Option<CoreMainAction> {
                 }
             }
             return None;
-        } else if args[0] == "--option" {
+        } else if args[0] == "--option"
+            || (cfg!(windows)
+                && matches!(
+                    args[0].as_str(),
+                    "--hide-client-window" | "--hide-client-window=N"
+                ))
+        {
             if is_cli_setting_change_disabled() {
                 println!("Settings are disabled!");
                 return None;
             }
             if crate::platform::is_installed() && is_root() {
-                if args.len() == 2 {
+                if args.len() == 1 && args[0].starts_with("--hide-client-window") {
+                    let value = if args[0] == "--hide-client-window" {
+                        "Y"
+                    } else {
+                        "N"
+                    };
+                    crate::ipc::set_option(keys::OPTION_HIDE_CLIENT_WINDOW, value);
+                } else if args.len() == 2 {
                     let options = crate::ipc::get_options();
                     println!("{}", options.get(&args[1]).unwrap_or(&"".to_owned()));
                 } else if args.len() == 3 {
