@@ -7065,7 +7065,13 @@ mod raii {
                         .name("portal-session-close".into())
                         .spawn(scrap::wayland::pipewire::try_close_session)
                     {
-                        log::error!("Failed to spawn the portal session close: {err}");
+                        // A peer can drop connections at any rate.
+                        hbb_common::throttled_log!(
+                            Duration::from_secs(60),
+                            error,
+                            "Failed to spawn the portal session close: {}",
+                            err
+                        );
                     }
                 }
             }
