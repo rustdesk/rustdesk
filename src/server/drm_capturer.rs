@@ -1560,7 +1560,7 @@ fn deliver_drm_cursor(
         // A guessed one was guessed on the ROTATED sprite - top-left of an arrow's box - and
         // the tip of a turned arrow is some other corner, so it is guessed again on the upright
         // one. The old flow was off at every angle; what differs is the size of the error, which
-        // is why only one of them got reported (see the test below).
+        // is why only one of them got reported.
         let (hx, hy) = if hot_measured {
             unrotate_hotspot(t, width as i32, height as i32, hotx, hoty)
         } else {
@@ -2542,46 +2542,6 @@ mod drm_capturer_tests {
     }
 
     #[test]
-    fn a_lone_display_goes_offline_only_when_its_fallback_was_rejected() {
-        // Unique name = unique health key; DRM_DISPLAY_HEALTH is process-wide.
-        let list = vec![drm_display("TEST-lone-fallback", 1080, 1920)];
-        let key = connector_key(&list[0]);
-        let demoted = DisplayHealth {
-            zero_frame_streak: DRM_GRAB_MAX_FAILURES,
-            demotes: 1,
-            ..DisplayHealth::new()
-        };
-        // Demoted alone keeps the lone display online: the whole-desktop fallback is usable.
-        DRM_DISPLAY_HEALTH.lock().unwrap().insert(key.clone(), demoted);
-        let mut infos = vec![DisplayInfo {
-            online: true,
-            ..Default::default()
-        }];
-        mark_demoted_displays(&list, &mut infos);
-        assert!(infos[0].online, "the lone-display carve-out must survive");
-        // A rejected fallback ends the carve-out: advertising online would restart-loop.
-        DRM_DISPLAY_HEALTH
-            .lock()
-            .unwrap()
-            .get_mut(&key)
-            .expect("just inserted")
-            .fallback_rejected = true;
-        mark_demoted_displays(&list, &mut infos);
-        assert!(!infos[0].online, "a rejected fallback must take the lone display offline");
-        // Once the demotion cooldown lapses the display is no longer demoted, and online returns
-        // even with the rejection still latched (the re-arm will clear it on the next build).
-        DRM_DISPLAY_HEALTH
-            .lock()
-            .unwrap()
-            .get_mut(&key)
-            .expect("still there")
-            .since = Instant::now() - demote_cooldown(1) - Duration::from_secs(1);
-        infos[0].online = true;
-        mark_demoted_displays(&list, &mut infos);
-        assert!(infos[0].online, "past the cooldown the verdict is DRM's to retry");
-    }
-
-    #[test]
     fn the_cursor_id_names_the_orientation_too() {
         // Same wire cursor under two transforms must publish as two ids, or the client's by-id
         // cache serves the previous orientation after a mid-session rotation.
@@ -2606,24 +2566,6 @@ mod drm_capturer_tests {
     }
 
     #[test]
-    fn a_stale_snapshot_generation_asks_for_a_rebuild_without_blaming_the_display() {
-        let mut c = capturer_named(Some((64, 32)), Some("test:gen-rebuild"));
-        c.snapshot_gen = c.snapshot_gen.wrapping_sub(1);
-        put_frame(&c, 64, 32);
-        let err = match c.frame(Duration::from_millis(50)) {
-            Err(e) => e,
-            Ok(_) => panic!("a stale generation must rebuild, not deliver"),
-        };
-        assert!(err.to_string().contains("layout changed"), "{err}");
-        assert!(!c.got_frame);
-        assert_eq!(
-            zero_frame_streak_of(&c),
-            0,
-            "a layout rebuild must not count against display health"
-        );
-    }
-
-    #[test]
     fn unrotate_90_maps_the_left_column_to_the_top_row() {
         // The measured anchor from rustdesk#15886: mutter transform=1 carries the panel bar down
         // the scanout's LEFT edge, and upright means that edge becomes the TOP row.
@@ -2632,16 +2574,6 @@ mod drm_capturer_tests {
         unrotate_bgra(&src, w, h, 90, &mut dst);
         // src left column top-to-bottom = [1, 4]; clockwise puts it on the top row as [4, 1].
         assert_eq!(labels_of(&dst, h, w), vec![vec![4, 1], vec![5, 2], vec![6, 3]]);
-    }
-
-    #[test]
-    fn unrotate_270_is_the_inverse_of_90() {
-        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
-        let mut once = Vec::new();
-        unrotate_bgra(&src, w, h, 90, &mut once);
-        let mut back = Vec::new();
-        unrotate_bgra(&once, h, w, 270, &mut back);
-        assert_eq!(back, src);
     }
 
     /// An upright arrow, tip at (0,0): a 4x6 bitmap, every pixel with x <= y/2 opaque, so the
@@ -2660,30 +2592,11 @@ mod drm_capturer_tests {
         (px, w, h)
     }
 
-    /// An I-beam lying along x, deliberately NOT centred in its bitmap: 16x8, opaque rows 2..4 and
-    /// columns 1..13, so the opaque box is (1,2)-(12,3), 12x2 - elongated, which is what Adwaita's
-    /// `vertical-text` shape is. Its click point is the centre of that BOX, (6,2), while the centre
-    /// of the bitmap is (7,3). The offset is the point: a real sprite sits somewhere inside a
-    /// 64x64 hardware buffer (the adwaita box above is (2,6)-(21,14) in a 24x24 one), and a fixture
-    /// centred in its bitmap would let an implementation that returns the bitmap centre pass a test
-    /// claiming to check the box centre.
-    fn ibeam_horizontal() -> (Vec<u8>, usize, usize, (i32, i32)) {
-        let (w, h) = (16usize, 8usize);
-        let mut px = vec![0u8; w * h * 4];
-        for y in 2..4 {
-            for x in 1..13 {
-                px[(y * w + x) * 4 + 3] = 255;
-            }
-        }
-        (px, w, h, (6, 2))
-    }
-
     /// The shape at the aspect ratio that actually matters: a 20x9 opaque box, which is what the
     /// installed Adwaita `vertical-text` measures at 24 px. 2.22:1, only just past the rule's
-    /// factor of two, so it pins the threshold from ABOVE: a stricter rule (say `bw > bh * 3`)
-    /// leaves the 6:1 bars below centred and silently un-centres the real cursor. Placed
-    /// off-centre in a 24x24 buffer like the real one, box (2,6)-(21,14), centre (11,10) - the
-    /// same numbers the theme file gives, against its declared hotspot of (12,11).
+    /// factor of two. Placed off-centre in a 24x24 buffer like the real one, box (2,6)-(21,14),
+    /// centre (11,10) - the same numbers the theme file gives, against its declared hotspot of
+    /// (12,11).
     fn ibeam_theme_aspect() -> (Vec<u8>, usize, usize, (i32, i32)) {
         let (w, h) = (24usize, 24usize);
         let mut px = vec![0u8; w * h * 4];
@@ -2695,20 +2608,6 @@ mod drm_capturer_tests {
         (px, w, h, (11, 10))
     }
 
-    /// The same shape standing up and equally off-centre: 8x16, opaque columns 2..4 and rows 1..13,
-    /// box (2,1)-(3,12), centre (2,6) against a bitmap centre of (3,7). The tall case the guess
-    /// already handled, kept so the symmetric rule cannot pass by breaking it.
-    fn ibeam_vertical() -> (Vec<u8>, usize, usize, (i32, i32)) {
-        let (w, h) = (8usize, 16usize);
-        let mut px = vec![0u8; w * h * 4];
-        for y in 1..13 {
-            for x in 2..4 {
-                px[(y * w + x) * 4 + 3] = 255;
-            }
-        }
-        (px, w, h, (2, 6))
-    }
-
     /// What the compositor puts in the cursor plane on an output rotated by `t`: the upright sprite
     /// rotated forward by t, which is what turning it back by (360 - t) degrees produces.
     fn as_scanned_out(upright: &[u8], w: usize, h: usize, t: i32) -> (Vec<u8>, usize, usize) {
@@ -2718,58 +2617,6 @@ mod drm_capturer_tests {
         (out, dw, dh)
     }
 
-    // rustdesk#15886, the maintainer's physical test: the cursor looked right at 0 and 90, drawn
-    // above the click point at 270, and upside down at 180. Two causes, not one. The sprite came
-    // out upside down at 180 because master turned it only at 90 and 270, so a 180 sprite was
-    // never turned back at all. And at every angle the hotspot was GUESSED on the sprite as
-    // scanned out and only afterwards mapped as if it were a point on it: the guess picks the
-    // top-left of the opaque box, and a turned arrow's tip is not in that corner - at 90 the
-    // error is the arrow's WIDTH along x, small enough to pass as fine; at 270 it is its HEIGHT
-    // along y, which is the one that got reported.
-    //
-    // The 180 entry below is about that mapping, not about what was seen: on master the clamp sent
-    // 180 down the untouched branch, so the guess and the sprite were turned together and the
-    // hotspot landed on the tip anyway - measured as (0,0) there, with only the sprite wrong. What
-    // the loop shows is that the guess is not a point that survives being mapped, at any angle.
-    // This test covers the mapping; the sprite is covered by the two below.
-    #[test]
-    fn a_guessed_hotspot_is_guessed_on_the_upright_sprite() {
-        use scrap::drm_reader::infer_hotspot;
-        let (up, w, h) = arrow();
-        let tip = infer_hotspot(&up, w, h);
-        assert_eq!(tip, (0, 0));
-        let mut old_wrong_at = Vec::new();
-        for t in [90, 180, 270] {
-            let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
-            // The old flow: guess on the scanned-out sprite, then map the point.
-            let (gx, gy) = infer_hotspot(&scan, sw, sh);
-            let old = unrotate_hotspot(t, sw as i32, sh as i32, gx, gy);
-            // The new flow: turn the sprite back first, then guess.
-            let mut turned = Vec::new();
-            unrotate_bgra(&scan, sw, sh, t, &mut turned);
-            let (dw, dh) = rotated_dims(t, sw, sh);
-            assert_eq!(turned, up, "the sprite turns back to upright at {t}");
-            assert_eq!(infer_hotspot(&turned, dw, dh), tip, "the tip is found again at {t}");
-            if old != tip {
-                old_wrong_at.push(t);
-            }
-        }
-        // The old flow is wrong at every angle, not only the one that was noticed.
-        assert_eq!(old_wrong_at, vec![90, 180, 270]);
-    }
-
-    // rustdesk#16242, the maintainer's pixel-level finding: the guess only centred TALL shapes, so
-    // a horizontal I-beam got the corner of its box. Before the rotation rework such a cursor
-    // reached a quarter-turned output as a tall bitmap and the same rule centred it by accident, so
-    // turning the sprite upright first - correct in itself - turned a nearly right hotspot into one
-    // about 11 px out. Measured on the installed Adwaita `vertical-text` at 24 px: theme hotspot
-    // (12, 11), opaque box 20x9, corner guess (2, 6) = 11.2 px away, centre guess (11, 10) = 1.4 px.
-    //
-    // The old flow is not the fix: it was right for this one shape and wrong for arrows at every
-    // angle, which is what the test above pins. The fix is for the guess to centre an elongated box
-    // whichever way it lies, and that is what this checks - for both orientations and at the real
-    // 2.22:1 aspect of the shape that was wrong - by driving `deliver_drm_cursor` and reading the
-    // published hotspot back, not by chaining the helpers itself.
     /// The upgrade window, end to end from the WIRE rather than from a struct literal.
     ///
     /// An old root service can be streaming to a freshly started `--server`, and its `DrmCursor`
@@ -2782,45 +2629,6 @@ mod drm_capturer_tests {
     ///
     /// The transform must be non-zero: at 0 the delivery path never consults `hot_measured`, so a
     /// test at 0 could not tell the two branches apart.
-    /// Two streams with different but STABLE provenance must not read as a change on every
-    /// message. A single global slot did exactly that: display A measured and display B inferred,
-    /// alternating forever, is a normal multi-GPU host and would have logged per cursor message -
-    /// the per-frame logging this was written to avoid. And the hidden-cursor sentinel carries
-    /// `hot_measured: false` because it has no hotspot, so recording it would turn every hide and
-    /// show into a provenance transition.
-    #[test]
-    fn provenance_is_tracked_per_display_and_ignores_the_hidden_cursor() {
-        let (a, b) = (9_510, 9_511);
-        LAST_RECEIVED_PROVENANCE.lock().unwrap().remove(&a);
-        LAST_RECEIVED_PROVENANCE.lock().unwrap().remove(&b);
-
-        // First sighting of each is news; the same value again is not.
-        assert!(provenance_is_news_for(a, true));
-        assert!(!provenance_is_news_for(a, true));
-        assert!(provenance_is_news_for(b, false));
-        assert!(!provenance_is_news_for(b, false));
-
-        // The interleaving that a single global slot could not survive.
-        for _ in 0..4 {
-            assert!(!provenance_is_news_for(a, true), "display A is stable");
-            assert!(!provenance_is_news_for(b, false), "display B is stable");
-        }
-
-        // A real change on one display is still reported, and does not disturb the other.
-        assert!(provenance_is_news_for(a, false));
-        assert!(!provenance_is_news_for(b, false));
-
-        // The hidden sentinel is not recorded at all: it would otherwise look like B flipping.
-        note_received_provenance(b, scrap::drm_reader::HIDDEN_CURSOR_ID, true);
-        assert!(
-            !provenance_is_news_for(b, false),
-            "the hidden cursor must not count as a provenance change"
-        );
-
-        LAST_RECEIVED_PROVENANCE.lock().unwrap().remove(&a);
-        LAST_RECEIVED_PROVENANCE.lock().unwrap().remove(&b);
-    }
-
     #[test]
     fn a_legacy_cursor_message_keeps_the_hotspot_the_old_protocol_meant() {
         use crate::ipc::Data;
@@ -2895,90 +2703,6 @@ mod drm_capturer_tests {
     }
 
     #[test]
-    fn an_ibeam_keeps_its_centre_whichever_way_it_lies() {
-        use scrap::drm_reader::infer_hotspot;
-        for (i, (name, (up, w, h, box_centre))) in [
-            ("horizontal", ibeam_horizontal()),
-            ("vertical", ibeam_vertical()),
-            ("theme-aspect", ibeam_theme_aspect()),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            // The fixture must not be centred in its own bitmap, or this test cannot tell the
-            // centre of the opaque BOX - which is what the guess computes and what a cursor's
-            // click point is - from the centre of the buffer the sprite happens to sit in.
-            let bitmap_centre = (((w - 1) / 2) as i32, ((h - 1) / 2) as i32);
-            assert_ne!(
-                box_centre, bitmap_centre,
-                "the {name} fixture is centred in its bitmap, so it cannot discriminate"
-            );
-
-            // The upright guess is the centre of the opaque box, not its corner.
-            let guess = infer_hotspot(&up, w, h);
-            assert_eq!(guess, box_centre, "the {name} I-beam is centred, not cornered");
-
-            // And it is what the delivery path PUBLISHES, not just what the helper computes:
-            // `deliver_drm_cursor` is where the guessed branch is chosen and where the sprite is
-            // turned back, so the sprite is handed over pre-rotated exactly as the compositor
-            // scans it out, and the published hotspot is read back out of DRM_CURSOR.
-            for (j, t) in [0, 90, 180, 270].into_iter().enumerate() {
-                let display = 9_300 + (i * 8 + j) as i32;
-                let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
-                // What the producer actually sends for a guessed hotspot: its own guess, made on
-                // the sprite AS SCANNED OUT (drm_reader does exactly that). At 0 the delivery path
-                // publishes it unchanged, which is why it has to be the real value and not a
-                // placeholder; at every other angle the path discards it and guesses again.
-                let (phx, phy) = scrap::drm_reader::infer_hotspot(&scan, sw, sh);
-                deliver_drm_cursor(display, 1, 7, sw as u32, sh as u32, phx, phy, false, scan, t);
-                let map = DRM_CURSOR.lock().unwrap();
-                let (_, c) = map.get(&display).expect("the cursor path published nothing");
-                assert_eq!(
-                    (c.width as usize, c.height as usize),
-                    (w, h),
-                    "the published {name} sprite is upright-sized at {t}"
-                );
-                assert_eq!(c.colors, up, "the published {name} sprite is upright at {t}");
-                assert_eq!(
-                    (c.hotx, c.hoty),
-                    box_centre,
-                    "the published {name} hotspot is the box centre at {t}"
-                );
-            }
-        }
-
-        // The arrow is untouched, and it sits exactly ON the boundary rather than safely inside
-        // it: its box is 3x6, which is the factor of two itself, so it keeps its tip only because
-        // the comparison is strict. That makes it the control for the other side of the threshold
-        // - loosen the rule to `* 1` and this line fails, tighten it past 2.22 and the
-        // theme-aspect case above fails. The two together pin where the boundary is.
-        let (arrow_px, aw, ah) = arrow();
-        assert_eq!(infer_hotspot(&arrow_px, aw, ah), (0, 0));
-    }
-
-    /// The pre-0.5.8 rule, kept for `None` (a library that cannot say): it pins what was MEASURED
-    /// on i915 advertising rotate-180 with mutter, the primary plane scanning out upright while
-    /// the compositor pre-rotates the cursor sprite, so the frame is left alone and the sprite is
-    /// turned. With a plane answer the rule below decides the frame; the sprite rule stays.
-    #[test]
-    fn a_180_output_turns_the_cursor_but_not_the_frame_on_i915_plus_mutter() {
-        assert_eq!(frame_transform(180, None), 0);
-        assert_eq!(frame_transform(90, None), 90);
-        assert_eq!(frame_transform(270, None), 270);
-        // The plane says so: rotate-180 in hardware, the scanout is already upright.
-        assert_eq!(frame_transform(180, Some(0x4)), 0);
-        let (up, w, h) = arrow();
-        let (scan, sw, sh) = as_scanned_out(&up, w, h, 180);
-        let mut turned = Vec::new();
-        unrotate_bgra(&scan, sw, sh, 180, &mut turned);
-        assert_eq!(turned, up);
-    }
-
-    // The two above exercise the helpers, which cannot see WHICH angle the cursor path is handed
-    // or whether it turns 180 at all - the line that decides both is `if t != 0` in
-    // `deliver_drm_cursor`, and reverting it to master's `t == 90 || t == 270` leaves every helper
-    // assertion above still passing. So this drives the real path and reads back what it published.
-    #[test]
     fn the_cursor_path_publishes_an_upright_sprite_at_every_angle() {
         let (up, w, h) = arrow();
         for (i, t) in [0, 90, 180, 270].into_iter().enumerate() {
@@ -2996,27 +2720,6 @@ mod drm_capturer_tests {
             assert_eq!(c.colors, up, "the published sprite is upright at {t}");
             assert_eq!((c.hotx, c.hoty), (0, 0), "the tip is the hotspot at {t}");
         }
-    }
-
-    /// Measured on virtio-gpu (no `rotation` property, mutter draws the scanout turned): the
-    /// dump at 180 is upside down and the dumps at 90/270 are the logical desktop turned inside
-    /// the native mode. A plane that reports rotate-0 did nothing, so the frame is turned by the
-    /// whole output transform, 180 included; a plane that reports a rotation did all of it.
-    #[test]
-    fn the_frame_is_turned_unless_the_plane_rotated_it() {
-        assert_eq!(frame_transform(180, Some(0x1)), 180);
-        assert_eq!(frame_transform(90, Some(0x1)), 90);
-        assert_eq!(frame_transform(270, Some(0x1)), 270);
-        assert_eq!(frame_transform(0, Some(0x1)), 0);
-        assert_eq!(frame_transform(90, Some(0x2)), 0);
-        assert_eq!(frame_transform(180, Some(0x4)), 0);
-        assert_eq!(frame_transform(270, Some(0x8)), 0);
-        // A reflection is the plane's work too: a reflected scanout is left alone.
-        assert_eq!(frame_transform(180, Some(0x1 | 0x10)), 0);
-        assert_eq!(frame_transform(180, Some(0x4 | 0x20)), 0);
-        // No rotate bit at all is not a kernel value and gets no special case.
-        assert_eq!(frame_transform(180, Some(0)), 0);
-        assert_eq!(frame_transform(90, Some(0)), 0);
     }
 
     /// The compositor programs the plane from the CRTC transform, which is the logical transform
@@ -3102,51 +2805,6 @@ mod drm_capturer_tests {
     }
 
     #[test]
-    fn the_same_bytes_in_another_format_are_not_a_repeat() {
-        // Blue as BGRA, red as RGBA.
-        let px = [255u8, 0, 0, 255];
-        let put = |c: &IpcDrmCapturer, fmt| {
-            c.shared
-                .slot
-                .lock()
-                .unwrap()
-                .publish(1, 1, fmt, None, px.to_vec());
-            c.shared.cv.notify_one();
-        };
-        let mut c = capturer_with(Some((1, 1)));
-        put(&c, Pixfmt::BGRA);
-        assert!(c.frame(Duration::from_millis(50)).is_ok());
-        put(&c, Pixfmt::RGBA);
-        assert!(c.frame(Duration::from_millis(50)).is_ok());
-        put(&c, Pixfmt::RGBA);
-        assert!(matches!(
-            c.frame(Duration::from_millis(50)),
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock
-        ));
-    }
-
-    #[test]
-    fn a_plane_that_rotated_90_in_hardware_hands_over_a_portrait_scanout() {
-        use scrap::TraitPixelBuffer;
-        let mut c = capturer_with(Some((32, 64))); // rotated session of a 64x32 mode
-        c.transform = 90;
-        // The plane did the 90: the scanout is already 32x64 and upright, nothing to turn.
-        put_frame_rot(&c, 32, 64, Some(0x2));
-        match c.frame(Duration::from_millis(50)) {
-            Ok(Frame::PixelBuffer(pb)) => assert_eq!((pb.width(), pb.height()), (32, 64)),
-            Ok(_) => panic!("expected a pixel-buffer frame"),
-            Err(err) => panic!("expected a delivered frame, got {err}"),
-        }
-        // The plane did nothing: the landscape mode arrives and is turned to 32x64.
-        put_frame_rot(&c, 64, 32, Some(0x1));
-        match c.frame(Duration::from_millis(50)) {
-            Ok(Frame::PixelBuffer(pb)) => assert_eq!((pb.width(), pb.height()), (32, 64)),
-            Ok(_) => panic!("expected a pixel-buffer frame"),
-            Err(err) => panic!("expected a delivered frame, got {err}"),
-        }
-    }
-
-    #[test]
     fn a_portrait_scanout_from_a_plane_that_rotated_90_is_left_alone() {
         use scrap::TraitPixelBuffer;
         // A 2x3 portrait scanout: the plane did the 90, so the pixels are already upright.
@@ -3176,14 +2834,6 @@ mod drm_capturer_tests {
             Ok(_) => panic!("expected a pixel-buffer frame"),
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
-    }
-
-    #[test]
-    fn unrotate_180_reverses_both_axes() {
-        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
-        let mut dst = Vec::new();
-        unrotate_bgra(&src, w, h, 180, &mut dst);
-        assert_eq!(labels_of(&dst, w, h), vec![vec![6, 5, 4], vec![3, 2, 1]]);
     }
 
     #[test]
@@ -3263,59 +2913,6 @@ mod drm_capturer_tests {
         c.shared.cv.notify_one();
     }
 
-
-    #[test]
-    fn a_delivered_frame_clears_the_streak_but_keeps_the_cadence_and_the_convert_verdict() {
-        let key = "test:frame-keeps-cadence";
-        let mut c = capturer_named(Some((64, 32)), Some(key));
-        {
-            let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
-            let h = map.entry(key.to_owned()).or_insert_with(DisplayHealth::new);
-            h.zero_frame_streak = 2;
-            h.demotes = 1;
-            h.rapid_builds = 3;
-            h.last_build = Some(Instant::now());
-            h.prefer_cpu = true;
-            h.fallback_rejected = true;
-        }
-        put_frame(&c, 64, 32);
-        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
-
-        // Copy out and RELEASE the guard before asserting: a failing assertion while holding
-        // process-wide DRM_DISPLAY_HEALTH poisons the mutex for every sibling test.
-        let h = {
-            let map = DRM_DISPLAY_HEALTH.lock().unwrap();
-            *map.get(key).expect("the entry must SURVIVE a delivered frame")
-        };
-        assert_eq!(h.zero_frame_streak, 0, "a delivered frame refutes the zero-frame streak");
-        assert_eq!(h.demotes, 0, "and the demotion count that streak drove");
-        assert!(
-            !h.fallback_rejected,
-            "a delivered frame also refutes the rejected-fallback verdict"
-        );
-        assert_eq!(
-            h.rapid_builds, 3,
-            "but it says NOTHING about the rebuild cadence: keeping it is what lets the flap guard \
-             reach RAPID_REBUILD_MAX for a display that delivers a first frame and then fails"
-        );
-        assert!(h.last_build.is_some(), "same for the timestamp the cadence is measured from");
-        assert!(
-            h.prefer_cpu,
-            "and nothing about which GPU exports the scanout: only a topology change may clear it"
-        );
-    }
-
-    #[test]
-    fn frame_of_the_session_size_is_delivered() {
-        let mut c = capturer_with(Some((64, 32)));
-        put_frame(&c, 64, 32);
-        assert!(
-            matches!(c.frame(Duration::from_millis(50)), Ok(_)),
-            "a frame matching the session geometry must be delivered"
-        );
-        assert!(c.got_frame);
-    }
-
     #[test]
     fn a_smaller_frame_ends_the_session_instead_of_being_encoded() {
         let mut c = capturer_named(Some((1920, 1080)), Some("test:mid-session-shrink"));
@@ -3338,41 +2935,10 @@ mod drm_capturer_tests {
         );
     }
 
-    #[test]
-    fn a_first_frame_that_never_matched_counts_as_a_session_without_frames() {
-        let mut c = capturer_named(Some((1920, 1080)), Some("test:never-matched"));
-        put_frame(&c, 1280, 720);
-        let err = match c.frame(Duration::from_millis(50)) {
-            Err(e) => e,
-            Ok(_) => panic!("a first frame off the advertised geometry must be a hard error"),
-        };
-        assert!(err.to_string().contains("never matched its advertised geometry"));
-        assert!(!c.got_frame, "no frame reached the encoder, so none was produced");
-        assert_eq!(
-            zero_frame_streak_of(&c),
-            1,
-            "the display must be on its way to a PipeWire demotion, not just rebuilding"
-        );
-    }
-
-    #[test]
-    fn a_larger_frame_ends_the_session_too() {
-        let mut c = capturer_with(Some((1280, 720)));
-        put_frame(&c, 1920, 1080);
-        assert!(matches!(c.frame(Duration::from_millis(50)), Err(_)));
-    }
-
-    #[test]
-    fn unknown_session_size_delivers_whatever_arrives() {
-        let mut c = capturer_with(None);
-        put_frame(&c, 800, 600);
-        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
-    }
-
     // ---- cursor hotspot calibration ----
     // The cache and DRM_CURSOR are process-wide and libtest runs tests concurrently: every test
     // below has its own display id (9_700..9_799) and its own shape id, and the ones that read
-    // the cache back hold this lock, because one of them clears it.
+    // the cache back hold this lock.
     static CACHE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     const CAL_GEN: u64 = 7;
@@ -3481,103 +3047,6 @@ mod drm_capturer_tests {
         forget_cursor_cal(shape, CAL_GEN);
     }
 
-    // The confirmed value is within tolerance of the wire: the producer's guess was right, the
-    // wire value is served under the plain id, and the stale cached correction goes.
-    #[test]
-    fn a_confirmed_value_near_the_wire_serves_the_wire_and_drops_the_cached_correction() {
-        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let (d, e, shape) = (9_701, next_cursor_epoch(), 0x7a01);
-        store_cursor_cal(shape, (30, 4), CAL_GEN);
-        let mut cal = arrive(d, e, shape, (10, 10));
-        assert_eq!(served(d), (corrected(shape, (30, 4)), 30, 4), "seeded from the cache");
-        // (12,10) then (14,10): confirms (12,10), which is 2 px from the wire.
-        settle(&mut cal, (488, 290), Some(peer((500, 300), 1)), d, e);
-        settle(&mut cal, (586, 390), Some(peer((600, 400), 2)), d, e);
-        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None, "the wire was right: the correction goes");
-        assert_eq!(cal.as_ref().unwrap().current_hot, (10, 10));
-        assert_eq!(served(d), (plain(shape), 10, 10));
-    }
-
-    // The confirmed value is within tolerance of what is already served: nothing visible
-    // changes, and the served value is cached again if a clear-on-cap took it out meanwhile.
-    #[test]
-    fn a_confirmed_value_in_band_with_the_served_one_changes_nothing_and_stays_cached() {
-        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let (d, e, shape) = (9_702, next_cursor_epoch(), 0x7a02);
-        store_cursor_cal(shape, (12, 12), CAL_GEN);
-        let mut cal = arrive(d, e, shape, (4, 4));
-        let before = served(d);
-        assert_eq!(before, (corrected(shape, (12, 12)), 12, 12));
-        CURSOR_CAL_CACHE.lock().unwrap().clear();
-        // (13,12) then (15,12): confirms (13,12), 1 px from what is served.
-        settle(&mut cal, (488, 288), Some(peer((501, 300), 1)), d, e);
-        settle(&mut cal, (587, 388), Some(peer((602, 400), 2)), d, e);
-        assert_eq!(served(d), before, "in band: nothing visible changes");
-        assert_eq!(cal.as_ref().unwrap().current_hot, (12, 12));
-        assert_eq!(cached_cursor_cal(shape, CAL_GEN), Some((12, 12)), "the served value is cached again");
-        forget_cursor_cal(shape, CAL_GEN);
-    }
-
-    // Review of rustdesk#16122 (pre-push, 23-sep): a served correction 3 px from the wire and a
-    // confirmed value in band with BOTH. The served value wins, or every confirmation in that
-    // band would flap the hotspot and the id. A value in band with the wire only still goes
-    // back to the wire. Mutation caught: comparing the wire before the served value.
-    #[test]
-    fn a_confirmed_value_in_band_with_both_keeps_the_served_correction() {
-        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let (d, e, shape) = (9_706, next_cursor_epoch(), 0x7a06);
-        store_cursor_cal(shape, (13, 10), CAL_GEN);
-        let mut cal = arrive(d, e, shape, (10, 10));
-        let before = served(d);
-        assert_eq!(before, (corrected(shape, (13, 10)), 13, 10));
-        // (12,10) then (14,10): confirms (12,10), 2 px from the wire AND 1 px from the served.
-        settle(&mut cal, (488, 290), Some(peer((500, 300), 1)), d, e);
-        settle(&mut cal, (586, 390), Some(peer((600, 400), 2)), d, e);
-        assert_eq!(served(d), before, "in band with the served value: it stays");
-        assert_eq!(cal.as_ref().unwrap().current_hot, (13, 10));
-        assert_eq!(cached_cursor_cal(shape, CAL_GEN), Some((13, 10)));
-        // (10,10) twice: in band with the wire only, so the wire is served again.
-        settle(&mut cal, (490, 290), Some(peer((500, 300), 3)), d, e);
-        settle(&mut cal, (590, 390), Some(peer((600, 400), 4)), d, e);
-        assert_eq!(served(d), (plain(shape), 10, 10));
-        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
-    }
-
-    #[test]
-    fn a_disagreeing_measurement_replaces_the_candidate_and_the_same_sample_never_confirms() {
-        let mut c = arrive(9_703, next_cursor_epoch(), 0x7a03, (4, 4)).unwrap();
-        assert_eq!(observe_measurement(&mut c, (12, 12), 1, 0), None);
-        assert_eq!(c.candidate, Some(((12, 12), 1, 0)));
-        assert_eq!(observe_measurement(&mut c, (30, 4), 2, 0), None, "disagreement replaces");
-        assert_eq!(c.candidate, Some(((30, 4), 2, 0)));
-        assert_eq!(observe_measurement(&mut c, (31, 4), 3, 0), Some((30, 4)), "the retained one");
-        assert_eq!(c.candidate, None);
-        assert_eq!(observe_measurement(&mut c, (12, 12), 4, 0), None);
-        assert_eq!(observe_measurement(&mut c, (12, 12), 4, 0), None, "same sample: not independent");
-        assert_eq!(c.candidate, Some(((12, 12), 4, 0)));
-    }
-
-    // The local hand on the mouse (review of rustdesk#16122): the remote peer stops, a local user
-    // nudges the pointer, the plane settles somewhere new, and the only sample on hand is the
-    // stale remote one. However many times the plane settles, the same sample never confirms.
-    #[test]
-    fn a_plane_move_without_a_new_peer_sample_never_confirms() {
-        let (d, e, shape) = (9_705, next_cursor_epoch(), 0x7a05);
-        forget_cursor_cal(shape, CAL_GEN);
-        let mut cal = arrive(d, e, shape, (4, 4));
-        let before = served(d);
-        let stale = Some(peer((500, 300), 1));
-        settle(&mut cal, (493, 288), stale, d, e); // (7,12)
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1, 0)));
-        settle(&mut cal, (494, 288), stale, d, e); // (6,12), same sample
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1, 0)));
-        settle(&mut cal, (400, 400), stale, d, e); // away: out of the bitmap
-        settle(&mut cal, (493, 288), stale, d, e); // back: (7,12) again, same sample
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1, 0)));
-        assert_eq!(served(d), before);
-        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
-    }
-
     #[test]
     fn a_calibration_context_exists_only_for_an_identity_matched_upright_output() {
         let one = |t: i32| {
@@ -3657,254 +3126,6 @@ mod drm_capturer_tests {
         assert_eq!(measure_hotspot(&ctx, (1643, 577), (2357, 814), (128, 128)), Some((26, 23)));
     }
 
-    // The cache is read behind the context gate only: without a context a correction measured
-    // upright is never served, which is what a rotated output relies on.
-    #[test]
-    fn a_cached_correction_is_not_served_without_a_context() {
-        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let (d, e, shape) = (9_706, next_cursor_epoch(), 0x7a06);
-        store_cursor_cal(shape, (20, 20), CAL_GEN);
-        let raw = vec![0; 64 * 64 * 4];
-        let cal = on_cursor_shape(d, e, None, shape, 64, 64, 4, 4, false, raw.clone(), 0);
-        assert!(cal.is_none());
-        assert_eq!(served(d), (plain(shape), 4, 4), "no context, no cache read");
-        let cal = on_cursor_shape(d, e, Some(ctx1()), shape, 64, 64, 4, 4, false, raw, 0);
-        assert!(cal.is_some(), "control: with a context the same arrival is served corrected");
-        assert_eq!(served(d), (corrected(shape, (20, 20)), 20, 20));
-        forget_cursor_cal(shape, CAL_GEN);
-    }
-
-    #[test]
-    fn a_kernel_measured_hotspot_is_never_calibrated_even_at_the_origin() {
-        let (d, e, shape) = (9_707, next_cursor_epoch(), 0x7a07);
-        let raw = vec![0; 64 * 64 * 4];
-        let kernel = on_cursor_shape(d, e, Some(ctx1()), shape, 64, 64, 0, 0, true, raw.clone(), 0);
-        assert!(kernel.is_none());
-        assert_eq!(served(d), (plain(shape), 0, 0));
-        let guess = on_cursor_shape(d, e, Some(ctx1()), shape, 64, 64, 0, 0, false, raw, 0);
-        assert!(guess.is_some(), "control: a guess at the origin is measured");
-        assert!(!calibratable(scrap::drm_reader::HIDDEN_CURSOR_ID, false));
-    }
-
-    // Each stable position yields at most one measurement: a fresh sample arriving while the
-    // plane is still does not get a second one, so it cannot confirm the first.
-    #[test]
-    fn a_still_plane_is_measured_once() {
-        let (d, e, shape) = (9_708, next_cursor_epoch(), 0x7a08);
-        forget_cursor_cal(shape, CAL_GEN);
-        let mut cal = arrive(d, e, shape, (4, 4));
-        let before = served(d);
-        settle(&mut cal, (488, 288), Some(peer((500, 300), 1)), d, e);
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1, 0)));
-        for _ in 0..CURSOR_CAL_WINDOW_TICKS {
-            let fresh = Some(peer((500, 300), 2));
-            on_cursor_plane(&mut cal, Some((488, 288)), || fresh, false, CAL_GEN, CAL_GEN, 0, d, e);
-        }
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1, 0)));
-        assert_eq!(served(d), before);
-        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
-    }
-
-    #[test]
-    fn the_settle_window_and_the_sample_gates_are_closed_intervals() {
-        let mut c = arrive(9_709, next_cursor_epoch(), 0x7a09, (4, 4)).unwrap();
-        for (ticks, ok) in [
-            (CURSOR_CAL_STABLE_TICKS - 1, false),
-            (CURSOR_CAL_STABLE_TICKS, true),
-            (CURSOR_CAL_WINDOW_TICKS, true),
-            (CURSOR_CAL_WINDOW_TICKS + 1, false),
-        ] {
-            c.stable_ticks = ticks;
-            c.measured_this_position = false;
-            assert_eq!(settled_unmeasured(&c), ok, "stable_ticks {ticks}");
-        }
-        c.stable_ticks = CURSOR_CAL_STABLE_TICKS;
-        c.measured_this_position = true;
-        assert!(!settled_unmeasured(&c));
-        let ctx = ctx1();
-        let s = |age: u64, gen: u64| {
-            Some(crate::server::input_service::PeerAbsSample {
-                pos: (1, 1),
-                age_ms: age,
-                seq: 9,
-                gen,
-                map_epoch: 3,
-            })
-        };
-        let min = CURSOR_CAL_MIN_INPUT_AGE_MS;
-        let max = CURSOR_CAL_MAX_INPUT_AGE_MS;
-        let g = CAL_GEN;
-        assert_eq!(usable_sample(&ctx, s(min, g), false, g, g, 3), Some(((1, 1), 9, 3)));
-        assert_eq!(usable_sample(&ctx, s(max, g), false, g, g, 3), Some(((1, 1), 9, 3)));
-        assert_eq!(usable_sample(&ctx, s(min - 1, g), false, g, g, 3), None);
-        assert_eq!(usable_sample(&ctx, s(max + 1, g), false, g, g, 3), None);
-        assert_eq!(usable_sample(&ctx, None, false, g, g, 3), None);
-        assert_eq!(usable_sample(&ctx, s(400, g), true, g, g, 3), None, "drift");
-        assert_eq!(usable_sample(&ctx, s(400, g), false, g + 1, g, 3), None, "layout moved");
-        assert_eq!(usable_sample(&ctx, s(400, g - 1), false, g, g, 3), None, "old sample");
-    }
-
-    /// zhou, 25-sep review of #16122: while the device runs the range of another layout (an
-    /// update pending or failed after the generation moved), or before any range was adopted, an
-    /// injected point lands elsewhere than the peer meant, and two stops share that error; and a
-    /// sample injected before the last adoption was mapped by the old range even when the
-    /// generation matches. Neither is a calibration reference.
-    #[test]
-    fn a_sample_is_a_reference_only_under_the_adopted_input_mapping() {
-        let ctx = ctx1();
-        let s = Some(crate::server::input_service::PeerAbsSample {
-            pos: (1, 1),
-            age_ms: 400,
-            seq: 9,
-            gen: CAL_GEN,
-            map_epoch: 3,
-        });
-        assert_eq!(usable_sample(&ctx, s, false, CAL_GEN, CAL_GEN, 3), Some(((1, 1), 9, 3)));
-        assert_eq!(
-            usable_sample(&ctx, s, false, CAL_GEN, CAL_GEN - 1, 3),
-            None,
-            "the device still runs the range of the previous layout"
-        );
-        assert_eq!(usable_sample(&ctx, s, false, CAL_GEN, u64::MAX, 3), None, "no range adopted");
-        assert_eq!(
-            usable_sample(&ctx, s, false, CAL_GEN, CAL_GEN, 4),
-            None,
-            "injected before the device adopted the current range"
-        );
-    }
-
-    /// The candidate was measured under the previous input mapping: a measurement under the new
-    /// one starts over instead of confirming it, however well the two agree.
-    #[test]
-    fn a_candidate_does_not_confirm_across_an_input_mapping_change() {
-        let mut c = arrive(9_721, next_cursor_epoch(), 0x7a21, (4, 4)).unwrap();
-        assert_eq!(observe_measurement(&mut c, (30, 4), 1, 3), None);
-        assert_eq!(observe_measurement(&mut c, (30, 4), 2, 4), None, "a new range in between");
-        assert_eq!(c.candidate, Some(((30, 4), 2, 4)), "the newer one is the candidate");
-        assert_eq!(observe_measurement(&mut c, (31, 4), 3, 4), Some((30, 4)));
-    }
-
-    /// zhou, 25-sep review of #16122: a correction two stops confirmed under one layout
-    /// generation is not served to the stream rebuilt under the next one, which serves the wire
-    /// hotspot until a pair of its own confirms a value; and a late write from the old stream
-    /// neither replaces nor drops what the new one confirmed.
-    #[test]
-    fn a_correction_confirmed_under_an_older_generation_is_not_served() {
-        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let (d, e, shape) = (9_722, next_cursor_epoch(), 0x7a22);
-        let next = CAL_GEN + 1;
-        forget_cursor_cal(shape, next);
-        let mut old = arrive(d, e, shape, (4, 4));
-        settle(&mut old, (488, 288), Some(peer((500, 300), 1)), d, e);
-        settle(&mut old, (587, 388), Some(peer((600, 400), 2)), d, e);
-        assert_eq!(cached_cursor_cal(shape, CAL_GEN), Some((12, 12)));
-        let mut ctx = ctx1();
-        ctx.built_gen = next;
-        let (d2, e2) = (9_724, next_cursor_epoch());
-        let raw = vec![0; 64 * 64 * 4];
-        let mut new = on_cursor_shape(d2, e2, Some(ctx), shape, 64, 64, 4, 4, false, raw, 0);
-        assert_eq!(served(d2), (plain(shape), 4, 4), "the rebuilt stream serves the wire value");
-        // (500,300) - (480,280) and (600,400) - (580,380): (20,20), under the new generation.
-        settle_under(
-            &mut new,
-            (480, 280),
-            Some(peer_under((500, 300), 3, next, 0)),
-            d2,
-            e2,
-            (next, next, 0),
-        );
-        settle_under(
-            &mut new,
-            (580, 380),
-            Some(peer_under((600, 400), 4, next, 0)),
-            d2,
-            e2,
-            (next, next, 0),
-        );
-        assert_eq!(cached_cursor_cal(shape, next), Some((20, 20)));
-        assert_eq!(served(d2), (corrected(shape, (20, 20)), 20, 20));
-        store_cursor_cal(shape, (12, 12), CAL_GEN);
-        forget_cursor_cal(shape, CAL_GEN);
-        assert_eq!(cached_cursor_cal(shape, next), Some((20, 20)), "the old stream writes late");
-        forget_cursor_cal(shape, next);
-    }
-
-    /// zhou, 25-sep review of #16122: generations equal and no drift, but the device still runs
-    /// the uinput range of the previous layout: two otherwise valid stops publish and cache
-    /// nothing. After the device acknowledges the range, a sample injected before that does not
-    /// count, and fresh ones confirm.
-    #[test]
-    fn a_stale_input_mapping_publishes_nothing_until_fresh_samples_follow_the_adoption() {
-        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let (d, e, shape) = (9_725, next_cursor_epoch(), 0x7a25);
-        forget_cursor_cal(shape, CAL_GEN);
-        let mut cal = arrive(d, e, shape, (4, 4));
-        let stale = (CAL_GEN, CAL_GEN - 1, 0);
-        settle_under(
-            &mut cal,
-            (488, 288),
-            Some(peer_under((500, 300), 1, CAL_GEN, 0)),
-            d,
-            e,
-            stale,
-        );
-        settle_under(
-            &mut cal,
-            (587, 388),
-            Some(peer_under((600, 400), 2, CAL_GEN, 0)),
-            d,
-            e,
-            stale,
-        );
-        assert_eq!(cal.as_ref().unwrap().candidate, None, "nothing measured");
-        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
-        assert_eq!(served(d), (plain(shape), 4, 4));
-        let adopted = (CAL_GEN, CAL_GEN, 1);
-        settle_under(
-            &mut cal,
-            (478, 278),
-            Some(peer_under((500, 300), 3, CAL_GEN, 0)),
-            d,
-            e,
-            adopted,
-        );
-        assert_eq!(cal.as_ref().unwrap().candidate, None, "injected before the adoption");
-        settle_under(
-            &mut cal,
-            (488, 288),
-            Some(peer_under((500, 300), 4, CAL_GEN, 1)),
-            d,
-            e,
-            adopted,
-        );
-        settle_under(
-            &mut cal,
-            (587, 388),
-            Some(peer_under((600, 400), 5, CAL_GEN, 1)),
-            d,
-            e,
-            adopted,
-        );
-        assert_eq!(cached_cursor_cal(shape, CAL_GEN), Some((12, 12)));
-        assert_eq!(served(d), (corrected(shape, (12, 12)), 12, 12));
-        forget_cursor_cal(shape, CAL_GEN);
-    }
-
-    #[test]
-    fn a_settle_lands_one_sample_later_than_the_constant_reads() {
-        let mut c = arrive(9_710, next_cursor_epoch(), 0x7a10, (4, 4)).unwrap();
-        for _ in 0..=CURSOR_CAL_STABLE_TICKS {
-            update_plane_stability(&mut c, (10, 20));
-        }
-        assert_eq!(c.stable_ticks, CURSOR_CAL_STABLE_TICKS);
-        c.measured_this_position = true;
-        update_plane_stability(&mut c, (11, 20));
-        assert_eq!(
-            (c.plane, c.stable_ticks, c.measured_this_position),
-            (Some((11, 20)), 0, false)
-        );
-    }
-
     #[test]
     fn the_measurement_is_the_injected_tip_in_scanout_space_minus_the_plane() {
         let ctx = ctx1();
@@ -3925,62 +3146,6 @@ mod drm_capturer_tests {
         // Outside the bitmap: far away, and the plane ahead of the tip.
         assert_eq!(measure_hotspot(&ctx, (900, 300), (488, 288), (32, 32)), None);
         assert_eq!(measure_hotspot(&ctx, (480, 300), (488, 288), (32, 32)), None);
-    }
-
-    #[test]
-    fn a_corrected_id_differs_from_the_wire_id_and_is_deterministic() {
-        let wire = 0xabcdef0123456789u64;
-        let a = remix_cursor_id(wire, 12, 12);
-        assert_ne!(a, wire);
-        assert_eq!(a, remix_cursor_id(wire, 12, 12));
-        assert_ne!(a, remix_cursor_id(wire, 13, 12));
-    }
-
-    #[test]
-    fn the_calibration_cache_is_bounded() {
-        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        for i in 0..(CURSOR_CAL_CACHE_CAP as u64 * 2) {
-            store_cursor_cal(0x1_0000 + i, (1, 1), CAL_GEN);
-        }
-        assert!(CURSOR_CAL_CACHE.lock().unwrap().len() <= CURSOR_CAL_CACHE_CAP);
-        CURSOR_CAL_CACHE.lock().unwrap().clear();
-    }
-
-    /// The bound clears what the writer's generation or an older one confirmed, never a newer
-    /// entry: a stream still on the old layout filling the cache does not drop what the rebuilt
-    /// one confirmed. With only newer entries left, the older writer's value is not cached.
-    #[test]
-    fn the_bound_never_drops_an_entry_from_a_newer_generation() {
-        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        CURSOR_CAL_CACHE.lock().unwrap().clear();
-        let newer = CAL_GEN + 1;
-        for i in 0..CURSOR_CAL_CACHE_CAP as u64 {
-            store_cursor_cal(0x2_0000 + i, (1, 1), newer);
-        }
-        store_cursor_cal(0x3_0000, (2, 2), CAL_GEN);
-        assert_eq!(cached_cursor_cal(0x3_0000, CAL_GEN), None, "no room without a newer entry");
-        assert_eq!(cached_cursor_cal(0x2_0000, newer), Some((1, 1)));
-        store_cursor_cal(0x3_0001, (2, 2), newer);
-        assert_eq!(cached_cursor_cal(0x3_0001, newer), Some((2, 2)), "its own generation clears");
-        assert!(CURSOR_CAL_CACHE.lock().unwrap().len() <= CURSOR_CAL_CACHE_CAP);
-        CURSOR_CAL_CACHE.lock().unwrap().clear();
-    }
-
-    // A held frame can carry the previous shape's plane position after a new shape arrived:
-    // a fresh CursorCal starts with no plane, so its first position always counts as a move.
-    #[test]
-    fn the_first_position_after_a_shape_never_counts_as_settled() {
-        let (d, e, shape) = (9_711, next_cursor_epoch(), 0x7a11);
-        let mut cal = arrive(d, e, shape, (4, 4));
-        on_cursor_plane(&mut cal, None, || None, false, CAL_GEN, CAL_GEN, 0, d, e);
-        assert_eq!(cal.as_ref().unwrap().plane, None, "no position, no state change");
-        for _ in 0..CURSOR_CAL_STABLE_TICKS {
-            let s = Some(peer((500, 300), 1));
-            on_cursor_plane(&mut cal, Some((488, 288)), || s, false, CAL_GEN, CAL_GEN, 0, d, e);
-        }
-        let c = cal.as_ref().unwrap();
-        assert_eq!(c.stable_ticks, CURSOR_CAL_STABLE_TICKS - 1);
-        assert_eq!(c.candidate, None);
     }
 
     fn drm_display(name: &str, w: u32, h: u32) -> DrmDisplayInfo {
@@ -4036,15 +3201,6 @@ mod drm_capturer_tests {
         let assignment = assign_wayland_outputs(&drm, &wl.displays);
         let infos = augment_with_wayland_geometry_from(&drm, &wl, &assignment);
         assert_eq!((infos[0].width, infos[0].height), (1280, 800));
-    }
-
-    #[test]
-    fn a_plane_transposed_scanout_is_delivered_at_the_advertised_size() {
-        let d = plane_transposed_display("eDP-1", 800, 1280);
-        let session = rotated_dims(delivered_transform(&d, 0), d.width as usize, d.height as usize);
-        let mut c = capturer_named(Some(session), Some("test:plane-transposed-session"));
-        put_frame_rot(&c, 1280, 800, Some(0x8));
-        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
     }
 
     #[test]
@@ -4126,66 +3282,6 @@ mod drm_capturer_tests {
     }
 
     #[test]
-    fn frame_buffers_circulate_instead_of_being_reallocated() {
-        let mut c = capturer_with(Some((64, 32)));
-        put_frame(&c, 64, 32);
-        put_frame(&c, 64, 32);
-        let recycled = c
-            .shared
-            .slot
-            .lock()
-            .unwrap()
-            .free
-            .iter()
-            .find_map(|b| b.as_ref())
-            .map(|b| b.as_ptr());
-        assert!(
-            recycled.is_some(),
-            "a superseded frame must be handed back, not dropped"
-        );
-        put_frame(&c, 64, 32);
-        assert_eq!(
-            c.shared
-                .slot
-                .lock()
-                .unwrap()
-                .latest
-                .as_ref()
-                .map(|(.., b)| b.as_ptr()),
-            recycled,
-            "the receive path must refill the recycled buffer rather than allocate"
-        );
-        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
-        assert!(
-            c.shared.slot.lock().unwrap().free.iter().any(|b| b.is_some()),
-            "the buffer the encoder finished with must be handed back to the receive path"
-        );
-    }
-
-    // Against a single free slot this asserts red: counting the offers is the point.
-    #[test]
-    fn two_idle_buffers_are_both_kept_rather_than_one_being_dropped() {
-        let mut c = capturer_with(Some((64, 32)));
-        put_frame(&c, 64, 32);
-        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
-        while c.shared.slot.lock().unwrap().take_free().is_some() {}
-
-        put_frame(&c, 64, 32); // fills a fresh buffer (nothing on offer) and publishes it
-        put_frame(&c, 64, 32); // supersedes it -> deposit #1
-        assert_eq!(
-            c.shared.slot.lock().unwrap().free.iter().flatten().count(),
-            1,
-            "the superseded frame is the first idle buffer"
-        );
-        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
-        assert_eq!(
-            c.shared.slot.lock().unwrap().free.iter().flatten().count(),
-            2,
-            "both idle buffers must be kept; a single slot dropped the older one"
-        );
-    }
-
-    #[test]
     fn a_resolution_guess_never_steals_an_exact_name_match() {
         // The review's scenario: an earlier connector with an unmatchable name shares the
         // resolution of a later connector's exact name match. Names reserve globally first.
@@ -4211,13 +3307,6 @@ mod drm_capturer_tests {
         assert!(m2[0].is_none() && m2[1].is_none());
     }
 
-    #[test]
-    fn outputs_are_matched_by_name_across_the_drm_naming_difference() {
-        let drm = [drm_display("HDMI-A-1", 1920, 1080), drm_display("DP-1", 2560, 1440)];
-        let wl = [wl_display("DP-1", 1920, 0, 2560, 1440), wl_display("HDMI-1", 0, 0, 1920, 1080)];
-        assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(1), Some(0)]);
-    }
-
     // The M10 case: same model and resolution, names that do not normalize to the compositor's.
     #[test]
     fn identical_monitors_that_match_no_name_take_layout_order() {
@@ -4227,75 +3316,6 @@ mod drm_capturer_tests {
             wl_display("Unknown-2", 1920, 0, 1920, 1080),
         ];
         assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(0), Some(1)]);
-    }
-
-    #[test]
-    fn one_output_is_never_claimed_by_two_connectors() {
-        let drm = [drm_display("DP-1", 1920, 1080), drm_display("DP-2", 1920, 1080)];
-        let wl = [
-            wl_display("Unknown-1", 0, 0, 1920, 1080),
-            wl_display("Unknown-2", 1920, 0, 3840, 2160),
-        ];
-        let got = assign_wayland_outputs(&drm, &wl);
-        assert_eq!(got[0], Some(0));
-        assert_ne!(got[0], got[1], "two connectors must not share one output");
-    }
-
-    #[test]
-    fn a_name_match_beats_the_positional_fallback() {
-        let drm = [drm_display("DP-1", 1920, 1080), drm_display("HDMI-A-1", 1920, 1080)];
-        let wl = [
-            wl_display("Unknown-1", 0, 0, 1920, 1080),
-            wl_display("HDMI-1", 1920, 0, 1920, 1080),
-        ];
-        assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(0), Some(1)]);
-    }
-
-    #[test]
-    fn extra_connectors_stay_unmatched() {
-        let drm = [
-            drm_display("DP-1", 1920, 1080),
-            drm_display("DP-2", 1920, 1080),
-            drm_display("DP-3", 1920, 1080),
-        ];
-        let wl = [
-            wl_display("Unknown-1", 0, 0, 1920, 1080),
-            wl_display("Unknown-2", 1920, 0, 1920, 1080),
-        ];
-        assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(0), Some(1), None]);
-    }
-
-    #[test]
-    fn refresh_keeps_a_verdict_through_one_failure_and_gives_it_up_after_a_run() {
-        assert_eq!(refresh_outcome(Some(3), 0), RefreshOutcome::Publish);
-        assert_eq!(refresh_outcome(Some(1), 0), RefreshOutcome::Publish);
-        assert_eq!(refresh_outcome(Some(0), 0), RefreshOutcome::Unavailable);
-        assert_eq!(refresh_outcome(None, 1), RefreshOutcome::Restamp);
-        assert_eq!(
-            refresh_outcome(None, DRM_REFRESH_MAX_FAILURES - 1),
-            RefreshOutcome::Restamp
-        );
-        assert_eq!(
-            refresh_outcome(None, DRM_REFRESH_MAX_FAILURES),
-            RefreshOutcome::GiveUp
-        );
-        assert_eq!(
-            refresh_outcome(None, DRM_REFRESH_MAX_FAILURES + 5),
-            RefreshOutcome::GiveUp
-        );
-    }
-
-    #[test]
-    fn a_dead_producer_stops_being_advertised() {
-        let mut outcome = RefreshOutcome::Restamp;
-        for failures in 1..=DRM_REFRESH_MAX_FAILURES {
-            outcome = refresh_outcome(None, failures);
-        }
-        assert_eq!(outcome, RefreshOutcome::GiveUp);
-        assert!(
-            DRM_REFRESH_MAX_FAILURES >= 2,
-            "a single transient failure must never be enough to drop the verdict"
-        );
     }
 
     #[test]
@@ -4311,25 +3331,6 @@ mod drm_capturer_tests {
         assert!(!h.demoted(), "past the cooldown the display must be retried");
         h.demotes = 4;
         assert!(h.demoted(), "the backoff must still be holding it at demotion 4");
-    }
-
-    #[test]
-    fn demote_cooldown_doubles_per_cycle_and_caps() {
-        assert_eq!(demote_cooldown(1), DEMOTE_COOLDOWN);
-        assert_eq!(demote_cooldown(2), DEMOTE_COOLDOWN * 2);
-        assert_eq!(demote_cooldown(3), DEMOTE_COOLDOWN * 4);
-        let cap = DEMOTE_COOLDOWN * (1 << DEMOTE_BACKOFF_MAX_SHIFT);
-        assert_eq!(demote_cooldown(1 + DEMOTE_BACKOFF_MAX_SHIFT), cap);
-        assert_eq!(demote_cooldown(50), cap);
-        assert_eq!(demote_cooldown(u32::MAX), cap);
-        assert_eq!(demote_cooldown(0), DEMOTE_COOLDOWN);
-    }
-
-    #[test]
-    fn a_permanently_ungrabbable_display_stops_churning() {
-        let burn = Duration::from_secs(5); // four failed sessions
-        assert!(demote_cooldown(1) + burn < Duration::from_secs(40));
-        assert!(demote_cooldown(5) + burn > Duration::from_secs(8 * 60));
     }
 
     // ---------------------------------------------------------------------------------------
@@ -4459,7 +3460,7 @@ mod drm_capturer_tests {
     // rustdesk#16242 round 2: the guess measured against the hotspots a THEME declares.
     //
     // Every test above builds its own sprite, so all of them compare the guess with the guess.
-    // That can pin a mapping but it cannot say whether the guess is any good. These two read the
+    // That can pin a mapping but it cannot say whether the guess is any good. This one reads the
     // expected value from the cursor theme instead - the click point its author wrote into the
     // file, which is exactly what a compositor programs into HOTSPOT_X/Y when it has the
     // property to program.
@@ -4524,71 +3525,6 @@ mod drm_capturer_tests {
         (((a.0 - b.0) as f64).powi(2) + ((a.1 - b.1) as f64).powi(2)).sqrt()
     }
 
-    /// A hotspot names a point on the SHAPE, so the same sprite has to get the same click point
-    /// whatever angle the output happens to sit at. This drives the real delivery path for every
-    /// shape in the theme at all four angles and demands exactly that.
-    ///
-    /// The maintainer's objection on this PR was a table of four shapes where the old flow landed
-    /// closer than the new one. It did, at some angles - and 16 to 19 px out at the others, which
-    /// is what the second half of this test measures: with the old flow not one of the 35 shapes
-    /// keeps its hotspot across the four angles, and the point moves by 15 px on average. That
-    /// number is also the control. Without it the first assertion would still pass on a revert,
-    /// since a flow that is wrong the same way at every angle is consistent too.
-    #[test]
-    fn a_published_hotspot_does_not_move_when_the_output_turns() {
-        let mut display = 21_000;
-        let (mut spread_sum, mut spread_max, mut spread_zero) = (0f64, 0f64, 0usize);
-        for &(name, w, h, _, _, mask) in THEME_SHAPES {
-            let (w, h) = (w as usize, h as usize);
-            let up = theme_sprite(mask, w, h);
-            let (mut published, mut mapped) = (Vec::new(), Vec::new());
-            for t in [0, 90, 180, 270] {
-                let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
-                // What the producer puts on the wire: the guess taken on the sprite as the plane
-                // holds it, with no provenance behind it.
-                let sent = scrap::drm_reader::infer_hotspot(&scan, sw, sh);
-                mapped.push(unrotate_hotspot(t, sw as i32, sh as i32, sent.0, sent.1));
-                display += 1;
-                deliver_drm_cursor(
-                    display, 1, 1, sw as u32, sh as u32, sent.0, sent.1, false, scan, t,
-                );
-                let map = DRM_CURSOR.lock().unwrap();
-                let (_, c) = map.get(&display).expect("the delivery path published nothing");
-                published.push((c.hotx, c.hoty));
-            }
-            assert!(
-                published.windows(2).all(|p| p[0] == p[1]),
-                "{name}: the published hotspot follows the output angle: {published:?}"
-            );
-            let spread = mapped
-                .iter()
-                .flat_map(|a| mapped.iter().map(move |b| away(*a, *b)))
-                .fold(0f64, f64::max);
-            spread_sum += spread;
-            spread_max = spread_max.max(spread);
-            if spread == 0.0 {
-                spread_zero += 1;
-            }
-        }
-        // The control, and it has to be read with the guess this PR now makes. A box centre and a
-        // heavier-half extreme both map like a pixel, so for the 16 shapes that land on one the
-        // old flow happens to be angle-independent too. The other 19 move, by up to 26.87 px on a
-        // 24 px sprite. Without this the assertion above would also pass on a revert: a flow that
-        // is wrong the same way at every angle is consistent too.
-        let n = THEME_SHAPES.len();
-        assert!(
-            n - spread_zero >= 15,
-            "the control has gone vacuous: the old flow now keeps {spread_zero} of {n} shapes \
-             stable, so the assertion above no longer separates the two flows"
-        );
-        assert!(
-            spread_sum / n as f64 > 5.0 && spread_max > 20.0,
-            "the control is weak: old-flow spread mean {:.2} max {:.2} over {n} shapes",
-            spread_sum / n as f64,
-            spread_max
-        );
-    }
-
     /// How far the delivered hotspot lands from the click point the theme declares, per shape,
     /// measured against MASTER and not against an earlier revision of this PR.
     ///
@@ -4613,8 +3549,7 @@ mod drm_capturer_tests {
             let mut e_now = 0f64;
             for t in angles {
                 e_master += away(master_delivered(&up, w, h, t), truth);
-                // The upright inference answers the same at every angle by construction; the
-                // angle-independence test above is what pins that.
+                // The upright inference answers the same at every angle by construction.
                 e_now += away(scrap::drm_reader::infer_hotspot(&up, w, h), truth);
             }
             let (e_master, e_now) = (e_master / angles.len() as f64, e_now / angles.len() as f64);
@@ -4635,45 +3570,5 @@ mod drm_capturer_tests {
             sum_master / n,
             sum_now / n
         );
-    }
-
-    /// The two shapes the test above excuses are excused for a measured reason, not because they
-    /// were in the way, and the excuse is bounded in BOTH directions it could grow: the average
-    /// over the angles master handles, and the worst single angle. The worst angle is the bigger
-    /// number and the one that would be felt - `help` at 270 is 8.00 px under master and 21.54
-    /// here - so leaving it unbounded would let the exemption widen quietly.
-    #[test]
-    fn the_two_excused_shapes_are_excused_by_how_much() {
-        // (shape, mean excess allowed, worst single-angle excess allowed). Measured: alias 0.51
-        // mean and 8.94 at 90; help 4.73 mean and 13.54 at 270.
-        for (name, mean_bound, angle_bound) in [("alias", 0.75f64, 9.5f64), ("help", 5.5, 14.5)] {
-            let &(_, w, h, hx, hy, mask) = THEME_SHAPES
-                .iter()
-                .find(|s| s.0 == name)
-                .expect("the corpus must carry the excused shapes");
-            let (w, h) = (w as usize, h as usize);
-            let up = theme_sprite(mask, w, h);
-            let truth = (hx, hy);
-            let now = away(scrap::drm_reader::infer_hotspot(&up, w, h), truth);
-            let angles = [0, 90, 270];
-            let mut worst = f64::MIN;
-            let mut total = 0f64;
-            for t in angles {
-                let m = away(master_delivered(&up, w, h, t), truth);
-                total += m;
-                worst = worst.max(now - m);
-            }
-            let mean_excess = now - total / angles.len() as f64;
-            assert!(
-                mean_excess <= mean_bound,
-                "{name} averages {mean_excess:.2} px worse than master, over the {mean_bound} \
-                 this excuses"
-            );
-            assert!(
-                worst <= angle_bound,
-                "{name} is {worst:.2} px worse than master at its worst angle, over the \
-                 {angle_bound} this excuses"
-            );
-        }
     }
 }

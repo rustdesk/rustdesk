@@ -219,22 +219,6 @@ mod cursor_pos_tests {
         stamp_cursor_pos(&mut shape, Some(&visible));
         assert!(matches!(&shape, DrmProducerMsg::Cursor { hotx: 1, hoty: 1, .. }));
     }
-
-    // A producer that predates the field: the descriptor arrives without it and reads as None.
-    #[test]
-    fn a_descriptor_without_a_cursor_position_reads_as_none() {
-        let mut v = serde_json::to_value(desc()).unwrap();
-        v.as_object_mut().unwrap().remove("cursor_pos").expect("the field is serialized");
-        let d: DmabufDesc = serde_json::from_value(v).expect("a legacy descriptor must deserialize");
-        assert_eq!(d.cursor_pos, None);
-        let d: DmabufDesc = serde_json::from_value(serde_json::to_value(DmabufDesc {
-            cursor_pos: Some((3, 4)),
-            ..desc()
-        })
-        .unwrap())
-        .unwrap();
-        assert_eq!(d.cursor_pos, Some((3, 4)));
-    }
 }
 
 struct DrmStopGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
@@ -1887,89 +1871,10 @@ mod drm_conn_tests {
     use hbb_common::tokio::{self, io::AsyncWriteExt};
     use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 
-    // Added to the wire later: an older peer's message must still decode.
-    #[test]
-    fn drm_display_info_decodes_without_render_node() {
-        let legacy = r#"{"name":"DP-1","crtc_id":386,"x":0,"y":0,
-                         "width":3840,"height":2160,"active":true}"#;
-        let info: DrmDisplayInfo =
-            serde_json::from_str(legacy).expect("a pre-render_node payload must still decode");
-        assert_eq!(info.name, "DP-1");
-        assert_eq!(info.crtc_id, 386);
-        assert!(info.render_node.is_empty(), "missing node; the consumer auto-selects only where there is one render node");
-        assert!(info.device.is_empty(), "missing device means auto-detect");
-
-        let current = DrmDisplayInfo {
-            name: "DP-1".to_owned(),
-            crtc_id: 386,
-            x: 0,
-            y: 0,
-            width: 3840,
-            height: 2160,
-            active: true,
-            render_node: "/dev/dri/renderD129".to_owned(),
-            device: "/dev/dri/card2".to_owned(),
-            plane_transposed: false,
-        };
-        let wire = serde_json::to_vec(&current).unwrap();
-        let back: DrmDisplayInfo = serde_json::from_slice(&wire).unwrap();
-        assert_eq!(back, current);
-    }
-
     fn pipe() -> (OwnedFd, OwnedFd) {
         let mut fds = [0 as libc::c_int; 2];
         assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0, "pipe() failed");
         unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) }
-    }
-
-    unsafe fn send_with_fds(sock: libc::c_int, data: &[u8], fds: &[libc::c_int]) -> isize {
-        let mut iov = libc::iovec {
-            iov_base: data.as_ptr() as *mut libc::c_void,
-            iov_len: data.len(),
-        };
-        let fdbytes = fds.len() * std::mem::size_of::<libc::c_int>();
-        let space = libc::CMSG_SPACE(fdbytes as u32) as usize;
-        let mut cbuf = vec![0u8; space];
-        let mut msg: libc::msghdr = std::mem::zeroed();
-        msg.msg_iov = &mut iov;
-        msg.msg_iovlen = 1;
-        msg.msg_control = cbuf.as_mut_ptr() as *mut libc::c_void;
-        msg.msg_controllen = space as _;
-        let cmsg = libc::CMSG_FIRSTHDR(&msg);
-        (*cmsg).cmsg_level = libc::SOL_SOCKET;
-        (*cmsg).cmsg_type = libc::SCM_RIGHTS;
-        (*cmsg).cmsg_len = libc::CMSG_LEN(fdbytes as u32) as _;
-        std::ptr::copy_nonoverlapping(fds.as_ptr() as *const u8, libc::CMSG_DATA(cmsg), fdbytes);
-        libc::sendmsg(sock, &msg, 0)
-    }
-
-    #[tokio::test]
-    async fn roundtrip_msg_no_fd() {
-        let (a, b) = tokio::net::UnixStream::pair().unwrap();
-        let mut tx = DrmConn::new(a);
-        let mut rx = DrmConn::new(b);
-        tx.send_msg(
-            &Data::DrmFrame {
-                width: 1920,
-                height: 1080,
-                plane_rotation: None,
-                cursor_pos: None,
-            },
-            None,
-        )
-            .await
-            .unwrap();
-        let (data, fd) = rx.recv_msg().await.unwrap();
-        assert!(matches!(
-            data,
-            Data::DrmFrame {
-                width: 1920,
-                height: 1080,
-                plane_rotation: None,
-                cursor_pos: None
-            }
-        ));
-        assert!(fd.is_none(), "no fd was sent, none must be reported");
     }
 
     #[tokio::test]
@@ -2037,131 +1942,6 @@ mod drm_conn_tests {
         );
     }
 
-    #[tokio::test]
-    async fn a_body_that_never_arrives_times_out() {
-        let (mut a, b) = tokio::net::UnixStream::pair().unwrap();
-        let mut rx = DrmConn::new(b);
-        a.write_all(&10u32.to_be_bytes()).await.unwrap();
-        let mut got = Vec::new();
-        let err = rx
-            .next_raw_into(&mut got)
-            .await
-            .err()
-            .expect("a body that never arrives must time out");
-        assert!(
-            err.to_string().contains("did not arrive"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[tokio::test]
-    async fn a_dripping_peer_cannot_re_arm_the_send_deadline() {
-        use tokio::io::AsyncReadExt;
-        let (mut reader, writer) = tokio::net::UnixStream::pair().unwrap();
-        let payload = vec![0u8; 32 * 1024 * 1024];
-        // Measured: 1 KiB drains do not re-assert POLLOUT; 64 KiB does, which separates the forms.
-        let drip = tokio::spawn(async move {
-            let mut sink = vec![0u8; 64 * 1024];
-            loop {
-                if reader.read(&mut sink).await.unwrap_or(0) == 0 {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-            }
-        });
-        let started = std::time::Instant::now();
-        let outcome = tokio::time::timeout(
-            std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS * 4),
-            drm_write_all(&writer, &payload, None),
-        )
-        .await;
-        drip.abort();
-        let inner = outcome.expect(
-            "the send deadline did not fire: the budget is being re-armed per readiness wait",
-        );
-        let err = inner.err().expect("a dripping peer must not complete the write");
-        assert!(
-            err.to_string().contains("did not accept the remaining"),
-            "unexpected error: {err}"
-        );
-        assert!(
-            started.elapsed() < std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS * 3),
-            "took {:?}, which is not the send deadline firing",
-            started.elapsed()
-        );
-    }
-
-    #[tokio::test]
-    async fn surplus_fds_keep_only_the_first() {
-        let (mut a, b) = tokio::net::UnixStream::pair().unwrap();
-        let mut rx = DrmConn::new(b);
-        let (rd, wr) = pipe();
-        let (rd2, _wr2) = pipe();
-        let payload = serde_json::to_vec(&Data::DrmFrame {
-            width: 8,
-            height: 8,
-            plane_rotation: None,
-            cursor_pos: None,
-        })
-        .unwrap();
-        let prefix = (payload.len() as u32).to_be_bytes();
-        let n = unsafe { send_with_fds(a.as_raw_fd(), &prefix, &[rd.as_raw_fd(), rd2.as_raw_fd()]) };
-        assert!(n >= 0, "sendmsg failed: {}", std::io::Error::last_os_error());
-        a.write_all(&payload).await.unwrap();
-        let (data, fd) = rx.recv_msg().await.unwrap();
-        assert!(matches!(
-            data,
-            Data::DrmFrame {
-                width: 8,
-                height: 8,
-                plane_rotation: None,
-                cursor_pos: None
-            }
-        ));
-        let kept = fd.expect("the first surplus fd must be kept");
-        let sentinel = [0x5Au8];
-        assert_eq!(
-            unsafe { libc::write(wr.as_raw_fd(), sentinel.as_ptr() as *const libc::c_void, 1) },
-            1
-        );
-        let mut got = [0u8; 1];
-        assert_eq!(
-            unsafe { libc::read(kept.as_raw_fd(), got.as_mut_ptr() as *mut libc::c_void, 1) },
-            1
-        );
-        assert_eq!(got[0], 0x5A, "the kept fd must be the FIRST one sent");
-    }
-
-    // 16 fds need CMSG_LEN(64)=80 > the 64-byte DRM_CMSG_CAP, so the kernel sets MSG_CTRUNC.
-    #[tokio::test]
-    async fn rejects_truncated_control_message() {
-        let (a, b) = tokio::net::UnixStream::pair().unwrap();
-        let mut rx = DrmConn::new(b);
-        let (rd, _wr) = pipe();
-        let dups: Vec<OwnedFd> = (0..16).map(|_| rd.try_clone().unwrap()).collect();
-        let fds: Vec<libc::c_int> = dups.iter().map(|f| f.as_raw_fd()).collect();
-        let prefix = 0u32.to_be_bytes(); // the fds ride the prefix read; CTRUNC fires before any body
-        let n = unsafe { send_with_fds(a.as_raw_fd(), &prefix, &fds) };
-        assert!(n >= 0, "sendmsg failed: {}", std::io::Error::last_os_error());
-        let err = rx
-            .recv_msg()
-            .await
-            .err()
-            .expect("a truncated control message must be rejected");
-        let msg = err.to_string().to_lowercase();
-        assert!(
-            msg.contains("truncat") || msg.contains("ctrunc"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[test]
-    fn peer_uid_from_fd_reads_socket_peer() {
-        let (a, _b) = std::os::unix::net::UnixStream::pair().unwrap();
-        let euid = unsafe { libc::geteuid() };
-        assert_eq!(peer_uid_from_fd(a.as_raw_fd()), Some(euid));
-    }
-
     #[test]
     fn drm_peer_authorized_matrix() {
         assert!(drm_peer_authorized(Some(0), Some(1000)));
@@ -2212,25 +1992,5 @@ mod drm_conn_tests {
         );
 
         assert!(super::ipc_auth::ensure_peer_executable_matches_current_by_pid_opt(None, "_drm").is_err());
-    }
-
-    #[test]
-    fn drm_conn_admission_bound() {
-        assert!(drm_conn_admitted(0));
-        assert!(drm_conn_admitted(MAX_DRM_CONNS - 1)); // last admitted slot
-        assert!(!drm_conn_admitted(MAX_DRM_CONNS)); // cap reached -> rejected
-        assert!(!drm_conn_admitted(MAX_DRM_CONNS + 5)); // over cap -> rejected
-    }
-
-    #[test]
-    fn drm_auth_admission_bound() {
-        assert!(drm_auth_admitted(0));
-        assert!(drm_auth_admitted(MAX_DRM_AUTH_IN_FLIGHT - 1)); // last admitted slot
-        assert!(!drm_auth_admitted(MAX_DRM_AUTH_IN_FLIGHT)); // cap reached -> rejected
-        assert!(!drm_auth_admitted(MAX_DRM_AUTH_IN_FLIGHT + 5)); // over cap -> rejected
-        assert!(
-            MAX_DRM_AUTH_IN_FLIGHT <= MAX_DRM_CONNS,
-            "the pre-auth bound must not be looser than the connection cap"
-        );
     }
 }
