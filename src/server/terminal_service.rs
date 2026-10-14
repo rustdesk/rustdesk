@@ -459,14 +459,12 @@ impl OutputBuffer {
                     self.total_size += newline_pos + 1;
                     start = newline_pos + 1;
                     self.last_line_incomplete = false;
-                } else if last_line.len() < DEFAULT_RECONNECT_BUFFER_BYTES {
+                } else {
                     // Still no newline, append all
                     last_line.extend_from_slice(data);
                     self.total_size += data.len();
                     start = data.len();
                 }
-                // Otherwise the incomplete line continues in a new chunk below, so
-                // trimming drops its oldest chunks instead of the whole line.
             }
         }
 
@@ -496,6 +494,14 @@ impl OutputBuffer {
 
         // Trim old data if buffer is too large
         while self.total_size > MAX_OUTPUT_BUFFER_SIZE || self.lines.len() > MAX_BUFFER_LINES {
+            if self.lines.len() == 1 && self.last_line_incomplete {
+                // Only an oversized line without newline is left: keep its newest half
+                // instead of dropping it, so the copy happens once per half buffer.
+                let line = &mut self.lines[0];
+                line.drain(..line.len().saturating_sub(MAX_OUTPUT_BUFFER_SIZE / 2));
+                self.total_size = line.len();
+                break;
+            }
             if let Some(removed) = self.lines.pop_front() {
                 if removed.len() > self.total_size {
                     log::error!(
