@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # 1.1.9-1 works for android, but for ios it becomes 1.1.91, need to set it to 1.1.9-a.1 for iOS, will get 1.1.9.1, but iOS store not allow 4 numbers
-version: 1.5.0+68
+version: 1.5.1+68
 
 environment:
   sdk: '^3.1.0'
@@ -58,7 +58,7 @@ dependencies:
   desktop_multi_window:
     git:
       url: https://github.com/rustdesk-org/rustdesk_desktop_multi_window
-      ref: 8b774a66671cbb9bcb2631af6ac28f9bdd469ce3
+      ref: cddc2e64f8fefce4f80db87b20bcda2dd019bed6
   freezed_annotation: ^2.0.3
   flutter_custom_cursor:
     git:
