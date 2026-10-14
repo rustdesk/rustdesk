@@ -324,7 +324,11 @@ prebuild)
 
 	# Install Flutter bridge version
 
-	prepare_flutter "${FLUTTER_BRIDGE_VERSION}" "${HOME}/flutter"
+	# Unbraced on purpose: F-Droid recipes rewrite the braced form with sed to
+	# pin a version, but the bridge generator only works with the Flutter
+	# version bridge.yml uses
+
+	prepare_flutter "$FLUTTER_BRIDGE_VERSION" "${HOME}/flutter"
 
 	# Save changes
 
