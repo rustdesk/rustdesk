@@ -5832,7 +5832,7 @@ mod webrtc_race_tests {
 }
 
 #[cfg(test)]
-#[path = "client/trusted_devices_tests.rs"]
+#[path = "client/tests/trusted_devices_tests.rs"]
 mod trusted_devices_tests;
 
 #[cfg(test)]

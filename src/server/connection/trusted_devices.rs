@@ -6,7 +6,7 @@ use crate::trusted_devices::{
 };
 use base::message_proto::LoginResponse;
 
-const MIN_CONTROLLER_VERSION: &str = "1.5.0";
+const MIN_V2_VERSION: &str = "1.5.0";
 
 impl Connection {
     pub(super) async fn begin_trusted_device(&mut self) -> bool {
@@ -19,7 +19,7 @@ impl Connection {
                 base::config::keys::OPTION_ENABLE_TRUSTED_DEVICES,
             )
             || hbb_common::get_version_number(&self.lr.version)
-                < hbb_common::get_version_number(MIN_CONTROLLER_VERSION)
+                < hbb_common::get_version_number(MIN_V2_VERSION)
         {
             return true;
         }

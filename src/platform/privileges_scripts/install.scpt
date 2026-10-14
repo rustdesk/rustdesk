@@ -12,11 +12,9 @@ on run {daemon_file, agent_file, user}
 
   set sh4 to "cp -rf " & prefs2_toml & " /var/root/Library/Preferences/com.carriez.RustDesk/;"
 
-  set stop_service to "launchctl bootout system/com.carriez.RustDesk_service 2>/dev/null || launchctl unload -w /Library/LaunchDaemons/com.carriez.RustDesk_service.plist 2>/dev/null || true;"
+  set sh5 to "launchctl bootout system/com.carriez.RustDesk_service 2>/dev/null || launchctl unload -w /Library/LaunchDaemons/com.carriez.RustDesk_service.plist 2>/dev/null || true; launchctl bootstrap system /Library/LaunchDaemons/com.carriez.RustDesk_service.plist 2>/dev/null || launchctl load -w /Library/LaunchDaemons/com.carriez.RustDesk_service.plist;"
 
-  set sh5 to "launchctl bootstrap system /Library/LaunchDaemons/com.carriez.RustDesk_service.plist 2>/dev/null || launchctl load -w /Library/LaunchDaemons/com.carriez.RustDesk_service.plist;"
-
-  set sh to sh1 & sh2 & stop_service & sh3 & sh4 & sh5
+  set sh to sh1 & sh2 & sh3 & sh4 & sh5
 
   do shell script sh with prompt "RustDesk wants to install daemon and agent" with administrator privileges
 end run

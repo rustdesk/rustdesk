@@ -292,7 +292,9 @@ fn heartbeat_url() -> String {
     format!("{}/api/heartbeat", url)
 }
 
-async fn handle_config_options(config_options: HashMap<String, String>) -> hbb_common::ResultType<()> {
+async fn handle_config_options(
+    config_options: HashMap<String, String>,
+) -> hbb_common::ResultType<()> {
     let mut options = Config::get_options();
     let default_settings = config::DEFAULT_SETTINGS.read().unwrap().clone();
     config_options
@@ -308,8 +310,16 @@ async fn handle_config_options(config_options: HashMap<String, String>) -> hbb_c
             }
         })
         .count();
-    let affected = crate::trusted_devices::config::changes_authentication(&options);
-    crate::trusted_devices::config::update_auth(affected, move || crate::trusted_devices::config::set_options(options)).await
+    // Changing 2FA or the trusted-device setting must revoke existing grants
+    // and sync authentication settings to the system service when used.
+    if crate::trusted_devices::config::changes_authentication(&options) {
+        return crate::trusted_devices::config::update_auth(true, move || {
+            crate::trusted_devices::config::set_options(options)
+        })
+        .await;
+    }
+    Config::set_options(options);
+    Ok(())
 }
 
 #[allow(unused)]
