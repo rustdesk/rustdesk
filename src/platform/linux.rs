@@ -302,6 +302,35 @@ thread_local! {
     static DISPLAY: RefCell<*mut c_void> = RefCell::new(unsafe { XOpenDisplay(std::ptr::null())});
 }
 
+pub fn right_alt_is_level3_shift() -> ResultType<bool> {
+    use hbb_common::x11::{keysym, xlib};
+    const XKB_USE_CORE_KBD: c_uint = 0x0100;
+    // A fresh connection avoids Xlib's stale keymap cache after a layout switch.
+    // This query runs only for a matched chord with physical Right Alt held.
+    let display = unsafe { xlib::XOpenDisplay(std::ptr::null()) };
+    if display.is_null() {
+        bail!("X display unavailable");
+    }
+    let result = (|| {
+        let code = rdev::linux_keycode_from_key(rdev::Key::AltGr)
+            .ok_or_else(|| anyhow!("Right Alt has no X keycode"))?;
+        let mut state: xlib::XkbStateRec = unsafe { std::mem::zeroed() };
+        let status = unsafe { xlib::XkbGetState(display, XKB_USE_CORE_KBD, &mut state) };
+        if status != c_int::from(xlib::Success) {
+            bail!("XkbGetState failed: {}", status);
+        }
+        let symbol = unsafe {
+            xlib::XkbKeycodeToKeysym(display, code as _, state.group.into(), 0)
+        };
+        // Physical Right Alt is ordinary Alt on layouts such as US English.
+        Ok(matches!(symbol as u32, keysym::XK_ISO_Level3_Shift
+            | keysym::XK_ISO_Level3_Latch | keysym::XK_ISO_Level3_Lock
+            | keysym::XK_Mode_switch))
+    })();
+    unsafe { xlib::XCloseDisplay(display) };
+    result
+}
+
 // X11 error event structure for the custom error handler.
 // See: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Using-the-Default-Error-Handlers
 #[repr(C)]

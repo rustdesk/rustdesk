@@ -463,7 +463,7 @@ impl OutputBuffer {
                     // Still no newline, append all
                     last_line.extend_from_slice(data);
                     self.total_size += data.len();
-                    return;
+                    start = data.len();
                 }
             }
         }
@@ -494,6 +494,14 @@ impl OutputBuffer {
 
         // Trim old data if buffer is too large
         while self.total_size > MAX_OUTPUT_BUFFER_SIZE || self.lines.len() > MAX_BUFFER_LINES {
+            if self.lines.len() == 1 && self.last_line_incomplete {
+                // Only an oversized line without newline is left: keep its newest half
+                // instead of dropping it, so the copy happens once per half buffer.
+                let line = &mut self.lines[0];
+                line.drain(..line.len().saturating_sub(MAX_OUTPUT_BUFFER_SIZE / 2));
+                self.total_size = line.len();
+                break;
+            }
             if let Some(removed) = self.lines.pop_front() {
                 if removed.len() > self.total_size {
                     log::error!(
@@ -2187,5 +2195,19 @@ mod tests {
 
         let actual_size: usize = buffer.lines.iter().map(|line| line.len()).sum();
         assert_eq!(buffer.total_size, actual_size);
+    }
+
+    #[test]
+    fn output_buffer_trims_output_without_newlines() {
+        let mut buffer = OutputBuffer::new();
+
+        let chunk = vec![b'a'; 4096];
+        for _ in 0..(super::MAX_OUTPUT_BUFFER_SIZE / chunk.len()) {
+            buffer.append(&chunk);
+        }
+        buffer.append(b"TAIL");
+
+        assert!(buffer.get_recent(usize::MAX).len() <= super::MAX_OUTPUT_BUFFER_SIZE);
+        assert_eq!(buffer.get_recent(4), b"TAIL");
     }
 }
