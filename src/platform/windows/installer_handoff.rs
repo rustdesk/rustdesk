@@ -119,7 +119,7 @@ fn verified_install_bootstrap(
     Ok(format!(
         "setlocal DisableDelayedExpansion & set \"S={source}\" & set \"R={runner}\" & \
          set \"Q={cmd}\" & set \"H={certutil}\" & set \"F={findstr}\" & \
-         set \"D={directory}\" & set \"E=0\" & setlocal EnableDelayedExpansion & \
+         set \"ERRORLEVEL=\" & set \"D={directory}\" & set \"E=0\" & setlocal EnableDelayedExpansion & \
          if exist \"!R!\" (set \"E={INSTALL_HANDOFF_RUNNER_EXISTS_EXIT_CODE}\") else (\
          copy /Y \"!S!\" \"!R!\" > nul || \
          (set \"E={INSTALL_HANDOFF_COPY_FAILURE_EXIT_CODE}\") & \
