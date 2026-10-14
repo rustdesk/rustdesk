@@ -13,6 +13,7 @@
 #include <flutter/standard_method_codec.h>
 
 #include <windows.h>
+#include <shobjidl.h>
 
 #include <optional>
 #include <memory>
@@ -177,6 +178,21 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_SHOWWINDOW && GetPropW(hwnd, L"RustDeskClientWindow")) {
+    // Flutter's taskbar setting also adds hidden windows, so follow native visibility.
+    ITaskbarList* taskbar = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_TaskbarList, nullptr,
+                                  CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&taskbar)))) {
+      if (SUCCEEDED(taskbar->HrInit())) {
+        if (wparam) {
+          taskbar->AddTab(hwnd);
+        } else {
+          taskbar->DeleteTab(hwnd);
+        }
+      }
+      taskbar->Release();
+    }
+  }
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

@@ -392,8 +392,13 @@ class ChatModel with ChangeNotifier {
     if (!isDesktop && chatIconOverlayEntry == null) {
       showChatIconOverlay();
     }
-    // show chat page
-    await showChatPage(messagekey);
+    final hiddenIncomingChat = isDesktop &&
+        id != clientModeID &&
+        isConnManager &&
+        isWindows &&
+        kBootArgs.contains('--hidden-client-window-mode') &&
+        !await windowManager.isVisible();
+    if (!hiddenIncomingChat) await showChatPage(messagekey);
     late final ChatUser chatUser;
     if (id == clientModeID) {
       chatUser = ChatUser(
@@ -431,11 +436,12 @@ class ChatModel with ChangeNotifier {
         return;
       }
       if (isDesktop) {
-        windowOnTop(null);
+        if (!hiddenIncomingChat) windowOnTop(null);
         // disable auto jumpTo other tab when hasFocus, and mark unread message
         final currentSelectedTab =
             session.serverModel.tabController.state.value.selectedTabInfo;
-        if (currentSelectedTab.key != id.toString() && inputNode.hasFocus) {
+        if (hiddenIncomingChat ||
+            (currentSelectedTab.key != id.toString() && inputNode.hasFocus)) {
           client.unreadChatMessageCount.value += 1;
         } else {
           parent.target?.serverModel.jumpTo(id);
