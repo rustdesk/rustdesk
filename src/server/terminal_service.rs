@@ -463,7 +463,7 @@ impl OutputBuffer {
                     // Still no newline, append all
                     last_line.extend_from_slice(data);
                     self.total_size += data.len();
-                    return;
+                    start = data.len();
                 }
             }
         }
@@ -2187,5 +2187,19 @@ mod tests {
 
         let actual_size: usize = buffer.lines.iter().map(|line| line.len()).sum();
         assert_eq!(buffer.total_size, actual_size);
+    }
+
+    #[test]
+    fn output_buffer_trims_output_without_newlines() {
+        let mut buffer = OutputBuffer::new();
+
+        let chunk = vec![b'a'; 4096];
+        for _ in 0..(2 * super::MAX_OUTPUT_BUFFER_SIZE / chunk.len()) {
+            buffer.append(&chunk);
+        }
+
+        let actual_size: usize = buffer.lines.iter().map(|line| line.len()).sum();
+        assert_eq!(buffer.total_size, actual_size);
+        assert!(buffer.total_size <= super::MAX_OUTPUT_BUFFER_SIZE);
     }
 }
