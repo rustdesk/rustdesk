@@ -28,6 +28,7 @@ impl Session {
                 interface.get_lch().write().unwrap().enable_trusted_devices = supported
             }
             Err(error) => {
+                interface.get_lch().write().unwrap().enable_trusted_devices = false;
                 const ERROR_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
                 hbb_common::throttled_log!(
                     ERROR_LOG_INTERVAL,

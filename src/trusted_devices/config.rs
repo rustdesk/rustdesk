@@ -223,7 +223,26 @@ pub fn import(apply: impl FnOnce() -> ResultType<()>) -> ResultType<()> {
 }
 
 pub fn set_password(value: &str) -> ResultType<bool> {
-    change(true, || Ok(Config::set_permanent_password(value)))
+    change(changes_password(value), || {
+        Ok(Config::set_permanent_password(value))
+    })
+}
+
+pub fn changes_password(value: &str) -> bool {
+    if Config::is_disable_change_permanent_password() {
+        return false;
+    }
+    let (password, salt) = Config::get_local_permanent_password_storage_and_salt();
+    // Match the setter's no-op cases; existing local passwords are re-encrypted.
+    if !password.is_empty() {
+        return true;
+    }
+    if value.is_empty() {
+        return false;
+    }
+    let (h1, salt) = normalize(Password { password, salt }, false);
+    h1.map(|h1| !utils::memcmp(&h1, &config::compute_permanent_password_h1(value, &salt)))
+        .unwrap_or(true)
 }
 
 pub fn sync_password(storage: &str, salt: &str) -> ResultType<bool> {

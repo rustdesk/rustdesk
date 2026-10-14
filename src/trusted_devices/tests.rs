@@ -90,7 +90,7 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     service_operations_share_and_revoke_persisted_grants().await;
     unavailable_grants_keep_password_totp_available().await;
     #[cfg(unix)]
-    crate::ipc::test::unchanged_salt_preserves_trusted_devices().await;
+    crate::ipc::test::unchanged_authentication_preserves_trusted_devices(PASSWORD).await;
     password_write_failure_is_reported().await;
 }
 

@@ -48,15 +48,17 @@ impl Connection {
     }
 
     pub(super) async fn check_trusted_device(&mut self) -> bool {
-        if let Some(attempt) = self.trusted_device.as_ref() {
+        if let Some(attempt) = self.trusted_device.as_mut() {
             if let Err(error) = attempt.check().await {
-                self.trusted_device = None;
                 if self.conn_audit_two_factor == ConnAuditTwoFactor::Totp
                     && error.is::<Unavailable>()
                 {
+                    // Retain the ticket for the final authentication check.
+                    attempt.enroll = false;
                     host::log_unavailable(&error);
                     return true;
                 }
+                self.trusted_device = None;
                 self.send_login_error(error).await;
                 self.on_close("Trusted-device authentication failed", false)
                     .await;

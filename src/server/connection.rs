@@ -1892,6 +1892,10 @@ impl Connection {
             return true;
         }
         self.awaiting_2fa = false;
+        // The later check also covers revocation while connection setup awaits.
+        if !self.check_trusted_device().await {
+            return false;
+        }
         if let Some(keep_alive) = self.prepare_terminal_login_for_authorization().await {
             return keep_alive;
         }

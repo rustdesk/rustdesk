@@ -216,7 +216,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.trusted_device = trust;
                         self.handler.lc.write().unwrap().enable_trusted_devices = false;
                     }
-                    Err(error) => { self.handler.on_error(&error.to_string()); return; }
+                    Err(error) => {
+                        self.handler.on_error(&error.to_string());
+                        self.handle_disconnected(round);
+                        return;
+                    }
                 }
                 // Only WebRTC needs refining: its label names the transport that won the race,
                 // not the family ICE ended up nominating, and it is the one path where the two

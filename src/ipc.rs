@@ -1027,7 +1027,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                         log::warn!("Changing permanent password is disabled");
                         updated = false;
                     } else {
-                        updated = match crate::trusted_devices::config::update_auth(true, move || crate::trusted_devices::config::set_password(&value)).await {
+                        let affected = crate::trusted_devices::config::changes_password(&value);
+                        updated = match crate::trusted_devices::config::update_auth(affected, move || crate::trusted_devices::config::set_password(&value)).await {
                             Ok(updated) => updated,
                             Err(error) => { log::error!("Password change rejected: {error}"); false }
                         };
@@ -2339,7 +2340,7 @@ pub(crate) mod test {
     use super::*;
 
     #[cfg(unix)]
-    pub(crate) async fn unchanged_salt_preserves_trusted_devices() {
+    pub(crate) async fn unchanged_authentication_preserves_trusted_devices(password: &str) {
         let path = std::env::temp_dir().join(format!("v2-salt-{}", uuid::Uuid::new_v4()));
         let mut incoming = Endpoint::new(path.to_str().unwrap().to_owned())
             .incoming()
@@ -2348,14 +2349,26 @@ pub(crate) mod test {
         let mut stream = Connection::new(incoming.next().await.unwrap().unwrap());
         let devices = crate::trusted_devices::devices().unwrap();
         assert_ne!(devices, "[]");
-        handle(
-            Data::Config((
-                "salt".into(),
-                Some(Config::get_local_permanent_password_storage_and_salt().1),
-            )),
-            &mut stream,
-        )
-        .await;
+        let hard_settings = std::mem::take(&mut *hbb_common::config::HARD_SETTINGS.write().unwrap());
+        hbb_common::config::HARD_SETTINGS
+            .write()
+            .unwrap()
+            .insert("password".into(), password.into());
+        assert!(Config::set_permanent_password(""));
+        assert!(crate::trusted_devices::config::set_password(password).unwrap());
+        assert_eq!(crate::trusted_devices::devices().unwrap(), devices);
+        for (name, value) in [
+            (
+                "salt",
+                Config::get_local_permanent_password_storage_and_salt().1,
+            ),
+            ("permanent-password", password.to_owned()),
+        ] {
+            handle(Data::Config((name.into(), Some(value))), &mut stream).await;
+            assert_eq!(crate::trusted_devices::devices().unwrap(), devices);
+        }
+        *hbb_common::config::HARD_SETTINGS.write().unwrap() = hard_settings;
+        assert!(Config::set_permanent_password(password));
         std::fs::remove_file(path).unwrap();
         assert_eq!(crate::trusted_devices::devices().unwrap(), devices);
     }
