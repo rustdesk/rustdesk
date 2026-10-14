@@ -123,6 +123,23 @@ void main() {
       );
     });
 
+    test('keeps decomposed graphemes intact with locked keyboard modifiers',
+        () {
+      const decomposedEAcute = 'é';
+
+      expect(
+        prepareTerminalInputPayload(
+          decomposedEAcute,
+          source: TerminalInputSource.keyboard,
+          isMobileOrWebMobile: true,
+          bracketedPasteMode: false,
+          ctrlLocked: true,
+          altLocked: false,
+        ),
+        decomposedEAcute,
+      );
+    });
+
     test('wraps paste without applying locked modifiers', () {
       expect(
         prepareTerminalInputPayload(

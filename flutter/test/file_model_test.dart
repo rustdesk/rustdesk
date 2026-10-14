@@ -159,6 +159,34 @@ void main() {
     expect((await second).path, '/same');
   });
 
+  test('session invalidation cancels active and waiting reads', () async {
+    final sent = <_SentRead>[];
+    final fileFetcher = FileFetcher(
+      () => _sessionId,
+      readRemoteDirectory: (_, path, includeHidden) async {
+        sent.add(_SentRead(path, includeHidden));
+      },
+    );
+    final first = fileFetcher.fetchDirectory('/same', false, false);
+    final waiting = fileFetcher.fetchDirectory('/same', false, true);
+    await Future<void>.delayed(Duration.zero);
+    final firstError = expectLater(first, throwsA(isA<StateError>()));
+    final waitingError = expectLater(waiting, throwsA(isA<StateError>()));
+
+    fileFetcher.beginRemoteSession();
+
+    await firstError;
+    await Future<void>.delayed(Duration.zero);
+    expect(sent.map((request) => request.includeHidden), [false]);
+    await waitingError;
+    expect(fileFetcher.hasPendingRemoteRead('/same'), isFalse);
+    final replacement = fileFetcher.fetchDirectory('/same', false, true);
+    await Future<void>.delayed(Duration.zero);
+    expect(sent.map((request) => request.includeHidden), [false, true]);
+    fileFetcher.tryCompleteTask(_directoryJson('/same'), 'false');
+    expect((await replacement).path, '/same');
+  });
+
   test('navigation ignores stale directory responses', () async {
     final fileFetcher = FileFetcher(
       () => _sessionId,
