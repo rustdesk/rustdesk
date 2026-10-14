@@ -459,12 +459,14 @@ impl OutputBuffer {
                     self.total_size += newline_pos + 1;
                     start = newline_pos + 1;
                     self.last_line_incomplete = false;
-                } else {
+                } else if last_line.len() < DEFAULT_RECONNECT_BUFFER_BYTES {
                     // Still no newline, append all
                     last_line.extend_from_slice(data);
                     self.total_size += data.len();
                     start = data.len();
                 }
+                // Otherwise the incomplete line continues in a new chunk below, so
+                // trimming drops its oldest chunks instead of the whole line.
             }
         }
 
@@ -2194,12 +2196,12 @@ mod tests {
         let mut buffer = OutputBuffer::new();
 
         let chunk = vec![b'a'; 4096];
-        for _ in 0..(2 * super::MAX_OUTPUT_BUFFER_SIZE / chunk.len()) {
+        for _ in 0..(super::MAX_OUTPUT_BUFFER_SIZE / chunk.len()) {
             buffer.append(&chunk);
         }
+        buffer.append(b"TAIL");
 
-        let actual_size: usize = buffer.lines.iter().map(|line| line.len()).sum();
-        assert_eq!(buffer.total_size, actual_size);
-        assert!(buffer.total_size <= super::MAX_OUTPUT_BUFFER_SIZE);
+        assert!(buffer.get_recent(usize::MAX).len() <= super::MAX_OUTPUT_BUFFER_SIZE);
+        assert_eq!(buffer.get_recent(4), b"TAIL");
     }
 }
