@@ -781,7 +781,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay fallback delay in seconds", "Prodleva před přepnutím na přenos v sekundách"),
         ("relay-fallback-delay-tip", "Jak dlouho již navázané spojení přes přenos čeká na přímé spojení WebRTC, než bude použito místo něj. Zvyšte, aby pomalé přímé spojení mělo více času uspět; snižte, aby se v sítích, kde přímé spojení není možné, dříve přešlo na přenos. Ponechte prázdné pro výchozí hodnotu 2.5 sekundy."),
         ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", ""),
-        ("Keep client window hidden (restart required)", ""),
         ("Keyboard shortcuts", ""),
         ("Configure shortcuts...", ""),
         ("Enable keyboard shortcuts in remote session", ""),
@@ -814,5 +813,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Keep client window hidden (restart required)", ""),
     ].iter().cloned().collect();
 }
