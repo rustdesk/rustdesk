@@ -373,7 +373,7 @@ jobs:
         run: |
           # The build's own features, so the tests see the code that ships.
           FEATURES=$(python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }} --print-features)
-          cargo test --locked --release --lib --features "$FEATURES" -- --skip test_get_cursor_pos --skip test_get_key_state
+          cargo test --locked --release --lib --features "$FEATURES"
           # Its Windows tests run nowhere else.
           cargo test --locked --release -p clipboard
 
@@ -1039,7 +1039,7 @@ jobs:
           # The build's own features, so the tests see the code that ships. MACOSX_DEPLOYMENT_TARGET
           # comes from the build step's export.
           FEATURES=$(./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }} --print-features)
-          cargo test --locked --release --lib --features "$FEATURES" -- --skip test_get_cursor_pos --skip test_get_key_state
+          cargo test --locked --release --lib --features "$FEATURES"
           # Opt-in, and its macOS tests run nowhere else.
           cargo test --locked --release -p clipboard --features unix-file-copy-paste
 
