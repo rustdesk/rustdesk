@@ -29,7 +29,7 @@ pub(crate) fn rejects_new_connection_when_window_closed() -> bool {
 }
 
 pub(crate) fn add_startup_args(normal_launch: bool, flutter_args: &mut Vec<String>) {
-    if normal_launch && !crate::platform::is_self_service_running() {
+    if normal_launch {
         flutter_args.push("--show-ui".to_owned());
     }
     if enabled() {
