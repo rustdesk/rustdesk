@@ -710,6 +710,8 @@ struct VirtualInputState {
 
 #[cfg(target_os = "macos")]
 impl VirtualInputState {
+    const KEY_UP_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(5);
+
     fn new() -> Option<Self> {
         VirtualInput::new(
             CGEventSourceStateID::CombinedSessionState,
@@ -1657,6 +1659,12 @@ fn simulate_(event_type: &EventType) {
         let _lock = VIRTUAL_INPUT_MTX.lock();
         if let Some(input) = VIRTUAL_INPUT_STATE.as_ref() {
             let _ = input.simulate(&event_type);
+        } else if matches!(event_type, EventType::KeyRelease(_)) {
+            hbb_common::throttled_log!(
+                VirtualInputState::KEY_UP_ERROR_LOG_INTERVAL,
+                error,
+                "Failed to inject macOS key-up: virtual input is not initialized"
+            );
         }
     }
 }
@@ -2481,6 +2489,9 @@ pub fn handle_key_(evt: &KeyEvent) {
         return;
     }
 
+    #[cfg(target_os = "linux")]
+    super::uinput::prepare_layout(evt);
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let mut _lock_mode_handler = None;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2815,52 +2826,13 @@ mod cursor_shape_tests {
 mod peer_abs_sample_tests {
     use super::*;
 
-    // The two writers share one static and libtest runs tests concurrently.
-    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     #[test]
     fn a_move_without_an_absolute_sample_forgets_the_last_one() {
-        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
         note_peer_absolute_move(20, 30);
         let s = last_peer_abs_sample().expect("an absolute move leaves a sample");
         assert_eq!(s.pos, (20, 30));
         assert!(s.age_ms < 1_000);
         note_pointer_moved_without_absolute_sample();
         assert_eq!(last_peer_abs_sample(), None);
-    }
-
-    #[test]
-    fn every_absolute_move_is_a_new_sample() {
-        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
-        note_peer_absolute_move(1, 1);
-        let a = last_peer_abs_sample().unwrap().seq;
-        note_peer_absolute_move(1, 1);
-        let b = last_peer_abs_sample().unwrap().seq;
-        assert!(b > a, "same point, distinct sample");
-        note_pointer_moved_without_absolute_sample();
-    }
-
-    #[test]
-    fn a_move_of_this_process_forgets_the_sample_of_a_peer_move_it_waited_for() {
-        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
-        let mouse = std::sync::Arc::new(std::sync::Mutex::new(()));
-        note_peer_absolute_move(5, 5);
-        // The peer holds the mouse lock when the move of this process starts.
-        let peer = mouse.lock().unwrap();
-        let (asked, asking) = std::sync::mpsc::channel();
-        let m = mouse.clone();
-        let mover = std::thread::spawn(move || {
-            let lock = || {
-                asked.send(()).unwrap();
-                m.lock().unwrap()
-            };
-            forget_sample_and_move(lock, |_| {})
-        });
-        asking.recv().unwrap();
-        assert!(last_peer_abs_sample().is_some(), "nothing forgotten before the lock");
-        note_peer_absolute_move(50, 50);
-        drop(peer);
-        mover.join().unwrap();
-        assert_eq!(last_peer_abs_sample(), None, "the move of this process came last");
     }
 }

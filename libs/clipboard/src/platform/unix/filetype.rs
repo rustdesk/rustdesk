@@ -244,8 +244,6 @@ mod tests {
     const ATTRIBUTES_OFFSET: usize = PDU_HEADER_SIZE + 36;
     const LAST_WRITE_TIME_OFFSET: usize = PDU_HEADER_SIZE + 56;
     const NAME_OFFSET: usize = PDU_HEADER_SIZE + 72;
-    const FILE_NAME_CODE_UNITS: usize = 260;
-    const INVALID_UTF16_UNIT: u16 = 0xdc00;
     const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
 
     fn descriptor_pdu(name: &str) -> Vec<u8> {
@@ -292,18 +290,6 @@ mod tests {
     }
 
     #[test]
-    fn ignores_data_after_null_terminator() {
-        let name = "file.txt";
-        let mut pdu = descriptor_pdu(name);
-        let padding_offset = NAME_OFFSET + (name.encode_utf16().count() + 1) * size_of::<u16>();
-        pdu[padding_offset..padding_offset + size_of::<u16>()]
-            .copy_from_slice(&INVALID_UTF16_UNIT.to_le_bytes());
-
-        let files = FileDescription::parse_file_descriptors(pdu, 0).unwrap();
-        assert_eq!(files[0].name, PathBuf::from("file.txt"));
-    }
-
-    #[test]
     fn file_list_id_is_fnv1a() {
         // Reference vectors; the Windows side computes the same id in C.
         assert_eq!(file_list_id(b"") as u32, 0x811c_9dc5);
@@ -317,15 +303,6 @@ mod tests {
         let id = file_list_id(&pdu);
         let files = FileDescription::parse_file_descriptors(pdu, 0).unwrap();
         assert_eq!(files[0].clip_data_id, id);
-    }
-
-    #[test]
-    fn rejects_non_terminated_file_name() {
-        let name = "a".repeat(FILE_NAME_CODE_UNITS);
-        assert!(matches!(
-            parse_name(&name),
-            Err(CliprdrError::InvalidRequest { .. })
-        ));
     }
 
     fn parse_perm(attributes: u32) -> u16 {

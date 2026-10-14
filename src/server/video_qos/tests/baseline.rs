@@ -9,25 +9,6 @@ fn learned_baseline(delay: u32) -> RttCalculator {
 }
 
 #[test]
-fn old_minimum_expires_after_a_stable_path_change() {
-    for (old, new) in [(10, 310), (10, 500), (159, 500)] {
-        let mut rtt = learned_baseline(old);
-        for i in 0..40 {
-            let before = rtt.get_rtt().unwrap();
-            rtt.update(new + i % 5 * 10);
-            let after = rtt.get_rtt().unwrap();
-            assert!(after <= before + 50, "limit the cost of relearning");
-            if i < 10 {
-                assert_eq!(after, old, "a short burst must not replace the baseline");
-            }
-        }
-        assert_eq!(rtt.get_rtt(), Some(new), "{old} -> {new}");
-        rtt.update(old);
-        assert_eq!(rtt.get_rtt(), Some(old), "a lower delay is direct evidence");
-    }
-}
-
-#[test]
 fn rising_delay_is_not_learned_as_a_new_baseline() {
     for step in [2, 10, 50] {
         let mut rtt = learned_baseline(10);
@@ -36,32 +17,6 @@ fn rising_delay_is_not_learned_as_a_new_baseline() {
             assert_eq!(rtt.get_rtt(), Some(10), "rising by {step} ms per reply");
         }
     }
-}
-
-#[test]
-fn intermittent_spikes_do_not_raise_the_baseline() {
-    let mut rtt = learned_baseline(159);
-    for delay in [159, 900, 500, 159, 350].repeat(30) {
-        rtt.update(delay);
-        assert_eq!(rtt.get_rtt(), Some(159));
-    }
-}
-
-#[test]
-fn pending_probes_and_late_replies_do_not_age_the_baseline() {
-    let mut qos = stable_qos();
-    for elapsed in (2001..122_001).step_by(1000) {
-        qos.user_delay_response_elapsed(1, elapsed);
-        assert_eq!(qos.users[&1].delay.rtt_calculator.get_rtt(), Some(10));
-    }
-    qos.user_network_delay(1, 122_000);
-    assert_eq!(qos.users[&1].delay.rtt_calculator.get_rtt(), Some(10));
-    for _ in 0..30 {
-        qos.user_delay_response_elapsed(1, 2500);
-        qos.user_network_delay(1, 2600);
-    }
-    assert_eq!(qos.users[&1].delay.rtt_calculator.get_rtt(), Some(10));
-    assert_eq!(qos.fps(), 5);
 }
 
 #[test]

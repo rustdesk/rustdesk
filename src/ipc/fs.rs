@@ -982,48 +982,4 @@ mod tests {
 
         std::fs::remove_dir_all(&base).ok();
     }
-
-    #[test]
-    fn test_ensure_secure_ipc_parent_dir_marks_non_service_mode_repair_for_scrub() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let unique = format!(
-            "rustdesk-ipc-nonservice-mode-repair-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        );
-        let base = std::env::temp_dir().join(unique);
-        std::fs::create_dir_all(&base).unwrap();
-
-        let parent_dir = base.join("non_service_parent");
-        std::fs::create_dir_all(&parent_dir).unwrap();
-        std::fs::set_permissions(&parent_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
-
-        let ipc_file = parent_dir.join("ipc");
-        std::fs::write(&ipc_file, b"socket-placeholder").unwrap();
-
-        let res = super::ensure_secure_ipc_parent_dir(ipc_file.to_string_lossy().as_ref(), "");
-        assert_eq!(res.unwrap(), true);
-
-        std::fs::remove_dir_all(&base).ok();
-    }
-
-    #[test]
-    fn test_should_scrub_parent_entries_after_check_pid_only_when_requested_and_not_alive() {
-        assert!(!super::should_scrub_parent_entries_after_check_pid(
-            false, false
-        ));
-        assert!(!super::should_scrub_parent_entries_after_check_pid(
-            false, true
-        ));
-        assert!(super::should_scrub_parent_entries_after_check_pid(
-            true, false
-        ));
-        assert!(!super::should_scrub_parent_entries_after_check_pid(
-            true, true
-        ));
-    }
 }

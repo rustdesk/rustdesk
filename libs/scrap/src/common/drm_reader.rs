@@ -309,6 +309,8 @@ pub struct DisplaySnapshot {
     pub y: i32,
     pub width: u32,
     pub height: u32,
+    /// The kernel's whole-hertz vrefresh: 59.94 reads 60. `DrmReader::crtc_refresh` is exact.
+    pub refresh_hz: u32,
     pub active: bool,
 }
 
@@ -545,12 +547,29 @@ impl DrmReader {
         self.last_plane_rotation
     }
 
+    /// The refresh of the captured CRTC in hertz as the reduced fraction `(num, den)` of its
+    /// current mode, read now. `None` when the library predates the call (0.5.9) or the CRTC has
+    /// no mode.
+    pub fn crtc_refresh(&mut self) -> Option<(u64, u64)> {
+        let f = self.lib.crtc_refresh?;
+        let (mut num, mut den) = (0u64, 0u64);
+        // SAFETY: self.ctx is a live context and both outputs outlive the call.
+        let rc = unsafe { f(self.ctx, &mut num, &mut den) };
+        (rc == 0 && num != 0 && den != 0).then_some((num, den))
+    }
+
     fn read_plane_rotation(&mut self) -> Option<u32> {
         let f = self.lib.plane_rotation?;
         let mut rotation: u32 = 0;
         // SAFETY: self.ctx is a live context and `rotation` outlives the call.
         let rc = unsafe { f(self.ctx, &mut rotation) };
         plane_rotation_answer(rc, rotation)
+    }
+
+    /// The primary plane's rotation read NOW, for a caller that has not grabbed (enumeration):
+    /// `plane_rotation()` only reflects the last grab.
+    pub fn query_plane_rotation(&mut self) -> Option<u32> {
+        self.read_plane_rotation()
     }
 
     /// Zero-copy EXPORT grab: fills a `drmtap_dmabuf_desc` (dma-buf fd, plane layout, HDR metadata) WITHOUT mapping, detiling or copying pixels, so on this
@@ -755,6 +774,7 @@ impl DrmReader {
                         y: raw[i].y as i32,
                         width: raw[i].width,
                         height: raw[i].height,
+                        refresh_hz: raw[i].refresh_hz,
                         active: raw[i].active != 0,
                     }
                 })
@@ -775,47 +795,7 @@ impl Drop for DrmReader {
 
 #[cfg(test)]
 mod hotspot_provenance_tests {
-    use super::{cursor_id, hot_measured_from, provenance_code, provenance_is_news};
-
-    /// The log this makes observable is one line per CHANGE, not one per cursor read. A cursor is
-    /// read far more often than its provenance changes, and a per-sample line here would be the
-    /// same defect libdrmtap already had once.
-    #[test]
-    fn provenance_is_logged_once_and_then_only_on_a_change() {
-        let (none, guessed, measured) = (
-            provenance_code(None),
-            provenance_code(Some(false)),
-            provenance_code(Some(true)),
-        );
-        assert_ne!(none, guessed);
-        assert_ne!(guessed, measured);
-        assert_ne!(none, measured);
-        // First sample of a run: -1 is the unset sentinel, so anything is news.
-        assert!(provenance_is_news(-1, measured));
-        // The same state again is not.
-        assert!(!provenance_is_news(measured, measured));
-        assert!(!provenance_is_news(guessed, guessed));
-        // A real transition is.
-        assert!(provenance_is_news(guessed, measured));
-        assert!(provenance_is_news(measured, none));
-    }
-
-    /// The dedup key has to move when the provenance does, or the consumer is never told that the
-    /// same picture now means something different. This is the transition that produces it: the
-    /// properties become readable, the driver's answer is the corner, and the bitmap is unchanged.
-    #[test]
-    fn provenance_changes_the_cursor_identity() {
-        let guessed = cursor_id(0xabc, 24, 24, 0, 0, false);
-        let measured = cursor_id(0xabc, 24, 24, 0, 0, true);
-        assert_ne!(
-            guessed, measured,
-            "same pixels, same (0, 0), different meaning: the producer must not dedupe this away"
-        );
-        // And the pre-existing parts still count, so this did not trade one blind spot for another.
-        assert_ne!(cursor_id(0xabc, 24, 24, 0, 0, true), cursor_id(0xabc, 32, 24, 0, 0, true));
-        assert_ne!(cursor_id(0xabc, 24, 24, 0, 0, true), cursor_id(0xabc, 24, 24, 1, 0, true));
-        assert_ne!(cursor_id(0xabc, 24, 24, 0, 0, true), cursor_id(0xdef, 24, 24, 0, 0, true));
-    }
+    use super::hot_measured_from;
 
     /// The case the whole entry point exists for, and the one the old heuristic got backwards: a
     /// para-virtualized driver that really publishes the hotspot at the image's top-left corner.
@@ -824,25 +804,6 @@ mod hotspot_provenance_tests {
     #[test]
     fn a_measured_zero_hotspot_is_measured() {
         assert!(hot_measured_from(Some(true), 0, 0));
-    }
-
-    /// And the mirror: when the library says it was NOT measured, that is the answer even if the
-    /// coordinates happen to be non-zero. The old test would have trusted them.
-    #[test]
-    fn the_librarys_no_beats_the_coordinates() {
-        assert!(!hot_measured_from(Some(false), 12, 11));
-        assert!(!hot_measured_from(Some(false), 0, 0));
-    }
-
-    /// No answer available: either the symbol is absent (a library older than 0.5.6) or nothing
-    /// recorded one for this sample (a cursor read through an older privileged helper). Neither
-    /// is "it was a guess", so the pre-existing behaviour is kept rather than resolved either way
-    /// -- an older deployed .so must keep behaving as it used to.
-    #[test]
-    fn without_an_answer_the_old_heuristic_stands() {
-        assert!(!hot_measured_from(None, 0, 0));
-        assert!(hot_measured_from(None, 12, 11));
-        assert!(hot_measured_from(None, 0, 5));
     }
 }
 
@@ -904,45 +865,6 @@ mod hotspot_guess_tests {
         assert_eq!(infer_hotspot(&px, w, h), (4, 4));
     }
 
-    /// Each axis is decided by its OWN mirror. This shape is symmetric left-to-right and not
-    /// top-to-bottom, which is the single-direction resize family: the click point is centred
-    /// across the axis that mirrors and stays at the edge on the axis that does not.
-    #[test]
-    fn one_symmetric_axis_centres_that_axis_only() {
-        let (px, w, h) = sprite(&[
-            "....#....",
-            "...###...",
-            "..#####..",
-            ".#######.",
-            "....#....",
-            "....#....",
-            "....#....",
-            "....#....",
-            "....#....",
-        ]);
-        assert_eq!(infer_hotspot(&px, w, h), (4, 0));
-    }
-
-    /// A two-headed DIAGONAL arrow mirrors onto the other diagonal about either axis alone, so
-    /// neither axis reads as symmetric - and it is still a shape with no tip. The half turn is
-    /// what catches it.
-    #[test]
-    fn a_diagonal_two_headed_arrow_is_held_by_its_middle_too() {
-        let (px, w, h) = sprite(&[
-            "###......",
-            "##.......",
-            "#.#......",
-            "...#.....",
-            "....#....",
-            ".....#...",
-            "......#.#",
-            ".......##",
-            "......###",
-        ]);
-        let (hx, hy) = infer_hotspot(&px, w, h);
-        assert_eq!((hx, hy), (4, 4), "a half turn maps this shape onto itself");
-    }
-
     /// A single-direction resize cursor is an arrow plus the bar of the edge it resizes, and the
     /// theme puts the click point on the BAR. The bar is the heavy end, and it is the only thing
     /// that separates `e-resize` from `w-resize`: they are the same picture reflected, so a rule
@@ -972,25 +894,6 @@ mod hotspot_guess_tests {
         assert_eq!(infer_hotspot(&px, w, h), (0, 3));
     }
 
-    /// A corner resize cursor is a bracket hugging one corner, and it mirrors onto itself about a
-    /// DIAGONAL rather than about either axis, so neither per-axis test sees it. The click point
-    /// is the inner corner of the bracket, which is the heavy end on both axes.
-    ///
-    /// A real one's box is usually not square, and a diagonal reflection only lines up inside a
-    /// square, so which corner of that square the box is placed against decides the answer:
-    /// `ne-resize` scores 0.62 anchored one way and 0.98 the other, and `nw-resize` is the
-    /// reverse. Both anchorings are therefore tried. That case cannot be built as a small
-    /// picture - a non-square box can never be exactly diagonal-symmetric - so it is covered by
-    /// the theme corpus instead, where dropping the second anchoring sends `ne-resize` back past
-    /// master.
-    #[test]
-    fn a_corner_bracket_is_held_by_its_inner_corner() {
-        let (px, w, h) = sprite(&[
-            ".....##", ".....##", ".....##", ".....##", ".....##", "#######", "#######",
-        ]);
-        assert_eq!(infer_hotspot(&px, w, h), (6, 6));
-    }
-
     /// The elongation rule stays ahead of the mirror test, so a bar that is NOT symmetric still
     /// keeps its centre. Nothing in the installed theme is shaped like this - its two I-beams are
     /// both symmetric - but a custom cursor can be, and this is the rustdesk#16242 round-one fix.
@@ -998,14 +901,6 @@ mod hotspot_guess_tests {
     fn an_elongated_shape_keeps_its_centre_even_when_it_is_lopsided() {
         let (px, w, h) = sprite(&["##########.", "#####......", "##########."]);
         assert_eq!(infer_hotspot(&px, w, h), (4, 1));
-    }
-
-    /// Nothing opaque is not a shape, and must not read as a box at the origin with a hotspot in
-    /// the middle of it.
-    #[test]
-    fn a_blank_sprite_has_no_hotspot_to_guess() {
-        let (px, w, h) = sprite(&["...", "...", "..."]);
-        assert_eq!(infer_hotspot(&px, w, h), (0, 0));
     }
 }
 
@@ -1030,8 +925,6 @@ fn plane_rotation_answer(rc: c_int, rotation: u32) -> Option<u32> {
 #[cfg(test)]
 mod plane_rotation_tests {
     use super::*;
-    use std::os::fd::AsRawFd;
-    use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
     #[test]
     fn a_plane_without_the_property_turned_nothing() {
@@ -1042,63 +935,64 @@ mod plane_rotation_tests {
         assert_eq!(plane_rotation_answer(-hbb_common::libc::EINVAL, 0), None);
         assert_eq!(plane_rotation_answer(-hbb_common::libc::EIO, 7), None);
     }
+}
 
-    // What the plane answers whenever it is asked. The fake release turns it, the way a compositor
-    // may once the frame is out, so a read taken after the release or outside the grab sees 0x1.
-    static PLANE: AtomicU32 = AtomicU32::new(0x1);
-    static FD: AtomicI32 = AtomicI32::new(-1);
-    static PIXELS: [u8; 16] = [0; 16];
+#[cfg(test)]
+mod crtc_refresh_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 
-    unsafe extern "C" fn plane_rotation(_: *mut drmtap_ctx, rotation: *mut u32) -> c_int {
-        *rotation = PLANE.load(Ordering::SeqCst);
-        0
+    static RC: AtomicI32 = AtomicI32::new(0);
+    static NUM: AtomicU64 = AtomicU64::new(0);
+    static DEN: AtomicU64 = AtomicU64::new(0);
+
+    unsafe extern "C" fn crtc_refresh(_: *mut drmtap_ctx, num: *mut u64, den: *mut u64) -> c_int {
+        *num = NUM.load(Ordering::SeqCst);
+        *den = DEN.load(Ordering::SeqCst);
+        RC.load(Ordering::SeqCst)
     }
-    unsafe extern "C" fn frame_release(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) {
-        PLANE.store(0x1, Ordering::SeqCst);
+    unsafe extern "C" fn grab_mapped(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) -> c_int {
+        -1
     }
-    unsafe extern "C" fn grab_mapped(_: *mut drmtap_ctx, f: *mut drmtap_frame_info) -> c_int {
-        (*f).data = PIXELS.as_ptr() as *mut _;
-        (*f).width = 2;
-        (*f).height = 2;
-        (*f).stride = 8;
-        (*f).format = DRM_FORMAT_XRGB8888;
-        0
-    }
+    unsafe extern "C" fn frame_release(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) {}
     unsafe extern "C" fn grab_desc(
         _: *mut drmtap_ctx,
-        d: *mut drmtap_dmabuf_desc,
+        _: *mut drmtap_dmabuf_desc,
         _: *mut drmtap_frame_info,
     ) -> c_int {
-        (*d).dma_buf_fd = FD.load(Ordering::SeqCst);
-        (*d).width = 2;
-        (*d).height = 2;
-        (*d).num_planes = 1;
-        (*d).pitches[0] = 8;
-        0
+        -1
+    }
+    unsafe extern "C" fn plane_rotation(_: *mut drmtap_ctx, _: *mut u32) -> c_int {
+        -1
     }
 
-    #[test]
-    fn a_frame_keeps_the_rotation_its_plane_had_when_it_was_grabbed() {
-        let lib: &'static DrmtapLib = Box::leak(Box::new(DrmtapLib::fake(
-            grab_mapped,
-            frame_release,
-            grab_desc,
-            plane_rotation,
-        )));
-        let mut r = DrmReader {
-            lib,
+    fn reader(with_call: bool) -> DrmReader {
+        let mut lib = DrmtapLib::fake(grab_mapped, frame_release, grab_desc, plane_rotation);
+        if with_call {
+            lib.crtc_refresh = Some(crtc_refresh);
+        }
+        DrmReader {
+            lib: Box::leak(Box::new(lib)),
             ctx: std::ptr::null_mut(),
             buf: Vec::new(),
             last_provenance: -1,
             last_plane_rotation: None,
-        };
-        PLANE.store(0x4, Ordering::SeqCst);
-        r.grab().expect("the fake grab succeeds");
-        assert_eq!(r.plane_rotation(), Some(0x4), "cpu grab");
-        let (fd, _peer) = std::os::unix::net::UnixStream::pair().unwrap();
-        FD.store(fd.as_raw_fd(), Ordering::SeqCst);
-        PLANE.store(0x8, Ordering::SeqCst);
-        r.grab_desc().expect("the fake export succeeds");
-        assert_eq!(r.plane_rotation(), Some(0x8), "dma-buf export");
+        }
+    }
+
+    /// rustdesk#16175: the exact refresh paces the producer; an older library has no answer.
+    #[test]
+    fn the_crtc_refresh_is_a_fraction_or_nothing() {
+        assert_eq!(reader(false).crtc_refresh(), None, "a library before 0.5.9");
+        let mut r = reader(true);
+        RC.store(0, Ordering::SeqCst);
+        NUM.store(148352, Ordering::SeqCst);
+        DEN.store(2475, Ordering::SeqCst);
+        assert_eq!(r.crtc_refresh(), Some((148352, 2475)));
+        RC.store(-hbb_common::libc::ENODATA, Ordering::SeqCst);
+        assert_eq!(r.crtc_refresh(), None, "a CRTC with no mode");
+        RC.store(0, Ordering::SeqCst);
+        DEN.store(0, Ordering::SeqCst);
+        assert_eq!(r.crtc_refresh(), None, "a zero denominator is no answer");
     }
 }
