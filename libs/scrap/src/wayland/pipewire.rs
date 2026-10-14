@@ -77,7 +77,9 @@ pub fn close_session() {
 
 #[inline]
 pub fn is_rdp_session_hold() -> bool {
-    RDP_SESSION_INFO.lock().unwrap().is_some()
+    // try_lock: a request waiting for the user holds the slot (no session yet), and so do the short
+    // looks while a session is set up. Busy answers no session rather than wait.
+    matches!(RDP_SESSION_INFO.try_lock(), Ok(info) if info.is_some())
 }
 
 pub fn try_close_session() {

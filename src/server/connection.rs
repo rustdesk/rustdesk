@@ -7058,7 +7058,9 @@ mod raii {
                 #[cfg(windows)]
                 let _ = virtual_display_manager::reset_all();
                 #[cfg(target_os = "linux")]
-                scrap::wayland::pipewire::try_close_session();
+                if self.1 == AuthConnType::Remote || self.1 == AuthConnType::ViewCamera {
+                    wayland::try_close_portal_session();
+                }
             }
             Self::check_wake_lock();
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
