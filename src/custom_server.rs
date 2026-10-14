@@ -62,7 +62,7 @@ pub fn get_custom_server_from_string(s: &str) -> ResultType<CustomServer> {
      * This allows using a ',' (comma) symbol as a final delimiter.
      */
     if s.to_lowercase().contains("host=") {
-        let stripped = &s[s.to_lowercase().find("host=").unwrap_or(0)..s.len()];
+        let stripped = &s[s.to_ascii_lowercase().find("host=").unwrap_or(0)..s.len()];
         let strs: Vec<&str> = stripped.split(",").collect();
         let mut host = String::default();
         let mut key = String::default();
@@ -231,5 +231,22 @@ mod test {
         assert_eq!(
             get_custom_server_from_string("=0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye.exe")
                 .unwrap(), lic);
+    }
+
+    #[test]
+    fn test_filename_license_string_in_non_ascii_path() {
+        // Windows passes the full exe path, and `İ` grows from 2 to 3 bytes when lowercased.
+        assert_eq!(
+            get_custom_server_from_string(
+                r"C:\Users\İsmail\Downloads\rustdesk-host=server.example.net,key=Zm9vYmFyLiwyCg==.exe"
+            )
+            .unwrap(),
+            CustomServer {
+                host: "server.example.net".to_owned(),
+                key: "Zm9vYmFyLiwyCg==".to_owned(),
+                api: "".to_owned(),
+                relay: "".to_owned(),
+            }
+        );
     }
 }
