@@ -65,8 +65,7 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void onWindowClose() {
-    if (isWindows && kBootArgs.contains('--hidden-client-window-mode') &&
-        gFFI.serverModel.clients.isNotEmpty) {
+    if (isWindows && kBootArgs.contains('--hidden-client-window-mode')) {
       hideWindowsClientWindow();
       return;
     }
