@@ -70,7 +70,7 @@ pub(crate) use ipc_auth::{
 use ipc_fs::terminal_count_candidate_uids;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use ipc_fs::{
-    check_pid, ensure_secure_ipc_parent_dir, scrub_secure_ipc_parent_dir,
+    check_pid, ensure_secure_ipc_parent_dir, lock_ipc_listener, scrub_secure_ipc_parent_dir,
     should_scrub_parent_entries_after_check_pid, write_pid,
 };
 // Gated with the module that uses it, so a `drm`-less build does not carry an unused import.
@@ -685,6 +685,8 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
     let path = Config::ipc_path(postfix);
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     let should_scrub_parent_entries = ensure_secure_ipc_parent_dir(&path, postfix)?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let _listener_lock = lock_ipc_listener(postfix).await?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     let existing_listener_alive = check_pid(postfix).await;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2328,7 +2330,19 @@ mod test {
         );
         // That failed start probed the old socket; take the probe off its queue.
         let _ = tokio::time::timeout(Duration::from_millis(300), old.next()).await;
-        ipc_fs::release_own_ipc_socket(&postfix);
+        // A copy that is starting holds the listener lock; the release has to wait for it.
+        let starting = lock_ipc_listener(&postfix).await.unwrap();
+        let release = {
+            let postfix = postfix.clone();
+            tokio::task::spawn_blocking(move || ipc_fs::release_own_ipc_socket(&postfix))
+        };
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(
+            std::path::Path::new(&path).exists(),
+            "the socket was released while a start held the listener lock"
+        );
+        drop(starting);
+        release.await.unwrap();
         let mut new = new_listener(&postfix)
             .await
             .expect("the released socket stayed taken");
@@ -2348,6 +2362,80 @@ mod test {
         );
         drop((old, new));
         cleanup();
+    }
+
+    // With a lock file that cannot be used, listeners start without the lock. The release has to
+    // go on without it as well, or a restart in that state leaves no window.
+    #[cfg(target_os = "macos")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_release_goes_on_when_the_lock_file_is_unusable() {
+        use std::time::Duration;
+        let postfix = format!("_test_release_unlocked_{}", std::process::id());
+        let path = Config::ipc_path(&postfix);
+        let lock = format!("{}.lock", path);
+        let cleanup = || {
+            for file in [path.clone(), format!("{}.pid", path), lock.clone()] {
+                let _ = std::fs::remove_file(file);
+            }
+        };
+        cleanup();
+        // The lock file is opened with O_NOFOLLOW, so a symlink in its place cannot be used.
+        std::os::unix::fs::symlink(format!("{}.target", path), &lock).unwrap();
+
+        let old = new_listener(&postfix)
+            .await
+            .expect("a listener starts without the lock");
+        assert!(
+            lock_ipc_listener(&postfix).await.unwrap().is_none(),
+            "the lock file was usable"
+        );
+        let release = {
+            let postfix = postfix.clone();
+            tokio::task::spawn_blocking(move || ipc_fs::release_own_ipc_socket(&postfix))
+        };
+        release.await.unwrap();
+        let mut new = new_listener(&postfix)
+            .await
+            .expect("the released socket stayed taken");
+        let _client = connect(1000, &postfix).await.unwrap();
+        assert!(
+            matches!(
+                tokio::time::timeout(Duration::from_secs(2), new.next()).await,
+                Ok(Some(Ok(_)))
+            ),
+            "the new listener got no connection"
+        );
+        drop((old, new));
+        cleanup();
+    }
+
+    // Both starts used to get a listener: the later check_pid unlinked the earlier socket and
+    // left that listener unreachable. The window is narrow (about one round in ten on master),
+    // hence the rounds.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_concurrent_new_listener_starts_one_listener() {
+        let postfix = format!("_test_concurrent_{}", std::process::id());
+        let path = Config::ipc_path(&postfix);
+        let start = || {
+            let postfix = postfix.clone();
+            tokio::spawn(async move { new_listener(&postfix).await })
+        };
+        let mut both_started = 0;
+        for _ in 0..100 {
+            let (first, second) = (start(), start());
+            let (first, second) = (first.await.unwrap(), second.await.unwrap());
+            assert!(first.is_ok() || second.is_ok());
+            if first.is_ok() && second.is_ok() {
+                both_started += 1;
+            }
+            drop((first, second));
+            for file in [path.clone(), format!("{}.pid", path)] {
+                let _ = std::fs::remove_file(file);
+            }
+        }
+        let _ = std::fs::remove_file(format!("{}.lock", path));
+        assert_eq!(both_started, 0, "both concurrent starts got a listener");
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
