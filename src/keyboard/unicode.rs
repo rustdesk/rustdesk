@@ -63,9 +63,10 @@ mod tests {
 
     #[test]
     fn autotype_text_survives_surrogate_key_releases() {
+        let expected = "a8*6 Hello café Grüße 日本語 한국어 汉字 Привет Ελληνικά مرحبا नमस्ते 😀🦀END";
         let mut input = UnicodeInput::default();
         let mut received = String::new();
-        let units: Vec<_> = "a8*6汉字😀🦀END".encode_utf16().collect();
+        let units: Vec<_> = expected.encode_utf16().collect();
         for unit in units {
             let mut event = Event {
                 event_type: EventType::KeyPress(Key::Unknown(0)),
@@ -91,6 +92,6 @@ mod tests {
             event.event_type = EventType::KeyPress(Key::KeyA);
             assert!(!is_text_event(&event));
         }
-        assert_eq!(received, "a8*6汉字😀🦀END");
+        assert_eq!(received, expected);
     }
 }

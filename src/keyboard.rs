@@ -1669,9 +1669,6 @@ pub fn keycode_to_rdev_key(keycode: u32) -> Key {
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod input_source {
-    #[cfg(target_os = "linux")]
-    mod linux;
-
     #[cfg(target_os = "macos")]
     use hbb_common::log;
     use hbb_common::SessionID;
@@ -1688,9 +1685,22 @@ pub mod input_source {
 
     pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_1;
 
+    #[cfg(target_os = "linux")]
+    fn uses_x11_backend() -> bool {
+        // XWayland windows can use rdev even when the desktop session is Wayland.
+        unsafe {
+            let display = gtk::gdk::ffi::gdk_display_get_default();
+            let x11_type =
+                gtk::glib::gobject_ffi::g_type_from_name(b"GdkX11Display\0".as_ptr().cast());
+            !display.is_null()
+                && x11_type != 0
+                && gtk::glib::gobject_ffi::g_type_check_instance_is_a(display.cast(), x11_type) != 0
+        }
+    }
+
     pub fn init_input_source() {
         #[cfg(target_os = "linux")]
-        if !linux::is_x11() {
+        if !uses_x11_backend() {
             // Native Wayland windows cannot use the X11 grab loop.
             // Do not change the config here.
             return;
@@ -1737,7 +1747,7 @@ pub mod input_source {
     #[inline]
     pub fn get_cur_session_input_source() -> String {
         #[cfg(target_os = "linux")]
-        if !linux::is_x11() {
+        if !uses_x11_backend() {
             return CONFIG_INPUT_SOURCE_2.to_string();
         }
         let input_source = get_local_option(CONFIG_OPTION_INPUT_SOURCE.to_string());
@@ -1751,7 +1761,7 @@ pub mod input_source {
     #[inline]
     pub fn get_supported_input_source() -> Vec<(String, String)> {
         #[cfg(target_os = "linux")]
-        if !linux::is_x11() {
+        if !uses_x11_backend() {
             return vec![(
                 CONFIG_INPUT_SOURCE_2.to_string(),
                 CONFIG_INPUT_SOURCE_2_TIP.to_string(),
