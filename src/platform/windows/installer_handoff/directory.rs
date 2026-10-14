@@ -29,7 +29,13 @@ pub(super) fn path() -> ResultType<PathBuf> {
         .ok_or_else(|| anyhow!("System directory has no parent"))?;
     let temporary = windows.join("Temp");
     for parent in temporary.ancestors() {
-        let metadata = fs::symlink_metadata(parent)?;
+        let metadata = fs::symlink_metadata(parent).map_err(|err| {
+            let context = format!(
+                "Failed to inspect installer temporary parent {}: {err}",
+                parent.display()
+            );
+            anyhow!(err).context(context)
+        })?;
         if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0 {
             bail!(
                 "Installer temporary parent is not a regular directory: {}",
