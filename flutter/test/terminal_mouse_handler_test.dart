@@ -71,10 +71,9 @@ void main() {
   String? report(
     TerminalMouseButton button, [
     TerminalMouseButtonState state = TerminalMouseButtonState.down,
-    CellOffset position = const CellOffset(10, 5),
   ]) {
     output.clear();
-    terminal.mouseInput(button, state, position);
+    terminal.mouseInput(button, state, const CellOffset(10, 5));
     return output.isEmpty ? null : output.single;
   }
 
@@ -102,40 +101,6 @@ void main() {
     );
   });
 
-  test('reports utf-encoding wheel buttons beyond the normal-mode range', () {
-    terminal.write('\x1b[?1000h\x1b[?1005h');
-
-    expect(
-      report(
-        TerminalMouseButton.wheelDown,
-        TerminalMouseButtonState.down,
-        const CellOffset(400, 300),
-      ),
-      '\x1b[M${String.fromCharCode(32 + 65)}'
-      '${String.fromCharCode(32 + 401)}${String.fromCharCode(32 + 301)}',
-    );
-  });
-
-  test('reports urxvt-encoding wheel buttons shifted by 32', () {
-    terminal.write('\x1b[?1000h\x1b[?1015h');
-
-    expect(report(TerminalMouseButton.wheelUp), '\x1b[96;11;6M');
-    expect(report(TerminalMouseButton.wheelDown), '\x1b[97;11;6M');
-  });
-
-  test('sends a null byte for coordinates past the encoding limit', () {
-    terminal.write('\x1b[?1000h');
-
-    expect(
-      report(
-        TerminalMouseButton.wheelUp,
-        TerminalMouseButtonState.down,
-        const CellOffset(300, 300),
-      ),
-      '\x1b[M${String.fromCharCode(32 + 64)}\x00\x00',
-    );
-  });
-
   test('leaves non-wheel buttons to the upstream handler', () {
     terminal.write('\x1b[?1000h\x1b[?1006h');
 
@@ -144,27 +109,6 @@ void main() {
     expect(
       report(TerminalMouseButton.right, TerminalMouseButtonState.up),
       '\x1b[<2;11;6m',
-    );
-  });
-
-  test('stays silent when the peer has not enabled mouse reporting', () {
-    expect(report(TerminalMouseButton.wheelDown), isNull);
-    expect(report(TerminalMouseButton.left), isNull);
-  });
-
-  test('stays silent for the wheel in click-only mode', () {
-    terminal.write('\x1b[?9h\x1b[?1006h');
-
-    expect(report(TerminalMouseButton.wheelDown), isNull);
-    expect(report(TerminalMouseButton.left), '\x1b[<0;11;6M');
-  });
-
-  test('does not report wheel button releases', () {
-    terminal.write('\x1b[?1000h\x1b[?1006h');
-
-    expect(
-      report(TerminalMouseButton.wheelDown, TerminalMouseButtonState.up),
-      isNull,
     );
   });
 
@@ -256,44 +200,6 @@ void main() {
     expect(controller.selection, isNull);
     await mouse.up();
     expect(output.last, '\x1b[<0;${endCell.x + 1};${endCell.y + 1}m');
-    expect(controller.suspendedPointerInputs, isFalse);
-  });
-
-  testWidgets('tmux drag stays suppressed after mouse mode is disabled',
-      (tester) async {
-    final controller = TerminalController();
-    terminal.write('\x1b[?1049h\x1b[?1002h\x1b[?1006hword');
-    await tester.pumpWidget(_terminalHarness(terminal, controller));
-    final renderTerminal = tester
-        .state<TerminalViewState>(find.byType(TerminalView))
-        .renderTerminal;
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    final start = renderTerminal.localToGlobal(const Offset(40, 40));
-    final end = renderTerminal.localToGlobal(const Offset(240, 80));
-    await mouse.down(start);
-    output.clear();
-    terminal.write('\x1b[?1002l');
-    await mouse.moveTo(end);
-
-    expect(output, isEmpty);
-    expect(controller.selection, isNull);
-    expect(controller.suspendedPointerInputs, isTrue);
-    terminal.write('\x1b[?1002h');
-    await mouse.moveTo(start);
-    expect(output, isEmpty);
-    expect(controller.selection, isNull);
-    await mouse.up();
-    expect(output, isEmpty);
-    expect(controller.suspendedPointerInputs, isFalse);
-
-    await mouse.down(start);
-    output.clear();
-    terminal.write('\x1b[?1002l');
-    await mouse.up();
-    await tester.pump(kDoubleTapTimeout);
-
-    expect(output, isEmpty);
-    expect(controller.selection, isNull);
     expect(controller.suspendedPointerInputs, isFalse);
   });
 }

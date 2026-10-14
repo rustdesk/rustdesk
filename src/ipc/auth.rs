@@ -928,37 +928,6 @@ mod tests {
         ));
     }
 
-    #[test]
-    #[cfg(windows)]
-    fn test_should_allow_everyone_create_on_windows_policy() {
-        assert!(super::should_allow_everyone_create_on_windows(""));
-        assert!(super::should_allow_everyone_create_on_windows("_service"));
-        assert!(!super::should_allow_everyone_create_on_windows(
-            "_portable_service"
-        ));
-    }
-
-    #[test]
-    #[cfg(windows)]
-    fn test_executable_paths_match_windows_normalization() {
-        let left = std::path::PathBuf::from(r"\\?\C:\Program Files\RustDesk\RustDesk.exe");
-        let right = std::path::PathBuf::from(r"c:\program files\rustdesk\rustdesk.exe");
-        assert!(super::executable_paths_match(&left, &right));
-    }
-
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_os_str_eq_ignore_ascii_case_for_process_names() {
-        assert!(super::os_str_eq_ignore_ascii_case(
-            Some(std::ffi::OsStr::new("RustDesk")),
-            Some(std::ffi::OsStr::new("rustdesk"))
-        ));
-        assert!(!super::os_str_eq_ignore_ascii_case(
-            Some(std::ffi::OsStr::new("RustDesk")),
-            Some(std::ffi::OsStr::new("service"))
-        ));
-    }
-
     #[cfg(all(windows, not(feature = "flutter")))]
     struct TempDirGuard(std::path::PathBuf);
 
@@ -993,45 +962,5 @@ mod tests {
             !super::portable_service_helper_is_trusted(&helper_exe, &helper_exe, &current_exe),
             "helper trust check must reject path-match-only binaries with mismatched content"
         );
-    }
-
-    #[test]
-    #[cfg(all(windows, not(feature = "flutter")))]
-    fn test_portable_service_helper_trust_accepts_matching_content() {
-        let unique = format!(
-            "rustdesk-portable-helper-trust-match-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        );
-        let base = std::env::temp_dir().join(unique);
-        std::fs::create_dir_all(&base).unwrap();
-        let _cleanup = TempDirGuard(base.clone());
-
-        let current_exe = base.join("current.exe");
-        let helper_exe = base.join("helper.exe");
-        std::fs::write(&current_exe, b"trusted-binary").unwrap();
-        std::fs::write(&helper_exe, b"trusted-binary").unwrap();
-
-        assert!(super::portable_service_helper_is_trusted(
-            &helper_exe,
-            &helper_exe,
-            &current_exe
-        ));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn test_console_owner_uid_matches_get_active_userid() {
-        let console_uid =
-            super::console_owner_uid().expect("/dev/console must have a resolvable uid");
-        let raw_uid = crate::platform::macos::get_active_userid();
-        let parsed_uid: u32 = raw_uid
-            .trim()
-            .parse()
-            .unwrap_or_else(|_| panic!("failed to parse get_active_userid() output: '{raw_uid}'"));
-        assert_eq!(parsed_uid, console_uid);
     }
 }

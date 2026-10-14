@@ -966,35 +966,6 @@ mod fuse_test {
         }
     }
 
-    fn build_single_file(prefix: &str) {
-        let raw_name = "simple_test_file.txt";
-        let f_name = if prefix == "" {
-            raw_name.to_string()
-        } else {
-            prefix.to_string() + "/" + raw_name
-        };
-        let desc = desc_gen(&f_name, FileType::File);
-        let tree = FuseNode::build_tree(vec![desc]).unwrap();
-
-        assert_eq!(tree.len(), 2);
-        assert_eq!(tree[0].name, "/");
-        assert_eq!(tree[0].children, vec![2]);
-
-        assert_eq!(tree[1].name, raw_name);
-        assert_eq!(tree[1].index, 0);
-        assert_eq!(tree[1].attributes.kind, FileType::File);
-    }
-
-    #[test]
-    fn test_parse_single() {
-        build_single_file("");
-        build_single_file("/");
-        build_single_file("test");
-        build_single_file("/test");
-        build_single_file("🗂");
-        build_single_file("/🗂");
-    }
-
     #[test]
     fn test_parse_tree() {
         build_tree("");

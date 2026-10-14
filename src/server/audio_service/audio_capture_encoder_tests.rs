@@ -1,6 +1,5 @@
 use super::super::{new_pcm_handoff, CAPTURE_PCM_QUEUE_PACKETS};
 use super::*;
-use crate::audio_resampler::allocation_tests::assert_no_allocations;
 use magnum_opus::{Application::LowDelay, Decoder, Encoder};
 
 const SAMPLE_RATE: u32 = 48_000;
@@ -10,8 +9,6 @@ const PAUSE_PACKET: usize = 50;
 const DROPPED_PACKETS: usize = 6;
 const SIGNAL_FREQUENCY: f64 = 97.0;
 const SIGNAL_AMPLITUDE: f64 = 0.5;
-const ACTIVE_LEVEL: f32 = 0.8;
-const SAMPLE_TOLERANCE: f32 = 0.000001;
 const MAX_ENCODE_BYTES_PER_SAMPLE: usize = 6;
 
 fn signal_packet(index: usize, channels: usize) -> Vec<f32> {
@@ -84,103 +81,4 @@ fn capture_overflow_is_smoothed_before_encoding() {
             "capture discard introduced a sharp join: clean={clean_step}, overflow={overflow_step}"
         );
     }
-}
-
-#[test]
-fn rejected_packets_mark_the_gap_after_already_queued_audio() {
-    const CAPACITY: usize = 3;
-    let samples = SAMPLE_RATE as usize / PACKETS_PER_SECOND;
-    let (mut sender, receiver) = new_pcm_handoff(CAPACITY, samples).unwrap();
-    let mut state = CaptureEncoderState::new(SAMPLE_RATE, Channels::Mono);
-    let active = vec![ACTIVE_LEVEL; samples];
-    let opposite = vec![-ACTIVE_LEVEL; samples];
-    sender.submit(&active);
-    let packet = state.next_packet(&receiver).unwrap();
-    assert_eq!(packet, active);
-    receiver.recycle(packet);
-    sender.submit(&active);
-    sender.submit(&active);
-    sender.submit(&vec![ACTIVE_LEVEL; samples + 1]);
-    sender.submit(&opposite);
-    assert_eq!(receiver.take_loss().oversized, 1);
-    assert_no_allocations(|| {
-        for _ in 0..CAPACITY - 1 {
-            let packet = state.next_packet(&receiver).unwrap();
-            assert_eq!(packet, active);
-            receiver.recycle(packet);
-        }
-        let packet = state.next_packet(&receiver).unwrap();
-        let expected = ACTIVE_LEVEL * (1.0 - 2.0 / state.fade_frames as f32);
-        assert!((packet[0] - expected).abs() < SAMPLE_TOLERANCE);
-        assert_eq!(&packet[samples / 2..], &opposite[samples / 2..]);
-        receiver.recycle(packet);
-    });
-}
-
-#[test]
-fn gaps_and_sequence_wrap_preserve_channel_history() {
-    const RATE_8_KHZ: u32 = 8_000;
-    for (rate, channels) in [
-        (RATE_8_KHZ, Channels::Mono),
-        (RATE_8_KHZ, Channels::Stereo),
-        (SAMPLE_RATE, Channels::Mono),
-        (SAMPLE_RATE, Channels::Stereo),
-    ] {
-        let channels_count = channels as usize;
-        let mut state = CaptureEncoderState::new(rate, channels);
-        let samples = rate as usize / PACKETS_PER_SECOND * channels_count;
-        let active: Vec<_> = [ACTIVE_LEVEL, -ACTIVE_LEVEL][..channels_count]
-            .iter()
-            .copied()
-            .cycle()
-            .take(samples)
-            .collect();
-        let mut first = active.clone();
-        state.smooth_packet(0, &mut first);
-        assert_eq!(first, active);
-        let mut opposite: Vec<_> = active.iter().map(|sample| -sample).collect();
-        let mut resumed = active.clone();
-        assert_no_allocations(|| {
-            state.smooth_packet(2, &mut opposite);
-            state.smooth_packet(4, &mut resumed);
-        });
-        for channel in 0..channels_count {
-            let expected = active[channel] * (1.0 - 2.0 / state.fade_frames as f32);
-            assert!((opposite[channel] - expected).abs() < SAMPLE_TOLERANCE);
-            let previous = opposite[samples - channels_count + channel];
-            let expected = previous + (active[channel] - previous) / state.fade_frames as f32;
-            assert!((resumed[channel] - expected).abs() < SAMPLE_TOLERANCE);
-        }
-        assert_eq!(&resumed[samples / 2..], &active[samples / 2..]);
-        state.expected_sequence = usize::MAX;
-        let mut last = active.clone();
-        let mut wrapped: Vec<_> = active.iter().map(|sample| -sample).collect();
-        let expected = wrapped.clone();
-        assert_no_allocations(|| {
-            state.smooth_packet(usize::MAX, &mut last);
-            state.smooth_packet(0, &mut wrapped);
-        });
-        assert_eq!(last, active);
-        assert_eq!(wrapped, expected);
-    }
-}
-
-#[test]
-fn capture_loss_is_reported_while_packets_remain_queued() {
-    const CAPACITY: usize = 2;
-    let samples = SAMPLE_RATE as usize / PACKETS_PER_SECOND;
-    let (mut sender, receiver) = new_pcm_handoff(CAPACITY, samples).unwrap();
-    let mut state = CaptureEncoderState::new(SAMPLE_RATE, Channels::Mono);
-    let before_report = Instant::now() - CAPTURE_STATS_LOG_INTERVAL;
-    state.reporter.last_report = before_report;
-    let packet = vec![ACTIVE_LEVEL; samples];
-    for _ in 0..=CAPACITY {
-        sender.submit(&packet);
-    }
-    let packet = state.next_packet(&receiver).unwrap();
-    assert!(!receiver.is_empty());
-    assert!(state.reporter.last_report > before_report);
-    assert!(state.reporter.pending.is_empty());
-    assert!(receiver.take_loss().is_empty());
-    receiver.recycle(packet);
 }

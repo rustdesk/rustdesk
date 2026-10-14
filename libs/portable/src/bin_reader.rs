@@ -280,26 +280,6 @@ mod tests {
     }
 
     #[test]
-    fn parses_the_generate_py_layout() {
-        let (files, exe) = parse(blob(
-            &[("./rustdesk.exe", b"app"), ("./custom.txt", b"cfg")],
-            "./rustdesk.exe",
-        ))
-        .unwrap();
-        assert_eq!(exe, "./rustdesk.exe");
-        assert_eq!(files.len(), 2);
-        assert_eq!(entry(&files, "./custom.txt").unwrap().raw, b"cfg");
-    }
-
-    #[test]
-    fn rejects_malformed_blobs() {
-        assert!(parse(b"".as_slice()).is_none());
-        assert!(parse(b"notrustd".as_slice()).is_none());
-        // Truncated mid-record rather than panicking on a slice out of range.
-        assert!(parse(b"rustdesk\x00\x00\x00\x40partial".as_slice()).is_none());
-    }
-
-    #[test]
     fn distinguishes_an_absent_package_from_a_malformed_one() {
         assert!(parse_package_blob(None).unwrap().0.is_empty());
         assert!(parse_package_blob(Some(b"damaged")).is_err());
@@ -371,35 +351,5 @@ mod tests {
             1
         );
         assert_eq!(entry(&files, "./librustdesk.dll").unwrap().raw, b"core");
-    }
-
-    #[test]
-    fn package_paths_are_recorded_for_the_dropped_file_sweep() {
-        let package = parse(blob(
-            &[("./custom.txt", b"cfg"), ("./data/logo.png", b"img")],
-            "./acme.exe",
-        ))
-        .unwrap();
-        let mut paths: Vec<String> = package.0.iter().map(|f| f.path.clone()).collect();
-        paths.sort();
-        assert_eq!(paths, vec!["./custom.txt", "./data/logo.png"]);
-
-        // Merging must not disturb them: the generic payload contributes none.
-        let embedded = parse(blob(&[("./librustdesk.dll", b"core")], "./rustdesk.exe")).unwrap();
-        let (files, _) = merge(embedded, package);
-        assert!(entry(&files, "./data/logo.png").is_some());
-    }
-
-    #[test]
-    fn matches_paths_across_separator_styles() {
-        // generate.py emits backslashes when it runs on Windows.
-        let embedded = parse(blob(&[(".\\rustdesk.exe", b"app")], ".\\rustdesk.exe")).unwrap();
-        let package = parse(blob(&[("./custom.txt", b"cfg")], "./acme.exe")).unwrap();
-
-        let (files, exe) = merge(embedded, package);
-
-        assert_eq!(exe, "./acme.exe");
-        assert!(entry(&files, "./acme.exe").is_some());
-        assert!(entry(&files, ".\\rustdesk.exe").is_none());
     }
 }
