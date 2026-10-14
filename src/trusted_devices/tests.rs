@@ -4,10 +4,10 @@ use super::{
 };
 use base::config::keys;
 use hbb_common::{
-    config::{Config, Config2},
+    config::{Config, Config2, PeerConfig},
     sodiumoxide::crypto::hash::sha256,
 };
-use std::{fs, path::PathBuf};
+use std::fs;
 
 const PASSWORD: &str = "permanent-test-password";
 
@@ -51,6 +51,10 @@ fn configure() -> std::collections::HashMap<String, String> {
 #[hbb_common::tokio::test]
 async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     let mut options = configure();
+    let legacy: Config2 =
+        hbb_common::toml::from_str("trusted_devices = 'legacy-v1-records'").unwrap();
+    let saved = hbb_common::toml::to_string(&legacy).unwrap();
+    assert!(!saved.contains("trusted_devices ="));
     assert_eq!(authority::manage(false).await.unwrap(), "[]");
     assert!(host::begin(proof("wrong-password", &[])).await.is_err());
     let (enrollment, valid, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
@@ -58,13 +62,6 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     assert!(!valid);
     enrollment.enroll = true;
     let token = enrollment.finish(DeviceInfo::default()).await.unwrap();
-    // Installing copies Config2, without the former standalone grant file.
-    let old_store = Config::path("trusted-devices-v2.json");
-    if old_store.exists() {
-        let saved = test_path();
-        fs::create_dir_all(saved.parent().unwrap()).unwrap();
-        fs::rename(&old_store, saved).unwrap();
-    }
     let (trusted, valid, _) = host::begin(proof(PASSWORD, &token)).await.unwrap().unwrap();
     let trusted = trusted.unwrap();
     assert!(valid);
@@ -168,15 +165,6 @@ async fn service_operations_share_and_revoke_persisted_grants() {
 const NOW: i64 = 1_700_000_000_000;
 const SCOPE: [u8; TOKEN_BYTES] = [7; TOKEN_BYTES];
 
-fn test_path() -> PathBuf {
-    std::env::temp_dir()
-        .join(format!(
-            "rustdesk-trust-v2-{}",
-            hbb_common::uuid::Uuid::new_v4()
-        ))
-        .join("credentials.json")
-}
-
 #[test]
 fn only_original_tokens_satisfy_trust_and_use_does_not_refresh_expiry() {
     let mut grants = Grants::default();
@@ -217,16 +205,34 @@ fn only_original_tokens_satisfy_trust_and_use_does_not_refresh_expiry() {
 #[test]
 fn controller_credentials_are_bound_and_storage_errors_surface() {
     initialize_config();
-    let path = test_path();
-    let credentials = Credentials::new(path.clone(), "server-a".into(), &[1; TOKEN_BYTES]).unwrap();
+    let peer_id = uuid::Uuid::new_v4().to_string();
+    let path = Config::path(format!("peers/{peer_id}.toml"));
+    let mut settings = PeerConfig::default();
+    settings.password = vec![5; TOKEN_BYTES];
+    settings.info.platform = "Windows".into();
+    settings
+        .options
+        .insert("alias".into(), "trusted-peer".into());
+    settings.store(&peer_id);
+    let credentials =
+        Credentials::new(peer_id.clone(), "server-a".into(), &[1; TOKEN_BYTES]).unwrap();
     let token = random_token().unwrap();
-    credentials.save(&token).unwrap();
+    credentials.save(&token, settings.info.clone()).unwrap();
+    assert_eq!(credentials.load().unwrap(), Some(token.to_vec()));
+    let loaded = PeerConfig::load(&peer_id);
+    assert_eq!(loaded.password, settings.password);
+    assert_eq!(loaded.options, settings.options);
+    assert!(serde_json::to_value(&loaded)
+        .unwrap()
+        .get("trusted_device_v2")
+        .is_none());
+    settings.store(&peer_id);
     assert_eq!(credentials.load().unwrap(), Some(token.to_vec()));
     for (namespace, key) in [
         ("server-b", [1; TOKEN_BYTES]),
         ("server-a", [2; TOKEN_BYTES]),
     ] {
-        assert!(Credentials::new(path.clone(), namespace.into(), &key)
+        assert!(Credentials::new(peer_id.clone(), namespace.into(), &key)
             .unwrap()
             .load()
             .unwrap()
@@ -234,8 +240,8 @@ fn controller_credentials_are_bound_and_storage_errors_surface() {
     }
     fs::write(&path, b"invalid credential file").unwrap();
     assert!(credentials.load().is_err());
-    let directory = test_path();
-    fs::create_dir_all(&directory).unwrap();
-    let invalid = Credentials::new(directory, "server-a".into(), &[1; TOKEN_BYTES]).unwrap();
-    assert!(invalid.save(&token).is_err());
+    let blocked_peer = uuid::Uuid::new_v4().to_string();
+    fs::create_dir_all(Config::path(format!("peers/{blocked_peer}.toml"))).unwrap();
+    let invalid = Credentials::new(blocked_peer, "server-a".into(), &[1; TOKEN_BYTES]).unwrap();
+    assert!(invalid.save(&token, settings.info).is_err());
 }

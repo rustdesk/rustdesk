@@ -5,6 +5,7 @@ use hbb_common::tcp::FramedStream;
 async fn legacy_trust_checkbox_does_not_send_machine_identifier() {
     crate::trusted_devices::tests::initialize_config();
     let mut login = LoginConfigHandler::default();
+    login.id = uuid::Uuid::new_v4().to_string();
     login
         .config
         .options
@@ -23,11 +24,7 @@ async fn legacy_trust_checkbox_does_not_send_machine_identifier() {
 
 async fn corrupt_credentials_do_not_block_password_login(login: &LoginConfigHandler) {
     use crate::trusted_devices::client::Session;
-    let path = std::fs::read_dir(Config::path("trusted-device-v2"))
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .find(|path| path.extension().is_some_and(|value| value == "json"))
-        .unwrap();
+    let path = Config::path(format!("peers/{}.toml", login.id));
     let saved = std::fs::read(&path).unwrap();
     std::fs::write(&path, b"invalid cached credential").unwrap();
     let mut trust = Session::new(login, true, Some(&[1; 32])).unwrap();
@@ -64,9 +61,13 @@ async fn verified_channel_controls_tokens(login: &LoginConfigHandler) {
     });
     assert!(trust.outgoing(auth).auth_2fa().trust_this_device);
     let mut success = LoginResponse::new();
-    success.set_peer_info(PeerInfo::default());
+    success.set_peer_info(PeerInfo {
+        platform: "Windows".into(),
+        ..Default::default()
+    });
     success.trusted_device_v2_token = token.clone().into();
     trust.response(&success).await.unwrap();
+    assert_eq!(PeerConfig::peers(Some(vec![login.id.clone()])).len(), 1);
     another_connection_cannot_supply_this_streams_token(&mut trust).await;
     let request = login.create_login_msg(String::new(), String::new(), vec![1; 32]);
     assert_eq!(sent_token(&mut trust, &request).await, token);

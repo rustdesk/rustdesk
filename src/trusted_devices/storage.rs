@@ -1,17 +1,18 @@
-pub use hbb_common::config::FileStorage as Storage;
-use hbb_common::{
-    config::{Config, Config2},
-    ResultType,
-};
+use hbb_common::{anyhow::anyhow, config::Config2, ResultType};
+use std::sync::{Mutex, MutexGuard};
+
+static GRANTS_LOCK: Mutex<()> = Mutex::new(());
 
 pub(super) struct GrantsStorage {
-    _lock: Storage,
+    _lock: MutexGuard<'static, ()>,
 }
 
 impl GrantsStorage {
     pub fn lock() -> ResultType<Self> {
         Ok(Self {
-            _lock: Storage::lock(&Config::path("trusted-devices-v2"))?,
+            _lock: GRANTS_LOCK
+                .lock()
+                .map_err(|_| anyhow!("Trusted-device storage lock is poisoned"))?,
         })
     }
 

@@ -1,15 +1,14 @@
-use super::{storage::Storage, TOKEN_BYTES};
+use super::TOKEN_BYTES;
 use base::message_proto::{login_response, message, LoginResponse, Message};
 use hbb_common::{
     anyhow::anyhow,
     bail,
-    config::Config,
+    config::{Config, PeerConfig, PeerInfoSerde},
     password_security::symmetric_crypt,
-    sodiumoxide::{crypto::hash::sha256, hex},
     tokio, ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{convert::TryInto, path::PathBuf};
+use std::convert::TryInto;
 
 #[derive(Default)]
 pub struct Session {
@@ -61,13 +60,7 @@ impl Session {
             .unwrap_or_else(Config::get_rendezvous_servers);
         servers.sort();
         let namespace = serde_json::to_string(&servers)?;
-        let binding = serde_json::to_vec(&(&namespace, key))?;
-        let name = hex::encode(sha256::hash(&binding));
-        let credentials = Credentials::new(
-            Config::path(format!("trusted-device-v2/{name}.json")),
-            namespace,
-            key,
-        )?;
+        let credentials = Credentials::new(login.get_id().to_owned(), namespace, key)?;
         Ok(Self {
             credentials: Some(credentials),
             ..Default::default()
@@ -112,7 +105,7 @@ impl Session {
         let Some(credentials) = self.credentials.clone() else {
             return Ok(false);
         };
-        if matches!(response.union, Some(login_response::Union::PeerInfo(_))) {
+        if let Some(login_response::Union::PeerInfo(info)) = response.union.as_ref() {
             let token = response.trusted_device_v2_token.to_vec();
             if self.requested && token.is_empty() {
                 bail!("Login succeeded, but the host did not remember this device");
@@ -121,7 +114,12 @@ impl Session {
                 if !self.requested {
                     bail!("Host returned an unsolicited trusted-device credential");
                 }
-                tokio::task::spawn_blocking(move || credentials.save(&token)).await??;
+                let info = PeerInfoSerde {
+                    username: info.username.clone(),
+                    hostname: info.hostname.clone(),
+                    platform: info.platform.clone(),
+                };
+                tokio::task::spawn_blocking(move || credentials.save(&token, info)).await??;
             }
         }
         Ok(self.supported)
@@ -142,14 +140,14 @@ struct SavedToken {
 
 #[derive(Clone)]
 pub(super) struct Credentials {
-    path: PathBuf,
+    peer_id: String,
     issuer: Issuer,
 }
 
 impl Credentials {
-    pub fn new(path: PathBuf, namespace: String, public_key: &[u8]) -> ResultType<Self> {
+    pub fn new(peer_id: String, namespace: String, public_key: &[u8]) -> ResultType<Self> {
         Ok(Self {
-            path,
+            peer_id,
             issuer: Issuer {
                 namespace,
                 public_key: public_key
@@ -160,11 +158,15 @@ impl Credentials {
     }
 
     pub fn load(&self) -> ResultType<Option<Vec<u8>>> {
-        let storage = Storage::lock(&self.path)?;
-        let saved: Option<SavedToken> = storage.read()?;
-        let Some(saved) = saved.filter(|saved| saved.issuer == self.issuer) else {
+        let value = PeerConfig::get_trusted_device_v2(&self.peer_id)?;
+        if value.is_empty() {
             return Ok(None);
-        };
+        }
+        let saved: SavedToken = serde_json::from_str(&value)
+            .map_err(|_| anyhow!("Invalid stored trusted-device credential"))?;
+        if saved.issuer != self.issuer {
+            return Ok(None);
+        }
         let token = symmetric_crypt(&saved.ciphertext, false)
             .map_err(|_| anyhow!("Could not decrypt trusted-device credential"))?;
         if token.len() != TOKEN_BYTES {
@@ -173,7 +175,7 @@ impl Credentials {
         Ok(Some(token))
     }
 
-    pub fn save(&self, token: &[u8]) -> ResultType<()> {
+    pub fn save(&self, token: &[u8], info: PeerInfoSerde) -> ResultType<()> {
         if token.len() != TOKEN_BYTES {
             bail!("Invalid issued trusted-device credential");
         }
@@ -183,6 +185,6 @@ impl Credentials {
             issuer: self.issuer.clone(),
             ciphertext,
         };
-        Storage::lock(&self.path)?.write(&Some(saved))
+        PeerConfig::set_trusted_device_v2(&self.peer_id, serde_json::to_string(&saved)?, info)
     }
 }

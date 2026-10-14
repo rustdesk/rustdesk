@@ -495,7 +495,6 @@ pub enum Data {
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
     RemoveTrustedDevices(Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>),
-    ClearTrustedDevices,
     TrustedDevicesV2 { clear: bool, result: Option<Result<String, String>> },
     TrustedDeviceRequest(Box<crate::trusted_devices::authority::Request>),
     TrustedDeviceResponse(Result<crate::trusted_devices::authority::Response, String>),
@@ -1005,8 +1004,6 @@ async fn handle(data: Data, stream: &mut Connection) {
                     value = crate::audio_service::get_voice_call_input_device();
                 } else if name == "unlock-pin" {
                     value = Some(Config::get_unlock_pin());
-                } else if name == "trusted-devices" {
-                    value = Some(Config::get_trusted_devices_json());
                 } else {
                     value = None;
                 }
@@ -1244,9 +1241,6 @@ async fn handle(data: Data, stream: &mut Connection) {
             let result = crate::trusted_devices::authority::remove(v).await
                 .map(|_| String::new()).map_err(|error| error.to_string());
             allow_err!(stream.send(&Data::TrustedDevicesV2 { clear: false, result: Some(result) }).await);
-        }
-        Data::ClearTrustedDevices => {
-            allow_err!(crate::trusted_devices::authority::manage(true).await);
         }
         Data::TrustedDevicesV2 { clear, result: None } => {
             let result = crate::trusted_devices::authority::manage(clear).await
