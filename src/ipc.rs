@@ -1038,7 +1038,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                     let ack = if updated { "Y" } else { "N" }.to_owned();
                     allow_err!(stream.send(&Data::Config((name.clone(), Some(ack)))).await);
                 } else if name == "salt" {
-                    if let Err(error) = crate::trusted_devices::config::update_auth(true, move || crate::trusted_devices::config::set_salt(&value)).await {
+                    let affected = Config::get_local_permanent_password_storage_and_salt().1 != value;
+                    if let Err(error) = crate::trusted_devices::config::update_auth(affected, move || crate::trusted_devices::config::set_salt(&value)).await {
                         allow_err!(stream.send(&Data::SecurityConfigError(error.to_string())).await);
                         return;
                     }
@@ -1859,24 +1860,23 @@ pub fn get_unlock_pin() -> String {
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn get_trusted_devices() -> ResultType<String> {
-    trusted_devices_v2(Data::TrustedDevicesV2 { clear: false, result: None })
+pub async fn get_trusted_devices() -> ResultType<String> {
+    trusted_devices_v2(Data::TrustedDevicesV2 { clear: false, result: None }).await
 }
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn remove_trusted_devices(record_ids: Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>) -> ResultType<()> {
-    trusted_devices_v2(Data::RemoveTrustedDevices(record_ids)).map(|_| ())
+pub async fn remove_trusted_devices(record_ids: Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>) -> ResultType<()> {
+    trusted_devices_v2(Data::RemoveTrustedDevices(record_ids)).await.map(|_| ())
 }
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn clear_trusted_devices() -> ResultType<()> {
-    trusted_devices_v2(Data::TrustedDevicesV2 { clear: true, result: None }).map(|_| ())
+pub async fn clear_trusted_devices() -> ResultType<()> {
+    trusted_devices_v2(Data::TrustedDevicesV2 { clear: true, result: None }).await.map(|_| ())
 }
 
 #[cfg(feature = "flutter")]
-#[tokio::main(flavor = "current_thread")]
 async fn trusted_devices_v2(data: Data) -> ResultType<String> {
     let mut connection = connect(1000, "").await?;
     connection.send(&data).await?;
@@ -2326,8 +2326,30 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 }
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
     use super::*;
+
+    #[cfg(unix)]
+    pub(crate) async fn unchanged_salt_preserves_trusted_devices() {
+        let path = std::env::temp_dir().join(format!("v2-salt-{}", uuid::Uuid::new_v4()));
+        let mut incoming = Endpoint::new(path.to_str().unwrap().to_owned())
+            .incoming()
+            .unwrap();
+        let _peer = Endpoint::connect(&path).await.unwrap();
+        let mut stream = Connection::new(incoming.next().await.unwrap().unwrap());
+        let devices = crate::trusted_devices::devices().unwrap();
+        assert_ne!(devices, "[]");
+        handle(
+            Data::Config((
+                "salt".into(),
+                Some(Config::get_local_permanent_password_storage_and_salt().1),
+            )),
+            &mut stream,
+        )
+        .await;
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(crate::trusted_devices::devices().unwrap(), devices);
+    }
 
     #[test]
     fn verify_ffi_enum_data_size() {

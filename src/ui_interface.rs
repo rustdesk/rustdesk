@@ -1726,31 +1726,6 @@ pub fn set_unlock_pin(pin: String) -> String {
 }
 
 #[cfg(feature = "flutter")]
-pub fn get_trusted_devices() -> hbb_common::ResultType<String> {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    return crate::trusted_devices::devices();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return ipc::get_trusted_devices();
-}
-
-#[cfg(feature = "flutter")]
-pub fn remove_trusted_devices(json: &str) -> hbb_common::ResultType<()> {
-    let record_ids = serde_json::from_str::<Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>>(json)?;
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    return crate::trusted_devices::remove(&record_ids);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return ipc::remove_trusted_devices(record_ids);
-}
-
-#[cfg(feature = "flutter")]
-pub fn clear_trusted_devices() -> hbb_common::ResultType<()> {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    return crate::trusted_devices::clear();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return ipc::clear_trusted_devices();
-}
-
-#[cfg(feature = "flutter")]
 pub fn max_encrypt_len() -> usize {
     hbb_common::config::ENCRYPT_MAX_LEN
 }

@@ -176,8 +176,8 @@ pub fn clear() -> ResultType<()> {
     if !storage.exists()? {
         return Ok(());
     }
-    let mut grants: Grants = storage.read()?;
-    grants.revoke(grants.scope)?;
+    let mut grants = Grants::default();
+    grants.revoke(Some(config::snapshot()?.scope))?;
     storage.write(&grants)
 }
 

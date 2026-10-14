@@ -89,17 +89,57 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     );
     service_operations_share_and_revoke_persisted_grants().await;
     unavailable_grants_keep_password_totp_available().await;
+    #[cfg(unix)]
+    crate::ipc::test::unchanged_salt_preserves_trusted_devices().await;
+    password_write_failure_is_reported().await;
+}
+
+async fn password_write_failure_is_reported() {
+    let result = config::update_auth(true, || {
+        let path = Config::file();
+        fs::rename(&path, path.with_extension("backup"))?;
+        fs::create_dir(&path)?;
+        config::set_password("changed-test-password")
+    })
+    .await;
+    let path = Config::file();
+    fs::remove_dir(&path).unwrap();
+    fs::rename(path.with_extension("backup"), &path).unwrap();
+    config::set_password(PASSWORD).unwrap();
+    assert!(
+        result.is_err(),
+        "Password persistence failure must be reported"
+    );
 }
 
 async fn unavailable_grants_keep_password_totp_available() {
-    let saved = Config2::get_trusted_devices_v2().unwrap();
     Config2::set_trusted_devices_v2("invalid grant store".into()).unwrap();
     assert!(host::begin(proof("wrong-password", &[])).await.is_err());
     let login = host::begin(proof(PASSWORD, &[])).await;
-    Config2::set_trusted_devices_v2(saved).unwrap();
     let (attempt, valid, _) = login.unwrap().unwrap();
     assert!(attempt.is_none());
     assert!(!valid);
+    authority::manage(true).await.unwrap();
+    assert_eq!(authority::manage(false).await.unwrap(), "[]");
+    let (enrollment, _, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
+    let mut enrollment = enrollment.unwrap();
+    enrollment.enroll = true;
+    let token = enrollment.finish(DeviceInfo::default()).await.unwrap();
+    let path = Config2::file();
+    let saved = fs::read_to_string(&path).unwrap();
+    let corrupt = format!("{saved}\ninvalid = [\n");
+    fs::write(&path, &corrupt).unwrap();
+    Config::set_option("trusted-device-test-option".into(), "N".into());
+    let after_save = fs::read_to_string(&path).unwrap();
+    fs::write(&path, saved).unwrap();
+    assert_eq!(after_save, corrupt);
+    assert!(
+        host::begin(proof(PASSWORD, &token))
+            .await
+            .unwrap()
+            .unwrap()
+            .1
+    );
 }
 
 async fn service_operations_share_and_revoke_persisted_grants() {
@@ -238,8 +278,11 @@ fn controller_credentials_are_bound_and_storage_errors_surface() {
             .unwrap()
             .is_none());
     }
-    fs::write(&path, b"invalid credential file").unwrap();
+    let corrupt = format!("{}\ninvalid = [\n", fs::read_to_string(&path).unwrap());
+    fs::write(&path, &corrupt).unwrap();
     assert!(credentials.load().is_err());
+    settings.store(&peer_id);
+    assert_eq!(fs::read_to_string(&path).unwrap(), corrupt);
     let blocked_peer = uuid::Uuid::new_v4().to_string();
     fs::create_dir_all(Config::path(format!("peers/{blocked_peer}.toml"))).unwrap();
     let invalid = Credentials::new(blocked_peer, "server-a".into(), &[1; TOKEN_BYTES]).unwrap();

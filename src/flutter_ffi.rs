@@ -2639,16 +2639,36 @@ pub fn main_check_hwcodec() {
     check_hwcodec()
 }
 
+// The bridge uses ordinary worker threads; desktop IPC needs a runtime at this boundary.
 pub fn main_get_trusted_devices() -> hbb_common::anyhow::Result<String> {
-    get_trusted_devices()
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return crate::trusted_devices::devices();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hbb_common::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(crate::ipc::get_trusted_devices())
 }
 
 pub fn main_remove_trusted_devices(json: String) -> hbb_common::anyhow::Result<()> {
-    remove_trusted_devices(&json)
+    let record_ids = serde_json::from_str::<Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>>(&json)?;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return crate::trusted_devices::remove(&record_ids);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hbb_common::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(crate::ipc::remove_trusted_devices(record_ids))
 }
 
 pub fn main_clear_trusted_devices() -> hbb_common::anyhow::Result<()> {
-    clear_trusted_devices()
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return crate::trusted_devices::clear();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hbb_common::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(crate::ipc::clear_trusted_devices())
 }
 
 pub fn main_max_encrypt_len() -> SyncReturn<usize> {
