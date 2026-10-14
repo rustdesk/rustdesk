@@ -761,8 +761,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "続行"),
         ("Browser didn't open? Use the url below to sign in.", "ブラウザが開きませんでしたか？下記の URL からログインしてください。"),
         ("Lock canvas", "キャンバスをロック"),
-        ("Headless display", ""),
-        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "セッション間でクリップボードを同期"),
         ("sync-clipboard-between-sessions-tip", "1つのリモートセッションでコピーしたテキストや画像は、接続中の他のセッションのクリップボードにも送信されます。"),
         ("terminal-clipboard-write-tip", ""),
@@ -815,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
     ].iter().cloned().collect();
 }

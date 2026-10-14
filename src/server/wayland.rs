@@ -565,7 +565,12 @@ fn init_displays() -> ResultType<()> {
             return Ok(());
         }
 
-        log::info!("wayland: starting the ScreenCast portal");
+        // A portal that fails at once is retried with the video service backoff.
+        hbb_common::throttled_log!(
+            std::time::Duration::from_secs(60),
+            info,
+            "wayland: starting the ScreenCast portal"
+        );
         let mut all = Display::all()?;
         log::debug!("Initializing displays with fill_displays()");
         {
@@ -791,7 +796,10 @@ where
         Err(e) => e,
     };
     if settling() {
-        log::info!(
+        // Retried with the video service backoff while the topology settles.
+        hbb_common::throttled_log!(
+            std::time::Duration::from_secs(60),
+            info,
             "drm: display {} is absent while the topology settles; retrying DRM instead of \
              starting PipeWire ({:#})",
             display_idx,

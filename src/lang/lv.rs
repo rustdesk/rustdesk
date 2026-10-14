@@ -761,8 +761,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Turpināt"),
         ("Browser didn't open? Use the url below to sign in.", "Pārlūkprogramma neatvērās? Izmantojiet tālāk norādīto URL, lai pieslēgtos."),
         ("Lock canvas", "Bloķēt audeklu"),
-        ("Headless display", ""),
-        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "Sinhronizēt starpliktuvi starp sesijām"),
         ("sync-clipboard-between-sessions-tip", "Vienā attālajā sesijā nokopētais teksts vai attēli tiek nosūtīti arī uz pārējo pievienoto sesiju starpliktuvi."),
         ("terminal-clipboard-write-tip", ""),
@@ -815,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
     ].iter().cloned().collect();
 }

@@ -761,8 +761,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Pokračovať"),
         ("Browser didn't open? Use the url below to sign in.", "Neotvoril sa prehliadač? Na prihlásenie použite URL nižšie."),
         ("Lock canvas", "Uzamknúť zobrazenie"),
-        ("Headless display", ""),
-        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "Synchronizovať schránku medzi reláciami"),
         ("sync-clipboard-between-sessions-tip", "Text alebo obrázky skopírované v jednej vzdialenej relácii sa odošlú aj do schránky ostatných pripojených relácií."),
         ("terminal-clipboard-write-tip", ""),
@@ -815,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
     ].iter().cloned().collect();
 }

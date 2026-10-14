@@ -761,8 +761,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", ""),
         ("Browser didn't open? Use the url below to sign in.", ""),
         ("Lock canvas", ""),
-        ("Headless display", ""),
-        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", ""),
         ("sync-clipboard-between-sessions-tip", ""),
         ("terminal-clipboard-write-tip", ""),
@@ -815,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
     ].iter().cloned().collect();
 }

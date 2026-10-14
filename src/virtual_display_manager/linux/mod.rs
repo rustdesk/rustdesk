@@ -19,7 +19,12 @@
 // monitor plugged into the connector we are holding, because our own EDID override is what that
 // connector reports; plugging into any other connector is noticed within a poll.
 
-use hbb_common::{anyhow::anyhow, bail, config::Config, log, ResultType};
+use hbb_common::{
+    anyhow::anyhow,
+    bail,
+    config::{Config, Config2},
+    log, ResultType,
+};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -36,9 +41,11 @@ use std::{
 pub const OPTION_ALLOW_HEADLESS_DISPLAY: &str = "allow-headless-display";
 
 /// The switch as the service last received it over `_service`, or unset. A pushed option is
-/// applied in memory and never stored from here: the CLI that pushed it has already stored it,
+/// applied in memory and the push stores nothing: the CLI that pushed it has already stored it,
 /// and a store from this process would write its whole in-memory config over anything that
-/// changed on disk since it started. After a restart the stored value is read as usual.
+/// changed on disk since it started. It reaches the stored config only inside a config synced from
+/// the user side, which the service stores anyway (`synced_config2`). After a restart the stored
+/// value is read as usual.
 static PUSHED_SWITCH: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(SWITCH_UNSET);
 const SWITCH_UNSET: u8 = 0;
 const SWITCH_OFF: u8 = 1;
@@ -57,7 +64,7 @@ fn pushed_switch() -> Option<bool> {
     }
 }
 
-/// What the service reads back for the echo: the pushed value, else the stored one.
+/// The switch in effect, as the config would store it: the pushed value, else the stored one.
 pub(crate) fn switch_value() -> String {
     match pushed_switch() {
         Some(true) => "Y".to_owned(),
@@ -87,13 +94,62 @@ pub(crate) fn reset_pushed_switch() {
     PUSHED_SWITCH.store(SWITCH_UNSET, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// A stored switch that changed under the pushed one takes over: the push was the CLI's word
-/// about the value on disk, and a synced config or an options map has since brought another.
-/// Called with the value read before that config was applied.
+/// A stored switch that an options map changed under the pushed one takes over: the push was the
+/// CLI's word about the value on disk, and the map has since brought another. Called with the value
+/// read before the map was applied. A synced config goes through `synced_config2`.
 pub(crate) fn note_stored_switch(before: &str) {
     if Config::get_option(OPTION_ALLOW_HEADLESS_DISPLAY) != before {
         reset_pushed_switch();
     }
+}
+
+/// The switch the user side holds, as far as the service can tell: the one its last pull handed
+/// it (`None` when that `--server` keeps its own config), then the one it last synced.
+static USER_SIDE_SWITCH: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn user_side_switch() -> std::sync::MutexGuard<'static, Option<String>> {
+    USER_SIDE_SWITCH.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+fn switch_in(config2: &Config2) -> String {
+    config2
+        .options
+        .get(OPTION_ALLOW_HEADLESS_DISPLAY)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// The config the service hands a `--server` that asks for it, with the switch in effect. Until a
+/// sync stores a push, the stored switch is stale: a `--server` that took it would show it while the
+/// watcher acts on the pushed one, and sync it back on its next change.
+/// `adopted` is whether that `--server` takes the config at all: while the root config has no key
+/// pair yet it keeps its own (`sync_and_watch_config_dir`), and what it holds is unknown until it
+/// syncs.
+pub(crate) fn config2_for_pull(mut config2: Config2, adopted: bool) -> Config2 {
+    if pushed_switch().is_some() {
+        config2
+            .options
+            .insert(OPTION_ALLOW_HEADLESS_DISPLAY.to_owned(), switch_value());
+    }
+    *user_side_switch() = adopted.then(|| switch_in(&config2));
+    config2
+}
+
+/// The config2 the service stores from a user-side sync, and whether that sync retires the pushed
+/// switch: it does when the side brings a switch other than the one it held, and a side whose
+/// switch is unknown has said nothing yet. While the push stands it is the switch stored, so a
+/// restart reads what the watcher acts on. The caller retires the push after storing.
+pub(crate) fn synced_config2(mut config2: Config2) -> (Config2, bool) {
+    let synced = switch_in(&config2);
+    let retire = user_side_switch()
+        .replace(synced.clone())
+        .is_some_and(|held| held != synced);
+    if !retire && pushed_switch().is_some() {
+        config2
+            .options
+            .insert(OPTION_ALLOW_HEADLESS_DISPLAY.to_owned(), switch_value());
+    }
+    (config2, retire)
 }
 
 const DRM_CLASS: &str = "/sys/class/drm";
@@ -109,6 +165,8 @@ const EDID_DIR_REF: &str = "edid/";
 const NO_OUTPUT_STABLE: Duration = Duration::from_secs(5);
 /// sysfs re-read interval. The service loop ticks twice a second; this feature does not need to.
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
+/// A failure the watcher meets again on every poll is logged once per this interval, with a count.
+const FAILURE_LOG_INTERVAL: Duration = Duration::from_secs(60);
 /// How long to wait for a forced connector to report a display before saying so in the log.
 const SETTLE_TIMEOUT: Duration = Duration::from_millis(1500);
 const SETTLE_STEP: Duration = Duration::from_millis(50);
@@ -684,7 +742,11 @@ fn drop_our_entries(mut which: impl FnMut(&str) -> bool) {
         return;
     }
     if let Err(e) = write_edid_param(&keep.join(",")) {
-        log::warn!("headless display: cannot clear our edid_firmware entry: {e}");
+        hbb_common::throttled_log!(
+            FAILURE_LOG_INTERVAL,
+            warn,
+            "headless display: cannot clear our edid_firmware entry: {e}"
+        );
         return;
     }
     for e in &mine {
@@ -959,7 +1021,12 @@ fn disable(state: &mut State) -> ResultType<()> {
         // the connector is off the force does the entry come off, and one more `detect` makes it
         // read the wire instead of the EDID it already holds.
         if let Err(e) = write_status(&t.sysfs, "detect") {
-            log::warn!("headless display: cannot release {}: {e}", t.sysfs);
+            hbb_common::throttled_log!(
+                FAILURE_LOG_INTERVAL,
+                warn,
+                "headless display: cannot release {}: {e}",
+                t.sysfs
+            );
             match &t.marker {
                 Some(marker) => {
                     still_held.push(t.name.clone());
@@ -969,7 +1036,9 @@ fn disable(state: &mut State) -> ResultType<()> {
                         marker: marker.clone(),
                     });
                 }
-                None => log::warn!(
+                None => hbb_common::throttled_log!(
+                    FAILURE_LOG_INTERVAL,
+                    warn,
                     "headless display: {} could not be released and cannot state its identity, so \
                      there is nothing left to record the hold against",
                     t.sysfs
@@ -982,7 +1051,12 @@ fn disable(state: &mut State) -> ResultType<()> {
         if let Err(e) = write_status(&t.sysfs, "detect") {
             // Released, but it may still report the override it probed a moment ago; the next
             // pass sees a connector carrying our EDID with no marker and re-probes it.
-            log::warn!("headless display: {} released, but the re-probe failed: {e}", t.sysfs);
+            hbb_common::throttled_log!(
+                FAILURE_LOG_INTERVAL,
+                warn,
+                "headless display: {} released, but the re-probe failed: {e}",
+                t.sysfs
+            );
         }
         released.push(t.sysfs.clone());
     }
@@ -1100,7 +1174,11 @@ pub fn start_watcher() {
                 // costs at most one extra poll.
                 let pass = std::panic::AssertUnwindSafe(|| tick(&mut state));
                 if let Err(e) = std::panic::catch_unwind(pass) {
-                    log::error!("headless display: a poll panicked ({e:?}); continuing");
+                    hbb_common::throttled_log!(
+                        FAILURE_LOG_INTERVAL,
+                        error,
+                        "headless display: a poll panicked ({e:?}); continuing"
+                    );
                 }
                 std::thread::sleep(POLL_INTERVAL);
             }
@@ -1224,7 +1302,11 @@ fn reconcile_markers(all: &[Connector]) -> bool {
     }
     for (name, marker) in &upgrade {
         if let Err(e) = install_edid(name, marker) {
-            log::warn!("headless display: cannot re-record the hold on {name}: {e}");
+            hbb_common::throttled_log!(
+                FAILURE_LOG_INTERVAL,
+                warn,
+                "headless display: cannot re-record the hold on {name}: {e}"
+            );
         } else {
             log::info!("headless display: the hold on {name} now records which connector it is");
         }
@@ -1239,7 +1321,12 @@ fn reconcile_markers(all: &[Connector]) -> bool {
         };
         for c in targets {
             if let Err(e) = write_status(&c.sysfs, "detect") {
-                log::warn!("headless display: cannot re-probe {}: {e}", c.sysfs);
+                hbb_common::throttled_log!(
+                    FAILURE_LOG_INTERVAL,
+                    warn,
+                    "headless display: cannot re-probe {}: {e}",
+                    c.sysfs
+                );
             }
         }
     }
@@ -1995,7 +2082,7 @@ mod tests {
     }
 
     /// rustdesk#15908 review (zhou, 23-sep), finding 2, the service side: a pushed option is
-    /// what this process acts on and echoes, and it is never stored from here.
+    /// what this process acts on and echoes, and the push stores nothing.
     #[test]
     fn a_pushed_switch_is_acted_on_in_memory_and_never_stored() {
         let _serial = switch_test_lock();
@@ -2013,15 +2100,15 @@ mod tests {
         assert_eq!(
             Config::get_option(OPTION_ALLOW_HEADLESS_DISPLAY),
             stored,
-            "a pushed switch never reaches the config"
+            "the push stores nothing"
         );
         reset_pushed_switch();
         assert_eq!(pushed_switch(), None);
         assert_eq!(switch_value(), stored, "unset: the echo reads the stored value");
     }
 
-    /// A synced config or options map that changes the stored switch retires the pushed one;
-    /// one that leaves it as it was does not.
+    /// An options map that changes the stored switch retires the pushed one; one that leaves it
+    /// as it was does not.
     #[test]
     fn a_stored_switch_that_changed_retires_the_pushed_one() {
         let _serial = switch_test_lock();

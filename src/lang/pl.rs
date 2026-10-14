@@ -761,8 +761,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Kontynuuj"),
         ("Browser didn't open? Use the url below to sign in.", "Przeglądarka się nie otworzyła? Użyj poniższego adresu URL, aby się zalogować."),
         ("Lock canvas", "Zablokuj ekran"),
-        ("Headless display", ""),
-        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "Synchronizuj schowek między sesjami"),
         ("sync-clipboard-between-sessions-tip", "Tekst lub obrazy skopiowane w jednej sesji zdalnej są wysyłane także do schowka pozostałych połączonych sesji."),
         ("terminal-clipboard-write-tip", "Aplikacja w terminalu chce skopiować tekst do schowka tego urządzenia. Jeśli wyrazisz na to zgodę, uprawnienie to będzie dotyczyć aplikacji terminalowych we wszystkich połączeniach, dopóki nie wyłączysz go w Ustawieniach. Ręczne kopiowanie i wklejanie pozostanie bez zmian."),
@@ -815,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
     ].iter().cloned().collect();
 }

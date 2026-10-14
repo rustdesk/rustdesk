@@ -761,8 +761,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Fortsæt"),
         ("Browser didn't open? Use the url below to sign in.", "Åbnede browseren ikke? Brug URL'en nedenfor til at logge ind."),
         ("Lock canvas", "Lås lærred"),
-        ("Headless display", ""),
-        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "Synkroniser udklipsholder mellem sessioner"),
         ("sync-clipboard-between-sessions-tip", "Tekst eller billeder, der kopieres i én fjernsession, sendes også til udklipsholderen i dine andre forbundne sessioner."),
         ("terminal-clipboard-write-tip", ""),
@@ -815,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
     ].iter().cloned().collect();
 }

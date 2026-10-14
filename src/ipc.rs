@@ -882,7 +882,7 @@ fn service_option_reply_with(
 }
 
 /// The production pair: the option is applied in the service's memory and read back from it;
-/// nothing is stored from the service (see `push_switch`).
+/// the push stores nothing (see `PUSHED_SWITCH`).
 #[cfg(all(target_os = "linux", feature = "headless-display"))]
 fn service_option_reply(key: &str, value: &str) -> Option<Data> {
     use crate::virtual_display_manager::linux as headless;
@@ -1131,21 +1131,30 @@ async fn handle(data: Data, stream: &mut Connection) {
             let (config, config2) = *configs;
             let _chk = CheckIfRestart::new();
             #[cfg(all(target_os = "linux", feature = "headless-display"))]
-            let stored_switch = Config::get_option(
-                crate::virtual_display_manager::linux::OPTION_ALLOW_HEADLESS_DISPLAY,
-            );
+            let (config2, retire_push) =
+                crate::virtual_display_manager::linux::synced_config2(config2);
             Config::set(config);
             Config2::set(config2);
             #[cfg(all(target_os = "linux", feature = "headless-display"))]
-            crate::virtual_display_manager::linux::note_stored_switch(&stored_switch);
+            if retire_push {
+                crate::virtual_display_manager::linux::reset_pushed_switch();
+            }
             allow_err!(stream.send(&Data::SyncConfig(None)).await);
         }
         Data::SyncConfig(None) => {
+            let config = Config::get();
+            // A `--server` takes what it pulls only from a root config that is not empty (an id and
+            // a key pair).
+            #[cfg(all(target_os = "linux", feature = "headless-display"))]
+            let config2 = crate::virtual_display_manager::linux::config2_for_pull(
+                Config2::get(),
+                !config.is_empty(),
+            );
+            #[cfg(not(all(target_os = "linux", feature = "headless-display")))]
+            let config2 = Config2::get();
             allow_err!(
                 stream
-                    .send(&Data::SyncConfig(Some(
-                        (Config::get(), Config2::get()).into()
-                    )))
+                    .send(&Data::SyncConfig(Some((config, config2).into())))
                     .await
             );
         }

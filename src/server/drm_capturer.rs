@@ -2009,7 +2009,10 @@ fn publish_probe_result(
     let answer = if cold {
         match &*st {
             ProbeState::Unknown if settling => {
-                log::info!(
+                // Every look during the settle starts a probe, so this repeats until it ends.
+                hbb_common::throttled_log!(
+                    Duration::from_secs(60),
+                    info,
                     "drm: availability probe -> no displays yet in {:?}; a headless output is on \
                      its way",
                     t.elapsed()
@@ -2171,12 +2174,17 @@ pub(super) fn cold_start_still_settling() -> bool {
 
 /// The production hold: the cached verdict (an `Unknown` starts the probe off-thread, so no
 /// push is needed), the sysfs gate re-read on every turn, and the runtime's sleep. The gate's
-/// inputs are logged once at the door, so a log shows what this process saw.
+/// inputs are logged at the door, at most once a minute because a failing video service retries
+/// through it, so a log shows what this process saw.
 #[cfg(feature = "headless-display")]
 pub(super) async fn wait_for_headless_scanout(bound: Duration) {
     if availability_cached() != Availability::Available {
         let e = crate::virtual_display_manager::linux::scanout_expectation();
-        log::info!("drm: headless scanout expectation at the door: {e:?}");
+        hbb_common::throttled_log!(
+            Duration::from_secs(60),
+            info,
+            "drm: headless scanout expectation at the door: {e:?}"
+        );
     }
     wait_for_headless_scanout_with(
         availability_cached,

@@ -761,8 +761,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Continuar"),
         ("Browser didn't open? Use the url below to sign in.", "¿No se abrió el navegador? Usa la URL de abajo para iniciar sesión."),
         ("Lock canvas", "Bloquear lienzo"),
-        ("Headless display", "Pantalla sin monitor"),
-        ("headless_display_tip", "Cuando no hay ningún monitor conectado, fuerza una salida de vídeo desconectada para que haya una pantalla que capturar. Se libera en cuanto se conecta un monitor en otra salida."),
         ("Sync clipboard between sessions", "Sincronizar portapapeles entre sesiones"),
         ("sync-clipboard-between-sessions-tip", "El texto o las imágenes copiados en una sesión remota también se envían al portapapeles de tus otras sesiones conectadas."),
         ("terminal-clipboard-write-tip", ""),
@@ -815,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Headless display", "Pantalla sin monitor"),
+        ("headless_display_tip", "Cuando no hay ningún monitor conectado, fuerza una salida de vídeo desconectada para que haya una pantalla que capturar. Se libera en cuanto se conecta un monitor en otra salida."),
     ].iter().cloned().collect();
 }
