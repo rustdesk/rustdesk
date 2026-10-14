@@ -207,7 +207,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
   if (hidden_client_window_mode && is_cm_page) {
     SetPropW(window.GetHandle(), cm_property.c_str(), reinterpret_cast<HANDLE>(1));
-  } else if (hidden_client_window_mode && !is_install_page) {
+  } else if (!is_cm_page && !is_install_page) {
     SetPropW(window.GetHandle(), L"RustDeskMainWindow", reinterpret_cast<HANDLE>(1));
   }
   window.SetQuitOnClose(true);

@@ -733,15 +733,8 @@ pub fn core_main() -> Option<CoreMainAction> {
             return None;
         }
     }
-    // Without a running service there is no tray to reopen a hidden main window.
     #[cfg(all(windows, feature = "flutter"))]
-    if args.is_empty() && !crate::platform::is_self_service_running() {
-        flutter_args.push("--show-ui".to_owned());
-    }
-    #[cfg(all(windows, feature = "flutter"))]
-    if crate::platform::windows::client_window::enabled() {
-        flutter_args.push("--hidden-client-window-mode".to_owned());
-    }
+    crate::platform::windows::client_window::add_startup_args(args.is_empty(), &mut flutter_args);
     //_async_logger_holder.map(|x| x.flush());
     #[cfg(feature = "flutter")]
     return Some(CoreMainAction::StartUi(flutter_args));

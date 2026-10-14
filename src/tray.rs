@@ -116,11 +116,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
             // dialog, I found on one user's desktop, but no idea why, Windows is shit.
             // Use `run_me` instead.
             #[cfg(feature = "flutter")]
-            if crate::platform::windows::client_window::enabled() {
-                crate::run_me::<&str>(vec!["--show-ui"]).ok();
-            } else {
-                crate::run_me::<&str>(vec![]).ok();
-            }
+            crate::platform::windows::client_window::open_from_tray();
             #[cfg(not(feature = "flutter"))]
             crate::run_me::<&str>(vec![]).ok();
         }
