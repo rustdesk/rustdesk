@@ -165,12 +165,12 @@ pub(super) fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
     // Cleanup must not change the result of an installation that already ran.
     match fs::symlink_metadata(&directory) {
         Ok(_) => log::warn!(
-            "Failed to remove protected installer directory {}",
+            "Protected installer directory may remain at {}",
             directory.display()
         ),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {}
         Err(err) => log::warn!(
-            "Failed to verify cleanup of protected installer directory {}: {err}",
+            "Protected installer directory may remain at {}: {err}",
             directory.display()
         ),
     }

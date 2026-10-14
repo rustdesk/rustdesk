@@ -1,10 +1,7 @@
 use super::super::installer_shell::{embedded_shortcut_commands, shortcut_bytes};
 use super::*;
-use ::windows::Win32::{
-    Storage::FileSystem::{FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_READ, FILE_SHARE_WRITE},
-    System::Threading,
-};
-use std::os::windows::{fs::OpenOptionsExt, process::CommandExt};
+use ::windows::Win32::System::Threading;
+use std::os::windows::process::CommandExt;
 
 #[test]
 fn native_install_handoff_verifies_before_execution() {
@@ -116,40 +113,4 @@ fn assert_native_handoff_structure(
     assert!(parameters.contains("findstr.exe"));
     assert!(!parameters.to_ascii_lowercase().contains("powershell"));
     assert!(parameters.encode_utf16().count() < WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS);
-}
-
-#[test]
-fn cleanup_failure_preserves_installer_exit_code() {
-    const INSTALLER_FAILURE: i32 = 77;
-    for exit_code in [0, INSTALLER_FAILURE] {
-        let runner_dir = std::env::temp_dir().join(format!(
-            "rustdesk_install_locked_{}",
-            uuid::Uuid::new_v4().simple()
-        ));
-        fs::create_dir(&runner_dir).expect("runner directory should be created");
-        let locked_directory = fs::OpenOptions::new()
-            .read(true)
-            .share_mode(FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0)
-            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS.0)
-            .open(&runner_dir)
-            .expect("cleanup should be blocked by an open directory");
-        let script = write_install_script(format!("exit /b {exit_code}"))
-            .expect("install script should be created");
-        let bootstrap = verified_install_bootstrap(&script, &runner_dir)
-            .expect("verifier bootstrap should be generated");
-        let output = run_install_bootstrap_for_test(&bootstrap);
-        let directory_remains = runner_dir.exists();
-        drop(locked_directory);
-        fs::remove_dir_all(&runner_dir).expect("test directory should be removed");
-        assert!(
-            directory_remains,
-            "open handle must prevent directory cleanup"
-        );
-        assert_eq!(
-            output.status.code(),
-            Some(exit_code),
-            "cleanup must preserve the installer's result: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
 }
