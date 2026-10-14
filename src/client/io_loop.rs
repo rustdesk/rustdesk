@@ -809,7 +809,16 @@ impl<T: InvokeUiSession> Remote<T> {
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     let to = match r#type {
-                        fs::JobType::Generic => fs::DataSource::FilePath(PathBuf::from(&to)),
+                        fs::JobType::Generic => {
+                            if let Err(err) = fs::download::validate_download_name(
+                                &path,
+                                self.handler.peer_platform() == "Windows",
+                            ) {
+                                self.handle_job_status(id, -1, Some(err.to_string()));
+                                return true;
+                            }
+                            fs::DataSource::FilePath(PathBuf::from(&to))
+                        }
                         fs::JobType::Printer => {
                             fs::DataSource::MemoryCursor(std::io::Cursor::new(Vec::new()))
                         }
@@ -1782,6 +1791,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                     fs::transform_windows_path(&mut entries);
                                 }
                             }
+                            if fd.id <= 0 {
+                                if let Err(err) = fs::download::validate_listing(
+                                    &entries,
+                                    self.handler.peer_platform() == "Windows",
+                                ) {
+                                    self.handle_job_status(fd.id, -1, Some(err.to_string()));
+                                    return true;
+                                }
+                            }
                             // We cannot call cancel_transfer_job/handle_job_status while holding
                             // a mutable borrow from fs::get_job(&mut self.write_jobs), so defer
                             // the error handling until after the borrow scope ends.
@@ -1877,11 +1895,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 crate::is_support_file_transfer_resume_num(
                                                     peer_ver,
                                                 );
-                                            match fs::is_write_need_confirmation(
-                                                is_support_resume && job.is_resume,
-                                                &write_path,
-                                                &digest,
-                                            ) {
+                                            match job.download_digest(is_support_resume, &digest) {
                                                 Ok(res) => match res {
                                                     DigestCheckResult::IsSame => {
                                                         let req = FileTransferSendConfirmRequest {
@@ -1938,13 +1952,19 @@ impl<T: InvokeUiSession> Remote<T> {
                                                         union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                                                         ..Default::default()
                                                     };
-                                                        job.confirm(&req).await;
+                                                        // This did not approve replacing an existing local file.
                                                         let msg = new_send_confirm(req);
                                                         allow_err!(peer.send(&msg).await);
                                                     }
                                                 },
                                                 Err(err) => {
-                                                    println!("error receiving digest: {}", err);
+                                                    self.cancel_transfer_job(digest.id, peer).await;
+                                                    self.handle_job_status(
+                                                        digest.id,
+                                                        -1,
+                                                        Some(err.to_string()),
+                                                    );
+                                                    return true;
                                                 }
                                             }
                                         }
@@ -1953,13 +1973,18 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Block(block)) => {
+                            let id = block.id;
+                            let mut write_error = None;
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                                if let Err(_err) = job.write(block).await {
-                                    // to-do: add "skip" for writing job
-                                }
+                                let result = job.write(block).await;
                                 if job.r#type == fs::JobType::Generic {
+                                    write_error = result.err().map(|err| err.to_string());
                                     self.update_jobs_status();
                                 }
+                            }
+                            if let Some(err) = write_error {
+                                self.cancel_transfer_job(id, peer).await;
+                                self.handle_job_status(id, -1, Some(err));
                             }
                         }
                         Some(file_response::Union::Done(d)) => {
@@ -1967,8 +1992,11 @@ impl<T: InvokeUiSession> Remote<T> {
                             let mut job_type = fs::JobType::Generic;
                             let mut printer_data = None;
                             if let Some(job) = fs::remove_job(d.id, &mut self.write_jobs) {
-                                job.modify_time();
-                                err = job.job_error();
+                                err = job
+                                    .finish_download()
+                                    .err()
+                                    .map(|err| err.to_string())
+                                    .or_else(|| job.job_error());
                                 job_type = job.r#type;
                                 printer_data = match job.get_buf_data().await {
                                     Ok(d) => d,
