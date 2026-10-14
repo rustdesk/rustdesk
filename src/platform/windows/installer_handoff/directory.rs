@@ -44,7 +44,7 @@ pub(super) fn path() -> ResultType<PathBuf> {
 }
 
 pub(super) fn create(path: &Path) -> ResultType<()> {
-    let path = wide_string(path_for_cmd_environment(path)?);
+    let wide_path = wide_string(path_for_cmd_environment(path)?);
     let mut descriptor = PSECURITY_DESCRIPTOR::default();
     // OWNER RIGHTS removes the ordinary creator's implicit WRITE_DAC permission.
     // The owner can inspect the ACL, but only Administrators/SYSTEM can modify contents.
@@ -62,7 +62,12 @@ pub(super) fn create(path: &Path) -> ResultType<()> {
         lpSecurityDescriptor: descriptor.0,
         bInheritHandle: false.into(),
     };
-    let result = unsafe { CreateDirectoryW(PCWSTR(path.as_ptr()), Some(&attributes)) };
+    let result = unsafe { CreateDirectoryW(PCWSTR(wide_path.as_ptr()), Some(&attributes)) };
     unsafe { LocalFree(Some(HLOCAL(descriptor.0))) };
-    Ok(result?)
+    result.map_err(|err| {
+        anyhow!(
+            "Failed to create protected installer directory {}: {err}",
+            path.display()
+        )
+    })
 }

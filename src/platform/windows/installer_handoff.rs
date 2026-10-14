@@ -31,7 +31,6 @@ const INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE: u32 = 0x5253_0004;
 const BATCH_CODE_PAGE_FAILURE_EXIT_CODE: u32 = 0x5253_0005;
 const BATCH_OUTPUT_DIRECTORY_EXISTS_EXIT_CODE: u32 = 0x5253_0006;
 const BATCH_OUTPUT_DIRECTORY_CREATE_FAILURE_EXIT_CODE: u32 = 0x5253_0007;
-const INSTALL_HANDOFF_CLEANUP_FAILURE_EXIT_CODE: u32 = 0x5253_000E;
 const SHA256_HASH_LENGTH: usize = 32;
 
 type BatchHash = [u8; SHA256_HASH_LENGTH];
@@ -120,7 +119,7 @@ fn verified_install_bootstrap(
     Ok(format!(
         "setlocal DisableDelayedExpansion & set \"S={source}\" & set \"R={runner}\" & \
          set \"Q={cmd}\" & set \"H={certutil}\" & set \"F={findstr}\" & \
-         set \"D={directory}\" & set \"ERRORLEVEL=\" & set \"E=0\" & setlocal EnableDelayedExpansion & \
+         set \"D={directory}\" & set \"E=0\" & setlocal EnableDelayedExpansion & \
          if exist \"!R!\" (set \"E={INSTALL_HANDOFF_RUNNER_EXISTS_EXIT_CODE}\") else (\
          copy /Y \"!S!\" \"!R!\" > nul || \
          (set \"E={INSTALL_HANDOFF_COPY_FAILURE_EXIT_CODE}\") & \
@@ -130,8 +129,7 @@ fn verified_install_bootstrap(
          set \"E={INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE}\") & \
          if \"!E!\"==\"0\" (\"!Q!\" /D /E:ON /V:OFF /C \"\"!R!\"\" & \
          set \"E=!errorlevel!\")) & \
-         rd /s /q \"!D!\" > nul 2>&1 || \
-         set \"E={INSTALL_HANDOFF_CLEANUP_FAILURE_EXIT_CODE}\" & exit /b !E!",
+         rd /s /q \"!D!\" > nul 2>&1 & exit /b !E!",
         install_hash_pattern(&script.expected_hash),
     ))
 }
@@ -164,6 +162,18 @@ pub(super) fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
             directory.display()
         )
     })?;
+    // Cleanup must not change the result of an installation that already ran.
+    match fs::symlink_metadata(&directory) {
+        Ok(_) => log::warn!(
+            "Failed to remove protected installer directory {}",
+            directory.display()
+        ),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => log::warn!(
+            "Failed to verify cleanup of protected installer directory {}: {err}",
+            directory.display()
+        ),
+    }
     if exit_code != 0 {
         bail!(
             "{tip} failed with elevated exit code {exit_code}: {}",
@@ -179,9 +189,6 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
         INSTALL_HANDOFF_COPY_FAILURE_EXIT_CODE => "failed to copy protected runner",
         INSTALL_HANDOFF_HASH_FAILURE_EXIT_CODE => "failed to hash protected runner",
         INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE => "protected runner hash mismatch",
-        INSTALL_HANDOFF_CLEANUP_FAILURE_EXIT_CODE => {
-            "failed to clean the protected installer directory"
-        }
         BATCH_CODE_PAGE_FAILURE_EXIT_CODE => "failed to set the installer code page",
         BATCH_OUTPUT_DIRECTORY_EXISTS_EXIT_CODE => "installer output directory already exists",
         BATCH_OUTPUT_DIRECTORY_CREATE_FAILURE_EXIT_CODE => {
@@ -193,94 +200,4 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::super::installer_shell::{embedded_shortcut_commands, shortcut_bytes};
-    use super::*;
-    use ::windows::Win32::System::Threading;
-    use std::os::windows::process::CommandExt;
-
-    #[test]
-    fn native_install_handoff_verifies_before_execution() {
-        let marker = std::env::temp_dir().join(format!(
-            "rustdesk_install_marker_{}",
-            uuid::Uuid::new_v4().simple()
-        ));
-        let runner_dir = std::env::temp_dir().join(format!(
-            "rustdesk_install_!RUSTDESK_HANDOFF_EXPAND!&^@()runner_{}",
-            uuid::Uuid::new_v4().simple()
-        ));
-        std::fs::create_dir(&runner_dir).expect("runner directory should be created");
-        let shortcut_commands = embedded_shortcut_commands(
-            shortcut_bytes(r"C:\RustDesk.exe", None, None)
-                .expect("native shortcut should be generated"),
-            "test.lnk",
-            "test",
-        );
-        let script = write_install_script(format!(
-            "if \"%PROGRAMDATA%\"==\"rustdesk_untrusted\" exit /b 77\r\n\
-             if \"%PUBLIC%\"==\"rustdesk_untrusted\" exit /b 77\r\n\
-             {shortcut_commands}\r\n\
-             > \"{}\" echo verified",
-            marker.display()
-        ))
-        .expect("install script should be created");
-        let bootstrap = verified_install_bootstrap(&script, &runner_dir)
-            .expect("native verifier bootstrap should be generated");
-        let output = run_install_bootstrap_for_test(&bootstrap);
-        assert!(
-            output.status.success(),
-            "unchanged script failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(marker.exists(), "verified install script must execute");
-        std::fs::remove_file(&marker).expect("test marker should be removed");
-        assert!(
-            !runner_dir.exists(),
-            "protected runner directory must be removed"
-        );
-        std::fs::create_dir(&runner_dir).expect("runner directory should be created");
-        assert_replaced_install_script_is_rejected(&script, &runner_dir, &marker);
-        assert!(
-            !runner_dir.exists(),
-            "failed handoff directory must be removed"
-        );
-    }
-
-    fn assert_replaced_install_script_is_rejected(
-        script: &InstallCommandScript,
-        runner_dir: &Path,
-        marker: &Path,
-    ) {
-        std::fs::write(
-            &script.path,
-            format!("> \"{}\" echo hijacked\r\n", marker.display()),
-        )
-        .expect("install script should be replaceable");
-        let replaced = verified_install_bootstrap(&script, &runner_dir)
-            .expect("replacement verifier should be generated");
-        let output = run_install_bootstrap_for_test(&replaced);
-        assert!(
-            !output.status.success(),
-            "replaced script unexpectedly passed verification"
-        );
-        assert_eq!(
-            output.status.code(),
-            Some(INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE as i32)
-        );
-        assert!(!marker.exists(), "replaced script must not execute");
-    }
-
-    fn run_install_bootstrap_for_test(bootstrap: &str) -> std::process::Output {
-        let cmd = get_system_executable(CMD_RELATIVE_PATH).expect("system cmd.exe should resolve");
-        let mut command = std::process::Command::new(cmd);
-        command
-            .env("PROGRAMDATA", "rustdesk_untrusted")
-            .env("PUBLIC", "rustdesk_untrusted")
-            .env("RUSTDESK_HANDOFF_EXPAND", "expanded");
-        command.raw_arg(format!("/D /E:ON /V:ON /C {bootstrap}"));
-        command
-            .creation_flags(Threading::CREATE_NO_WINDOW.0)
-            .output()
-            .expect("native verifier should run")
-    }
-}
+mod tests;
