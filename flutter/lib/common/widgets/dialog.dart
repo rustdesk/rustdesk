@@ -2278,9 +2278,12 @@ void changeBot({Function()? callback}) async {
 
 void change2fa({Function()? callback}) async {
   if (bind.mainHasValid2FaSync()) {
-    await bind.mainSetOption(key: "2fa", value: "");
-    await bind.mainClearTrustedDevices();
-    callback?.call();
+    try {
+      await bind.mainSetOption(key: "2fa", value: "");
+      callback?.call();
+    } catch (error) {
+      showToast(error.toString());
+    }
     return;
   }
   var new2fa = (await bind.mainGenerate2Fa());
@@ -2795,23 +2798,33 @@ void confrimDeleteTrustedDevicesDialog(
   CommonConfirmDialog(gFFI.dialogManager, '${translate('Confirm Delete')}?',
       () async {
     if (selectedDevices.isEmpty) return;
-    if (selectedDevices.length == trustedDevices.length) {
-      await bind.mainClearTrustedDevices();
-      trustedDevices.clear();
-      selectedDevices.clear();
-    } else {
-      final json = jsonEncode(selectedDevices.map((e) => e.toList()).toList());
-      await bind.mainRemoveTrustedDevices(json: json);
-      trustedDevices.removeWhere((element) {
-        return selectedDevices.contains(element.hwid);
-      });
-      selectedDevices.clear();
+    try {
+      if (selectedDevices.length == trustedDevices.length) {
+        await bind.mainClearTrustedDevices();
+        trustedDevices.clear();
+        selectedDevices.clear();
+      } else {
+        final json = jsonEncode(selectedDevices.map((e) => e.toList()).toList());
+        await bind.mainRemoveTrustedDevices(json: json);
+        trustedDevices.removeWhere((element) {
+          return selectedDevices.contains(element.recordId);
+        });
+        selectedDevices.clear();
+      }
+    } catch (error) {
+      showToast(error.toString());
     }
   });
 }
 
 void manageTrustedDeviceDialog() async {
-  RxList<TrustedDevice> trustedDevices = (await TrustedDevice.get()).obs;
+  late final RxList<TrustedDevice> trustedDevices;
+  try {
+    trustedDevices = (await TrustedDevice.get()).obs;
+  } catch (error) {
+    showToast(error.toString());
+    return;
+  }
   RxList<Uint8List> selectedDevices = RxList.empty();
   gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
@@ -2838,15 +2851,15 @@ void manageTrustedDeviceDialog() async {
 }
 
 class TrustedDevice {
-  late final Uint8List hwid;
+  late final Uint8List recordId;
   late final int time;
   late final String id;
   late final String name;
   late final String platform;
 
   TrustedDevice.fromJson(Map<String, dynamic> json) {
-    final hwidList = json['hwid'] as List<dynamic>;
-    hwid = Uint8List.fromList(hwidList.cast<int>());
+    final recordIdList = json['record_id'] as List<dynamic>;
+    recordId = Uint8List.fromList(recordIdList.cast<int>());
     time = json['time'];
     id = json['id'];
     name = json['name'];
@@ -2854,7 +2867,8 @@ class TrustedDevice {
   }
 
   String daysRemaining() {
-    final expiry = time + 90 * 24 * 60 * 60 * 1000;
+    const lifetime = Duration(days: 30);
+    final expiry = time + lifetime.inMilliseconds;
     final remaining = expiry - DateTime.now().millisecondsSinceEpoch;
     if (remaining < 0) {
       return '0';
@@ -2864,18 +2878,10 @@ class TrustedDevice {
 
   static Future<List<TrustedDevice>> get() async {
     final List<TrustedDevice> devices = List.empty(growable: true);
-    try {
-      final devicesJson = await bind.mainGetTrustedDevices();
-      if (devicesJson.isNotEmpty) {
-        final devicesList = json.decode(devicesJson);
-        if (devicesList is List) {
-          for (var device in devicesList) {
-            devices.add(TrustedDevice.fromJson(device));
-          }
-        }
-      }
-    } catch (e) {
-      print(e.toString());
+    final devicesJson = await bind.mainGetTrustedDevices();
+    final devicesList = json.decode(devicesJson) as List;
+    for (final device in devicesList) {
+      devices.add(TrustedDevice.fromJson(device));
     }
     devices.sort((a, b) => b.time.compareTo(a.time));
     return devices;
@@ -2909,7 +2915,7 @@ Widget trustedDevicesTable(
               onChanged: (value) {
                 if (value == true) {
                   selectedDevices.clear();
-                  selectedDevices.addAll(devices.map((e) => e.hwid));
+                  selectedDevices.addAll(devices.map((e) => e.recordId));
                 } else {
                   selectedDevices.clear();
                 }
@@ -2923,14 +2929,14 @@ Widget trustedDevicesTable(
           rows: devices.map((device) {
             return DataRow(cells: [
               DataCell(Checkbox(
-                value: selectedDevices.contains(device.hwid),
+                value: selectedDevices.contains(device.recordId),
                 onChanged: (value) {
                   if (value == null) return;
                   if (value) {
-                    selectedDevices.remove(device.hwid);
-                    selectedDevices.add(device.hwid);
+                    selectedDevices.remove(device.recordId);
+                    selectedDevices.add(device.recordId);
                   } else {
-                    selectedDevices.remove(device.hwid);
+                    selectedDevices.remove(device.recordId);
                   }
                 },
               )),

@@ -1144,6 +1144,13 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               message: translate("enable-trusted-devices-tip"),
               child: _OptionCheckBox(context, "Enable trusted devices",
                   kOptionEnableTrustedDevices,
+                  optSetter: (key, value) async {
+                try {
+                  await mainSetBoolOption(key, value);
+                } catch (error) {
+                  showToast(error.toString());
+                }
+              },
                   enabled: !locked, update: (v) {
                 setState(() {});
               }),
