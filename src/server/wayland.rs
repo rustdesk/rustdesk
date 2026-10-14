@@ -728,6 +728,44 @@ pub fn clear() {
     *PIPEWIRE_INITIALIZED.write().unwrap() = false;
 }
 
+/// The portal session close when the last remote connection goes (`AuthedConnID::drop`). A portal
+/// request waiting for the user holds the session slot for up to 3 minutes, and the drop can run
+/// on a tokio worker: the close waits on its own thread, and one runs at a time.
+pub(super) fn try_close_portal_session() {
+    static CLOSER: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
+    // No session and no request pending (drm, x11, closed already): nothing to wait for.
+    if matches!(scrap::wayland::pipewire::RDP_SESSION_INFO.try_lock(), Ok(info) if info.is_none()) {
+        return;
+    }
+    let mut closer = CLOSER.lock().unwrap();
+    // A close still running covers this one.
+    if matches!(&*closer, Some(close) if !close.is_finished()) {
+        return;
+    }
+    match std::thread::Builder::new()
+        .name("portal-session-close".into())
+        .spawn(|| {
+            // The drop counted before this thread ran: count again.
+            if !AUTHED_CONNS
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|c| c.conn_type == AuthConnType::Remote)
+            {
+                scrap::wayland::pipewire::try_close_session();
+            }
+        }) {
+        Ok(close) => *closer = Some(close),
+        // A peer can drop connections at any rate.
+        Err(err) => hbb_common::throttled_log!(
+            std::time::Duration::from_secs(60),
+            error,
+            "Failed to spawn the portal session close: {}",
+            err
+        ),
+    }
+}
+
 /// Initialize the PipeWire/portal capture path from the plain (sync) video thread, so a DRM display
 /// that cannot be captured can fall through to PipeWire for THAT display. `ensure_inited` short-circuits
 /// to the DRM branch whenever DRM is globally available, so it never runs `check_init`; this helper

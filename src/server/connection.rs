@@ -7057,33 +7057,9 @@ mod raii {
                 display_service::restore_resolutions();
                 #[cfg(windows)]
                 let _ = virtual_display_manager::reset_all();
-                // The session slot is held while a portal request waits for the user, and this
-                // can drop on a tokio worker: close off it.
                 #[cfg(target_os = "linux")]
-                if !crate::platform::linux::is_x11() {
-                    if let Err(err) = std::thread::Builder::new()
-                        .name("portal-session-close".into())
-                        .spawn(|| {
-                            // A remote that came in since the count above keeps the session, as
-                            // when the close ran on the dropping thread right after the count.
-                            let remote = AUTHED_CONNS
-                                .lock()
-                                .unwrap()
-                                .iter()
-                                .any(|c| c.conn_type == AuthConnType::Remote);
-                            if !remote {
-                                scrap::wayland::pipewire::try_close_session();
-                            }
-                        })
-                    {
-                        // A peer can drop connections at any rate.
-                        hbb_common::throttled_log!(
-                            Duration::from_secs(60),
-                            error,
-                            "Failed to spawn the portal session close: {}",
-                            err
-                        );
-                    }
+                if self.1 == AuthConnType::Remote || self.1 == AuthConnType::ViewCamera {
+                    wayland::try_close_portal_session();
                 }
             }
             Self::check_wake_lock();
