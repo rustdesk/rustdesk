@@ -1,28 +1,34 @@
-use super::{super::read_token_user_buffer, ResultType};
-use hbb_common::{anyhow::Context, bail};
+use super::{ResultType, SERVICE_WAIT_TIMEOUT};
+use hbb_common::{anyhow::Context, bail, log};
 use std::{
-    ffi::OsStr, fmt, os::windows::ffi::OsStrExt, path::Path, process::Command, time::Duration,
+    ffi::OsStr,
+    fmt,
+    os::windows::ffi::OsStrExt,
+    path::Path,
+    process::Command,
+    thread,
+    time::{Duration, Instant},
 };
 use windows::{
-    core::{Error, Owned, PCWSTR, PWSTR},
+    core::{Interface, BSTR},
     Win32::{
-        Foundation::{
-            GetLastError, ERROR_NOT_ALL_ASSIGNED, ERROR_TIMEOUT, HANDLE, WAIT_OBJECT_0,
-            WAIT_TIMEOUT,
-        },
-        Security::{
-            AdjustTokenPrivileges, IsWellKnownSid, LookupPrivilegeValueW, WinLocalSystemSid,
-            LUID_AND_ATTRIBUTES, SE_DEBUG_NAME, SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES,
-            TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_PRIVILEGES, TOKEN_QUERY, TOKEN_USER,
-        },
-        System::Threading::{
-            CreateProcessWithTokenW, GetCurrentProcess, GetExitCodeProcess, OpenProcess,
-            OpenProcessToken, TerminateProcess, WaitForSingleObject, CREATE_NO_WINDOW,
-            LOGON_WITH_PROFILE, PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
-            STARTUPINFOW,
+        Foundation::RPC_E_CHANGED_MODE,
+        System::{
+            Com::{
+                CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+                COINIT_MULTITHREADED,
+            },
+            TaskScheduler::{
+                IExecAction, IRegisteredTask, ITaskDefinition, ITaskService, TaskScheduler,
+                TASK_ACTION_EXEC, TASK_CREATE, TASK_LOGON_SERVICE_ACCOUNT, TASK_STATE_QUEUED,
+                TASK_STATE_READY, TASK_STATE_RUNNING,
+            },
+            Variant::VARIANT,
         },
     },
 };
+
+const IMPORT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Debug)]
 pub(super) struct ImportExitUnconfirmed;
@@ -38,120 +44,115 @@ impl std::error::Error for ImportExitUnconfirmed {}
 pub(super) fn run(config_path: &Path) -> ResultType<()> {
     let mut command = super::system_import_command()?;
     command.arg(config_path);
-    let token = system_token()?;
-    let process = spawn(&command, *token)?;
-    wait_for_import(*process)
+    let arguments = command
+        .get_args()
+        .map(quoted)
+        .collect::<Result<Vec<_>, _>>()?
+        .join(" ");
+    let _com = initialize_com()?;
+    let scheduler: ITaskService =
+        unsafe { CoCreateInstance(&TaskScheduler, None, CLSCTX_INPROC_SERVER) }?;
+    let empty = VARIANT::default();
+    unsafe { scheduler.Connect(&empty, &empty, &empty, &empty) }?;
+    let definition = task_definition(&scheduler, &command)?;
+    let folder = unsafe { scheduler.GetFolder(&BSTR::from("\\")) }?;
+    let name = BSTR::from(format!(
+        "{}-ConfigImport-{}",
+        crate::get_app_name(),
+        uuid::Uuid::new_v4().simple()
+    ));
+    let task = unsafe {
+        folder.RegisterTaskDefinition(
+            &name,
+            &definition,
+            TASK_CREATE.0,
+            &VARIANT::from("SYSTEM"),
+            &empty,
+            TASK_LOGON_SERVICE_ACCOUNT,
+            &VARIANT::from("O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)"),
+        )
+    }?;
+    let result = run_task(&task, &arguments);
+    if let Err(error) = unsafe { folder.DeleteTask(&name, 0) } {
+        log::error!("Failed to remove configuration import task {name}: {error}");
+        if result.is_ok() {
+            return Err(error.into());
+        }
+    }
+    result
 }
 
-fn wait_for_import(process: HANDLE) -> ResultType<()> {
-    let timeout = super::SERVICE_WAIT_TIMEOUT.as_millis() as u32;
-    match unsafe { WaitForSingleObject(process, timeout) } {
-        WAIT_OBJECT_0 => {}
-        WAIT_TIMEOUT => {
-            unsafe { TerminateProcess(process, ERROR_TIMEOUT.0) }.context(ImportExitUnconfirmed)?;
-            wait_for_termination(process, super::SERVICE_WAIT_TIMEOUT)?;
-            bail!("Configuration import timed out");
-        }
-        _ => return Err(Error::from_win32()).context(ImportExitUnconfirmed),
+fn run_task(task: &IRegisteredTask, arguments: &str) -> ResultType<()> {
+    let _running = unsafe { task.Run(&VARIANT::from(arguments)) }?;
+    if let Err(error) = wait_for_exit(task) {
+        unsafe { task.Stop(0) }.context(ImportExitUnconfirmed)?;
+        wait_for_exit(task).context(ImportExitUnconfirmed)?;
+        return Err(error);
     }
-    let mut exit_code = 0;
-    unsafe { GetExitCodeProcess(process, &mut exit_code) }?;
+    let exit_code = unsafe { task.LastTaskResult() }?;
     if exit_code != 0 {
-        bail!("Configuration importer failed with exit code {exit_code}");
+        bail!("Configuration importer failed with exit code {exit_code:#010x}");
     }
     Ok(())
 }
 
-fn wait_for_termination(process: HANDLE, timeout: Duration) -> ResultType<()> {
-    match unsafe { WaitForSingleObject(process, timeout.as_millis() as u32) } {
-        WAIT_OBJECT_0 => Ok(()),
-        WAIT_TIMEOUT => Err(ImportExitUnconfirmed.into()),
-        _ => Err(Error::from_win32()).context(ImportExitUnconfirmed),
+fn wait_for_exit(task: &IRegisteredTask) -> ResultType<()> {
+    let started = Instant::now();
+    loop {
+        match unsafe { task.State() }? {
+            TASK_STATE_READY => return Ok(()),
+            TASK_STATE_RUNNING | TASK_STATE_QUEUED => {}
+            state => bail!("Unexpected configuration import task state: {state:?}"),
+        }
+        if started.elapsed() >= SERVICE_WAIT_TIMEOUT {
+            bail!("Configuration import timed out");
+        }
+        thread::sleep(IMPORT_POLL_INTERVAL);
     }
 }
 
-fn spawn(command: &Command, token: HANDLE) -> ResultType<Owned<HANDLE>> {
-    let executable = wide(command.get_program());
-    let directory = wide(
+fn task_definition(scheduler: &ITaskService, command: &Command) -> ResultType<ITaskDefinition> {
+    let executable = bstr(command.get_program());
+    let directory = bstr(
         command
             .get_current_dir()
             .context("Missing import directory")?
             .as_os_str(),
     );
-    let mut command_line = std::iter::once(command.get_program())
-        .chain(command.get_args())
-        .map(quoted)
-        .collect::<Result<Vec<_>, _>>()?
-        .join(" ")
-        .encode_utf16()
-        .chain(Some(0))
-        .collect::<Vec<_>>();
-    let startup = STARTUPINFOW {
-        cb: std::mem::size_of::<STARTUPINFOW>() as u32,
-        ..Default::default()
-    };
-    let mut info = PROCESS_INFORMATION::default();
-    // A null environment with LOGON_WITH_PROFILE uses the SYSTEM profile,
-    // rather than inheriting the elevated user's configuration directory.
+    let definition = unsafe { scheduler.NewTask(0) }?;
     unsafe {
-        CreateProcessWithTokenW(
-            token,
-            LOGON_WITH_PROFILE,
-            PCWSTR(executable.as_ptr()),
-            Some(PWSTR(command_line.as_mut_ptr())),
-            CREATE_NO_WINDOW,
-            None,
-            PCWSTR(directory.as_ptr()),
-            &startup,
-            &mut info,
-        )?;
+        let principal = definition.Principal()?;
+        principal.SetUserId(&BSTR::from("SYSTEM"))?;
+        principal.SetLogonType(TASK_LOGON_SERVICE_ACCOUNT)?;
+        let settings = definition.Settings()?;
+        settings.SetAllowDemandStart(true.into())?;
+        settings.SetDisallowStartIfOnBatteries(false.into())?;
+        settings.SetStopIfGoingOnBatteries(false.into())?;
+        settings.SetAllowHardTerminate(true.into())?;
+        let action: IExecAction = definition.Actions()?.Create(TASK_ACTION_EXEC)?.cast()?;
+        action.SetPath(&executable)?;
+        // Supply arguments at Run time so user paths are not stored in the task definition.
+        action.SetArguments(&BSTR::from("$(Arg0)"))?;
+        action.SetWorkingDirectory(&directory)?;
     }
-    let process = unsafe { Owned::new(info.hProcess) };
-    let _thread = unsafe { Owned::new(info.hThread) };
-    Ok(process)
+    Ok(definition)
 }
 
-fn system_token() -> ResultType<Owned<HANDLE>> {
-    enable_debug_privilege()?;
-    let pid = impersonate_system::get_process_pid("winlogon.exe", false)
-        .map_err(|_| hbb_common::anyhow::anyhow!("Cannot find the SYSTEM logon process"))?;
-    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }?;
-    let process = unsafe { Owned::new(process) };
-    let mut token = HANDLE::default();
-    unsafe {
-        OpenProcessToken(
-            *process,
-            TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
-            &mut token,
-        )?;
+struct ComGuard;
+
+impl Drop for ComGuard {
+    fn drop(&mut self) {
+        unsafe { CoUninitialize() };
     }
-    let token = unsafe { Owned::new(token) };
-    let buffer = unsafe { read_token_user_buffer(*token, "configuration importer") }?;
-    let user = unsafe { std::ptr::read_unaligned(buffer.as_ptr().cast::<TOKEN_USER>()) };
-    if !unsafe { IsWellKnownSid(user.User.Sid, WinLocalSystemSid) }.as_bool() {
-        bail!("Configuration import requires a LocalSystem token");
-    }
-    Ok(token)
 }
 
-fn enable_debug_privilege() -> ResultType<()> {
-    let mut token = HANDLE::default();
-    unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &mut token) }?;
-    let token = unsafe { Owned::new(token) };
-    let mut privilege = LUID_AND_ATTRIBUTES {
-        Attributes: SE_PRIVILEGE_ENABLED,
-        ..Default::default()
-    };
-    unsafe { LookupPrivilegeValueW(None, SE_DEBUG_NAME, &mut privilege.Luid) }?;
-    let privileges = TOKEN_PRIVILEGES {
-        PrivilegeCount: 1,
-        Privileges: [privilege],
-    };
-    unsafe { AdjustTokenPrivileges(*token, false, Some(&privileges), 0, None, None) }?;
-    if unsafe { GetLastError() } == ERROR_NOT_ALL_ASSIGNED {
-        bail!("Administrator token does not grant SeDebugPrivilege for configuration import");
+fn initialize_com() -> ResultType<Option<ComGuard>> {
+    let result = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+    if result == RPC_E_CHANGED_MODE {
+        return Ok(None);
     }
-    Ok(())
+    result.ok()?;
+    Ok(Some(ComGuard))
 }
 
 fn quoted(value: &OsStr) -> ResultType<String> {
@@ -164,57 +165,6 @@ fn quoted(value: &OsStr) -> ResultType<String> {
     Ok(format!("\"{value}\""))
 }
 
-fn wide(value: &OsStr) -> Vec<u16> {
-    value.encode_wide().chain(Some(0)).collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{
-        os::windows::{io::AsRawHandle, process::CommandExt},
-        process::Stdio,
-        thread,
-    };
-
-    #[test]
-    fn termination_wait_reports_timeout_while_child_is_running() {
-        const CHILD_EXIT_DELAY: Duration = Duration::from_millis(250);
-        let shell = super::super::super::installer_shell::get_system_executable("cmd.exe").unwrap();
-        let mut child = Command::new(shell)
-            .args(["/d", "/c", "set /p input="])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
-            .spawn()
-            .unwrap();
-        let input = child.stdin.take().unwrap();
-        let release_input = thread::spawn(move || {
-            thread::sleep(CHILD_EXIT_DELAY);
-            drop(input);
-        });
-        let result = wait_for_termination(HANDLE(child.as_raw_handle()), Duration::ZERO);
-        release_input.join().unwrap();
-        child.wait().unwrap();
-        assert!(
-            result.unwrap_err().is::<ImportExitUnconfirmed>(),
-            "A live importer must time out instead of allowing service startup"
-        );
-        assert!(wait_for_termination(HANDLE(child.as_raw_handle()), Duration::ZERO).is_ok());
-    }
-
-    #[test]
-    fn importer_failure_is_reported_after_the_child_exits() {
-        let shell = super::super::super::installer_shell::get_system_executable("cmd.exe").unwrap();
-        for exit_code in [0, 1] {
-            let mut child = Command::new(&shell)
-                .args(["/d", "/c", &format!("exit /b {exit_code}")])
-                .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
-                .spawn()
-                .unwrap();
-            let result = wait_for_import(HANDLE(child.as_raw_handle()));
-            assert_eq!(result.is_ok(), exit_code == 0);
-            assert_eq!(child.try_wait().unwrap().unwrap().code(), Some(exit_code));
-        }
-    }
+fn bstr(value: &OsStr) -> BSTR {
+    BSTR::from_wide(&value.encode_wide().collect::<Vec<_>>())
 }

@@ -36,7 +36,9 @@ const SERVICE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 pub(super) fn execute(install: bool, caller_pid: u32, config_path: &Path) -> ResultType<()> {
     let (_, directory, _, executable) = super::super::get_install_info();
     if install && config::is_outgoing_only() {
-        terminate_processes(caller_pid, false)?;
+        if let Err(error) = terminate_processes(caller_pid, false) {
+            log::warn!("Service process cleanup failed: {error:#}");
+        }
         return create_tray_shortcut(&directory, &executable);
     }
     let access = if install {
