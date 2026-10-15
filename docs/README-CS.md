@@ -74,6 +74,7 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ### Instalace vcpkg
 
 ```sh
+cd "$HOME"
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
 git checkout 2023.04.15
