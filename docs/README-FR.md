@@ -33,7 +33,7 @@ Les versions de bureau utilisent [sciter](https://sciter.com/) pour l'interface 
 
 - Installez [vcpkg](https://github.com/microsoft/vcpkg), et définissez correctement la variable d'environnement `VCPKG_ROOT`.
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- Depuis la racine du dépôt, installez les dépendances déclarées dans `vcpkg.json` (manifest mode).
 
   ```sh
   # Linux/macOS

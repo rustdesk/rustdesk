@@ -45,7 +45,7 @@
 
 - بطريقة صحيحة `VCPKG_ROOT` env variable وأعد [vcpkg](https://github.com/microsoft/vcpkg) ثبت
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- من جذر المستودع، ثبّت التبعيات المُعلنة في `vcpkg.json` (manifest mode).
 
   ```sh
   # Linux/macOS

@@ -43,7 +43,7 @@ Vui lòng tự tải thư viện `Sciter` về máy theo hướng dẫn cho từ
 
 - Tải và cài đặt [`vcpkg`](https://github.com/microsoft/vcpkg), và thiết lập biến môi trường `VCPKG_ROOT`.
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- Từ thư mục gốc của repo, cài đặt các gói phụ thuộc được khai báo trong `vcpkg.json` (manifest mode).
 
   ```sh
   # Linux/macOS

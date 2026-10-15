@@ -33,7 +33,7 @@ Desktop-versiot käyttävät [sciter](https://sciter.com/) graafisena käyttöli
 
 - Asenna [vcpkg](https://github.com/microsoft/vcpkg), ja aseta `VCPKG_ROOT`-ympäristömuuttuja oikein
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- Asenna repositorion juuresta `vcpkg.json`:ssä määritellyt riippuvuudet (manifest mode).
 
   ```sh
   # Linux/macOS

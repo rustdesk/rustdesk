@@ -33,7 +33,7 @@ La labortabla versio uzas [sciter](https://sciter.com/) por la interfaco, bonvol
 
 - Instalu [vcpkg](https://github.com/microsoft/vcpkg), kaj agordu la medivariablon `VCPKG_ROOT` korekte
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- El la radika dosierujo de la deponejo instalu la dependecojn deklaritajn en `vcpkg.json` (manifest mode).
 
   ```sh
   # Linux/macOS

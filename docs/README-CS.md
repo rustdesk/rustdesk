@@ -38,7 +38,7 @@ Varianta pro mobilní platformy používá aplikační rámec (framework) Flutte
 
 - Nainstalujte [vcpkg](https://github.com/microsoft/vcpkg), a správně nastavte proměnnou prostředí `VCPKG_ROOT`
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- Z kořene repozitáře nainstalujte závislosti deklarované v `vcpkg.json` (manifest mode).
 
   ```sh
   # Linux/macOS

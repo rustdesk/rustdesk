@@ -45,7 +45,7 @@ Wersje desktopowe korzystają z biblioteki [sciter](https://sciter.com/) jako si
 
 - Zainstaluj [vcpkg](https://github.com/microsoft/vcpkg), i ustaw prawidłowo zmienną `VCPKG_ROOT`
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- Z katalogu głównego repozytorium zainstaluj zależności zadeklarowane w `vcpkg.json` (manifest mode).
 
   ```sh
   # Linux/macOS

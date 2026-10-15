@@ -33,7 +33,7 @@
 
 - [vcpkg](https://github.com/microsoft/vcpkg) ഇൻസ്റ്റാൾ ചെയ്ത് `VCPKG_ROOT` env വേരിയബിൾ ശരിയായി സജ്ജമാക്കുക
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- റെപ്പോ റൂട്ടിൽ നിന്ന് `vcpkg.json`-ൽ പ്രഖ്യാപിച്ചിട്ടുള്ള ഡിപ്പൻഡൻസികൾ ഇൻസ്റ്റാൾ ചെയ്യുക (manifest mode).
 
   ```sh
   # Linux/macOS

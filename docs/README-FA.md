@@ -42,7 +42,7 @@
 - نرم افزار [vcpkg](https://github.com/microsoft/vcpkg) را نصب کنید و متغیر `VCPKG_ROOT` را به درستی تنظیم کنید.
 - بسته‌های vcpkg مورد نیاز را نصب کنید:
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- از ریشهٔ مخزن، وابستگی‌های اعلام‌شده در `vcpkg.json` را نصب کنید (manifest mode).
 
   ```sh
   # Linux/macOS

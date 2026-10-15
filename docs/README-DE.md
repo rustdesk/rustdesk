@@ -52,7 +52,7 @@ Bitte laden Sie die dynamische Bibliothek Sciter selbst herunter.
 
 - Installieren Sie [vcpkg](https://github.com/microsoft/vcpkg) und fügen Sie die Systemumgebungsvariable `VCPKG_ROOT` hinzu
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- Installieren Sie ausgehend vom Stammverzeichnis des Repos die in `vcpkg.json` deklarierten Abhängigkeiten (manifest mode).
 
   ```sh
   # Linux/macOS

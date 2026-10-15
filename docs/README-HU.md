@@ -43,7 +43,7 @@ A telefonos verziók Flutter-t hasznának. Később lehetséges hogy Sciterről 
 
 - Telepítsd a [vcpkg](https://github.com/microsoft/vcpkg)-t, és állítsd be a `VCPKG_ROOT` környezeti változót helyesen
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- A repo gyökérkönyvtárából telepítsd a `vcpkg.json`-ban megadott függőségeket (manifest mode).
 
   ```sh
   # Linux/macOS

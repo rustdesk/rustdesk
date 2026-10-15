@@ -52,7 +52,7 @@ Sciter 동적 라이브러리를 직접 다운로드하세요.
 
 - [vcpkg](https://github.com/microsoft/vcpkg)를 설치하고 `VCPKG_ROOT` 환경 변수를 올바르게 설정합니다
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- 리포지토리 루트 디렉터리에서 `vcpkg.json`에 선언된 종속성을 설치합니다 (manifest mode).
 
   ```sh
   # Linux/macOS

@@ -35,7 +35,7 @@ Hent venligst sciter dynamic library selv.
 
 - Installer [vcpkg](https://github.com/microsoft/vcpkg), og indstil env-variabelen "VCPKG_ROOT" korrekt
 
-- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+- Installer de afhængigheder, der er deklareret i `vcpkg.json`, fra roden af repoet (manifest mode).
 
   ```sh
   # Linux/macOS
