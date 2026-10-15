@@ -1,6 +1,7 @@
 mod directory;
 
 use super::{
+    installer_files::VERIFY_FILE_ARGUMENT,
     installer_shell::{
         get_system_executable, path_for_cmd_assignment, path_for_cmd_environment,
         run_elevated_and_wait, trusted_install_environment,
@@ -20,14 +21,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const CERTUTIL_RELATIVE_PATH: &str = "certutil.exe";
 const CHCP_RELATIVE_PATH: &str = "chcp.com";
-const FINDSTR_RELATIVE_PATH: &str = "findstr.exe";
 const UTF8_CODE_PAGE: u32 = 65001;
 const INSTALL_HANDOFF_RUNNER_EXISTS_EXIT_CODE: u32 = 0x5253_0001;
 const INSTALL_HANDOFF_COPY_FAILURE_EXIT_CODE: u32 = 0x5253_0002;
 const INSTALL_HANDOFF_HASH_FAILURE_EXIT_CODE: u32 = 0x5253_0003;
-const INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE: u32 = 0x5253_0004;
 const BATCH_CODE_PAGE_FAILURE_EXIT_CODE: u32 = 0x5253_0005;
 const BATCH_OUTPUT_DIRECTORY_EXISTS_EXIT_CODE: u32 = 0x5253_0006;
 const BATCH_OUTPUT_DIRECTORY_CREATE_FAILURE_EXIT_CODE: u32 = 0x5253_0007;
@@ -57,11 +55,14 @@ fn prepare_install_commands(commands: &str) -> ResultType<String> {
     let commands = commands.replace("\r\n", "\n").replace('\n', "\r\n");
     let chcp_path = get_system_executable(CHCP_RELATIVE_PATH)?;
     let chcp = path_for_cmd_environment(&chcp_path)?;
+    let executable = std::env::current_exe()?;
+    let helper = path_for_cmd_environment(&executable)?;
     Ok(format!(
         "@echo off\r\nsetlocal EnableExtensions DisableDelayedExpansion\r\n\
          \"{chcp}\" {UTF8_CODE_PAGE} > nul || exit /b \
          {BATCH_CODE_PAGE_FAILURE_EXIT_CODE}\r\n\
          {}\r\n\
+         set \"RUSTDESK_INSTALL_HELPER={helper}\"\r\n\
          if exist \"%~f0.dir\" exit /b {BATCH_OUTPUT_DIRECTORY_EXISTS_EXIT_CODE}\r\n\
          md \"%~f0.dir\" || exit /b {BATCH_OUTPUT_DIRECTORY_CREATE_FAILURE_EXIT_CODE}\r\n\
          set \"RUSTDESK_OUTPUT_DIR=%~f0.dir\"\r\n{commands}\r\nexit /b 0\r\n",
@@ -91,13 +92,6 @@ fn write_install_script(cmds: String) -> ResultType<InstallCommandScript> {
     Ok(script)
 }
 
-fn install_hash_pattern(hash: &BatchHash) -> String {
-    hash.iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<Vec<_>>()
-        .join(" *")
-}
-
 fn verified_install_bootstrap(
     script: &InstallCommandScript,
     runner_directory: &Path,
@@ -106,31 +100,29 @@ fn verified_install_bootstrap(
     let directory = path_for_cmd_assignment(runner_directory)?;
     let runner = runner_directory.join("install.bat");
     let runner = path_for_cmd_assignment(&runner)?;
-    let cmd_path = get_system_executable(CMD_RELATIVE_PATH)?;
-    let certutil_path = get_system_executable(CERTUTIL_RELATIVE_PATH)?;
-    let findstr_path = get_system_executable(FINDSTR_RELATIVE_PATH)?;
-    let cmd = path_for_cmd_assignment(&cmd_path)?;
-    let certutil = path_for_cmd_assignment(&certutil_path)?;
-    let findstr = path_for_cmd_assignment(&findstr_path)?;
+    let helper_path = std::env::current_exe()?;
+    let helper = path_for_cmd_assignment(&helper_path)?;
     // Short names preserve headroom under the Windows 7 ShellExecuteExW 2,048
     // UTF-16-character parameter limit. Paths are stored with delayed expansion
     // disabled, then expanded indirectly so literal `!` survives: S=source,
-    // R=runner, Q=cmd.exe, H=certutil.exe, F=findstr.exe, D=directory, E=exit code.
+    // R=runner, H=native file helper, D=directory, E=exit code.
+    // Execute the BAT directly in this cmd process, without CALL's extra parsing.
     Ok(format!(
         "setlocal DisableDelayedExpansion & set \"S={source}\" & set \"R={runner}\" & \
-         set \"Q={cmd}\" & set \"H={certutil}\" & set \"F={findstr}\" & \
+         set \"H={helper}\" & \
          set \"ERRORLEVEL=\" & set \"D={directory}\" & set \"E=0\" & setlocal EnableDelayedExpansion & \
          if exist \"!R!\" (set \"E={INSTALL_HANDOFF_RUNNER_EXISTS_EXIT_CODE}\") else (\
          copy /Y \"!S!\" \"!R!\" > nul || \
          (set \"E={INSTALL_HANDOFF_COPY_FAILURE_EXIT_CODE}\") & \
-         if \"!E!\"==\"0\" (\"!H!\" -hashfile \"!R!\" SHA256 > \"!R!.hash\" || \
+         if \"!E!\"==\"0\" (start \"\" /b /wait \"!H!\" {VERIFY_FILE_ARGUMENT} \
+         \"!R!\" {expected_hash} \"!R!.verified\" || \
          set \"E={INSTALL_HANDOFF_HASH_FAILURE_EXIT_CODE}\") & \
-         if \"!E!\"==\"0\" (\"!F!\" /R /I /X /C:\"{}\" \"!R!.hash\" > nul || \
-         set \"E={INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE}\") & \
-         if \"!E!\"==\"0\" (\"!Q!\" /D /E:ON /V:OFF /C \"\"!R!\"\" & \
+         if \"!E!\"==\"0\" (if not exist \"!R!.verified\" \
+         set \"E={INSTALL_HANDOFF_HASH_FAILURE_EXIT_CODE}\") & \
+         if \"!E!\"==\"0\" (\"!R!\" & \
          set \"E=!errorlevel!\")) & \
          rd /s /q \"!D!\" > nul 2>&1 & exit /b !E!",
-        install_hash_pattern(&script.expected_hash),
+        expected_hash = hex::encode(script.expected_hash),
     ))
 }
 
@@ -187,8 +179,7 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
     match exit_code {
         INSTALL_HANDOFF_RUNNER_EXISTS_EXIT_CODE => "protected runner already exists",
         INSTALL_HANDOFF_COPY_FAILURE_EXIT_CODE => "failed to copy protected runner",
-        INSTALL_HANDOFF_HASH_FAILURE_EXIT_CODE => "failed to hash protected runner",
-        INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE => "protected runner hash mismatch",
+        INSTALL_HANDOFF_HASH_FAILURE_EXIT_CODE => "failed to verify protected runner",
         BATCH_CODE_PAGE_FAILURE_EXIT_CODE => "failed to set the installer code page",
         BATCH_OUTPUT_DIRECTORY_EXISTS_EXIT_CODE => "installer output directory already exists",
         BATCH_OUTPUT_DIRECTORY_CREATE_FAILURE_EXIT_CODE => {
@@ -201,125 +192,66 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::super::installer_shell::{
-        embedded_shortcut_commands, shortcut_bytes, WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS,
+    use super::super::{
+        installer_files::{handle_command, DECODE_SHORTCUT_ARGUMENT},
+        installer_shell::{embedded_shortcut_commands, shortcut_bytes},
     };
     use super::*;
-    use ::windows::Win32::System::Threading;
-    use std::os::windows::process::CommandExt;
+    use hbb_common::base64::{engine::general_purpose::STANDARD, Engine as _};
 
     #[test]
-    fn native_install_handoff_verifies_before_execution() {
-        let marker = std::env::temp_dir().join(format!(
-            "rustdesk_install_marker_{}",
-            uuid::Uuid::new_v4().simple()
-        ));
-        let runner_dir = std::env::temp_dir().join(format!(
-            "rustdesk_install_!RUSTDESK_HANDOFF_EXPAND!&^@()runner_{}",
-            uuid::Uuid::new_v4().simple()
-        ));
-        std::fs::create_dir(&runner_dir).expect("runner directory should be created");
-        let shortcut_commands = embedded_shortcut_commands(
-            shortcut_bytes(r"C:\RustDesk.exe", None, None)
-                .expect("native shortcut should be generated"),
-            "test.lnk",
-            "test",
-        );
-        let script = write_install_script(format!(
-            "if \"%PROGRAMDATA%\"==\"rustdesk_untrusted\" exit /b 77\r\n\
-             if \"%PUBLIC%\"==\"rustdesk_untrusted\" exit /b 77\r\n\
-             {shortcut_commands}\r\n\
-             > \"{}\" echo verified",
-            marker.display()
-        ))
-        .expect("install script should be created");
-        let bootstrap = verified_install_bootstrap(&script, &runner_dir)
-            .expect("native verifier bootstrap should be generated");
-        assert_native_handoff_structure(&script, &shortcut_commands, &runner_dir);
-
-        let output = run_install_bootstrap_for_test(&bootstrap);
-        assert!(
-            output.status.success(),
-            "unchanged script failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(marker.exists(), "verified install script must execute");
-        std::fs::remove_file(&marker).expect("test marker should be removed");
-        assert!(
-            !runner_dir.exists(),
-            "protected runner directory must be removed"
-        );
-        std::fs::create_dir(&runner_dir).expect("runner directory should be created");
-        assert_replaced_install_script_is_rejected(&script, &runner_dir, &marker);
-        assert!(
-            !runner_dir.exists(),
-            "failed handoff directory must be removed"
-        );
-    }
-
-    fn assert_native_handoff_structure(
-        script: &InstallCommandScript,
-        shortcut_commands: &str,
-        runner_dir: &Path,
-    ) {
-        let bootstrap = verified_install_bootstrap(script, runner_dir)
-            .expect("native verifier bootstrap should be generated");
-        assert!(shortcut_commands.contains("certutil"));
-        assert!(shortcut_commands.contains("-decode"));
-        assert!(!shortcut_commands.to_ascii_lowercase().contains("cscript"));
-        assert!(!shortcut_commands
-            .to_ascii_lowercase()
-            .contains("powershell"));
-        let win7_hash_pattern = script
-            .expected_hash
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<Vec<_>>()
-            .join(" *");
-        assert!(bootstrap.contains(&format!("/R /I /X /C:\"{win7_hash_pattern}\"")));
-        let parameters = verified_install_parameters(script, runner_dir)
-            .expect("elevated parameters should be generated");
-        assert!(bootstrap.contains("certutil.exe"));
-        assert!(bootstrap.contains("findstr.exe"));
-        assert!(!bootstrap.to_ascii_lowercase().contains("powershell"));
+    fn installer_verification_rejects_changed_files() {
+        let shortcut = embedded_shortcut_commands(vec![0, 1, 2], "test.lnk", "test");
+        let script = write_install_script(shortcut.clone()).unwrap();
+        let runner = std::env::temp_dir().join("rustdesk !&^@() runner");
+        let parameters = verified_install_parameters(&script, &runner).unwrap();
+        for tool in ["certutil", "findstr", "cscript", "powershell"] {
+            assert!(!parameters.to_ascii_lowercase().contains(tool));
+            assert!(!shortcut.to_ascii_lowercase().contains(tool));
+        }
+        assert!(!parameters.to_ascii_lowercase().contains("cmd.exe"));
         assert!(parameters.encode_utf16().count() < WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS);
-    }
 
-    fn assert_replaced_install_script_is_rejected(
-        script: &InstallCommandScript,
-        runner_dir: &Path,
-        marker: &Path,
-    ) {
-        std::fs::write(
-            &script.path,
-            format!("> \"{}\" echo hijacked\r\n", marker.display()),
-        )
-        .expect("install script should be replaceable");
-        let replaced = verified_install_bootstrap(&script, &runner_dir)
-            .expect("replacement verifier should be generated");
-        let output = run_install_bootstrap_for_test(&replaced);
+        let receipt = script.path.with_extension("verified");
+        let arguments = vec![
+            VERIFY_FILE_ARGUMENT.into(),
+            script.path.to_str().unwrap().into(),
+            hex::encode(script.expected_hash),
+            receipt.to_str().unwrap().into(),
+        ];
+        handle_command(&arguments).unwrap().unwrap();
+        assert!(receipt.exists());
+        fs::remove_file(&receipt).unwrap();
+
+        fs::write(&script.path, "exit /b 77\r\n").unwrap();
+        assert!(handle_command(&arguments).unwrap().is_err());
         assert!(
-            !output.status.success(),
-            "replaced script unexpectedly passed verification"
+            !receipt.exists(),
+            "Changed files must not authorize execution"
         );
-        assert_eq!(
-            output.status.code(),
-            Some(INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE as i32)
-        );
-        assert!(!marker.exists(), "replaced script must not execute");
     }
 
-    fn run_install_bootstrap_for_test(bootstrap: &str) -> std::process::Output {
-        let cmd = get_system_executable(CMD_RELATIVE_PATH).expect("system cmd.exe should resolve");
-        let mut command = std::process::Command::new(cmd);
-        command
-            .env("PROGRAMDATA", "rustdesk_untrusted")
-            .env("PUBLIC", "rustdesk_untrusted")
-            .env("RUSTDESK_HANDOFF_EXPAND", "expanded");
-        command.raw_arg(format!("/D /E:ON /V:ON /C {bootstrap}"));
-        command
-            .creation_flags(Threading::CREATE_NO_WINDOW.0)
-            .output()
-            .expect("native verifier should run")
+    #[test]
+    fn installer_shortcut_decoding_preserves_link_bytes() {
+        let source = std::env::temp_dir().join(format!(
+            "rustdesk-shortcut-{}-!&^@().b64",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let destination = source.with_extension("lnk");
+        let shortcut = shortcut_bytes(r"C:\RustDesk.exe", Some("--tray"), None).unwrap();
+        fs::write(&source, format!("{}\r\n", STANDARD.encode(&shortcut))).unwrap();
+        let arguments = vec![
+            DECODE_SHORTCUT_ARGUMENT.into(),
+            source.to_str().unwrap().into(),
+            destination.to_str().unwrap().into(),
+        ];
+        handle_command(&arguments).unwrap().unwrap();
+        assert_eq!(fs::read(&destination).unwrap(), shortcut);
+        fs::remove_file(&destination).unwrap();
+
+        fs::write(&source, "invalid base64").unwrap();
+        assert!(handle_command(&arguments).unwrap().is_err());
+        assert!(!destination.exists());
+        fs::remove_file(source).unwrap();
     }
 }

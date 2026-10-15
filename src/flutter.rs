@@ -128,7 +128,7 @@ pub extern "C" fn rustdesk_core_main() -> bool {
         Some(crate::core_main::CoreMainAction::ExitFailure(err)) => {
             eprintln!("Command failed: {err}");
             log::error!("Command failed: {err}");
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            #[cfg(target_os = "macos")]
             std::process::exit(CORE_MAIN_EXIT_FAILURE);
         }
         None => {

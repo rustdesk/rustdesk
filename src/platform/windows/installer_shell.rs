@@ -1,4 +1,4 @@
-use super::{wide_string, ResultType};
+use super::{installer_files::DECODE_SHORTCUT_ARGUMENT, wide_string, ResultType};
 use hbb_common::{
     anyhow::anyhow,
     bail,
@@ -73,10 +73,10 @@ pub(super) fn shortcut_bytes(
 
 pub(super) fn embedded_shortcut_commands(bytes: Vec<u8>, filename: &str, name: &str) -> String {
     let encoded = STANDARD.encode(bytes);
-    let encoded_path = format!("%~f0.{name}.b64");
     format!(
-        "> \"{encoded_path}\" echo {encoded}\r\n\
-         certutil -f -decode \"{encoded_path}\" \"%RUSTDESK_OUTPUT_DIR%\\{filename}\" > nul || exit /b {BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE}"
+        "> \"%~f0.{name}.b64\" echo {encoded}\r\n\
+         start \"\" /b /wait \"%RUSTDESK_INSTALL_HELPER%\" {DECODE_SHORTCUT_ARGUMENT} \"%~f0.{name}.b64\" \"%RUSTDESK_OUTPUT_DIR%\\{filename}\" > nul || exit /b {BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE}\r\n\
+         if not exist \"%RUSTDESK_OUTPUT_DIR%\\{filename}\" exit /b {BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE}"
     )
 }
 

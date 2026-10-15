@@ -97,9 +97,9 @@ use windows_service::{
 use winreg::{enums::*, RegKey};
 
 mod acl;
+pub(crate) mod installer_files;
 mod installer_handoff;
 mod installer_shell;
-pub(crate) mod service_control;
 mod verified_update;
 mod msi_registry;
 pub(crate) use acl::current_process_user_sid_string;
@@ -3326,9 +3326,22 @@ pub fn try_lock_tray_single_instance() -> bool {
 
 pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     log::info!("Uninstalling service...");
+    let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "Y".into());
-    if let Err(err) = service_control::run(false) {
-        service_control::restore_stop_service(false);
+    let cmds = format!(
+        "
+    chcp 65001
+    sc stop {app_name}
+    sc delete {app_name}
+    if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
+    taskkill /F /IM {broker_exe}
+    taskkill /F /IM {app_name}.exe{filter}
+    ",
+        app_name = crate::get_app_name(),
+        broker_exe = WIN_TOPMOST_INJECTED_PROCESS_EXE,
+    );
+    if let Err(err) = run_cmds(cmds, false, "uninstall") {
+        Config::set_option("stop-service".into(), "".into());
         log::debug!("{err}");
         return true;
     }
@@ -3336,13 +3349,54 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     std::process::exit(0);
 }
 
+fn get_install_service_commands(path: &str, exe: &str) -> ResultType<String> {
+    let app_name = crate::get_app_name();
+    for value in [path, exe] {
+        validate_install_value(value)?;
+    }
+    let config_path = Config::file();
+    validate_install_value(
+        config_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Configuration path is not valid Unicode"))?,
+    )?;
+    let shortcut_icon_location = get_custom_icon(path, exe);
+    if let Some(icon) = shortcut_icon_location.as_deref() {
+        validate_install_value(icon)?;
+    }
+    let tray_shortcut_commands =
+        embedded_tray_shortcut_commands(&app_name, exe, shortcut_icon_location.as_deref())?;
+    let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
+    Ok(format!(
+        "
+chcp 65001
+taskkill /F /IM {app_name}.exe{filter}
+{tray_shortcut_commands}
+copy /Y \"%RUSTDESK_OUTPUT_DIR%\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+{import_config}
+{create_service}
+    ",
+        import_config = get_import_config(exe),
+        create_service = get_create_service(exe),
+    ))
+}
+
 pub fn install_service() -> bool {
     log::info!("Installing service...");
     let _installing = crate::platform::InstallingService::new();
+    let (_, path, _, exe) = get_install_info();
     Config::set_option("stop-service".into(), "".into());
+    let cmds = match get_install_service_commands(&path, &exe) {
+        Ok(cmds) => cmds,
+        Err(err) => {
+            Config::set_option("stop-service".into(), "Y".into());
+            log::error!("Failed to prepare service installation: {err}");
+            return true;
+        }
+    };
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
-    if let Err(err) = service_control::run(true) {
-        service_control::restore_stop_service(true);
+    if let Err(err) = run_cmds(cmds, false, "install") {
+        Config::set_option("stop-service".into(), "Y".into());
         crate::ipc::EXIT_RECV_CLOSE.store(true, Ordering::Relaxed);
         log::debug!("{err}");
         return true;
