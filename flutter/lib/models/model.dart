@@ -125,6 +125,7 @@ class FfiModel with ChangeNotifier {
   bool _androidDocumentPickerActive = false;
   bool _androidDocumentPickerInterruptedConnection = false;
   bool _viewOnly = false;
+  Map<String, String>? mcpLastMsgBox;
   bool _showMyCursor = false;
   WeakReference<FFI> parent;
   late final SessionID sessionId;
@@ -166,7 +167,10 @@ class FfiModel with ChangeNotifier {
   bool get isPeerLinux => _pi.platform == kPeerPlatformLinux;
   bool get isPeerWindows => _pi.platform == kPeerPlatformWindows;
 
-  bool get viewOnly => _viewOnly;
+  bool get viewOnly => _viewOnly || agentControl;
+  String get agentControlGrant =>
+      bind.sessionGetAgentControl(sessionId: sessionId);
+  bool get agentControl => agentControlGrant.isNotEmpty;
   bool get showMyCursor => _showMyCursor;
 
   set inputBlocked(v) {
@@ -892,6 +896,7 @@ class FfiModel with ChangeNotifier {
     final title = evt['title'];
     final text = evt['text'];
     final link = evt['link'];
+    mcpLastMsgBox = {'type': '$type', 'title': '$title', 'text': '$text'};
 
     // The peer-gone detector reconnects under `restarting-show` rather than an error title, so
     // it needs naming here too. By its own title, not the type: an explicitly restarted remote
@@ -933,6 +938,7 @@ class FfiModel with ChangeNotifier {
       if (_restartReconnectDelayTimer == null) {
         parent.target?.inputModel.setRelativeMouseMode(false);
         _cancelPendingMonitorRestore();
+        mcpLastMsgBox = null;
         bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
         clearPermissions();
         // Retry once more after the silent window so restart reconnect attempts
@@ -1118,6 +1124,7 @@ class FfiModel with ChangeNotifier {
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
     _cancelPendingMonitorRestore();
+    mcpLastMsgBox = null;
     bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
     clearPermissions();
     dialogManager.dismissAll();
@@ -1839,6 +1846,8 @@ class FfiModel with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  void refreshAgentControl() => notifyListeners();
 
   void setShowMyCursor(bool value) {
     if (_showMyCursor != value) {

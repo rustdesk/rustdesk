@@ -288,5 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-already-bound-to", "Already bound to"),
         ("shortcut-mobile-physical-keyboard-tip", "Recording requires a physical keyboard. Soft keyboards are not supported."),
         ("shortcut-key-not-supported", "\"{}\" can't be used as a shortcut."),
+        ("mcp-server-tip", "Let MCP clients such as Claude control remote computers through RustDesk. Listens on 127.0.0.1 only and requires an access token. Connections and control requests need your approval unless you turn that off below."),
+        ("mcp-read-access-tip", "Enabling MCP lets local MCP clients that hold the access token list your open remote sessions and take screenshots of them without asking for control."),
     ].iter().cloned().collect();
 }
