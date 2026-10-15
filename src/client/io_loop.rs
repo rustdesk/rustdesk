@@ -269,6 +269,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut webrtc_suspect_since: Option<Instant> = None;
                 let mut last_rx_progress = peer.rx_progress();
                 let mut peer_gone = false;
+                // A send on a link that died silently (e.g. while the Mac slept) can block
+                // for minutes, which keeps the receive timeout below from ever firing.
+                peer.set_send_timeout(SEC30.as_millis() as u64);
 
                 loop {
                     tokio::select! {
