@@ -381,6 +381,13 @@ prebuild)
 		flutter/android/build.gradle \
 		flutter/android/app/build.gradle
 
+	# Gradle 8 / AGP 8 thrash in the default 1 GiB heap; raise it as CI does
+
+	sed \
+		-i \
+		-e 's/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g' \
+		flutter/android/gradle.properties
+
 	# `firebase_analytics` is not in these files now, but we still keep the following lines.
 
 	sed \
