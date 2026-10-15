@@ -346,7 +346,7 @@ prebuild)
 	pushd flutter
 
 	flutter clean
-	flutter packages pub get
+	flutter packages pub get --enforce-lockfile
 
 	popd # flutter
 
