@@ -1978,10 +1978,23 @@ class ImageModel with ChangeNotifier {
   decodeAndUpdate(int display, Uint8List rgba) async {
     final pid = parent.target?.id;
     final rect = parent.target?.ffiModel.pi.getDisplayRect(display);
+    var width = rect?.width.toInt() ?? 0;
+    var height = rect?.height.toInt() ?? 0;
+    // The FSRCNNX upscaler doubles frame dimensions after decode while peer
+    // info still reports native size: follow the buffer when the toggle is on
+    // and it holds exactly a 2x frame (2w * 2h * 4 bytes).
+    if (width > 0 &&
+        height > 0 &&
+        rgba.length == width * height * 16 &&
+        bind.sessionGetToggleOptionSync(
+            sessionId: sessionId, arg: kOptionUpscaler)) {
+      width *= 2;
+      height *= 2;
+    }
     final image = await img.decodeImageFromPixels(
       rgba,
-      rect?.width.toInt() ?? 0,
-      rect?.height.toInt() ?? 0,
+      width,
+      height,
       isWeb | isWindows | isLinux
           ? ui.PixelFormat.rgba8888
           : ui.PixelFormat.bgra8888,

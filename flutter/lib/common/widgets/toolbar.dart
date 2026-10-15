@@ -1199,6 +1199,23 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('True color (4:4:4)'))));
   }
 
+  // FSRCNNX upscaling (client-side, after decode; off by default: it costs
+  // roughly 0.3s per 960x540 frame on a desktop CPU).
+  // Native only: on Web Rust never runs (JS client owns decode/render),
+  // so the toggle would be a dead switch there.
+  if (!isWeb) {
+    final value = bind.sessionGetToggleOptionSync(
+        sessionId: sessionId, arg: kOptionUpscaler);
+    v.add(TToggleMenu(
+        value: value,
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionToggleOption(
+              sessionId: sessionId, value: kOptionUpscaler);
+        },
+        child: Text(translate('Upscaling (FSRCNNX)'))));
+  }
+
   if (isDefaultConn && isMobile) {
     v.addAll(toolbarKeyboardToggles(ffi));
   }
