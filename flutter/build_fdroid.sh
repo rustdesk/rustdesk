@@ -154,7 +154,7 @@ prebuild)
 		.github/workflows/bridge.yml)"
 
 	FLUTTER_BRIDGE_VERSION="$(yq -r \
-		.env.FLUTTER_VERSION \
+		'.jobs.generate_bridge.strategy.matrix.job[] | select(.["artifact-name"] == "bridge-artifact") | .["flutter-version"]' \
 		.github/workflows/bridge.yml)"
 
 	FLUTTER_RUST_BRIDGE_VERSION="$(yq -r \
@@ -306,66 +306,68 @@ prebuild)
 
 	git apply res/fdroid/patches/*.patch
 
-	# If Flutter version used to generate bridge files differs from Flutter
-	# version used to compile Rustdesk library, generate bridge using the
-	# `FLUTTER_BRIDGE_VERSION` an restore the pubspec later
+	# Generate bridge files using `FLUTTER_BRIDGE_VERSION`, which may differ
+	# from the Flutter version used to compile RustDesk library, and restore
+	# the pubspec later
 
-	if [ "${FLUTTER_VERSION}" != "${FLUTTER_BRIDGE_VERSION}" ]; then
-		# Find first libclang.so and set BRIDGE_LLVM_PATH
+	# Find first libclang.so and set BRIDGE_LLVM_PATH
 
-		BRIDGE_LLVM_PATH="$(find /usr/lib/ -name libclang.so | head -n1)"
+	BRIDGE_LLVM_PATH="$(find /usr/lib/ -name libclang.so | head -n1)"
 
-		if [ -z "${BRIDGE_LLVM_PATH}" ]; then
-			echo 'ERROR: Can not find libclang.so for bridge generator!' >&2
-			exit 1
-		fi
-
-		BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
-		BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
-
-		# Install Flutter bridge version
-
-		prepare_flutter "${FLUTTER_BRIDGE_VERSION}" "${HOME}/flutter"
-
-		# Save changes
-
-		git add .
-
-		# Edit pubspec to make flutter bridge version work
-
-		sed \
-			-i \
-			-e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
-			flutter/pubspec.yaml
-
-		# Download Flutter dependencies
-
-		pushd flutter
-
-		flutter clean
-		flutter packages pub get
-
-		popd # flutter
-
-		# Generate FFI bindings
-
-		flutter_rust_bridge_codegen \
-			--rust-input ./src/flutter_ffi.rs \
-			--dart-output ./flutter/lib/generated_bridge.dart \
-			--llvm-path "${BRIDGE_LLVM_PATH}"
-
-		# Add bridge files to save-list
-
-		git add -f ./flutter/lib/generated_bridge.* ./src/bridge_generated.*
-
-		# Restore everything
-
-		git checkout '*'
-		git clean -dffx
-		git reset
-
-		unset BRIDGE_LLVM_PATH
+	if [ -z "${BRIDGE_LLVM_PATH}" ]; then
+		echo 'ERROR: Can not find libclang.so for bridge generator!' >&2
+		exit 1
 	fi
+
+	BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
+	BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
+
+	# Install Flutter bridge version
+
+	# Unbraced on purpose: F-Droid recipes rewrite the braced form with sed to
+	# pin a version, but the bridge generator only works with the Flutter
+	# version bridge.yml uses
+
+	prepare_flutter "$FLUTTER_BRIDGE_VERSION" "${HOME}/flutter"
+
+	# Save changes
+
+	git add .
+
+	# Edit pubspec to make flutter bridge version work
+
+	sed \
+		-i \
+		-e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
+		flutter/pubspec.yaml
+
+	# Download Flutter dependencies
+
+	pushd flutter
+
+	flutter clean
+	flutter packages pub get
+
+	popd # flutter
+
+	# Generate FFI bindings
+
+	flutter_rust_bridge_codegen \
+		--rust-input ./src/flutter_ffi.rs \
+		--dart-output ./flutter/lib/generated_bridge.dart \
+		--llvm-path "${BRIDGE_LLVM_PATH}"
+
+	# Add bridge files to save-list
+
+	git add -f ./flutter/lib/generated_bridge.* ./src/bridge_generated.*
+
+	# Restore everything
+
+	git checkout '*'
+	git clean -dffx
+	git reset
+
+	unset BRIDGE_LLVM_PATH
 
 	# Install Flutter version for RustDesk library build
 
@@ -378,6 +380,13 @@ prebuild)
 		-e '/gms/d' \
 		flutter/android/build.gradle \
 		flutter/android/app/build.gradle
+
+	# Gradle 8 / AGP 8 thrash in the default 1 GiB heap; raise it as CI does
+
+	sed \
+		-i \
+		-e 's/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g' \
+		flutter/android/gradle.properties
 
 	# `firebase_analytics` is not in these files now, but we still keep the following lines.
 
