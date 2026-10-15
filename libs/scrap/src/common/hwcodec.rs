@@ -134,7 +134,7 @@ impl EncoderApi for HwRamEncoder {
             }
             Ok(vf)
         } else {
-            Err(anyhow!("no valid frame"))
+            Err(anyhow!("encoder warm-up pending"))
         }
     }
 
@@ -236,7 +236,9 @@ impl HwRamEncoder {
                 data.append(v);
                 Ok(data)
             }
-            Err(_) => Ok(Vec::<EncodeFrame>::new()),
+            // Real encode errors propagate; an empty frame list (Ok with no
+            // output) is handled below as warm-up pending, not here.
+            Err(code) => bail!("encoder error: {}", code),
         }
     }
 
