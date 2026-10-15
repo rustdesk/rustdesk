@@ -26,7 +26,6 @@ const double _kSpaceBetweenLeftRightButtons = 40;
 const double _kLeftRightButtonWidth = 55;
 const double _kLeftRightButtonHeight = 40;
 const double _kBorderWidth = 1;
-const double _joystickDiameter = 100;
 final Color _kDefaultBorderColor = Colors.white.withOpacity(0.7);
 final Color _kDefaultColor = Colors.black.withOpacity(0.4);
 final Color _kTapDownColor = Colors.blue.withOpacity(0.7);
@@ -44,8 +43,7 @@ Offset _clampMouseButtonPosition(Offset position, Size size) {
   );
 }
 
-bool _mouseButtonsFit(Size size, Offset left, Offset right,
-    {Rect? joystickRect}) {
+bool _mouseButtonsFit(Size size, Offset left, Offset right) {
   const buttonSize = Size(_kLeftRightButtonWidth, _kLeftRightButtonHeight);
   final leftRect = left & buttonSize;
   final rightRect = right & buttonSize;
@@ -63,10 +61,7 @@ bool _mouseButtonsFit(Size size, Offset left, Offset right,
       rightRect.bottom <= size.height &&
       !leftRect.overlaps(rightRect) &&
       !leftRect.overlaps(wheelRect) &&
-      !rightRect.overlaps(wheelRect) &&
-      (joystickRect == null ||
-          (!leftRect.overlaps(joystickRect) &&
-              !rightRect.overlaps(joystickRect)));
+      !rightRect.overlaps(wheelRect);
 }
 
 (Offset, Offset)? _defaultMouseButtonPositions(Size size) {
@@ -98,32 +93,6 @@ bool _mouseButtonsFit(Size size, Offset left, Offset right,
   left = _clampMouseButtonPosition(left, size);
   right = _clampMouseButtonPosition(right, size);
   return _mouseButtonsFit(size, left, right) ? (left, right) : null;
-}
-
-Rect? _joystickRect(Size size, (Offset, Offset)? buttonPositions) {
-  if (size.width < _joystickDiameter || size.height < _joystickDiameter) {
-    return null;
-  }
-  final left = min(_kSpaceToHorizontalEdge, size.width - _joystickDiameter);
-  final maxTop = size.height - _joystickDiameter;
-  final wheelRect = Rect.fromLTWH(
-      max(0.0, size.width - _wheelWidth - _kSpaceToHorizontalEdge),
-      max(0.0, (size.height - _wheelHeight) / 2),
-      _wheelWidth,
-      min(_wheelHeight, size.height));
-  for (final top in [
-    (size.height * 0.5 + 25).clamp(0.0, maxTop),
-    min(_kSpaceToVerticalEdge, maxTop),
-  ]) {
-    final rect = Rect.fromLTWH(left, top, _joystickDiameter, _joystickDiameter);
-    if (!rect.overlaps(wheelRect) &&
-        (buttonPositions == null ||
-            _mouseButtonsFit(size, buttonPositions.$1, buttonPositions.$2,
-                joystickRect: rect))) {
-      return rect;
-    }
-  }
-  return null;
 }
 
 class FloatingMouseWidgets extends StatefulWidget {
@@ -178,9 +147,6 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
       builder: (context, constraints) {
         final viewportSize = constraints.biggest;
         final buttonPositions = _defaultMouseButtonPositions(viewportSize);
-        final joystickRect = virtualMouseMode.showVirtualJoystick
-            ? _joystickRect(viewportSize, buttonPositions)
-            : null;
         return Stack(
           children: [
             FloatingWheel(
@@ -188,11 +154,10 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
               cursorModel: _cursorModel,
               viewportSize: viewportSize,
             ),
-            if (joystickRect != null)
+            if (virtualMouseMode.showVirtualJoystick)
               VirtualJoystick(
                 cursorModel: _cursorModel,
                 inputModel: _inputModel,
-                position: joystickRect.topLeft,
               ),
             if (buttonPositions != null) ...[
               FloatingLeftRightButton(
@@ -200,14 +165,12 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
                 inputModel: _inputModel,
                 cursorModel: _cursorModel,
                 viewportSize: viewportSize,
-                joystickRect: joystickRect,
               ),
               FloatingLeftRightButton(
                 isLeft: false,
                 inputModel: _inputModel,
                 cursorModel: _cursorModel,
                 viewportSize: viewportSize,
-                joystickRect: joystickRect,
               ),
             ],
           ],
@@ -499,14 +462,12 @@ class FloatingLeftRightButton extends StatefulWidget {
   final InputModel inputModel;
   final CursorModel cursorModel;
   final Size viewportSize;
-  final Rect? joystickRect;
   const FloatingLeftRightButton(
       {super.key,
       required this.isLeft,
       required this.inputModel,
       required this.cursorModel,
-      required this.viewportSize,
-      this.joystickRect});
+      required this.viewportSize});
 
   @override
   State<FloatingLeftRightButton> createState() =>
@@ -576,8 +537,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   @override
   void didUpdateWidget(FloatingLeftRightButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.viewportSize != widget.viewportSize ||
-        oldWidget.joystickRect != widget.joystickRect) {
+    if (oldWidget.viewportSize != widget.viewportSize) {
       _resetPosition(MediaQuery.of(context).orientation);
     }
   }
@@ -628,8 +588,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     _position = _clampPosition(_savedOrDefaultPosition(ori, _isLeft));
     final otherPosition =
         _clampPosition(_savedOrDefaultPosition(ori, !_isLeft));
-    if (!_mouseButtonsFit(widget.viewportSize, _position, otherPosition,
-        joystickRect: widget.joystickRect)) {
+    if (!_mouseButtonsFit(widget.viewportSize, _position, otherPosition)) {
       _position = _defaultPosition(_isLeft);
     }
     // Layout changes must not overwrite the saved position.
@@ -861,13 +820,11 @@ class _QuarterCirclePainter extends CustomPainter {
 class VirtualJoystick extends StatefulWidget {
   final CursorModel cursorModel;
   final InputModel inputModel;
-  final Offset position;
 
   const VirtualJoystick({
     super.key,
     required this.cursorModel,
     required this.inputModel,
-    required this.position,
   });
 
   @override
@@ -875,8 +832,10 @@ class VirtualJoystick extends StatefulWidget {
 }
 
 class _VirtualJoystickState extends State<VirtualJoystick> {
+  Offset _position = Offset.zero;
+  bool _isInitialized = false;
   Offset _offset = Offset.zero;
-  final double _joystickRadius = _joystickDiameter / 2;
+  final double _joystickRadius = 50.0;
   final double _thumbRadius = 20.0;
   final double _moveStep = 3.0;
   final double _speed = 1.0;
@@ -889,16 +848,48 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
   Timer? _dragStartTimer;
   // Periodic timer for continuous movement
   Timer? _continuousMoveTimer;
+  Size? _lastScreenSize;
   bool _isPressed = false;
 
   /// Check if relative mouse mode is enabled.
   bool get _useRelativeMouse => widget.inputModel.relativeMouseMode.value;
 
   @override
+  void initState() {
+    super.initState();
+    widget.cursorModel.blockEvents = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _lastScreenSize = MediaQuery.of(context).size;
+      _resetPosition();
+    });
+  }
+
+  @override
   void dispose() {
     _stopSendEventTimer();
-    if (_isPressed) widget.cursorModel.blockEvents = false;
+    widget.cursorModel.blockEvents = false;
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final currentScreenSize = MediaQuery.of(context).size;
+    if (_lastScreenSize != null && _lastScreenSize != currentScreenSize) {
+      _resetPosition();
+    }
+    _lastScreenSize = currentScreenSize;
+  }
+
+  void _resetPosition() {
+    final size = MediaQuery.of(context).size;
+    setState(() {
+      _position = Offset(
+        _kSpaceToHorizontalEdge + _joystickRadius,
+        size.height * 0.5 + _joystickRadius * 1.5,
+      );
+      _isInitialized = true;
+    });
   }
 
   Offset _offsetToPanDelta(Offset offset) {
@@ -929,9 +920,12 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return Positioned(child: Offstage());
+    }
     return Positioned(
-      left: widget.position.dx,
-      top: widget.position.dy,
+      left: _position.dx - _joystickRadius,
+      top: _position.dy - _joystickRadius,
       child: GestureDetector(
         onPanStart: (details) {
           setState(() {

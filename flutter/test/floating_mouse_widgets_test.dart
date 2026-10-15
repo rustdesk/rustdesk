@@ -62,7 +62,6 @@ class _Binding extends Fake implements RustdeskImpl {
 }
 
 class _Input extends Fake implements InputModel {
-  final movements = <Offset>[];
   final scrollDirections = <int>[];
   final pressedButtons = <MouseButtons>[];
   final releasedButtons = <MouseButtons>[];
@@ -71,9 +70,7 @@ class _Input extends Fake implements InputModel {
   final relativeMouseMode = false.obs;
 
   @override
-  Future<void> sendMobileRelativeMouseMove(double dx, double dy) async {
-    movements.add(Offset(dx, dy));
-  }
+  Future<void> sendMobileRelativeMouseMove(double dx, double dy) async {}
 
   @override
   Future<void> scroll(int y) async {
@@ -111,11 +108,6 @@ class _VirtualMouseMode extends ChangeNotifier implements VirtualMouseMode {
 
   @override
   bool showVirtualJoystick = false;
-
-  void setJoystick(bool visible) {
-    showVirtualJoystick = visible;
-    notifyListeners();
-  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -163,7 +155,6 @@ final _left = find.byWidgetPredicate(
 final _right = find.byWidgetPredicate(
     (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
 final _wheel = find.byType(FloatingWheel);
-final _joystick = find.byType(VirtualJoystick);
 
 void main() {
   late _Binding binding;
@@ -420,98 +411,16 @@ void main() {
     expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
 
     try {
-      await pumpMouseWidgets(tester, ffi,
-          bottomBarHeight: 300, rightInset: 600);
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 730);
       expect(find.byType(FloatingLeftRightButton), findsNothing);
       expect(joystick, findsOneWidget);
-      expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
+      expect(ffi.cursorModel.shouldBlock(60, 1), isTrue);
     } finally {
       await gesture.up();
     }
     await tester.pump();
-    expect(ffi.cursorModel.shouldBlock(1, 1), isFalse);
+    expect(ffi.cursorModel.shouldBlock(60, 1), isFalse);
     await tester.pumpWidget(const SizedBox());
-  });
-
-  testWidgets('compact controls avoid the joystick and retain saved positions',
-      (tester) async {
-    setViewSize(tester, const Size(240, 200));
-    final ffi = _FFI();
-    ffi.inputModel.relativeMouseMode.value = true;
-    savedPositions['ll-mouse-btn-pos'] = '{"x":25.0,"y":20.0}';
-    savedPositions['rl-mouse-btn-pos'] = '{"x":95.0,"y":125.0}';
-    final saved = Map<String, String>.from(savedPositions);
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    expect(tester.getRect(_left).topLeft, const Offset(25, 20));
-    ffi.ffiModel.virtualMouseMode.setJoystick(true);
-    await tester.pump();
-    await tester.pump();
-    _expectSeparate(tester, [_left, _right, _wheel, _joystick]);
-    expect(tester.getRect(_right).topLeft, const Offset(95, 145));
-    await tester.tap(_left);
-    await tester.tap(_right);
-    await tester.tap(find.byIcon(Icons.keyboard_arrow_down));
-    final gesture = await tester.startGesture(tester.getCenter(_joystick));
-    await gesture.moveBy(const Offset(25, 0));
-    await tester.pump(const Duration(milliseconds: 150));
-    await gesture.up();
-    expect(
-        ffi.inputModel.pressedButtons, [MouseButtons.left, MouseButtons.right]);
-    expect(ffi.inputModel.scrollDirections, [-1]);
-    expect(ffi.inputModel.movements, isNotEmpty);
-    ffi.ffiModel.virtualMouseMode.setJoystick(false);
-    await tester.pump();
-    await tester.pump();
-    expect(tester.getRect(_left).topLeft, const Offset(25, 20));
-    expect(tester.getRect(_right).topLeft, const Offset(95, 125));
-    await removeControls(tester);
-    expect(savedPositions, saved);
-  });
-
-  testWidgets('shrinking the viewport hides an active joystick until it fits',
-      (tester) async {
-    setViewSize(tester, const Size(800, 400));
-    final ffi = _FFI();
-    ffi.ffiModel.virtualMouseMode.setJoystick(true);
-    ffi.inputModel.relativeMouseMode.value = true;
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final gesture = await tester.startGesture(tester.getCenter(_joystick));
-    await gesture.moveBy(const Offset(25, 0));
-    await tester.pump(const Duration(milliseconds: 150));
-    expect(ffi.inputModel.movements, isNotEmpty);
-    expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 300, rightInset: 580);
-    expect(_joystick, findsNothing);
-    expect(find.byType(FloatingLeftRightButton), findsNWidgets(2));
-    expect(_wheel, findsOneWidget);
-    expect(ffi.cursorModel.shouldBlock(1, 1), isFalse);
-    final sent = ffi.inputModel.movements.length;
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(ffi.inputModel.movements.length, sent);
-    await gesture.up();
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    expect(_joystick, findsOneWidget);
-    await removeControls(tester);
-  });
-
-  testWidgets('idle joystick removal and restoration preserve a button drag',
-      (tester) async {
-    setViewSize(tester, const Size(240, 200));
-    final ffi = _FFI();
-    ffi.ffiModel.virtualMouseMode.setJoystick(true);
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final gesture = await tester.startGesture(tester.getCenter(_right));
-    await gesture.moveBy(const Offset(3, 0));
-    expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 100, rightInset: 20);
-    expect(_joystick, findsNothing);
-    expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    expect(_joystick, findsOneWidget);
-    expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
-    await gesture.up();
-    expect(ffi.cursorModel.shouldBlock(1, 1), isFalse);
-    await removeControls(tester);
   });
 
   testWidgets(
