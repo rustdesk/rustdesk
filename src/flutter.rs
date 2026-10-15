@@ -39,7 +39,7 @@ pub(crate) const APP_TYPE_CM: &str = "main";
 
 #[cfg(target_os = "macos")]
 const CORE_MAIN_EXIT_SUCCESS: i32 = 0;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 const CORE_MAIN_EXIT_FAILURE: i32 = 1;
 
 // Do not remove the following constants.
@@ -128,7 +128,7 @@ pub extern "C" fn rustdesk_core_main() -> bool {
         Some(crate::core_main::CoreMainAction::ExitFailure(err)) => {
             eprintln!("Command failed: {err}");
             log::error!("Command failed: {err}");
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             std::process::exit(CORE_MAIN_EXIT_FAILURE);
         }
         None => {
@@ -158,6 +158,7 @@ pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_c
             }
             Some(crate::core_main::CoreMainAction::ExitFailure(err)) => {
                 log::error!("Command failed: {err}");
+                std::process::exit(CORE_MAIN_EXIT_FAILURE);
             }
             None => {}
         }
