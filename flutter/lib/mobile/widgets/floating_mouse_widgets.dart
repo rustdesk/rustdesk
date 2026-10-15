@@ -80,16 +80,11 @@ bool _mouseButtonsFit(Size size, Offset left, Offset right) {
 
   final wheelLeft =
       max(0.0, size.width - _wheelWidth - _kSpaceToHorizontalEdge);
-  if (wheelLeft >=
-      _kSpaceToHorizontalEdge +
-          2 * _kLeftRightButtonWidth +
-          _kSpaceToVerticalEdge) {
+  if (wheelLeft >= _kSpaceToHorizontalEdge + 2 * _kLeftRightButtonWidth) {
+    final gap = min(_kSpaceToVerticalEdge,
+        wheelLeft - _kSpaceToHorizontalEdge - 2 * _kLeftRightButtonWidth);
     left = Offset(_kSpaceToHorizontalEdge, y);
-    right = Offset(
-        _kSpaceToHorizontalEdge +
-            _kLeftRightButtonWidth +
-            _kSpaceToVerticalEdge,
-        y);
+    right = Offset(_kSpaceToHorizontalEdge + _kLeftRightButtonWidth + gap, y);
   } else {
     left = Offset(_kSpaceToHorizontalEdge,
         y - _kLeftRightButtonHeight - _kSpaceToVerticalEdge);
@@ -152,10 +147,6 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
       builder: (context, constraints) {
         final viewportSize = constraints.biggest;
         final buttonPositions = _defaultMouseButtonPositions(viewportSize);
-        if (buttonPositions == null) {
-          _cursorModel.blockEvents = false;
-          isSpecialHoldDragActive = false;
-        }
         return Stack(
           children: [
             FloatingWheel(
@@ -515,6 +506,10 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
 
   @override
   void dispose() {
+    if (_isDown) {
+      if (_isDragging) _cursorModel.blockEvents = false;
+      isSpecialHoldDragActive = false;
+    }
     _activePress = null;
     if (_remoteButtonDown) {
       _remoteButtonDown = false;

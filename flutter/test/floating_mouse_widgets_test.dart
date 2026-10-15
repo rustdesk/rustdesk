@@ -12,11 +12,18 @@ import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 
 class _Input extends Fake implements InputModel {
   final scrollDirections = <int>[];
   final pressedButtons = <MouseButtons>[];
   final releasedButtons = <MouseButtons>[];
+
+  @override
+  final relativeMouseMode = false.obs;
+
+  @override
+  Future<void> sendMobileRelativeMouseMove(double dx, double dy) async {}
 
   @override
   Future<void> scroll(int y) async {
@@ -53,7 +60,7 @@ class _VirtualMouseMode extends ChangeNotifier implements VirtualMouseMode {
   }
 
   @override
-  bool get showVirtualJoystick => false;
+  bool showVirtualJoystick = false;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -268,12 +275,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
   });
 
-  for (final size in [const Size(120, 400), const Size(240, 100)]) {
+  for (final size in [
+    const Size(120, 400),
+    const Size(240, 100),
+    const Size(220, 100),
+    const Size(215, 100),
+    const Size(210, 100),
+  ]) {
     testWidgets('all three controls stay separate and usable at $size',
         (tester) async {
       setViewSize(tester, size);
       final ffi = _FFI();
       await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+      expect(find.byType(FloatingLeftRightButton), findsNWidgets(2));
       final viewport = tester.getRect(find.byKey(const Key('mouse viewport')));
       final wheel = tester.getRect(find.byType(FloatingWheel));
       final left = find.byWidgetPredicate(
@@ -512,26 +526,60 @@ void main() {
     });
   }
 
-  testWidgets('shrinking away a held button releases input blocking',
+  for (final hold in [false, true]) {
+    testWidgets('shrinking away a button releases input blocking (held: $hold)',
+        (tester) async {
+      setViewSize(tester, const Size(800, 400));
+      final ffi = _FFI();
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+      final left = find.byWidgetPredicate(
+          (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+      final gesture = await tester.startGesture(tester.getCenter(left));
+      await tester.pump(Duration(milliseconds: hold ? 250 : 100));
+      await gesture.moveBy(const Offset(5, 0));
+      expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
+      expect(isSpecialHoldDragActive, hold);
+
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 730);
+      expect(find.byType(FloatingLeftRightButton), findsNothing);
+      expect(ffi.cursorModel.shouldBlock(60, 1), isFalse);
+      expect(isSpecialHoldDragActive, isFalse);
+      expect((ffi.inputModel as _Input).pressedButtons,
+          hold ? [MouseButtons.left] : isEmpty);
+      expect((ffi.inputModel as _Input).releasedButtons,
+          hold ? [MouseButtons.left] : isEmpty);
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 1));
+      expect((ffi.inputModel as _Input).releasedButtons,
+          hold ? [MouseButtons.left] : isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('joystick blocking survives click buttons disappearing',
       (tester) async {
     setViewSize(tester, const Size(800, 400));
     final ffi = _FFI();
+    ffi.ffiModel.virtualMouseMode.showVirtualJoystick = true;
+    ffi.inputModel.relativeMouseMode.value = true;
     await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
-    final left = find.byWidgetPredicate(
-        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
-    final gesture = await tester.startGesture(tester.getCenter(left));
-    await tester.pump(const Duration(milliseconds: 250));
-    await gesture.moveBy(const Offset(5, 0));
+    expect(find.byType(FloatingLeftRightButton), findsNWidgets(2));
+    final joystick = find.byType(VirtualJoystick);
+    final gesture = await tester.startGesture(tester.getCenter(joystick));
+    await gesture.moveBy(const Offset(25, 0));
+    await tester.pump(const Duration(milliseconds: 150));
     expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
 
-    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 730);
-    await gesture.up();
-    await tester.pump(const Duration(milliseconds: 1));
-    expect(find.byType(FloatingLeftRightButton), findsNothing);
+    try {
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 280, rightInset: 730);
+      expect(find.byType(FloatingLeftRightButton), findsNothing);
+      expect(joystick, findsOneWidget);
+      expect(ffi.cursorModel.shouldBlock(60, 1), isTrue);
+    } finally {
+      await gesture.up();
+    }
+    await tester.pump();
     expect(ffi.cursorModel.shouldBlock(60, 1), isFalse);
-    expect(isSpecialHoldDragActive, isFalse);
-    expect((ffi.inputModel as _Input).pressedButtons, [MouseButtons.left]);
-    expect((ffi.inputModel as _Input).releasedButtons, [MouseButtons.left]);
     await tester.pumpWidget(const SizedBox());
   });
 
