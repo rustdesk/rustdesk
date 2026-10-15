@@ -50,6 +50,8 @@ Por favor descarga la librería dinámica de Sciter tú mismo.
 
 - Instala [vcpkg](https://github.com/microsoft/vcpkg), y configura la variable de entono `VCPKG_ROOT` correctamente.
 
+- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+
   ```sh
   # Linux/macOS
   $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"

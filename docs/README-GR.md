@@ -45,6 +45,8 @@
 
 - Εγκαταστήσετε το [vcpkg](https://github.com/microsoft/vcpkg), και ρυθμίστε σωστά την παράμετρο συστήματος `VCPKG_ROOT`
 
+- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+
   ```sh
   # Linux/macOS
   $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"

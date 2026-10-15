@@ -50,6 +50,8 @@ RustDesk 期待各位的贡献. 如何参与开发? 详情请看 [CONTRIBUTING-Z
 
 - 安装 [vcpkg](https://github.com/microsoft/vcpkg), 正确设置 `VCPKG_ROOT` 环境变量
 
+- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+
   ```sh
   # Linux/macOS
   $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"

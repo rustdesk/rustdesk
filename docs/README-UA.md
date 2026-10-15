@@ -51,6 +51,8 @@ RustDesk вітає внески від усіх охочих. Дивіться 
 
 - Встановіть [vcpkg](https://github.com/microsoft/vcpkg) і правильно задайте змінну середовища `VCPKG_ROOT`.
 
+- From the repo root, install the dependencies declared in `vcpkg.json` (manifest mode).
+
   ```sh
   # Linux/macOS
   $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
