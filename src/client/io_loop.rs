@@ -1560,12 +1560,17 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::Hash(hash)) => {
+                    let was_secured = peer.is_secured();
                     if !self
                         .handler
                         .handle_hash(&self.handler.password.clone(), hash, peer)
                         .await
                     {
                         return false;
+                    }
+                    if !was_secured && peer.is_secured() {
+                        // A direct IP stream that was encrypted in answer to the server's offer.
+                        self.handler.set_connection_type(true, true, "TCP");
                     }
                 }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
