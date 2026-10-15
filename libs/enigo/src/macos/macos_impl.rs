@@ -294,12 +294,10 @@ impl MouseControllable for Enigo {
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) = CGEvent::new_mouse_event(src.clone(), event_type, dest, button) {
-                if self.multiple_click > 1 {
-                    event.set_integer_value_field(
-                        EventField::MOUSE_EVENT_CLICK_STATE,
-                        self.multiple_click,
-                    );
-                }
+                event.set_integer_value_field(
+                    EventField::MOUSE_EVENT_CLICK_STATE,
+                    self.multiple_click,
+                );
                 if let Some(v) = btn_value {
                     event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
                 }
@@ -333,12 +331,10 @@ impl MouseControllable for Enigo {
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) = CGEvent::new_mouse_event(src.clone(), event_type, dest, button) {
-                if self.multiple_click > 1 {
-                    event.set_integer_value_field(
-                        EventField::MOUSE_EVENT_CLICK_STATE,
-                        self.multiple_click,
-                    );
-                }
+                event.set_integer_value_field(
+                    EventField::MOUSE_EVENT_CLICK_STATE,
+                    self.multiple_click,
+                );
                 if let Some(v) = btn_value {
                     event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
                 }
