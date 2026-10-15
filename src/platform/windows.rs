@@ -3328,7 +3328,7 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     log::info!("Uninstalling service...");
     Config::set_option("stop-service".into(), "Y".into());
     if let Err(err) = service_control::run(false) {
-        Config::set_option("stop-service".into(), "".into());
+        service_control::restore_stop_service(false);
         log::debug!("{err}");
         return true;
     }
@@ -3342,7 +3342,7 @@ pub fn install_service() -> bool {
     Config::set_option("stop-service".into(), "".into());
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
     if let Err(err) = service_control::run(true) {
-        Config::set_option("stop-service".into(), "Y".into());
+        service_control::restore_stop_service(true);
         crate::ipc::EXIT_RECV_CLOSE.store(true, Ordering::Relaxed);
         log::debug!("{err}");
         return true;

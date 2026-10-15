@@ -1,28 +1,25 @@
 use super::{installer_shell::run_elevated_and_wait, ResultType};
 use hbb_common::{
-    anyhow::{anyhow, Context},
+    anyhow::Context,
     bail,
-    config::Config,
+    config::{self, Config},
     log,
 };
 use std::{
-    ffi::OsString,
-    os::windows::process::CommandExt,
     path::{Path, PathBuf},
     process::Command,
     time::Duration,
 };
 use windows_service::{
-    define_windows_service,
-    service::{ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus},
-    service_control_handler::{self, ServiceControlHandlerResult},
-    service_dispatcher,
+    service::{ServiceAccess, ServiceState},
+    service_manager::{ServiceManager, ServiceManagerAccess},
 };
 
+mod import;
 mod operations;
 
 const CONTROL_ARGUMENT: &str = "--native-service-control";
-const IMPORT_ARGUMENT: &str = "--native-service-import";
+const SERVICE_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(super) fn run(install: bool) -> ResultType<()> {
     let (executable, parameters) = command(install)?;
@@ -33,12 +30,54 @@ pub(super) fn run(install: bool) -> ResultType<()> {
     Ok(())
 }
 
+pub(super) fn restore_stop_service(install: bool) {
+    let stopped = if config::is_outgoing_only() {
+        Ok(install)
+    } else {
+        is_stopped()
+    };
+    match stopped {
+        Ok(stopped) => {
+            Config::set_option("stop-service".into(), if stopped { "Y" } else { "" }.into())
+        }
+        Err(error) => log::error!("Failed to synchronize service state after an error: {error:#}"),
+    }
+}
+
+fn is_stopped() -> ResultType<bool> {
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
+    match manager.open_service(crate::get_app_name(), ServiceAccess::QUERY_STATUS) {
+        Ok(service) => Ok(matches!(
+            service.query_status()?.current_state,
+            ServiceState::Stopped | ServiceState::StopPending
+        )),
+        Err(windows_service::Error::Winapi(error))
+            if matches!(error.raw_os_error(), Some(code) if
+                code == winapi::shared::winerror::ERROR_SERVICE_DOES_NOT_EXIST as i32 ||
+                code == winapi::shared::winerror::ERROR_SERVICE_MARKED_FOR_DELETE as i32) =>
+        {
+            Ok(true)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 fn command(install: bool) -> ResultType<(PathBuf, String)> {
     super::validate_install_app_name(&crate::get_app_name())?;
     let executable = std::env::current_exe()?;
     let action = if install { "install" } else { "uninstall" };
     let parameters = parameters(action, std::process::id(), &Config::file())?;
     Ok((executable, parameters))
+}
+
+fn system_import_command() -> ResultType<Command> {
+    let executable = PathBuf::from(super::get_install_info().3);
+    let directory = executable
+        .parent()
+        .context("Missing installation directory")?;
+    let mut command = Command::new(&executable);
+    command.arg("--import-config").current_dir(directory);
+    Ok(command)
 }
 
 fn parameters(action: &str, caller_pid: u32, config_path: &Path) -> ResultType<String> {
@@ -56,11 +95,6 @@ fn parameters(action: &str, caller_pid: u32, config_path: &Path) -> ResultType<S
 pub(crate) fn handle_command(args: &[String]) -> Option<ResultType<()>> {
     match args.first().map(String::as_str) {
         Some(CONTROL_ARGUMENT) => Some(execute_command(args)),
-        Some(IMPORT_ARGUMENT) if args.len() == 1 => Some(
-            service_dispatcher::start(crate::get_app_name(), ffi_import_service)
-                .map_err(Into::into),
-        ),
-        Some(IMPORT_ARGUMENT) => Some(Err(anyhow!("Invalid service import arguments"))),
         _ => None,
     }
 }
@@ -87,65 +121,17 @@ fn execute_command(args: &[String]) -> ResultType<()> {
     operations::execute(install, caller_pid, Path::new(config_path))
 }
 
-define_windows_service!(ffi_import_service, import_service_main);
-
-fn import_service_main(arguments: Vec<OsString>) {
-    if let Err(error) = run_import_service(&arguments) {
-        log::error!("Service configuration import failed: {error:#}");
-    }
-}
-
-fn run_import_service(arguments: &[OsString]) -> ResultType<()> {
-    let handle = service_control_handler::register(crate::get_app_name(), |event| match event {
-        ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
-        _ => ServiceControlHandlerResult::NotImplemented,
-    })?;
-    let status = ServiceStatus {
-        service_type: super::SERVICE_TYPE,
-        current_state: ServiceState::Running,
-        controls_accepted: ServiceControlAccept::empty(),
-        exit_code: ServiceExitCode::Win32(0),
-        checkpoint: 0,
-        wait_hint: Duration::ZERO,
-        process_id: None,
-    };
-    handle.set_service_status(status.clone())?;
-    let result = import_configuration(arguments);
-    let exit_code = match &result {
-        Ok(()) => ServiceExitCode::Win32(0),
-        Err(_) => ServiceExitCode::Win32(winapi::shared::winerror::ERROR_GEN_FAILURE),
-    };
-    handle.set_service_status(ServiceStatus {
-        current_state: ServiceState::Stopped,
-        exit_code,
-        ..status
-    })?;
-    result
-}
-
-fn import_configuration(arguments: &[OsString]) -> ResultType<()> {
-    let [_, config_path] = arguments else {
-        bail!("Configuration import requires one source path");
-    };
-    if !Path::new(config_path).is_absolute() {
-        bail!("Configuration import requires an absolute source path");
-    }
-    // The SCM starts this process as SYSTEM. Keep the existing importer in a
-    // separate process so the subsequently started service loads fresh config.
-    let status = Command::new(super::get_install_info().3)
-        .arg("--import-config")
-        .arg(config_path)
-        .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
-        .status()?;
-    if !status.success() {
-        bail!("Configuration importer failed: {status}");
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn system_import_uses_the_installed_legacy_command() {
+        let command = system_import_command().unwrap();
+        let installed = PathBuf::from(super::super::get_install_info().3);
+        assert_eq!(command.get_program(), installed.as_os_str());
+        assert_eq!(command.get_args().collect::<Vec<_>>(), ["--import-config"]);
+    }
 
     #[test]
     fn service_control_uses_current_executable_without_batch_tools() {

@@ -1,7 +1,7 @@
-use super::{super::installer_shell::get_system_executable, ResultType, IMPORT_ARGUMENT};
+use super::{super::installer_shell::get_system_executable, ResultType, SERVICE_WAIT_TIMEOUT};
 use hbb_common::{
     anyhow::Context,
-    bail, config,
+    bail, config, log,
     sysinfo::{Process, System},
 };
 use std::{
@@ -25,17 +25,20 @@ use windows::{
 };
 use windows_service::{
     service::{
-        Service, ServiceAccess, ServiceErrorControl, ServiceExitCode, ServiceInfo,
+        Service, ServiceAccess, ServiceControlAccept, ServiceErrorControl, ServiceInfo,
         ServiceStartType, ServiceState, ServiceStatus,
     },
     service_manager::{ServiceManager, ServiceManagerAccess},
 };
 
-const SERVICE_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 const SERVICE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 pub(super) fn execute(install: bool, caller_pid: u32, config_path: &Path) -> ResultType<()> {
     let (_, directory, _, executable) = super::super::get_install_info();
+    if install && config::is_outgoing_only() {
+        terminate_processes(caller_pid, false)?;
+        return create_tray_shortcut(&directory, &executable);
+    }
     let access = if install {
         ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE
     } else {
@@ -43,51 +46,67 @@ pub(super) fn execute(install: bool, caller_pid: u32, config_path: &Path) -> Res
     };
     let manager = ServiceManager::local_computer(None::<&str>, access)?;
     if install {
-        if !config::is_outgoing_only() {
-            remove_service(&manager)?;
+        if let Err(error) = create_tray_shortcut(&directory, &executable) {
+            log::warn!("Service tray shortcut creation failed: {error:#}");
         }
-        terminate_processes(caller_pid, false)?;
-        create_tray_shortcut(&directory, &executable)?;
-        if !config::is_outgoing_only() {
-            import_configuration(&manager, &std::env::current_exe()?, config_path)?;
-            let service = create_service(&manager, Path::new(&executable), false)?;
-            service.start::<&str>(&[])?;
-            wait_for_state(&service, ServiceState::Running)?;
+        let service = open_or_create_service(&manager, Path::new(&executable))?;
+        stop_service(&service)?;
+        if let Err(error) = terminate_processes(caller_pid, false) {
+            log::warn!("Service process cleanup failed: {error:#}");
         }
+        let imported = super::import::run(config_path);
+        if let Err(error) = &imported {
+            log::error!("Service configuration import failed: {error:#}");
+            if error.is::<super::import::ImportExitUnconfirmed>() {
+                return imported;
+            }
+        }
+        service.start::<&str>(&[])?;
+        wait_for_state(&service, ServiceState::Running)?;
+        imported?;
     } else {
         remove_service(&manager)?;
-        remove_tray_shortcut()?;
-        terminate_processes(caller_pid, true)?;
+        if let Err(error) = remove_tray_shortcut() {
+            log::warn!("Service tray shortcut removal failed: {error:#}");
+        }
+        if let Err(error) = terminate_processes(caller_pid, true) {
+            log::warn!("Service process cleanup failed: {error:#}");
+        }
     }
     Ok(())
 }
 
-fn create_service(
-    manager: &ServiceManager,
-    executable: &Path,
-    import: bool,
-) -> ResultType<Service> {
+fn open_or_create_service(manager: &ServiceManager, executable: &Path) -> ResultType<Service> {
     let name = crate::get_app_name();
     let info = ServiceInfo {
         name: name.clone().into(),
         display_name: format!("{name} Service").into(),
         service_type: super::super::SERVICE_TYPE,
-        start_type: if import {
-            ServiceStartType::OnDemand
-        } else {
-            ServiceStartType::AutoStart
-        },
+        start_type: ServiceStartType::AutoStart,
         error_control: ServiceErrorControl::Normal,
         executable_path: executable.to_owned(),
-        launch_arguments: vec![if import { IMPORT_ARGUMENT } else { "--service" }.into()],
+        launch_arguments: vec!["--service".into()],
         dependencies: Vec::new(),
-        account_name: None,
+        account_name: Some("LocalSystem".into()),
         account_password: None,
     };
-    Ok(manager.create_service(
-        &info,
-        ServiceAccess::START | ServiceAccess::QUERY_STATUS | ServiceAccess::DELETE,
-    )?)
+    let access = ServiceAccess::START
+        | ServiceAccess::STOP
+        | ServiceAccess::QUERY_STATUS
+        | ServiceAccess::CHANGE_CONFIG;
+    match manager.open_service(&name, access) {
+        Ok(service) => {
+            service.change_config(&info)?;
+            Ok(service)
+        }
+        Err(windows_service::Error::Winapi(error))
+            if error.raw_os_error()
+                == Some(winapi::shared::winerror::ERROR_SERVICE_DOES_NOT_EXIST as i32) =>
+        {
+            Ok(manager.create_service(&info, access)?)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn remove_service(manager: &ServiceManager) -> ResultType<()> {
@@ -104,61 +123,34 @@ fn remove_service(manager: &ServiceManager) -> ResultType<()> {
         }
         Err(error) => return Err(error.into()),
     };
-    let state = service.query_status()?.current_state;
-    if state != ServiceState::Stopped {
-        if state != ServiceState::StopPending {
-            service.stop()?;
-        }
-        wait_for_state(&service, ServiceState::Stopped)?;
-    }
-    service.delete()?;
-    drop(service);
-    wait_for_deletion(manager)
+    stop_service(&service)?;
+    Ok(service.delete()?)
 }
 
-fn import_configuration(
-    manager: &ServiceManager,
-    executable: &Path,
-    path: &Path,
-) -> ResultType<()> {
-    let service = create_service(manager, executable, true)?;
-    let result = (|| -> ResultType<()> {
-        service.start(&[path.as_os_str()])?;
-        let status = wait_for_state(&service, ServiceState::Stopped)?;
-        if status.exit_code != ServiceExitCode::Win32(0) {
-            bail!(
-                "Service configuration import failed: {:?}",
-                status.exit_code
-            );
-        }
-        Ok(())
-    })();
-    if let Err(error) = service.delete() {
-        bail!("Failed to remove configuration import service: {error}; import result: {result:?}");
-    }
-    drop(service);
-    result?;
-    wait_for_deletion(manager)
-}
-
-fn wait_for_deletion(manager: &ServiceManager) -> ResultType<()> {
+fn stop_service(service: &Service) -> ResultType<()> {
     let started = Instant::now();
     loop {
-        match manager.open_service(crate::get_app_name(), ServiceAccess::QUERY_STATUS) {
-            Err(windows_service::Error::Winapi(error))
-                if error.raw_os_error()
-                    == Some(winapi::shared::winerror::ERROR_SERVICE_DOES_NOT_EXIST as i32) =>
-            {
-                return Ok(())
+        let status = service.query_status()?;
+        match status.current_state {
+            ServiceState::Stopped => return Ok(()),
+            ServiceState::Running | ServiceState::Paused => {
+                if !status
+                    .controls_accepted
+                    .contains(ServiceControlAccept::STOP)
+                {
+                    bail!(
+                        "Service does not accept STOP controls: {:?}",
+                        status.current_state
+                    );
+                }
+                service.stop()?;
+                wait_for_state(service, ServiceState::Stopped)?;
+                return Ok(());
             }
-            Err(windows_service::Error::Winapi(error))
-                if error.raw_os_error()
-                    == Some(winapi::shared::winerror::ERROR_SERVICE_MARKED_FOR_DELETE as i32) => {}
-            Ok(_) => {}
-            Err(error) => return Err(error.into()),
+            _ => {}
         }
         if started.elapsed() >= SERVICE_WAIT_TIMEOUT {
-            bail!("Service deletion is still pending; close open service handles before retrying");
+            bail!("Service is still transitioning: {:?}", status.current_state);
         }
         thread::sleep(SERVICE_POLL_INTERVAL);
     }
