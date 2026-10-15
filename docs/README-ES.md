@@ -50,8 +50,14 @@ Por favor descarga la librería dinámica de Sciter tú mismo.
 
 - Instala [vcpkg](https://github.com/microsoft/vcpkg), y configura la variable de entono `VCPKG_ROOT` correctamente.
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-  - Linux/Osx: vcpkg install libvpx libyuv opus aom
+- Desde la raíz del repositorio, instala las dependencias declaradas en `vcpkg.json` (manifest mode).
+
+  ```sh
+  # Linux/macOS
+  $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+  # Windows, Git Bash (x64; use arm64-windows-static on ARM64)
+  $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+  ```
 
 - Corre `cargo run`
 
@@ -86,13 +92,17 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ### Instala vcpkg
 
 ```sh
+cd "$HOME"
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
 git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus aom
+git clone --depth 1 --recurse-submodules https://github.com/rustdesk/rustdesk
+cd rustdesk
+$VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+cd
 ```
 
 ### Arregla libvpx (Para Fedora)
@@ -113,8 +123,7 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone --recurse-submodules https://github.com/rustdesk/rustdesk
-cd rustdesk
+cd ~/rustdesk
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug

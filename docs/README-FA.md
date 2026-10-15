@@ -41,8 +41,15 @@
 
 - نرم افزار [vcpkg](https://github.com/microsoft/vcpkg) را نصب کنید و متغیر `VCPKG_ROOT` را به درستی تنظیم کنید.
 - بسته‌های vcpkg مورد نیاز را نصب کنید:
-  - ویندوز: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static`
-  - مک و لینوکس: `vcpkg install libvpx libyuv opus aom`
+
+- از ریشهٔ مخزن، وابستگی‌های اعلام‌شده در `vcpkg.json` را نصب کنید (manifest mode).
+
+  ```sh
+  # Linux/macOS
+  $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+  # Windows, Git Bash (x64; use arm64-windows-static on ARM64)
+  $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+  ```
 - این دستور را اجرا کنید: `cargo run`
 
 ## [ساخت](https://rustdesk.com/docs/en/dev/build/)
@@ -70,13 +77,17 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 ### نرم افزار vcpkg را نصب کنید
 
 ```sh
+cd "$HOME"
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
 git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus aom
+git clone --depth 1 --recurse-submodules https://github.com/rustdesk/rustdesk
+cd rustdesk
+$VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+cd
 ```
 
 ### رفع ایراد libvpx (برای فدورا)
@@ -97,8 +108,7 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
+cd ~/rustdesk
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
