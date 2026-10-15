@@ -813,5 +813,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "'{}' non può essere usato come scorciatoia."),
         ("On", "ON"),
         ("Off", "OFF"),
+        ("Upscaling (FSRCNNX)", ""),
     ].iter().cloned().collect();
 }
