@@ -1355,6 +1355,7 @@ impl<T: InvokeUiSession> Remote<T> {
             misc.set_toggle_privacy_mode(TogglePrivacyMode {
                 impl_key,
                 on: true,
+                remembered: true,
                 ..Default::default()
             });
             let mut msg_out = Message::new();
