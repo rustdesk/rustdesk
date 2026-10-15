@@ -50,8 +50,12 @@ RustDesk 期待各位的贡献. 如何参与开发? 详情请看 [CONTRIBUTING-Z
 
 - 安装 [vcpkg](https://github.com/microsoft/vcpkg), 正确设置 `VCPKG_ROOT` 环境变量
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-  - Linux/macOS: vcpkg install libvpx libyuv opus aom
+  ```sh
+  # Linux/macOS
+  $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+  # Windows, Git Bash (x64; use arm64-windows-static on ARM64)
+  $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+  ```
 
 - 运行 `cargo run`
 
@@ -94,7 +98,6 @@ git checkout 2023.04.15
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus aom
 ```
 
 ### 修复 libvpx (仅仅针对 Fedora)
@@ -115,8 +118,9 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
+git clone --depth 1 --recurse-submodules https://github.com/rustdesk/rustdesk
 cd rustdesk
+$VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
