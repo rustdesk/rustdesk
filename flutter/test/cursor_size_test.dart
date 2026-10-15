@@ -39,6 +39,10 @@ class _Canvas extends ChangeNotifier implements CanvasModel {
   @override
   double get y => 0;
   @override
+  double get displayPaddingX => 0;
+  @override
+  double get displayPaddingY => 0;
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
