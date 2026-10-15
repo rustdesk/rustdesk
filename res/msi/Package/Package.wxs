@@ -38,8 +38,8 @@
 
 			<!--Only do InstallValidate if is not Uninstall-->
 			<!--<InstallValidate Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE )" />-->
-			<!--Only do InstallValidate if is Install-->
-			<InstallValidate Condition="NOT Installed" />
+			<!--Only validate fresh installs, not major upgrades-->
+			<InstallValidate Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
 
 		</InstallExecuteSequence>
 
