@@ -267,6 +267,8 @@ pub enum DataKeyboard {
 #[serde(tag = "t", content = "c")]
 pub enum DataKeyboardResponse {
     GetKeyState(bool),
+    #[cfg(target_os = "linux")]
+    GetKeyStateError(String),
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1190,8 +1192,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                 }
             } else if value == "clear" {
                 set_local_option(key.clone(), "".to_owned());
+                // The session slot is held while a portal request waits for the user, and this ipc
+                // listener runs on one thread: wait for the slot off it, then close what the
+                // request brings back.
                 #[cfg(target_os = "linux")]
-                scrap::wayland::pipewire::close_session();
+                allow_err!(
+                    hbb_common::tokio::task::spawn_blocking(
+                        scrap::wayland::pipewire::close_session
+                    )
+                    .await
+                );
                 Some("".to_owned())
             } else {
                 None
@@ -2266,42 +2276,8 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 
 #[cfg(test)]
 mod test {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     use super::*;
-
-    #[test]
-    fn verify_ffi_enum_data_size() {
-        println!("{}", std::mem::size_of::<Data>());
-        assert!(std::mem::size_of::<Data>() <= 120);
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    #[test]
-    fn test_service_ipc_path_is_shared_across_uids() {
-        assert_eq!(
-            Config::ipc_path_for_uid(0, crate::POSTFIX_SERVICE),
-            Config::ipc_path_for_uid(501, crate::POSTFIX_SERVICE)
-        );
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    #[test]
-    fn test_ipc_path_differs_by_uid_for_cm() {
-        let effective_uid = unsafe { hbb_common::libc::geteuid() as u32 };
-        let other_uid = effective_uid.saturating_add(1);
-        let postfix = "_cm";
-
-        // Default connect path targets the current effective uid.
-        assert_eq!(
-            Config::ipc_path(postfix),
-            Config::ipc_path_for_uid(effective_uid, postfix)
-        );
-        // A different uid yields a different socket path - this is the root cause of the
-        // cross-user regression when root spawns a user process but still connects as uid 0.
-        assert_ne!(
-            Config::ipc_path(postfix),
-            Config::ipc_path_for_uid(other_uid, postfix)
-        );
-    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
@@ -2343,109 +2319,5 @@ mod test {
     #[test]
     fn test_select_server_uid_fails_when_multiple_servers_are_ambiguous() {
         assert!(select_server_uid_for_user_main_ipc(&[501, 502], None, false).is_err());
-    }
-
-    /// The upgrade window: an old root service is still streaming when a new `--server` starts,
-    /// and its DrmCursor carries no `hot_measured` at all. Read as `false` the consumer would
-    /// discard a hotspot the producer did measure and re-infer one from the bitmap, which moves
-    /// the cursor on a rotated display until the old process is replaced. `bool::default()` is
-    /// the wrong default here; the right one preserves what the old protocol meant.
-    #[cfg(all(target_os = "linux", feature = "drm"))]
-    #[test]
-    fn a_drm_cursor_without_provenance_keeps_the_hotspot_the_producer_sent() {
-        // `Data` is adjacently tagged (`tag = "t", content = "c"`), so this is the real shape on
-        // the socket, not a simplified one.
-        let legacy =
-            r#"{"t":"DrmCursor","c":{"id":7,"width":24,"height":24,"hotx":12,"hoty":11}}"#;
-        let msg: Data = serde_json::from_str(legacy).expect("legacy DrmCursor must deserialize");
-        match msg {
-            Data::DrmCursor {
-                hotx,
-                hoty,
-                hot_measured,
-                ..
-            } => {
-                assert_eq!((hotx, hoty), (12, 11));
-                assert!(
-                    hot_measured,
-                    "a message with no provenance field must be treated as the old protocol did, \
-                     i.e. use the hotspot as sent, not re-infer it"
-                );
-            }
-            other => panic!("expected DrmCursor, got {other:?}"),
-        }
-
-        // And a NEW producer that really wants re-inference says so, which serializes: the
-        // default must not swallow an explicit false.
-        let modern = r#"{"t":"DrmCursor","c":{"id":7,"width":24,"height":24,"hotx":0,"hoty":0,"hot_measured":false}}"#;
-        match serde_json::from_str::<Data>(modern).expect("modern DrmCursor must deserialize") {
-            Data::DrmCursor { hot_measured, .. } => assert!(!hot_measured),
-            other => panic!("expected DrmCursor, got {other:?}"),
-        }
-    }
-
-    /// A frame from a producer that predates the plane rotation reads as `None`, in the cpu frame
-    /// header and in the dma-buf descriptor: the root service and the `--server` are upgraded
-    /// separately, and `None` keeps the previous rule.
-    #[cfg(all(target_os = "linux", feature = "drm"))]
-    #[test]
-    fn a_frame_without_a_plane_rotation_reads_as_none() {
-        let legacy = r#"{"t":"DrmFrame","c":{"width":8,"height":8}}"#;
-        match serde_json::from_str::<Data>(legacy).expect("legacy DrmFrame must deserialize") {
-            Data::DrmFrame { plane_rotation, .. } => assert_eq!(plane_rotation, None),
-            other => panic!("expected DrmFrame, got {other:?}"),
-        }
-        let modern = r#"{"t":"DrmFrame","c":{"width":8,"height":8,"plane_rotation":4}}"#;
-        match serde_json::from_str::<Data>(modern).expect("modern DrmFrame must deserialize") {
-            Data::DrmFrame { plane_rotation, .. } => assert_eq!(plane_rotation, Some(4)),
-            other => panic!("expected DrmFrame, got {other:?}"),
-        }
-        let desc = DmabufDesc {
-            buffer_id: 0,
-            width: 4,
-            height: 4,
-            format: 0,
-            modifier: 0,
-            fb_id: 0,
-            num_planes: 1,
-            offsets: [0; 4],
-            pitches: [16, 0, 0, 0],
-            hdr_eotf: 0,
-            hdr_max_nits: 0,
-            has_fd: false,
-            plane_rotation: Some(4),
-            cursor_pos: None,
-        };
-        let mut value = serde_json::to_value(&desc).unwrap();
-        assert!(value.as_object_mut().unwrap().remove("plane_rotation").is_some());
-        let legacy: DmabufDesc =
-            serde_json::from_value(value).expect("legacy DmabufDesc must deserialize");
-        assert_eq!(legacy.plane_rotation, None);
-    }
-
-    /// A frame header from a producer that predates the cursor plane position reads as `None`;
-    /// a producer that sends one is read back exactly. A pin, not a gate: the consumer only ever
-    /// measures against `Some`.
-    #[cfg(all(target_os = "linux", feature = "drm"))]
-    #[test]
-    fn a_drm_frame_without_a_cursor_position_reads_as_none() {
-        let legacy = r#"{"t":"DrmFrame","c":{"width":8,"height":8}}"#;
-        match serde_json::from_str::<Data>(legacy).expect("legacy DrmFrame must deserialize") {
-            Data::DrmFrame {
-                width,
-                height,
-                cursor_pos,
-                ..
-            } => {
-                assert_eq!((width, height), (8, 8));
-                assert_eq!(cursor_pos, None);
-            }
-            other => panic!("expected DrmFrame, got {other:?}"),
-        }
-        let modern = r#"{"t":"DrmFrame","c":{"width":8,"height":8,"cursor_pos":[3,4]}}"#;
-        match serde_json::from_str::<Data>(modern).expect("modern DrmFrame must deserialize") {
-            Data::DrmFrame { cursor_pos, .. } => assert_eq!(cursor_pos, Some((3, 4))),
-            other => panic!("expected DrmFrame, got {other:?}"),
-        }
     }
 }

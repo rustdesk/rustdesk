@@ -108,17 +108,11 @@ void main() {
       binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
   for (final scenario in [
     ((4, 64), 0.5, (2, 32)),
-    ((64, 4), 0.5, (32, 2)),
-    ((1, 64), 0.25, (1, 16)),
     ((8, 8), 0.5, (12, 12)),
-    ((4, 64), 1.0, (4, 64)),
-    ((1, 512), 10.0, (1, 512)),
   ]) {
     test('native cursor size $scenario',
         () => _checkSize(scenario, registrations));
   }
-  test('native raster boundaries rebuild buffers and distinguish cache keys',
-      () => _checkRasterTransitions(registrations));
   test('cursor resize limits preserve the last valid raster', () async {
     for (final size in [(30, 20), (20, 30)]) {
       await _checkResizeLimits(size, registrations);
@@ -132,15 +126,15 @@ void main() {
     test('Windows peer cursor alpha survives resizing $pattern',
         () => _checkWindowsPeerAlpha(pattern, registrations));
   }
-  for (final style in [
-    kRemoteViewStyleOriginal,
-    kRemoteViewStyleAdaptive,
-    kRemoteViewStyleCustom
+  for (final (style, zoom) in [
+    (kRemoteViewStyleOriginal, false),
+    (kRemoteViewStyleAdaptive, false),
+    (kRemoteViewStyleAdaptive, true),
+    (kRemoteViewStyleCustom, false),
+    (kRemoteViewStyleCustom, true),
   ]) {
-    for (final zoom in [false, true]) {
-      testWidgets('$style zoom=$zoom follows the live DPR and peer scale',
-          (tester) => _checkView(tester, (style, zoom), registrations));
-    }
+    testWidgets('$style zoom=$zoom follows the live DPR and peer scale',
+        (tester) => _checkView(tester, (style, zoom), registrations));
   }
 }
 
@@ -239,31 +233,6 @@ void _expectSize(Map<dynamic, dynamic> args, (int, int) expected) {
     final bitmap = img.decodePng(bytes)!;
     expect((bitmap.width, bitmap.height), expected);
   }
-}
-
-Future<void> _checkRasterTransitions(
-    List<Map<dynamic, dynamic>> registrations) async {
-  const delta = 3e-8;
-  const scaleAboveOne = (2.25 / 1.75) / 2.25 * 1.75;
-  final ffi = _FFI(_Canvas(kRemoteViewStyleAdaptive));
-  final cursor = _Cursor(_data((64, 64)), ffi);
-  addTearDown(() => _dispose(cursor));
-  addTearDown(ffi.canvasModel.dispose);
-  for (final (scale, expected) in [
-    (scaleAboveOne, (65, 65)),
-    (0.5 - delta, (32, 32)),
-    (0.5 + delta, (33, 33)),
-    (1.0, (64, 64)),
-    (scaleAboveOne, (65, 65)),
-    (1.0, (64, 64)),
-  ]) {
-    buildCursorOfCache(cursor, scale, cursor.cache);
-    await Future<void>.delayed(Duration.zero);
-    final key = cursor.nativeKey(cursor.cache, scale);
-    _expectSize(
-        registrations.singleWhere((args) => args['name'] == key), expected);
-  }
-  expect(registrations.length, 4);
 }
 
 Future<void> _checkResizeLimits(

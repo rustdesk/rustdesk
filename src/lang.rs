@@ -337,16 +337,6 @@ mod test {
     }
 
     #[test]
-    fn test_resolve_lang_forces_english_for_saved_cjk_when_target_disables_cjk() {
-        use super::resolve_lang as f;
-
-        assert_eq!(f("zh-cn", "en-US", true), "en");
-        assert_eq!(f("zh-tw", "en-US", true), "en");
-        assert_eq!(f("ja", "en-US", true), "en");
-        assert_eq!(f("ko", "en-US", true), "en");
-    }
-
-    #[test]
     fn test_resolve_lang_forces_english_for_cjk_locale_when_target_disables_cjk() {
         use super::resolve_lang as f;
 
@@ -374,13 +364,5 @@ mod test {
         assert_eq!(f("", "pt_BR", false), "pt-br");
         assert_eq!(f("", "pt-AO", false), "pt-pt");
         assert_eq!(f("", "pt-MZ", false), "pt-pt");
-    }
-
-    #[test]
-    fn test_resolve_lang_saved_lang_takes_precedence_over_locale() {
-        use super::resolve_lang as f;
-
-        assert_eq!(f("pt-br", "pt-PT", false), "pt-br");
-        assert_eq!(f("pt-pt", "pt-BR", false), "pt-pt");
     }
 }

@@ -281,5 +281,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("relay-fallback-delay-tip", "How long a relay connection that is already up waits for the direct WebRTC connection before it is used instead. Raise it to give a slow direct connection more time to win; lower it to settle on the relay sooner on networks where a direct connection cannot be made. Leave empty for the default of 2.5 seconds."),
         ("mcp-server-tip", "Let MCP clients such as Claude control remote computers through RustDesk. Listens on 127.0.0.1 only and requires an access token. Connections and control requests need your approval unless you turn that off below."),
         ("mcp-read-access-tip", "Enabling MCP lets local MCP clients that hold the access token list your open remote sessions and take screenshots of them without asking for control."),
+        ("shortcut-page-description", "Bind a key combination to each session action below. Each binding must include at least one modifier."),
+        ("shortcut-passthrough-tip", "When on, every bound combination is forwarded to the remote. Useful when a binding collides with something you need on the remote."),
+        ("shortcut-reset-confirm-tip", "This will replace all current bindings with the default set. Continue?"),
+        ("shortcut-recording-instruction", "Press the key combination you want to use."),
+        ("shortcut-recording-press-keys-tip", "Press a key combination..."),
+        ("shortcut-must-include-modifiers", "Must include at least one modifier: {}"),
+        ("shortcut-already-bound-to", "Already bound to"),
+        ("shortcut-mobile-physical-keyboard-tip", "Recording requires a physical keyboard. Soft keyboards are not supported."),
+        ("shortcut-key-not-supported", "\"{}\" can't be used as a shortcut."),
     ].iter().cloned().collect();
 }

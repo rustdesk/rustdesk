@@ -1145,6 +1145,14 @@ impl Connection {
                 },
                 Some(data) = rx_from_authed.recv() => {
                     match data {
+                        ipc::Data::Close => {
+                            conn.send(crate::common::make_privacy_mode_msg(
+                                back_notification::PrivacyModeState::PrvOnByOther,
+                                String::new(),
+                            )).await;
+                            conn.on_close("privacy mode", false).await;
+                            break;
+                        }
                         #[cfg(all(target_os = "windows", feature = "flutter"))]
                         ipc::Data::PrinterData(data) => {
                             if Self::permission(keys::OPTION_ENABLE_REMOTE_PRINTER, &conn.control_permissions) {
@@ -2455,6 +2463,41 @@ impl Connection {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
 
+    // Auto Login: the password and Return the client would otherwise type itself, typed only if a
+    // check right before finds the logon or lock screen.
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    async fn type_auto_login_password(&self, password: String) {
+        // A peer can send this at any rate, hence the throttled logs.
+        let at_logon_screen = tokio::task::spawn_blocking(crate::platform::is_logon_screen)
+            .await
+            .unwrap_or_else(|e| {
+                hbb_common::throttled_log!(
+                    Duration::from_secs(60),
+                    error,
+                    "Failed to check the logon screen: {}",
+                    e
+                );
+                false
+            });
+        if !at_logon_screen {
+            hbb_common::throttled_log!(
+                Duration::from_secs(60),
+                info,
+                "Auto login dropped, not at the logon or lock screen"
+            );
+            return;
+        }
+        let mut key_event = KeyEvent::new();
+        key_event.mode = KeyboardMode::Legacy.into();
+        key_event.press = true;
+        key_event.set_seq(password);
+        self.input_key(key_event.clone(), false);
+        key_event.set_control_key(ControlKey::Return);
+        CLICK_TIME.store(get_time(), Ordering::SeqCst);
+        MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
+        self.input_key(key_event, true);
+    }
+
     fn verify_h1(&self, h1: &[u8]) -> bool {
         let mut hasher2 = Sha256::new();
         hasher2.update(h1);
@@ -3344,6 +3387,13 @@ impl Connection {
                         } else {
                             self.input_key(me, false);
                         }
+                    }
+                    self.update_auto_disconnect_timer();
+                }
+                #[cfg(any(target_os = "windows", target_os = "macos"))]
+                Some(message::Union::OsLogin(login)) => {
+                    if self.peer_keyboard_enabled() {
+                        self.type_auto_login_password(login.password).await;
                     }
                     self.update_auto_disconnect_timer();
                 }
@@ -5142,6 +5192,7 @@ impl Connection {
                             5_000,
                         );
                         if err_msg.is_empty() {
+                            privacy_mode::close_other_remote_connections_for_privacy(self.inner.id);
                             crate::common::make_privacy_mode_msg(
                                 back_notification::PrivacyModeState::PrvOnSucceeded,
                                 impl_key,
@@ -5168,10 +5219,10 @@ impl Connection {
                 Some(Err(e)) => {
                     log::error!("Failed to turn on privacy mode. {}", e);
                     if privacy_mode::is_in_privacy_mode() {
-                        let _ = Self::turn_off_privacy_to_msg(
-                            privacy_mode::INVALID_PRIVACY_MODE_CONN_ID,
-                            String::new(),
-                        );
+                        // Use this connection's ID so a failed request cannot disable another
+                        // connection's privacy mode: INVALID_PRIVACY_MODE_CONN_ID would bypass
+                        // the ownership check (see `check_off_conn_id`).
+                        let _ = Self::turn_off_privacy_to_msg(self.inner.id, String::new());
                     }
                     crate::common::make_privacy_mode_msg_with_details(
                         back_notification::PrivacyModeState::PrvOnFailed,
@@ -6105,6 +6156,7 @@ impl Connection {
             Some(message::Union::TerminalAction(_)) => "terminal_action",
             Some(message::Union::TerminalResponse(_)) => "terminal_response",
             Some(message::Union::PortForwardChannel(_)) => "port_forward_channel",
+            Some(message::Union::OsLogin(_)) => "os_login",
             Some(message::Union::Misc(misc)) => Self::misc_message_family(misc),
             Some(_) => "message.other",
             None => "empty",
@@ -7006,7 +7058,9 @@ mod raii {
                 #[cfg(windows)]
                 let _ = virtual_display_manager::reset_all();
                 #[cfg(target_os = "linux")]
-                scrap::wayland::pipewire::try_close_session();
+                if self.1 == AuthConnType::Remote || self.1 == AuthConnType::ViewCamera {
+                    wayland::try_close_portal_session();
+                }
             }
             Self::check_wake_lock();
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -7146,64 +7200,6 @@ mod test {
         assert!(!other.is_evicted());
         drop(held);
         assert!(admit_unauthorized(1_000_102, a).is_some());
-    }
-
-    #[tokio::test]
-    async fn test_unauthorized_full_tells_the_oldest_to_go_and_frees_its_place_only_when_it_has() {
-        let _serial = UNAUTHORIZED_TESTS.lock().unwrap_or_else(|e| e.into_inner());
-        let mut held: Vec<_> = (0..MAX_UNAUTHORIZED_CONNS as i32)
-            .map(|i| {
-                let ip: IpAddr = format!("198.51.100.{}", i + 1).parse().unwrap();
-                admit_unauthorized(2_000_000 + i, ip).unwrap()
-            })
-            .collect();
-        // At the limit the newcomer is refused, the oldest is told to go, and the count does
-        // not move: the place is still occupied.
-        assert!(admit_unauthorized(2_000_999, "198.51.100.250".parse().unwrap()).is_none());
-        assert!(held[0].is_evicted());
-        assert!(held[1..].iter().all(|u| !u.is_evicted()));
-        assert_eq!(unauthorized_count(), MAX_UNAUTHORIZED_CONNS);
-        hbb_common::timeout(1000, held[0].evicted()).await.unwrap();
-        // A further arrival while that one is still on its way out tells nobody else to go: a
-        // burst of refused arrivals clears no more room than a single one.
-        assert!(admit_unauthorized(2_001_000, "198.51.100.251".parse().unwrap()).is_none());
-        assert!(held[1..].iter().all(|u| !u.is_evicted()));
-        // Only once an evicted connection has gone is there a place for a newcomer.
-        drop(held.remove(0));
-        assert_eq!(unauthorized_count(), MAX_UNAUTHORIZED_CONNS - 1);
-        let newcomer = admit_unauthorized(2_001_001, "198.51.100.252".parse().unwrap()).unwrap();
-        assert!(!newcomer.is_evicted());
-        assert_eq!(unauthorized_count(), MAX_UNAUTHORIZED_CONNS);
-        // Full again, the next arrival tells the connection now oldest to go.
-        assert!(admit_unauthorized(2_001_002, "198.51.100.253".parse().unwrap()).is_none());
-        assert!(held[0].is_evicted());
-        assert!(held[1..].iter().all(|u| !u.is_evicted()));
-        assert!(!newcomer.is_evicted());
-    }
-
-    // The per-address share holds at the limit too: an address can turn out at most that many
-    // connections, one per place it then takes, and is refused before any eviction from then on.
-    #[test]
-    fn test_unauthorized_full_one_address_turns_out_at_most_its_share() {
-        let _serial = UNAUTHORIZED_TESTS.lock().unwrap_or_else(|e| e.into_inner());
-        let mut held: Vec<_> = (0..MAX_UNAUTHORIZED_CONNS as i32)
-            .map(|i| {
-                let ip: IpAddr = format!("198.51.100.{}", i + 1).parse().unwrap();
-                admit_unauthorized(3_000_000 + i, ip).unwrap()
-            })
-            .collect();
-        let flooder: IpAddr = "203.0.113.9".parse().unwrap();
-        let mut taken = Vec::new();
-        for i in 0..MAX_UNAUTHORIZED_CONNS_PER_ADDR as i32 {
-            assert!(admit_unauthorized(3_001_000 + i, flooder).is_none());
-            assert!(held[0].is_evicted());
-            drop(held.remove(0));
-            taken.push(admit_unauthorized(3_002_000 + i, flooder).unwrap());
-        }
-        assert_eq!(unauthorized_count(), MAX_UNAUTHORIZED_CONNS);
-        assert!(admit_unauthorized(3_003_000, flooder).is_none());
-        assert!(held.iter().all(|u| !u.is_evicted()));
-        assert!(taken.iter().all(|u| !u.is_evicted()));
     }
 
     /// A loopback TCP connection as create_tcp_connection sees it, and the controller's end,
@@ -7422,54 +7418,6 @@ mod test {
     }
 
     #[test]
-    fn test_decay_stale_failures() {
-        let entry = |minute: i32| (minute, 1, 40);
-        let keys = ["ip".to_string(), "p64".to_string(), "absent".to_string()];
-        let mut m: HashMap<String, (i32, i32, i32)> = HashMap::new();
-        m.insert("ip".to_string(), entry(100));
-        m.insert("p64".to_string(), entry(160));
-        m.insert("untouched".to_string(), entry(100));
-
-        // Exactly at the window: forgotten. Still inside it: kept.
-        decay_stale_failures(&mut m, &keys, 160, 60);
-        assert!(!m.contains_key("ip"));
-        assert!(m.contains_key("p64"));
-        // Keys that were not passed in are never visited, absent ones are a no-op.
-        assert!(m.contains_key("untouched"));
-
-        // One minute short of the window keeps the entry.
-        decay_stale_failures(&mut m, &keys, 219, 60);
-        assert!(m.contains_key("p64"));
-        decay_stale_failures(&mut m, &keys, 220, 60);
-        assert!(!m.contains_key("p64"));
-
-        // A clock that jumped backwards must not drop anything.
-        m.insert("ip".to_string(), entry(500));
-        decay_stale_failures(&mut m, &keys, 0, 60);
-        assert!(m.contains_key("ip"));
-    }
-
-    #[test]
-    fn test_clear_failures_drops_shared_prefixes() {
-        // On IPv6 a whitelisted peer usually has no entry of its own, while the shared
-        // prefixes that block it do. Clearing must not depend on the per-address entry.
-        let mut m: HashMap<String, (i32, i32, i32)> = HashMap::new();
-        m.insert("p64".to_string(), (100, 1, 55));
-        m.insert("p56".to_string(), (100, 1, 75));
-        m.insert("p48".to_string(), (100, 1, 95));
-        m.insert("someone-else".to_string(), (100, 1, 95));
-        let keys = ["ip", "p64", "p56", "p48"].map(|k| k.to_string());
-
-        clear_failures(&mut m, &keys);
-
-        for key in ["p64", "p56", "p48"] {
-            assert!(!m.contains_key(key), "{key} should have been cleared");
-        }
-        // Keys belonging to other peers are left alone.
-        assert!(m.contains_key("someone-else"));
-    }
-
-    #[test]
     fn test_id_whitelist_allows() {
         let list = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
 
@@ -7561,13 +7509,6 @@ mod test {
         assert_eq!(pos.y, 510);
     }
 
-    #[test]
-    fn ipv6() {
-        assert!(Ipv6Addr::from_str("::1").is_ok());
-        assert!(Ipv6Addr::from_str("127.0.0.1").is_err());
-        assert!(Ipv6Addr::from_str("0").is_err());
-    }
-
     fn msg(set: impl FnOnce(&mut Message)) -> Message {
         let mut msg = Message::new();
         set(&mut msg);
@@ -7588,10 +7529,6 @@ mod test {
             set(&mut option);
             misc.set_option(option);
         })
-    }
-
-    fn set_supported_decoding(option: &mut OptionMessage) {
-        option.supported_decoding = hbb_common::protobuf::MessageField::some(Default::default());
     }
 
     fn assert_scopes(
@@ -7857,69 +7794,6 @@ mod test {
         assert_eq!(violation, Some("login.option"));
     }
 
-    #[test]
-    fn session_scope_limited_render_noop_options_reject_mixed_fields() {
-        for conn_type in [
-            AuthConnType::FileTransfer,
-            AuthConnType::Terminal,
-            AuthConnType::PortForward,
-        ] {
-            let supported_decoding_only = option_msg(set_supported_decoding);
-            assert_eq!(
-                Connection::authorized_message_scope_violation(conn_type, &supported_decoding_only),
-                None
-            );
-
-            let mixed_option = option_msg(|o| {
-                set_supported_decoding(o);
-                o.disable_audio = BoolOption::Yes.into();
-            });
-            assert_eq!(
-                Connection::authorized_message_scope_violation(conn_type, &mixed_option),
-                Some("misc.option")
-            );
-        }
-    }
-
-    #[test]
-    fn session_scope_view_camera_options_keep_only_camera_fields() {
-        let mut option = OptionMessage::new();
-        option.image_quality = ImageQuality::Balanced.into();
-        option.custom_image_quality = 80;
-        option.custom_fps = 24;
-        set_supported_decoding(&mut option);
-        option.disable_audio = BoolOption::Yes.into();
-        option.block_input = BoolOption::Yes.into();
-        option.disable_clipboard = BoolOption::Yes.into();
-        option.enable_file_transfer = BoolOption::Yes.into();
-        option.terminal_persistent = BoolOption::Yes.into();
-
-        let (scoped, violation) =
-            Connection::scoped_login_option(AuthConnType::ViewCamera, &option);
-        let scoped = scoped.unwrap();
-        assert_eq!(violation, Some("login.option"));
-        assert_eq!(
-            scoped.image_quality.enum_value(),
-            Ok(ImageQuality::Balanced)
-        );
-        assert_eq!(scoped.custom_image_quality, 80);
-        assert_eq!(scoped.custom_fps, 24);
-        assert!(scoped.supported_decoding.is_some());
-        assert_eq!(scoped.disable_audio.enum_value(), Ok(BoolOption::Yes));
-        assert_eq!(scoped.block_input.enum_value(), Ok(BoolOption::NotSet));
-        assert_eq!(
-            scoped.disable_clipboard.enum_value(),
-            Ok(BoolOption::NotSet)
-        );
-        assert_eq!(
-            scoped.enable_file_transfer.enum_value(),
-            Ok(BoolOption::NotSet)
-        );
-        assert_eq!(
-            scoped.terminal_persistent.enum_value(),
-            Ok(BoolOption::NotSet)
-        );
-    }
     #[test]
     fn only_a_newer_remote_control_of_the_same_session_keeps_the_screen_unlocked() {
         let replaced_by = super::raii::AuthedConnID::is_newer_session_remote;

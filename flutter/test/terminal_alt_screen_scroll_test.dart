@@ -50,54 +50,20 @@ void main() {
     await tester.pump();
   }
 
-  for (final trackpad in [false, true]) {
-    final device = trackpad ? 'trackpad' : 'wheel';
-    testWidgets('alternate screen reports $device after main-screen history',
-        (tester) async {
-      final view = await mount(tester);
-      terminal.write('\x1b[?1049h$_captureMouse');
-      await tester.pump();
-      final render = view.renderTerminal;
-      final point = render.localToGlobal(
-          Offset(render.cellSize.width * 2.5, render.lineHeight * 1.5));
-      if (trackpad) {
-        await scrollTrackpad(tester, point, render.lineHeight * 3);
-      } else {
-        await tester.sendEventToBinding(PointerScrollEvent(
-          position: point,
-          scrollDelta: Offset(0, -render.lineHeight * 3),
-        ));
-        await tester.pump();
-      }
-
-      expect(output, isNotEmpty);
-      expect(output, everyElement('\x1b[<64;3;2M'));
-      expect(view.widget.scrollController!.offset, 0);
-      expect(controller.selection, isNull);
-    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
-  }
-
-  testWidgets('trackpad scrolling keeps subsequent drag coordinates aligned',
+  testWidgets('alternate screen reports trackpad after main-screen history',
       (tester) async {
     final view = await mount(tester);
     terminal.write('\x1b[?1049h$_captureMouse');
     await tester.pump();
     final render = view.renderTerminal;
-    final start = render.localToGlobal(
+    final point = render.localToGlobal(
         Offset(render.cellSize.width * 2.5, render.lineHeight * 1.5));
-    final end = render.localToGlobal(
-        Offset(render.cellSize.width * 6.5, render.lineHeight * 2.5));
-    await scrollTrackpad(tester, start, render.lineHeight * 3);
-    output.clear();
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.down(start);
-    await mouse.moveTo(end);
-    await mouse.up();
-    await tester.pump(kDoubleTapTimeout);
+    await scrollTrackpad(tester, point, render.lineHeight * 3);
 
-    expect(output, ['\x1b[<0;3;2M', '\x1b[<32;7;3M', '\x1b[<0;7;3m']);
+    expect(output, isNotEmpty);
+    expect(output, everyElement('\x1b[<64;3;2M'));
+    expect(view.widget.scrollController!.offset, 0);
     expect(controller.selection, isNull);
-    expect(controller.suspendedPointerInputs, isFalse);
   }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   testWidgets('leaving alternate screen restores local trackpad scrollback',

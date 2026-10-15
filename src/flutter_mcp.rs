@@ -118,7 +118,7 @@ pub fn set_agent_control(session_id: SessionID, grant_id: String) {
             .as_ref()
             .map_or(false, |s| std::sync::Arc::ptr_eq(s, &session))
         {
-            crate::keyboard::release_remote_keys_for_session(&session);
+            crate::keyboard::release_remote_keys_for_session(&session, session_id);
         }
         let swap = session.get_toggle_option("swap-left-right-mouse".to_owned());
         for button in [1, 2, 4, 8, 16] {
@@ -232,6 +232,7 @@ pub fn process_human_key_event(keyboard_mode: &str, event: &rdev::Event, lock_mo
                 event,
                 lock_modes,
                 &session,
+                session_id,
             );
         });
     }
