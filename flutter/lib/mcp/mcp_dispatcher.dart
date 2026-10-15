@@ -216,11 +216,11 @@ class McpDispatcher {
       final after = a['screenshot_after_ms'];
       final delay =
           after == null ? null : _requireInt(a, 'screenshot_after_ms');
+      final display = _optionalInt(a, 'display');
       await send();
       final result = text('ok');
       if (delay != null) {
         await Future.delayed(Duration(milliseconds: delay.clamp(0, 5000)));
-        final display = _optionalInt(a, 'display');
         try {
           final image = await backend.screenshot(sid(a), display: display);
           (result['content'] as List).addAll(_imageContent(image, display));
@@ -566,7 +566,8 @@ class McpDispatcher {
         'press_key',
         'Press a key, optionally with modifiers, e.g. key `VK_C` with '
             'modifiers [`ctrl`]. `action` `down` holds the key and `up` '
-            'releases it, for keys that must stay held; always release what '
+            'releases it. Linux peers do not support holding ordinary keys; '
+            'use `press` on Linux. Always release what '
             'you hold. Modifier keys cannot be held this way: pass '
             '`modifiers` to the input that needs them. `Meta` is the Windows '
             'or Command key, the same key as the `command` modifier. `shift` '

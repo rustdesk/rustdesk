@@ -300,6 +300,8 @@ pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<boo
 
 pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        crate::flutter_mcp::close_connection(&session);
         crate::keyboard::shortcuts::clear_session_state(&session_id);
         // `release_remote_keys` is not required for mobile platforms in common cases.
         // But we still call it to make the code more stable.
@@ -375,15 +377,9 @@ pub fn mcp_session_id(connection_id: String) -> SyncReturn<String> {
 }
 
 #[allow(unused_variables)]
-pub fn mcp_release_input(
-    connection_id: String,
-    grant_id: String,
-    buttons: Vec<String>,
-    keys: Vec<String>,
-    revoke: bool,
-) -> SyncReturn<()> {
+pub fn mcp_release_input(connection_id: String, grant_id: String, revoke: bool) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::flutter_mcp::release_input(&connection_id, &grant_id, &buttons, &keys, revoke);
+    crate::flutter_mcp::release_input(&connection_id, &grant_id, revoke);
     SyncReturn(())
 }
 
@@ -694,15 +690,27 @@ pub fn session_set_trackpad_speed(session_id: SessionID, value: i32) {
 }
 
 pub fn session_lock_screen(session_id: SessionID) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.lock_screen();
-    }
+    let send = || {
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            session.lock_screen();
+        }
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::with_human_input(session_id, send);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    send();
 }
 
 pub fn session_ctrl_alt_del(session_id: SessionID) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.ctrl_alt_del();
-    }
+    let send = || {
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            session.ctrl_alt_del();
+        }
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::with_human_input(session_id, send);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    send();
 }
 
 pub fn session_switch_display(is_desktop: bool, session_id: SessionID, value: Vec<i32>) {
@@ -802,17 +810,57 @@ pub fn session_input_key(
     shift: bool,
     command: bool,
 ) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        // #[cfg(any(target_os = "android", target_os = "ios"))]
-        session.input_key(&name, down, press, alt, ctrl, shift, command);
-    }
+    let send = || {
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            // #[cfg(any(target_os = "android", target_os = "ios"))]
+            session.input_key(&name, down, press, alt, ctrl, shift, command);
+        }
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::with_human_input(session_id, send);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    send();
 }
 
 pub fn session_input_string(session_id: SessionID, value: String) {
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        // #[cfg(any(target_os = "android", target_os = "ios"))]
-        session.input_string(&value);
-    }
+    let send = || {
+        if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+            // #[cfg(any(target_os = "android", target_os = "ios"))]
+            session.input_string(&value);
+        }
+    };
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::with_human_input(session_id, send);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    send();
+}
+
+#[allow(unused_variables)]
+pub fn session_input_mcp_key(
+    session_id: SessionID,
+    grant_id: String,
+    name: String,
+    down: bool,
+    press: bool,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::flutter_mcp::input_key(
+        session_id, &grant_id, &name, down, press, alt, ctrl, shift, command,
+    );
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    "Not supported".into()
+}
+
+#[allow(unused_variables)]
+pub fn session_input_mcp_string(session_id: SessionID, grant_id: String, value: String) -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::flutter_mcp::input_string(session_id, &grant_id, &value);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    "Not supported".into()
 }
 
 // chat_client_mode
@@ -866,6 +914,9 @@ pub fn session_get_peer_option(session_id: SessionID, name: String) -> String {
 }
 
 pub fn session_input_os_password(session_id: SessionID, value: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::flutter_mcp::input_os_password(session_id, value);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.input_os_password(value, true);
     }

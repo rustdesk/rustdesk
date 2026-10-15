@@ -449,6 +449,22 @@ void main() {
       expect(backend.calls, ['key s VK_RETURN  down', 'screenshot s 0']);
     });
 
+    test('invalid screenshot arguments fail before any input is sent',
+        () async {
+      for (final tool in ['type_text', 'press_key']) {
+        final r = await _rpc(
+            dispatcher,
+            _call(tool, {
+              'session_id': 's',
+              if (tool == 'type_text') 'text': 'hello' else 'key': 'VK_RETURN',
+              'screenshot_after_ms': 0,
+              'display': '0',
+            }));
+        expect(r['result']['isError'], isTrue);
+        expect(backend.calls, isEmpty);
+      }
+    });
+
     test('a failed screenshot does not hide that the input was sent', () async {
       final r = await _rpc(
           dispatcher,

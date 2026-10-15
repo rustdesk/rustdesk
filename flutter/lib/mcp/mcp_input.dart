@@ -26,9 +26,6 @@ class McpInputState {
   bool get active => _release == null;
   final _queue = McpOperationQueue();
   Future<void>? _release;
-  final Set<String> buttons = {};
-  final Set<String> keys = {};
-  ({int x, int y})? pointer;
 
   void checkActive() {
     if (_release != null) {

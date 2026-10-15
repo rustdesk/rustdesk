@@ -1994,12 +1994,30 @@ class RustdeskImpl {
   void mcpReleaseInput(
       {required String connectionId,
       required String grantId,
-      required List<String> buttons,
-      required List<String> keys,
       required bool revoke,
       dynamic hint}) {
     throw UnimplementedError('mcpReleaseInput');
   }
+
+  Future<String> sessionInputMcpKey(
+          {required UuidValue sessionId,
+          required String grantId,
+          required String name,
+          required bool down,
+          required bool press,
+          required bool alt,
+          required bool ctrl,
+          required bool shift,
+          required bool command,
+          dynamic hint}) async =>
+      'Not supported';
+
+  Future<String> sessionInputMcpString(
+          {required UuidValue sessionId,
+          required String grantId,
+          required String value,
+          dynamic hint}) async =>
+      'Not supported';
 
   bool sessionMcpAuthenticate(
           {required UuidValue sessionId,

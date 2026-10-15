@@ -56,7 +56,6 @@ void main() {
       started.complete();
       await sent.future;
       events.add('down');
-      input.buttons.add('left');
       input.checkActive();
       events.add('unexpected move');
     });
@@ -66,10 +65,7 @@ void main() {
         input.run(() async => events.add('unexpected down')),
         throwsA(isA<McpToolException>()));
     Future<void> cleanup() async {
-      for (final button in input.buttons) {
-        events.add('$button up');
-      }
-      input.buttons.clear();
+      events.add('release input');
     }
 
     final released = input.release(cleanup);
@@ -78,28 +74,24 @@ void main() {
     await Future.wait([cancelled, queued, released, repeated]);
     await expectLater(input.run(() async => events.add('late down')),
         throwsA(isA<McpToolException>()));
-    expect(events, ['down', 'left up']);
+    expect(events, ['down', 'release input']);
   });
 
   test('a failed input call does not prevent release', () async {
     final input = McpInputState('grant');
     final events = <String>[];
     final failed = expectLater(input.run(() async {
-      input.keys.add('VK_SHIFT');
       throw StateError('FFI failed after key down');
     }), throwsStateError);
     await failed;
     await input.release(() async {
-      for (final key in input.keys) {
-        events.add('$key up');
-      }
+      events.add('release input');
     });
-    expect(events, ['VK_SHIFT up']);
+    expect(events, ['release input']);
   });
 
   test('failed cleanup keeps the old grant closed to further input', () async {
     final input = McpInputState('old-grant');
-    await input.run(() async => input.keys.add('VK_SHIFT'));
     await expectLater(input.release(() async {
       throw StateError('Native release failed');
     }), throwsStateError);

@@ -228,13 +228,7 @@ class RustDeskMcpBackend implements McpBackend {
   void _clearHeld(String connectionId, McpInputState input,
       {bool revoke = true}) {
     bind.mcpReleaseInput(
-        connectionId: connectionId,
-        grantId: input.grantId,
-        buttons: input.buttons.toList(),
-        keys: input.keys.toList(),
-        revoke: revoke);
-    input.buttons.clear();
-    input.keys.clear();
+        connectionId: connectionId, grantId: input.grantId, revoke: revoke);
   }
 
   // Notifications only refresh UI from native state. A late notification
@@ -601,9 +595,11 @@ class RustDeskMcpBackend implements McpBackend {
   }
 
   Future<void> _sendMouse(
-          McpInputState input, UuidValue sid, Map<String, String> msg) =>
-      bind.sessionSendMcpMouse(
-          sessionId: sid, grantId: input.grantId, msg: jsonEncode(msg));
+      McpInputState input, UuidValue sid, Map<String, String> msg) async {
+    _checkGrant(sid.toString(), input);
+    await bind.sessionSendMcpMouse(
+        sessionId: sid, grantId: input.grantId, msg: jsonEncode(msg));
+  }
 
   ({int x, int y}) _toRemote(
       Map<String, dynamic> session, int display, int x, int y) {
@@ -622,8 +618,10 @@ class RustDeskMcpBackend implements McpBackend {
   Future<void> _holding(McpInputState input, UuidValue sid,
       List<String> modifiers, Future<void> Function() body) async {
     if (modifiers.isEmpty) return body();
-    Future<void> key(String m, bool down) => bind.sessionInputKey(
+    Future<void> key(String m, bool down) async =>
+        _checkInputResult(await bind.sessionInputMcpKey(
           sessionId: sid,
+          grantId: input.grantId,
           name: kMcpModifierKeyNames[m]!,
           down: down,
           press: false,
@@ -631,7 +629,7 @@ class RustDeskMcpBackend implements McpBackend {
           ctrl: down && modifiers.contains('ctrl'),
           shift: down && modifiers.contains('shift'),
           command: down && modifiers.contains('command'),
-        );
+        ));
     try {
       for (final m in modifiers) {
         input.checkActive();
@@ -664,7 +662,6 @@ class RustDeskMcpBackend implements McpBackend {
           input.checkActive();
           await _sendMouse(input, sid,
               mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
-          input.pointer = p;
           if (action == 'move') return;
           final buttons = switch (action) {
             'right_click' => 'right',
@@ -674,8 +671,6 @@ class RustDeskMcpBackend implements McpBackend {
           };
           Future<void> press(String type, ({int x, int y}) at) async {
             input.checkActive();
-            input.pointer = at;
-            if (type == 'down') input.buttons.add(buttons);
             await _sendMouse(
                 input,
                 sid,
@@ -685,7 +680,6 @@ class RustDeskMcpBackend implements McpBackend {
                     x: at.x,
                     y: at.y,
                     modifiers: modifiers));
-            if (type == 'up') input.buttons.remove(buttons);
           }
 
           if (action == 'down' || action == 'up') {
@@ -696,7 +690,6 @@ class RustDeskMcpBackend implements McpBackend {
             for (final point in mcpDragPath(p, end)) {
               await Future.delayed(const Duration(milliseconds: 20));
               input.checkActive();
-              input.pointer = point;
               await _sendMouse(
                   input,
                   sid,
@@ -704,7 +697,6 @@ class RustDeskMcpBackend implements McpBackend {
                       x: point.x, y: point.y, modifiers: modifiers));
             }
             await press('up', end);
-            input.pointer = end;
             return;
           }
           final times = action == 'double_click' ? 2 : 1;
@@ -727,7 +719,6 @@ class RustDeskMcpBackend implements McpBackend {
           input.checkActive();
           await _sendMouse(input, sid,
               mcpMouseMessage(x: p.x, y: p.y, modifiers: modifiers));
-          input.pointer = p;
           final step = mcpWheelStep(direction);
           for (var i = 0; i < amount.clamp(0, 50); i++) {
             input.checkActive();
@@ -752,7 +743,8 @@ class RustDeskMcpBackend implements McpBackend {
             // Unicode LF is not an Enter key on Windows.
             await _pressKey(input, sessionId, 'VK_RETURN', const [], 'press');
           } else {
-            await bind.sessionInputString(sessionId: sid, value: chunks[i]);
+            _checkInputResult(await bind.sessionInputMcpString(
+                sessionId: sid, grantId: input.grantId, value: chunks[i]));
           }
           if (delayMs > 0 && i < chunks.length - 1) {
             await Future.delayed(Duration(milliseconds: delayMs));
@@ -773,12 +765,16 @@ class RustDeskMcpBackend implements McpBackend {
         return _pressKey(input, sessionId, key, modifiers, action);
       });
 
+  void _checkInputResult(String error) {
+    if (error.isNotEmpty) throw McpToolException(error);
+  }
+
   Future<void> _pressKey(McpInputState input, String sessionId, String key,
       List<String> modifiers, String action) async {
     input.checkActive();
-    if (action == 'down') input.keys.add(key);
-    await bind.sessionInputKey(
+    _checkInputResult(await bind.sessionInputMcpKey(
       sessionId: UuidValue(sessionId),
+      grantId: input.grantId,
       name: key,
       down: action == 'down',
       press: action == 'press',
@@ -786,8 +782,7 @@ class RustDeskMcpBackend implements McpBackend {
       ctrl: modifiers.contains('ctrl'),
       shift: modifiers.contains('shift'),
       command: modifiers.contains('command'),
-    );
-    if (action == 'up') input.keys.remove(key);
+    ));
   }
 
   @override
