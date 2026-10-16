@@ -1545,16 +1545,26 @@ impl<T: InvokeUiSession> Remote<T> {
                         return true;
                     };
                     if Self::contains_key_frame(&vf) {
+                        // Drain pre-keyframe deltas under the write lock, then
+                        // send the keyframe before releasing it so a new-GOP
+                        // delta cannot be queued and later discarded.
+                        let video_queue = thread.video_queue.write().unwrap();
+                        while video_queue.pop().is_some() {}
                         thread
                             .video_sender
                             .send(MediaData::VideoFrame(Box::new(vf)))
                             .ok();
                     } else {
-                        let video_queue = thread.video_queue.read().unwrap();
+                        // Write lock serializes with the decoder drain so
+                        // empty-check + push cannot race a drain that then
+                        // blocks in recv() without a VideoQueue wakeup.
+                        let video_queue = thread.video_queue.write().unwrap();
+                        let was_empty = video_queue.is_empty();
                         if video_queue.force_push(vf).is_some() {
                             drop(video_queue);
                             self.handler.refresh_video(display as _);
-                        } else {
+                        } else if was_empty {
+                            drop(video_queue);
                             thread.video_sender.send(MediaData::VideoQueue).ok();
                         }
                     }
