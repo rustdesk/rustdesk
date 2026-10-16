@@ -9,7 +9,7 @@ use std::{
 use windows::{
     core::{w, Owned, PCWSTR},
     Win32::{
-        Foundation::{GENERIC_READ, GENERIC_WRITE, HANDLE, HLOCAL},
+        Foundation::{DuplicateHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, HLOCAL},
         Security::{
             Authorization::{
                 ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -20,6 +20,7 @@ use windows::{
             CreateFileW, FileDispositionInfo, SetFileInformationByHandle, CREATE_NEW, DELETE,
             FILE_ATTRIBUTE_NORMAL, FILE_DISPOSITION_INFO, FILE_SHARE_READ,
         },
+        System::Threading::GetCurrentProcess,
     },
 };
 
@@ -27,6 +28,7 @@ use windows::{
 // directory whose executable or DLLs could be replaced while UAC is pending.
 pub(super) struct ProtectedInstallFile {
     path: PathBuf,
+    cleanup_handle: Option<Owned<HANDLE>>,
 }
 
 impl ProtectedInstallFile {
@@ -46,7 +48,7 @@ impl ProtectedInstallFile {
         expected_sha256: Option<&str>,
     ) -> ResultType<Self> {
         let mut file = create_protected_file(path)?;
-        let result = (|| -> ResultType<()> {
+        let result = (|| -> ResultType<Owned<HANDLE>> {
             io::copy(source, &mut file)?;
             file.sync_all()?;
             if let Some(expected) = expected_sha256 {
@@ -57,37 +59,50 @@ impl ProtectedInstallFile {
                     )
                 })?;
             }
-            Ok(())
+            duplicate_cleanup_handle(&file)
         })();
-        if let Err(error) = result {
+        let cleanup_handle = result.map_err(|error| {
             // The initial handle can remove an incomplete file without reopening its protected path.
-            if let Err(cleanup_error) = delete_incomplete_file(&file) {
+            if let Err(cleanup_error) = delete_staged_file(HANDLE(file.as_raw_handle())) {
                 log::warn!(
                     "Failed to remove incomplete installer file {}: {cleanup_error}",
                     path.display()
                 );
             }
-            return Err(error);
-        }
+            error
+        })?;
         Ok(Self {
             path: path.to_owned(),
+            cleanup_handle: Some(cleanup_handle),
         })
     }
 
     pub(super) fn path(&self) -> &Path {
         &self.path
     }
+
+    pub(super) fn release(&mut self) {
+        // cmd.exe cannot read/copy these files while a DELETE handle is open.
+        // The handoff gate keeps it waiting until every staged handle is closed.
+        drop(self.cleanup_handle.take());
+    }
 }
 
 impl Drop for ProtectedInstallFile {
     fn drop(&mut self) {
-        if let Err(error) = fs::remove_file(&self.path) {
-            if error.kind() != io::ErrorKind::NotFound {
-                log::warn!(
-                    "Protected installer file may remain at {}: {error}",
-                    self.path.display()
-                );
-            }
+        // Cancellation cannot reopen the protected path with DELETE permission.
+        let result = match &self.cleanup_handle {
+            Some(handle) => delete_staged_file(**handle),
+            None => match fs::remove_file(&self.path) {
+                Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error.into()),
+                _ => Ok(()),
+            },
+        };
+        if let Err(error) = result {
+            log::warn!(
+                "Protected installer file may remain at {}: {error}",
+                self.path.display()
+            );
         }
     }
 }
@@ -134,13 +149,31 @@ fn create_protected_file(path: &Path) -> ResultType<File> {
     Ok(unsafe { File::from_raw_handle(handle.0) })
 }
 
-fn delete_incomplete_file(file: &File) -> ResultType<()> {
+fn duplicate_cleanup_handle(file: &File) -> ResultType<Owned<HANDLE>> {
+    let mut handle = HANDLE::default();
+    // Retain deletion capability, not a writable handle, while waiting for UAC.
+    unsafe {
+        let process = GetCurrentProcess();
+        DuplicateHandle(
+            process,
+            HANDLE(file.as_raw_handle()),
+            process,
+            &mut handle,
+            DELETE.0,
+            false,
+            Default::default(),
+        )?;
+        Ok(Owned::new(handle))
+    }
+}
+
+fn delete_staged_file(handle: HANDLE) -> ResultType<()> {
     let disposition = FILE_DISPOSITION_INFO {
         DeleteFile: true.into(),
     };
     unsafe {
         SetFileInformationByHandle(
-            HANDLE(file.as_raw_handle()),
+            handle,
             FileDispositionInfo,
             &disposition as *const _ as *const _,
             std::mem::size_of_val(&disposition) as u32,
@@ -171,6 +204,52 @@ mod tests {
             System::Threading::{GetCurrentProcess, OpenProcessToken},
         },
     };
+
+    #[test]
+    fn cancelled_staging_removes_files_without_parent_delete_permission() {
+        use windows::Win32::Security::{ImpersonateLoggedOnUser, RevertToSelf};
+        let root = std::env::temp_dir().join(format!("rustdesk-cancel-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("package.tmp");
+        let file = ProtectedInstallFile::new(&path, b"cancelled update").unwrap();
+        // Omit DELETE_CHILD as in Windows Temp, but retain fixture ACL control.
+        set_parent_acl(&root, w!("D:P(A;;0x1600af;;;OW)"));
+        unsafe {
+            let token = ordinary_owner_token();
+            ImpersonateLoggedOnUser(*token).unwrap();
+            drop(file);
+            RevertToSelf().unwrap();
+        }
+        set_parent_acl(&root, w!("D:P(A;;FA;;;OW)"));
+        let remaining = fs::symlink_metadata(&path);
+        fs::remove_dir_all(&root).unwrap();
+        assert!(
+            matches!(remaining, Err(error) if error.kind() == io::ErrorKind::NotFound),
+            "Cancelled staging must remove the protected package"
+        );
+    }
+
+    fn set_parent_acl(path: &Path, sddl: PCWSTR) {
+        use windows::Win32::Security::{SetFileSecurityW, PROTECTED_DACL_SECURITY_INFORMATION};
+        let path = wide_string(path.to_str().unwrap());
+        let mut descriptor = PSECURITY_DESCRIPTOR::default();
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl,
+                SDDL_REVISION_1,
+                &mut descriptor,
+                None,
+            )
+            .unwrap();
+            let _descriptor = Owned::new(HLOCAL(descriptor.0));
+            assert!(SetFileSecurityW(
+                PCWSTR(path.as_ptr()),
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                descriptor
+            )
+            .as_bool());
+        }
+    }
 
     #[test]
     fn staged_files_protect_contents_and_remove_unverified_data() {

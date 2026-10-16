@@ -193,7 +193,25 @@ fn initialize_shell_com() -> ResultType<Option<ShellComGuard>> {
     Ok(Some(ShellComGuard))
 }
 
-struct ProcessHandle(HANDLE);
+pub(super) struct ProcessHandle(HANDLE);
+impl ProcessHandle {
+    pub(super) fn handle(&self) -> HANDLE {
+        self.0
+    }
+
+    pub(super) fn wait(self) -> ResultType<u32> {
+        let wait_result = unsafe { Threading::WaitForSingleObject(self.0, Threading::INFINITE) };
+        if wait_result == Foundation::WAIT_FAILED {
+            return Err(io::Error::last_os_error().into());
+        }
+        if wait_result != Foundation::WAIT_OBJECT_0 {
+            bail!("Unexpected elevated process wait result: {}", wait_result.0);
+        }
+        let mut exit_code = 0;
+        unsafe { Threading::GetExitCodeProcess(self.0, &mut exit_code) }?;
+        Ok(exit_code)
+    }
+}
 
 impl Drop for ProcessHandle {
     fn drop(&mut self) {
@@ -209,11 +227,11 @@ fn elevated_working_directory(executable: &Path) -> ResultType<&Path> {
         .ok_or_else(|| anyhow!("Elevated executable has no parent directory"))
 }
 
-pub(super) fn run_elevated_and_wait(
+pub(super) fn launch_elevated(
     executable: &Path,
     parameters: &str,
     show: bool,
-) -> ResultType<u32> {
+) -> ResultType<ProcessHandle> {
     let parameter_chars = parameters.encode_utf16().count();
     if parameter_chars >= WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS {
         bail!("Elevated command is too long: {parameter_chars} UTF-16 characters");
@@ -241,17 +259,7 @@ pub(super) fn run_elevated_and_wait(
     if info.hProcess.0.is_null() {
         bail!("Windows did not return an elevated process handle");
     }
-    let process = ProcessHandle(info.hProcess);
-    let wait_result = unsafe { Threading::WaitForSingleObject(process.0, Threading::INFINITE) };
-    if wait_result == Foundation::WAIT_FAILED {
-        return Err(io::Error::last_os_error().into());
-    }
-    if wait_result != Foundation::WAIT_OBJECT_0 {
-        bail!("Unexpected elevated process wait result: {}", wait_result.0);
-    }
-    let mut exit_code = 0;
-    unsafe { Threading::GetExitCodeProcess(process.0, &mut exit_code) }?;
-    Ok(exit_code)
+    Ok(ProcessHandle(info.hProcess))
 }
 
 // Escape `^` before using it to escape `&` so both survive nested cmd.exe parsing.

@@ -130,8 +130,11 @@ inline DWORD RunCommand(int count, wchar_t** args) {
   return ERROR_BAD_ARGUMENTS;
 }
 
-// Called before Rust initialization so service control neither opens the UI
-// nor depends on loading librustdesk.dll.
+// Keep these commands in the existing runner so installation/removal can control
+// services before loading librustdesk.dll or initializing the UI. A Rust-side
+// handler would first require that DLL to load. The header-only implementation
+// keeps main.cpp as a dispatch hook without adding a CMake source entry; it is
+// compiled into the existing EXE, not a separately packaged helper.
 inline std::optional<DWORD> HandleCommand(const wchar_t* command_line) {
   constexpr std::wstring_view option = L"--service-control";
   const std::wstring_view arguments(command_line);
