@@ -2039,15 +2039,6 @@ impl Connection {
             if !crate::platform::linux::is_x11_for_drm() {
                 super::drm_capturer::settle_unknown_availability().await;
             }
-            // A headless box boots to its greeter, and its output may still be coming up: give
-            // it the login door's hold before deciding, or the first login is refused for a
-            // scanout that lands seconds later. After the settle: the hold's first look starts a
-            // probe, and a settle that found it in flight would not wait for it.
-            #[cfg(feature = "headless-display")]
-            if crate::platform::linux::is_login_screen_wayland() {
-                super::drm_capturer::wait_for_headless_scanout(super::drm_capturer::HEADLESS_LOGIN_HOLD)
-                    .await;
-            }
             // Refuse only while nothing can capture a Wayland greeter: the DRM path can.
             if crate::platform::linux::is_login_screen_wayland() && !drm_can_serve_login_screen() {
                 msg = crate::client::LOGIN_SCREEN_WAYLAND.to_owned()

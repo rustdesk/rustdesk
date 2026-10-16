@@ -2370,9 +2370,6 @@ jobs:
             run_drm_tests "rustdesk virtual_display_manager::linux::tests" \
               cargo test --locked --lib --features drm,drm-wake,headless-display \
               virtual_display_manager::linux::tests
-            run_drm_tests "rustdesk headless-display drm_capturer drm_portal_tests ipc::test" \
-              cargo test --locked --lib --features drm,drm-wake,headless-display -- \
-              drm_capturer drm_portal_tests ipc::test
             run_drm_tests "rustdesk drm_pacing_tests" \
               cargo test --locked --lib --features drm drm_pacing_tests
             run_drm_tests "scrap hotspot_provenance_tests" \

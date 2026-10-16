@@ -531,10 +531,13 @@ pub fn core_main() -> Option<CoreMainAction> {
             {
                 use crate::virtual_display_manager::linux as headless;
                 use headless::OPTION_ALLOW_HEADLESS_DISPLAY as KEY;
+                fn fail(msg: &str) -> ! {
+                    println!("{msg}");
+                    std::process::exit(1)
+                }
                 match args.get(1).map(String::as_str) {
-                    // Read-only, so it needs no privilege: every connector's status is world
-                    // readable. The option comes over IPC like `--option` does, because the value
-                    // that matters is the one the running server has, not this process's copy.
+                    // Every connector's status is world readable. The switch comes from the
+                    // session `--server`, the way `--option` reads one.
                     Some("status") | None => {
                         let enabled = hbb_common::config::option2bool(
                             KEY,
@@ -546,44 +549,39 @@ pub fn core_main() -> Option<CoreMainAction> {
                     }
                     Some(verb @ ("enable" | "disable")) => {
                         if is_cli_setting_change_disabled() {
-                            println!("Settings are disabled!");
-                        } else if verb == "enable" && !headless::is_supported() {
-                            // Disabling must always be possible: with DRM temporarily gone the
-                            // setting would otherwise stay armed and re-fire when DRM returns.
-                            println!("No DRM connectors on this machine!");
-                        } else if crate::platform::is_installed() && is_root() {
-                            // Only the option is set here. Forcing the connector is the root
-                            // service's job.
-                            let want = if verb == "enable" { "Y" } else { "N" };
-                            crate::ipc::set_option(KEY, want);
-                            // `set_option` swallows a failed send, and `set_options` only writes the
-                            // local config after that send succeeds - so a failure here would leave
-                            // the old value in place and the push below would hand the service a
-                            // value nobody asked for. Read it back instead of assuming.
-                            if config::Config::get_option(KEY) != want {
-                                println!("Could not save the setting!");
+                            fail("Settings are disabled!");
+                        }
+                        // Disabling must always be possible: with DRM temporarily gone the setting
+                        // would otherwise stay armed and re-fire when DRM returns.
+                        if verb == "enable" && !headless::is_supported() {
+                            fail("No DRM connectors on this machine!");
+                        }
+                        if !(crate::platform::is_installed() && is_root()) {
+                            fail("Installation and administrative privileges required!");
+                        }
+                        // The same path as the settings checkbox: the option goes to the session
+                        // `--server`, which syncs it to the service. Forcing the connector is the
+                        // service's job. Right after an install that `--server` may still be starting.
+                        if !headless::wait_for_session_server() {
+                            fail("No RustDesk session is running yet, try again in a moment.");
+                        }
+                        let on = verb == "enable";
+                        // Done only once the service holds it. A `--server` that has just started
+                        // takes the service's config on its first sync and can drop a value set
+                        // before that, so the option is set once more after it.
+                        for _ in 0..2 {
+                            crate::ipc::set_option(KEY, if on { "Y" } else { "N" });
+                            if headless::wait_for_service_switch(on) {
+                                println!("Done!");
                                 return None;
                             }
-                            // ... but on the machine this feature is FOR, that is not enough.
-                            // `ipc::set_option` talks to the user `--server`, and a box with no
-                            // display has no seat0 session, so there is no `--server` to talk to:
-                            // the call quietly falls back to rewriting this process's config file,
-                            // while the running root service keeps the config it read at startup
-                            // and never notices. So hand this one option to the service directly,
-                            // over the protected channel, which admits exactly this key.
-                            match crate::ipc::set_service_option(KEY, want) {
-                                Ok(()) => println!("Done!"),
-                                Err(err) => println!(
-                                    "Saved, but the running service did not pick it up ({err}); \
-                                     restart it to apply."
-                                ),
-                            }
-                        } else {
-                            println!("Installation and administrative privileges required!");
                         }
+                        fail("Could not save the setting!");
                     }
                     Some(other) => {
-                        println!("Unknown argument {other}; expected enable, disable or status")
+                        fail(&format!(
+                            "Unknown argument {other}; expected enable, disable or status"
+                        ));
                     }
                 }
                 return None;
