@@ -167,6 +167,8 @@ jobs:
           cd ../..
           mkdir dist
           cp target/release/rustdesk-portable-packer.exe "dist/rustdesk-${VERSION}-x86_64.exe"
+          # Same binary; a name ending in install.exe makes it start the installer when run.
+          cp target/release/rustdesk-portable-packer.exe "dist/rustdesk-${VERSION}-install.exe"
           (cd flutter/build/windows/x64/runner/Release && 7z a -tzip "../../../../../../dist/rustdesk-${VERSION}-windows-x86_64.zip" .)
 
       - name: Sign update metadata
