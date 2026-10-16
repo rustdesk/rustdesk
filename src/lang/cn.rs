@@ -813,9 +813,5 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "“{}” 不能用作快捷键。"),
         ("On", "开"),
         ("Off", "关"),
-        ("Server profiles", ""),
-        ("Profile name", ""),
-        ("Save current", ""),
-        ("Edit profile", ""),
     ].iter().cloned().collect();
 }

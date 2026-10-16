@@ -1,0 +1,72 @@
+# Merges new upstream RustDesk commits into this repo's default branch.
+# A clean merge is pushed directly. On a conflict nothing is pushed and an issue is opened instead.
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  UPSTREAM_REPO: rustdesk/rustdesk
+  UPSTREAM_BRANCH: master
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch upstream "${UPSTREAM_BRANCH}"
+          echo "BEHIND=$(git rev-list --count HEAD..upstream/${UPSTREAM_BRANCH})" >> "$GITHUB_ENV"
+
+      - name: Merge upstream
+        id: merge
+        if: env.BEHIND != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git merge --no-edit "upstream/${UPSTREAM_BRANCH}"; then
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+            echo "result=merged" >> "$GITHUB_OUTPUT"
+          else
+            git diff --name-only --diff-filter=U > conflicts.txt
+            git merge --abort
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open an issue on conflict
+        if: steps.merge.outputs.result == 'conflict'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Merging \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` into \`${GITHUB_REF_NAME}\` hit conflicts in:"
+            echo
+            sed 's/^/- `/; s/$/`/' conflicts.txt
+            echo
+            echo "Resolve locally:"
+            echo
+            echo '```'
+            echo "git remote add upstream https://github.com/${UPSTREAM_REPO}.git"
+            echo "git fetch upstream && git merge upstream/${UPSTREAM_BRANCH}"
+            echo '```'
+          } > body.md
+          existing=$(gh issue list --state open --label upstream-sync --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh label create upstream-sync --color d93f0b --description "Upstream merge conflict" 2>/dev/null || true
+            gh issue create --title "Upstream sync conflict" --label upstream-sync --body-file body.md
+          fi

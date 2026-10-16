@@ -115,6 +115,10 @@ jobs:
           flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
 
       - name: Build rustdesk
+        env:
+          # Point the in-app update check at this repo's releases. Without a tag the check stays off.
+          FORK_UPDATE_REPO: ${{ github.repository }}
+          FORK_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
         run: python3 .\build.py --flutter --skip-portable-pack --hwcodec --vram
 
       - name: Pack portable exe
