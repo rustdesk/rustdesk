@@ -526,6 +526,9 @@ pub fn core_main() -> Option<CoreMainAction> {
                 println!("Installation and administrative privileges required!");
             }
             return None;
+        } else if args[0] == "--profile" {
+            crate::profiles::cli(&args[1..]);
+            return None;
         } else if args[0] == "--assign" {
             if config::Config::no_register_device() {
                 println!("Cannot assign an unregistrable device!");

@@ -157,6 +157,18 @@ pub(crate) fn verify_update_metadata(
         expected_release_id: requirements.expected_release_id,
         artifact: requirements.artifact,
     };
+    let fork_keys;
+    let trusted_keys = match crate::fork_update::trusted_public_key() {
+        Some(public_key) if crate::fork_update::is_fork_build() => {
+            fork_keys = [TrustedUpdateKey {
+                key_id: TRUSTED_UPDATE_KEYS[0].key_id,
+                algorithm: SIGNATURE_ALGORITHM,
+                public_key,
+            }];
+            &fork_keys[..]
+        }
+        _ => TRUSTED_UPDATE_KEYS,
+    };
     verify_update_metadata_with_options(
         metadata_bytes,
         signature_bytes,
@@ -164,7 +176,7 @@ pub(crate) fn verify_update_metadata(
             requirements: metadata_requirements,
             expected_package_id: PUBLIC_UPDATE_PACKAGE_ID,
             artifact_url_policy,
-            trusted_keys: TRUSTED_UPDATE_KEYS,
+            trusted_keys,
         },
     )
 }

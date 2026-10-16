@@ -1049,9 +1049,12 @@ pub(crate) fn release_id_from_update_url(update_url: &str) -> ResultType<String>
         bail!("Update URL has no path: {}", update_url);
     };
     let segments = segments.collect::<Vec<_>>();
+    let (owner, repo) = crate::fork_update::update_repo()
+        .split_once('/')
+        .unwrap_or_default();
     let release_id = match segments.as_slice() {
-        ["rustdesk", "rustdesk", "releases", "tag", release_id] => *release_id,
-        ["rustdesk", "rustdesk", "releases", "tag", release_id, ""] => *release_id,
+        [o, r, "releases", "tag", release_id] if *o == owner && *r == repo => *release_id,
+        [o, r, "releases", "tag", release_id, ""] if *o == owner && *r == repo => *release_id,
         _ => bail!(
             "Update URL is not a RustDesk release tag URL: {}",
             update_url
@@ -1130,6 +1133,9 @@ fn process_software_update_check_response(bytes: Bytes) -> ResultType<()> {
 // Because the url is always `https://api.rustdesk.com/version/latest`.
 #[tokio::main(flavor = "current_thread")]
 pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
+    if crate::fork_update::is_fork_build() {
+        return crate::fork_update::check().await;
+    }
     let (request, url) =
         hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
     let proxy_conf = Config::get_socks();
