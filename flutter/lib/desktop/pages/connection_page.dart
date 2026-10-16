@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
+import 'package:flutter_hbb/common/widgets/server_profiles.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -353,6 +354,7 @@ class _ConnectionPageState extends State<ConnectionPage>
         child: Column(
           children: [
             getConnectionPageTitle(context, false).marginOnly(bottom: 15),
+            const ConnectProfilePicker(),
             Row(
               children: [
                 Expanded(
