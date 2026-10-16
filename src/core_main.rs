@@ -234,9 +234,6 @@ pub fn core_main() -> Option<CoreMainAction> {
         #[cfg(windows)]
         {
             use crate::platform;
-            if let Some(result) = platform::windows::installer_files::handle_command(&args) {
-                return result.err().map(CoreMainAction::ExitFailure);
-            }
             if args[0] == "--uninstall" {
                 if let Err(err) = platform::uninstall_me(true) {
                     log::error!("Failed to uninstall: {}", err);

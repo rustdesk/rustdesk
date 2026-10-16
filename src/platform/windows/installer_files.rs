@@ -1,149 +1,294 @@
-use hbb_common::{
-    anyhow::{anyhow, Context},
-    base64::{engine::general_purpose::STANDARD, Engine as _},
-    ResultType,
-};
+use super::{installer_handoff::directory, wide_string};
+use hbb_common::{anyhow::anyhow, log, ResultType};
 use std::{
-    fs,
+    fs::{self, File},
+    io::{self, Read},
+    os::windows::io::{AsRawHandle, FromRawHandle},
     path::{Path, PathBuf},
 };
-
-pub(super) const VERIFY_FILE_ARGUMENT: &str = "--verify-install-file";
-pub(super) const DECODE_SHORTCUT_ARGUMENT: &str = "--decode-install-shortcut";
-
-pub(super) fn helper_path() -> ResultType<String> {
-    // Resolve mapped drives before UAC switches logon sessions.
-    let executable = resolve_mapped_drive(&std::env::current_exe()?)?;
-    let path = executable
-        .to_str()
-        .ok_or_else(|| anyhow!("Installer helper path is not valid Unicode"))?;
-    if path.contains(['\0', '"', '\r', '\n']) {
-        return Err(anyhow!(
-            "Installer helper path is unsafe for cmd.exe: {path}"
-        ));
-    }
-    Ok(path.to_owned())
-}
-
-fn resolve_mapped_drive(path: &Path) -> ResultType<PathBuf> {
-    use std::path::{Component, Prefix};
-    use windows::{core::PCWSTR, Win32::Storage::FileSystem::GetDriveTypeW};
-
-    let mut components = path.components();
-    let Some(Component::Prefix(prefix)) = components.next() else {
-        return Ok(path.to_owned());
-    };
-    let (Prefix::Disk(drive) | Prefix::VerbatimDisk(drive)) = prefix.kind() else {
-        return Ok(path.to_owned());
-    };
-    let root = super::wide_string(&format!("{}:\\", drive as char));
-    if unsafe { GetDriveTypeW(PCWSTR(root.as_ptr())) } != winapi::um::winbase::DRIVE_REMOTE {
-        return Ok(path.to_owned());
-    }
-    // Query only the mapping; normalizing SMB components can require extra access.
-    let remote = mapped_drive_root(drive)?;
-    Ok(remote.join(components.as_path().strip_prefix(r"\")?))
-}
-
-fn mapped_drive_root(drive: u8) -> ResultType<PathBuf> {
-    use windows::{
-        core::{PCWSTR, PWSTR},
-        Win32::{
-            Foundation::{ERROR_MORE_DATA, MAX_PATH},
-            NetworkManagement::WNet::WNetGetConnectionW,
+use windows::{
+    core::{w, Owned, PCWSTR},
+    Win32::{
+        Foundation::{GENERIC_READ, GENERIC_WRITE, HANDLE, HLOCAL},
+        Security::{
+            Authorization::{
+                ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+            },
+            PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
         },
-    };
+        Storage::FileSystem::{
+            CreateFileW, FileDispositionInfo, SetFileInformationByHandle, CREATE_NEW, DELETE,
+            FILE_ATTRIBUTE_NORMAL, FILE_DISPOSITION_INFO, FILE_SHARE_READ,
+        },
+    },
+};
 
-    let device = super::wide_string(&format!("{}:", drive as char));
-    let mut length = MAX_PATH;
-    let mut buffer = vec![0; length as usize];
-    let mut result = unsafe {
-        WNetGetConnectionW(
-            PCWSTR(device.as_ptr()),
-            Some(PWSTR(buffer.as_mut_ptr())),
-            &mut length,
-        )
-    };
-    if result == ERROR_MORE_DATA {
-        buffer.resize(length as usize, 0);
-        result = unsafe {
-            WNetGetConnectionW(
-                PCWSTR(device.as_ptr()),
-                Some(PWSTR(buffer.as_mut_ptr())),
-                &mut length,
-            )
-        };
+// Stage data before elevation instead of relaunching a verifier from a portable
+// directory whose executable or DLLs could be replaced while UAC is pending.
+pub(super) struct ProtectedInstallFile {
+    path: PathBuf,
+}
+
+impl ProtectedInstallFile {
+    pub(super) fn new(path: &Path, bytes: &[u8]) -> ResultType<Self> {
+        Self::create(path, &mut io::Cursor::new(bytes), None)
     }
-    result.ok().with_context(|| {
-        format!(
-            "Failed to resolve installer helper drive {}:",
-            drive as char
+
+    pub(super) fn copy_verified(source: &Path, expected_sha256: &str) -> ResultType<Self> {
+        let mut source = File::open(source)?;
+        let path = directory::path()?.with_extension("tmp");
+        Self::create(&path, &mut source, Some(expected_sha256))
+    }
+
+    fn create(
+        path: &Path,
+        source: &mut impl Read,
+        expected_sha256: Option<&str>,
+    ) -> ResultType<Self> {
+        let mut file = create_protected_file(path)?;
+        let result = (|| -> ResultType<()> {
+            io::copy(source, &mut file)?;
+            file.sync_all()?;
+            if let Some(expected) = expected_sha256 {
+                crate::update_hash::verify_sha256_reader(&mut file, expected).map_err(|error| {
+                    anyhow!(
+                        "Failed to verify staged installer file {}: {error:?}",
+                        path.display()
+                    )
+                })?;
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            // The initial handle can remove an incomplete file without reopening its protected path.
+            if let Err(cleanup_error) = delete_incomplete_file(&file) {
+                log::warn!(
+                    "Failed to remove incomplete installer file {}: {cleanup_error}",
+                    path.display()
+                );
+            }
+            return Err(error);
+        }
+        Ok(Self {
+            path: path.to_owned(),
+        })
+    }
+
+    pub(super) fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for ProtectedInstallFile {
+    fn drop(&mut self) {
+        if let Err(error) = fs::remove_file(&self.path) {
+            if error.kind() != io::ErrorKind::NotFound {
+                log::warn!(
+                    "Protected installer file may remain at {}: {error}",
+                    self.path.display()
+                );
+            }
+        }
+    }
+}
+
+fn create_protected_file(path: &Path) -> ResultType<File> {
+    let mut descriptor = PSECURITY_DESCRIPTOR::default();
+    // Restrict OWNER RIGHTS at creation so the unelevated creator cannot reopen
+    // the file for writing or grant itself that permission after staging.
+    unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            w!("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FRFX;;;OW)"),
+            SDDL_REVISION_1,
+            &mut descriptor,
+            None,
+        )?;
+    }
+    let _descriptor = unsafe { Owned::new(HLOCAL(descriptor.0)) };
+    let attributes = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor.0,
+        bInheritHandle: false.into(),
+    };
+    let path_string = path
+        .to_str()
+        .ok_or_else(|| anyhow!("Invalid protected installer path"))?;
+    let path_string = wide_string(path_string);
+    let handle = unsafe {
+        CreateFileW(
+            PCWSTR(path_string.as_ptr()),
+            GENERIC_READ.0 | GENERIC_WRITE.0 | DELETE.0,
+            FILE_SHARE_READ,
+            Some(&attributes),
+            CREATE_NEW,
+            FILE_ATTRIBUTE_NORMAL,
+            None,
+        )
+    }
+    .map_err(|error| {
+        anyhow!(
+            "Failed to create protected installer file {}: {error}",
+            path.display()
         )
     })?;
-    let end = buffer
-        .iter()
-        .position(|&value| value == 0)
-        .ok_or_else(|| anyhow!("Installer helper drive mapping is not terminated"))?;
-    let remote = String::from_utf16(&buffer[..end])
-        .context("Installer helper drive mapping is not valid Unicode")?;
-    Ok(PathBuf::from(remote))
+    Ok(unsafe { File::from_raw_handle(handle.0) })
 }
 
-pub(crate) fn handle_command(args: &[String]) -> Option<ResultType<()>> {
-    match args.first()?.as_str() {
-        VERIFY_FILE_ARGUMENT => Some(match args {
-            [_, source, expected_hash, receipt] => verify(source, expected_hash, receipt),
-            _ => Err(anyhow!(
-                "Expected a file, SHA-256 hash and verification receipt path"
-            )),
-        }),
-        DECODE_SHORTCUT_ARGUMENT => Some(match args {
-            [_, source, destination] => decode_shortcut(source, destination),
-            _ => Err(anyhow!("Expected encoded shortcut and destination paths")),
-        }),
-        _ => None,
+fn delete_incomplete_file(file: &File) -> ResultType<()> {
+    let disposition = FILE_DISPOSITION_INFO {
+        DeleteFile: true.into(),
+    };
+    unsafe {
+        SetFileInformationByHandle(
+            HANDLE(file.as_raw_handle()),
+            FileDispositionInfo,
+            &disposition as *const _ as *const _,
+            std::mem::size_of_val(&disposition) as u32,
+        )?;
     }
-}
-
-fn verify(source: &str, expected_hash: &str, receipt: &str) -> ResultType<()> {
-    let mut file = fs::File::open(source)
-        .with_context(|| format!("Failed to open installer file {source}"))?;
-    crate::update_hash::verify_sha256_reader(&mut file, expected_hash)
-        .map_err(|error| anyhow!("Failed to verify installer file {source}: {error:?}"))?;
-    // Startup can exit before dispatch; the caller requires proof that verification ran.
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(receipt)
-        .with_context(|| format!("Failed to write verification receipt {receipt}"))?;
     Ok(())
-}
-
-fn decode_shortcut(source: &str, destination: &str) -> ResultType<()> {
-    let encoded = fs::read_to_string(source)
-        .with_context(|| format!("Failed to read encoded installer shortcut {source}"))?;
-    let bytes = STANDARD
-        .decode(encoded.trim())
-        .context("Failed to decode installer shortcut")?;
-    fs::write(destination, bytes)
-        .with_context(|| format!("Failed to write installer shortcut {destination}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use windows::{
+        core::BOOL,
+        Win32::{
+            Foundation::HANDLE,
+            Security::{
+                AccessCheck,
+                Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT},
+                CreateRestrictedToken, CreateWellKnownSid, DuplicateToken, SecurityImpersonation,
+                WinBuiltinAdministratorsSid, DACL_SECURITY_INFORMATION, DISABLE_MAX_PRIVILEGE,
+                GENERIC_MAPPING, GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
+                PRIVILEGE_SET, PSID, SECURITY_MAX_SID_SIZE, SID_AND_ATTRIBUTES, TOKEN_DUPLICATE,
+                TOKEN_QUERY,
+            },
+            Storage::FileSystem::{
+                FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+            },
+            System::Threading::{GetCurrentProcess, OpenProcessToken},
+        },
+    };
 
     #[test]
-    fn helper_paths_preserve_local_and_unc_paths() {
-        let local = std::env::current_exe()
-            .unwrap()
-            .with_file_name(format!("missing-{}.exe", uuid::Uuid::new_v4()));
-        for path in [
-            local,
-            PathBuf::from(r"\\localhost\rustdesk-test-share\restricted\rustdesk.exe"),
-            PathBuf::from(r"\\?\UNC\localhost\rustdesk-test-share\restricted\rustdesk.exe"),
-        ] {
-            assert_eq!(resolve_mapped_drive(&path).unwrap(), path);
+    fn staged_files_protect_contents_and_remove_unverified_data() {
+        const HASH: &str = "304ca1638c5effa6832e0e15b958a8f74847efe4df9c3f3187216e921c168fed";
+        let root = std::env::temp_dir().join(format!("rustdesk-staging-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("input.tmp");
+        let file =
+            ProtectedInstallFile::create(&path, &mut io::Cursor::new(b"rustdesk"), Some(HASH))
+                .unwrap();
+        assert_eq!(
+            ordinary_owner_access(file.path()),
+            (FILE_GENERIC_READ | FILE_GENERIC_EXECUTE).0
+        );
+        assert_eq!(fs::read(file.path()).unwrap(), b"rustdesk");
+        assert!(ProtectedInstallFile::new(&path, b"replacement").is_err());
+        let rejected = root.join("rejected.tmp");
+        assert!(ProtectedInstallFile::create(
+            &rejected,
+            &mut io::Cursor::new(b"changed"),
+            Some(HASH)
+        )
+        .is_err());
+        assert!(!rejected.exists());
+        drop(file);
+        fs::remove_dir(root).unwrap();
+    }
+
+    fn ordinary_owner_access(path: &Path) -> u32 {
+        let path = wide_string(path.to_str().unwrap());
+        let mut descriptor = PSECURITY_DESCRIPTOR::default();
+        unsafe {
+            GetNamedSecurityInfoW(
+                PCWSTR(path.as_ptr()),
+                SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                None,
+                None,
+                None,
+                None,
+                &mut descriptor,
+            )
+            .ok()
+            .unwrap();
         }
+        let _descriptor = unsafe { Owned::new(HLOCAL(descriptor.0)) };
+        let token = ordinary_owner_token();
+        let mapping = GENERIC_MAPPING {
+            GenericRead: FILE_GENERIC_READ.0,
+            GenericWrite: FILE_GENERIC_WRITE.0,
+            GenericExecute: FILE_GENERIC_EXECUTE.0,
+            GenericAll: FILE_ALL_ACCESS.0,
+        };
+        let mut privileges = PRIVILEGE_SET::default();
+        let mut size = std::mem::size_of::<PRIVILEGE_SET>() as u32;
+        let mut granted = 0;
+        let mut allowed = BOOL::default();
+        unsafe {
+            AccessCheck(
+                descriptor,
+                *token,
+                winapi::um::winnt::MAXIMUM_ALLOWED,
+                &mapping,
+                Some(&mut privileges),
+                &mut size,
+                &mut granted,
+                &mut allowed,
+            )
+            .unwrap();
+        }
+        assert!(allowed.as_bool());
+        granted
+    }
+
+    fn ordinary_owner_token() -> Owned<HANDLE> {
+        let mut original = HANDLE::default();
+        unsafe {
+            OpenProcessToken(
+                GetCurrentProcess(),
+                TOKEN_QUERY | TOKEN_DUPLICATE,
+                &mut original,
+            )
+            .unwrap();
+        }
+        let original = unsafe { Owned::new(original) };
+        let mut sid = [0; SECURITY_MAX_SID_SIZE as usize];
+        let sid_pointer = PSID(sid.as_mut_ptr().cast());
+        let mut size = sid.len() as u32;
+        unsafe {
+            CreateWellKnownSid(
+                WinBuiltinAdministratorsSid,
+                None,
+                Some(sid_pointer),
+                &mut size,
+            )
+            .unwrap();
+        }
+        let disabled = [SID_AND_ATTRIBUTES {
+            Sid: sid_pointer,
+            Attributes: 0,
+        }];
+        let mut restricted = HANDLE::default();
+        unsafe {
+            CreateRestrictedToken(
+                *original,
+                DISABLE_MAX_PRIVILEGE,
+                Some(&disabled),
+                None,
+                None,
+                &mut restricted,
+            )
+            .unwrap();
+        }
+        let restricted = unsafe { Owned::new(restricted) };
+        let mut impersonation = HANDLE::default();
+        unsafe {
+            DuplicateToken(*restricted, SecurityImpersonation, &mut impersonation).unwrap();
+        }
+        unsafe { Owned::new(impersonation) }
     }
 }

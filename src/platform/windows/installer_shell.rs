@@ -1,10 +1,7 @@
-use super::{installer_files::DECODE_SHORTCUT_ARGUMENT, wide_string, ResultType};
-use hbb_common::{
-    anyhow::anyhow,
-    bail,
-    base64::{engine::general_purpose::STANDARD, Engine as _},
-    log,
+use super::{
+    installer_files::ProtectedInstallFile, installer_handoff::directory, wide_string, ResultType,
 };
+use hbb_common::{anyhow::anyhow, bail, log};
 use std::{
     ffi::OsString,
     io, mem,
@@ -26,7 +23,7 @@ use windows::{
 };
 
 pub(super) const CMD_RELATIVE_PATH: &str = "cmd.exe";
-pub(super) const BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE: u32 = 0x5253_0008;
+pub(super) const BATCH_SHORTCUT_COPY_FAILURE_EXIT_CODE: u32 = 0x5253_0008;
 pub(super) const WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS: usize = 2048;
 const SHORTCUT_ICON_INDEX: i32 = 0;
 
@@ -71,26 +68,29 @@ pub(super) fn shortcut_bytes(
     Ok(bytes)
 }
 
-pub(super) fn embedded_shortcut_commands(bytes: Vec<u8>, filename: &str, name: &str) -> String {
-    let encoded = STANDARD.encode(bytes);
-    format!(
-        "> \"%~f0.{name}.b64\" echo {encoded}\r\n\
-         start \"\" /b /wait \"%RUSTDESK_INSTALL_HELPER%\" {DECODE_SHORTCUT_ARGUMENT} \"%~f0.{name}.b64\" \"%RUSTDESK_OUTPUT_DIR%\\{filename}\" > nul || exit /b {BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE}\r\n\
-         if not exist \"%RUSTDESK_OUTPUT_DIR%\\{filename}\" exit /b {BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE}"
-    )
+pub(super) fn staged_shortcut_commands(
+    bytes: Vec<u8>,
+    filename: &str,
+) -> ResultType<(String, ProtectedInstallFile)> {
+    validate_install_value(filename)?;
+    let file = ProtectedInstallFile::new(&directory::path()?.with_extension("lnk"), &bytes)?;
+    let source = path_for_cmd_environment(file.path())?;
+    let commands = format!(
+        "copy /B /Y \"{source}\" \"%RUSTDESK_OUTPUT_DIR%\\{filename}\" > nul || exit /b {BATCH_SHORTCUT_COPY_FAILURE_EXIT_CODE}"
+    );
+    Ok((commands, file))
 }
 
-pub(super) fn embedded_tray_shortcut_commands(
+pub(super) fn staged_tray_shortcut_commands(
     app_name: &str,
     exe: &str,
     icon_location: Option<&str>,
-) -> ResultType<String> {
+) -> ResultType<(String, ProtectedInstallFile)> {
     let filename = format!("{app_name} Tray.lnk");
-    Ok(embedded_shortcut_commands(
+    staged_shortcut_commands(
         shortcut_bytes(exe, Some("--tray"), icon_location)?,
         &filename,
-        "tray_shortcut",
-    ))
+    )
 }
 
 pub(super) fn validate_install_value(value: &str) -> ResultType<()> {
@@ -133,14 +133,6 @@ pub(super) fn path_for_cmd_environment(path: &Path) -> ResultType<&str> {
         bail!("Path is unsafe for an elevated cmd.exe handoff: {:?}", path);
     }
     Ok(value)
-}
-
-// Bootstrap assignments are parsed before DisableDelayedExpansion takes effect.
-// Escape carets first so `^!` preserves each literal exclamation mark.
-pub(super) fn path_for_cmd_assignment(path: &Path) -> ResultType<String> {
-    Ok(path_for_cmd_environment(path)?
-        .replace('^', "^^")
-        .replace('!', "^!"))
 }
 
 pub(super) fn trusted_install_environment() -> ResultType<String> {

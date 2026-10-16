@@ -129,7 +129,6 @@ winapi = { version = "0.3", features = [
 windows = { version = "0.61", features = [
     "Win32",
     "Win32_Foundation",
-    "Win32_NetworkManagement_WNet",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",

@@ -2,9 +2,10 @@ mod file;
 
 use super::{
     get_custom_client_staging_dir, get_reg_of_hkcr, handle_custom_client_staging_dir_before_update,
-    installer_files::VERIFY_FILE_ARGUMENT, installer_handoff::run_cmds,
-    installer_shell::path_for_cmd_environment, remove_custom_client_staging_dir, ResultType,
-    REG_NAME_INSTALL_PRINTER,
+    installer_files::ProtectedInstallFile,
+    installer_handoff::{run_cmds, InstallCommands},
+    installer_shell::path_for_cmd_environment,
+    remove_custom_client_staging_dir, ResultType, REG_NAME_INSTALL_PRINTER,
 };
 use hbb_common::{allow_err, anyhow::anyhow, bail, log};
 use std::path::Path;
@@ -15,9 +16,7 @@ const VERIFIED_UPDATE_FILE_PREFIX: &str = "rustdesk-verified-";
 const VERIFIED_EXE_FILENAME: &str = "update.exe";
 const VERIFIED_MSI_FILENAME: &str = "update.msi";
 const VERIFIED_UPDATE_COPY_FAILURE_EXIT_CODE: u32 = 0x5253_0009;
-const VERIFIED_UPDATE_HASH_FAILURE_EXIT_CODE: u32 = 0x5253_000A;
 const VERIFIED_EXE_LAUNCH_FAILURE_EXIT_CODE: u32 = 0x5253_000C;
-const SHA256_HASH_LENGTH: usize = 32;
 
 pub fn update_to_verified(file: &str, expected_sha256: &str, expected_size: u64) -> ResultType<()> {
     let extension = file::update_file_extension(file).unwrap_or_default();
@@ -76,45 +75,33 @@ fn launch_verified_update(
     Ok(())
 }
 
-fn verified_update_hash(expected_sha256: &str) -> ResultType<String> {
-    let hash = hex::decode(expected_sha256.trim())
-        .map_err(|err| anyhow!("Invalid expected update SHA-256: {err}"))?;
-    if hash.len() != SHA256_HASH_LENGTH {
-        bail!("Invalid expected update SHA-256 length");
-    }
-    Ok(hex::encode(hash))
-}
-
 fn launch_verified_exe(exe: &str, expected_sha256: &str) -> ResultType<()> {
-    let source = path_for_cmd_environment(Path::new(exe))?;
-    let expected_hash = verified_update_hash(expected_sha256)?;
-    // Keep the receipt outside the EXE directory because update_me() copies that
-    // entire directory into the installation.
+    let update = ProtectedInstallFile::copy_verified(Path::new(exe), expected_sha256)?;
+    let source = path_for_cmd_environment(update.path())?;
     let commands = format!(
         "set \"RUSTDESK_VERIFIED_EXE_SOURCE={source}\"\r\n\
          set \"RUSTDESK_VERIFIED_EXE=%RUSTDESK_OUTPUT_DIR%\\{VERIFIED_EXE_FILENAME}\"\r\n\
          copy /B /Y \"%RUSTDESK_VERIFIED_EXE_SOURCE%\" \"%RUSTDESK_VERIFIED_EXE%\" > nul || exit /b {VERIFIED_UPDATE_COPY_FAILURE_EXIT_CODE}\r\n\
-         start \"\" /b /wait \"%RUSTDESK_INSTALL_HELPER%\" {VERIFY_FILE_ARGUMENT} \
-         \"%RUSTDESK_VERIFIED_EXE%\" {expected_hash} \"%~f0.exe.verified\" || exit /b {VERIFIED_UPDATE_HASH_FAILURE_EXIT_CODE}\r\n\
-         if not exist \"%~f0.exe.verified\" exit /b {VERIFIED_UPDATE_HASH_FAILURE_EXIT_CODE}\r\n\
          start \"\" /wait \"%RUSTDESK_VERIFIED_EXE%\" --update || exit /b {VERIFIED_EXE_LAUNCH_FAILURE_EXIT_CODE}"
     );
-    run_cmds(commands, false, "update-exe")
+    run_cmds(
+        InstallCommands {
+            script: commands,
+            files: vec![update],
+        },
+        false,
+        "update-exe",
+    )
 }
 
-fn verified_msi_install_commands(
-    msi: &Path,
-    expected_sha256: &str,
-    quiet: bool,
-) -> ResultType<String> {
+fn verified_msi_install_commands(msi: &Path, quiet: bool) -> ResultType<String> {
     use windows::Win32::Foundation::{
         ERROR_SUCCESS, ERROR_SUCCESS_REBOOT_INITIATED, ERROR_SUCCESS_REBOOT_REQUIRED,
     };
 
-    // The open source handle prevents replacing that file, but not retargeting an
-    // ancestor junction. Copy and reverify it in the protected runner directory.
+    // The input is already verified and protected, including its parent path.
+    // Execute the copy from the protected runner to exclude adjacent untrusted files.
     let source = path_for_cmd_environment(msi)?;
-    let expected_hash = verified_update_hash(expected_sha256)?;
     let quiet_args = if quiet { " /qn LAUNCH_TRAY_APP=N" } else { "" };
     let app_name = crate::get_app_name();
     let subkey = format!(".{}", app_name.to_lowercase());
@@ -135,9 +122,6 @@ fn verified_msi_install_commands(
         "set \"RUSTDESK_VERIFIED_MSI_SOURCE={source}\"\r\n\
          set \"RUSTDESK_VERIFIED_MSI=%RUSTDESK_OUTPUT_DIR%\\{VERIFIED_MSI_FILENAME}\"\r\n\
          copy /B /Y \"%RUSTDESK_VERIFIED_MSI_SOURCE%\" \"%RUSTDESK_VERIFIED_MSI%\" > nul || exit /b {VERIFIED_UPDATE_COPY_FAILURE_EXIT_CODE}\r\n\
-         start \"\" /b /wait \"%RUSTDESK_INSTALL_HELPER%\" {VERIFY_FILE_ARGUMENT} \
-         \"%RUSTDESK_VERIFIED_MSI%\" {expected_hash} \"%~f0.msi.verified\" || exit /b {VERIFIED_UPDATE_HASH_FAILURE_EXIT_CODE}\r\n\
-         if not exist \"%~f0.msi.verified\" exit /b {VERIFIED_UPDATE_HASH_FAILURE_EXIT_CODE}\r\n\
          msiexec.exe /i \"%RUSTDESK_VERIFIED_MSI%\"{quiet_args}{printer_args} REBOOT=ReallySuppress /norestart\r\n\
          set \"RUSTDESK_MSI_EXIT_CODE=%ERRORLEVEL%\"\r\n\
          if \"%RUSTDESK_MSI_EXIT_CODE%\"==\"{reboot_initiated}\" exit /b {success}\r\n\
@@ -154,8 +138,12 @@ pub(super) fn install_verified_msi(
     expected_sha256: &str,
     quiet: bool,
 ) -> ResultType<()> {
+    let update = ProtectedInstallFile::copy_verified(Path::new(msi), expected_sha256)?;
     run_cmds(
-        verified_msi_install_commands(Path::new(msi), expected_sha256, quiet)?,
+        InstallCommands {
+            script: verified_msi_install_commands(update.path(), quiet)?,
+            files: vec![update],
+        },
         false,
         "update-msi",
     )
