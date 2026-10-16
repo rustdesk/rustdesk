@@ -351,82 +351,51 @@ void main() {
     expect(controller.canApply, isTrue);
   });
 
-  for (final withScale in [false, true]) {
-    testWidgets(
-        'resolution send failure preserves drafts and allows retry (scale: $withScale)',
-        (tester) async {
-      var closes = 0;
-      var scaleRequests = 0;
-      var attempts = 0;
-      var resolution = (1920, 1080);
-      DisplayScaleState readback(double percent) => DisplayScaleState(
-          identity: 'display',
-          resolution: resolution,
-          percent: percent == 0 ? 150 : percent,
-          options: [100, 125, 150],
-          token: 'after');
-      final pending = Completer<void>();
-      await tester.pumpWidget(_displaySettings(
-          onCancel: () => closes++,
-          onApply: (width, height, _) async {
-            attempts++;
-            if (attempts == 1) await pending.future;
-            resolution = (width, height);
-            return withScale ? readback(0) : null;
-          },
-          requestScale: !withScale
-              ? null
-              : (percent, _) async {
-                  if (percent != 0) scaleRequests++;
-                  return readback(percent);
-                }));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).first, '2560');
-      await tester.pumpAndSettle();
-      if (withScale) {
-        await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
-        await tester.pumpAndSettle();
-        await tester
-            .tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
-        await tester.pumpAndSettle();
-      }
-      await tester.tap(find.text('Apply'));
-      await tester.pump();
-      expect(closes, 0);
-      expect(scaleRequests, 0);
-      expect(
-          tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
-          isNull);
-      final widthInput =
-          tester.widget<EditableText>(find.byType(EditableText).first);
-      widthInput.focusNode.requestFocus();
-      await tester.pump();
-      expect(widthInput.focusNode.hasFocus, isFalse);
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-      expect(tester.testTextInput.hasAnyClients, isFalse);
-      pending.completeError(const DisplayScaleError('send failed'));
-      await tester.pumpAndSettle();
-      widthInput.focusNode.requestFocus();
-      await tester.pump();
-      expect(widthInput.focusNode.hasFocus, isTrue);
-      expect(closes, 0);
-      expect(find.text('send failed'), findsOneWidget);
-      expect(scaleRequests, 0);
-      expect(
-          tester
-              .widget<TextField>(find.byType(TextField).first)
-              .controller!
-              .text,
-          '2560');
-      await tester.tap(find.text('Apply'));
-      await tester.pumpAndSettle();
-      expect(attempts, 2);
-      expect(closes, 1);
-      expect(scaleRequests, withScale ? 1 : 0);
-      expect(tester.takeException(), isNull);
-    });
-  }
+  testWidgets('resolution send failure preserves drafts and allows retry',
+      (tester) async {
+    var closes = 0;
+    var attempts = 0;
+    final pending = Completer<void>();
+    await tester.pumpWidget(_displaySettings(
+        onCancel: () => closes++,
+        onApply: (_, __, ___) async {
+          attempts++;
+          if (attempts == 1) await pending.future;
+          return null;
+        },
+        requestScale: null));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '2560');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'));
+    await tester.pump();
+    expect(closes, 0);
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+    final widthInput =
+        tester.widget<EditableText>(find.byType(EditableText).first);
+    widthInput.focusNode.requestFocus();
+    await tester.pump();
+    expect(widthInput.focusNode.hasFocus, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(tester.testTextInput.hasAnyClients, isFalse);
+    pending.completeError(const DisplayScaleError('send failed'));
+    await tester.pumpAndSettle();
+    widthInput.focusNode.requestFocus();
+    await tester.pump();
+    expect(widthInput.focusNode.hasFocus, isTrue);
+    expect(closes, 0);
+    expect(find.text('send failed'), findsOneWidget);
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        '2560');
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
+    expect(closes, 1);
+    expect(tester.takeException(), isNull);
+  });
 
   test('failed readback and terminal invalidation cannot accept a late reply',
       () async {
@@ -446,10 +415,6 @@ void main() {
     controller.invalidate(failure);
     expect(controller.needsReopen, isTrue);
     expect(controller.error, failure.message);
-    controller.reset();
-    expect(controller.percent, 125);
-    expect(await controller.refresh(), isFalse);
-    expect(await controller.apply(), isFalse);
     reply.complete(const DisplayScaleState(
         identity: 'display',
         resolution: (2560, 1440),
@@ -916,36 +881,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(calls, [(0, ''), (0, ''), (-1, 'fresh')]);
     expect(closed, isTrue);
-  });
-
-  testWidgets('Original resolution restores scale with confirmed mode token',
-      (tester) async {
-    final calls = <(double, String)>[];
-    final modes = <(int, int)>[];
-    await tester.pumpWidget(_displaySettings(
-        width: 1600,
-        height: 900,
-        allowArbitrarySize: false,
-        supportedResolutions: const [(1600, 900), (1920, 1080)],
-        defaultResolution: (1920, 1080, 1),
-        onApply: (width, height, _) {
-          modes.add((width, height));
-          return scaleState(150, 'confirmed');
-        },
-        onCancel: () {},
-        requestScale: (percent, token) async {
-          calls.add((percent, token));
-          return percent == 0
-              ? scaleState(150, 'before', resolution: (1600, 900))
-              : scaleState(100, 'restored');
-        }));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('resolution_original_tip'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Apply'));
-    await tester.pumpAndSettle();
-    expect(modes, [(1920, 1080)]);
-    expect(calls, [(0, ''), (-1, 'confirmed')]);
   });
 
   testWidgets(

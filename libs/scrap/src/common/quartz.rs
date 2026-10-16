@@ -88,6 +88,18 @@ pub struct PixelBuffer<'a> {
     height: usize,
 }
 
+impl<'a> PixelBuffer<'a> {
+    pub fn from_frame(mut frame: quartz::Frame, width: usize, height: usize) -> Self {
+        frame.surface_to_bgra(height);
+        Self {
+            frame,
+            data: PhantomData,
+            width,
+            height,
+        }
+    }
+}
+
 impl<'a> crate::TraitPixelBuffer for PixelBuffer<'a> {
     fn data(&self) -> &[u8] {
         &*self.frame

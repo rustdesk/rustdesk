@@ -14,6 +14,7 @@ class DisplayScaleState {
   final String token;
   final String identity;
   final (int, int) resolution;
+  final bool restoreResolution;
 
   const DisplayScaleState(
       {required this.percent,
@@ -22,7 +23,8 @@ class DisplayScaleState {
       required this.options,
       required this.token,
       required this.identity,
-      required this.resolution});
+      required this.resolution,
+      this.restoreResolution = false});
 
   double? nearest(double value) {
     final range = custom;
@@ -112,7 +114,8 @@ class DisplayScaleState {
           ..sort(),
         token: data['token'],
         identity: data['identity'],
-        resolution: (data['resolution'][0], data['resolution'][1]));
+        resolution: (data['resolution'][0], data['resolution'][1]),
+        restoreResolution: data['restore_resolution'] == true);
   }
 }
 

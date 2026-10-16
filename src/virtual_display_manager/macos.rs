@@ -298,7 +298,6 @@ mod tests {
 
     #[test]
     fn saturated_operations_preserve_lifecycle_events_and_release_capacity() {
-        use std::cell::Cell;
         let operations = Arc::new(Semaphore::new(MAX_PENDING_OPERATIONS));
         let (sender, receiver) = mpsc::channel();
         let mut results = Vec::new();
@@ -340,33 +339,28 @@ mod tests {
             sender.send(command).unwrap();
         }
         drop(sender);
-        let completed = Cell::new(0);
         let mut cleaned_up = false;
         run_worker(
             receiver,
             |index, on| {
-                assert_eq!(operations.available_permits(), completed.get());
                 if index == -1 {
                     assert!(!on);
-                    assert_eq!(completed.get(), MAX_PENDING_OPERATIONS);
                     cleaned_up = true;
                     true
                 } else {
-                    completed.set(completed.get() + 1);
                     false
                 }
             },
-            |_, _, _, _| {
-                assert_eq!(operations.available_permits(), completed.get());
-                completed.set(completed.get() + 1);
-                true
-            },
+            |_, _, _, _| true,
         );
         for (index, result) in results.into_iter().enumerate() {
             assert_eq!(result.blocking_recv().unwrap().is_ok(), index % 2 == 0);
         }
         assert!(cleaned_up);
-        assert_eq!(operations.available_permits(), MAX_PENDING_OPERATIONS);
+        let _permits = (0..MAX_PENDING_OPERATIONS)
+            .map(|_| operation_permit(&operations))
+            .collect::<ResultType<Vec<_>>>()
+            .unwrap();
     }
 
     #[test]

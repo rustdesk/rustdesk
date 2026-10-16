@@ -77,8 +77,6 @@ pub(super) fn resize(current: &[Rect], index: usize, size: (i32, i32)) -> Result
     }
     let dx = i64::from(size.0) - i64::from(target.width);
     let dy = i64::from(size.1) - i64::from(target.height);
-    // A screen spanning two rows/columns can collide with a neighbor if both
-    // axes move. Prefer the existing placement, then try each axis separately.
     for (horizontal, vertical) in [(true, true), (true, false), (false, true), (false, false)] {
         let next: Option<Vec<_>> = current
             .iter()
@@ -105,9 +103,231 @@ pub(super) fn resize(current: &[Rect], index: usize, size: (i32, i32)) -> Result
     bail!(UNSUPPORTED)
 }
 
+pub(super) fn plan(
+    current: &[Rect],
+    sizes: &[(i32, i32)],
+    maximum: &[(i32, i32)],
+    limit: (i32, i32),
+    identities: &[String],
+) -> ResultType<Vec<Rect>> {
+    if current.is_empty()
+        || current.len() != sizes.len()
+        || current.len() != maximum.len()
+        || current.len() != identities.len()
+        || current.iter().any(|r| r.width <= 0 || r.height <= 0)
+        || !valid(current, current)
+        || sizes
+            .iter()
+            .zip(maximum)
+            .any(|(&(w, h), &(mw, mh))| w <= 0 || h <= 0 || w > mw || h > mh)
+    {
+        bail!(UNSUPPORTED);
+    }
+    // Certify the entire mode/scale range before accepting any change, so
+    // restoring a different combination does not depend on the path taken.
+    let fits = |horizontal| {
+        let (mut width, mut height) = (0i64, 0i64);
+        for &(w, h) in maximum {
+            if horizontal {
+                width += i64::from(w);
+                height = height.max(i64::from(h));
+            } else {
+                width = width.max(i64::from(w));
+                height += i64::from(h);
+            }
+        }
+        width <= i64::from(limit.0) && height <= i64::from(limit.1)
+    };
+    let horizontal = if fits(true) {
+        true
+    } else if fits(false) {
+        false
+    } else {
+        bail!(UNSUPPORTED);
+    };
+    let within = |rects: &[Rect]| {
+        rects.iter().all(|r| {
+            r.x >= 0
+                && r.y >= 0
+                && r.right() <= i64::from(limit.0)
+                && r.bottom() <= i64::from(limit.1)
+        })
+    };
+    let changed: Vec<_> = current
+        .iter()
+        .zip(sizes)
+        .enumerate()
+        .filter(|(_, (r, size))| (r.width, r.height) != **size)
+        .map(|(i, _)| i)
+        .collect();
+    if changed.len() == 1 {
+        let index = changed[0];
+        if let Ok(next) = resize(current, index, sizes[index]) {
+            if within(&next) {
+                return Ok(next);
+            }
+        }
+    } else {
+        let next: Vec<_> = current
+            .iter()
+            .zip(sizes)
+            .map(|(r, &(width, height))| Rect {
+                width,
+                height,
+                ..*r
+            })
+            .collect();
+        if valid(current, &next) && within(&next) {
+            return Ok(next);
+        }
+    }
+    let mut order: Vec<_> = (0..current.len()).collect();
+    order.sort_by(|&a, &b| identities[a].cmp(&identities[b]));
+    if order
+        .windows(2)
+        .any(|p| identities[p[0]] == identities[p[1]])
+    {
+        bail!(UNSUPPORTED);
+    }
+    let mut next = current.to_vec();
+    let mut offset = 0i64;
+    for index in order {
+        let (width, height) = sizes[index];
+        let coordinate = i32::try_from(offset)?;
+        next[index] = Rect {
+            x: if horizontal { coordinate } else { 0 },
+            y: if horizontal { 0 } else { coordinate },
+            width,
+            height,
+        };
+        offset += i64::from(if horizontal { width } else { height });
+    }
+    Ok(next)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rectangles(values: &[(i32, i32, i32, i32)]) -> Vec<Rect> {
+        values
+            .iter()
+            .map(|&(x, y, width, height)| Rect {
+                x,
+                y,
+                width,
+                height,
+            })
+            .collect()
+    }
+
+    fn planned(current: &[Rect], sizes: &[(i32, i32)]) -> Vec<Rect> {
+        plan(
+            current,
+            sizes,
+            &vec![(16384, 16384); current.len()],
+            (131072, 131072),
+            &(0..current.len())
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn original_after_consecutive_scale_changes() {
+        for values in [
+            [
+                (1920, 0, 3840, 2160),
+                (1920, 2160, 3840, 2160),
+                (0, 2700, 1920, 1080),
+                (840, 240, 1080, 1920),
+            ],
+            [
+                (0, 0, 1920, 1080),
+                (0, 1080, 1080, 1920),
+                (1920, 0, 3840, 2160),
+                (1920, 2160, 1280, 720),
+            ],
+        ] {
+            for transpose in [false, true] {
+                let current = rectangles(&values.map(|(x, y, w, h)| {
+                    if transpose {
+                        (y, x, h, w)
+                    } else {
+                        (x, y, w, h)
+                    }
+                }));
+                let original: Vec<_> = current.iter().map(|r| (r.width, r.height)).collect();
+                let mut sizes = original.clone();
+                sizes[2] = (original[2].0 * 2 / 3, original[2].1 * 2 / 3);
+                let scaled = planned(&current, &sizes);
+                sizes[2] = (original[2].0 * 4 / 5, original[2].1 * 4 / 5);
+                let scaled = planned(&scaled, &sizes);
+                let restored = planned(&scaled, &original);
+                assert_eq!(
+                    restored
+                        .iter()
+                        .map(|r| (r.width, r.height))
+                        .collect::<Vec<_>>(),
+                    original
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn originals_preserve_other_targets_and_batch_mode_changes() {
+        let current = rectangles(&[
+            (0, 0, 1280, 720),
+            (0, 720, 1280, 720),
+            (1280, 0, 2560, 1440),
+            (1280, 1440, 2560, 1440),
+        ]);
+        let original: Vec<_> = current.iter().map(|r| (r.width, r.height)).collect();
+        let mut sizes = original.clone();
+        sizes[0] = (640, 360);
+        let first = planned(&current, &sizes);
+        sizes[2] = (1280, 720);
+        let both = planned(&first, &sizes);
+        for order in [[0, 2], [2, 0]] {
+            let mut desired = sizes.clone();
+            desired[order[0]] = original[order[0]];
+            let next = planned(&both, &desired);
+            assert_eq!(
+                (next[order[1]].width, next[order[1]].height),
+                sizes[order[1]]
+            );
+            let restored = planned(&next, &original);
+            assert_eq!(
+                restored
+                    .iter()
+                    .map(|r| (r.width, r.height))
+                    .collect::<Vec<_>>(),
+                original
+            );
+        }
+        // A mode change and restoring a pre-existing 50% scale can enlarge
+        // several screens at once; no intermediate per-screen layout is needed.
+        let larger = vec![(3840, 2160), (1280, 720), (5120, 2880), (2560, 1440)];
+        let changed = planned(&both, &larger);
+        let restored = planned(&changed, &original);
+        assert_eq!(
+            restored
+                .iter()
+                .map(|r| (r.width, r.height))
+                .collect::<Vec<_>>(),
+            original
+        );
+        assert!(plan(
+            &current,
+            &sizes,
+            &vec![(7680, 4320); 4],
+            (16384, 16384),
+            &["a".into(), "b".into(), "c".into(), "d".into()]
+        )
+        .is_err());
+    }
 
     #[test]
     fn preserves_reachable_layouts_or_rejects_the_change() {

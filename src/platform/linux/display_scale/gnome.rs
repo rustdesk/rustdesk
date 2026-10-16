@@ -1,9 +1,12 @@
-use super::{layout, percent, Display, SnapshotChanged, State, STALE, TIMEOUT, UNSUPPORTED};
+use super::{
+    layout, percent, Display, SnapshotChanged, State, Target, STALE, TIMEOUT, UNSUPPORTED,
+};
 use dbus::{
     arg::{PropMap, Variant},
     blocking::{stdintf::org_freedesktop_dbus::Properties, Connection},
 };
 use hbb_common::{bail, ResultType};
+use std::time::Duration;
 
 const BUS: &str = "org.gnome.Mutter.DisplayConfig";
 const PATH: &str = "/org/gnome/Mutter/DisplayConfig";
@@ -199,20 +202,130 @@ fn logical_size(current: &Current, logical: &Logical, scale: f64) -> ResultType<
     Ok((width as i32, height as i32))
 }
 
-fn configuration(
+fn batch_configuration(
     current: &Current,
-    index: usize,
-    scale: f64,
+    targets: &[Target],
 ) -> ResultType<(Configuration, PropMap)> {
-    let target = &current.2[index];
+    let layout_mode = current
+        .3
+        .get("layout-mode")
+        .and_then(|p| p.0.as_u64())
+        .unwrap_or(1);
+    if !matches!(layout_mode, 1 | 2) {
+        bail!(UNSUPPORTED);
+    }
+    // Mutter omits this property when its backend has no screen-size limit.
+    let limit = if let Some(value) = current.3.get("max-screen-size") {
+        let Some(mut fields) = value.0.as_iter() else {
+            bail!(UNSUPPORTED);
+        };
+        let width = fields
+            .next()
+            .and_then(|v| v.as_i64())
+            .and_then(|v| i32::try_from(v).ok());
+        let height = fields
+            .next()
+            .and_then(|v| v.as_i64())
+            .and_then(|v| i32::try_from(v).ok());
+        match (width, height) {
+            (Some(w), Some(h)) if w > 0 && h > 0 => (w, h),
+            _ => bail!(UNSUPPORTED),
+        }
+    } else {
+        (i32::MAX, i32::MAX)
+    };
+    let mut found = vec![false; targets.len()];
     let mut logicals = Vec::new();
-    for (i, logical) in current.2.iter().enumerate() {
+    let mut rectangles = Vec::new();
+    let mut sizes = Vec::new();
+    let mut maximum = Vec::new();
+    let mut identities = Vec::new();
+    for (index, logical) in current.2.iter().enumerate() {
+        let mut specs = logical.5.clone();
+        specs.sort();
+        identities.push(super::token(&specs));
+        let identity = (logical.5.len() == 1).then(|| super::token(("gnome", &logical.5[0])));
+        let matches: Vec<_> = targets
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| identity.as_ref() == Some(&t.identity))
+            .collect();
+        if matches.len() > 1 {
+            bail!(UNSUPPORTED);
+        }
+        let target = matches.first().map(|&(i, t)| {
+            found[i] = true;
+            t
+        });
+        if target.is_some() {
+            state_at(current, index)?;
+        }
+        let scale = target.map_or(logical.2, |t| t.percent / 100.0);
+        if percent(scale).is_none() {
+            bail!(UNSUPPORTED);
+        }
+        let (mut max_width, mut max_height) = (0, 0);
+        let mut desired_size = None;
         let mut monitors = Vec::new();
         for spec in &logical.5 {
             let Some(monitor) = current.1.iter().find(|m| &m.0 == spec) else {
                 bail!(UNSUPPORTED);
             };
-            let mode = mode(monitor)?;
+            let current_mode = mode(monitor)?;
+            let oriented = |m: &Mode| {
+                if logical.3 % 2 == 1 {
+                    (m.2, m.1)
+                } else {
+                    (m.1, m.2)
+                }
+            };
+            let supported = |m: &&Mode| {
+                target.map_or(true, |t| {
+                    oriented(m) == (t.resolution.0 as i32, t.resolution.1 as i32)
+                        && m.5.iter().any(|s| (*s - scale).abs() < 0.000001)
+                })
+            };
+            let selected = if supported(&current_mode) {
+                current_mode
+            } else {
+                monitor
+                    .1
+                    .iter()
+                    .filter(supported)
+                    .max_by(|a, b| a.3.total_cmp(&b.3))
+                    .ok_or(UNSUPPORTED)?
+            };
+            let dimensions = |m: &Mode, scale: f64| -> ResultType<(i32, i32)> {
+                let (w, h) = oriented(m);
+                if w <= 0 || h <= 0 {
+                    bail!(UNSUPPORTED);
+                }
+                let divisor = if layout_mode == 1 { scale } else { 1.0 };
+                let (w, h) = (
+                    (f64::from(w) / divisor).round(),
+                    (f64::from(h) / divisor).round(),
+                );
+                if !(1.0..=f64::from(i32::MAX)).contains(&w)
+                    || !(1.0..=f64::from(i32::MAX)).contains(&h)
+                {
+                    bail!(UNSUPPORTED);
+                }
+                Ok((w as i32, h as i32))
+            };
+            let size = dimensions(selected, scale)?;
+            if desired_size.is_some_and(|before| before != size) {
+                bail!(UNSUPPORTED);
+            }
+            desired_size = Some(size);
+            // Include every advertised mode and restorable scale, not just the
+            // current one: resolution changes use this same admitted range.
+            for m in &monitor.1 {
+                for &s in m.5.iter().filter(|s| percent(**s).is_some()) {
+                    let (w, h) = dimensions(m, s)?;
+                    max_width = max_width.max(w);
+                    max_height = max_height.max(h);
+                }
+            }
             let mut props = PropMap::new();
             for (from, to) in [
                 ("is-underscanning", "underscanning"),
@@ -223,53 +336,175 @@ fn configuration(
                     props.insert(to.into(), Variant(value.0.box_clone()));
                 }
             }
-            monitors.push((spec.0.clone(), mode.0.clone(), props));
+            monitors.push((spec.0.clone(), selected.0.clone(), props));
         }
-        logicals.push((
-            logical.0,
-            logical.1,
-            if i == index { scale } else { logical.2 },
-            logical.3,
-            logical.4,
-            monitors,
-        ));
+        let before_scale = if layout_mode == 1 { logical.2 } else { 1.0 };
+        let (width, height) = logical_size(current, logical, before_scale)?;
+        rectangles.push(layout::Rect {
+            x: logical.0,
+            y: logical.1,
+            width,
+            height,
+        });
+        sizes.push(desired_size.ok_or(UNSUPPORTED)?);
+        maximum.push((max_width, max_height));
+        logicals.push((logical.0, logical.1, scale, logical.3, logical.4, monitors));
     }
-    let layout = current
-        .3
-        .get("layout-mode")
-        .and_then(|p| p.0.as_u64())
-        .unwrap_or(1);
-    if layout != 1 && layout != 2 {
-        bail!(UNSUPPORTED);
+    if found.iter().any(|found| !found) {
+        bail!(STALE);
     }
-    if layout == 1 {
-        let rectangles = current
-            .2
-            .iter()
-            .map(|logical| {
-                let (width, height) = logical_size(current, logical, logical.2)?;
-                Ok(layout::Rect {
-                    x: logical.0,
-                    y: logical.1,
-                    width,
-                    height,
-                })
-            })
-            .collect::<ResultType<Vec<_>>>()?;
-        let size = logical_size(current, target, scale)?;
-        for (logical, rect) in logicals
-            .iter_mut()
-            .zip(layout::resize(&rectangles, index, size)?)
-        {
-            logical.0 = rect.x;
-            logical.1 = rect.y;
-        }
+    for (logical, rect) in logicals.iter_mut().zip(layout::plan(
+        &rectangles,
+        &sizes,
+        &maximum,
+        limit,
+        &identities,
+    )?) {
+        logical.0 = rect.x;
+        logical.1 = rect.y;
     }
     let mut props = PropMap::new();
     if flag(&current.3, "supports-changing-layout-mode") {
-        props.insert("layout-mode".into(), Variant(Box::new(layout as u32)));
+        props.insert("layout-mode".into(), Variant(Box::new(layout_mode as u32)));
     }
     Ok((logicals, props))
+}
+
+fn applied(current: &Current, configuration: &Configuration, before: &Current) -> bool {
+    current.2.len() == configuration.len()
+        && before
+            .2
+            .iter()
+            .flat_map(|l| &l.5)
+            .all(|spec| current.2.iter().any(|l| l.5.contains(spec)))
+        && configuration.iter().all(|expected| {
+            current.2.iter().any(|actual| {
+                (actual.0, actual.1, actual.3, actual.4)
+                    == (expected.0, expected.1, expected.3, expected.4)
+                    && (actual.2 - expected.2).abs() < 0.000001
+                    && actual.5.len() == expected.5.len()
+                    && expected.5.iter().all(|(connector, mode_id, _)| {
+                        actual.5.iter().any(|spec| {
+                            &spec.0 == connector
+                                && current
+                                    .1
+                                    .iter()
+                                    .find(|m| &m.0 == spec)
+                                    .and_then(|m| mode(m).ok())
+                                    .is_some_and(|m| &m.0 == mode_id)
+                        })
+                    })
+            })
+        })
+}
+
+fn commit(connection: &Connection, before: &Current, targets: &[Target]) -> ResultType<Vec<State>> {
+    let (logicals, props) = batch_configuration(before, targets)?;
+    let proxy = connection.with_proxy(BUS, PATH, TIMEOUT);
+    let _: () = proxy.method_call(
+        BUS,
+        "ApplyMonitorsConfig",
+        (before.0, 0u32, &logicals, &props),
+    )?;
+    let _: () = proxy.method_call(
+        BUS,
+        "ApplyMonitorsConfig",
+        (before.0, 1u32, &logicals, props),
+    )?;
+    let deadline = std::time::Instant::now() + TIMEOUT;
+    loop {
+        let after = current(connection)?;
+        if applied(&after, &logicals, before) {
+            return targets
+                .iter()
+                .map(|target| {
+                    let index = after
+                        .2
+                        .iter()
+                        .position(|l| {
+                            l.5.len() == 1 && super::token(("gnome", &l.5[0])) == target.identity
+                        })
+                        .ok_or_else(|| hbb_common::anyhow::anyhow!(STALE))?;
+                    state_at(&after, index)
+                })
+                .collect();
+        }
+        if std::time::Instant::now() >= deadline {
+            bail!("Display settings timed out. Refresh and try again.");
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+pub fn restore(connection: &Connection, targets: &[Target]) -> ResultType<Vec<State>> {
+    commit(connection, &current(connection)?, targets)
+}
+
+fn resolution_target(
+    current: &Current,
+    index: usize,
+    resolution: (u32, u32),
+) -> ResultType<Target> {
+    let state = state_at(current, index)?;
+    let logical = &current.2[index];
+    let monitor = current
+        .1
+        .iter()
+        .find(|m| m.0 == logical.5[0])
+        .ok_or(UNSUPPORTED)?;
+    let size = if logical.3 % 2 == 1 {
+        (resolution.1, resolution.0)
+    } else {
+        resolution
+    };
+    let modes: Vec<_> = monitor
+        .1
+        .iter()
+        .filter(|m| (m.1 as u32, m.2 as u32) == size)
+        .collect();
+    let percent = if modes
+        .iter()
+        .any(|m| m.5.iter().any(|s| percent(*s) == Some(state.percent)))
+    {
+        state.percent
+    } else {
+        let selected = modes
+            .into_iter()
+            .max_by(|a, b| a.3.total_cmp(&b.3))
+            .ok_or(UNSUPPORTED)?;
+        percent(selected.4)
+            .filter(|_| selected.5.contains(&selected.4))
+            .or_else(|| {
+                selected
+                    .5
+                    .iter()
+                    .filter_map(|s| percent(*s))
+                    .min_by(f64::total_cmp)
+            })
+            .ok_or(UNSUPPORTED)?
+    };
+    Ok(Target {
+        identity: state.identity,
+        resolution,
+        percent,
+    })
+}
+
+pub fn set_resolution(
+    connection: &Connection,
+    display: &Display,
+    resolution: (u32, u32),
+) -> ResultType<State> {
+    let before = current(connection)?;
+    let (state, index) = state(&before, display)?;
+    if state.resolution == resolution {
+        return Ok(state);
+    }
+    let target = resolution_target(&before, index, resolution)?;
+    commit(connection, &before, &[target])?
+        .into_iter()
+        .next()
+        .ok_or_else(|| UNSUPPORTED.into())
 }
 
 pub fn apply(
@@ -279,34 +514,19 @@ pub fn apply(
     expected: &str,
 ) -> ResultType<State> {
     let current = current(connection)?;
-    let (state, index) = state(&current, display)?;
+    let (state, _) = state(&current, display)?;
     super::validate(&state, value, expected)?;
     if state.percent == value {
         return Ok(state);
     }
-    let target = &current.2[index];
-    let Some(monitor) = current.1.iter().find(|m| m.0 == target.5[0]) else {
-        bail!(UNSUPPORTED);
-    };
-    let Some(scale) = mode(monitor)?
-        .5
-        .iter()
-        .find(|s| percent(**s) == Some(value))
-    else {
-        bail!(UNSUPPORTED);
-    };
-    let (logicals, props) = configuration(&current, index, *scale)?;
-    let proxy = connection.with_proxy(BUS, PATH, TIMEOUT);
-    let _: () = proxy.method_call(
-        BUS,
-        "ApplyMonitorsConfig",
-        (current.0, 0u32, &logicals, &props),
-    )?;
-    // Session-scoped application avoids a second local confirmation dialog.
-    let _: () = proxy.method_call(
-        BUS,
-        "ApplyMonitorsConfig",
-        (current.0, 1u32, logicals, props),
+    commit(
+        connection,
+        &current,
+        &[Target {
+            identity: state.identity.clone(),
+            resolution: state.resolution,
+            percent: value,
+        }],
     )?;
     Ok(state)
 }
@@ -314,6 +534,22 @@ pub fn apply(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn configuration(
+        current: &Current,
+        index: usize,
+        scale: f64,
+    ) -> ResultType<(Configuration, PropMap)> {
+        let state = state_at(current, index)?;
+        batch_configuration(
+            current,
+            &[Target {
+                identity: state.identity,
+                resolution: state.resolution,
+                percent: scale * 100.0,
+            }],
+        )
+    }
 
     fn fixture() -> Current {
         let monitors: Vec<_> = ["eDP-1", "DP-1"]
@@ -457,6 +693,31 @@ mod tests {
         let (config, _) = configuration(&current, 0, 3.0).unwrap();
         assert_eq!((config[1].0, config[1].1), (1920, 0));
         assert_eq!((config[2].0, config[2].1), (0, 720));
+        let mut changed_mode = fixture();
+        changed_mode.1[0].1.push((
+            "2560x1440@60".into(),
+            2560,
+            1440,
+            60.0,
+            1.0,
+            vec![1.0],
+            PropMap::new(),
+        ));
+        let target = resolution_target(&changed_mode, 0, (2560, 1440)).unwrap();
+        assert_eq!(target.percent, 100.0);
+        let (config, _) = batch_configuration(&changed_mode, &[target]).unwrap();
+        assert_eq!(config[0].5[0].1, "2560x1440@60");
+        assert_eq!((config[0].2, config[1].2), (1.0, 2.0));
+        let original = state_at(&changed_mode, 0).unwrap();
+        assert!(batch_configuration(
+            &changed_mode,
+            &[Target {
+                identity: original.identity,
+                resolution: (2560, 1440),
+                percent: 200.0,
+            }]
+        )
+        .is_err());
     }
 
     #[test]

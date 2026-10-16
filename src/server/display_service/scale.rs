@@ -9,16 +9,25 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Condvar, Mutex, OnceLock,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
+
+#[cfg(windows)]
+use std::time::Instant;
+
+#[cfg(target_os = "linux")]
+mod linux;
 
 static BUSY: AtomicBool = AtomicBool::new(false);
 static TRACKING: OnceLock<(Mutex<Tracking>, Condvar)> = OnceLock::new();
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
+#[cfg_attr(windows, derive(Copy))]
 struct OriginalScale {
     resolution: (u32, u32),
     percent: f64,
+    #[cfg(target_os = "linux")]
+    display_name: String,
 }
 
 #[derive(Default)]
@@ -60,6 +69,8 @@ pub(in crate::server) struct ResolutionReservation {
 pub(in crate::server) fn reserve_resolution() -> Option<ResolutionReservation> {
     let capture = Config::get_bool_option(keys::OPTION_ALLOW_DISPLAY_SCALING);
     let mut state = tracking().0.lock().unwrap();
+    #[cfg(target_os = "linux")]
+    let capture = capture || !state.originals.is_empty() || state.pending != 0;
     if state.restoring {
         log::trace!("Resolution change skipped: display settings are busy");
         return None;
@@ -85,6 +96,13 @@ fn remember(state: &crate::platform::display_scale::State, display_name: &str) {
         .map_or(state.resolution, |original| {
             (original.original.0 as _, original.original.1 as _)
         });
+    // PipeWire names are empty, so the legacy name-keyed record is not per monitor.
+    #[cfg(target_os = "linux")]
+    let resolution = if display_name.is_empty() {
+        state.resolution
+    } else {
+        resolution
+    };
     let mut tracking = tracking().0.lock().unwrap();
     tracking
         .originals
@@ -92,6 +110,8 @@ fn remember(state: &crate::platform::display_scale::State, display_name: &str) {
         .or_insert(OriginalScale {
             resolution,
             percent: state.percent,
+            #[cfg(target_os = "linux")]
+            display_name: display_name.to_owned(),
         });
 }
 
@@ -109,9 +129,21 @@ pub(in crate::server) fn change_resolution_after_capture(
     };
     tokio::task::spawn_blocking(move || {
         let _operation = operation;
+        #[cfg(target_os = "linux")]
+        let _settings = crate::platform::display_scale::settings_lock();
         match crate::platform::display_scale::configure(&captured, 0.0, "") {
-            Ok(state) => remember(&state, &name),
-            Err(error) => log::trace!("Could not record original display scale: {error}"),
+            Ok(state) => {
+                remember(&state, &name);
+                #[cfg(target_os = "linux")]
+                return linux::change_resolution(&captured, &name, original, requested);
+            }
+            Err(error) => {
+                log::trace!("Could not record original display scale: {error}");
+                #[cfg(target_os = "linux")]
+                if !tracking().0.lock().unwrap().originals.is_empty() {
+                    return;
+                }
+            }
         }
         super::set_last_changed_resolution(&name, original, requested);
         if let Err(error) =
@@ -141,6 +173,7 @@ impl std::fmt::Display for Disabled {
 
 impl std::error::Error for Disabled {}
 
+#[cfg(windows)]
 fn restore_original(identity: &str, original: OriginalScale) {
     let deadline = Instant::now() + Duration::from_secs(4);
     loop {
@@ -211,7 +244,12 @@ fn restore_after_pending() {
     let originals = std::mem::take(&mut state.originals);
     drop(state);
 
+    #[cfg(target_os = "linux")]
+    let _settings = crate::platform::display_scale::settings_lock();
+    #[cfg(target_os = "linux")]
+    linux::restore(&originals);
     super::restore_resolutions();
+    #[cfg(windows)]
     for (identity, original) in originals {
         restore_original(&identity, original);
     }
@@ -312,6 +350,8 @@ pub(in crate::server) fn request(
             tokio::task::spawn_blocking(move || {
                 let _pending = pending;
                 let _operation = operation;
+                #[cfg(target_os = "linux")]
+                let _settings = crate::platform::display_scale::settings_lock();
                 let Ok(index) = usize::try_from(request.display) else {
                     bail!(crate::platform::display_scale::STALE);
                 };
@@ -343,27 +383,34 @@ pub(in crate::server) fn request(
                                 .unwrap()
                                 .originals
                                 .get(&current.identity)
-                                .copied()
+                                .cloned()
                         } else {
                             None
                         };
                         if let Some(original) = original {
-                            if current.resolution != original.resolution {
-                                bail!(crate::platform::display_scale::STALE);
-                            }
-                            if (current.percent - original.percent).abs() < 0.000001 {
-                                Ok(current)
-                            } else {
-                                if !enabled
-                                    || !Config::get_bool_option(keys::OPTION_ALLOW_DISPLAY_SCALING)
-                                {
-                                    bail!(Disabled);
+                            #[cfg(target_os = "linux")]
+                            return linux::restore_one(current, &original, enabled);
+                            #[cfg(windows)]
+                            {
+                                if current.resolution != original.resolution {
+                                    bail!(crate::platform::display_scale::STALE);
                                 }
-                                crate::platform::display_scale::restore_original(
-                                    &display,
-                                    original.percent,
-                                    &current.token,
-                                )
+                                if (current.percent - original.percent).abs() < 0.000001 {
+                                    Ok(current)
+                                } else {
+                                    if !enabled
+                                        || !Config::get_bool_option(
+                                            keys::OPTION_ALLOW_DISPLAY_SCALING,
+                                        )
+                                    {
+                                        bail!(Disabled);
+                                    }
+                                    crate::platform::display_scale::restore_original(
+                                        &display,
+                                        original.percent,
+                                        &current.token,
+                                    )
+                                }
                             }
                         } else {
                             Ok(current)
@@ -397,7 +444,25 @@ pub(in crate::server) fn request(
         }
         .await;
         let response = match result {
-            Ok(state) => serde_json::json!({"request_id": request_id, "state": state}),
+            Ok(state) => {
+                #[cfg(target_os = "linux")]
+                let restore_resolution =
+                    Config::get_bool_option(keys::OPTION_ALLOW_DISPLAY_SCALING)
+                        && tracking()
+                            .0
+                            .lock()
+                            .unwrap()
+                            .originals
+                            .contains_key(&state.identity);
+                let response = serde_json::json!({"request_id": request_id, "state": state});
+                #[cfg(target_os = "linux")]
+                let response = {
+                    let mut response = response;
+                    response["state"]["restore_resolution"] = restore_resolution.into();
+                    response
+                };
+                response
+            }
             Err(error) => {
                 log::trace!("Display scaling: {error}");
                 let mut response =

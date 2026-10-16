@@ -2,6 +2,8 @@
 // https://github.com/servo/core-foundation-rs
 // https://github.com/rust-windowing/winit
 
+pub mod sck;
+
 mod update_temp;
 mod verified_dmg;
 

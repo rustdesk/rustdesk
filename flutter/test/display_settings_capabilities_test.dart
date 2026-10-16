@@ -483,6 +483,85 @@ void main() {
     }
   });
 
+  testWidgets('Original restores the mode in one request only when advertised',
+      (tester) async {
+    model.pi.platformAdditions['display_scale'] = true;
+    for (final (restoreResolution, supported, original) in [
+      (false, [(1920, 1080), (1280, 720)], (1280, 720)),
+      (true, [(1920, 1080), (1280, 720)], (1280, 720)),
+      (true, <(int, int)>[], (1280, 720)),
+      (true, <(int, int)>[], (1920, 1080)),
+    ]) {
+      final writes = <String>[];
+      final applied = <(int, int)>[];
+      var resolution = (1920, 1080);
+      var token = 'before';
+      var closed = false;
+      final target =
+          DisplaySettingsTarget(session, (_, percent, expected, __) async {
+        if (percent != 0) {
+          writes.add('scale:$percent:$expected');
+          resolution = original;
+          token = 'restored';
+        }
+        return DisplayScaleState.fromJson({
+          'identity': 'display',
+          'resolution': [resolution.$1, resolution.$2],
+          'percent': percent == -1 ? 100 : 150,
+          'options': [100, 125, 150],
+          'token': token,
+          if (restoreResolution) 'restore_resolution': true,
+        });
+      });
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: SizedBox(
+                  width: 400,
+                  child: DisplaySettings(
+                      translate: (s) => s,
+                      width: 1920,
+                      height: 1080,
+                      minDimension: 1,
+                      maxDimension: 4096,
+                      allowArbitrarySize: false,
+                      supportedResolutions: supported,
+                      defaultResolution:
+                          supported.isEmpty ? null : (1280, 720, 1),
+                      defaultLabel: 'Original',
+                      requestScale: (percent, token) => target.requestScale(
+                          percent, token,
+                          onApplied: (w, h) => applied.add((w, h))),
+                      onApply: (width, height, _) async {
+                        final state = await target.applyResolution(() {
+                          writes.add('resolution:$width:$height');
+                          resolution = (width, height);
+                          token = 'resized';
+                        }, resolution: (width, height));
+                        applied.add((width, height));
+                        return state;
+                      },
+                      onCancel: () => closed = true)))));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Original'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      expect(closed, isTrue);
+      expect(applied, original == (1920, 1080) ? isEmpty : [original]);
+      expect(writes, [
+        if (!restoreResolution) 'resolution:1280:720',
+        'scale:-1.0:${restoreResolution ? 'before' : 'resized'}',
+      ]);
+      if (restoreResolution) {
+        final tooltip = tester.widget<Tooltip>(find.ancestor(
+            of: find.text('Original'), matching: find.byType(Tooltip)));
+        expect(tooltip.message, 'Original');
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
   testWidgets(
       'combined Apply confirms the native mode across capture refreshes',
       (tester) async {

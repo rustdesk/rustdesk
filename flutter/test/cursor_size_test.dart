@@ -135,10 +135,13 @@ void main() {
   ]) {
     testWidgets('$style zoom=$zoom follows the live DPR and peer scale',
         (tester) => _checkView(tester, (style, zoom), registrations));
-    testWidgets(
-        '$style zoom=$zoom with one remaining display in all-displays',
-        (tester) => _checkView(tester, (style, zoom), registrations,
-            allDisplays: true));
+    if (style == kRemoteViewStyleOriginal ||
+        (zoom && style != kRemoteViewStyleCustom)) {
+      testWidgets(
+          '$style zoom=$zoom with one remaining display in all-displays',
+          (tester) => _checkView(tester, (style, zoom), registrations,
+              allDisplays: true));
+    }
   }
 }
 

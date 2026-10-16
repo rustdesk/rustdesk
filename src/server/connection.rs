@@ -4883,7 +4883,9 @@ impl Connection {
                     );
                     if record_changed {
                         #[cfg(any(windows, target_os = "linux"))]
-                        if original != (r.width, r.height) && scale_operation.capture {
+                        if scale_operation.capture
+                            && (original != (r.width, r.height) || cfg!(target_os = "linux"))
+                        {
                             task = Some(display_service::scale::change_resolution_after_capture(
                                 scale_operation,
                                 display,

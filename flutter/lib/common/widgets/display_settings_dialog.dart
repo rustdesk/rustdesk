@@ -118,7 +118,8 @@ class DisplaySettingsTarget {
     }
   }
 
-  Future<DisplayScaleState> requestScale(double percent, String token) async {
+  Future<DisplayScaleState> requestScale(double percent, String token,
+      {void Function(int, int)? onApplied}) async {
     _requireReady();
     if (percent == 0 && _nativeState != null) {
       final selected = _selected();
@@ -135,14 +136,21 @@ class DisplaySettingsTarget {
     _requireReady();
     final selected = _selected();
     if (!identical(_display, selected)) throw _stale;
+    final beforeResolution =
+        percent == -1 && _nativeState?.restoreResolution == true
+            ? _nativeState!.resolution
+            : null;
     final state = await _requestScale(_index, percent, token, '');
     _requireReady();
     if (percent == 0 && !identical(selected, _selected())) throw _stale;
-    _validateState(state);
+    _validateState(state, allowResolutionChange: beforeResolution != null);
     _nativeState = state;
     if (percent == -1 ||
         (percent > 0 && (state.percent - percent).abs() < 0.000001)) {
       _confirmedToken = state.token;
+    }
+    if (beforeResolution != null && beforeResolution != state.resolution) {
+      onApplied?.call(state.resolution.$1, state.resolution.$2);
     }
     return state;
   }
@@ -280,7 +288,8 @@ Future<void> showDisplaySettingsDialog(
                   translate: translate,
                   requestScale:
                       !isWeb && pi.platformAdditions['display_scale'] == true
-                          ? target.requestScale
+                          ? (percent, token) => target.requestScale(percent, token,
+                              onApplied: onApplied)
                           : null,
                   minDimension: nativeDimensions?.minDimension ??
                       (isVirtual && pi.platform == kPeerPlatformMacOS
@@ -470,6 +479,8 @@ class _DisplaySettingsState extends State<DisplaySettings> {
   Future<void> _apply() async {
     if (_applying) return;
     final mode = _editedMode;
+    final restoreOriginalScale =
+        _restoreOriginalScale && _originalMode == mode;
     final resolutionChanged = _hasChanges;
     setState(() {
       _applying = true;
@@ -478,6 +489,11 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     final systemScale = _systemScale;
     final confirmResolution = systemScale?.current != null;
     try {
+      if (restoreOriginalScale &&
+          systemScale?.current?.restoreResolution == true) {
+        if (await systemScale!.restoreOriginal() && mounted) widget.onCancel();
+        return;
+      }
       if (resolutionChanged) {
         final confirmed = await widget.onApply(mode.$1, mode.$2, mode.$3);
         if (!mounted) return;
@@ -492,9 +508,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
       }
       if (systemScale?.changed == true) {
         if (!await systemScale!.apply() || !mounted) return;
-      } else if (_restoreOriginalScale &&
-          widget.defaultResolution == mode &&
-          systemScale?.current != null) {
+      } else if (restoreOriginalScale && systemScale?.current != null) {
         if (!await systemScale!.restoreOriginal() || !mounted) return;
       }
       if (mounted) widget.onCancel();
@@ -536,7 +550,18 @@ class _DisplaySettingsState extends State<DisplaySettings> {
           widget.supportedResolutions
               .contains((width ~/ scale, height ~/ scale)));
 
-  bool get _valid => _validSize(_editedMode.$1, _editedMode.$2, _scale);
+  (int, int, int)? get _originalMode {
+    final state = _systemScale?.current;
+    return state?.restoreResolution == true
+        ? (state!.resolution.$1, state.resolution.$2, 1)
+        : widget.defaultResolution;
+  }
+
+  bool get _valid =>
+      (_restoreOriginalScale &&
+          _systemScale?.current?.restoreResolution == true &&
+          _originalMode == _editedMode) ||
+      _validSize(_editedMode.$1, _editedMode.$2, _scale);
 
   int get _minDimension => (widget.minDimension / _scale).ceil();
   int get _maxDimension => widget.maxDimension ~/ _scale;
@@ -781,12 +806,17 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     String? hint,
     bool restoreOriginalScale = false,
   }) {
-    final enabled =
-        !_needsReopen && mode != null && _validSize(mode.$1, mode.$2, mode.$3);
+    final nativeOriginal = restoreOriginalScale &&
+        _systemScale?.current?.restoreResolution == true;
+    final enabled = !_needsReopen &&
+        mode != null &&
+        (nativeOriginal || _validSize(mode.$1, mode.$2, mode.$3));
     return Tooltip(
       message: [
         if (hint != null) widget.translate(hint),
-        if (mode != null)
+        if (nativeOriginal)
+          widget.translate(label)
+        else if (mode != null)
           _modeLabel(mode)
         else if (hint == null)
           widget.translate(label),
@@ -812,7 +842,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
                 ? 'Adjusted to display limits'
                 : 'Closest supported resolution'
             : null;
-    final defaultMode = widget.defaultResolution;
+    final defaultMode = _originalMode;
     return Wrap(spacing: 8, children: [
       _shortcut(
         label: 'resolution_fit_local_tip',
@@ -837,7 +867,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     final busy = _applying || _systemScale?.busy == true;
     final scaleChanged = _systemScale?.changed == true;
     final restoreOriginalScale = _restoreOriginalScale &&
-        widget.defaultResolution == _editedMode &&
+        _originalMode == _editedMode &&
         _systemScale != null &&
         !_systemScale!.unavailable;
     final canEditResolution =
@@ -868,6 +898,14 @@ class _DisplaySettingsState extends State<DisplaySettings> {
                   }),
               if (canEditResolution) const Divider(height: 24),
             ],
+            if (!canEditResolution &&
+                _systemScale?.current?.restoreResolution == true)
+              _shortcut(
+                label: widget.defaultLabel,
+                icon: Icons.settings_backup_restore,
+                mode: _originalMode,
+                restoreOriginalScale: true,
+              ),
             if (canEditResolution) ...[
               if (widget.usesLogicalSize)
                 Text(widget.translate('Interface size'), style: sectionStyle),

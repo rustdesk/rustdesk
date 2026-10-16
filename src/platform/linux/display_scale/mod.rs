@@ -3,13 +3,69 @@ use crate::platform::display_scale::{
 };
 use dbus::blocking::Connection;
 use hbb_common::{bail, libc, ResultType};
-use std::time::Duration;
+use std::{
+    sync::{Mutex, MutexGuard},
+    time::Duration,
+};
 
 mod gnome;
 mod kde;
 mod layout;
 
 const TIMEOUT: Duration = Duration::from_secs(2);
+
+pub struct Target {
+    pub identity: String,
+    pub resolution: (u32, u32),
+    pub percent: f64,
+}
+
+pub fn settings_lock() -> MutexGuard<'static, ()> {
+    static SETTINGS: Mutex<()> = Mutex::new(());
+    SETTINGS.lock().unwrap()
+}
+
+pub fn restore(targets: &[Target]) -> ResultType<Vec<State>> {
+    if targets.is_empty() {
+        return Ok(Vec::new());
+    }
+    if targets.iter().any(|t| {
+        t.identity.is_empty()
+            || !valid_resolution(t.resolution)
+            || !t.percent.is_finite()
+            || !(50.0..=500.0).contains(&t.percent)
+    }) {
+        bail!(UNSUPPORTED);
+    }
+    let connection = connection()?;
+    if has_owner(&connection, "org.gnome.Mutter.DisplayConfig")? {
+        gnome::restore(&connection, targets)
+    } else if has_owner(&connection, "org.kde.KWin")? && crate::platform::current_is_wayland() {
+        kde::restore(targets)
+    } else {
+        bail!(UNSUPPORTED)
+    }
+}
+
+fn valid_resolution((w, h): (u32, u32)) -> bool {
+    w > 0 && h > 0 && w <= i32::MAX as u32 && h <= i32::MAX as u32
+}
+
+pub fn set_resolution(display: &Display, resolution: (u32, u32)) -> ResultType<State> {
+    if !valid_resolution(resolution) {
+        bail!(UNSUPPORTED);
+    }
+    let connection = connection()?;
+    let captured = resolve_capture(display)?;
+    let display = captured.as_ref().unwrap_or(display);
+    if has_owner(&connection, "org.gnome.Mutter.DisplayConfig")? {
+        gnome::set_resolution(&connection, display, resolution)
+    } else if has_owner(&connection, "org.kde.KWin")? && crate::platform::current_is_wayland() {
+        kde::set_resolution(display, resolution)
+    } else {
+        bail!(UNSUPPORTED)
+    }
+}
 
 fn connection() -> ResultType<Connection> {
     // Never address a greeter, root's bus, or another logged-in user's compositor.
@@ -70,17 +126,6 @@ pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<Stat
         gnome::apply(&connection, display, percent, expected)
     } else if has_owner(&connection, "org.kde.KWin")? && crate::platform::current_is_wayland() {
         kde::apply(display, percent, expected)
-    } else {
-        bail!(UNSUPPORTED)
-    }
-}
-
-pub fn apply_original(display: &Display, percent: f64, expected: &str) -> ResultType<State> {
-    let connection = connection()?;
-    let captured = resolve_capture(display)?;
-    let display = captured.as_ref().unwrap_or(display);
-    if has_owner(&connection, "org.kde.KWin")? && crate::platform::current_is_wayland() {
-        kde::apply_original(display, percent, expected)
     } else {
         bail!(UNSUPPORTED)
     }
