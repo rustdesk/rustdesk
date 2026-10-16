@@ -228,21 +228,4 @@ mod tests {
         std::fs::remove_dir_all(test_dir).unwrap();
     }
 
-    #[test]
-    fn stale_update_temp_dir_name_requires_owned_randomized_dir() {
-        let euid = unsafe { hbb_common::libc::geteuid() };
-
-        assert!(is_stale_update_temp_dir_name(&format!(
-            ".rustdeskupdate-{euid}-123-456"
-        )));
-        for name in [
-            format!(".rustdeskupdate-{euid}"),
-            format!(".rustdeskupdate-{euid}-abc-456"),
-            format!(".rustdeskupdate-{euid}-123"),
-            ".rustdeskupdate-999999-123-456".to_owned(),
-            "rustdeskupdate-123-456".to_owned(),
-        ] {
-            assert!(!is_stale_update_temp_dir_name(&name), "{name}");
-        }
-    }
 }

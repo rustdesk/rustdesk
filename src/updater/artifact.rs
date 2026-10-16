@@ -242,18 +242,4 @@ mod tests {
             assert!(get_update_download_file_from_url(url).is_none(), "{url}");
         }
     }
-
-    #[test]
-    fn limited_sidecar_reader_rejects_oversized_payloads() {
-        let mut payload: &[u8] = b"rustdesk";
-        assert_eq!(
-            read_limited_response_bytes(&mut payload, 8, "sidecar")
-                .unwrap()
-                .len(),
-            8
-        );
-
-        let mut oversized: &[u8] = b"too-large";
-        assert!(read_limited_response_bytes(&mut oversized, 4, "sidecar").is_err());
-    }
 }

@@ -271,11 +271,6 @@ class AllPeersLoader {
   void updateOnlineStateForTesting(Map<String, dynamic> evt) {
     _updateOnlineState(evt);
   }
-
-  @visibleForTesting
-  bool applyLastOnlineStateForTesting(List<Peer> peers) {
-    return _applyLastOnlineState(peers);
-  }
 }
 
 class AutocompletePeerTile extends StatefulWidget {

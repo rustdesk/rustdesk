@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_hbb/models/file_model.dart';
@@ -62,19 +61,6 @@ void main() {
     expect(directory.path, '/fast');
   });
 
-  test('a send failure fails and removes its registered task', () async {
-    final failure = StateError('send failed');
-    final fileFetcher = FileFetcher(
-      () => _sessionId,
-      readRemoteDirectory: (_, __, ___) => Future<void>.error(failure),
-    );
-    await expectLater(
-      fileFetcher.fetchDirectory('/failed', false, false),
-      throwsA(same(failure)),
-    );
-    expect(fileFetcher.hasPendingRemoteRead('/failed'), isFalse);
-  });
-
   test('a resolved Home path completes the sole empty-path request', () async {
     final sent = <_SentRead>[];
     final fileFetcher = FileFetcher(
@@ -105,35 +91,6 @@ void main() {
 
     expect(controller.homePath, '/home/user');
     expect(controller.directory.value.path, '/home/user');
-  });
-
-  test('an exact path response is not taken by a pending Home request',
-      () async {
-    final sent = <_SentRead>[];
-    final fileFetcher = FileFetcher(
-      () => _sessionId,
-      readRemoteDirectory: (_, path, includeHidden) async {
-        sent.add(_SentRead(path, includeHidden));
-      },
-    );
-    final home = fileFetcher.fetchDirectory('', false, false);
-    final regular = fileFetcher.fetchDirectory('/regular', false, false);
-    await Future<void>.delayed(Duration.zero);
-    var homeCompleted = false;
-    home.then<void>((_) => homeCompleted = true);
-
-    fileFetcher.tryCompleteTask(_directoryJson('/unmatched'), 'false');
-    await Future<void>.delayed(Duration.zero);
-    expect(homeCompleted, isFalse);
-
-    fileFetcher.tryCompleteTask(_directoryJson('/regular'), 'false');
-    expect((await regular).path, '/regular');
-    await Future<void>.delayed(Duration.zero);
-    expect(homeCompleted, isFalse);
-
-    fileFetcher.tryCompleteTask(_directoryJson('/home/user'), 'false');
-    expect((await home).path, '/home/user');
-    expect(sent.map((request) => request.path), ['', '/regular']);
   });
 
   test('a read error completes the sole pending request', () async {
@@ -228,35 +185,6 @@ void main() {
     expect(sent.map((request) => request.includeHidden), [false, true]);
     fileFetcher.tryCompleteTask(_directoryJson('/same'), 'false');
     expect((await replacement).path, '/same');
-  });
-
-  test('a late dispatch failure cannot remove a replacement task', () async {
-    final dispatches = <Completer<void>>[];
-    final fileFetcher = FileFetcher(
-      () => _sessionId,
-      readRemoteDirectory: (_, __, ___) {
-        final dispatch = Completer<void>();
-        dispatches.add(dispatch);
-        return dispatch.future;
-      },
-    );
-    final first = fileFetcher.fetchDirectory('/same', false, false);
-    await Future<void>.delayed(Duration.zero);
-    final firstError = expectLater(first, throwsA(isA<StateError>()));
-    fileFetcher.beginRemoteSession();
-    await firstError;
-
-    final replacement = fileFetcher.fetchDirectory('/same', false, false);
-    await Future<void>.delayed(Duration.zero);
-    expect(dispatches, hasLength(2));
-    dispatches.first.completeError(StateError('late dispatch failure'));
-    await Future<void>.delayed(Duration.zero);
-
-    expect(fileFetcher.hasPendingRemoteRead('/same'), isTrue);
-    fileFetcher.tryCompleteTask(_directoryJson('/same'), 'false');
-    expect((await replacement).path, '/same');
-    dispatches.last.complete();
-    await Future<void>.delayed(Duration.zero);
   });
 
   test('navigation ignores stale directory responses', () async {

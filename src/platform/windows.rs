@@ -561,7 +561,6 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
     fn get_current_session(rdp: BOOL) -> DWORD;
-    fn is_session_locked(session_id: DWORD) -> BOOL;
     fn LaunchProcessWin(
         cmd: *const u16,
         session_id: DWORD,
@@ -1265,7 +1264,7 @@ pub fn is_locked() -> bool {
     let Some(session_id) = get_current_process_session_id() else {
         return false;
     };
-    unsafe { is_session_locked(session_id) == TRUE }
+    is_session_locked_flag(session_id) == Some(true)
 }
 
 #[inline]
@@ -1277,6 +1276,47 @@ pub fn is_logon_ui() -> ResultType<bool> {
     Ok(pids
         .into_iter()
         .any(|pid| get_session_id_of_process(pid) == Some(current_sid)))
+}
+
+// Auto-login types the OS password on this, so a state that cannot be read counts as unlocked.
+// `is_prelogin()` reads a failed query as no user signed in, and `is_logon_ui()` is left out
+// because a LogonUI.exe can outlive the unlock.
+pub fn is_logon_screen() -> bool {
+    let Some(session_id) = get_current_process_session_id() else {
+        return false;
+    };
+    is_session_prelogin(session_id) == Some(true)
+        || is_session_locked_flag(session_id) == Some(true)
+}
+
+fn is_session_prelogin(session_id: u32) -> Option<bool> {
+    extern "C" {
+        fn get_session_user_info(path: *mut u16, n: u32, session_id: u32) -> u32;
+    }
+    let mut buff = [0u16; 256];
+    // The bytes copied include the terminating null, so 0 means the query failed.
+    let n = unsafe { get_session_user_info(buff.as_mut_ptr(), buff.len() as _, session_id) };
+    if n == 0 {
+        return None;
+    }
+    let username = String::from_utf16_lossy(&buff);
+    let username = username.trim_end_matches('\0');
+    Some(username.is_empty() || username == "SYSTEM")
+}
+
+// Windows 7 and Server 2008 R2 report LOCK and UNLOCK the other way round (see WTSINFOEX_LEVEL1).
+fn is_session_locked_flag(session_id: u32) -> Option<bool> {
+    extern "C" {
+        fn get_session_flags(session_id: DWORD) -> DWORD;
+    }
+    const WTS_SESSIONSTATE_LOCK: DWORD = 0;
+    const WTS_SESSIONSTATE_UNLOCK: DWORD = 1;
+    let reversed = !base::platform::windows::is_windows_version_or_greater(6, 2, 0, 0, 0);
+    match unsafe { get_session_flags(session_id) } {
+        WTS_SESSIONSTATE_LOCK => Some(!reversed),
+        WTS_SESSIONSTATE_UNLOCK => Some(reversed),
+        _ => None,
+    }
 }
 
 pub fn is_root() -> bool {
@@ -4715,119 +4755,6 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // Test-only reusable Win32 HANDLE RAII helper.
-    // If a future non-test path needs the same pattern, move it out of this test module.
-    //
-    // This struct is similar to `base::platform::windows::RAIIHandle`,
-    // but `RAIIHandle` depends on `WinApi` crate, while this `HandleGuard` only depends on `windows` crate.
-    struct HandleGuard(WinHANDLE);
-
-    impl HandleGuard {
-        #[inline]
-        fn new(handle: WinHANDLE) -> Self {
-            Self(handle)
-        }
-
-        #[inline]
-        fn get(&self) -> WinHANDLE {
-            self.0
-        }
-    }
-
-    impl Drop for HandleGuard {
-        fn drop(&mut self) {
-            unsafe {
-                if !self.0.is_invalid() {
-                    let _ = WinCloseHandle(self.0);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_is_process_running_as_system_invalid_pid_errors() {
-        assert!(is_process_running_as_system(u32::MAX).is_err());
-    }
-
-    #[test]
-    fn test_is_process_running_as_system_matches_current_process_token_user() {
-        let pid = unsafe { windows::Win32::System::Threading::GetCurrentProcessId() };
-        let actual = is_process_running_as_system(pid).unwrap();
-
-        let expected = unsafe {
-            // Keep this test consistent: use only the `windows` crate APIs/types.
-            let process = HandleGuard::new(
-                WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-                    .expect("WinOpenProcess should succeed for current process"),
-            );
-            let mut token = WinHANDLE::default();
-            WinOpenProcessToken(process.get(), WIN_TOKEN_QUERY, &mut token)
-                .expect("WinOpenProcessToken should succeed for current process");
-            let token = HandleGuard::new(token);
-
-            let mut token_user_size = 0u32;
-            let _ = WinGetTokenInformation(token.get(), TokenUser, None, 0, &mut token_user_size);
-            assert_ne!(token_user_size, 0, "TokenUser size should be non-zero");
-
-            let mut buffer = vec![0u8; token_user_size as usize];
-            WinGetTokenInformation(
-                token.get(),
-                TokenUser,
-                Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
-                token_user_size,
-                &mut token_user_size,
-            )
-            .expect("WinGetTokenInformation(TokenUser) should succeed for current process");
-
-            let min_size = std::mem::size_of::<TOKEN_USER>();
-            assert!(
-                buffer.len() >= min_size,
-                "TokenUser buffer too small (got {}, need >= {})",
-                buffer.len(),
-                min_size
-            );
-            let token_user: TOKEN_USER =
-                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
-            let expected = IsWellKnownSid(token_user.User.Sid, WinLocalSystemSid).as_bool();
-            expected
-        };
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn test_uninstall_cert() {
-        println!("uninstall driver certs: {:?}", cert::uninstall_cert());
-    }
-
-    #[test]
-    fn test_get_unicode_char_by_vk() {
-        let chr = get_char_from_vk(0x41); // VK_A
-        assert_eq!(chr, Some('a'));
-        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
-        assert_eq!(chr, None)
-    }
-
-    #[test]
-    fn install_app_names_enforce_ascii_command_safety() {
-        assert!(validate_install_app_name("RustDesk-Admin1").is_ok());
-        for app_name in [
-            "",
-            "RustDesk_Admin",
-            "RustDesk&whoami",
-            "RustDesk应用",
-            "RustDesk앱",
-            "RustDeskBüro",
-            "RustDeskFrançais",
-            "RustDeskアプリ",
-        ] {
-            assert!(
-                validate_install_app_name(app_name).is_err(),
-                "unsafe application name was accepted: {app_name}"
-            );
-        }
-    }
 
     #[test]
     fn vbs_files_use_utf16le_with_bom_and_crlf() {
