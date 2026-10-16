@@ -434,12 +434,13 @@ pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
         return false;
     };
 
+    // The user store becomes authoritative again after removing the daemon.
+    if let Err(error) = crate::trusted_devices::clear() {
+        log::error!("Cannot revoke local trusted devices before service removal: {error}");
+        return false;
+    }
+
     let func = move || {
-        // The user store becomes authoritative again after removing the daemon.
-        if let Err(error) = crate::trusted_devices::clear() {
-            log::error!("Cannot revoke local trusted devices before service removal: {error}");
-            return;
-        }
         match std::process::Command::new("osascript")
             .arg("-e")
             .arg(script_body)
