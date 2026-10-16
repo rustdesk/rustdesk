@@ -288,5 +288,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-already-bound-to", "Already bound to"),
         ("shortcut-mobile-physical-keyboard-tip", "Recording requires a physical keyboard. Soft keyboards are not supported."),
         ("shortcut-key-not-supported", "\"{}\" can't be used as a shortcut."),
+        ("trusted_devices_legacy_tip", "Previous trusted-device settings were found. To enroll again, sign in with your permanent password and 2FA with \"Trust this device\" selected."),
     ].iter().cloned().collect();
 }

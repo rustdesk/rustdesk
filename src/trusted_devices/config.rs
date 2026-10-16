@@ -1,3 +1,4 @@
+use super::policy;
 use base::config::keys;
 use hbb_common::{
     anyhow::{anyhow, Context},
@@ -78,6 +79,7 @@ pub struct Snapshot {
     pub salt: String,
     pub totp: String,
     pub enabled: bool,
+    pub validity_days: u32,
 }
 
 fn read<T: serde::de::DeserializeOwned + Default>(path: &Path) -> ResultType<T> {
@@ -155,13 +157,15 @@ fn build(
             .map(String::as_str)
             .unwrap_or_default(),
     );
-    let scope = sha256::hash(&serde_json::to_vec(&(&h1, &salt, &totp, enabled))?).0;
+    let validity_days = policy::days(&options)?;
+    let scope = policy::scope(&(&h1, &salt, &totp, enabled), validity_days)?;
     Ok(Snapshot {
         scope,
         h1,
         salt,
         totp,
         enabled,
+        validity_days,
     })
 }
 
@@ -198,6 +202,7 @@ fn change<T>(affected: bool, apply: impl FnOnce() -> ResultType<T>) -> ResultTyp
 }
 
 pub fn set_options(options: HashMap<String, String>) -> ResultType<()> {
+    policy::days(&effective_options(options.clone()))?;
     let affected = changes_authentication(&options);
     change(affected, || {
         Config::set_options(options);
@@ -211,6 +216,7 @@ pub fn changes_authentication(options: &HashMap<String, String>) -> bool {
     AUTH_OPTIONS
         .iter()
         .any(|key| old.get(*key) != new.get(*key))
+        || policy::days(&old).ok() != policy::days(&new).ok()
 }
 
 pub fn import(apply: impl FnOnce() -> ResultType<()>) -> ResultType<()> {
@@ -268,6 +274,7 @@ pub fn set_config(value: Config) -> ResultType<bool> {
 }
 
 pub fn set_config2(value: Config2) -> ResultType<bool> {
+    policy::days(&effective_options(value.options.clone()))?;
     let affected = changes_authentication(&value.options);
     change(affected, || Ok(Config2::set(value)))
 }

@@ -9,6 +9,8 @@ use hbb_common::{
 };
 use std::fs;
 
+mod configuration;
+
 const PASSWORD: &str = "permanent-test-password";
 
 pub(crate) fn initialize_config() {
@@ -51,11 +53,14 @@ fn configure() -> std::collections::HashMap<String, String> {
 #[hbb_common::tokio::test]
 async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     let mut options = configure();
+    configuration::malformed_host_field_preserves_authentication();
     let legacy: Config2 =
         hbb_common::toml::from_str("trusted_devices = 'legacy-v1-records'").unwrap();
     let saved = hbb_common::toml::to_string(&legacy).unwrap();
-    assert!(!saved.contains("trusted_devices ="));
-    assert_eq!(authority::manage(false).await.unwrap(), "[]");
+    assert!(saved.contains("trusted_devices ="));
+    configuration::legacy_settings_survive_saving().await;
+    configuration::expiration_changes_revoke_grants().await;
+    assert!(configuration::devices().await.is_empty());
     assert!(host::begin(proof("wrong-password", &[])).await.is_err());
     let (enrollment, valid, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
     let mut enrollment = enrollment.unwrap();
@@ -66,6 +71,8 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     let trusted = trusted.unwrap();
     assert!(valid);
     trusted.check().await.unwrap();
+    configuration::encrypted_store_preserves_grants(&token).await;
+    configuration::renewal_preserves_authorization(&token).await;
     let (pending, _, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
     let mut pending = pending.unwrap();
     pending.enroll = true;
@@ -120,7 +127,7 @@ async fn unavailable_grants_keep_password_totp_available() {
     assert!(attempt.is_none());
     assert!(!valid);
     authority::manage(true).await.unwrap();
-    assert_eq!(authority::manage(false).await.unwrap(), "[]");
+    assert!(configuration::devices().await.is_empty());
     let (enrollment, _, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
     let mut enrollment = enrollment.unwrap();
     enrollment.enroll = true;
@@ -151,8 +158,7 @@ async fn service_operations_share_and_revoke_persisted_grants() {
     let mut pending = pending.unwrap();
     assert!(valid);
     pending.enroll = true;
-    let devices: Vec<serde_json::Value> =
-        serde_json::from_str(&authority::manage(false).await.unwrap()).unwrap();
+    let devices = configuration::devices().await;
     let record_id: [u8; TOKEN_BYTES] =
         serde_json::from_value(devices[0]["record_id"].clone()).unwrap();
     let login = host::begin(proof(PASSWORD, &record_id)).await.unwrap();
@@ -173,12 +179,7 @@ async fn service_operations_share_and_revoke_persisted_grants() {
     let remaining = remaining.unwrap();
     remaining.check().await.unwrap();
     let stale_config: Config2 = hbb_common::config::load_path(Config2::file());
-    assert_eq!(
-        serde_json::from_str::<Vec<DeviceInfo>>(&authority::manage(false).await.unwrap())
-            .unwrap()
-            .len(),
-        1
-    );
+    assert_eq!(configuration::devices().await.len(), 1);
     authority::manage(true).await.unwrap();
     // Neither configuration sync nor another process's settings may restore grants.
     config::set_config2(stale_config.clone()).unwrap();
@@ -187,7 +188,7 @@ async fn service_operations_share_and_revoke_persisted_grants() {
     assert!(pending.finish(DeviceInfo::default()).await.is_err());
     let login = host::begin(proof(PASSWORD, &other_token)).await.unwrap();
     assert!(!login.unwrap().1);
-    assert_eq!(authority::manage(false).await.unwrap(), "[]");
+    assert!(configuration::devices().await.is_empty());
     config::import(|| {
         hbb_common::config::store_path(Config2::file(), stale_config.without_trusted_devices_v2())
     })

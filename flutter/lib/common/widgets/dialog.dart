@@ -2817,10 +2817,27 @@ void confrimDeleteTrustedDevicesDialog(
   });
 }
 
+Future<void> renewTrustedDevice(
+    TrustedDevice device,
+    RxList<TrustedDevice> trustedDevices,
+    RxList<Uint8List> selectedDevices) async {
+  try {
+    final json = jsonEncode([device.recordId.toList()]);
+    await bind.mainRenewTrustedDevices(json: json);
+    final result = await TrustedDevice.get();
+    selectedDevices.clear();
+    trustedDevices.assignAll(result.devices);
+  } catch (error) {
+    showToast(error.toString());
+  }
+}
+
 void manageTrustedDeviceDialog() async {
   late final RxList<TrustedDevice> trustedDevices;
+  late final TrustedDevices result;
   try {
-    trustedDevices = (await TrustedDevice.get()).obs;
+    result = await TrustedDevice.get();
+    trustedDevices = result.devices.obs;
   } catch (error) {
     showToast(error.toString());
     return;
@@ -2829,7 +2846,10 @@ void manageTrustedDeviceDialog() async {
   gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate("Manage trusted devices")),
-      content: trustedDevicesTable(trustedDevices, selectedDevices),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (result.legacy) trustedDevicesMigrationNotice(),
+        trustedDevicesTable(trustedDevices, selectedDevices),
+      ]),
       actions: [
         Obx(() => dialogButton(translate("Delete"),
                 onPressed: selectedDevices.isEmpty
@@ -2850,9 +2870,47 @@ void manageTrustedDeviceDialog() async {
   });
 }
 
+Widget trustedDeviceExpiration({
+  required bool enabled,
+  required VoidCallback onChanged,
+}) {
+  final period = bind.mainGetOptionSync(key: kOptionTrustedDeviceExpiration);
+  return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text(translate('Trust duration (days)')),
+    ComboBox(
+      keys: ['1', '7', '30', '0'],
+      values: ['1', '7', '30', translate('Never')],
+      initialKey: period.isEmpty ? '30' : period,
+      enabled: enabled && !isOptionFixed(kOptionTrustedDeviceExpiration),
+      onChanged: (value) async {
+        try {
+          await bind.mainSetOption(
+              key: kOptionTrustedDeviceExpiration, value: value);
+        } catch (error) {
+          showToast(error.toString());
+        }
+        onChanged();
+      },
+    ),
+    Text(translate('Changing this period removes all trusted devices.')),
+  ]);
+}
+
+Widget trustedDevicesMigrationNotice() => ConstrainedBox(
+    constraints: BoxConstraints(maxWidth: 350),
+    child:
+        Text(translate('trusted_devices_legacy_tip')).marginOnly(bottom: 12));
+
+class TrustedDevices {
+  final List<TrustedDevice> devices;
+  final bool legacy;
+  TrustedDevices(this.devices, this.legacy);
+}
+
 class TrustedDevice {
   late final Uint8List recordId;
   late final int time;
+  late final int? expiresAt;
   late final String id;
   late final String name;
   late final String platform;
@@ -2861,14 +2919,16 @@ class TrustedDevice {
     final recordIdList = json['record_id'] as List<dynamic>;
     recordId = Uint8List.fromList(recordIdList.cast<int>());
     time = json['time'];
+    expiresAt = json['expires_at'];
     id = json['id'];
     name = json['name'];
     platform = json['platform'];
   }
 
   String daysRemaining() {
+    if (expiresAt == 0) return translate('Never');
     const lifetime = Duration(days: 30);
-    final expiry = time + lifetime.inMilliseconds;
+    final expiry = expiresAt ?? time + lifetime.inMilliseconds;
     final remaining = expiry - DateTime.now().millisecondsSinceEpoch;
     if (remaining < 0) {
       return '0';
@@ -2876,15 +2936,16 @@ class TrustedDevice {
     return (remaining / (24 * 60 * 60 * 1000)).toStringAsFixed(0);
   }
 
-  static Future<List<TrustedDevice>> get() async {
+  static Future<TrustedDevices> get() async {
     final List<TrustedDevice> devices = List.empty(growable: true);
     final devicesJson = await bind.mainGetTrustedDevices();
-    final devicesList = json.decode(devicesJson) as List;
+    final result = json.decode(devicesJson) as Map<String, dynamic>;
+    final devicesList = result['devices'] as List;
     for (final device in devicesList) {
       devices.add(TrustedDevice.fromJson(device));
     }
     devices.sort((a, b) => b.time.compareTo(a.time));
-    return devices;
+    return TrustedDevices(devices, result['legacy'] as bool);
   }
 }
 
@@ -2943,7 +3004,16 @@ Widget trustedDevicesTable(
               DataCell(Text(device.platform)),
               DataCell(Text(device.id)),
               DataCell(Text(device.name)),
-              DataCell(Text(device.daysRemaining())),
+              DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(device.daysRemaining()),
+                if (device.expiresAt != 0)
+                  IconButton(
+                    icon: Icon(Icons.refresh),
+                    tooltip: translate('Renew trust'),
+                    onPressed: () =>
+                        renewTrustedDevice(device, devices, selectedDevices),
+                  ),
+              ])),
             ]);
           }).toList(),
         )),

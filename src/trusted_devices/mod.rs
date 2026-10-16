@@ -2,6 +2,7 @@ pub mod authority;
 pub mod client;
 pub mod config;
 pub mod host;
+mod policy;
 mod storage;
 
 #[cfg(test)]
@@ -18,12 +19,15 @@ use serde_derive::{Deserialize, Serialize};
 use storage::GrantsStorage;
 
 pub const TOKEN_BYTES: usize = 32;
-pub const LIFETIME_MILLIS: i64 = 30 * 24 * 60 * 60 * 1000;
+pub const LIFETIME_MILLIS: i64 = policy::DEFAULT_DAYS as i64 * policy::DAY_MILLIS;
 pub const MAX_RECORDS: usize = 32;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct DeviceInfo {
     pub time: i64,
+    // Missing on existing V2 grants; zero means no expiration.
+    #[serde(default)]
+    pub expires_at: Option<i64>,
     pub id: String,
     pub name: String,
     pub platform: String,
@@ -49,7 +53,11 @@ impl Record {
     }
 
     fn current(&self, now: i64) -> bool {
-        now >= self.info.time && now < self.info.time.saturating_add(LIFETIME_MILLIS)
+        let expiry = self
+            .info
+            .expires_at
+            .unwrap_or_else(|| self.info.time.saturating_add(LIFETIME_MILLIS));
+        now >= self.info.time && (expiry == 0 || now < expiry)
     }
 }
 
@@ -194,6 +202,32 @@ pub fn remove(record_ids: &[[u8; TOKEN_BYTES]]) -> ResultType<()> {
     Ok(())
 }
 
+pub fn renew(record_ids: &[[u8; TOKEN_BYTES]]) -> ResultType<()> {
+    if record_ids.is_empty() {
+        bail!("Select at least one trusted device");
+    }
+    let storage = storage()?;
+    let settings = config::snapshot()?;
+    if !settings.enabled || settings.totp.is_empty() {
+        bail!("Trusted devices require two-factor authentication to be enabled");
+    }
+    if settings.validity_days == policy::NEVER_EXPIRE {
+        bail!("Trusted devices are configured to never expire");
+    }
+    let mut grants = load_grants(&storage, &settings.scope)?;
+    let now = hbb_common::get_time();
+    let expires_at = policy::expires_at(now, settings.validity_days);
+    for record_id in record_ids {
+        let record = grants
+            .records
+            .iter_mut()
+            .find(|record| record.id() == *record_id && record.current(now))
+            .ok_or_else(|| anyhow!("Trusted device expired or was revoked; refresh the list"))?;
+        record.info.expires_at = Some(expires_at);
+    }
+    storage.write(&grants)
+}
+
 pub fn initialize() -> ResultType<()> {
     if !Config2::file().try_exists()? {
         return Ok(());
@@ -213,8 +247,9 @@ pub fn initialize() -> ResultType<()> {
 
 pub fn devices() -> ResultType<String> {
     let storage = storage()?;
+    let legacy = Config2::has_legacy_trusted_devices()?;
     if !storage.exists()? {
-        return Ok("[]".into());
+        return Ok(serde_json::json!({ "devices": [], "legacy": legacy }).to_string());
     }
     let current = config::snapshot()?;
     let grants = load_grants(&storage, &current.scope)?;
@@ -228,5 +263,5 @@ pub fn devices() -> ResultType<String> {
             info: &record.info,
         })
         .collect();
-    Ok(serde_json::to_string(&devices)?)
+    Ok(serde_json::json!({ "devices": devices, "legacy": legacy }).to_string())
 }

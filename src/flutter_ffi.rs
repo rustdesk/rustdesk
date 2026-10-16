@@ -1010,7 +1010,10 @@ pub fn main_get_error() -> String {
 }
 
 pub fn main_set_option(key: String, value: String) -> hbb_common::anyhow::Result<()> {
-    if key == "2fa" || key == keys::OPTION_ENABLE_TRUSTED_DEVICES {
+    if key == "2fa"
+        || key == keys::OPTION_ENABLE_TRUSTED_DEVICES
+        || key == keys::OPTION_TRUSTED_DEVICE_EXPIRATION
+    {
         return set_auth_option(key, value);
     }
     #[cfg(target_os = "android")]
@@ -2676,6 +2679,17 @@ pub fn main_remove_trusted_devices(json: String) -> hbb_common::anyhow::Result<(
         .enable_all()
         .build()?
         .block_on(crate::ipc::remove_trusted_devices(record_ids))
+}
+
+pub fn main_renew_trusted_devices(json: String) -> hbb_common::anyhow::Result<()> {
+    let record_ids = serde_json::from_str::<Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>>(&json)?;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return crate::trusted_devices::renew(&record_ids);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hbb_common::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(crate::ipc::renew_trusted_devices(record_ids))
 }
 
 pub fn main_clear_trusted_devices() -> hbb_common::anyhow::Result<()> {

@@ -31,6 +31,7 @@ pub enum Request {
     List,
     Clear,
     Remove(Vec<[u8; TOKEN_BYTES]>),
+    Renew(Vec<[u8; TOKEN_BYTES]>),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -119,6 +120,10 @@ pub fn handle(request: Request) -> ResultType<Response> {
             super::remove(&record_ids)?;
             return Ok(Response::Done);
         }
+        Request::Renew(record_ids) => {
+            super::renew(&record_ids)?;
+            return Ok(Response::Done);
+        }
         _ => {}
     }
     let storage = super::storage()?;
@@ -145,11 +150,13 @@ pub fn handle(request: Request) -> ResultType<Response> {
             verifier,
             info,
         } => {
+            let time = get_time();
             grants.enroll_digest(
                 &ticket,
                 verifier,
                 DeviceInfo {
-                    time: get_time(),
+                    time,
+                    expires_at: Some(super::policy::expires_at(time, settings.validity_days)),
                     ..info
                 },
             )?;
@@ -172,5 +179,12 @@ pub async fn remove(record_ids: Vec<[u8; TOKEN_BYTES]>) -> ResultType<()> {
     match request(Request::Remove(record_ids)).await? {
         Response::Done => Ok(()),
         _ => bail!("Invalid trusted-device removal response"),
+    }
+}
+
+pub async fn renew(record_ids: Vec<[u8; TOKEN_BYTES]>) -> ResultType<()> {
+    match request(Request::Renew(record_ids)).await? {
+        Response::Done => Ok(()),
+        _ => bail!("Invalid trusted-device renewal response"),
     }
 }

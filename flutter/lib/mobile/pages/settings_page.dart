@@ -372,6 +372,15 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         ),
       if (enable2fa && _enableTrustedDevices)
         SettingsTile(
+          title: trustedDeviceExpiration(
+            enabled: true,
+            onChanged: () {
+              if (mounted) setState(() {});
+            },
+          ),
+        ),
+      if (enable2fa && _enableTrustedDevices)
+        SettingsTile(
             title: Text(translate('Manage trusted devices')),
             trailing: Icon(Icons.arrow_forward_ios),
             onPressed: (context) {
@@ -1387,9 +1396,13 @@ class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
             if (snapshot.hasError) {
               return Center(child: Text('Error: ${snapshot.error}'));
             }
-            final devices = snapshot.data as List<TrustedDevice>;
-            trustedDevices = devices.obs;
-            return trustedDevicesTable(trustedDevices, selectedDevices);
+            final result = snapshot.data as TrustedDevices;
+            trustedDevices = result.devices.obs;
+            return Column(children: [
+              if (result.legacy) trustedDevicesMigrationNotice(),
+              Expanded(
+                  child: trustedDevicesTable(trustedDevices, selectedDevices)),
+            ]);
           }),
     );
   }

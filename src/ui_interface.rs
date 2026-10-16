@@ -436,7 +436,10 @@ pub fn set_auth_option(key: String, value: String) -> hbb_common::ResultType<()>
 
 #[inline]
 pub fn set_option(key: String, value: String) {
-    if key == "2fa" || key == keys::OPTION_ENABLE_TRUSTED_DEVICES {
+    if key == "2fa"
+        || key == keys::OPTION_ENABLE_TRUSTED_DEVICES
+        || key == keys::OPTION_TRUSTED_DEVICE_EXPIRATION
+    {
         hbb_common::allow_err!(set_auth_option(key, value));
         return;
     }

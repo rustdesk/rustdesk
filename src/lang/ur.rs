@@ -813,6 +813,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Trust duration (days)", ""),
+        ("Changing this period removes all trusted devices.", ""),
+        ("trusted_devices_legacy_tip", ""),
+        ("Renew trust", ""),
     ].iter().cloned().collect();
 }
 

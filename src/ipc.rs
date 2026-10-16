@@ -495,6 +495,7 @@ pub enum Data {
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
     RemoveTrustedDevices(Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>),
+    RenewTrustedDevices(Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>),
     TrustedDevicesV2 { clear: bool, result: Option<Result<String, String>> },
     TrustedDeviceRequest(Box<crate::trusted_devices::authority::Request>),
     TrustedDeviceResponse(Result<crate::trusted_devices::authority::Response, String>),
@@ -1252,6 +1253,20 @@ async fn handle(data: Data, stream: &mut Connection) {
                 .map(|_| String::new()).map_err(|error| error.to_string());
             allow_err!(stream.send(&Data::TrustedDevicesV2 { clear: false, result: Some(result) }).await);
         }
+        Data::RenewTrustedDevices(v) => {
+            let result = crate::trusted_devices::authority::renew(v)
+                .await
+                .map(|_| String::new())
+                .map_err(|error| error.to_string());
+            allow_err!(
+                stream
+                    .send(&Data::TrustedDevicesV2 {
+                        clear: false,
+                        result: Some(result)
+                    })
+                    .await
+            );
+        }
         Data::TrustedDevicesV2 { clear, result: None } => {
             let result = crate::trusted_devices::authority::manage(clear).await
                 .map_err(|error| error.to_string());
@@ -1877,6 +1892,16 @@ pub async fn get_trusted_devices() -> ResultType<String> {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn remove_trusted_devices(record_ids: Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>) -> ResultType<()> {
     trusted_devices_v2(Data::RemoveTrustedDevices(record_ids)).await.map(|_| ())
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub async fn renew_trusted_devices(
+    record_ids: Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>,
+) -> ResultType<()> {
+    trusted_devices_v2(Data::RenewTrustedDevices(record_ids))
+        .await
+        .map(|_| ())
 }
 
 #[cfg(feature = "flutter")]

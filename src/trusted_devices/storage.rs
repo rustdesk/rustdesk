@@ -1,6 +1,10 @@
-use hbb_common::{anyhow::anyhow, config::Config2, ResultType};
+use hbb_common::{
+    anyhow::anyhow, config::Config2, password_security::symmetric_crypt, sodiumoxide::base64,
+    ResultType,
+};
 use std::sync::{Mutex, MutexGuard};
 
+const ENCRYPTION_VERSION: &str = "00";
 static GRANTS_LOCK: Mutex<()> = Mutex::new(());
 
 pub(super) struct GrantsStorage {
@@ -21,15 +25,31 @@ impl GrantsStorage {
         if value.is_empty() {
             return Ok(super::Grants::default());
         }
-        serde_json::from_str(&value)
-            .map_err(|_| hbb_common::anyhow::anyhow!("Invalid trusted-device grants"))
+        if let Some(ciphertext) = value.strip_prefix(ENCRYPTION_VERSION) {
+            let ciphertext = base64::decode(ciphertext, base64::Variant::Original)
+                .map_err(|_| anyhow!("Invalid encrypted trusted-device grants"))?;
+            let plaintext = symmetric_crypt(&ciphertext, false)
+                .map_err(|_| anyhow!("Could not decrypt trusted-device grants"))?;
+            return serde_json::from_slice(&plaintext)
+                .map_err(|_| anyhow!("Invalid trusted-device grants"));
+        }
+        // Migrate records from earlier V2 builds without revoking them.
+        let grants =
+            serde_json::from_str(&value).map_err(|_| anyhow!("Invalid trusted-device grants"))?;
+        self.write(&grants)?;
+        Ok(grants)
     }
 
     pub fn exists(&self) -> ResultType<bool> {
-        Ok(!Config2::get_trusted_devices_v2()?.is_empty())
+        Config2::has_trusted_devices_v2()
     }
 
     pub fn write(&self, grants: &super::Grants) -> ResultType<()> {
-        Config2::set_trusted_devices_v2(serde_json::to_string(grants)?)
+        let ciphertext = symmetric_crypt(&serde_json::to_vec(grants)?, true)
+            .map_err(|_| anyhow!("Could not encrypt trusted-device grants"))?;
+        Config2::set_trusted_devices_v2(format!(
+            "{ENCRYPTION_VERSION}{}",
+            base64::encode(&ciphertext, base64::Variant::Original)
+        ))
     }
 }
