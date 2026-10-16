@@ -1,7 +1,7 @@
 mod directory;
 
 use super::{
-    installer_files::VERIFY_FILE_ARGUMENT,
+    installer_files::{self, VERIFY_FILE_ARGUMENT},
     installer_shell::{
         get_system_executable, path_for_cmd_assignment, path_for_cmd_environment,
         run_elevated_and_wait, trusted_install_environment,
@@ -55,8 +55,7 @@ fn prepare_install_commands(commands: &str) -> ResultType<String> {
     let commands = commands.replace("\r\n", "\n").replace('\n', "\r\n");
     let chcp_path = get_system_executable(CHCP_RELATIVE_PATH)?;
     let chcp = path_for_cmd_environment(&chcp_path)?;
-    let executable = std::env::current_exe()?;
-    let helper = path_for_cmd_environment(&executable)?;
+    let helper = installer_files::helper_path()?.replace('%', "%%");
     Ok(format!(
         "@echo off\r\nsetlocal EnableExtensions DisableDelayedExpansion\r\n\
          \"{chcp}\" {UTF8_CODE_PAGE} > nul || exit /b \
@@ -100,17 +99,20 @@ fn verified_install_bootstrap(
     let directory = path_for_cmd_assignment(runner_directory)?;
     let runner = runner_directory.join("install.bat");
     let runner = path_for_cmd_assignment(&runner)?;
-    let helper_path = std::env::current_exe()?;
-    let helper = path_for_cmd_assignment(&helper_path)?;
+    let helper = installer_files::helper_path()?
+        .replace('^', "^^")
+        .replace('!', "^!")
+        .replace('%', "!P!");
     // Short names preserve headroom under the Windows 7 ShellExecuteExW 2,048
     // UTF-16-character parameter limit. Paths are stored with delayed expansion
     // disabled, then expanded indirectly so literal `!` survives: S=source,
-    // R=runner, H=native file helper, D=directory, E=exit code.
+    // R=runner, H=native file helper, D=directory, E=exit code, P=literal percent.
+    // Insert percent signs with delayed expansion to avoid expanding environment variables.
     // Execute the BAT directly in this cmd process, without CALL's extra parsing.
     Ok(format!(
         "setlocal DisableDelayedExpansion & set \"S={source}\" & set \"R={runner}\" & \
-         set \"H={helper}\" & \
-         set \"ERRORLEVEL=\" & set \"D={directory}\" & set \"E=0\" & setlocal EnableDelayedExpansion & \
+         set \"ERRORLEVEL=\" & set \"D={directory}\" & set \"E=0\" & set \"P=%\" & \
+         setlocal EnableDelayedExpansion & set \"H={helper}\" & \
          if exist \"!R!\" (set \"E={INSTALL_HANDOFF_RUNNER_EXISTS_EXIT_CODE}\") else (\
          copy /Y \"!S!\" \"!R!\" > nul || \
          (set \"E={INSTALL_HANDOFF_COPY_FAILURE_EXIT_CODE}\") & \
@@ -228,6 +230,33 @@ mod tests {
         assert!(
             !receipt.exists(),
             "Changed files must not authorize execution"
+        );
+    }
+
+    #[test]
+    fn native_handoff_accepts_percent_in_executable_path() {
+        use std::os::windows::process::CommandExt;
+
+        let executable = std::env::current_exe().unwrap();
+        let alias = executable.with_file_name(format!(
+            "rustdesk-%RUSTDESK_HELPER_PATH%-{}.exe",
+            uuid::Uuid::new_v4().simple()
+        ));
+        fs::hard_link(&executable, &alias).unwrap();
+        let output = std::process::Command::new(&alias)
+            .args([
+                "--exact",
+                "platform::windows::installer_handoff::tests::installer_verification_rejects_changed_files",
+            ])
+            .env("RUSTDESK_HELPER_PATH", "expanded")
+            .creation_flags(::windows::Win32::System::Threading::CREATE_NO_WINDOW.0)
+            .output();
+        fs::remove_file(alias).unwrap();
+        let output = output.unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
         );
     }
 
