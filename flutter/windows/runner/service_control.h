@@ -91,11 +91,13 @@ inline DWORD InstallService(const wchar_t* name, const wchar_t* executable) {
     return GetLastError();
   }
   ServiceHandle service(
-      CreateServiceW(manager.get(), name, display_name.c_str(), SERVICE_START,
-                     SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START,
-                     SERVICE_ERROR_NORMAL, binary_path.c_str(), nullptr,
+      CreateServiceW(manager.get(), name, display_name.c_str(),
+                     SERVICE_START | DELETE, SERVICE_WIN32_OWN_PROCESS,
+                     SERVICE_AUTO_START, SERVICE_ERROR_NORMAL,
+                     binary_path.c_str(), nullptr,
                      nullptr, nullptr, nullptr, nullptr),
       CloseServiceHandle);
+  const bool created = service != nullptr;
   // --after-install can reuse a registration. Preserve its executable and
   // account, as the previous create-then-start script did.
   if (!service && GetLastError() == ERROR_SERVICE_EXISTS) {
@@ -108,6 +110,15 @@ inline DWORD InstallService(const wchar_t* name, const wchar_t* executable) {
     return ERROR_SUCCESS;
   }
   const DWORD error = GetLastError();
+  // The caller restores stop-service=Y on failure; do not leave a new
+  // auto-start registration behind.
+  if (created && error != ERROR_SERVICE_ALREADY_RUNNING &&
+      !DeleteService(service.get())) {
+    const DWORD rollback_error = GetLastError();
+    std::fwprintf(stderr,
+                  L"Failed to roll back newly created service: Windows error %lu\n",
+                  rollback_error);
+  }
   return error == ERROR_SERVICE_ALREADY_RUNNING ? ERROR_SUCCESS : error;
 }
 
