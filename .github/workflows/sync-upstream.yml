@@ -1,5 +1,7 @@
-# Merges new upstream RustDesk commits into this repo's default branch.
-# A clean merge is pushed directly. On a conflict nothing is pushed and an issue is opened instead.
+# Merges new upstream RustDesk commits into the `upstream-sync` branch and opens a pull request
+# into the default branch. The default branch is never changed here, so you can test the branch
+# (run "Release Windows portable" on it by hand) before merging.
+# On a merge conflict nothing is pushed and an issue is opened instead.
 name: Sync upstream
 
 on:
@@ -10,14 +12,18 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 env:
   UPSTREAM_REPO: rustdesk/rustdesk
   UPSTREAM_BRANCH: master
+  SYNC_BRANCH: upstream-sync
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -27,18 +33,31 @@ jobs:
 
       - name: Fetch upstream
         run: |
+          BASE="${{ github.event.repository.default_branch }}"
+          echo "BASE=$BASE" >> "$GITHUB_ENV"
           git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
           git fetch upstream "${UPSTREAM_BRANCH}"
-          echo "BEHIND=$(git rev-list --count HEAD..upstream/${UPSTREAM_BRANCH})" >> "$GITHUB_ENV"
+          echo "BEHIND=$(git rev-list --count "origin/${BASE}..upstream/${UPSTREAM_BRANCH}")" >> "$GITHUB_ENV"
+          if git ls-remote --exit-code --heads origin "${SYNC_BRANCH}" >/dev/null; then
+            git fetch origin "${SYNC_BRANCH}"
+            echo "PENDING=$(git rev-list --count "origin/${BASE}..origin/${SYNC_BRANCH}")" >> "$GITHUB_ENV"
+          else
+            echo "PENDING=0" >> "$GITHUB_ENV"
+          fi
 
-      - name: Merge upstream
+      - name: Skip while a sync branch is unmerged
+        if: env.PENDING != '0'
+        run: echo "::notice::${SYNC_BRANCH} has unmerged commits; merge or delete it first. Nothing to do."
+
+      - name: Merge upstream into the sync branch
         id: merge
-        if: env.BEHIND != '0'
+        if: env.BEHIND != '0' && env.PENDING == '0'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "${SYNC_BRANCH}" "origin/${BASE}"
           if git merge --no-edit "upstream/${UPSTREAM_BRANCH}"; then
-            git push origin "HEAD:${GITHUB_REF_NAME}"
+            git push --force origin "${SYNC_BRANCH}"
             echo "result=merged" >> "$GITHUB_OUTPUT"
           else
             git diff --name-only --diff-filter=U > conflicts.txt
@@ -46,21 +65,32 @@ jobs:
             echo "result=conflict" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Open a pull request
+        if: steps.merge.outputs.result == 'merged'
+        run: |
+          if [ -z "$(gh pr list --head "${SYNC_BRANCH}" --state open --json number --jq '.[0].number')" ]; then
+            gh pr create --base "${BASE}" --head "${SYNC_BRANCH}" \
+              --title "Sync upstream ${UPSTREAM_REPO}" \
+              --body "Clean merge of \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\`. Build and test this branch before merging."
+          fi
+
       - name: Open an issue on conflict
         if: steps.merge.outputs.result == 'conflict'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo "Merging \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` into \`${GITHUB_REF_NAME}\` hit conflicts in:"
+            echo "Merging \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` into \`${BASE}\` hit conflicts in:"
             echo
             sed 's/^/- `/; s/$/`/' conflicts.txt
             echo
-            echo "Resolve locally:"
+            echo "Resolve them on the sync branch, then open a pull request into \`${BASE}\`:"
             echo
             echo '```'
             echo "git remote add upstream https://github.com/${UPSTREAM_REPO}.git"
-            echo "git fetch upstream && git merge upstream/${UPSTREAM_BRANCH}"
+            echo "git fetch --all"
+            echo "git checkout -b ${SYNC_BRANCH} origin/${BASE}"
+            echo "git merge upstream/${UPSTREAM_BRANCH}"
+            echo "# resolve, commit, then:"
+            echo "git push origin ${SYNC_BRANCH}"
             echo '```'
           } > body.md
           existing=$(gh issue list --state open --label upstream-sync --json number --jq '.[0].number')

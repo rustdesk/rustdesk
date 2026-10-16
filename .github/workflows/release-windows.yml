@@ -114,24 +114,83 @@ jobs:
           (cd flutter && flutter pub get)
           flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
 
-      - name: Build rustdesk
+      - name: Prepare release build
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
         env:
-          # Point the in-app update check at this repo's releases. Without a tag the check stays off.
-          FORK_UPDATE_REPO: ${{ github.repository }}
-          FORK_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          UPDATE_SIGNING_SEED: ${{ secrets.UPDATE_SIGNING_SEED }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag must look like v1.2.3, got ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          if [ -z "$UPDATE_SIGNING_SEED" ]; then
+            echo "::error::Add the UPDATE_SIGNING_SEED repository secret (base64 of a random 32-byte Ed25519 seed)."
+            exit 1
+          fi
+          pip3 install cryptography
+          # The app's version decides what counts as an update, so it must equal the tag.
+          python3 - "$VERSION" <<'PY'
+          import re, sys
+          v = sys.argv[1]
+          for path, pattern in (("Cargo.toml", r'(?m)^version = "[^"]*"'), ("Cargo.lock", r'(name = "rustdesk"\r?\nversion = )"[^"]*"')):
+              text = open(path, encoding="utf-8", newline="").read()
+              repl = f'version = "{v}"' if path == "Cargo.toml" else rf'\g<1>"{v}"'
+              text, n = re.subn(pattern, repl, text, count=1)
+              assert n == 1, path
+              open(path, "w", encoding="utf-8", newline="").write(text)
+          PY
+          PUBLIC_KEY=$(python3 - <<'PY'
+          import base64, os
+          from cryptography.hazmat.primitives import serialization
+          from cryptography.hazmat.primitives.asymmetric import ed25519
+          key = ed25519.Ed25519PrivateKey.from_private_bytes(base64.b64decode(os.environ["UPDATE_SIGNING_SEED"]))
+          raw = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+          print(base64.b64encode(raw).decode())
+          PY
+          )
+          echo "FORK_UPDATE_REPO=${GITHUB_REPOSITORY}" >> "$GITHUB_ENV"
+          echo "FORK_UPDATE_PUBLIC_KEY=${PUBLIC_KEY}" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build rustdesk
         run: python3 .\build.py --flutter --skip-portable-pack --hwcodec --vram
 
       - name: Pack portable exe
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME//\//-}"
+          VERSION="${RELEASE_VERSION:-dev}"
           cd libs/portable
           pip3 install -r requirements.txt
           python3 ./generate.py -f ../../flutter/build/windows/x64/runner/Release -o . -e ../../flutter/build/windows/x64/runner/Release/rustdesk.exe
           cd ../..
           mkdir dist
-          cp target/release/rustdesk-portable-packer.exe "dist/rustdesk-${VERSION}-windows-x86_64-portable.exe"
+          cp target/release/rustdesk-portable-packer.exe "dist/rustdesk-${VERSION}-x86_64.exe"
           (cd flutter/build/windows/x64/runner/Release && 7z a -tzip "../../../../../../dist/rustdesk-${VERSION}-windows-x86_64.zip" .)
+
+      - name: Sign update metadata
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          RUSTDESK_UPDATE_ED25519_SEED: ${{ secrets.UPDATE_SIGNING_SEED }}
+        run: |
+          python3 res/update/generate_update_metadata.py sign \
+            --artifact windows x86_64 exe "dist/rustdesk-${RELEASE_VERSION}-x86_64.exe" \
+            --version "$RELEASE_VERSION" --release-id "$GITHUB_REF_NAME" \
+            --package-id rustdesk \
+            --release-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download" \
+            --published-at "$(git log -1 --format=%cI)" \
+            --metadata-out dist/rustdesk-update.json \
+            --signature-out dist/rustdesk-update.json.sig
+          RUSTDESK_UPDATE_ED25519_PUBLIC_KEY="$FORK_UPDATE_PUBLIC_KEY" \
+          python3 res/update/generate_update_metadata.py verify \
+            --metadata dist/rustdesk-update.json \
+            --signature dist/rustdesk-update.json.sig \
+            --artifact "dist/rustdesk-${RELEASE_VERSION}-x86_64.exe" \
+            --version "$RELEASE_VERSION" --release-id "$GITHUB_REF_NAME" \
+            --package-id rustdesk \
+            --release-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
