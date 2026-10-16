@@ -51,6 +51,7 @@ mod custom_server;
 mod fork_update;
 mod profiles;
 mod lang;
+mod lang_fork;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
 mod port_forward_mux;
