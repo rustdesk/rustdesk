@@ -99,10 +99,16 @@ fn verified_install_bootstrap(
     let directory = path_for_cmd_assignment(runner_directory)?;
     let runner = runner_directory.join("install.bat");
     let runner = path_for_cmd_assignment(&runner)?;
-    let helper = installer_files::helper_path()?
-        .replace('^', "^^")
-        .replace('!', "^!")
-        .replace('%', "!P!");
+    let helper = installer_files::helper_path()?;
+    // cmd consumes caret escapes only when the assignment contains an exclamation mark.
+    let helper = if helper.contains(['!', '%']) {
+        helper
+            .replace('^', "^^")
+            .replace('!', "^!")
+            .replace('%', "!P!")
+    } else {
+        helper
+    };
     // Short names preserve headroom under the Windows 7 ShellExecuteExW 2,048
     // UTF-16-character parameter limit. Paths are stored with delayed expansion
     // disabled, then expanded indirectly so literal `!` survives: S=source,
@@ -200,6 +206,7 @@ mod tests {
     };
     use super::*;
     use hbb_common::base64::{engine::general_purpose::STANDARD, Engine as _};
+    use std::os::windows::process::CommandExt;
 
     #[test]
     fn installer_verification_rejects_changed_files() {
@@ -213,6 +220,17 @@ mod tests {
         }
         assert!(!parameters.to_ascii_lowercase().contains("cmd.exe"));
         assert!(parameters.encode_utf16().count() < WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS);
+
+        // Check the generated helper target without launching the test runner as an installer.
+        let (assignment, _) = parameters.split_once(" & if exist ").unwrap();
+        let status = std::process::Command::new(get_system_executable(CMD_RELATIVE_PATH).unwrap())
+            .raw_arg(format!(
+                "{assignment} & if exist \"!H!\" (exit /b 0) else (exit /b 1)"
+            ))
+            .creation_flags(::windows::Win32::System::Threading::CREATE_NO_WINDOW.0)
+            .status()
+            .unwrap();
+        assert!(status.success());
 
         let receipt = script.path.with_extension("verified");
         let arguments = vec![
@@ -234,30 +252,26 @@ mod tests {
     }
 
     #[test]
-    fn native_handoff_accepts_percent_in_executable_path() {
-        use std::os::windows::process::CommandExt;
-
+    fn native_handoff_accepts_special_characters_in_executable_path() {
         let executable = std::env::current_exe().unwrap();
-        let alias = executable.with_file_name(format!(
-            "rustdesk-%RUSTDESK_HELPER_PATH%-{}.exe",
-            uuid::Uuid::new_v4().simple()
-        ));
-        fs::hard_link(&executable, &alias).unwrap();
-        let output = std::process::Command::new(&alias)
-            .args([
-                "--exact",
-                "platform::windows::installer_handoff::tests::installer_verification_rejects_changed_files",
-            ])
-            .env("RUSTDESK_HELPER_PATH", "expanded")
-            .creation_flags(::windows::Win32::System::Threading::CREATE_NO_WINDOW.0)
-            .output();
-        fs::remove_file(alias).unwrap();
-        let output = output.unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stdout)
-        );
+        for characters in ["^", "%RUSTDESK_HELPER_PATH%"] {
+            let alias = executable.with_file_name(format!(
+                "rustdesk-{characters}-{}.exe",
+                uuid::Uuid::new_v4().simple()
+            ));
+            fs::hard_link(&executable, &alias).unwrap();
+            let output = std::process::Command::new(&alias)
+                .args([
+                    "--exact",
+                    "platform::windows::installer_handoff::tests::installer_verification_rejects_changed_files",
+                ])
+                .env("RUSTDESK_HELPER_PATH", "expanded")
+                .creation_flags(::windows::Win32::System::Threading::CREATE_NO_WINDOW.0)
+                .output();
+            fs::remove_file(alias).unwrap();
+            let output = output.unwrap();
+            assert!(output.status.success(), "{output:?}");
+        }
     }
 
     #[test]
