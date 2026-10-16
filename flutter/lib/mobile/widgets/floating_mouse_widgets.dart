@@ -53,12 +53,8 @@ bool _mouseButtonsFit(Size size, Offset left, Offset right) {
       max(0.0, (size.height - _wheelHeight) / 2),
       _wheelWidth,
       min(_wheelHeight, size.height));
-  return viewport.contains(leftRect.topLeft) &&
-      leftRect.right <= size.width &&
-      leftRect.bottom <= size.height &&
-      viewport.contains(rightRect.topLeft) &&
-      rightRect.right <= size.width &&
-      rightRect.bottom <= size.height &&
+  return viewport.intersect(leftRect) == leftRect &&
+      viewport.intersect(rightRect) == rightRect &&
       !leftRect.overlaps(rightRect) &&
       !leftRect.overlaps(wheelRect) &&
       !rightRect.overlaps(wheelRect);
@@ -595,17 +591,8 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     _preSavedPos = _position;
   }
 
-  Offset _clampPosition(Offset position) {
-    final size = widget.viewportSize;
-    final maxX =
-        max(0.0, size.width - _kLeftRightButtonWidth - _kSpaceToHorizontalEdge);
-    final maxY =
-        max(0.0, size.height - _kLeftRightButtonHeight - _kSpaceToVerticalEdge);
-    return Offset(
-      position.dx.clamp(min(_kSpaceToHorizontalEdge, maxX), maxX),
-      position.dy.clamp(min(_kSpaceToVerticalEdge, maxY), maxY),
-    );
-  }
+  Offset _clampPosition(Offset position) =>
+      _clampMouseButtonPosition(position, widget.viewportSize);
 
   void _resetPosition(Orientation ori) {
     setState(() {
