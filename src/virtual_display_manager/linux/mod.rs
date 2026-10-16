@@ -866,8 +866,10 @@ fn disable(state: &mut State) -> ResultType<()> {
             last_err = Some(e);
         }
         if let Err(e) = write_status(&t.sysfs, "detect") {
-            // Released, but it may still report the override it probed a moment ago; the next
-            // pass sees a connector carrying our EDID with no marker and re-probes it.
+            // Released. Only a connector that is going away fails here: `status_store` returns
+            // -EINTR, which the write retries, or -EINVAL, and ignores the probe result. Its cached
+            // EDID goes with it, and our entry is already gone, so whatever comes back under the
+            // name reads the wire.
             hbb_common::throttled_log!(
                 FAILURE_LOG_INTERVAL,
                 warn,
