@@ -4770,9 +4770,8 @@ dependencies = [
 
 [[package]]
 name = "mozjpeg"
-version = "0.10.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55571bce4f12d80ceb4296526e7614f796df72daaaac85f265ab732fa47b7bc9"
+version = "0.10.13"
+source = "git+https://github.com/Flutter-Dart-loong64/mozjpeg-rust.git?rev=f9970f2ba88e136db0f5532983c14573ecb0b037#f9970f2ba88e136db0f5532983c14573ecb0b037"
 dependencies = [
  "arrayvec",
  "bytemuck",
@@ -4783,9 +4782,8 @@ dependencies = [
 
 [[package]]
 name = "mozjpeg-sys"
-version = "2.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad3626d7942d5b56cc6d47b1c59724c0a976b786fca059c5aaa904aef6324d55"
+version = "2.2.4-beta.1"
+source = "git+https://github.com/Flutter-Dart-loong64/mozjpeg-sys.git?rev=5489d3b8eab946069330dbe0a6b7b8e1861bf001#5489d3b8eab946069330dbe0a6b7b8e1861bf001"
 dependencies = [
  "cc",
  "dunce",
@@ -4995,8 +4993,7 @@ dependencies = [
 [[package]]
 name = "nix"
 version = "0.23.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3790c00a0150112de0f4cd161e3d7fc4b2d8a5542ffc35f099a2562aecb35c"
+source = "git+https://github.com/Flutter-Dart-loong64/nix.git?rev=03d60be7e04b8b41175d78f0c5e41a74ae23a230#03d60be7e04b8b41175d78f0c5e41a74ae23a230"
 dependencies = [
  "bitflags 1.3.2",
  "cc",
@@ -5008,8 +5005,7 @@ dependencies = [
 [[package]]
 name = "nix"
 version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f346ff70e7dbfd675fe90590b92d59ef2de15a8779ae305ebcbfd3f0caf59be4"
+source = "git+https://github.com/Flutter-Dart-loong64/nix.git?rev=cc26a733b0314a3e9a5db9ec180386893d22e772#cc26a733b0314a3e9a5db9ec180386893d22e772"
 dependencies = [
  "autocfg 1.3.0",
  "bitflags 1.3.2",
@@ -5022,8 +5018,7 @@ dependencies = [
 [[package]]
 name = "nix"
 version = "0.26.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
+source = "git+https://github.com/Flutter-Dart-loong64/nix.git?rev=87b10c3ae8ceb18ea7fe890bdffab955ebae1e6e#87b10c3ae8ceb18ea7fe890bdffab955ebae1e6e"
 dependencies = [
  "bitflags 1.3.2",
  "cfg-if 1.0.0",
