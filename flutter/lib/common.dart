@@ -30,6 +30,7 @@ import 'package:window_size/window_size.dart' as window_size;
 
 import '../consts.dart';
 import 'common/widgets/overlay.dart';
+import 'common/widgets/login.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
 import 'mobile/pages/view_camera_page.dart';
@@ -2532,6 +2533,7 @@ connectMainDesktop(String id,
     String? password,
     String? connToken,
     bool? isSharedPassword}) async {
+  if (!await ensurePublicServerLogin(id)) return;
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id,
         password: password,
@@ -2596,6 +2598,7 @@ connect(BuildContext context, String id,
   final oldId = id;
   id = await bind.mainHandleRelayId(id: id);
   forceRelay = id != oldId || forceRelay;
+  if (!isDesktop && !await ensurePublicServerLogin(id)) return;
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
       "more than one connect type");
 

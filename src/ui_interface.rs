@@ -1289,6 +1289,17 @@ fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
 
 #[cfg(feature = "flutter")]
 pub fn account_auth(op: String, id: String, uuid: String, remember_me: bool) {
+    if let Some(provider) = op.strip_prefix(base::config::public_server::OIDC_PREFIX) {
+        // The public login dialog stores its result separately from the private account.
+        account::OidcSession::account_auth(
+            base::config::public_server::API_SERVER.to_owned(),
+            provider.to_owned(),
+            id,
+            uuid,
+            false,
+        );
+        return;
+    }
     account::OidcSession::account_auth(get_api_server(), op, id, uuid, remember_me);
 }
 

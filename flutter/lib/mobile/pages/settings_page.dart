@@ -749,6 +749,14 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               ),
             ],
           ),
+        if (!isWeb && !bind.isDisableAccount() && !_isUsingPublicServer)
+          SettingsSection(tiles: [
+            SettingsTile(
+              title: Text('${translate('Login')} — admin.rustdesk.com'),
+              leading: Icon(Icons.public),
+              onPressed: (_) => loginDialog(publicServer: true),
+            ),
+          ]),
         SettingsSection(title: Text(translate("Settings")), tiles: [
           if (!disabledSettings && !_hideNetwork && !_hideServer)
             SettingsTile(

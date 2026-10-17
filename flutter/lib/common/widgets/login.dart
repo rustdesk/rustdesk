@@ -9,8 +9,10 @@ import 'package:flutter_hbb/models/user_model.dart';
 import 'package:get/get.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_hbb/utils/http_service.dart' as http;
 
 import '../../common.dart';
+import '../public_server_auth.dart';
 import './dialog.dart';
 import './oidc_auth_status.dart';
 
@@ -151,6 +153,9 @@ class ConfigOP {
 }
 
 class _OidcAuthController {
+  final bool publicServer;
+  _OidcAuthController({this.publicServer = false});
+
   final RxString curOP = ''.obs;
   Future<void> _pendingOperation = Future<void>.value();
   int _authAttempt = 0;
@@ -183,7 +188,9 @@ class _OidcAuthController {
           completer.complete(false);
           return;
         }
-        await bind.mainAccountAuth(op: op, rememberMe: true);
+        await bind.mainAccountAuth(
+            op: publicServer ? '$kPublicServerOidcPrefix$op' : op,
+            rememberMe: !publicServer);
         completer.complete(_isCurrent(authAttempt, op));
       } catch (error, stackTrace) {
         completer.completeError(error, stackTrace);
@@ -699,24 +706,136 @@ class LoginWidgetUserPass extends StatelessWidget {
 const kAuthReqTypeOidc = 'oidc/';
 
 Future<bool?>? _activeLoginDialog;
+bool _activeLoginIsPublic = false;
+
+Future<bool> ensurePublicServerLogin(String id) async {
+  if (isWeb || !isPublicServerPeer(id)) return true;
+  final usingPublicServer = await bind.mainIsUsingPublicServer();
+  final tokenKey = usingPublicServer ? 'access_token' : kPublicServerAccessToken;
+  if (bind.mainGetLocalOption(key: tokenKey).isNotEmpty) return true;
+  return await loginDialog(publicServer: !usingPublicServer) == true;
+}
+
+Widget publicServerLoginButton() {
+  if (isWeb) return const SizedBox.shrink();
+  return FutureBuilder<bool>(
+    future: bind.mainIsUsingPublicServer(),
+    builder: (context, snapshot) {
+      if (snapshot.data != false) return const SizedBox.shrink();
+      return TextButton(
+        onPressed: () => loginDialog(publicServer: true),
+        child: Text('${translate('Login')} — admin.rustdesk.com'),
+      );
+    },
+  );
+}
 
 // call this directly
-Future<bool?> loginDialog() {
+Future<bool?> loginDialog({bool publicServer = false}) {
   final activeDialog = _activeLoginDialog;
   if (activeDialog != null) {
+    if (_activeLoginIsPublic != publicServer) {
+      return activeDialog.then((_) => loginDialog(publicServer: publicServer));
+    }
     return activeDialog;
   }
-  final dialog = _openLoginDialogOnce();
+  _activeLoginIsPublic = publicServer;
+  final dialog = _openLoginDialogOnce(publicServer: publicServer);
   _activeLoginDialog = dialog;
   return dialog;
 }
 
-Future<bool?> _openLoginDialogOnce() async {
+Future<bool?> _openLoginDialogOnce({bool publicServer = false}) async {
   try {
+    if (publicServer) return await _openPublicServerLoginDialog();
     return await _openLoginDialog();
   } finally {
     _activeLoginDialog = null;
   }
+}
+
+Future<List<dynamic>> _queryPublicServerLoginOptions() async {
+  final resp = await http.get(Uri.parse('$kPublicServerApiServer/api/login-options'));
+  if (resp.statusCode < 200 || resp.statusCode >= 300) {
+    throw RequestException(resp.statusCode, resp.reasonPhrase ?? 'Request failed');
+  }
+  final options = (jsonDecode(resp.body) as List).cast<String>();
+  for (final option in options) {
+    if (option.startsWith('common-oidc/')) {
+      return jsonDecode(option.substring('common-oidc/'.length));
+    }
+  }
+  return options
+      .where((option) => option.startsWith('oidc/'))
+      .map((option) => {'name': option.substring('oidc/'.length)})
+      .toList();
+}
+
+Future<bool?> _openPublicServerLoginDialog() async {
+  final oidcAuth = _OidcAuthController(publicServer: true);
+  var options = _queryPublicServerLoginOptions();
+  String? authError;
+  return gFFI.dialogManager.show<bool>((setState, close, context) {
+    return CustomAlertDialog(
+      title: Text('${translate('Login')} — admin.rustdesk.com'),
+      contentBoxConstraints: const BoxConstraints(minWidth: 400),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (authError != null) Text(authError!),
+          FutureBuilder<List<dynamic>>(
+            future: options,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const CircularProgressIndicator();
+              }
+              final providers = snapshot.data ?? [];
+              if (snapshot.hasError || providers.isEmpty) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SelectableText(
+                        '${translate('Failed')}: ${snapshot.error ?? kPublicServerApiServer}'),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        options = _queryPublicServerLoginOptions();
+                      }),
+                      child: Text(translate('Retry')),
+                    ),
+                  ],
+                );
+              }
+              return LoginWidgetOP(
+                ops: providers
+                    .map((e) => ConfigOP(op: e['name'], icon: e['icon']))
+                    .toList(),
+                curOP: oidcAuth.curOP,
+                startAuth: oidcAuth.start,
+                cancelAuth: oidcAuth.cancelCurrent,
+                canStartAuth: oidcAuth.canStart,
+                cbLogin: (authBody) async {
+                  final token = authBody['access_token'];
+                  if (authBody['type'] != HttpType.kAuthResTypeToken ||
+                      token is! String ||
+                      token.isEmpty) {
+                    setState(() => authError = translate('Failed'));
+                    return;
+                  }
+                  await bind.mainSetLocalOption(
+                      key: kPublicServerAccessToken, value: token);
+                  close(true);
+                },
+              );
+            },
+          ),
+        ],
+      ),
+      actions: [
+        dialogButton('Cancel', onPressed: () => close(false)),
+      ],
+      onCancel: () => close(false),
+    );
+  }).whenComplete(oidcAuth.close);
 }
 
 Future<bool?> _openLoginDialog() async {
