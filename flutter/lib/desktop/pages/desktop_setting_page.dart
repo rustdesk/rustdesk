@@ -2264,7 +2264,11 @@ class _AccountState extends State<_Account> {
     return ListView(
       controller: scrollController,
       children: [
-        _Card(title: 'Account', children: [accountAction(), useInfo()]),
+        _Card(title: 'Account', children: [
+          accountAction(),
+          useInfo(),
+          publicServerLoginButton(),
+        ]),
       ],
     ).marginOnly(bottom: _kListViewBottomMargin);
   }
