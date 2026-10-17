@@ -112,7 +112,16 @@ mod tests {
         ));
         create(&directory).expect("production directory creation should succeed");
         let access = creator_directory_access(&directory);
-        fs::remove_dir(&directory).expect("test directory should be removed");
+        if elevated {
+            fs::remove_dir(&directory).expect("test directory should be removed");
+        } else if let Err(err) = fs::remove_dir(&directory) {
+            // Non-elevated creators cannot remove the protected directory by
+            // design; the elevated installer removes it in production.
+            eprintln!(
+                "leaving protected test directory {}: {err}",
+                directory.display()
+            );
+        }
         let expected = if elevated {
             FILE_ALL_ACCESS
         } else {

@@ -13,7 +13,7 @@ use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use ringbuf::{ring_buffer::RbBase, Rb};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     ffi::c_void,
     net::SocketAddr,
     ops::Deref,
@@ -3994,6 +3994,12 @@ pub fn start_video_thread<F, T>(
     let mut video_callback = video_callback;
     let mut last_chroma = None;
     let is_view_camera = session.is_view_camera();
+    // With the slow FSRCNNX upscaler on, frames can arrive faster than they
+    // upscale. Newer messages pile up here while every frame is still decoded
+    // in order (delta codecs keep their state); only the latest frame per
+    // pile-up is upscaled and rendered, so latency stays bounded. Stays empty
+    // while the toggle is off.
+    let mut stash: VecDeque<MediaData> = VecDeque::new();
 
     std::thread::spawn(move || {
         #[cfg(windows)]
@@ -4004,127 +4010,177 @@ pub fn start_video_thread<F, T>(
         let mut duration = std::time::Duration::ZERO;
         let mut skip_beginning = 0;
         loop {
-            if let Ok(data) = video_receiver.recv() {
-                match data {
-                    MediaData::VideoFrame(_) | MediaData::VideoQueue => {
-                        let vf = match data {
-                            MediaData::VideoFrame(vf) => {
-                                *discard_queue.write().unwrap() = false;
-                                *vf
-                            }
-                            MediaData::VideoQueue => {
-                                if let Some(vf) = video_queue.read().unwrap().pop() {
-                                    if discard_queue.read().unwrap().clone() {
-                                        continue;
-                                    }
-                                    vf
-                                } else {
+            let data = match stash.pop_front() {
+                Some(data) => data,
+                None => match video_receiver.recv() {
+                    Ok(data) => data,
+                    Err(_) => break,
+                },
+            };
+            // Coalesce only while the upscaler is on; off, this is a no-op and
+            // the loop below behaves exactly as before.
+            let upscaler_on = session
+                .lc
+                .read()
+                .map(|lc| lc.get_toggle_option(keys::OPTION_UPSCALER))
+                .unwrap_or(false);
+            let coalesce = upscaler_on
+                && matches!(data, MediaData::VideoFrame(_) | MediaData::VideoQueue);
+            if coalesce {
+                while let Ok(stashed) = video_receiver.try_recv() {
+                    stash.push_back(stashed);
+                }
+            }
+            let render_current = !coalesce
+                || (!stash
+                    .iter()
+                    .any(|m| matches!(m, MediaData::VideoFrame(_) | MediaData::VideoQueue))
+                    && !stash
+                        .iter()
+                        .any(|m| matches!(m, MediaData::Reset | MediaData::RecordScreen(_))));
+            let mut render_current = render_current;
+            match data {
+                MediaData::VideoFrame(_) | MediaData::VideoQueue => {
+                    let vf = match data {
+                        MediaData::VideoFrame(vf) => {
+                            *discard_queue.write().unwrap() = false;
+                            *vf
+                        }
+                        MediaData::VideoQueue => {
+                            let (vf_opt, queue_empty) = {
+                                let queue = video_queue.read().unwrap();
+                                (queue.pop(), queue.is_empty())
+                            };
+                            if let Some(vf) = vf_opt {
+                                if discard_queue.read().unwrap().clone() {
                                     continue;
                                 }
-                            }
-                            _ => {
-                                // unreachable!();
+                                // Newer frames waiting in the shared queue make
+                                // this one stale: still decoded (delta codecs
+                                // need every frame) but not rendered. Only
+                                // while the upscaler is on; with the toggle
+                                // off every frame renders exactly as before.
+                                render_current =
+                                    render_current && (queue_empty || !upscaler_on);
+                                vf
+                            } else {
                                 continue;
                             }
-                        };
-                        let display = vf.display as usize;
-                        let start = std::time::Instant::now();
-                        let format = CodecFormat::from(&vf);
-                        if video_handler.is_none() {
-                            let mut handler = VideoHandler::new(format, display);
-                            let record_state = session.lc.read().unwrap().record_state;
-                            let record_permission = session.lc.read().unwrap().record_permission;
-                            let id = session.lc.read().unwrap().id.clone();
-                            if record_state && record_permission {
-                                handler.record_screen(true, id, display, is_view_camera);
-                            }
-                            video_handler = Some(handler);
                         }
-                        if let Some(handler) = video_handler.as_mut() {
-                            let mut pixelbuffer = true;
-                            let mut tmp_chroma = None;
-                            let format_changed = handler.decoder.format() != format;
-                            match handler.handle_frame(vf, &mut pixelbuffer, &mut tmp_chroma) {
-                                Ok(true) => {
+                        _ => {
+                            // unreachable!();
+                            continue;
+                        }
+                    };
+                    let display = vf.display as usize;
+                    let start = std::time::Instant::now();
+                    let format = CodecFormat::from(&vf);
+                    if video_handler.is_none() {
+                        let mut handler = VideoHandler::new(format, display);
+                        let record_state = session.lc.read().unwrap().record_state;
+                        let record_permission = session.lc.read().unwrap().record_permission;
+                        let id = session.lc.read().unwrap().id.clone();
+                        if record_state && record_permission {
+                            handler.record_screen(true, id, display, is_view_camera);
+                        }
+                        video_handler = Some(handler);
+                    }
+                    if let Some(handler) = video_handler.as_mut() {
+                        let mut pixelbuffer = true;
+                        let mut tmp_chroma = None;
+                        let format_changed = handler.decoder.format() != format;
+                        match handler.handle_frame(vf, &mut pixelbuffer, &mut tmp_chroma) {
+                            Ok(true) => {
+                                // `render_current` is false when newer frames are
+                                // already stashed: this frame is still decoded
+                                // (delta codecs need every frame) but skipped
+                                // for upscaling/display to bound latency.
+                                if render_current {
+                                    crate::upscaler_hook::maybe_upscale_session_frame(
+                                        &session,
+                                        &mut handler.rgb,
+                                        pixelbuffer,
+                                    );
                                     video_callback(
                                         display,
                                         &mut handler.rgb,
                                         handler.texture.texture,
                                         pixelbuffer,
                                     );
-
-                                    // chroma
-                                    if tmp_chroma.is_some() && last_chroma != tmp_chroma {
-                                        last_chroma = tmp_chroma;
-                                        *chroma.write().unwrap() = tmp_chroma;
-                                    }
-
-                                    // fps calculation
-                                    fps_calculate(
-                                        &mut skip_beginning,
-                                        &fps,
-                                        format_changed,
-                                        start.elapsed(),
-                                        &mut count,
-                                        &mut duration,
-                                    );
                                 }
-                                Err(e) => {
-                                    // This is a simple workaround.
-                                    //
-                                    // I only see the following error:
-                                    // FailedCall("errcode=1 scrap::common::vpxcodec:libs\\scrap\\src\\common\\vpxcodec.rs:433:9")
-                                    // When switching from all displays to one display, the error occurs.
-                                    // eg:
-                                    // 1. Connect to a device with two displays (A and B).
-                                    // 2. Switch to display A. The error occurs.
-                                    // 3. If the error does not occur. Switch from A to display B. The error occurs.
-                                    //
-                                    // to-do: fix the error
-                                    log::error!("handle video frame error, {}", e);
-                                    session.refresh_video(display as _);
+
+                                // Chroma and fps track decoded frames, not just
+                                // rendered ones: stale frames are still decoded
+                                // to keep delta-codec state.
+                                // chroma
+                                if tmp_chroma.is_some() && last_chroma != tmp_chroma {
+                                    last_chroma = tmp_chroma;
+                                    *chroma.write().unwrap() = tmp_chroma;
                                 }
-                                _ => {}
+
+                                // fps calculation
+                                fps_calculate(
+                                    &mut skip_beginning,
+                                    &fps,
+                                    format_changed,
+                                    start.elapsed(),
+                                    &mut count,
+                                    &mut duration,
+                                );
+                            }
+                            Err(e) => {
+                                // This is a simple workaround.
+                                //
+                                // I only see the following error:
+                                // FailedCall("errcode=1 scrap::common::vpxcodec:libs\\scrap\\src\\common\\vpxcodec.rs:433:9")
+                                // When switching from all displays to one display, the error occurs.
+                                // eg:
+                                // 1. Connect to a device with two displays (A and B).
+                                // 2. Switch to display A. The error occurs.
+                                // 3. If the error does not occur. Switch from A to display B. The error occurs.
+                                //
+                                // to-do: fix the error
+                                log::error!("handle video frame error, {}", e);
+                                session.refresh_video(display as _);
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // check invalid decoders
+                    let mut should_update_supported = false;
+                    if let Some(handler) = video_handler.as_mut() {
+                        if !handler.decoder.valid()
+                            || handler.fail_counter >= MAX_DECODE_FAIL_COUNTER
+                        {
+                            let mut lc = session.lc.write().unwrap();
+                            let format = handler.decoder.format();
+                            if !lc.mark_unsupported.contains(&format) {
+                                lc.mark_unsupported.push(format);
+                                should_update_supported = true;
+                                log::info!("mark {format:?} decoder as unsupported, valid:{}, fail_counter:{}, all unsupported:{:?}", handler.decoder.valid(), handler.fail_counter, lc.mark_unsupported);
                             }
                         }
-
-                        // check invalid decoders
-                        let mut should_update_supported = false;
-                        if let Some(handler) = video_handler.as_mut() {
-                            if !handler.decoder.valid()
-                                || handler.fail_counter >= MAX_DECODE_FAIL_COUNTER
-                            {
-                                let mut lc = session.lc.write().unwrap();
-                                let format = handler.decoder.format();
-                                if !lc.mark_unsupported.contains(&format) {
-                                    lc.mark_unsupported.push(format);
-                                    should_update_supported = true;
-                                    log::info!("mark {format:?} decoder as unsupported, valid:{}, fail_counter:{}, all unsupported:{:?}", handler.decoder.valid(), handler.fail_counter, lc.mark_unsupported);
-                                }
-                            }
-                        }
-                        if should_update_supported {
-                            session.send(Data::Message(
-                                session.lc.read().unwrap().update_supported_decodings(),
-                            ));
-                        }
                     }
-                    MediaData::Reset => {
-                        if let Some(handler) = video_handler.as_mut() {
-                            handler.reset(None);
-                        }
+                    if should_update_supported {
+                        session.send(Data::Message(
+                            session.lc.read().unwrap().update_supported_decodings(),
+                        ));
                     }
-                    MediaData::RecordScreen(start) => {
-                        let id = session.lc.read().unwrap().id.clone();
-                        if let Some(handler) = video_handler.as_mut() {
-                            handler.record_screen(start, id, display, is_view_camera);
-                        }
-                    }
-                    _ => {}
                 }
-            } else {
-                break;
-            }
+                MediaData::Reset => {
+                    if let Some(handler) = video_handler.as_mut() {
+                        handler.reset(None);
+                    }
+                }
+                MediaData::RecordScreen(start) => {
+                    let id = session.lc.read().unwrap().id.clone();
+                    if let Some(handler) = video_handler.as_mut() {
+                        handler.record_screen(start, id, display, is_view_camera);
+                    }
+                }
+                _ => {}
+                }
         }
         log::info!("Video decoder loop exits");
     });

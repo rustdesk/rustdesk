@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::{atomic::AtomicUsize, Arc, Mutex, RwLock},
+    time::{Duration, Instant},
 };
 
 use sciter::{
@@ -30,6 +31,14 @@ type Video = AssetPtr<video_destination>;
 
 lazy_static::lazy_static! {
     static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
+    // Dimensions the video stream was initialized with. The FSRCNNX upscaler
+    // changes frame dimensions after decode, so `on_rgba` restarts the stream
+    // when a frame no longer matches. The two mutexes are never held at the
+    // same time, so this cannot deadlock.
+    static ref VIDEO_SIZE: Mutex<(i32, i32)> = Mutex::new((0, 0));
+    // Last stream-restart attempt: a failing `start_streaming` must not be
+    // retried on every frame.
+    static ref VIDEO_RETRY_AT: Mutex<Option<Instant>> = Mutex::new(None);
 }
 
 /// SciterHandler
@@ -151,6 +160,7 @@ impl InvokeUiSession for SciterHandler {
         // Nothing spectacular in decoder – done on CPU side.
         // So if you can do BGRA translation on your side – the better.
         // BGRA is used as internal image format so it will not require additional transformations.
+        *VIDEO_SIZE.lock().unwrap() = (w, h);
         VIDEO.lock().unwrap().as_mut().map(|v| {
             v.stop_streaming().ok();
             let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
@@ -293,6 +303,36 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn on_rgba(&self, _display: usize, rgba: &mut scrap::ImageRgb) {
+        // Frames may be 2x native when the FSRCNNX upscaler is on (or back to
+        // native when it is off); re-init the fixed-size stream to match, with
+        // a throttled retry while starting keeps failing.
+        let (w, h) = (rgba.w as i32, rgba.h as i32);
+        let known = *VIDEO_SIZE.lock().unwrap();
+        if known != (0, 0) && known != (w, h) {
+            let due = match *VIDEO_RETRY_AT.lock().unwrap() {
+                Some(t) => t.elapsed() >= Duration::from_secs(2),
+                None => true,
+            };
+            if due {
+                // The `VIDEO` guard is dropped before touching the size and
+                // retry state below, so the locks are never nested.
+                let restarted = VIDEO.lock().unwrap().as_mut().map(|v| {
+                    v.stop_streaming().ok();
+                    v.start_streaming((w, h), COLOR_SPACE::Rgb32, None).is_ok()
+                });
+                match restarted {
+                    Some(true) => {
+                        *VIDEO_SIZE.lock().unwrap() = (w, h);
+                        *VIDEO_RETRY_AT.lock().unwrap() = None;
+                        log::info!("[video] stream size followed frame to {w}x{h}");
+                    }
+                    Some(false) => {
+                        *VIDEO_RETRY_AT.lock().unwrap() = Some(Instant::now());
+                    }
+                    None => {}
+                }
+            }
+        }
         VIDEO
             .lock()
             .unwrap()

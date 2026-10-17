@@ -25,6 +25,7 @@ pub const OPTION_HIDE_AB_TAGS_PANEL: &str = "hideAbTagsPanel";
 pub const OPTION_ENABLE_CONFIRM_CLOSING_TABS: &str = "enable-confirm-closing-tabs";
 pub const OPTION_ENABLE_OPEN_NEW_CONNECTIONS_IN_TABS: &str = "enable-open-new-connections-in-tabs";
 pub const OPTION_TEXTURE_RENDER: &str = "use-texture-render";
+pub const OPTION_UPSCALER: &str = "upscaler";
 // Internal health record written by the texture-render watchdog/probe;
 // "failed-*" flips the texture-render default to opt-in on this machine.
 pub const OPTION_TEXTURE_RENDER_HEALTH: &str = "texture-render-health";
@@ -209,6 +210,7 @@ pub const KEYS_DISPLAY_SETTINGS: &[&str] = &[
     OPTION_SCROLL_STYLE,
     OPTION_EDGE_SCROLL_EDGE_THICKNESS,
     OPTION_IMAGE_QUALITY,
+    OPTION_UPSCALER,
     OPTION_CUSTOM_IMAGE_QUALITY,
     OPTION_CUSTOM_FPS,
     OPTION_CODEC_PREFERENCE,
