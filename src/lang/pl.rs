@@ -811,7 +811,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Valid", "Poprawny"),
         ("shortcut-mobile-physical-keyboard-tip", "Do nagrywania potrzebna jest klawiatura fizyczna. Klawiatury programowe nie są obsługiwane."),
         ("shortcut-key-not-supported", "Znak '{}' nie może być użyty jako skrót."),
-        ("On", "Włącz"),
-        ("Off", "Wyłącz"),
+        ("On", "Włączone"),
+        ("Off", "Wyłączone"),
     ].iter().cloned().collect();
 }
