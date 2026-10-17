@@ -797,7 +797,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Switch to next tab", "Przełącz na następną zakładkę"),
         ("Switch to previous tab", "Przełącz na poprzednią zakładkę"),
         ("Toggle session recording", "Włącz/wyłącz nagrywanie sesji"),
-        ("Close tab", "Zaknij zakładkę"),
+        ("Close tab", "Zamknij zakładkę"),
         ("Toggle toolbar", "Włącz/wyłącz pasek narzędziowy"),
         ("Toggle input source", "Włącz/wyłącz źródło wejściowe"),
         ("Edit", "Edytuj"),
