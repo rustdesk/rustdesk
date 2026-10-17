@@ -20,7 +20,12 @@
 // monitor plugged into the connector we are holding, because our own EDID override is what that
 // connector reports; plugging into any other connector is noticed within a poll.
 
-use hbb_common::{anyhow::anyhow, bail, config::Config, libc, log, tokio, ResultType};
+use hbb_common::{
+    anyhow::anyhow,
+    bail,
+    config::{option2bool, Config, DEFAULT_SETTINGS, OVERWRITE_SETTINGS},
+    libc, log, tokio, ResultType,
+};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -35,7 +40,7 @@ use std::{
 /// - an absent value would default this ON - and an `allow-` key as `value == "Y"`, which is off
 /// until somebody says otherwise. The prefix is what decides it, so the key does not have to be
 /// registered anywhere for that to hold.
-pub const OPTION_ALLOW_HEADLESS_DISPLAY: &str = "allow-headless-display";
+const OPTION_ALLOW_HEADLESS_DISPLAY: &str = "allow-headless-display";
 
 const DRM_CLASS: &str = "/sys/class/drm";
 const EDID_PARAM: &str = "/sys/module/drm/parameters/edid_firmware";
@@ -1053,7 +1058,7 @@ fn stop(state: &mut State) -> ! {
 /// about to hand it the option. Every session has one, the greeter included, but it starts a moment
 /// after the service: an install script that turns the feature on straight away would find none.
 #[tokio::main(flavor = "current_thread")]
-pub async fn wait_for_session_server() -> bool {
+async fn wait_for_session_server() -> bool {
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
         if crate::ipc::connect(1000, "").await.is_ok() {
@@ -1126,7 +1131,6 @@ fn reconcile_markers(all: &[Connector]) -> bool {
 #[tokio::main(flavor = "current_thread")]
 async fn service_switch() -> ResultType<bool> {
     use crate::ipc::Data;
-    use hbb_common::config::{option2bool, DEFAULT_SETTINGS, OVERWRITE_SETTINGS};
     const KEY: &str = OPTION_ALLOW_HEADLESS_DISPLAY;
     let mut c = crate::ipc::connect_service(1000).await?;
     c.send(&Data::SyncConfig(None)).await?;
@@ -1146,7 +1150,7 @@ async fn service_switch() -> ResultType<bool> {
 
 /// Wait for the service to hold the switch a root CLI has just set on the session `--server`, which
 /// syncs a change to it within a second.
-pub fn wait_for_service_switch(on: bool) -> bool {
+fn wait_for_service_switch(on: bool) -> bool {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if service_switch().is_ok_and(|s| s == on) {
@@ -1260,10 +1264,70 @@ fn tick(state: &mut State) {
     }
 }
 
+/// `rustdesk --headless-display [status|enable|disable]`, with the arguments `core_main` got. Every
+/// failure prints why and exits 1. `settings_disabled` is the check `core_main` makes for `--option`;
+/// it is private there, so it is passed in. Only enable and disable call it.
+pub fn cli(args: &[String], settings_disabled: fn() -> bool) {
+    const KEY: &str = OPTION_ALLOW_HEADLESS_DISPLAY;
+    fn fail(msg: &str) -> ! {
+        println!("{msg}");
+        std::process::exit(1)
+    }
+    match args.get(1).map(String::as_str) {
+        // Every connector's status is world readable. The switch comes from the session
+        // `--server`, the way `--option` reads one.
+        Some("status") | None => {
+            let enabled = option2bool(
+                KEY,
+                crate::ipc::get_options()
+                    .get(KEY)
+                    .map_or("", |v| v.as_str()),
+            );
+            print!("{}", status_text(enabled));
+        }
+        Some(verb @ ("enable" | "disable")) => {
+            if settings_disabled() {
+                fail("Settings are disabled!");
+            }
+            // Disabling must always be possible: with DRM temporarily gone the setting would
+            // otherwise stay armed and re-fire when DRM returns.
+            if verb == "enable" && !is_supported() {
+                fail("No DRM connectors on this machine!");
+            }
+            if !(crate::platform::is_installed() && crate::platform::is_root()) {
+                fail("Installation and administrative privileges required!");
+            }
+            // The same path as the settings checkbox: the option goes to the session `--server`,
+            // which syncs it to the service. Forcing the connector is the service's job. Right
+            // after an install that `--server` may still be starting.
+            if !wait_for_session_server() {
+                fail("No RustDesk session is running yet, try again in a moment.");
+            }
+            let on = verb == "enable";
+            // Done only once the service holds it. A `--server` that has just started takes the
+            // service's config on its first sync and can drop a value set before that, so the
+            // option is set once more after it.
+            for _ in 0..2 {
+                crate::ipc::set_option(KEY, if on { "Y" } else { "N" });
+                if wait_for_service_switch(on) {
+                    println!("Done!");
+                    return;
+                }
+            }
+            fail("Could not save the setting!");
+        }
+        Some(other) => {
+            fail(&format!(
+                "Unknown argument {other}; expected enable, disable or status"
+            ));
+        }
+    }
+}
+
 /// What `--headless-display status` prints. `enabled` is passed in rather than read here: the CLI
 /// asks the running server over IPC, the way `--option` does, so a normal user does not get told
 /// about their own config while the root service acts on a different one.
-pub fn status_text(enabled: bool) -> String {
+fn status_text(enabled: bool) -> String {
     let all = connectors();
     let mut s = format!(
         "headless display: {}\n",

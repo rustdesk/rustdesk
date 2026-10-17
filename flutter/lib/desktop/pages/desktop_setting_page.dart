@@ -593,7 +593,6 @@ class _GeneralState extends State<_General> {
             ),
           ),
       ],
-      // Controlled side only, and only where there is a DRM connector to force.
       if (isLinux &&
           !outgoingOnly &&
           bind.mainGetCommonSync(key: 'supports-headless-display') == 'true')

@@ -529,65 +529,9 @@ pub fn core_main() -> Option<CoreMainAction> {
         } else if args[0] == "--headless-display" {
             #[cfg(all(target_os = "linux", feature = "headless-display"))]
             {
-                use crate::virtual_display_manager::linux as headless;
-                use headless::OPTION_ALLOW_HEADLESS_DISPLAY as KEY;
-                fn fail(msg: &str) -> ! {
-                    println!("{msg}");
-                    std::process::exit(1)
-                }
-                match args.get(1).map(String::as_str) {
-                    // Every connector's status is world readable. The switch comes from the
-                    // session `--server`, the way `--option` reads one.
-                    Some("status") | None => {
-                        let enabled = hbb_common::config::option2bool(
-                            KEY,
-                            crate::ipc::get_options()
-                                .get(KEY)
-                                .map_or("", |v| v.as_str()),
-                        );
-                        print!("{}", headless::status_text(enabled));
-                    }
-                    Some(verb @ ("enable" | "disable")) => {
-                        if is_cli_setting_change_disabled() {
-                            fail("Settings are disabled!");
-                        }
-                        // Disabling must always be possible: with DRM temporarily gone the setting
-                        // would otherwise stay armed and re-fire when DRM returns.
-                        if verb == "enable" && !headless::is_supported() {
-                            fail("No DRM connectors on this machine!");
-                        }
-                        if !(crate::platform::is_installed() && is_root()) {
-                            fail("Installation and administrative privileges required!");
-                        }
-                        // The same path as the settings checkbox: the option goes to the session
-                        // `--server`, which syncs it to the service. Forcing the connector is the
-                        // service's job. Right after an install that `--server` may still be starting.
-                        if !headless::wait_for_session_server() {
-                            fail("No RustDesk session is running yet, try again in a moment.");
-                        }
-                        let on = verb == "enable";
-                        // Done only once the service holds it. A `--server` that has just started
-                        // takes the service's config on its first sync and can drop a value set
-                        // before that, so the option is set once more after it.
-                        for _ in 0..2 {
-                            crate::ipc::set_option(KEY, if on { "Y" } else { "N" });
-                            if headless::wait_for_service_switch(on) {
-                                println!("Done!");
-                                return None;
-                            }
-                        }
-                        fail("Could not save the setting!");
-                    }
-                    Some(other) => {
-                        fail(&format!(
-                            "Unknown argument {other}; expected enable, disable or status"
-                        ));
-                    }
-                }
+                crate::virtual_display_manager::linux::cli(&args, is_cli_setting_change_disabled);
                 return None;
             }
-            // Gating the `else if` itself would drop the flag through to the end of the chain and
-            // launch the UI, so the arm stays and only its answer changes.
             #[cfg(not(all(target_os = "linux", feature = "headless-display")))]
             {
                 println!("Headless display support is not compiled in!");
