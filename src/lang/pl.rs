@@ -788,7 +788,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-passthrough-tip", "Po włączeniu wszystkie powiązane kombinacje są przekazywane do sesji zdalnej. Jest to przydatne, gdy powiązanie koliduje z czymś, czego potrzebujesz w sesji zdalnej."),
         ("Pass-through to remote", "Przenieś do zdalnej sesji"),
         ("Reset to defaults", "Przywróć domyślne"),
-        ("shortcut-reset-confirm-tip", "Zresetuj domyślne ustawienia"),
+        ("shortcut-reset-confirm-tip", "Wszystkie obecne przypisania zostaną zastąpione domyślnymi. Kontynuować?"),
         ("Monitor", "Monitor"),
         ("Keyboard", "Klawiatura"),
         ("Toggle fullscreen", "Przełącz na pełny ekran"),
