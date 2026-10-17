@@ -1,3 +1,5 @@
+pub(super) mod display_scale;
+
 use super::{validate_install_app_name, CursorData, ResultType};
 use crate::{
     common::PORTABLE_APPNAME_RUNTIME_ENV_KEY,

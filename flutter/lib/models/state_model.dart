@@ -34,9 +34,6 @@ class StateGlobal {
   // Note: This is session-only runtime state, NOT persisted to config.
   final RxMap<String, bool> relativeMouseModeState = <String, bool>{}.obs;
 
-  // Use for desktop -> remote toolbar -> resolution
-  final Map<String, Map<int, String?>> _lastResolutionGroupValues = {};
-
   int get windowId => _windowId;
   RxBool get fullscreen => _fullscreen;
   bool get isMinimized => _isMinimized;
@@ -44,22 +41,6 @@ class StateGlobal {
   RxBool get showTabBar => _showTabBar;
   RxDouble get resizeEdgeSize => _resizeEdgeSize;
   RxDouble get windowBorderWidth => _windowBorderWidth;
-
-  resetLastResolutionGroupValues(String peerId) {
-    _lastResolutionGroupValues[peerId] = {};
-  }
-
-  setLastResolutionGroupValue(
-      String peerId, int currentDisplay, String? value) {
-    if (!_lastResolutionGroupValues.containsKey(peerId)) {
-      _lastResolutionGroupValues[peerId] = {};
-    }
-    _lastResolutionGroupValues[peerId]![currentDisplay] = value;
-  }
-
-  String? getLastResolutionGroupValue(String peerId, int currentDisplay) {
-    return _lastResolutionGroupValues[peerId]?[currentDisplay];
-  }
 
   setWindowId(int id) => _windowId = id;
   setMaximized(bool v) {

@@ -135,6 +135,13 @@ void main() {
   ]) {
     testWidgets('$style zoom=$zoom follows the live DPR and peer scale',
         (tester) => _checkView(tester, (style, zoom), registrations));
+    if (style == kRemoteViewStyleOriginal ||
+        (zoom && style != kRemoteViewStyleCustom)) {
+      testWidgets(
+          '$style zoom=$zoom with one remaining display in all-displays',
+          (tester) => _checkView(tester, (style, zoom), registrations,
+              allDisplays: true));
+    }
   }
 }
 
@@ -280,16 +287,18 @@ const _viewCases = [
   (1.0, kPeerPlatformMacOS, 2.0),
   (1.25, kPeerPlatformLinux, 2.0),
   (2.0, kPeerPlatformMacOS, 1.0),
+  (2.0, kPeerPlatformMacOS, 2.0),
 ];
 
 Future<void> _checkView(WidgetTester tester, (String, bool) mode,
-    List<Map<dynamic, dynamic>> registrations) async {
+    List<Map<dynamic, dynamic>> registrations,
+    {bool allDisplays = false}) async {
   const sourceSize = 64, customScale = 4.0;
   final canvas = _Canvas(mode.$1);
   final ffi = _FFI(canvas);
   final display = _Display();
-  ffi.ffiModel.pi.displays.addAll([Display(), display]);
-  ffi.ffiModel.pi.currentDisplay = 1;
+  ffi.ffiModel.pi.displays.addAll([if (!allDisplays) Display(), display]);
+  ffi.ffiModel.pi.currentDisplay = allDisplays ? kAllDisplayValue : 1;
   final cursor = _Cursor(_data((sourceSize, sourceSize)), ffi);
   addTearDown(() => _dispose(cursor));
   addTearDown(canvas.dispose);

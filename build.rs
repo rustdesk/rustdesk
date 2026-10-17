@@ -22,6 +22,51 @@ fn build_mac() {
     println!("cargo:rerun-if-changed={}", file);
 }
 
+#[cfg(target_os = "macos")]
+fn build_sck() {
+    use std::{
+        env,
+        path::{Path, PathBuf},
+        process::Command,
+    };
+
+    let file = "src/platform/macos/sck.m";
+    cc::Build::new()
+        .file(file)
+        .flag("-fobjc-arc")
+        .flag("-fblocks")
+        .compile("rustdesk_sck");
+    println!("cargo:rerun-if-changed={file}");
+    println!("cargo:rerun-if-env-changed=SDKROOT");
+    let sdk = match env::var_os("SDKROOT")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute() && path.as_path() != Path::new("/") && path.exists())
+    {
+        Some(sdk) => sdk,
+        None => match Command::new("xcrun")
+            .args(["--sdk", "macosx", "--show-sdk-path"])
+            .output()
+        {
+            Ok(output) if output.status.success() => {
+                PathBuf::from(String::from_utf8_lossy(&output.stdout).trim())
+            }
+            Ok(output) => panic!(
+                "Cannot locate macOS SDK: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
+            Err(error) => panic!("Cannot locate macOS SDK: {error}"),
+        },
+    };
+    if sdk
+        .join("System/Library/Frameworks/ScreenCaptureKit.framework/Headers/ScreenCaptureKit.h")
+        .is_file()
+    {
+        println!("cargo:rustc-link-lib=framework=CoreMedia");
+        println!("cargo:rustc-link-lib=framework=CoreVideo");
+        println!("cargo:rustc-link-arg=-Wl,-weak_framework,ScreenCaptureKit");
+    }
+}
+
 #[cfg(all(windows, feature = "inline"))]
 fn build_manifest() {
     use std::io::Write;
@@ -96,6 +141,8 @@ fn main() {
     if target_os == "macos" {
         #[cfg(target_os = "macos")]
         build_mac();
+        #[cfg(target_os = "macos")]
+        build_sck();
         println!("cargo:rustc-link-lib=framework=ApplicationServices");
     }
     if target_os == "android" {

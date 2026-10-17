@@ -212,6 +212,12 @@ extern "C" {
 
     pub fn dispatch_release(object: DispatchQueue);
 
+    pub fn dispatch_async_f(
+        queue: DispatchQueue,
+        context: *mut c_void,
+        work: extern "C" fn(*mut c_void),
+    );
+
     // Core Foundation
 
     pub static kCFTypeDictionaryKeyCallBacks: CFDictionaryKeyCallBacks;

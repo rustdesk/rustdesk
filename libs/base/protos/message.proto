@@ -595,7 +595,26 @@ message DisplayResolution {
   Resolution resolution = 2;
 }
 
+// Native display identity, output pixels and desktop scale for an owned virtual display.
+message VirtualDisplayMode {
+  uint32 display_id = 1;
+  int32 width = 2;
+  int32 height = 3;
+  uint32 scale = 4;
+  string request_id = 5;
+}
+
 message SupportedResolutions { repeated Resolution resolutions = 1; }
+
+message DisplayScaleRequest {
+  string request_id = 1;
+  int32 display = 2;
+  // Zero queries capabilities; -1 restores the original scale. Writes require a fresh token.
+  double percent = 3;
+  string token = 4;
+  // Bind post-change readback to the previously confirmed display.
+  string expected_identity = 5;
+}
 
 message SwitchDisplay {
   int32 display = 1;
@@ -867,6 +886,10 @@ message Misc {
     // is rebuilt, and held again, the next time it is shown, before any connection names it
     // by id again, so the shape just selected is always there to give.
     uint64 request_cursor_data = 39;
+    VirtualDisplayMode virtual_display_mode = 40;
+    DisplayScaleRequest display_scale_request = 41;
+    string display_scale_response = 42;
+    string virtual_display_mode_response = 43;
   }
 }
 
