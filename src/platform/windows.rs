@@ -3972,6 +3972,26 @@ fn native_after_install_commands(
     ))
 }
 
+#[cfg(not(feature = "flutter"))]
+pub fn handle_service_control() -> Option<std::process::ExitCode> {
+    if std::env::args_os().nth(1).as_deref() != Some(std::ffi::OsStr::new("--service-control")) {
+        return None;
+    }
+    extern "C" {
+        fn run_service_control() -> u32;
+    }
+    let error = unsafe { run_service_control() };
+    Some(if error == ERROR_SUCCESS {
+        std::process::ExitCode::SUCCESS
+    } else {
+        eprintln!(
+            "RustDesk service control failed: {}",
+            std::io::Error::from_raw_os_error(error as i32)
+        );
+        std::process::ExitCode::FAILURE
+    })
+}
+
 fn service_control_command(operation: &str, exe: &str, installed_now: bool) -> ResultType<String> {
     let app_name = crate::get_app_name();
     let legacy = match operation {
@@ -3979,10 +3999,7 @@ fn service_control_command(operation: &str, exe: &str, installed_now: bool) -> R
         "remove" => format!("sc stop {app_name}\r\nsc delete {app_name}"),
         _ => bail!("Unsupported service operation: {operation}"),
     };
-    if !cfg!(feature = "flutter")
-        || legacy.is_empty()
-        || (operation == "install" && Config::get_option("stop-service") == "Y")
-    {
+    if legacy.is_empty() || (operation == "install" && Config::get_option("stop-service") == "Y") {
         return Ok(legacy);
     }
     // A fresh installation has just copied this runner. Otherwise only use the
