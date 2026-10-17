@@ -813,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("Headless display", "Pantalla sense monitor"),
+        ("headless_display_tip", "Quan no hi ha cap monitor connectat, força una sortida de vídeo desconnectada perquè hi hagi una pantalla per capturar. S'allibera tan bon punt es connecta un monitor en una altra sortida."),
     ].iter().cloned().collect();
 }

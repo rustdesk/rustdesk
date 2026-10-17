@@ -526,6 +526,17 @@ pub fn core_main() -> Option<CoreMainAction> {
                 println!("Installation and administrative privileges required!");
             }
             return None;
+        } else if args[0] == "--headless-display" {
+            #[cfg(all(target_os = "linux", feature = "headless-display"))]
+            {
+                crate::virtual_display_manager::linux::cli(&args, is_cli_setting_change_disabled);
+                return None;
+            }
+            #[cfg(not(all(target_os = "linux", feature = "headless-display")))]
+            {
+                println!("Headless display support is not compiled in!");
+                std::process::exit(1);
+            }
         } else if args[0] == "--assign" {
             if config::Config::no_register_device() {
                 println!("Cannot assign an unregistrable device!");
@@ -872,6 +883,7 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
             | Some("--option")
             | Some("--assign")
             | Some("--deploy")
+            | Some("--headless-display")
     )
 }
 

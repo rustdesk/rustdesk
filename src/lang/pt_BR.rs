@@ -813,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "Não é possível usar \"{}\" como atalho."),
         ("On", "Ativado"),
         ("Off", "Desativado"),
+        ("Headless display", "Tela sem monitor"),
+        ("headless_display_tip", ""),
     ].iter().cloned().collect();
 }

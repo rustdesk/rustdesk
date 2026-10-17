@@ -593,6 +593,17 @@ class _GeneralState extends State<_General> {
             ),
           ),
       ],
+      if (isLinux &&
+          !outgoingOnly &&
+          bind.mainGetCommonSync(key: 'supports-headless-display') == 'true')
+        Tooltip(
+          message: translate('headless_display_tip'),
+          child: _OptionCheckBox(
+            context,
+            'Headless display',
+            kOptionAllowHeadlessDisplay,
+          ),
+        ),
       if (!isWeb && !bind.isCustomClient())
         _OptionCheckBox(
           context,

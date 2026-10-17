@@ -183,6 +183,9 @@ pub const OPTION_DISABLE_GROUP_PANEL: &str = "disable-group-panel";
 pub const OPTION_DISABLE_DISCOVERY_PANEL: &str = "disable-discovery-panel";
 pub const OPTION_PRE_ELEVATE_SERVICE: &str = "pre-elevate-service";
 
+// Linux, `headless-display` feature: force a connector on when nothing is plugged in
+pub const OPTION_ALLOW_HEADLESS_DISPLAY: &str = "allow-headless-display";
+
 // DEFAULT_DISPLAY_SETTINGS, OVERWRITE_DISPLAY_SETTINGS
 pub const KEYS_DISPLAY_SETTINGS: &[&str] = &[
     OPTION_VIEW_ONLY,
@@ -330,6 +333,7 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_ALLOW_AUTO_UPDATE,
     OPTION_ALLOW_KCP_CC,
     OPTION_ALLOW_WEBRTC_CC,
+    OPTION_ALLOW_HEADLESS_DISPLAY,
 ];
 
 // BUILDIN_SETTINGS
