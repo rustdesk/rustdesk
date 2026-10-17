@@ -104,11 +104,13 @@ class _CanvasScrollState {
       if (_dx == 0 && _dy == 0) {
         tryCancel();
       } else {
-        if (_dx != 0) {
-          canvasModel.panX(_dx);
-        }
-        if (_dy != 0) {
-          canvasModel.panY(_dy);
+        if (!canvasModel.locked) {
+          if (_dx != 0) {
+            canvasModel.panX(_dx);
+          }
+          if (_dy != 0) {
+            canvasModel.panY(_dy);
+          }
         }
         final evt = inputModel.processEventToPeer(
             InputModel.getMouseEventMove(), _mouseGlobalPosition,
@@ -122,6 +124,10 @@ class _CanvasScrollState {
 
   bool shouldCancelScrollTimer(Map<String, dynamic>? evt) {
     if (evt == null) {
+      return true;
+    }
+    // Edge scroll pans the canvas; a locked canvas must stay put.
+    if (canvasModel.locked) {
       return true;
     }
     double s = canvasModel.scale;
