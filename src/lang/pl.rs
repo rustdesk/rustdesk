@@ -803,7 +803,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Edit", "Edytuj"),
         ("Save", "Zapisz"),
         ("Set shortcut", "Ustaw skrót"),
-        ("shortcut-recording-instruction", "Naciśnij kombinację klawiszy, krótych chcesz użyć."),
+        ("shortcut-recording-instruction", "Naciśnij kombinację klawiszy, których chcesz użyć."),
         ("shortcut-recording-press-keys-tip", "Naciśnij kombinację klawiszy..."),
         ("shortcut-must-include-modifiers", "Musi zawierać co najmniej jeden modyfikator: {}"),
         ("shortcut-already-bound-to", "Już przypisano do"),
