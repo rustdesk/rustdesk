@@ -20,6 +20,7 @@
 // monitor plugged into the connector we are holding, because our own EDID override is what that
 // connector reports; plugging into any other connector is noticed within a poll.
 
+use base::config::keys::OPTION_ALLOW_HEADLESS_DISPLAY;
 use hbb_common::{
     anyhow::anyhow,
     bail,
@@ -32,15 +33,6 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
-
-/// User-facing switch, kept in this crate the same way `enable-drm-display-wake` is: it belongs to
-/// a compile-gated Linux backend rather than to the shared config vocabulary.
-///
-/// `allow-` and not `enable-` is load-bearing. `option2bool` reads an `enable-` key as `value != "N"`
-/// - an absent value would default this ON - and an `allow-` key as `value == "Y"`, which is off
-/// until somebody says otherwise. The prefix is what decides it, so the key does not have to be
-/// registered anywhere for that to hold.
-const OPTION_ALLOW_HEADLESS_DISPLAY: &str = "allow-headless-display";
 
 const DRM_CLASS: &str = "/sys/class/drm";
 const EDID_PARAM: &str = "/sys/module/drm/parameters/edid_firmware";
@@ -256,6 +248,9 @@ pub fn is_supported() -> bool {
     Path::new(DRM_CLASS).exists() && !connectors().is_empty()
 }
 
+/// `allow-` and not `enable-` is load-bearing. `option2bool` reads an `enable-` key as `value != "N"`
+/// - an absent value would default this ON - and an `allow-` key as `value == "Y"`, which is off
+/// until somebody says otherwise.
 fn is_enabled() -> bool {
     Config::get_bool_option(OPTION_ALLOW_HEADLESS_DISPLAY)
 }
