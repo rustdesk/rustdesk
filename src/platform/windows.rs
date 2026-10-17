@@ -1765,7 +1765,11 @@ copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\
         Some(reg_value_desktop_shortcuts),
         Some(reg_value_printer),
     );
-    let after_install = native_after_install_commands(after_install, &exe, true)?;
+    let after_install = native_after_install_commands(
+        format!("{after_install}\r\n{install_remote_printer}"),
+        &exe,
+        true,
+    )?;
     // Remember to check if `update_me` need to be changed if changing the `cmds`.
     // No need to merge the existing dup code, because the code in these two functions are too critical.
     // New code should be written in a common function.
@@ -1797,7 +1801,6 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {dels}
 {import_config}
 {after_install}
-{install_remote_printer}
 {sleep}
     ",
         display_icon = shortcut_icon_location.as_deref().unwrap_or(exe.as_str()),
@@ -3331,6 +3334,8 @@ pub fn try_lock_tray_single_instance() -> bool {
     }
 }
 
+/// Returns `true` on failure or cancellation so the caller keeps running.
+/// Successful removal exits this process instead of returning.
 pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     log::info!("Uninstalling service...");
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
@@ -3956,10 +3961,14 @@ fn native_after_install_commands(
     if service.is_empty() {
         return Ok(commands);
     }
-    Ok(commands.replacen(
-        &service,
-        &service_control_command("install", exe, installed_now)?,
-        1,
+    let native_service = service_control_command("install", exe, installed_now)?;
+    if native_service == service {
+        return Ok(commands);
+    }
+    // Complete independent setup before service-start errors can exit the BAT.
+    Ok(format!(
+        "{}\r\n{native_service}",
+        commands.replacen(&service, "", 1)
     ))
 }
 
