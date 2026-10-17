@@ -71,9 +71,15 @@ inline DWORD RemoveService(const wchar_t* name) {
   }
   const DWORD stopped = StopService(service.get());
   if (stopped != ERROR_SUCCESS) {
-    return stopped;
+    // The uninstall script must still reach its taskkill cleanup.
+    std::fwprintf(stderr,
+                  L"Service did not stop cleanly: Windows error %lu\n", stopped);
   }
-  return DeleteService(service.get()) ? ERROR_SUCCESS : GetLastError();
+  if (DeleteService(service.get())) {
+    return ERROR_SUCCESS;
+  }
+  const DWORD error = GetLastError();
+  return error == ERROR_SERVICE_MARKED_FOR_DELETE ? ERROR_SUCCESS : error;
 }
 
 inline DWORD InstallService(const wchar_t* name, const wchar_t* executable) {
