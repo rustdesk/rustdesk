@@ -4383,16 +4383,20 @@ class FFI {
 
   void _holdOutgoingForeground() {
     if (!isAndroid) return;
-    _outgoingHold.apply(true, _invokeOutgoingForeground);
+    unawaited(_outgoingHold.apply(true, _invokeOutgoingForeground));
   }
 
   void _releaseOutgoingForeground() {
     if (!isAndroid) return;
-    _outgoingHold.apply(false, _invokeOutgoingForeground);
+    unawaited(_outgoingHold.apply(false, _invokeOutgoingForeground));
   }
 
-  void _invokeOutgoingForeground(String method) {
-    invokeMethod(method).catchError((_) => false);
+  Future<bool> _invokeOutgoingForeground(String method) async {
+    try {
+      return await invokeMethod(method) == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Close the remote session.

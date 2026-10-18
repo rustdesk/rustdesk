@@ -160,22 +160,24 @@ class OutgoingConnectionService : Service() {
         private val lock = Any()
         private var requested = 0
 
-        fun start(context: Context) {
+        fun start(context: Context): Boolean {
             val launch = synchronized(lock) {
                 requested += 1
                 requested == 1
             }
-            if (!launch) return
+            if (!launch) return true
             val intent = Intent(context, OutgoingConnectionService::class.java).setAction(ACTION_START)
-            try {
+            return try {
                 ContextCompat.startForegroundService(context, intent)
+                true
             } catch (error: Exception) {
                 synchronized(lock) { requested = (requested - 1).coerceAtLeast(0) }
                 Log.e(logTag, "Failed to start outgoing connection service", error)
+                false
             }
         }
 
-        fun stop(context: Context) {
+        fun stop(context: Context): Boolean {
             val launch = synchronized(lock) {
                 if (requested == 0) false
                 else {
@@ -183,12 +185,15 @@ class OutgoingConnectionService : Service() {
                     requested == 0
                 }
             }
-            if (!launch) return
+            if (!launch) return true
             val intent = Intent(context, OutgoingConnectionService::class.java).setAction(ACTION_STOP)
-            try {
+            return try {
                 context.startService(intent)
+                true
             } catch (error: Exception) {
+                synchronized(lock) { requested += 1 }
                 Log.w(logTag, "Failed to stop outgoing connection service", error)
+                false
             }
         }
     }
