@@ -2344,12 +2344,9 @@ class CanvasModel with ChangeNotifier {
     if (isMobile) {
       // Account for horizontal safe area insets on both orientations.
       w = w - mediaData.padding.left - mediaData.padding.right;
-      // Vertically, subtract the bottom keyboard inset (viewInsets.bottom) and any
-      // bottom overlay (e.g. key-help tools) so the canvas is not covered.
-      h = h -
-          mediaData.viewInsets.bottom -
-          (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
-              0);
+      // The soft keyboard and the left-docked key bar are overlays on top of the
+      // session, so they are not subtracted from the canvas height: otherwise the
+      // remote image is re-centred (or pushed off-screen) as soon as they appear.
       // Orientation-specific handling:
       //  - Portrait: additionally subtract top padding (e.g. status bar / notch)
       //  - Landscape: does not subtract mediaData.padding.top/bottom (home indicator auto-hides)
@@ -2374,9 +2371,9 @@ class CanvasModel with ChangeNotifier {
 
   // mobile only
   double getAdjustY() {
-    final bottom =
-        parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ?? 0;
-    return max(bottom - MediaQueryData.fromView(ui.window).padding.top, 0);
+    // The soft keyboard and the key bar are overlays on top of the canvas, so
+    // the canvas is not shifted for them.
+    return 0;
   }
 
   updateSize() => _size = getSize();
@@ -3134,8 +3131,6 @@ class CursorModel with ChangeNotifier {
 
   bool get lastKeyboardIsVisible => _lastKeyboardIsVisible;
 
-  Rect? get keyHelpToolsRectToAdjustCanvas =>
-      _lastKeyboardIsVisible ? _keyHelpToolsRect : null;
   // The blocked rect is used to block the pointer/touch events in the remote page.
   final List<Rect> _blockedRects = [];
   // Used in shouldBlock().

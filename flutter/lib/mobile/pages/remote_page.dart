@@ -722,7 +722,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               top: 0,
               bottom: 0,
               child: SizedBox(
-                width: 140,
+                width: 118,
                 child: Obx(() {
                   final chatKeyboardRequested =
                       gFFI.chatModel.softKeyboardRequested.value;
@@ -1111,9 +1111,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
               ),
           active: _more),
     ];
-    final fn = <Widget>[
-      SizedBox(width: 9999),
-    ];
+    final fn = <Widget>[];
     for (var i = 1; i <= 12; ++i) {
       final name = 'F$i';
       fn.add(wrap(name, () {
@@ -1121,7 +1119,6 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }));
     }
     final more = <Widget>[
-      SizedBox(width: 9999),
       wrap('Esc', () {
         inputModel.inputKey('VK_ESCAPE');
       }),
@@ -1192,6 +1189,20 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }),
     ];
     final space = size.width > 320 ? 4.0 : 2.0;
+    final items = <Widget>[
+      ...modifiers,
+      ...keys,
+      if (_fn) ...fn,
+      if (_more) ...more,
+    ];
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += 2) {
+      rows.add(Row(mainAxisSize: MainAxisSize.min, children: [
+        items[i],
+        if (i + 1 < items.length) SizedBox(width: space),
+        if (i + 1 < items.length) items[i + 1],
+      ]));
+    }
     // 500 ms is long enough for this widget to be built!
     Future.delayed(Duration(milliseconds: 500), () {
       _updateRect();
@@ -1202,14 +1213,13 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         padding: EdgeInsets.only(
             top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
         child: SingleChildScrollView(
-          child: Wrap(
-            spacing: space,
-            runSpacing: space,
-            children: <Widget>[SizedBox(width: 9999)] +
-                modifiers +
-                keys +
-                (_fn ? fn : []) +
-                (_more ? more : []),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final row in rows)
+                FittedBox(fit: BoxFit.scaleDown, child: row),
+            ],
           ),
         ));
   }
