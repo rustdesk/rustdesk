@@ -161,7 +161,6 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     _timerDidChangeMetrics = Timer(Duration(milliseconds: 100), () async {
       // We need this comparation because poping up the floating action will also trigger `didChangeMetrics()`.
       if (newBottom != _viewInsetsBottom) {
-        gFFI.canvasModel.mobileFocusCanvasCursor();
         _viewInsetsBottom = newBottom;
       }
     });

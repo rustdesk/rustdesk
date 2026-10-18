@@ -3157,15 +3157,8 @@ class CursorModel with ChangeNotifier {
       // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
       _lastIsBlocked = true;
     }
-    if (isMobile && _lastKeyboardIsVisible != keyboardIsVisible) {
-      if (keyboardIsVisible) {
-        parent.target?.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
-        parent.target?.canvasModel.mobileFocusCanvasCursor();
-        parent.target?.canvasModel.isMobileCanvasChanged = false;
-      } else {
-        parent.target?.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
-      }
-    }
+    // The soft keyboard is an overlay now: opening or closing it must not
+    // re-centre the canvas.
     _lastKeyboardIsVisible = keyboardIsVisible;
   }
 

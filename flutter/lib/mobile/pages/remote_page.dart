@@ -1166,7 +1166,6 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       wrap('Enter', () {
         inputModel.inputKey('VK_ENTER');
       }),
-      SizedBox(width: 9999),
       wrap('', () {
         inputModel.inputKey('VK_LEFT');
       }, icon: Icons.keyboard_arrow_left),
