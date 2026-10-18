@@ -108,6 +108,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   bool _inPip = false;
   bool _pipSupported = false;
   bool _restoreMobileActionsAfterPip = false;
+  bool _restoreChatIconAfterPip = false;
   bool _restoreChatAfterPip = false;
 
   InputModel get inputModel => gFFI.inputModel;
@@ -236,6 +237,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (_restoreMobileActionsAfterPip) {
       gFFI.dialogManager.hideMobileActionsOverlay(store: false);
     }
+    _restoreChatIconAfterPip = gFFI.chatModel.chatIconOverlayEntry != null;
+    if (_restoreChatIconAfterPip) {
+      gFFI.chatModel.hideChatIconOverlay();
+    }
     _restoreChatAfterPip = gFFI.chatModel.chatWindowOverlayEntry != null;
     if (_restoreChatAfterPip) {
       gFFI.chatModel.hideChatWindowOverlay();
@@ -248,8 +253,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       _restoreMobileActionsAfterPip = false;
       gFFI.dialogManager.showMobileActionsOverlay(ffi: gFFI);
     }
+    if (_restoreChatIconAfterPip) {
+      _restoreChatIconAfterPip = false;
+      gFFI.chatModel.showChatIconOverlay();
+    }
     if (_restoreChatAfterPip) {
       _restoreChatAfterPip = false;
+      // PiP set FLAG_ALT_FOCUSABLE_IM. Clear it so a later tap can open the
+      // keyboard, without focusing the field and showing it immediately.
+      gFFI.invokeMethod("enable_soft_keyboard", true);
       gFFI.chatModel.showChatWindowOverlay(
           requestSoftKeyboard: false, enableSoftKeyboard: false);
     }
@@ -912,32 +924,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final mobileActionMenus = _getMobileActionMenus();
     final menus = toolbarControls(context, id, gFFI);
 
-    final toolbarEntries = <PopupMenuEntry<int>>[];
-    var pipInserted = false;
-    for (var i = 0; i < menus.length; i++) {
-      final menu = menus[i];
-      toolbarEntries.add(PopupMenuItem<int>(
-        child: menu.getChild(),
-        value: i + mobileActionMenus.length,
-      ));
-      final child = menu.child;
-      if (_pipSupported &&
-          !pipInserted &&
-          child is Text &&
-          child.data == translate('Note')) {
-        toolbarEntries.add(PopupMenuItem<int>(
-          value: -1,
-          child: Text(translate('Picture in picture')),
-        ));
-        pipInserted = true;
-      }
-    }
-    if (_pipSupported && !pipInserted) {
-      toolbarEntries.add(PopupMenuItem<int>(
-        value: -1,
-        child: Text(translate('Picture in picture')),
-      ));
-    }
     final List<PopupMenuEntry<int>> more = [
       ...mobileActionMenus
           .asMap()
@@ -946,8 +932,36 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               PopupMenuItem<int>(child: e.value.getChild(), value: e.key))
           .toList(),
       if (mobileActionMenus.isNotEmpty) PopupMenuDivider(),
-      ...toolbarEntries,
+      ...menus
+          .asMap()
+          .entries
+          .map((e) => PopupMenuItem<int>(
+              child: e.value.getChild(),
+              value: e.key + mobileActionMenus.length))
+          .toList(),
     ];
+    if (_pipSupported) {
+      final pipItem = PopupMenuItem<int>(
+        value: -1,
+        child: Text(translate('Picture in picture')),
+      );
+      final noteLabel = translate('Note');
+      var noteIndex = -1;
+      for (var i = 0; i < more.length; i++) {
+        final entry = more[i];
+        if (entry is PopupMenuItem<int> &&
+            entry.child is Text &&
+            (entry.child as Text).data == noteLabel) {
+          noteIndex = i;
+          break;
+        }
+      }
+      if (noteIndex >= 0) {
+        more.insert(noteIndex + 1, pipItem);
+      } else {
+        more.add(pipItem);
+      }
+    }
     () async {
       var index = await showMenu(
         context: context,
