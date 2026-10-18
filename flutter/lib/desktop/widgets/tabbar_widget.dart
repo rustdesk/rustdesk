@@ -418,6 +418,13 @@ class _DesktopTabState extends State<DesktopTab>
     }
   }
 
+  // On Linux, GTK destroys the window on a close request unless prevent-close
+  // is on. It is off for the cm and install windows, and onActiveWindowChanged()
+  // turns it off to quit, so the window can no longer be saved or hidden.
+  // https://github.com/rustdesk/rustdesk/issues/16512
+  Future<bool> _isLinuxWindowClosed() async =>
+      isLinux && isMainWindow && !await windowManager.isPreventClose();
+
   @override
   void onWindowMoved() {
     _saveFrame();
@@ -465,6 +472,8 @@ class _DesktopTabState extends State<DesktopTab>
       });
     }
 
+    if (await _isLinuxWindowClosed()) return;
+
     await _saveFrame(flush: true);
 
     // hide window on close
@@ -472,6 +481,7 @@ class _DesktopTabState extends State<DesktopTab>
       if (rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
         await rustDeskWinManager.unregisterActiveWindow(kMainWindowId);
       }
+      if (await _isLinuxWindowClosed()) return;
       // macOS specific workaround, the window is not hiding when in fullscreen.
       if (isMacOS && await windowManager.isFullScreen()) {
         await windowManager.setFullScreen(false);

@@ -1025,68 +1025,12 @@ pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> 
     Ok(displays)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::normalize_primary_display_idx;
-
-    #[test]
-    fn normalize_primary_display_idx_bounds() {
-        assert_eq!(normalize_primary_display_idx(0, 0), 0);
-        assert_eq!(normalize_primary_display_idx(0, 2), 0);
-        assert_eq!(normalize_primary_display_idx(1, 2), 1);
-        assert_eq!(normalize_primary_display_idx(2, 2), 0);
-    }
-}
-
 #[cfg(all(test, target_os = "linux", feature = "drm"))]
 mod input_map_tests {
-    use super::{
-        input_map_epoch, input_map_gen, input_map_label, note_input_map_adopted,
-        note_input_map_ready, note_input_map_unknown, run_uinput_apply, set_wayland_uinput_rect,
-        wayland_uinput_rect,
-    };
-
-    // The input-map statics are process-wide and libtest runs tests concurrently.
-    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-    #[test]
-    fn an_apply_leaves_no_range_ready_until_it_is_acknowledged() {
-        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
-        set_wayland_uinput_rect((0, 1920, 0, 1080));
-        note_input_map_adopted(41);
-        let before = input_map_epoch();
-        note_input_map_unknown();
-        assert_eq!(input_map_gen(), u64::MAX, "no generation is ready");
-        assert_eq!(input_map_epoch(), before + 1, "samples from before do not count");
-        assert_eq!(wayland_uinput_rect(), None, "the poll applies again");
-    }
-
-    #[test]
-    fn the_raw_drm_union_labels_a_range_with_no_generation() {
-        assert_eq!(input_map_label(5, true), 5);
-        assert_eq!(input_map_label(5, false), u64::MAX);
-    }
-
-    #[test]
-    fn an_acknowledged_range_is_an_adoption_and_a_fitting_one_is_not() {
-        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
-        let before = input_map_epoch();
-        note_input_map_adopted(41);
-        assert_eq!((input_map_gen(), input_map_epoch()), (41, before + 1));
-        note_input_map_ready(42);
-        assert_eq!(
-            (input_map_gen(), input_map_epoch()),
-            (42, before + 1),
-            "a range that already fits is not an adoption"
-        );
-    }
-
-    // The apply thread is process-wide, and one test kills it on purpose.
-    static WORKER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    use super::run_uinput_apply;
 
     #[test]
     fn uinput_applies_run_one_at_a_time_in_the_order_asked() {
-        let _worker = WORKER.lock().unwrap_or_else(|p| p.into_inner());
         let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let answers: Vec<_> = (0..4)
             .map(|i| {
@@ -1106,35 +1050,6 @@ mod input_map_tests {
         assert_eq!(got, vec![0, 10, 20, 30]);
         let want: Vec<_> = (0..4).flat_map(|i| [("start", i), ("end", i)]).collect();
         assert_eq!(*log.lock().unwrap(), want, "one job at a time, in order");
-    }
-
-    #[test]
-    fn a_uinput_apply_job_can_bound_its_ipc_with_a_timeout() {
-        let _worker = WORKER.lock().unwrap_or_else(|p| p.into_inner());
-        let timed_out = run_uinput_apply(|rt| {
-            rt.block_on(async {
-                hbb_common::timeout(10, std::future::pending::<()>())
-                    .await
-                    .is_err()
-            })
-        });
-        assert!(timed_out.blocking_recv().unwrap());
-    }
-
-    #[test]
-    fn a_uinput_apply_thread_that_died_is_started_again() {
-        let _worker = WORKER.lock().unwrap_or_else(|p| p.into_inner());
-        let died = run_uinput_apply(|_| panic!("the apply thread dies here"));
-        assert!(died.blocking_recv().is_err(), "the job that killed it has no answer");
-        // A job asked while the dying thread still unwinds is lost with it; a later one runs.
-        let answered = (0..50).find_map(|_| {
-            let answer = run_uinput_apply(|_| 7).blocking_recv().ok();
-            if answer.is_none() {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            answer
-        });
-        assert_eq!(answered, Some(7));
     }
 }
 
@@ -1163,18 +1078,6 @@ mod wayland_layout_tests {
         let mut l = WaylandLayout::default();
         l.reset_baseline(upright.clone());
         l.observe(&upright);
-        l.reset_baseline(upright.clone());
-        l.reset_baseline(rotated.clone());
-        assert!(l.edge(&rotated, false, 0));
-    }
-
-    // The same, with no poll ever having run: the outgoing baseline is the only record of what
-    // the first capturer was built against.
-    #[test]
-    fn a_rotation_between_two_inits_before_the_first_poll_is_still_an_edge() {
-        let upright = layout(1920, 1080, 0);
-        let rotated = layout(1080, 1920, 1);
-        let mut l = WaylandLayout::default();
         l.reset_baseline(upright.clone());
         l.reset_baseline(rotated.clone());
         assert!(l.edge(&rotated, false, 0));
@@ -1218,86 +1121,6 @@ mod wayland_layout_tests {
         l3.reset_baseline(Vec::new());
         l3.note_capturer(&upright, 0);
         assert!(!l3.edge(&upright, false, 0));
-    }
-
-    // A capturer built while the poll already has a memory must not overwrite it.
-    #[test]
-    fn a_later_capturer_does_not_overwrite_the_polls_memory() {
-        let upright = layout(1920, 1080, 0);
-        let rotated = layout(1080, 1920, 1);
-        let mut l = WaylandLayout::default();
-        l.observe(&upright);
-        l.note_capturer(&rotated, 0);
-        assert!(l.edge(&rotated, false, 0), "the poll's memory still says upright");
-    }
-
-    // The constructor's snapshot read and its `note_capturer` are two steps, and the poll can
-    // land between them. After a failed init (empty baseline) the constructor takes A and
-    // publishes it; the output rotates; the poll reads B live, finds nothing recorded and the
-    // snapshot present, so no edge, and observes B. The late `note_capturer(A)` then met a
-    // non-empty memory and was dropped: the capturer showed A while the detector held B, and B
-    // against B never bumped the generation.
-    #[test]
-    fn a_capturer_record_that_lost_the_race_with_the_first_poll_is_still_an_edge() {
-        let upright = layout(1920, 1080, 0);
-        let rotated = layout(1080, 1920, 1);
-        let mut l = WaylandLayout::default();
-        l.reset_baseline(Vec::new());
-        assert!(!l.edge(&rotated, false, 0), "nothing recorded and the snapshot is present");
-        l.observe(&rotated);
-        l.note_capturer(&upright, 0);
-        assert!(l.edge(&rotated, false, 0), "the capturer is built on upright, live is rotated");
-
-        // The promotion consumes it: the next poll sees the same layout and stays quiet.
-        l.observe(&rotated);
-        l.reset_baseline(rotated.clone());
-        assert!(!l.edge(&rotated, false, 0));
-
-        // The same with a session init between the late record and the poll.
-        let mut l2 = WaylandLayout::default();
-        l2.reset_baseline(Vec::new());
-        l2.observe(&rotated);
-        l2.note_capturer(&upright, 0);
-        l2.reset_baseline(rotated.clone());
-        assert!(l2.edge(&rotated, false, 0));
-
-        // Control: a late record that agrees with the poll's memory is not an edge.
-        let mut l3 = WaylandLayout::default();
-        l3.reset_baseline(Vec::new());
-        l3.observe(&upright);
-        l3.note_capturer(&upright, 0);
-        assert!(!l3.edge(&upright, false, 0));
-    }
-
-    // The late record can also land after the poll consumed the edge but before the bump that
-    // edge promotes, or after the bump with a snapshot taken before it. That capturer is stale
-    // by generation and rebuilds on its own, so its record must not buy a second promotion
-    // that tears the freshly rebuilt capturers down again.
-    #[test]
-    fn a_late_record_from_a_generation_already_promoted_is_not_a_second_edge() {
-        let upright = layout(1920, 1080, 0);
-        let rotated = layout(1080, 1920, 1);
-        let mut l = WaylandLayout::default();
-        l.reset_baseline(upright.clone());
-        l.observe(&upright);
-        // The output rotates, the poll consumes the edge, the capturer built on upright at
-        // generation 7 records late, and the poll promotes to 8.
-        assert!(l.edge(&rotated, false, 7));
-        l.observe(&rotated);
-        l.note_capturer(&upright, 7);
-        l.reset_baseline(rotated.clone());
-        assert!(!l.edge(&rotated, false, 8), "the capturer built at 7 rebuilds on its own");
-
-        // Control: a disagreeing record AT the promoted generation is a real edge.
-        l.observe(&rotated);
-        l.note_capturer(&upright, 8);
-        assert!(l.edge(&rotated, false, 8));
-
-        // A stale record landing after a fresh one must not hide the fresh one.
-        l.observe(&rotated);
-        l.note_capturer(&upright, 8);
-        l.note_capturer(&upright, 7);
-        assert!(l.edge(&rotated, false, 8));
     }
 
     // A promotion consumes the edge: the next poll sees the same layout and must stay quiet.

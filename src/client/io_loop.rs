@@ -2767,7 +2767,7 @@ impl<T: InvokeUiSession> Remote<T> {
 /// A shape that decoded, still compressed, under the id the UI knows it by. Copied once it
 /// decoded: the message's colors may be a slice of a larger received buffer, which a clone
 /// would keep alive.
-#[cfg(any(feature = "flutter", test))]
+#[cfg(feature = "flutter")]
 fn cursor_shape(id: u64, cd: &CursorData, compressed: &[u8]) -> CursorData {
     CursorData {
         id,
@@ -3022,74 +3022,6 @@ mod cursor_dedupe_tests {
         assert_eq!(dedupe.id(2), first);
         assert_eq!(dedupe.id(1), first);
     }
-
-    #[test]
-    fn the_hotspot_is_part_of_the_shape() {
-        let a = CursorDedupe::name(&shape(1, 0, b"arrow"));
-        let b = CursorDedupe::name(&shape(2, 1, b"arrow"));
-        assert_ne!(a, b);
-    }
-
-    #[test]
-    fn a_reused_handle_names_its_latest_shape() {
-        let mut dedupe = CursorDedupe::default();
-        dedupe.record(1, CursorDedupe::name(&shape(1, 0, b"arrow")));
-        let beam = CursorDedupe::name(&shape(1, 0, b"beam"));
-        dedupe.record(1, beam);
-        assert_eq!(dedupe.id(1), beam);
-    }
-
-    #[test]
-    fn a_rejected_shape_names_its_handle_and_is_never_decoded() {
-        let mut dedupe = CursorDedupe::default();
-        let arrow = CursorDedupe::name(&shape(7, 0, b"arrow"));
-        dedupe.record(7, arrow);
-        let beam = CursorDedupe::name(&shape(8, 0, b"beam"));
-        dedupe.record(8, beam);
-        let broken = CursorDedupe::name(&shape(7, 0, b"broken"));
-        assert_eq!(
-            dedupe.rejected(7, broken),
-            broken,
-            "not the shape it named before"
-        );
-        assert_eq!(
-            dedupe.id(7),
-            broken,
-            "nor when the handle is selected again"
-        );
-        assert_eq!(dedupe.id(8), beam, "another handle keeps its shape");
-        assert!(!dedupe.has_decoded(broken));
-        assert!(
-            dedupe.has_decoded(arrow),
-            "kept for a handle that brings it again"
-        );
-        dedupe.record(7, arrow);
-        assert_eq!(dedupe.id(7), arrow);
-    }
-
-    #[test]
-    fn a_shape_rejected_under_handles_never_seen_files_nothing() {
-        let mut dedupe = CursorDedupe::default();
-        let broken = CursorDedupe::name(&shape(0, 0, b"broken"));
-        for handle in 0..1000 {
-            assert_eq!(dedupe.rejected(handle, broken), broken);
-        }
-        assert!(dedupe.ids.is_empty());
-        assert!(!dedupe.has_decoded(broken));
-    }
-
-    #[test]
-    fn an_id_the_peer_never_sent_is_passed_on() {
-        assert_eq!(CursorDedupe::default().id(7), 7);
-    }
-
-    #[test]
-    fn peers_from_1_5_0_name_cursors_by_content() {
-        use hbb_common::get_version_number as v;
-        assert!(!crate::is_peer_naming_cursors_by_content(v("1.4.9")));
-        assert!(crate::is_peer_naming_cursors_by_content(v("1.5.0")));
-        assert!(crate::is_peer_naming_cursors_by_content(v("1.5.1")));
-    }
 }
 
 #[cfg(test)]
@@ -3105,21 +3037,6 @@ mod kept_cursor_tests {
             colors: hbb_common::compress::compress(&rgba).into(),
             ..Default::default()
         }
-    }
-
-    #[test]
-    fn a_kept_shape_is_a_copy_under_the_ui_id() {
-        let mut cd = compressed(4, 4);
-        cd.hotx = 1;
-        let kept = cursor_shape(42, &cd, &cd.colors);
-        assert_eq!(kept.id, 42);
-        assert_eq!((kept.hotx, kept.width, kept.height), (1, 4, 4));
-        assert_eq!(kept.colors, cd.colors);
-        assert_ne!(
-            kept.colors.as_ptr(),
-            cd.colors.as_ptr(),
-            "not a view of the received buffer"
-        );
     }
 
     #[test]

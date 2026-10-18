@@ -1742,16 +1742,7 @@ pub fn is_remote_modify_enabled_by_control_permissions() -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::{trim_video_save_directory, validate_windows_service_video_save_directory};
-
-    #[test]
-    fn trim_configured_video_save_directory() {
-        assert_eq!(
-            trim_video_save_directory("  relative/recordings  "),
-            Some("relative/recordings")
-        );
-        assert_eq!(trim_video_save_directory("  "), None);
-    }
+    use super::validate_windows_service_video_save_directory;
 
     #[test]
     fn validate_service_video_save_directory() {

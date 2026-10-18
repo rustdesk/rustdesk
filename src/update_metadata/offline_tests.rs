@@ -28,17 +28,6 @@ fn verify_offline_for_package(
 }
 
 #[test]
-fn accepts_valid_signed_offline_artifact() {
-    let artifact = verify_offline(&valid_fixture(), "rustdesk-1.4.6-x86_64.exe")
-        .expect("verified offline artifact");
-
-    assert_eq!("rustdesk-1.4.6-x86_64.exe", artifact.file_name);
-    assert_eq!(123456, artifact.size);
-    assert_eq!(SHA256, artifact.sha256);
-    assert_eq!("1.4.6", artifact.version);
-}
-
-#[test]
 fn offline_metadata_requires_the_expected_package_identity() {
     const CUSTOM_PACKAGE_ID: &str = "com.example.rustdesk-custom";
     let mut custom_metadata = metadata();

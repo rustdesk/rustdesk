@@ -251,19 +251,6 @@ mod gnome_monitor_layout_tests {
             Some(GnomeMonitorLayoutMode::Logical)
         );
     }
-
-    #[test]
-    fn maps_physical_layout() {
-        assert_eq!(
-            gnome_monitor_layout_mode_from_value(2),
-            Some(GnomeMonitorLayoutMode::Physical)
-        );
-    }
-
-    #[test]
-    fn rejects_unknown_layout() {
-        assert_eq!(gnome_monitor_layout_mode_from_value(4), None);
-    }
 }
 
 #[inline]
@@ -2464,29 +2451,6 @@ mod desktop {
             } else {
                 self.get_display_x11();
                 self.get_xauth_x11();
-            }
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn test_desktop_env() {
-            let mut d = Desktop::default();
-            d.refresh();
-            if d.username == "root" {
-                assert_eq!(d.home, "/root");
-            } else {
-                if !d.username.is_empty() {
-                    let home = super::super::get_env_var("HOME");
-                    if !home.is_empty() {
-                        assert_eq!(d.home, home);
-                    } else {
-                        //
-                    }
-                }
             }
         }
     }

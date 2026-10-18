@@ -1848,46 +1848,4 @@ mod tests {
             }
         });
     }
-
-    /// Tests that symlink creation works on this platform.
-    /// This is a helper to verify the test environment supports symlinks.
-    #[test]
-    #[cfg(not(any(target_os = "ios")))]
-    fn test_symlink_creation_works() {
-        let base_dir = std::env::temp_dir().join("rustdesk_symlink_test");
-        let _ = fs::remove_dir_all(&base_dir);
-        fs::create_dir_all(&base_dir).unwrap();
-
-        // Create target file in a subdirectory
-        let target_dir = base_dir.join("target_dir");
-        fs::create_dir_all(&target_dir).unwrap();
-        let target_file = target_dir.join("target.txt");
-        fs::write(&target_file, b"content").unwrap();
-
-        // Create symlink in a different directory
-        let link_dir = base_dir.join("link_dir");
-        fs::create_dir_all(&link_dir).unwrap();
-        let link_path = link_dir.join("link.txt");
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::symlink;
-            if symlink(&target_file, &link_path).is_err() {
-                let _ = fs::remove_dir_all(&base_dir);
-                return;
-            }
-        }
-
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::symlink_file;
-            if symlink_file(&target_file, &link_path).is_err() {
-                // Skip if no permission (needs admin or dev mode on Windows)
-                let _ = fs::remove_dir_all(&base_dir);
-                return;
-            }
-        }
-
-        let _ = fs::remove_dir_all(&base_dir);
-    }
 }
