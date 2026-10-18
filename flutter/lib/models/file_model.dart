@@ -628,6 +628,8 @@ class FileController {
     final transferJobIds = <int>[];
     for (var from in items.items) {
       final jobID = jobController.addTransferJob(from, isRemoteToLocal);
+      // Keep this check before PathUtil.join: Rust does not receive the selected
+      // root separately, and Web transfers bypass Rust validation.
       if (isRemoteToLocal &&
           !DownloadPaths.validName(from.name, windows: isWindows)) {
         jobController.jobError({
