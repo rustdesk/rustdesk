@@ -4023,7 +4023,7 @@ fn service_control_command(operation: &str, exe: &str, installed_now: bool) -> R
     };
     Ok(format!(
         "start \"\" /b /wait \"{exe}\" --service-control {operation} \"{app_name}\"{executable_argument}\r\n\
-         if errorlevel 1 exit /b %errorlevel%"
+         if not \"%errorlevel%\"==\"0\" exit /b %errorlevel%"
     ))
 }
 
