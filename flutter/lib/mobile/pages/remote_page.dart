@@ -497,6 +497,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         return false;
       },
       child: Scaffold(
+          // Let the soft keyboard float over the canvas instead of shrinking it,
+          // so the remote image (and a locked canvas) does not move.
+          resizeToAvoidBottomInset: false,
           // workaround for https://github.com/rustdesk/rustdesk/issues/3131
           floatingActionButtonLocation: keyboardIsVisible
               ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
@@ -714,14 +717,23 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               right: 10,
               child: QualityMonitor(gFFI.qualityMonitorModel),
             ),
-            Obx(() {
-              final chatKeyboardRequested =
-                  gFFI.chatModel.softKeyboardRequested.value;
-              return KeyHelpTools(
-                  keyboardIsVisible: keyboardVisibilityController.isVisible &&
-                      (_showEdit || chatKeyboardRequested),
-                  showGestureHelp: _showGestureHelp);
-            }),
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: SizedBox(
+                width: 140,
+                child: Obx(() {
+                  final chatKeyboardRequested =
+                      gFFI.chatModel.softKeyboardRequested.value;
+                  return KeyHelpTools(
+                      keyboardIsVisible:
+                          keyboardVisibilityController.isVisible &&
+                              (_showEdit || chatKeyboardRequested),
+                      showGestureHelp: _showGestureHelp);
+                }),
+              ),
+            ),
             SizedBox(
               width: 0,
               height: 0,
@@ -1189,14 +1201,16 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         color: Color(0xAA000000),
         padding: EdgeInsets.only(
             top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
-        child: Wrap(
-          spacing: space,
-          runSpacing: space,
-          children: <Widget>[SizedBox(width: 9999)] +
-              modifiers +
-              keys +
-              (_fn ? fn : []) +
-              (_more ? more : []),
+        child: SingleChildScrollView(
+          child: Wrap(
+            spacing: space,
+            runSpacing: space,
+            children: <Widget>[SizedBox(width: 9999)] +
+                modifiers +
+                keys +
+                (_fn ? fn : []) +
+                (_more ? more : []),
+          ),
         ));
   }
 }
