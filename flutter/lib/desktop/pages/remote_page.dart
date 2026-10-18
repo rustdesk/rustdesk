@@ -24,6 +24,7 @@ import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 import '../widgets/tabbar_widget.dart';
 import 'macos_full_screen_focus_recovery.dart';
+import 'remote_window_resize.dart';
 
 import 'package:flutter_hbb/native/custom_cursor.dart'
     if (dart.library.html) 'package:flutter_hbb/web/custom_cursor.dart';
@@ -88,6 +89,7 @@ class _RemotePageState extends State<RemotePage>
         WidgetsBindingObserver,
         TickerProviderStateMixin {
   Timer? _timer;
+  RemoteWindowResize? _remoteWindowResize;
   String keyboardMode = "legacy";
   bool _isWindowBlur = false;
   // Known macOS remote-input trade-offs (kept simple intentionally):
@@ -149,6 +151,8 @@ class _RemotePageState extends State<RemotePage>
   void initState() {
     super.initState();
     _ffi = FFI(widget.sessionId);
+    _remoteWindowResize = RemoteWindowResize(
+        _ffi.canvasModel, () => _isSelectedTab, widget.tabController);
     if (isMacOS) {
       // SchedulerBinding.instance.lifecycleState is null in the first connection in a new window.
       _macOSLifecycleState = SchedulerBinding.instance.lifecycleState;
@@ -649,6 +653,7 @@ class _RemotePageState extends State<RemotePage>
 
   @override
   Future<void> dispose() async {
+    _remoteWindowResize?.dispose();
     final closeSession = closeSessionOnDispose.remove(widget.id) ?? true;
 
     // https://github.com/flutter/flutter/issues/64935
