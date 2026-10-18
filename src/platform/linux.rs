@@ -921,6 +921,15 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
                     ));
                 }
             }
+            
+            for key in ["PULSE_LATENCY_MSEC", "PIPEWIRE_LATENCY"] {
+                if let Ok(value) = std::env::var(key) {
+                    if !value.is_empty() {
+                        envs.push((key, value));
+                    }
+                }
+            }
+            
             envs.push((
                 "TERM",
                 get_cur_term(&desktop.uid).unwrap_or_else(|| suggest_best_term()),
