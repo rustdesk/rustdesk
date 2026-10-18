@@ -1,13 +1,25 @@
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/outgoing_connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('an outgoing session holds the connection until it closes', () {
+  test('ending the connection stops the service until the session reconnects',
+      () {
+    final calls = <String>[];
     final hold = OutgoingConnectionHold();
 
-    expect(hold.open(), isTrue);
-    expect(hold.open(), isFalse);
-    expect(hold.close(), isTrue);
-    expect(hold.close(), isFalse);
+    hold.apply(true, calls.add);
+    hold.apply(true, calls.add);
+    hold.apply(false, calls.add);
+    hold.apply(true, calls.add);
+    hold.apply(false, calls.add);
+    hold.apply(false, calls.add);
+
+    expect(calls, [
+      AndroidChannel.kStartOutgoingForeground,
+      AndroidChannel.kStopOutgoingForeground,
+      AndroidChannel.kStartOutgoingForeground,
+      AndroidChannel.kStopOutgoingForeground,
+    ]);
   });
 }

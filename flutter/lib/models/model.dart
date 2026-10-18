@@ -894,6 +894,12 @@ class FfiModel with ChangeNotifier {
     final text = evt['text'];
     final link = evt['link'];
 
+    // The peer has dropped the socket. The page stays up behind the dialog, so
+    // the foreground hold must not wait for FFI.close().
+    if (title == 'Connection Error') {
+      parent.target!._releaseOutgoingForeground();
+    }
+
     // The peer-gone detector reconnects under `restarting-show` rather than an error title, so
     // it needs naming here too. By its own title, not the type: an explicitly restarted remote
     // device reaches the same type from a path this change does not touch.
@@ -1116,6 +1122,7 @@ class FfiModel with ChangeNotifier {
 
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
+    parent.target?._holdOutgoingForeground();
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
     _cancelPendingMonitorRestore();
@@ -4376,15 +4383,16 @@ class FFI {
 
   void _holdOutgoingForeground() {
     if (!isAndroid) return;
-    if (_outgoingHold.open()) {
-      invokeMethod(AndroidChannel.kStartOutgoingForeground).catchError((_) => false);
-    }
+    _outgoingHold.apply(true, _invokeOutgoingForeground);
   }
 
   void _releaseOutgoingForeground() {
-    if (_outgoingHold.close()) {
-      invokeMethod(AndroidChannel.kStopOutgoingForeground).catchError((_) => false);
-    }
+    if (!isAndroid) return;
+    _outgoingHold.apply(false, _invokeOutgoingForeground);
+  }
+
+  void _invokeOutgoingForeground(String method) {
+    invokeMethod(method).catchError((_) => false);
   }
 
   /// Close the remote session.

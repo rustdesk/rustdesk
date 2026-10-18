@@ -1,17 +1,19 @@
-/// One outgoing session keeps the Android process in the foreground.
-/// A second open does not ask again, and a close with nothing open is ignored.
+import '../consts.dart';
+
+/// The Android service counts each start against a later stop. A second
+/// start for the same session would keep the wake lock after the session ends.
 class OutgoingConnectionHold {
   var _held = false;
 
-  bool open() {
-    if (_held) return false;
-    _held = true;
-    return true;
-  }
-
-  bool close() {
-    if (!_held) return false;
-    _held = false;
-    return true;
+  void apply(bool active, void Function(String method) invoke) {
+    if (active) {
+      if (_held) return;
+      _held = true;
+      invoke(AndroidChannel.kStartOutgoingForeground);
+    } else {
+      if (!_held) return;
+      _held = false;
+      invoke(AndroidChannel.kStopOutgoingForeground);
+    }
   }
 }
