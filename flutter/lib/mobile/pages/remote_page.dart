@@ -502,7 +502,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           resizeToAvoidBottomInset: false,
           // workaround for https://github.com/rustdesk/rustdesk/issues/3131
           floatingActionButtonLocation: keyboardIsVisible
-              ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
+              ? FABLocation(FloatingActionButtonLocation.endFloat, 0,
+                  -MediaQuery.of(context).viewInsets.bottom)
               : null,
           floatingActionButton: !showActionButton
               ? null
@@ -1213,6 +1214,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         padding: EdgeInsets.only(
             top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
         child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
