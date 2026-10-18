@@ -200,7 +200,9 @@ class ChatModel with ChangeNotifier {
   }
 
   showChatWindowOverlay(
-      {Offset? chatInitPos, bool requestSoftKeyboard = true}) {
+      {Offset? chatInitPos,
+      bool requestSoftKeyboard = true,
+      bool enableSoftKeyboard = true}) {
     if (chatWindowOverlayEntry != null) return;
     isWindowFocus.value = true;
     _blockableOverlayState.setMiddleBlocked(true);
@@ -209,7 +211,9 @@ class ChatModel with ChangeNotifier {
     if (overlayState == null) return;
     if (isMobile) {
       _softKeyboardRequested.value = requestSoftKeyboard;
-      gFFI.invokeMethod("enable_soft_keyboard", true);
+      if (enableSoftKeyboard) {
+        gFFI.invokeMethod("enable_soft_keyboard", true);
+      }
     }
     if (isMobile &&
         !gFFI.chatModel.currentKey.isOut && // not in remote page
@@ -238,7 +242,9 @@ class ChatModel with ChangeNotifier {
       inputNode.addListener(_updateChatInputControl);
       _updateChatInputControl();
     }
-    requestChatInputFocus();
+    if (!isMobile || enableSoftKeyboard) {
+      requestChatInputFocus();
+    }
   }
 
   hideChatWindowOverlay() {

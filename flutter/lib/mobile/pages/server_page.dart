@@ -13,6 +13,7 @@ import '../../common/widgets/dialog.dart';
 import '../../consts.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
+import '../pip_mode.dart';
 import 'home_page.dart';
 
 class ServerPage extends StatefulWidget implements PageShape {
@@ -938,6 +939,13 @@ void androidChannelInit() {
                 "stop_service by kotlin, isStart:${gFFI.serverModel.isStart}");
             if (gFFI.serverModel.isStart) {
               gFFI.serverModel.stopService();
+            }
+            break;
+          }
+        case "on_pip_changed":
+          {
+            if (arguments is bool) {
+              androidInPip.value = arguments;
             }
             break;
           }

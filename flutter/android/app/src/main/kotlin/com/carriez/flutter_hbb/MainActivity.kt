@@ -15,6 +15,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.ClipboardManager
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Build
 import android.os.IBinder
@@ -76,6 +77,7 @@ class MainActivity : FlutterActivity() {
 
     private var isAudioStart = false
     private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
+    private val remotePip = RemotePictureInPicture(this)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -658,6 +660,20 @@ class MainActivity : FlutterActivity() {
                 "on_voice_call_closed" -> {
                     onVoiceCallClosed()
                 }
+                "pip_supported" -> {
+                    result.success(remotePip.supported())
+                }
+                "set_pip_eligible" -> {
+                    if (call.arguments is Boolean) {
+                        remotePip.setEligible(call.arguments as Boolean)
+                        result.success(true)
+                    } else {
+                        result.success(false)
+                    }
+                }
+                "enter_pip" -> {
+                    result.success(remotePip.enterFromUser())
+                }
                 else -> {
                     result.error("-1", "No such method", null)
                 }
@@ -1006,8 +1022,27 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onUserLeaveHint() {
+        remotePip.onUserLeaveHint()
+        super.onUserLeaveHint()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        flutterMethodChannel?.invokeMethod("on_pip_changed", isInPictureInPictureMode)
+    }
+
     override fun onStop() {
         super.onStop()
+        // Some devices deliver onStop while the picture-in-picture window is still
+        // visible. The capture-service icon is for a real move to the background.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode) {
+            return
+        }
         val disableFloatingWindow = FFI.getLocalOption("disable-floating-window") == "Y"
         if (!disableFloatingWindow && MainService.isReady) {
             startService(Intent(this, FloatingWindowService::class.java))
