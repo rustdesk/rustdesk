@@ -2798,6 +2798,8 @@ class CanvasModel with ChangeNotifier {
     _timerMobileFocusCanvasCursor?.cancel();
     _timerMobileFocusCanvasCursor =
         Timer(Duration(milliseconds: 100), () async {
+      // The user may have locked the canvas during the delay.
+      if (locked) return;
       updateSize();
       _resetCanvasOffset(getDisplayWidth(), getDisplayHeight());
       notifyListeners();
@@ -2819,6 +2821,8 @@ class CanvasModel with ChangeNotifier {
       return;
     }
     _timerMobileRestoreCanvasOffset = Timer(Duration(milliseconds: 100), () {
+      // The user may have locked the canvas during the delay.
+      if (locked) return;
       updateSize();
       _x = targetOffset.dx;
       _y = targetOffset.dy;
