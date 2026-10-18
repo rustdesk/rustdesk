@@ -99,6 +99,16 @@
         </service>
 
         <service
+            android:name=".OutgoingConnectionService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="@string/outgoing_connection_foreground_service_subtype" />
+        </service>
+
+        <service
             android:name=".FloatingWindowService"
             android:enabled="true" />
 

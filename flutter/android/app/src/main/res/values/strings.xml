@@ -2,4 +2,5 @@
     <string name="app_name">RustDesk</string>
     <string name="accessibility_service_description">Allow other devices to control your phone using virtual touch, when RustDesk screen sharing is established</string>
     <string name="foreground_service_special_use_subtype">Keeps the RustDesk remote desktop host available for authorized unattended connections and foreground notifications without starting screen capture before user approval.</string>
+    <string name="outgoing_connection_foreground_service_subtype">Keeps an outgoing RustDesk session and its network connection alive while the screen is off.</string>
 </resources>

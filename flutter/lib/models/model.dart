@@ -39,6 +39,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:vector_math/vector_math.dart' show Vector2;
 
 import '../common.dart';
+import '../mobile/outgoing_connection.dart';
 import '../utils/image.dart' as img;
 import '../common/widgets/dialog.dart';
 import 'input_model.dart';
@@ -4032,6 +4033,7 @@ class FFI {
   var version = '';
   var connType = ConnType.defaultConn;
   var closed = false;
+  final _outgoingHold = OutgoingConnectionHold();
 
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
@@ -4125,6 +4127,7 @@ class FFI {
     List<int>? displays,
   }) {
     closed = false;
+    _holdOutgoingForeground();
     if (isMobile) mobileReset();
     assert(
         (!(isPortForward && isViewCamera)) &&
@@ -4371,9 +4374,23 @@ class FFI {
         sessionId: sessionId, code: code, trustThisDevice: trustThisDevice);
   }
 
+  void _holdOutgoingForeground() {
+    if (!isAndroid) return;
+    if (_outgoingHold.open()) {
+      invokeMethod(AndroidChannel.kStartOutgoingForeground).catchError((_) => false);
+    }
+  }
+
+  void _releaseOutgoingForeground() {
+    if (_outgoingHold.close()) {
+      invokeMethod(AndroidChannel.kStopOutgoingForeground).catchError((_) => false);
+    }
+  }
+
   /// Close the remote session.
   Future<void> close({bool closeSession = true}) async {
     closed = true;
+    _releaseOutgoingForeground();
     if (isWeb) {
       platformFFI.clearVideoFrameCallback();
     }

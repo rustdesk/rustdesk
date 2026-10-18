@@ -471,6 +471,8 @@ class AndroidChannel {
   static final kPickImportDirectory = "pick_import_directory";
   static final kImportDirectory = "import_directory";
   static final kExportFiles = "export_files";
+  static final kStartOutgoingForeground = "start_outgoing_foreground";
+  static final kStopOutgoingForeground = "stop_outgoing_foreground";
 }
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels
