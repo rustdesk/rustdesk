@@ -229,6 +229,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   void _stashChromeForPip() {
+    gFFI.chatModel.discardChatNoticeDeferredByPip();
     _showEdit = false;
     _showGestureHelp = false;
     _mobileFocusNode.unfocus();
@@ -265,6 +266,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       gFFI.chatModel.showChatWindowOverlay(
           requestSoftKeyboard: false, enableSoftKeyboard: false);
     }
+    gFFI.chatModel.showChatNoticeDeferredByPip();
   }
 
   @override

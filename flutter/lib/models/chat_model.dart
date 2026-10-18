@@ -67,6 +67,7 @@ class ChatModel with ChangeNotifier {
   final Rx<VoiceCallStatus> _voiceCallStatus = Rx(VoiceCallStatus.notStarted);
   final RxBool _softKeyboardRequested = false.obs;
   bool _usingPhysicalChatInput = false;
+  bool _chatNoticeDeferredByPip = false;
 
   Rx<VoiceCallStatus> get voiceCallStatus => _voiceCallStatus;
   RxBool get softKeyboardRequested => _softKeyboardRequested;
@@ -155,7 +156,10 @@ class ChatModel with ChangeNotifier {
   ChatUser? get currentUser => _messages[_currentKey]?.chatUser;
 
   showChatIconOverlay({Offset offset = const Offset(200, 50)}) {
-    if (isAndroid && androidInPip.value) return;
+    if (isAndroid && androidInPip.value) {
+      _chatNoticeDeferredByPip = true;
+      return;
+    }
     if (chatIconOverlayEntry != null) {
       chatIconOverlayEntry!.remove();
     }
@@ -205,7 +209,10 @@ class ChatModel with ChangeNotifier {
       {Offset? chatInitPos,
       bool requestSoftKeyboard = true,
       bool enableSoftKeyboard = true}) {
-    if (isAndroid && androidInPip.value) return;
+    if (isAndroid && androidInPip.value) {
+      _chatNoticeDeferredByPip = true;
+      return;
+    }
     if (chatWindowOverlayEntry != null) return;
     isWindowFocus.value = true;
     _blockableOverlayState.setMiddleBlocked(true);
@@ -248,6 +255,21 @@ class ChatModel with ChangeNotifier {
     if (!isMobile || enableSoftKeyboard) {
       requestChatInputFocus();
     }
+  }
+
+  void showChatNoticeDeferredByPip() {
+    if (!_chatNoticeDeferredByPip) return;
+    _chatNoticeDeferredByPip = false;
+    if (!(isDesktop || isWebDesktop) && chatIconOverlayEntry == null) {
+      showChatIconOverlay();
+    }
+    if (chatWindowOverlayEntry == null) {
+      showChatWindowOverlay();
+    }
+  }
+
+  void discardChatNoticeDeferredByPip() {
+    _chatNoticeDeferredByPip = false;
   }
 
   hideChatWindowOverlay() {
@@ -533,6 +555,7 @@ class ChatModel with ChangeNotifier {
   }
 
   close() {
+    discardChatNoticeDeferredByPip();
     hideChatIconOverlay();
     hideChatWindowOverlay();
     notifyListeners();
