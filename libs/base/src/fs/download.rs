@@ -9,11 +9,11 @@ use crate::message_proto::{
 use hbb_common::{anyhow::anyhow, bail, compress::decompress, ResultType};
 use std::{
     borrow::Cow,
-    io::{ErrorKind, Write},
+    io::ErrorKind,
     path::{Path, PathBuf},
 };
 use tokio::{
-    fs::OpenOptions,
+    fs::{self, OpenOptions},
     io::{AsyncSeekExt, AsyncWriteExt},
 };
 
@@ -104,6 +104,14 @@ fn remove_if_exists(path: &Path) -> ResultType<()> {
     }
 }
 
+async fn remove_if_exists_async(path: &Path) -> ResultType<()> {
+    match fs::remove_file(path).await {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
 async fn validate_resume_file(file: &tokio::fs::File) -> ResultType<()> {
     let metadata = file.metadata().await?;
     if !metadata.is_file() {
@@ -118,14 +126,20 @@ async fn validate_resume_file(file: &tokio::fs::File) -> ResultType<()> {
             shared::minwindef::FALSE,
             um::fileapi::{GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION},
         };
-        let mut information = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
-        if unsafe {
-            GetFileInformationByHandle(file.as_raw_handle() as _, information.as_mut_ptr())
-        } == FALSE
-        {
-            return Err(std::io::Error::last_os_error().into());
-        }
-        u64::from(unsafe { information.assume_init() }.nNumberOfLinks)
+        let file = file.try_clone().await?;
+        tokio::task::spawn_blocking(move || -> ResultType<u64> {
+            let mut information = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
+            if unsafe {
+                GetFileInformationByHandle(file.as_raw_handle() as _, information.as_mut_ptr())
+            } == FALSE
+            {
+                return Err(std::io::Error::last_os_error().into());
+            }
+            Ok(u64::from(
+                unsafe { information.assume_init() }.nNumberOfLinks,
+            ))
+        })
+        .await??
     };
     if links != SINGLE_LINK_COUNT {
         bail!("hard-linked download resume staging file is not allowed");
@@ -205,7 +219,9 @@ impl TransferJob {
         let staging = PathBuf::from(format!("{}.download", target.display()));
         let digest = PathBuf::from(format!("{}.digest", target.display()));
         let confirmation = self.download_confirmation_offset(file_num);
-        if (target.try_exists()? || staging.try_exists()? || digest.try_exists()?)
+        if (fs::try_exists(&target).await?
+            || fs::try_exists(&staging).await?
+            || fs::try_exists(&digest).await?)
             && confirmation.is_none()
         {
             bail!("download overwrite requires confirmation");
@@ -214,9 +230,9 @@ impl TransferJob {
             return self.resume_download(file_num, offset).await;
         }
         if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).await?;
         }
-        remove_if_exists(&staging)?;
+        remove_if_exists_async(&staging).await?;
         let file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -224,21 +240,25 @@ impl TransferJob {
             .await?;
         self.file_num = file_num;
         self.data_stream = Some(DataStream::FileStream(file));
-        remove_if_exists(&digest)?;
-        let mut metadata = std::fs::OpenOptions::new()
+        remove_if_exists_async(&digest).await?;
+        let mut metadata = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&digest)?;
-        metadata.write_all(serde_json::to_string(&self.digest)?.as_bytes())?;
+            .open(&digest)
+            .await?;
+        metadata
+            .write_all(serde_json::to_string(&self.digest)?.as_bytes())
+            .await?;
+        metadata.flush().await?;
         Ok(())
     }
 
     async fn resume_download(&mut self, file_num: i32, offset: u32) -> ResultType<()> {
         let target = self.download_target(file_num)?;
-        if target.try_exists()? {
+        if fs::try_exists(&target).await? {
             bail!("download overwrite requires confirmation");
         }
-        let digest = std::fs::metadata(format!("{}.digest", target.display()))?;
+        let digest = fs::metadata(format!("{}.digest", target.display())).await?;
         if !digest.is_file() {
             bail!("download resume metadata is not a regular file");
         }
