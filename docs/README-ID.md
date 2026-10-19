@@ -80,13 +80,13 @@ sudo apt install -y zip g++ gcc git curl wget nasm yasm autoconf automake libtoo
 ### Fedora 28 (CentOS 8)
 
 ```sh
-sudo yum -y install gcc-c++ git curl wget nasm yasm autoconf automake libtool gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
+sudo yum -y install gcc-c++ git curl wget nasm yasm autoconf automake libtool gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel libva-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
 ### Arch (Manjaro)
 
 ```sh
-sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip autoconf automake libtool make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
+sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip autoconf automake libtool make pkg-config clang gtk3 xdotool libxcb libxfixes libva alsa-lib pipewire
 ```
 
 ### Install vcpkg
