@@ -442,7 +442,7 @@ impl KeyboardControllable for Enigo {
                     hbb_common::throttled_log!(
                         KEYBOARD_ERROR_LOG_INTERVAL,
                         error,
-                        "Failed to inject macOS Enigo key-sequence: could not create balanced keyboard events"
+                        "Failed to inject macOS Enigo key-sequence: could not create keyboard event"
                     );
                 }
             } else {
