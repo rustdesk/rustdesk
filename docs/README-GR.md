@@ -47,11 +47,18 @@
 
 - Από τον ριζικό κατάλογο του αποθετηρίου εγκαταστήσετε τις εξαρτήσεις που δηλώνονται στο `vcpkg.json` (manifest mode).
 
+  Linux/macOS:
+
   ```sh
-  # Linux/macOS
-  $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
-  # Windows, Git Bash (x64; use arm64-windows-static on ARM64)
-  $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+  $VCPKG_ROOT/vcpkg install --x-install-root="$PWD/vcpkg_installed"
+  export VCPKG_INSTALLED_ROOT="$PWD/vcpkg_installed"
+  ```
+
+  Windows (Git Bash, x64; use `arm64-windows-static` on ARM64):
+
+  ```sh
+  $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$PWD/vcpkg_installed"
+  export VCPKG_INSTALLED_ROOT="$PWD/vcpkg_installed"
   ```
 
 - Εκτελέστε `cargo run`
@@ -64,7 +71,7 @@
 
 ```sh
 sudo apt install -y zip g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev \
-        libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake make \
+        libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev libva-dev cmake make \
         libclang-dev ninja-build libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 ```
 
@@ -91,13 +98,16 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 cd "$HOME"
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2023.04.15
+git checkout 9e593bb18ea69cc5095e012465dcd675a822ed0d  # vcpkg 2026.07.29, matches VCPKG_COMMIT_ID in CI
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
 git clone --depth 1 --recurse-submodules https://github.com/rustdesk/rustdesk
 cd rustdesk
-$VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+# install into a project-local tree instead of $VCPKG_ROOT/installed;
+# manifest mode reconciles its install root and would otherwise remove
+# other projects' packages
+$VCPKG_ROOT/vcpkg install --x-install-root="$PWD/vcpkg_installed"
 cd
 ```
 
@@ -110,7 +120,7 @@ cd *
 sed -i 's/CFLAGS+=-I/CFLAGS+=-fPIC -I/g' Makefile
 sed -i 's/CXXFLAGS+=-I/CXXFLAGS+=-fPIC -I/g' Makefile
 make
-cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
+cp libvpx.a $HOME/rustdesk/vcpkg_installed/x64-linux/lib/
 cd
 ```
 
@@ -123,6 +133,7 @@ cd ~/rustdesk
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
+export VCPKG_INSTALLED_ROOT="$PWD/vcpkg_installed"
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
