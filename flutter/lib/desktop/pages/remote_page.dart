@@ -1259,13 +1259,18 @@ class _ImagePaintState extends State<ImagePaint> {
   Widget _buildScrollbarNonTextureRender(
       ImageModel m, Size imageSize, double s) {
     double sizeScale = s;
+    var frameWidth =
+        (m.parent.target?.canvasModel.getDisplayWidth() ?? 0).toDouble();
     if (widget.ffi.ffiModel.isPeerLinux) {
       final displays = widget.ffi.ffiModel.pi.getCurDisplays();
       if (displays.isNotEmpty) {
         sizeScale = s / displays[0].scale;
+        // The canvas rect is already divided by the display scale on Linux;
+        // the frame is at physical size, so undo it for the ratio below.
+        frameWidth *= displays[0].scale;
       }
     }
-    sizeScale = _imagePathScale(m, sizeScale);
+    sizeScale = _imagePathScale(m, sizeScale, frameWidth);
     return CustomPaint(
       size: imageSize,
       painter: ImagePainter(image: m.image, x: 0, y: 0, scale: sizeScale),
@@ -1275,13 +1280,15 @@ class _ImagePaintState extends State<ImagePaint> {
   Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
     double sizeScale = s;
+    var frameWidth = c.getDisplayWidth().toDouble();
     if (widget.ffi.ffiModel.isPeerLinux) {
       final displays = widget.ffi.ffiModel.pi.getCurDisplays();
       if (displays.isNotEmpty) {
         sizeScale = s / displays[0].scale;
+        frameWidth *= displays[0].scale;
       }
     }
-    sizeScale = _imagePathScale(m, sizeScale);
+    sizeScale = _imagePathScale(m, sizeScale, frameWidth);
     return CustomPaint(
       size: Size(c.size.width, c.size.height),
       painter: ImagePainter(
@@ -1292,17 +1299,18 @@ class _ImagePaintState extends State<ImagePaint> {
     );
   }
 
-  // The FSRCNNX upscaler doubles frame dimensions while peer info still
-  // reports native size. ImagePainter draws at the image's own size, so the
+  // The FSRCNNX upscaler doubles frame dimensions while the peer still reports
+  // the native size. ImagePainter draws at the image's own size, so the
   // image-rendering path must scale the larger image back into the native
-  // display rectangle; the texture path does the equivalent in the renderer.
-  double _imagePathScale(ImageModel m, double scale) {
+  // rectangle; the texture path does the equivalent in the renderer.
+  // frameWidth is the unscaled native frame width (physical pixels on Linux,
+  // where the canvas width is already divided by the display scale).
+  double _imagePathScale(ImageModel m, double scale, double frameWidth) {
     final image = m.image;
-    final displayWidth = m.parent.target?.canvasModel.getDisplayWidth() ?? 0;
-    if (image == null || displayWidth <= 0 || image.width == displayWidth) {
+    if (image == null || frameWidth <= 0 || image.width == frameWidth) {
       return scale;
     }
-    return scale * displayWidth / image.width;
+    return scale * frameWidth / image.width;
   }
 
   Widget _BuildPaintTextureRender(
