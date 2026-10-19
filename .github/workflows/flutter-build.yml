@@ -203,7 +203,15 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: recursive
-
+          
+      - name: Switch hbb_common to latest
+        shell: bash
+        run: |
+          cd libs/hbb_common
+          git checkout master || git checkout main
+          git pull
+          cd ../..
+          
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -769,6 +777,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Switch hbb_common to latest
+        shell: bash
+        run: |
+          cd libs/hbb_common
+          git checkout master || git checkout main
+          git pull
+          cd ../..
+          
       - name: Install flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
@@ -1413,6 +1429,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Switch hbb_common to latest
+        shell: bash
+        run: |
+          cd libs/hbb_common
+          git checkout master || git checkout main
+          git pull
+          cd ../..
+          
       - name: Install flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
@@ -1686,6 +1710,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Switch hbb_common to latest
+        shell: bash
+        run: |
+          cd libs/hbb_common
+          git checkout master || git checkout main
+          git pull
+          cd ../..
+          
       - name: Install flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
@@ -1853,6 +1885,22 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Switch hbb_common to latest
+        shell: bash
+        run: |
+          cd libs/hbb_common
+          git checkout master || git checkout main
+          git pull
+          cd ../..
+          
+      - name: Switch hbb_common to latest
+        shell: bash
+        run: |
+          cd libs/hbb_common
+          git checkout master || git checkout main
+          git pull
+          cd ../..
+          
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@49819abfb41bd9b44fb781159c033dba90353a7c # v1.0
         with:
