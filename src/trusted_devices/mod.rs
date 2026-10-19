@@ -187,8 +187,17 @@ pub fn clear() -> ResultType<()> {
     if !storage.exists()? {
         return Ok(());
     }
+    let scope = match config::snapshot() {
+        Ok(settings) => Some(settings.scope),
+        Err(error) => {
+            const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+            hbb_common::throttled_log!(LOG_INTERVAL, warn,
+                "Cannot read trusted-device authentication settings; revoking grants without an authentication scope: {error:#}");
+            None
+        }
+    };
     let mut grants = Grants::default();
-    grants.revoke(Some(config::snapshot()?.scope))?;
+    grants.revoke(scope)?;
     storage.write(&grants)
 }
 

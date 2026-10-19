@@ -416,6 +416,10 @@ pub fn set_options(m: HashMap<String, String>) {
 pub fn try_set_options(m: HashMap<String, String>) -> hbb_common::ResultType<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
+        if !crate::trusted_devices::config::changes_authentication(&m) {
+            *OPTIONS.lock().unwrap() = m.clone();
+            return ipc::set_options(m);
+        }
         ipc::set_options(m.clone())?;
         *OPTIONS.lock().unwrap() = m;
     }

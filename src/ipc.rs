@@ -1990,6 +1990,7 @@ pub async fn clear_trusted_devices() -> ResultType<()> {
 }
 
 #[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn trusted_devices_v2(data: Data) -> ResultType<String> {
     let mut connection = connect(1000, "").await?;
     connection.send(&data).await?;

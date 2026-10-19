@@ -37,7 +37,14 @@ pub async fn update_auth<T: Send + 'static>(
     if affected {
         super::authority::manage(true).await?;
     }
-    let result = update(apply).await?;
+    let result = update(move || {
+        // Clearing grants can succeed without a valid authentication snapshot.
+        if affected && super::storage()?.exists()? {
+            snapshot()?;
+        }
+        apply()
+    })
+    .await?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     if affected && super::authority::uses_service()? {
         sync_auth_to_service().await?;
