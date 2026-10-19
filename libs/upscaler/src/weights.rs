@@ -1,5 +1,7 @@
 // Generated from Magpie FSRCNNX.hlsl (FSRCNNX_x2_8-0-4-1 general variant),
 // itself ported from igv/FSRCNN-TensorFlow (FSRCNN by Dong et al.).
+// Source: Blinue/Magpie@a32ea649dcb677c8357d6052c8152ebf179c5a77
+//   src/Effects/FSRCNNX/FSRCNNX.hlsl sha256 777cb5c841295b6f17a7ccdce6c1a3b1e3df9d401e2712f6d3b4e1d493cab590
 // Do not edit by hand. See libs/upscaler/tools/extract.py convention.
 // Layout notes: HLSL mul(rowvec,mat) with row-major MF4x4 literals;
 // MulAdd(x,M,a)[j] = a[j] + sum_i x[i]*M[i][j].

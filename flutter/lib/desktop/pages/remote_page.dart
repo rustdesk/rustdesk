@@ -1265,6 +1265,7 @@ class _ImagePaintState extends State<ImagePaint> {
         sizeScale = s / displays[0].scale;
       }
     }
+    sizeScale = _imagePathScale(m, sizeScale);
     return CustomPaint(
       size: imageSize,
       painter: ImagePainter(image: m.image, x: 0, y: 0, scale: sizeScale),
@@ -1280,6 +1281,7 @@ class _ImagePaintState extends State<ImagePaint> {
         sizeScale = s / displays[0].scale;
       }
     }
+    sizeScale = _imagePathScale(m, sizeScale);
     return CustomPaint(
       size: Size(c.size.width, c.size.height),
       painter: ImagePainter(
@@ -1288,6 +1290,19 @@ class _ImagePaintState extends State<ImagePaint> {
           y: c.y / sizeScale,
           scale: sizeScale),
     );
+  }
+
+  // The FSRCNNX upscaler doubles frame dimensions while peer info still
+  // reports native size. ImagePainter draws at the image's own size, so the
+  // image-rendering path must scale the larger image back into the native
+  // display rectangle; the texture path does the equivalent in the renderer.
+  double _imagePathScale(ImageModel m, double scale) {
+    final image = m.image;
+    final displayWidth = m.parent.target?.canvasModel.getDisplayWidth() ?? 0;
+    if (image == null || displayWidth <= 0 || image.width == displayWidth) {
+      return scale;
+    }
+    return scale * displayWidth / image.width;
   }
 
   Widget _BuildPaintTextureRender(

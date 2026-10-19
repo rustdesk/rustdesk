@@ -193,4 +193,38 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn nonuniform_image_across_tile_seam_is_exact() {
+        // A solid image cannot catch a wrong tap position or a broken tile
+        // border, because every pixel carries the same value. 132px crosses
+        // the 128px tile boundary, so output x=256 sits on the seam; the
+        // expected bytes pin the tap order and the border handling.
+        let (w, h) = (132, 4);
+        let mut src = vec![0u8; w * h * 4];
+        for y in 0..h {
+            for x in 0..w {
+                let o = (y * w + x) * 4;
+                src[o] = ((x * 7 + y * 3) % 256) as u8;
+                src[o + 1] = ((x * 13 + y * 5) % 256) as u8;
+                src[o + 2] = ((x * 29 + y * 11) % 256) as u8;
+                src[o + 3] = 255;
+            }
+        }
+        let out = upscale_2x_fsrcnnx(&src, w, h, PixelFormat::Rgba).expect("fits");
+        let ow = w * 2;
+        let px = |x: usize, y: usize| {
+            let o = (y * ow + x) * 4;
+            [out[o], out[o + 1], out[o + 2]]
+        };
+        for (x, y, want) in [
+            (10, 1, [34, 63, 140]),
+            (130, 3, [202, 81, 100]),
+            (254, 0, [119, 111, 91]),  // left of the seam
+            (256, 2, [128, 128, 129]), // right of the seam
+            (263, 3, [154, 175, 230]), // right edge
+        ] {
+            assert_eq!(px(x, y), want, "pixel ({x}, {y})");
+        }
+    }
 }

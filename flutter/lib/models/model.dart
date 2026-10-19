@@ -1981,13 +1981,10 @@ class ImageModel with ChangeNotifier {
     var width = rect?.width.toInt() ?? 0;
     var height = rect?.height.toInt() ?? 0;
     // The FSRCNNX upscaler doubles frame dimensions after decode while peer
-    // info still reports native size: follow the buffer when the toggle is on
-    // and it holds exactly a 2x frame (2w * 2h * 4 bytes).
-    if (width > 0 &&
-        height > 0 &&
-        rgba.length == width * height * 16 &&
-        bind.sessionGetToggleOptionSync(
-            sessionId: sessionId, arg: kOptionUpscaler)) {
+    // info still reports native size. Only the upscaler can produce a buffer
+    // of exactly 2w * 2h * 4 bytes, so the length identifies such a frame even
+    // when it was queued before the toggle was switched off.
+    if (width > 0 && height > 0 && rgba.length == width * height * 16) {
       width *= 2;
       height *= 2;
     }

@@ -161,11 +161,17 @@ impl InvokeUiSession for SciterHandler {
         // So if you can do BGRA translation on your side – the better.
         // BGRA is used as internal image format so it will not require additional transformations.
         *VIDEO_SIZE.lock().unwrap() = (w, h);
-        VIDEO.lock().unwrap().as_mut().map(|v| {
+        let restarted = VIDEO.lock().unwrap().as_mut().map(|v| {
             v.stop_streaming().ok();
             let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
             log::info!("[video] reinitialized: {:?}", ok);
+            ok.is_ok()
         });
+        // A successful re-init here supersedes any pending retry, otherwise the
+        // timestamp left by an earlier failed attempt can defer the next one.
+        if restarted == Some(true) {
+            *VIDEO_RETRY_AT.lock().unwrap() = None;
+        }
     }
 
     fn update_privacy_mode(&self) {
@@ -324,7 +330,7 @@ impl InvokeUiSession for SciterHandler {
                     Some(true) => {
                         *VIDEO_SIZE.lock().unwrap() = (w, h);
                         *VIDEO_RETRY_AT.lock().unwrap() = None;
-                        log::info!("[video] stream size followed frame to {w}x{h}");
+                        log::trace!("[video] stream size followed frame to {w}x{h}");
                     }
                     Some(false) => {
                         *VIDEO_RETRY_AT.lock().unwrap() = Some(Instant::now());

@@ -1,10 +1,23 @@
-import re, pathlib, sys
+import hashlib, re, pathlib, sys
+
+# The weights must come from one known revision of the upstream shader: a
+# different checkout can produce different weights while still passing the
+# element-count asserts below. Bump both constants together when updating.
+SOURCE_REVISION = 'Blinue/Magpie@a32ea649dcb677c8357d6052c8152ebf179c5a77'
+SOURCE_SHA256 = '777cb5c841295b6f17a7ccdce6c1a3b1e3df9d401e2712f6d3b4e1d493cab590'
 
 # Usage: extract.py [path/to/FSRCNNX.hlsl]
 # Defaults to a Magpie checkout next to the rustdesk checkout.
 _here = pathlib.Path(__file__).resolve().parent
 _default = _here / '..' / '..' / '..' / '..' / 'Magpie' / 'src' / 'Effects' / 'FSRCNNX' / 'FSRCNNX.hlsl'
-src = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else _default).read_text()
+src_path = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else _default)
+src_bytes = src_path.read_bytes()
+sha = hashlib.sha256(src_bytes).hexdigest()
+if sha != SOURCE_SHA256:
+    sys.exit(
+        f'{src_path} is not the pinned shader: sha256 {sha} != {SOURCE_SHA256} '
+        f'({SOURCE_REVISION}). Check out that revision, or update SOURCE_* here.')
+src = src_bytes.decode()
 
 def floats(s):
     return [float(x) for x in re.findall(r'[-+]?\d*\.\d+(?:[eE][-+]?\d+)?|[-+]?\d+\.\d*', s)]
@@ -17,7 +30,10 @@ for i in range(1, len(chunks), 2):
     passes[int(chunks[i])] = chunks[i+1]
 
 out_lines = []
-out_lines.append('// Generated from Magpie FSRCNNX.hlsl (FSRCNNX_x2_8-0-4-1 general variant).')
+out_lines.append('// Generated from Magpie FSRCNNX.hlsl (FSRCNNX_x2_8-0-4-1 general variant),')
+out_lines.append('// itself ported from igv/FSRCNN-TensorFlow (FSRCNN by Dong et al.).')
+out_lines.append(f'// Source: {SOURCE_REVISION}')
+out_lines.append(f'//   src/Effects/FSRCNNX/FSRCNNX.hlsl sha256 {SOURCE_SHA256}')
 out_lines.append('// Do not edit by hand. See libs/upscaler/tools/extract.py convention.')
 out_lines.append('// Layout notes: HLSL mul(rowvec,mat) with row-major MF4x4 literals;')
 out_lines.append('// MulAdd(x,M,a)[j] = a[j] + sum_i x[i]*M[i][j].')
