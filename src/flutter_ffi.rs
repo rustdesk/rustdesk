@@ -854,6 +854,13 @@ pub fn session_read_local_dir_sync(
     path: String,
     show_hidden: bool,
 ) -> String {
+    #[cfg(target_os = "android")]
+    if fs::android::is_path(&fs::get_path(&path)) {
+        return match fs::read_dir(&fs::get_path(&path), show_hidden) {
+            Ok(fd) => make_fd_to_json(fd.id, path, &fd.entries),
+            Err(error) => serde_json::json!({"error": error.to_string()}).to_string(),
+        };
+    }
     if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
         return make_fd_to_json(fd.id, path, &fd.entries);
     }

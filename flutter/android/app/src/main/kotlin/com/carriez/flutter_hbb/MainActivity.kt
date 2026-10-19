@@ -73,6 +73,7 @@ class MainActivity : FlutterActivity() {
     )
 
     private var pendingPicker: PendingPicker? = null
+    private val documentPicker by lazy { DocumentPicker(this) }
 
     private var isAudioStart = false
     private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
@@ -127,6 +128,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (documentPicker.onResult(requestCode, resultCode, data)) return
         if (requestCode == REQ_IMPORT_FILES) {
             val pending = pendingPicker as? PendingPicker.ImportFiles ?: return
             pendingPicker = null
@@ -243,6 +245,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        documentPicker.close()
         Log.e(logTag, "onDestroy")
         // The process can outlive the UI whenever something keeps it alive:
         // MainService, or the accessibility InputService on its own. Only the
@@ -275,6 +278,7 @@ class MainActivity : FlutterActivity() {
 
     private fun initFlutterChannel(flutterMethodChannel: MethodChannel) {
         flutterMethodChannel.setMethodCallHandler { call, result ->
+            if (documentPicker.handle(call, result)) return@setMethodCallHandler
             // make sure result will be invoked, otherwise flutter will await forever
             when (call.method) {
                 "init_service" -> {

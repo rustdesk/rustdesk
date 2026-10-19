@@ -1,0 +1,215 @@
+use super::{
+    android, android_descriptor::DocumentDescriptor, DataSource, DataStream, FileTransferBlock,
+    TransferJob,
+};
+use hbb_common::{anyhow::anyhow, bail, compress::decompress, ResultType};
+use serde_json::{json, Value};
+use tokio::{
+    fs::File,
+    io::{AsyncSeekExt, AsyncWriteExt},
+    task::spawn_blocking,
+};
+
+#[derive(Debug, Default)]
+pub(super) struct DocumentTransfer {
+    reader: Option<DocumentDescriptor>,
+    pending: Option<PendingWrite>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug)]
+struct PendingWrite {
+    file: File,
+    descriptor: DocumentDescriptor,
+    token: Value,
+    path: String,
+}
+
+impl TransferJob {
+    pub fn is_document(&self) -> bool {
+        matches!(&self.data_source, DataSource::FilePath(path) if android::is_path(path))
+    }
+
+    fn document_path(&self, file_num: usize) -> ResultType<String> {
+        let DataSource::FilePath(base) = &self.data_source else {
+            bail!("Not a document transfer");
+        };
+        let entry = self
+            .files
+            .get(file_num)
+            .ok_or(anyhow!("Wrong file number"))?;
+        super::validate_file_name_no_traversal(&entry.name)?;
+        Ok(Self::join(base, &entry.name).to_string_lossy().into_owned())
+    }
+
+    pub(super) async fn open_document_stream(&mut self) -> ResultType<bool> {
+        if let Some(error) = &self.document_transfer.error {
+            self.file_num = self.files.len() as i32;
+            self.data_stream.take();
+            bail!("{}", error);
+        }
+        if self.file_num as usize >= self.files.len() {
+            self.data_stream.take();
+            return Ok(true);
+        }
+        if self.data_stream.is_some() {
+            return Ok(false);
+        }
+        let result = android::open(self.document_path(self.file_num as usize)?).await;
+        self.file_confirmed = false;
+        self.file_is_waiting = false;
+        match result {
+            Ok((file, descriptor)) => {
+                self.data_stream = Some(DataStream::FileStream(file));
+                self.document_transfer.reader = Some(descriptor);
+            }
+            Err(error) => {
+                self.fail_document_read(error.to_string());
+                return Err(error);
+            }
+        }
+        Ok(false)
+    }
+
+    pub(super) async fn finish_document_read(&mut self) -> ResultType<()> {
+        self.data_stream.take();
+        let descriptor = self
+            .document_transfer
+            .reader
+            .take()
+            .ok_or(anyhow!("No open document reader"))?;
+        let result = descriptor.close("").await;
+        if let Err(error) = &result {
+            self.fail_document_read(error.to_string());
+        }
+        result
+    }
+
+    pub(super) fn fail_document_read(&mut self, error: String) {
+        self.document_transfer.error = Some(error);
+        self.file_num = self.files.len() as i32;
+        self.file_confirmed = false;
+        self.file_is_waiting = false;
+        self.document_transfer.reader.take();
+    }
+
+    pub(super) async fn write_document(&mut self, block: FileTransferBlock) -> ResultType<()> {
+        if let Some(error) = &self.document_transfer.error {
+            bail!("{}", error);
+        }
+        let result = self.write_document_block(&block).await;
+        if let Err(error) = &result {
+            self.document_transfer.error = Some(error.to_string());
+        }
+        result
+    }
+
+    async fn write_document_block(&mut self, block: &FileTransferBlock) -> ResultType<()> {
+        if self.is_resume {
+            bail!("Document transfers must be restarted after interruption");
+        }
+        let path = self.document_path(block.file_num as usize)?;
+        if self.document_transfer.pending.as_ref().map(|p| &p.path) != Some(&path) {
+            self.finish_document().await?;
+            self.document_transfer.pending = Some(begin_write(path).await?);
+            self.file_num = block.file_num;
+        }
+        let pending = self
+            .document_transfer
+            .pending
+            .as_mut()
+            .ok_or(anyhow!("No open document"))?;
+        let data = if block.compressed {
+            std::borrow::Cow::Owned(decompress(&block.data))
+        } else {
+            std::borrow::Cow::Borrowed(block.data.as_ref())
+        };
+        pending.file.write_all(&data).await?;
+        self.finished_size += data.len() as u64;
+        self.transferred += block.data.len() as u64;
+        if block.data.is_empty() {
+            self.finish_document().await?;
+        }
+        Ok(())
+    }
+
+    pub async fn finish_document(&mut self) -> ResultType<()> {
+        if let Some(error) = &self.document_transfer.error {
+            bail!("{}", error);
+        }
+        let Some(pending) = self.document_transfer.pending.take() else {
+            return Ok(());
+        };
+        let result = finish_write(pending).await;
+        if let Err(error) = &result {
+            self.document_transfer.error = Some(error.to_string());
+        }
+        result
+    }
+
+    pub async fn cancel_document(&mut self) -> ResultType<()> {
+        let Some(pending) = self.document_transfer.pending.take() else {
+            return Ok(());
+        };
+        let PendingWrite {
+            file,
+            descriptor,
+            path,
+            token,
+        } = pending;
+        drop(file);
+        descriptor.close("Document transfer canceled").await?;
+        spawn_blocking(move || {
+            android::request(json!({
+                "op": "discard", "path": path, "token": token
+            }))
+        })
+        .await??;
+        Ok(())
+    }
+
+    pub(super) async fn seek_document(&mut self, offset: u64) -> ResultType<()> {
+        let Some(DataStream::FileStream(file)) = self.data_stream.as_mut() else {
+            bail!("Document receives must be restarted after interruption");
+        };
+        file.seek(std::io::SeekFrom::Start(offset)).await?;
+        self.finished_size += offset;
+        self.transferred += offset;
+        Ok(())
+    }
+}
+
+async fn begin_write(path: String) -> ResultType<PendingWrite> {
+    spawn_blocking(move || {
+        let token = android::request(json!({"op": "begin", "path": path}))?;
+        let file = android::take_file(&token["fd"])?;
+        let descriptor = DocumentDescriptor::new(&token)?;
+        Ok(PendingWrite {
+            file: File::from_std(file),
+            descriptor,
+            token,
+            path,
+        })
+    })
+    .await?
+}
+
+async fn finish_write(pending: PendingWrite) -> ResultType<()> {
+    let PendingWrite {
+        mut file,
+        descriptor,
+        path,
+        token,
+    } = pending;
+    file.flush().await?;
+    file.sync_all().await?;
+    drop(file);
+    descriptor.close("").await?;
+    spawn_blocking(move || {
+        android::request(json!({
+            "op": "finish", "path": path, "token": token
+        }))
+    })
+    .await??;
+    Ok(())
+}

@@ -13,6 +13,7 @@ import '../../common/widgets/dialog.dart';
 import '../../consts.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
+import '../../utils/android_documents.dart';
 import 'home_page.dart';
 
 class ServerPage extends StatefulWidget implements PageShape {
@@ -573,6 +574,17 @@ class PermissionChecker extends StatefulWidget {
 }
 
 class _PermissionCheckerState extends State<PermissionChecker> {
+  Future<void> _selectFolder() async {
+    try {
+      final selected = await AndroidDocuments.selectFolder(share: true);
+      if (selected != null) {
+        showToast(AndroidDocuments.displayPath(selected['path'] as String));
+      }
+    } catch (error) {
+      showToast(error.toString());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
@@ -620,6 +632,12 @@ class _PermissionCheckerState extends State<PermissionChecker> {
             serverModel.toggleFile,
             enabled: !permissionChangeLocked,
           ),
+          if (isAndroid)
+            TextButton.icon(
+              icon: const Icon(Icons.folder_open),
+              label: Text(translate('Change Path')),
+              onPressed: permissionChangeLocked ? null : _selectFolder,
+            ),
           hasAudioPermission
               ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
                   serverModel.toggleAudio,

@@ -239,8 +239,7 @@ pub fn need_fs_cm_send_files() -> bool {
     }
 }
 
-/// Android is scoped-storage only: the peer may never touch anything outside the app
-/// workspace (`Config::get_home()`, i.e. the app-specific external files directory).
+/// Android peers may access the app workspace and explicitly shared document locations.
 ///
 /// Every peer supplied path must be validated with this before it reaches the
 /// filesystem, for reads, writes, renames, creations and deletions alike. The path is
@@ -252,6 +251,16 @@ pub fn need_fs_cm_send_files() -> bool {
 #[cfg(target_os = "android")]
 pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
     use std::path::{Component, Path, PathBuf};
+
+    if base::fs::android::is_path(Path::new(path)) {
+        return match base::fs::android::allowed(path) {
+            Ok(allowed) => allowed,
+            Err(error) => {
+                log::trace!("Document access denied: {}", error);
+                false
+            }
+        };
+    }
 
     // Canonicalize the deepest existing ancestor and re-append the missing tail.
     fn resolve(path: &Path) -> Option<PathBuf> {

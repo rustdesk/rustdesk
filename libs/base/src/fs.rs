@@ -27,6 +27,15 @@ use hbb_common::{
 
 static NEXT_JOB_ID: AtomicI32 = AtomicI32::new(1);
 
+#[cfg(any(target_os = "android", test))]
+pub mod android;
+
+#[cfg(any(target_os = "android", all(test, unix)))]
+mod android_transfer;
+
+#[cfg(any(target_os = "android", all(test, unix)))]
+mod android_descriptor;
+
 pub fn get_next_job_id() -> i32 {
     NEXT_JOB_ID.fetch_add(1, Ordering::SeqCst)
 }
@@ -36,6 +45,10 @@ pub fn update_next_job_id(id: i32) {
 }
 
 pub fn read_dir(path: &Path, include_hidden: bool) -> ResultType<FileDirectory> {
+    #[cfg(any(target_os = "android", test))]
+    if android::is_path(path) {
+        return android::read_dir(&get_string(path), include_hidden);
+    }
     let mut dir = FileDirectory {
         path: get_string(path),
         ..Default::default()
@@ -140,6 +153,15 @@ pub fn get_path(path: &str) -> PathBuf {
 
 #[inline]
 pub fn get_home_as_string() -> String {
+    #[cfg(target_os = "android")]
+    match android::home() {
+        Ok(Some(path)) => return path,
+        Ok(None) => {}
+        Err(error) => {
+            log::trace!("Unable to load the selected document location: {}", error);
+            return android::ROOT.trim_end_matches('/').to_owned();
+        }
+    }
     get_string(&Config::get_home())
 }
 
@@ -203,6 +225,10 @@ fn read_dir_recursive(
 }
 
 pub fn get_recursive_files(path: &str, include_hidden: bool) -> ResultType<Vec<FileEntry>> {
+    #[cfg(any(target_os = "android", test))]
+    if android::is_path(Path::new(path)) {
+        return android::recursive_files(path, include_hidden);
+    }
     read_dir_recursive(&get_path(path), &get_path(""), include_hidden)
 }
 
@@ -248,6 +274,10 @@ pub fn get_empty_dirs_recursive(
     path: &str,
     include_hidden: bool,
 ) -> ResultType<Vec<FileDirectory>> {
+    #[cfg(any(target_os = "android", test))]
+    if android::is_path(Path::new(path)) {
+        return android::empty_dirs(path, include_hidden);
+    }
     read_empty_dirs_recursive(&get_path(path), &get_path(""), include_hidden)
 }
 
@@ -391,6 +421,9 @@ pub struct FileDigest {
 #[derive(Default, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferJob {
+    #[cfg(any(target_os = "android", all(test, unix)))]
+    #[serde(skip)]
+    document_transfer: android_transfer::DocumentTransfer,
     pub id: i32,
     pub r#type: JobType,
     pub remote: String,
@@ -517,6 +550,11 @@ fn validate_fs_path_argument(path: &str, arg_name: &str) -> ResultType<()> {
 }
 
 fn validate_no_symlink_components(base: &PathBuf, name: &str) -> ResultType<()> {
+    #[cfg(any(target_os = "android", test))]
+    if android::is_path(base) {
+        // Document IDs are resolved and confined to their grant by Android, not the OS filesystem.
+        return Ok(());
+    }
     if name.is_empty() {
         return Ok(());
     }
@@ -705,6 +743,10 @@ impl TransferJob {
     }
 
     pub fn modify_time(&self) {
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        if self.is_document() {
+            return;
+        }
         if self.r#type == JobType::Printer {
             return;
         }
@@ -729,6 +771,10 @@ impl TransferJob {
     }
 
     pub fn remove_download_file(&self) {
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        if self.is_document() {
+            return;
+        }
         if self.r#type == JobType::Printer {
             return;
         }
@@ -763,6 +809,10 @@ impl TransferJob {
     pub async fn write(&mut self, block: FileTransferBlock) -> ResultType<()> {
         if block.id != self.id {
             bail!("Wrong id");
+        }
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        if self.is_document() {
+            return self.write_document(block).await;
         }
         match &self.data_source {
             DataSource::FilePath(p) => {
@@ -843,6 +893,10 @@ impl TransferJob {
     /// Open the data stream for the current file.
     /// Returns Ok(true) if job is done, Ok(false) otherwise.
     async fn open_data_stream(&mut self) -> ResultType<bool> {
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        if self.is_document() {
+            return self.open_document_stream().await;
+        }
         let file_num = self.file_num as usize;
         match &mut self.data_source {
             DataSource::FilePath(p) => {
@@ -882,6 +936,14 @@ impl TransferJob {
 
     /// Get current file's digest (last_modified, file_size) for overwrite detection.
     async fn get_current_digest(&self) -> ResultType<(u64, u64)> {
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        if self.is_document() {
+            let entry = self
+                .files
+                .get(self.file_num as usize)
+                .ok_or(anyhow!("Wrong file number"))?;
+            return Ok((entry.modified_time, entry.size));
+        }
         let meta = match self.data_stream.as_ref().ok_or(anyhow!("file is None"))? {
             DataStream::FileStream(file) => file.metadata().await?,
             DataStream::BufStream(_) => bail!("No digest for buf stream"),
@@ -970,6 +1032,10 @@ impl TransferJob {
                     self.data_stream = None;
                     self.file_confirmed = false;
                     self.file_is_waiting = false;
+                    #[cfg(any(target_os = "android", all(test, unix)))]
+                    if self.is_document() {
+                        self.fail_document_read(err.to_string());
+                    }
                     return Err(err.into());
                 }
                 Ok(n) => {
@@ -982,6 +1048,10 @@ impl TransferJob {
         }
         unsafe { buf.set_len(offset) };
         if offset == 0 {
+            #[cfg(any(target_os = "android", all(test, unix)))]
+            if self.is_document() {
+                self.finish_document_read().await?;
+            }
             if matches!(self.data_source, DataSource::MemoryCursor(_)) {
                 self.data_stream.take();
                 return Ok(None);
@@ -1089,6 +1159,10 @@ impl TransferJob {
 
     /// Get job error message, useful for getting status when job had finished
     pub fn job_error(&self) -> Option<String> {
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        if let Some(error) = &self.document_transfer.error {
+            return Some(error.clone());
+        }
         if self.job_skipped() {
             return Some("skipped".to_string());
         }
@@ -1106,6 +1180,13 @@ impl TransferJob {
     }
 
     async fn set_stream_offset(&mut self, file_num: usize, offset: u64) {
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        if self.is_document() {
+            if let Err(error) = self.seek_document(offset).await {
+                self.fail_document_read(error.to_string());
+            }
+            return;
+        }
         if file_num >= self.files.len() {
             return;
         }
@@ -1388,6 +1469,10 @@ pub async fn handle_read_jobs(
 }
 
 pub fn remove_all_empty_dir(path: &Path) -> ResultType<()> {
+    #[cfg(any(target_os = "android", test))]
+    if android::is_path(path) {
+        return android::remove_empty_tree(&get_string(path));
+    }
     let fd = read_dir(path, true)?;
     for entry in fd.entries.iter() {
         match entry.entry_type.enum_value() {
@@ -1406,6 +1491,10 @@ pub fn remove_all_empty_dir(path: &Path) -> ResultType<()> {
 
 #[inline]
 pub fn remove_file(file: &str) -> ResultType<()> {
+    #[cfg(any(target_os = "android", test))]
+    if android::is_path(Path::new(file)) {
+        return android::remove_file(file);
+    }
     validate_fs_path_argument(file, "file path")?;
     std::fs::remove_file(get_path(file))?;
     Ok(())
@@ -1413,6 +1502,10 @@ pub fn remove_file(file: &str) -> ResultType<()> {
 
 #[inline]
 pub fn create_dir(dir: &str) -> ResultType<()> {
+    #[cfg(any(target_os = "android", test))]
+    if android::is_path(Path::new(dir)) {
+        return android::operation("mkdir", dir);
+    }
     validate_fs_path_argument(dir, "directory path")?;
     std::fs::create_dir_all(get_path(dir))?;
     Ok(())
@@ -1420,6 +1513,10 @@ pub fn create_dir(dir: &str) -> ResultType<()> {
 
 #[inline]
 pub fn rename_file(path: &str, new_name: &str) -> ResultType<()> {
+    #[cfg(any(target_os = "android", test))]
+    if android::is_path(Path::new(path)) {
+        return android::rename(path, new_name);
+    }
     validate_fs_path_argument(path, "path")?;
     if new_name.is_empty() {
         bail!("new file name cannot be empty");
@@ -1457,6 +1554,23 @@ pub fn is_write_need_confirmation(
     file_path: &str,
     digest: &FileTransferDigest,
 ) -> ResultType<DigestCheckResult> {
+    #[cfg(any(target_os = "android", test))]
+    if android::is_path(Path::new(file_path)) {
+        android::validate(file_path)?;
+        if is_resume {
+            bail!("Document transfers must be restarted after interruption");
+        }
+        return match android::stat(file_path)? {
+            Some(entry) => Ok(DigestCheckResult::NeedConfirm(FileTransferDigest {
+                id: digest.id,
+                file_num: digest.file_num,
+                last_modified: entry.modified_time,
+                file_size: entry.size,
+                ..Default::default()
+            })),
+            None => Ok(DigestCheckResult::NoSuchFile),
+        };
+    }
     let path = Path::new(file_path);
     let digest_file = format!("{}.digest", file_path);
     let download_file = format!("{}.download", file_path);

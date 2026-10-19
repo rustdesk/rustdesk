@@ -2182,12 +2182,14 @@ impl Connection {
         if let Some((dir, show_hidden)) = self.file_transfer.clone() {
             self.keyboard = false;
             let is_existing_dir = !dir.is_empty() && std::path::Path::new(&dir).is_dir();
+            #[cfg(target_os = "android")]
+            let is_existing_dir = is_existing_dir || fs::android::is_path(std::path::Path::new(&dir));
             let is_allowed_dir =
                 is_existing_dir && crate::common::is_peer_path_allowed(&dir, false);
             #[cfg(target_os = "android")]
             if is_existing_dir && !is_allowed_dir {
                 log::warn!(
-                    "Use the app workspace because the initial file-transfer directory is outside it: {}",
+                    "Use the default file-transfer location because access to the initial directory was denied: {}",
                     dir
                 );
             }
@@ -5592,7 +5594,24 @@ impl Connection {
         path: String,
         check_file_limit: bool,
     ) {
-        match fs::TransferJob::new_read(
+        #[cfg(target_os = "android")]
+        let result = tokio::task::spawn_blocking(move || {
+            fs::TransferJob::new_read(
+                id,
+                job_type,
+                "".to_string(),
+                data_source,
+                file_num,
+                include_hidden,
+                false,
+                overwrite_detection,
+            )
+        })
+        .await
+        .map_err(hbb_common::anyhow::Error::from)
+        .and_then(|result| result);
+        #[cfg(not(target_os = "android"))]
+        let result = fs::TransferJob::new_read(
             id,
             job_type,
             "".to_string(),
@@ -5601,7 +5620,8 @@ impl Connection {
             include_hidden,
             false,
             overwrite_detection,
-        ) {
+        );
+        match result {
             Err(err) => {
                 self.send(fs::new_error(id, err, 0)).await;
             }

@@ -11,6 +11,7 @@ import 'package:flutter_hbb/web/dummy.dart'
     if (dart.library.html) 'package:flutter_hbb/web/web_unique.dart';
 
 import '../consts.dart';
+import '../utils/android_documents.dart';
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -383,6 +384,7 @@ class FileController {
 
   bool _isPathAllowed(String candidate) {
     if (!isAndroid || !isLocal) return true;
+    if (AndroidDocuments.isPath(candidate)) return true;
     if (homePath.isEmpty || candidate.isEmpty) return false;
     final home = PathUtil.posixContext.normalize(homePath);
     final target = PathUtil.posixContext.normalize(candidate);
@@ -528,6 +530,9 @@ class FileController {
         return true;
       }
       debugPrint("Failed to openDirectory $path: $e");
+      if (isAndroid && isLocal && AndroidDocuments.isPath(path)) {
+        showToast(e.toString());
+      }
       return false;
     }
   }
@@ -564,6 +569,9 @@ class FileController {
   }
 
   Future<bool> _goToParentDirectory({bool isBack = false}) async {
+    if (AndroidDocuments.isRoot(directory.value.path)) {
+      return false;
+    }
     final isWindows = options.value.isWindows;
     final dirPath = directory.value.path;
     var parent = PathUtil.dirname(dirPath, isWindows);
@@ -1601,6 +1609,11 @@ class FileFetcher {
       if (isLocal) {
         final res = await bind.sessionReadLocalDirSync(
             sessionId: sessionId, path: path, showHidden: showHidden);
+        if (isAndroid && AndroidDocuments.isPath(path)) {
+          final data = jsonDecode(res);
+          if (data['error'] != null) throw StateError(data['error'] as String);
+          return FileDirectory.fromJson(data);
+        }
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
