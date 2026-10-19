@@ -1826,7 +1826,7 @@ fn apply_permanent_password_storage_and_salt_payload(payload: Option<&str>) -> R
         bail!("Invalid permanent-password-storage-and-salt payload");
     };
 
-    crate::trusted_devices::config::sync_password(storage, salt)?;
+    Config::set_permanent_password_storage_for_sync(storage, salt)?;
     Ok(())
 }
 
@@ -2011,7 +2011,7 @@ pub fn get_id() -> String {
         if !v.is_empty() {
             // update salt also, so that next time reinstallation not causing first-time auto-login failure
             if let Ok(Some(v2)) = get_config("salt") {
-                allow_err!(crate::trusted_devices::config::set_salt(&v2));
+                Config::set_salt(&v2);
             }
             if v != Config::get_id() {
                 Config::set_key_confirmed(false);
@@ -2041,7 +2041,7 @@ async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     let mut c = connect(ms_timeout, "").await?;
     c.send(&Data::Options(None)).await?;
     if let Some(Data::Options(Some(value))) = c.next_timeout(ms_timeout).await? {
-        crate::trusted_devices::config::set_options(value.clone())?;
+        Config::set_options(value.clone());
         Ok(value)
     } else {
         Ok(Config::get_options())
@@ -2094,10 +2094,8 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
             _ => {}
         }
     }
-    crate::trusted_devices::config::update(move || {
-        crate::trusted_devices::config::set_options(value)
-    })
-    .await
+    Config::set_options(value);
+    Ok(())
 }
 
 #[inline]

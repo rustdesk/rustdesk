@@ -210,7 +210,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     .set_connected();
                 let is_secured = peer.is_secured();
                 let trust = crate::trusted_devices::client::Session::new(
-                    &self.handler.lc.read().unwrap(), is_secured, pk.as_deref());
+                    &self.handler.lc.read().unwrap(),
+                    is_secured,
+                    pk.as_deref(),
+                );
                 match trust {
                     Ok(trust) => {
                         self.trusted_device = trust;
@@ -744,7 +747,14 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             Data::Login((os_username, os_password, password, remember)) => {
                 self.handler
-                    .handle_login_from_ui(os_username, os_password, password, remember, &mut self.trusted_device, peer)
+                    .handle_login_from_ui(
+                        os_username,
+                        os_password,
+                        password,
+                        remember,
+                        &mut self.trusted_device,
+                        peer,
+                    )
                     .await;
             }
             #[cfg(all(target_os = "windows", not(feature = "flutter")))]
@@ -1578,13 +1588,23 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Hash(hash)) => {
                     if !self
                         .handler
-                        .handle_hash(&self.handler.password.clone(), hash, &mut self.trusted_device, peer)
+                        .handle_hash(
+                            &self.handler.password.clone(),
+                            hash,
+                            &mut self.trusted_device,
+                            peer,
+                        )
                         .await
                     {
                         return false;
                     }
                 }
-                Some(message::Union::LoginResponse(lr)) => match self.trusted_device.respond(lr, &self.handler).await.union {
+                Some(message::Union::LoginResponse(lr)) => match self
+                    .trusted_device
+                    .respond(lr, &self.handler)
+                    .await
+                    .union
+                {
                     Some(login_response::Union::Error(err)) => {
                         if !self.handler.handle_login_error(&err) {
                             return false;

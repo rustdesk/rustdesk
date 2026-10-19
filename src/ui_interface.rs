@@ -434,8 +434,11 @@ pub fn set_auth_option(key: String, value: String) -> hbb_common::ResultType<()>
     let mut options = ipc::get_options();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let mut options = Config::get_options();
-    if value.is_empty() { options.remove(&key); }
-    else { options.insert(key, value); }
+    if value.is_empty() {
+        options.remove(&key);
+    } else {
+        options.insert(key, value);
+    }
     try_set_options(options)
 }
 
@@ -677,7 +680,10 @@ pub fn set_permanent_password_with_result(password: String) -> bool {
     {
         return match crate::trusted_devices::config::set_password(&password) {
             Ok(updated) => updated,
-            Err(error) => { log::error!("Password change rejected: {error}"); false }
+            Err(error) => {
+                log::error!("Password change rejected: {error}");
+                false
+            }
         };
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

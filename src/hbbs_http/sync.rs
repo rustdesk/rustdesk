@@ -313,6 +313,24 @@ async fn handle_config_options(
     // Changing 2FA or the trusted-device setting must revoke existing grants
     // and sync authentication settings to the system service when used.
     if crate::trusted_devices::config::changes_authentication(&options) {
+        let current = Config::get_options();
+        let mut non_auth_options = options.clone();
+        for key in [
+            "2fa",
+            keys::OPTION_ENABLE_TRUSTED_DEVICES,
+            keys::OPTION_TRUSTED_DEVICE_EXPIRATION,
+        ] {
+            match current.get(key) {
+                Some(value) => {
+                    non_auth_options.insert(key.to_owned(), value.clone());
+                }
+                None => {
+                    non_auth_options.remove(key);
+                }
+            }
+        }
+        // Service revocation failures must not block unrelated strategy options.
+        Config::set_options(non_auth_options);
         return crate::trusted_devices::config::update_auth(true, move || {
             crate::trusted_devices::config::set_options(options)
         })

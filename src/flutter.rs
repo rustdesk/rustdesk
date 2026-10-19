@@ -995,7 +995,15 @@ impl InvokeUiSession for FlutterHandler {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
         if msgtype == "custom-error-trusted-device" {
             const ERROR_DURATION_MS: u32 = 10_000;
-            self.push_event("toast", &[("type", json!("error")), ("text", json!(text)), ("dur_msec", json!(ERROR_DURATION_MS))], &[]);
+            self.push_event(
+                "toast",
+                &[
+                    ("type", json!("error")),
+                    ("text", json!(text)),
+                    ("dur_msec", json!(ERROR_DURATION_MS)),
+                ],
+                &[],
+            );
             return;
         }
         let has_retry = if retry { "true" } else { "" };

@@ -12,8 +12,10 @@ use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, io::ErrorKind, path::Path};
 
 const AUTH_OPTIONS: [&str; 2] = ["2fa", keys::OPTION_ENABLE_TRUSTED_DEVICES];
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const SYNC_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub fn log_sync_error(error: impl std::fmt::Display) {
     hbb_common::throttled_log!(
         SYNC_LOG_INTERVAL,
@@ -248,14 +250,6 @@ pub fn changes_password(value: &str) -> bool {
     let (h1, salt) = normalize(Password { password, salt }, false);
     h1.map(|h1| !utils::memcmp(&h1, &config::compute_permanent_password_h1(value, &salt)))
         .unwrap_or(true)
-}
-
-pub fn sync_password(storage: &str, salt: &str) -> ResultType<bool> {
-    let affected =
-        Config::get_local_permanent_password_storage_and_salt() != (storage.into(), salt.into());
-    change(affected, || {
-        Config::set_permanent_password_storage_for_sync(storage, salt)
-    })
 }
 
 pub fn set_salt(salt: &str) -> ResultType<()> {

@@ -6,7 +6,7 @@ use crate::trusted_devices::{
 };
 use base::message_proto::LoginResponse;
 
-const MIN_V2_VERSION: &str = "1.5.0";
+const MIN_V2_VERSION: &str = "1.5.1";
 
 impl Connection {
     pub(super) async fn begin_trusted_device(&mut self) -> bool {

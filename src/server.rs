@@ -727,20 +727,10 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                         match data {
                             Data::SyncConfig(Some(configs)) => {
                                 let (config, config2) = *configs;
-                                if crate::trusted_devices::config::set_config(config)
-                                    .map_err(|error| {
-                                        crate::trusted_devices::config::log_sync_error(error)
-                                    })
-                                    .unwrap_or(false)
-                                {
+                                if Config::set(config) {
                                     log::info!("config synced");
                                 }
-                                if crate::trusted_devices::config::set_config2(config2)
-                                    .map_err(|error| {
-                                        crate::trusted_devices::config::log_sync_error(error)
-                                    })
-                                    .unwrap_or(false)
-                                {
+                                if Config2::set(config2) {
                                     log::info!("config2 synced");
                                 }
                             }

@@ -4751,7 +4751,16 @@ pub async fn handle_hash(
         hasher.finalize()[..].into()
     };
 
-    if let Err(error) = send_login(lc.clone(), String::new(), String::new(), password, trust, peer).await {
+    if let Err(error) = send_login(
+        lc.clone(),
+        String::new(),
+        String::new(),
+        password,
+        trust,
+        peer,
+    )
+    .await
+    {
         interface.on_error(&error.to_string());
         return false;
     }
@@ -4852,7 +4861,15 @@ pub async fn handle_login_from_ui(
     hasher2.update(&lc.read().unwrap().hash.challenge);
     hash_password = hasher2.finalize()[..].to_vec();
 
-    send_login(lc.clone(), os_username, os_password, hash_password, trust, peer).await
+    send_login(
+        lc.clone(),
+        os_username,
+        os_password,
+        hash_password,
+        trust,
+        peer,
+    )
+    .await
 }
 
 async fn send_switch_login_request(
@@ -4887,7 +4904,13 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }
-    async fn handle_hash(&self, pass: &str, hash: Hash, trust: &mut crate::trusted_devices::client::Session, peer: &mut Stream) -> bool;
+    async fn handle_hash(
+        &self,
+        pass: &str,
+        hash: Hash,
+        trust: &mut crate::trusted_devices::client::Session,
+        peer: &mut Stream,
+    ) -> bool;
     async fn handle_login_from_ui(
         &self,
         os_username: String,
