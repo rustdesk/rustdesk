@@ -1307,9 +1307,41 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec
         return vec![evt];
     }
 
-    _map_keyboard_mode(_peer, event, key_event)
-        .map(|e| vec![e])
-        .unwrap_or_default()
+    #[cfg(target_os = "windows")]
+    if event.platform_code == 0xE7 && event.position_code > 0 {
+        if let Some(c) = char::from_u32(event.position_code as u32) {
+            if is_press(event) {
+                let mut evt = key_event.clone();
+                evt.mode = KeyboardMode::Translate.into();
+                evt.set_seq(c.to_string());
+                evt.down = true;
+                return vec![evt];
+            } else {
+                return vec![];
+            }
+        }
+    }
+
+    if let Some(mapped) = _map_keyboard_mode(_peer, event, key_event.clone()) {
+        return vec![mapped];
+    }
+
+    if let Some(unicode_info) = &event.unicode {
+        if let Some(name) = &unicode_info.name {
+            if !name.is_empty() && is_press(event) {
+                let first_char = name.chars().next().unwrap_or('\0');
+                if !first_char.is_ascii() || name.chars().count() > 1 {
+                    let mut evt = key_event;
+                    evt.mode = KeyboardMode::Translate.into();
+                    evt.set_seq(name.to_string());
+                    evt.down = true;
+                    return vec![evt];
+                }
+            }
+        }
+    }
+
+    Vec::new()
 }
 
 fn windows_peer_special_key(peer: &str, event: &Event) -> Option<KeyEvent> {
@@ -1361,8 +1393,8 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
     let keycode = match _peer {
         OS_LOWER_WINDOWS => {
             // https://github.com/rustdesk/rustdesk/issues/1371
-            // Filter scancodes that are greater than 255 and the height word is not 0xE0.
-            if event.position_code > 255 && (event.position_code >> 8) != 0xE0 {
+            // Filter scancodes that are 0 or greater than 255 and the high byte is not 0xE0.
+            if event.position_code == 0 || (event.position_code > 255 && (event.position_code >> 8) != 0xE0) {
                 return None;
             }
             event.position_code
@@ -1508,7 +1540,6 @@ fn is_altgr(event: &Event) -> bool {
 }
 
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn is_press(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(_))
 }
@@ -1695,5 +1726,90 @@ pub mod input_source {
                 CONFIG_INPUT_SOURCE_2_TIP.to_string(),
             ),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_map_keyboard_mode_unmapped_unicode() {
+        let event = Event {
+            time: std::time::SystemTime::now(),
+            unicode: Some(rdev::UnicodeInfo {
+                name: Some("â".to_string()),
+                unicode: "â".encode_utf16().collect(),
+                is_dead: false,
+            }),
+            platform_code: 0xFFFF,
+            position_code: 0,
+            event_type: EventType::KeyPress(Key::Unknown(0)),
+            usb_hid: 0,
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            extra_data: 0,
+        };
+        let mut key_event = KeyEvent::new();
+        key_event.mode = KeyboardMode::Map.into();
+
+        let res = map_keyboard_mode(OS_LOWER_WINDOWS, &event, key_event);
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].mode, KeyboardMode::Translate.into());
+        assert_eq!(res[0].seq(), "â");
+        assert!(res[0].down);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_map_keyboard_mode_vk_packet() {
+        let event_press = Event {
+            time: std::time::SystemTime::now(),
+            unicode: None,
+            platform_code: 0xE7,
+            position_code: 'ế' as KeyCode,
+            event_type: EventType::KeyPress(Key::Unknown(0)),
+            usb_hid: 0,
+            extra_data: 0,
+        };
+        let mut key_event = KeyEvent::new();
+        key_event.mode = KeyboardMode::Map.into();
+
+        let res = map_keyboard_mode(OS_LOWER_WINDOWS, &event_press, key_event.clone());
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].mode, KeyboardMode::Translate.into());
+        assert_eq!(res[0].seq(), "ế");
+        assert!(res[0].down);
+
+        let event_release = Event {
+            event_type: EventType::KeyRelease(Key::Unknown(0)),
+            ..event_press
+        };
+        let res_release = map_keyboard_mode(OS_LOWER_WINDOWS, &event_release, key_event);
+        assert!(res_release.is_empty());
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_map_keyboard_mode_mapped_key_retains_map_mode() {
+        let event = Event {
+            time: std::time::SystemTime::now(),
+            unicode: Some(rdev::UnicodeInfo {
+                name: Some("a".to_string()),
+                unicode: "a".encode_utf16().collect(),
+                is_dead: false,
+            }),
+            platform_code: 0x41,
+            position_code: 0x1E,
+            event_type: EventType::KeyPress(Key::KeyA),
+            usb_hid: 0,
+            extra_data: 0,
+        };
+        let mut key_event = KeyEvent::new();
+        key_event.mode = KeyboardMode::Map.into();
+
+        let res = map_keyboard_mode(OS_LOWER_WINDOWS, &event, key_event);
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].mode, KeyboardMode::Map.into());
+        assert!(res[0].down);
     }
 }
