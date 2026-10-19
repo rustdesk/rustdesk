@@ -562,18 +562,43 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollbarNonTextureRender(
       ImageModel m, Size imageSize, double s) {
+    final sizeScale = _imagePathScale(m, s);
     return CustomPaint(
       size: imageSize,
-      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: sizeScale),
     );
   }
 
   Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
+    final sizeScale = _imagePathScale(m, s);
     return CustomPaint(
       size: Size(c.size.width, c.size.height),
-      painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+      painter: ImagePainter(
+          image: m.image,
+          x: c.x / sizeScale,
+          y: c.y / sizeScale,
+          scale: sizeScale),
     );
+  }
+
+  // The FSRCNNX upscaler doubles the frame after decode while the canvas still
+  // reports native size. This view has no display-scale handling of its own, so
+  // match only an exact 2x frame; every other size is left untouched.
+  double _imagePathScale(ImageModel m, double scale) {
+    final image = m.image;
+    var nativeWidth =
+        (m.parent.target?.canvasModel.getDisplayWidth() ?? 0).toDouble();
+    if (widget.ffi.ffiModel.isPeerLinux) {
+      final displays = widget.ffi.ffiModel.pi.getCurDisplays();
+      if (displays.isNotEmpty) {
+        nativeWidth *= displays[0].scale;
+      }
+    }
+    if (image == null || nativeWidth <= 0 || image.width != nativeWidth * 2) {
+      return scale;
+    }
+    return scale / 2;
   }
 
   Widget _BuildPaintTextureRender(
