@@ -421,6 +421,13 @@ pub fn write_plists() -> ResultType<()> {
     Ok(())
 }
 
+pub fn clear_service_trusted_devices() -> ResultType<()> {
+    if !is_root() {
+        bail!("Trusted-device service cleanup requires root");
+    }
+    crate::trusted_devices::clear()
+}
+
 pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
     // to-do: do together with win/linux about refactory start/stop service
     if !is_installed_daemon(false) {
@@ -448,6 +455,9 @@ pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
         {
             Err(e) => {
                 log::error!("run osascript failed: {}", e);
+            }
+            Ok(status) if !status.success() => {
+                log::error!("Service removal failed: {status}");
             }
             _ => {
                 let agent = format!("{}_server.plist", crate::get_full_name());

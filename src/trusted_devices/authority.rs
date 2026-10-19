@@ -1,5 +1,5 @@
 use super::{DeviceInfo, Ticket, TOKEN_BYTES};
-use hbb_common::{bail, get_time, ResultType};
+use hbb_common::{bail, get_time, sodiumoxide::utils, ResultType};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug)]
@@ -45,6 +45,22 @@ pub enum Response {
 impl std::fmt::Debug for Request {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str("TrustedDeviceRequest")
+    }
+}
+
+impl Request {
+    fn check_scope(&self, current: &[u8; TOKEN_BYTES]) -> ResultType<()> {
+        let scope = match self {
+            Self::Begin { scope, .. } => scope,
+            Self::Check { ticket, .. } | Self::Enroll { ticket, .. } => &ticket.scope,
+            _ => bail!("Invalid trusted-device authorization operation"),
+        };
+        if !utils::memcmp(scope, current) {
+            bail!(
+                "Trusted-device authentication settings changed; reconnect and authenticate again"
+            );
+        }
+        Ok(())
     }
 }
 
@@ -131,6 +147,8 @@ pub fn handle(request: Request) -> ResultType<Response> {
     if !settings.enabled || settings.totp.is_empty() {
         bail!("Trusted devices require two-factor authentication to be enabled");
     }
+    // Validate authentication settings before allowing an unavailable-grants fallback.
+    request.check_scope(&settings.scope)?;
     let mut grants = super::load_grants(&storage, &settings.scope)?;
     match request {
         Request::Begin { scope, verifier } => {

@@ -141,7 +141,8 @@ pub async fn connect_service(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnC
 pub(crate) async fn connect_trusted_device_service(
     ms_timeout: u64,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
-    let connection = connect_service(ms_timeout).await
+    let connection = connect_service(ms_timeout)
+        .await
         .map_err(crate::trusted_devices::authority::Unavailable)?;
     if connection.peer_uid() != Some(0) {
         bail!("Trusted-device system service is not an authenticated root peer");
@@ -496,7 +497,10 @@ pub enum Data {
     HwCodecConfig(Option<String>),
     RemoveTrustedDevices(Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>),
     RenewTrustedDevices(Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>),
-    TrustedDevicesV2 { clear: bool, result: Option<Result<String, String>> },
+    TrustedDevicesV2 {
+        clear: bool,
+        result: Option<Result<String, String>>,
+    },
     TrustedDeviceRequest(Box<crate::trusted_devices::authority::Request>),
     TrustedDeviceResponse(Result<crate::trusted_devices::authority::Response, String>),
     SecurityConfigError(String),
@@ -615,7 +619,9 @@ pub async fn start(postfix: &str) -> ResultType<()> {
     let mut incoming = new_listener(postfix).await?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     if postfix == crate::POSTFIX_SERVICE {
-        allow_err!(crate::trusted_devices::config::update(crate::trusted_devices::initialize).await);
+        allow_err!(
+            crate::trusted_devices::config::update(crate::trusted_devices::initialize).await
+        );
     }
     loop {
         if let Some(result) = incoming.next().await {
@@ -660,7 +666,10 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     // uinput IPC paths while still minimizing exposed message surface here.
                                     #[cfg(any(target_os = "linux", target_os = "macos"))]
                                     if postfix == crate::POSTFIX_SERVICE {
-                                        if matches!(&data, Data::SyncConfig(_) | Data::TrustedDeviceRequest(_)) {
+                                        if matches!(
+                                            &data,
+                                            Data::SyncConfig(_) | Data::TrustedDeviceRequest(_)
+                                        ) {
                                             handle(data, &mut stream).await;
                                         } else {
                                             log::warn!(
@@ -1029,10 +1038,18 @@ async fn handle(data: Data, stream: &mut Connection) {
                         updated = false;
                     } else {
                         let affected = crate::trusted_devices::config::changes_password(&value);
-                        updated = match crate::trusted_devices::config::update_auth(affected, move || crate::trusted_devices::config::set_password(&value)).await {
-                            Ok(updated) => updated,
-                            Err(error) => { log::error!("Password change rejected: {error}"); false }
-                        };
+                        updated =
+                            match crate::trusted_devices::config::update_auth(affected, move || {
+                                crate::trusted_devices::config::set_password(&value)
+                            })
+                            .await
+                            {
+                                Ok(updated) => updated,
+                                Err(error) => {
+                                    log::error!("Password change rejected: {error}");
+                                    false
+                                }
+                            };
                     }
                     // Explicitly ACK/NACK permanent-password writes. This allows UIs/FFI to
                     // distinguish "accepted by daemon" vs "IPC send succeeded" without
@@ -1040,9 +1057,19 @@ async fn handle(data: Data, stream: &mut Connection) {
                     let ack = if updated { "Y" } else { "N" }.to_owned();
                     allow_err!(stream.send(&Data::Config((name.clone(), Some(ack)))).await);
                 } else if name == "salt" {
-                    let affected = Config::get_local_permanent_password_storage_and_salt().1 != value;
-                    if let Err(error) = crate::trusted_devices::config::update_auth(affected, move || crate::trusted_devices::config::set_salt(&value)).await {
-                        allow_err!(stream.send(&Data::SecurityConfigError(error.to_string())).await);
+                    let affected =
+                        Config::get_local_permanent_password_storage_and_salt().1 != value;
+                    if let Err(error) =
+                        crate::trusted_devices::config::update_auth(affected, move || {
+                            crate::trusted_devices::config::set_salt(&value)
+                        })
+                        .await
+                    {
+                        allow_err!(
+                            stream
+                                .send(&Data::SecurityConfigError(error.to_string()))
+                                .await
+                        );
                         return;
                     }
                 } else if name == "voice-call-input" {
@@ -1069,8 +1096,17 @@ async fn handle(data: Data, stream: &mut Connection) {
                     crate::privacy_mode::switch(v);
                 }
                 let affected = crate::trusted_devices::config::changes_authentication(&value);
-                if let Err(error) = crate::trusted_devices::config::update_auth(affected, move || crate::trusted_devices::config::set_options(value)).await {
-                    allow_err!(stream.send(&Data::SecurityConfigError(error.to_string())).await);
+                if let Err(error) =
+                    crate::trusted_devices::config::update_auth(affected, move || {
+                        crate::trusted_devices::config::set_options(value)
+                    })
+                    .await
+                {
+                    allow_err!(
+                        stream
+                            .send(&Data::SecurityConfigError(error.to_string()))
+                            .await
+                    );
                     return;
                 }
                 allow_err!(stream.send(&Data::Options(None)).await);
@@ -1086,8 +1122,14 @@ async fn handle(data: Data, stream: &mut Connection) {
             if let Err(error) = crate::trusted_devices::config::update(move || {
                 crate::trusted_devices::config::set_config(config)
                     .and_then(|_| crate::trusted_devices::config::set_config2(config2))
-            }).await {
-                allow_err!(stream.send(&Data::SecurityConfigError(error.to_string())).await);
+            })
+            .await
+            {
+                allow_err!(
+                    stream
+                        .send(&Data::SecurityConfigError(error.to_string()))
+                        .await
+                );
                 return;
             }
             allow_err!(stream.send(&Data::SyncConfig(None)).await);
@@ -1249,9 +1291,18 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
         }
         Data::RemoveTrustedDevices(v) => {
-            let result = crate::trusted_devices::authority::remove(v).await
-                .map(|_| String::new()).map_err(|error| error.to_string());
-            allow_err!(stream.send(&Data::TrustedDevicesV2 { clear: false, result: Some(result) }).await);
+            let result = crate::trusted_devices::authority::remove(v)
+                .await
+                .map(|_| String::new())
+                .map_err(|error| error.to_string());
+            allow_err!(
+                stream
+                    .send(&Data::TrustedDevicesV2 {
+                        clear: false,
+                        result: Some(result)
+                    })
+                    .await
+            );
         }
         Data::RenewTrustedDevices(v) => {
             let result = crate::trusted_devices::authority::renew(v)
@@ -1267,16 +1318,31 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .await
             );
         }
-        Data::TrustedDevicesV2 { clear, result: None } => {
-            let result = crate::trusted_devices::authority::manage(clear).await
+        Data::TrustedDevicesV2 {
+            clear,
+            result: None,
+        } => {
+            let result = crate::trusted_devices::authority::manage(clear)
+                .await
                 .map_err(|error| error.to_string());
-            allow_err!(stream.send(&Data::TrustedDevicesV2 { clear, result: Some(result) }).await);
+            allow_err!(
+                stream
+                    .send(&Data::TrustedDevicesV2 {
+                        clear,
+                        result: Some(result)
+                    })
+                    .await
+            );
         }
         Data::TrustedDeviceRequest(request) => {
-            let result = match crate::trusted_devices::config::update(move || crate::trusted_devices::authority::handle(*request)).await {
-                Err(error) if error.is::<crate::trusted_devices::authority::Unavailable>() => {
-                    Ok(crate::trusted_devices::authority::Response::Unavailable(error.to_string()))
-                }
+            let result = match crate::trusted_devices::config::update(move || {
+                crate::trusted_devices::authority::handle(*request)
+            })
+            .await
+            {
+                Err(error) if error.is::<crate::trusted_devices::authority::Unavailable>() => Ok(
+                    crate::trusted_devices::authority::Response::Unavailable(error.to_string()),
+                ),
                 result => result.map_err(|error| error.to_string()),
             };
             allow_err!(stream.send(&Data::TrustedDeviceResponse(result)).await);
@@ -1885,13 +1951,21 @@ pub fn get_unlock_pin() -> String {
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn get_trusted_devices() -> ResultType<String> {
-    trusted_devices_v2(Data::TrustedDevicesV2 { clear: false, result: None }).await
+    trusted_devices_v2(Data::TrustedDevicesV2 {
+        clear: false,
+        result: None,
+    })
+    .await
 }
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn remove_trusted_devices(record_ids: Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>) -> ResultType<()> {
-    trusted_devices_v2(Data::RemoveTrustedDevices(record_ids)).await.map(|_| ())
+pub async fn remove_trusted_devices(
+    record_ids: Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>,
+) -> ResultType<()> {
+    trusted_devices_v2(Data::RemoveTrustedDevices(record_ids))
+        .await
+        .map(|_| ())
 }
 
 #[cfg(feature = "flutter")]
@@ -1907,7 +1981,12 @@ pub async fn renew_trusted_devices(
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn clear_trusted_devices() -> ResultType<()> {
-    trusted_devices_v2(Data::TrustedDevicesV2 { clear: true, result: None }).await.map(|_| ())
+    trusted_devices_v2(Data::TrustedDevicesV2 {
+        clear: true,
+        result: None,
+    })
+    .await
+    .map(|_| ())
 }
 
 #[cfg(feature = "flutter")]
@@ -1915,7 +1994,10 @@ async fn trusted_devices_v2(data: Data) -> ResultType<String> {
     let mut connection = connect(1000, "").await?;
     connection.send(&data).await?;
     match connection.next_timeout(1000).await? {
-        Some(Data::TrustedDevicesV2 { result: Some(result), .. }) => result.map_err(|error| hbb_common::anyhow::anyhow!(error)),
+        Some(Data::TrustedDevicesV2 {
+            result: Some(result),
+            ..
+        }) => result.map_err(|error| hbb_common::anyhow::anyhow!(error)),
         _ => bail!("The host did not confirm the trusted-device operation"),
     }
 }
@@ -2005,14 +2087,17 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
         c.send(&Data::Options(Some(value.clone()))).await?;
         // do not put below before connect, because we need to check should_exit
         match c.next_timeout(1000).await {
-            Ok(Some(Data::Options(None))) => {},
+            Ok(Some(Data::Options(None))) => {}
             Ok(Some(Data::SecurityConfigError(error))) => bail!(error),
             Err(error) if affected => return Err(error),
             _ if affected => bail!("The host did not confirm the configuration update"),
-            _ => {},
+            _ => {}
         }
     }
-    crate::trusted_devices::config::update(move || crate::trusted_devices::config::set_options(value)).await
+    crate::trusted_devices::config::update(move || {
+        crate::trusted_devices::config::set_options(value)
+    })
+    .await
 }
 
 #[inline]
@@ -2374,7 +2459,8 @@ pub(crate) mod test {
         let mut stream = Connection::new(incoming.next().await.unwrap().unwrap());
         let devices = crate::trusted_devices::devices().unwrap();
         assert_ne!(devices, "[]");
-        let hard_settings = std::mem::take(&mut *hbb_common::config::HARD_SETTINGS.write().unwrap());
+        let hard_settings =
+            std::mem::take(&mut *hbb_common::config::HARD_SETTINGS.write().unwrap());
         hbb_common::config::HARD_SETTINGS
             .write()
             .unwrap()

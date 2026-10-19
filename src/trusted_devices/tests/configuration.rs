@@ -226,7 +226,13 @@ pub(super) fn malformed_host_field_preserves_authentication() {
 
     assert_eq!(loaded.options.get("2fa"), Config::get_options().get("2fa"));
     assert!(credential.is_err());
-    assert_eq!(after_save, malformed);
+    let after_save: Config2 = hbb_common::toml::from_str(&after_save).unwrap();
+    assert_eq!(after_save.options["trusted-device-field-test"], "Y");
+    assert_eq!(after_save.options.get("2fa"), loaded.options.get("2fa"));
+    assert!(serde_json::to_value(&after_save)
+        .unwrap()
+        .get("trusted_devices_v2")
+        .is_none());
     cleared.unwrap();
     let recovered: serde_json::Value = serde_json::from_str(&recovered.unwrap()).unwrap();
     assert_eq!(recovered["devices"], serde_json::json!([]));

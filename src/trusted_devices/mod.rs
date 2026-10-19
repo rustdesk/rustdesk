@@ -171,7 +171,10 @@ fn load_grants(storage: &GrantsStorage, scope: &[u8; TOKEN_BYTES]) -> ResultType
         grants.revoke(Some(*scope))?;
         storage.write(&grants).map_err(authority::Unavailable)?;
     } else if !grants.matches_scope(scope) {
-        bail!("Trusted-device authentication settings changed; restart the host to synchronize");
+        return Err(authority::Unavailable(anyhow!(
+            "Trusted-device grants are out of sync; restart the host to synchronize"
+        ))
+        .into());
     }
     if grants.cleanup(hbb_common::get_time()) {
         storage.write(&grants).map_err(authority::Unavailable)?;

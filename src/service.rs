@@ -4,9 +4,12 @@ use librustdesk::*;
 fn main() {}
 
 #[cfg(target_os = "macos")]
-fn main() {
+fn main() -> hbb_common::ResultType<()> {
     let args: Vec<String> = std::env::args().collect();
     crate::common::load_custom_client();
+    if args.get(1).map(String::as_str) == Some("--clear-trusted-devices") {
+        return librustdesk::platform::clear_service_trusted_devices();
+    }
     if args.len() > 1 && args[1] == "--write-plists" {
         if let Err(e) = librustdesk::platform::write_plists() {
             eprintln!("Failed to write plists: {}", e);
@@ -16,4 +19,5 @@ fn main() {
     }
     hbb_common::init_log(false, "service");
     crate::start_os_service();
+    Ok(())
 }

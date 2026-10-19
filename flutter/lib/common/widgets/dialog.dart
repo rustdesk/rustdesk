@@ -2875,12 +2875,13 @@ Widget trustedDeviceExpiration({
   required VoidCallback onChanged,
 }) {
   final period = bind.mainGetOptionSync(key: kOptionTrustedDeviceExpiration);
+  const periods = ['1', '7', '30', '0'];
   return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     Text(translate('Trust duration (days)')),
     ComboBox(
-      keys: ['1', '7', '30', '0'],
+      keys: periods,
       values: ['1', '7', '30', translate('Never')],
-      initialKey: period.isEmpty ? '30' : period,
+      initialKey: periods.contains(period) ? period : '30',
       enabled: enabled && !isOptionFixed(kOptionTrustedDeviceExpiration),
       onChanged: (value) async {
         try {

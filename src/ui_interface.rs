@@ -425,6 +425,11 @@ pub fn try_set_options(m: HashMap<String, String>) -> hbb_common::ResultType<()>
 }
 
 pub fn set_auth_option(key: String, value: String) -> hbb_common::ResultType<()> {
+    if key == keys::OPTION_TRUSTED_DEVICE_EXPIRATION
+        && !matches!(value.as_str(), "" | "1" | "7" | "30" | "0")
+    {
+        hbb_common::bail!("Invalid trusted-device expiration period");
+    }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let mut options = ipc::get_options();
     #[cfg(any(target_os = "android", target_os = "ios"))]

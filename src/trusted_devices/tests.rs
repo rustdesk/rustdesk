@@ -10,6 +10,7 @@ use hbb_common::{
 use std::fs;
 
 mod configuration;
+mod recovery;
 
 const PASSWORD: &str = "permanent-test-password";
 
@@ -60,6 +61,8 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     assert!(saved.contains("trusted_devices ="));
     configuration::legacy_settings_survive_saving().await;
     configuration::expiration_changes_revoke_grants().await;
+    recovery::unknown_expiration_preserves_login_and_settings().await;
+    recovery::unusable_grant_scope_keeps_current_password_totp_available().await;
     assert!(configuration::devices().await.is_empty());
     assert!(host::begin(proof("wrong-password", &[])).await.is_err());
     let (enrollment, valid, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
@@ -133,15 +136,14 @@ async fn unavailable_grants_keep_password_totp_available() {
     enrollment.enroll = true;
     let token = enrollment.finish(DeviceInfo::default()).await.unwrap();
     let path = Config2::file();
-    let saved = fs::read_to_string(&path).unwrap();
-    let corrupt = format!("{saved}\ninvalid = [\n");
-    fs::write(&path, &corrupt).unwrap();
+    fs::write(&path, b"\xff").unwrap();
     Config::set_option("trusted-device-test-option".into(), "N".into());
-    let after_save = fs::read_to_string(&path).unwrap();
-    fs::write(&path, saved).unwrap();
-    assert_eq!(after_save, corrupt);
+    let after_save: Config2 =
+        hbb_common::toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(after_save.options["trusted-device-test-option"], "N");
+    assert!(Config2::get_trusted_devices_v2().unwrap().is_empty());
     assert!(
-        host::begin(proof(PASSWORD, &token))
+        !host::begin(proof(PASSWORD, &token))
             .await
             .unwrap()
             .unwrap()
@@ -280,10 +282,13 @@ fn controller_credentials_are_bound_and_storage_errors_surface() {
             .is_none());
     }
     let corrupt = format!("{}\ninvalid = [\n", fs::read_to_string(&path).unwrap());
-    fs::write(&path, &corrupt).unwrap();
-    assert!(credentials.load().is_err());
-    settings.store(&peer_id);
-    assert_eq!(fs::read_to_string(&path).unwrap(), corrupt);
+    for corrupt in [corrupt.as_bytes(), b"\xff"] {
+        fs::write(&path, corrupt).unwrap();
+        assert!(credentials.load().is_err());
+        settings.store(&peer_id);
+        assert_eq!(PeerConfig::load(&peer_id).options, settings.options);
+        assert!(credentials.load().unwrap().is_none());
+    }
     let blocked_peer = uuid::Uuid::new_v4().to_string();
     fs::create_dir_all(Config::path(format!("peers/{blocked_peer}.toml"))).unwrap();
     let invalid = Credentials::new(blocked_peer, "server-a".into(), &[1; TOKEN_BYTES]).unwrap();

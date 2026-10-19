@@ -1,21 +1,26 @@
 use base::config::keys;
-use hbb_common::{bail, sodiumoxide::crypto::hash::sha256, ResultType};
+use hbb_common::{sodiumoxide::crypto::hash::sha256, ResultType};
 use std::collections::HashMap;
 
 pub const DEFAULT_DAYS: u32 = 30;
 pub const NEVER_EXPIRE: u32 = 0;
 pub const DAY_MILLIS: i64 = 24 * 60 * 60 * 1000;
 
-pub fn days(options: &HashMap<String, String>) -> ResultType<u32> {
+pub fn days(options: &HashMap<String, String>) -> u32 {
     match options
         .get(keys::OPTION_TRUSTED_DEVICE_EXPIRATION)
         .map(String::as_str)
     {
-        None | Some("") | Some("30") => Ok(DEFAULT_DAYS),
-        Some("1") => Ok(1),
-        Some("7") => Ok(7),
-        Some("0") => Ok(NEVER_EXPIRE),
-        _ => bail!("Invalid trusted-device expiration period"),
+        None | Some("") | Some("30") => DEFAULT_DAYS,
+        Some("1") => 1,
+        Some("7") => 7,
+        Some("0") => NEVER_EXPIRE,
+        _ => {
+            const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+            hbb_common::throttled_log!(LOG_INTERVAL, warn,
+                "Invalid trusted-device expiration period; using the default of {DEFAULT_DAYS} days");
+            DEFAULT_DAYS
+        }
     }
 }
 

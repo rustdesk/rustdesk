@@ -75,7 +75,6 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use crate::virtual_display_manager;
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
-#[path = "connection/trusted_devices.rs"]
 mod trusted_devices;
 
 const FAILURE_IDX_ID_WHITELIST: usize = 2;

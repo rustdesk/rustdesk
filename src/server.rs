@@ -727,10 +727,20 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                         match data {
                             Data::SyncConfig(Some(configs)) => {
                                 let (config, config2) = *configs;
-                                if crate::trusted_devices::config::set_config(config).map_err(|error| crate::trusted_devices::config::log_sync_error(error)).unwrap_or(false) {
+                                if crate::trusted_devices::config::set_config(config)
+                                    .map_err(|error| {
+                                        crate::trusted_devices::config::log_sync_error(error)
+                                    })
+                                    .unwrap_or(false)
+                                {
                                     log::info!("config synced");
                                 }
-                                if crate::trusted_devices::config::set_config2(config2).map_err(|error| crate::trusted_devices::config::log_sync_error(error)).unwrap_or(false) {
+                                if crate::trusted_devices::config::set_config2(config2)
+                                    .map_err(|error| {
+                                        crate::trusted_devices::config::log_sync_error(error)
+                                    })
+                                    .unwrap_or(false)
+                                {
                                     log::info!("config2 synced");
                                 }
                             }
@@ -853,15 +863,33 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                     let _chk_pk = crate::CheckIfResendPk::new();
                                     if !config.is_empty() {
                                         if cfg0.0 != config {
-                                            match crate::trusted_devices::config::set_config(config.clone()) {
-                                                Ok(_) => { cfg0.0 = config; log::info!("sync config from root"); }
-                                                Err(error) => crate::trusted_devices::config::log_sync_error(error),
+                                            match crate::trusted_devices::config::set_config(
+                                                config.clone(),
+                                            ) {
+                                                Ok(_) => {
+                                                    cfg0.0 = config;
+                                                    log::info!("sync config from root");
+                                                }
+                                                Err(error) => {
+                                                    crate::trusted_devices::config::log_sync_error(
+                                                        error,
+                                                    )
+                                                }
                                             }
                                         }
                                         if cfg0.1 != config2 {
-                                            match crate::trusted_devices::config::set_config2(config2.clone()) {
-                                                Ok(_) => { cfg0.1 = config2; log::info!("sync config2 from root"); }
-                                                Err(error) => crate::trusted_devices::config::log_sync_error(error),
+                                            match crate::trusted_devices::config::set_config2(
+                                                config2.clone(),
+                                            ) {
+                                                Ok(_) => {
+                                                    cfg0.1 = config2;
+                                                    log::info!("sync config2 from root");
+                                                }
+                                                Err(error) => {
+                                                    crate::trusted_devices::config::log_sync_error(
+                                                        error,
+                                                    )
+                                                }
                                             }
                                         }
                                     } else {
@@ -918,8 +946,12 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                         cfg0 = cfg;
                                         is_root_config_empty = false;
                                     }
-                                    Ok(Some(Data::SecurityConfigError(error))) => crate::trusted_devices::config::log_sync_error(error),
-                                    _ => crate::trusted_devices::config::log_sync_error("Host did not confirm configuration sync"),
+                                    Ok(Some(Data::SecurityConfigError(error))) => {
+                                        crate::trusted_devices::config::log_sync_error(error)
+                                    }
+                                    _ => crate::trusted_devices::config::log_sync_error(
+                                        "Host did not confirm configuration sync",
+                                    ),
                                 }
                             }
                         }
