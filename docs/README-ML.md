@@ -56,19 +56,19 @@
 ### ഉബുണ്ടു 18 (ഡെബിയൻ 10)
 
 ```sh
-sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev libva-dev cmake
+sudo apt install -y g++ gcc git curl wget nasm yasm autoconf automake libtool libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev libva-dev cmake
 ```
 
 ### ഫെഡോറ 28 (CentOS 8)
 
 ```sh
-sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
+sudo yum -y install gcc-c++ git curl wget nasm yasm autoconf automake libtool gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
 ### ആർച് (മഞ്ചാരോ)
 
 ```sh
-sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
+sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip autoconf automake libtool make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
 ```
 
 ### vcpkg ഇൻസ്റ്റാൾ ചെയ്യുക
