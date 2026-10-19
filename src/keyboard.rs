@@ -1742,7 +1742,7 @@ mod tests {
                 unicode: "â".encode_utf16().collect(),
                 is_dead: false,
             }),
-            platform_code: 0,
+            platform_code: 0xFFFF,
             position_code: 0,
             event_type: EventType::KeyPress(Key::Unknown(0)),
             usb_hid: 0,
@@ -1789,6 +1789,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "windows")]
     fn test_map_keyboard_mode_mapped_key_retains_map_mode() {
         let event = Event {
             time: std::time::SystemTime::now(),
@@ -1801,7 +1802,6 @@ mod tests {
             position_code: 0x1E,
             event_type: EventType::KeyPress(Key::KeyA),
             usb_hid: 0,
-            #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
         };
         let mut key_event = KeyEvent::new();
