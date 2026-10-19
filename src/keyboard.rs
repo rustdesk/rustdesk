@@ -1307,6 +1307,36 @@ pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec
         return vec![evt];
     }
 
+    if let Some(unicode_info) = &event.unicode {
+        if let Some(name) = &unicode_info.name {
+            if !name.is_empty() && is_press(event) {
+                let first_char = name.chars().next().unwrap_or('\0');
+                if !first_char.is_ascii() || name.chars().count() > 1 {
+                    let mut evt = key_event.clone();
+                    evt.mode = KeyboardMode::Translate.into();
+                    evt.set_seq(name.to_string());
+                    evt.down = true;
+                    return vec![evt];
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    if event.platform_code == 0xE7 && event.position_code > 0 {
+        if let Some(c) = char::from_u32(event.position_code as u32) {
+            if is_press(event) {
+                let mut evt = key_event.clone();
+                evt.mode = KeyboardMode::Translate.into();
+                evt.set_seq(c.to_string());
+                evt.down = true;
+                return vec![evt];
+            } else {
+                return vec![];
+            }
+        }
+    }
+
     _map_keyboard_mode(_peer, event, key_event)
         .map(|e| vec![e])
         .unwrap_or_default()
@@ -1508,7 +1538,6 @@ fn is_altgr(event: &Event) -> bool {
 }
 
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn is_press(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(_))
 }
