@@ -33,6 +33,8 @@ fn proof(password: &str, token: &[u8]) -> host::LoginProof {
         salt,
         challenge,
         token: token.to_vec(),
+        supports_v2: true,
+        ..Default::default()
     }
 }
 
@@ -63,6 +65,14 @@ async fn begin_enrollment() -> host::Attempt {
 async fn is_trusted(token: &[u8]) -> bool {
     let (_, valid, _) = host::begin(proof(PASSWORD, token)).await.unwrap().unwrap();
     valid
+}
+
+fn legacy_proof(hwid: &[u8], info: &DeviceInfo, supports_v2: bool) -> host::LoginProof {
+    host::LoginProof {
+        legacy: super::legacy::verifier(hwid, info).unwrap(),
+        supports_v2,
+        ..proof(PASSWORD, &[])
+    }
 }
 
 #[hbb_common::tokio::test]

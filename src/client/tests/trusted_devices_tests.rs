@@ -2,7 +2,7 @@ use super::*;
 use hbb_common::tcp::FramedStream;
 
 #[tokio::test]
-async fn legacy_trust_checkbox_does_not_send_machine_identifier() {
+async fn existing_legacy_consent_is_preserved_across_upgrades() {
     crate::trusted_devices::tests::initialize_config();
     let mut login = LoginConfigHandler::default();
     login.id = uuid::Uuid::new_v4().to_string();
@@ -15,8 +15,8 @@ async fn legacy_trust_checkbox_does_not_send_machine_identifier() {
         panic!("expected a login request");
     };
     assert!(
-        request.hwid.is_empty(),
-        "legacy trust must not send a machine identifier as a credential"
+        request.hwid == crate::get_hwid(),
+        "an existing legacy consent must remain usable with old hosts"
     );
     verified_channel_controls_tokens(&login).await;
     corrupt_credentials_do_not_block_password_login(&login).await;
@@ -78,11 +78,19 @@ async fn verified_channel_controls_tokens(login: &LoginConfigHandler) {
         assert!(sent_token(&mut unverified, &request).await.is_empty());
     }
     response.trusted_device_v2_supported = false;
-    trust.response(&response).await.unwrap();
+    response.enable_trusted_devices = true;
+    assert!(!trust.response(&response).await.unwrap());
     assert_eq!(sent_token(&mut trust, &request).await, token);
     response.trusted_device_v2_supported = true;
     trust.response(&response).await.unwrap();
     assert_eq!(sent_token(&mut trust, &request).await, token);
+    let mut migration = Session::new(login, true, Some(&[1; 32])).unwrap();
+    let outgoing = migration.login(request).await.unwrap();
+    assert!(outgoing.login_request().trusted_device_v2_supported);
+    success.trusted_device_v2_supported = true;
+    migration.response(&success).await.unwrap();
+    let mut no_consent = Session::new(login, true, Some(&[1; 32])).unwrap();
+    assert!(no_consent.response(&success).await.is_err());
 }
 
 async fn another_connection_cannot_supply_this_streams_token(

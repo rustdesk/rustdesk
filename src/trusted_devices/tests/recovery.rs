@@ -54,6 +54,7 @@ pub(super) async fn unusable_grant_scope_keeps_current_password_totp_available()
     let error = authority::handle(authority::Request::Begin {
         scope: wrong_scope,
         verifier: None,
+        legacy: None,
     })
     .err()
     .unwrap();
@@ -70,4 +71,54 @@ pub(super) async fn unusable_grant_scope_keeps_current_password_totp_available()
     fs::write(&path, saved).unwrap();
     assert!(login.is_err());
     authority::manage(true).await.unwrap();
+}
+
+pub(super) async fn legacy_migration_preserves_revocation(hwid: &[u8], info: &DeviceInfo) {
+    let (old, valid, _) = host::begin(legacy_proof(hwid, info, false))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(valid);
+    assert!(old.unwrap().finish(info.clone()).await.unwrap().is_empty());
+    let in_flight = host::begin(legacy_proof(hwid, info, true))
+        .await
+        .unwrap()
+        .unwrap()
+        .0
+        .unwrap();
+    let mut tokens = Vec::new();
+    for _ in 0..2 {
+        let (attempt, valid, _) = host::begin(legacy_proof(hwid, info, true))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(valid);
+        tokens.push(attempt.unwrap().finish(info.clone()).await.unwrap());
+    }
+    for token in &tokens {
+        assert!(is_trusted(token).await);
+    }
+    in_flight.check().await.unwrap();
+    tokens.push(in_flight.finish(info.clone()).await.unwrap());
+    let (attempt, valid, _) = host::begin(legacy_proof(hwid, info, false))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!valid && attempt.is_none());
+    let listed = configuration::devices().await;
+    assert_eq!(
+        listed.len(),
+        2,
+        "Migration must keep a single management entry"
+    );
+    let device = listed
+        .iter()
+        .find(|device| device["id"] == info.id)
+        .unwrap();
+    assert_eq!(device["expires_at"], 0);
+    let id = serde_json::from_value(device["record_id"].clone()).unwrap();
+    super::super::remove(&[id]).unwrap();
+    for token in tokens {
+        assert!(!is_trusted(&token).await);
+    }
 }

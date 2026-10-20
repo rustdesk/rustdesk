@@ -21,27 +21,31 @@ impl GrantsStorage {
     }
 
     pub fn read(&self) -> ResultType<super::Grants> {
-        let value = Config2::get_trusted_devices_v2()?;
-        if value.is_empty() {
-            return Ok(super::Grants::default());
-        }
-        if let Some(ciphertext) = value.strip_prefix(ENCRYPTION_VERSION) {
+        let (value, legacy) = Config2::get_trusted_device_stores()?;
+        let mut grants = if value.is_empty() {
+            super::Grants::default()
+        } else if let Some(ciphertext) = value.strip_prefix(ENCRYPTION_VERSION) {
             let ciphertext = base64::decode(ciphertext, base64::Variant::Original)
                 .map_err(|_| anyhow!("Invalid encrypted trusted-device grants"))?;
             let plaintext = symmetric_crypt(&ciphertext, false)
                 .map_err(|_| anyhow!("Could not decrypt trusted-device grants"))?;
-            return serde_json::from_slice(&plaintext)
-                .map_err(|_| anyhow!("Invalid trusted-device grants"));
+            serde_json::from_slice(&plaintext)
+                .map_err(|_| anyhow!("Invalid trusted-device grants"))?
+        } else {
+            serde_json::from_str(&value).map_err(|_| anyhow!("Invalid trusted-device grants"))?
+        };
+        if !legacy.is_empty() {
+            super::legacy::import(&mut grants, &legacy, value.is_empty())?;
         }
-        // Migrate records from earlier V2 builds without revoking them.
-        let grants =
-            serde_json::from_str(&value).map_err(|_| anyhow!("Invalid trusted-device grants"))?;
-        self.write(&grants)?;
+        if !legacy.is_empty() || (!value.is_empty() && !value.starts_with(ENCRYPTION_VERSION)) {
+            self.write(&grants)?;
+        }
         Ok(grants)
     }
 
     pub fn exists(&self) -> ResultType<bool> {
-        Config2::has_trusted_devices_v2()
+        Ok(Config2::has_trusted_devices_v2()?
+            || !Config2::get_trusted_device_stores()?.1.is_empty())
     }
 
     pub fn write(&self, grants: &super::Grants) -> ResultType<()> {

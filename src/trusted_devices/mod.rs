@@ -2,8 +2,12 @@ pub mod authority;
 pub mod client;
 pub mod config;
 pub mod host;
+mod legacy;
+mod management;
 mod policy;
 mod storage;
+
+pub use management::{devices, remove, renew};
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -37,19 +41,17 @@ pub struct DeviceInfo {
 struct Record {
     verifier: [u8; TOKEN_BYTES],
     info: DeviceInfo,
-}
-
-#[derive(Serialize)]
-struct ListedDevice<'a> {
-    record_id: [u8; TOKEN_BYTES],
-    #[serde(flatten)]
-    info: &'a DeviceInfo,
+    #[serde(default)]
+    legacy: bool,
+    // Keep migrated credentials and their legacy entry in one revocation group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    origin: Option<[u8; TOKEN_BYTES]>,
 }
 
 impl Record {
     fn id(&self) -> [u8; TOKEN_BYTES] {
         // Management identifiers must not expose authentication verifiers.
-        sha256::hash(&self.verifier).0
+        sha256::hash(&self.origin.unwrap_or(self.verifier)).0
     }
 
     fn current(&self, now: i64) -> bool {
@@ -120,10 +122,9 @@ impl Grants {
         let Some(verifier) = verifier else {
             return Ok(false);
         };
-        Ok(self
-            .records
-            .iter()
-            .any(|record| record.current(now) && utils::memcmp(&record.verifier, verifier)))
+        Ok(self.records.iter().any(|record| {
+            !record.legacy && record.current(now) && utils::memcmp(&record.verifier, verifier)
+        }))
     }
 
     pub fn enroll_digest(
@@ -134,7 +135,12 @@ impl Grants {
     ) -> ResultType<()> {
         self.check_ticket(ticket)?;
         let now = info.time;
-        self.records.push(Record { verifier, info });
+        self.records.push(Record {
+            verifier,
+            info,
+            legacy: false,
+            origin: None,
+        });
         self.cleanup(now);
         Ok(())
     }
@@ -143,8 +149,20 @@ impl Grants {
         let previous = self.records.len();
         self.records.retain(|record| record.current(now));
         self.records.sort_by_key(|record| record.info.time);
-        let excess = self.records.len().saturating_sub(MAX_RECORDS);
-        self.records.drain(..excess);
+        // Upgrading must not evict existing legacy registrations to satisfy the V2 cap.
+        let mut excess = self
+            .records
+            .iter()
+            .filter(|record| !record.legacy)
+            .count()
+            .saturating_sub(MAX_RECORDS);
+        self.records.retain(|record| {
+            if !record.legacy && excess > 0 {
+                excess -= 1;
+                return false;
+            }
+            true
+        });
         previous != self.records.len()
     }
 }
@@ -201,45 +219,6 @@ pub fn clear() -> ResultType<()> {
     storage.write(&grants)
 }
 
-pub fn remove(record_ids: &[[u8; TOKEN_BYTES]]) -> ResultType<()> {
-    let storage = storage()?;
-    let mut grants: Grants = storage.read()?;
-    let previous = grants.records.len();
-    grants
-        .records
-        .retain(|record| !record_ids.contains(&record.id()));
-    if grants.records.len() != previous {
-        storage.write(&grants)?;
-    }
-    Ok(())
-}
-
-pub fn renew(record_ids: &[[u8; TOKEN_BYTES]]) -> ResultType<()> {
-    if record_ids.is_empty() {
-        bail!("Select at least one trusted device");
-    }
-    let storage = storage()?;
-    let settings = config::snapshot()?;
-    if !settings.enabled || settings.totp.is_empty() {
-        bail!("Trusted devices require two-factor authentication to be enabled");
-    }
-    if settings.validity_days == policy::NEVER_EXPIRE {
-        bail!("Trusted devices are configured to never expire");
-    }
-    let mut grants = load_grants(&storage, &settings.scope)?;
-    let now = hbb_common::get_time();
-    let expires_at = policy::expires_at(now, settings.validity_days);
-    for record_id in record_ids {
-        let record = grants
-            .records
-            .iter_mut()
-            .find(|record| record.id() == *record_id && record.current(now))
-            .ok_or_else(|| anyhow!("Trusted device expired or was revoked; refresh the list"))?;
-        record.info.expires_at = Some(expires_at);
-    }
-    storage.write(&grants)
-}
-
 pub fn initialize() -> ResultType<()> {
     if !Config2::file().try_exists()? {
         return Ok(());
@@ -270,24 +249,4 @@ pub fn initialize() -> ResultType<()> {
         storage.write(&grants)?;
     }
     Ok(())
-}
-
-pub fn devices() -> ResultType<String> {
-    let storage = storage()?;
-    if !storage.exists()? {
-        return Ok(serde_json::json!({ "devices": [] }).to_string());
-    }
-    let current = config::snapshot()?;
-    let grants = load_grants(&storage, &current.scope)?;
-    let now = hbb_common::get_time();
-    let devices: Vec<_> = grants
-        .records
-        .iter()
-        .filter(|record| record.current(now))
-        .map(|record| ListedDevice {
-            record_id: record.id(),
-            info: &record.info,
-        })
-        .collect();
-    Ok(serde_json::json!({ "devices": devices }).to_string())
 }

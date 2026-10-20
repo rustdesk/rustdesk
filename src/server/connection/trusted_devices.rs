@@ -6,11 +6,8 @@ use crate::trusted_devices::{
 };
 use base::message_proto::LoginResponse;
 
-const MIN_V2_VERSION: &str = "1.5.1";
-
 impl Connection {
     pub(super) async fn begin_trusted_device(&mut self) -> bool {
-        let token = std::mem::take(&mut self.lr.trusted_device_v2_token);
         if self.conn_audit_primary_auth != ConnAuditPrimaryAuth::PermanentPassword
             || !self.stream.is_secured()
             || self.require_2fa.is_none()
@@ -18,18 +15,16 @@ impl Connection {
             || !hbb_common::config::Config::get_bool_option(
                 base::config::keys::OPTION_ENABLE_TRUSTED_DEVICES,
             )
-            || hbb_common::get_version_number(&self.lr.version)
-                < hbb_common::get_version_number(MIN_V2_VERSION)
+            || (!self.lr.trusted_device_v2_supported && self.lr.hwid.is_empty())
         {
+            self.lr.trusted_device_v2_token.clear();
             return true;
         }
-        let proof = LoginProof {
-            password: self.lr.password.to_vec(),
-            challenge: self.hash.challenge.clone(),
-            salt: self.hash.salt.clone(),
-            token: token.to_vec(),
+        let result = match LoginProof::from_login(&mut self.lr, &self.hash) {
+            Ok(proof) => host::begin(proof).await,
+            Err(error) => Err(error),
         };
-        match host::begin(proof).await {
+        match result {
             Ok(Some((attempt, valid, totp))) => {
                 self.trusted_device = attempt;
                 self.require_2fa = Some(totp);
@@ -85,6 +80,7 @@ impl Connection {
         };
         match attempt.finish(info).await {
             Ok(token) => {
+                response.trusted_device_v2_supported = self.lr.trusted_device_v2_supported;
                 response.trusted_device_v2_token = token.into();
                 true
             }

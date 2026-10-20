@@ -1,18 +1,64 @@
 use super::*;
-use hbb_common::{password_security::decrypt_str_or_original, sodiumoxide::base64};
+use hbb_common::{
+    password_security::{decrypt_str_or_original, encrypt_str_or_original},
+    sodiumoxide::base64,
+};
 
 pub(super) async fn legacy_settings_survive_saving() {
+    let existing = begin_enrollment()
+        .await
+        .finish(DeviceInfo::default())
+        .await
+        .unwrap();
+    let now = hbb_common::get_time();
+    let day = super::super::policy::DAY_MILLIS;
+    let info = DeviceInfo {
+        time: now - 7 * day,
+        id: "legacy-controller".into(),
+        ..Default::default()
+    };
+    let hwid = b"legacy-hwid";
+    let encrypted = legacy_fixture(hwid, &info);
     let path = Config2::file();
-    let saved = fs::read_to_string(&path).unwrap();
-    let legacy = format!("trusted_devices = 'legacy-v1-records'\n{saved}");
-    fs::write(&path, legacy).unwrap();
-    let valid = is_trusted(&[]).await;
-    Config::set_option("trusted-device-field-test".into(), "N".into());
-    let after_save = fs::read_to_string(&path).unwrap();
+    let saved = format!(
+        "trusted_devices = '{encrypted}'\n{}",
+        fs::read_to_string(&path).unwrap()
+    );
     fs::write(&path, saved).unwrap();
-    assert!(after_save.contains("legacy-v1-records"));
-    assert!(after_save.contains("trusted_devices_v2"));
-    assert!(!valid, "Legacy records must not bypass TOTP");
+    Config::set_option("trusted-device-field-test".into(), "N".into());
+    assert!(fs::read_to_string(&path).unwrap().contains(&encrypted));
+    let listed = devices().await;
+    assert_eq!(listed.len(), 2);
+    let device = listed
+        .iter()
+        .find(|device| device["id"] == info.id)
+        .unwrap();
+    let expiry = device["expires_at"].as_i64().unwrap();
+    assert!(expiry >= now + LIFETIME_MILLIS && expiry <= hbb_common::get_time() + LIFETIME_MILLIS);
+    assert!(Config2::get_trusted_device_stores().unwrap().1.is_empty());
+    let original = Config::get_options();
+    let mut options = original.clone();
+    options.insert(keys::OPTION_TRUSTED_DEVICE_EXPIRATION.into(), "0".into());
+    config::set_options(options).unwrap();
+    super::super::initialize().unwrap();
+    assert!(devices()
+        .await
+        .iter()
+        .all(|device| device["expires_at"] == 0));
+    recovery::legacy_migration_preserves_revocation(hwid, &info).await;
+    assert!(is_trusted(&existing).await);
+    authority::manage(true).await.unwrap();
+    config::set_options(original).unwrap();
+}
+
+fn legacy_fixture(hwid: &[u8], info: &DeviceInfo) -> String {
+    let mut legacy = serde_json::to_value(info).unwrap();
+    legacy["hwid"] = serde_json::json!(hwid);
+    let mut expired = legacy.clone();
+    expired["time"] = serde_json::json!(info.time - 90 * super::super::policy::DAY_MILLIS);
+    expired["id"] = serde_json::json!("expired-controller");
+    let plaintext = serde_json::to_string(&vec![legacy, expired]).unwrap();
+    encrypt_str_or_original(&plaintext, "00", plaintext.len())
 }
 
 pub(super) async fn devices() -> Vec<serde_json::Value> {

@@ -15,6 +15,7 @@ pub struct Session {
     credentials: Option<Credentials>,
     supported: bool,
     requested: bool,
+    legacy: bool,
 }
 
 impl Session {
@@ -71,15 +72,20 @@ impl Session {
     pub async fn login(&mut self, mut message: Message) -> ResultType<Message> {
         self.supported = false;
         self.requested = false;
+        self.legacy = false;
         if let (Some(credentials), Some(message::Union::LoginRequest(request))) =
             (self.credentials.clone(), message.union.as_mut())
         {
+            request.trusted_device_v2_supported = true;
+            self.legacy = !request.hwid.is_empty();
             if !request.password.is_empty() {
                 request.trusted_device_v2_token.clear();
                 let token = match tokio::task::spawn_blocking(move || credentials.load()).await? {
                     Ok(token) => token.unwrap_or_default(),
                     Err(error) => {
                         self.credentials = None;
+                        self.legacy = false;
+                        request.trusted_device_v2_supported = false;
                         const LOG_INTERVAL: std::time::Duration =
                             std::time::Duration::from_secs(30);
                         hbb_common::throttled_log!(LOG_INTERVAL, warn,
@@ -95,6 +101,7 @@ impl Session {
 
     pub fn outgoing(&mut self, mut message: Message) -> Message {
         if let Some(message::Union::Auth2fa(auth)) = message.union.as_mut() {
+            self.legacy = false;
             auth.trust_this_device &= self.supported && self.credentials.is_some();
             self.requested = auth.trust_this_device;
         }
@@ -112,7 +119,7 @@ impl Session {
                 bail!("Login succeeded, but the host did not remember this device");
             }
             if !token.is_empty() {
-                if !self.requested {
+                if !self.requested && !(self.legacy && response.trusted_device_v2_supported) {
                     bail!("Host returned an unsolicited trusted-device credential");
                 }
                 let info = PeerInfoSerde {

@@ -3832,6 +3832,11 @@ impl LoginConfigHandler {
         let my_platform = hbb_common::whoami::platform().to_string();
         #[cfg(target_os = "android")]
         let my_platform = "Android".into();
+        let hwid = if self.get_option("trust-this-device") == "Y" {
+            crate::get_hwid()
+        } else {
+            Bytes::new()
+        };
         let os_login: MessageField<OSLogin> = if self.conn_type == ConnType::TERMINAL {
             Some(OSLogin {
                 username: os_username,
@@ -3852,6 +3857,7 @@ impl LoginConfigHandler {
             session_id: self.session_id,
             version: crate::VERSION.to_string(),
             os_login,
+            hwid,
             avatar,
             ..Default::default()
         };

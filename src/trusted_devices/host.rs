@@ -1,23 +1,49 @@
 use super::{
-    authority::{self, Request, Response},
+    authority::{self, Credential, Request, Response},
     random_token, token_verifier, DeviceInfo, Ticket, TOKEN_BYTES,
 };
+use base::message_proto::{Hash, LoginRequest};
 use hbb_common::{
     bail,
     sodiumoxide::{crypto::hash::sha256, utils},
     ResultType,
 };
 
+#[derive(Default)]
 pub struct LoginProof {
     pub password: Vec<u8>,
     pub challenge: String,
     pub salt: String,
     pub token: Vec<u8>,
+    pub legacy: Option<[u8; TOKEN_BYTES]>,
+    pub supports_v2: bool,
+}
+
+impl LoginProof {
+    pub fn from_login(request: &mut LoginRequest, hash: &Hash) -> ResultType<Self> {
+        let token = std::mem::take(&mut request.trusted_device_v2_token).to_vec();
+        Ok(Self {
+            password: request.password.to_vec(),
+            challenge: hash.challenge.clone(),
+            salt: hash.salt.clone(),
+            token,
+            legacy: super::legacy::verifier(
+                &request.hwid,
+                &DeviceInfo {
+                    id: request.my_id.clone(),
+                    name: request.my_name.clone(),
+                    platform: request.my_platform.clone(),
+                    ..Default::default()
+                },
+            )?,
+            supports_v2: request.trusted_device_v2_supported,
+        })
+    }
 }
 
 pub struct Attempt {
     ticket: Ticket,
-    verifier: Option<[u8; TOKEN_BYTES]>,
+    credential: Option<Credential>,
     pub enroll: bool,
 }
 
@@ -25,6 +51,8 @@ pub async fn begin(
     proof: LoginProof,
 ) -> ResultType<Option<(Option<Attempt>, bool, totp_rs::TOTP)>> {
     let verifier = token_verifier(&proof.token);
+    let legacy = proof.legacy;
+    let supports_v2 = proof.supports_v2;
     let settings = super::config::update(move || {
         let settings = super::config::snapshot()?;
         if !settings.enabled || settings.totp.is_empty() {
@@ -38,8 +66,14 @@ pub async fn begin(
     let Some((scope, totp)) = settings else {
         return Ok(None);
     };
-    let (ticket, valid) = match authority::request(Request::Begin { scope, verifier }).await {
-        Ok(Response::Begun(ticket, valid)) => (ticket, valid),
+    let (ticket, credential) = match authority::request(Request::Begin {
+        scope,
+        verifier,
+        legacy,
+    })
+    .await
+    {
+        Ok(Response::Begun(ticket, credential)) => (ticket, credential),
         Err(error) if error.is::<authority::Unavailable>() => {
             log_unavailable(&error);
             return Ok(Some((None, false, totp)));
@@ -47,11 +81,16 @@ pub async fn begin(
         Err(error) => return Err(error),
         _ => bail!("Invalid trusted-device authorization response"),
     };
+    let valid = credential.is_some();
+    if !valid && !supports_v2 {
+        return Ok(Some((None, false, totp)));
+    }
+    let enroll = supports_v2 && matches!(&credential, Some(Credential::Legacy(_)));
     Ok(Some((
         Some(Attempt {
             ticket,
-            verifier: if valid { verifier } else { None },
-            enroll: false,
+            credential,
+            enroll,
         }),
         valid,
         totp,
@@ -69,7 +108,7 @@ impl Attempt {
         self.check_settings().await?;
         match authority::request(Request::Check {
             ticket: self.ticket.clone(),
-            verifier: self.verifier,
+            credential: self.credential.clone(),
         })
         .await?
         {
@@ -84,10 +123,15 @@ impl Attempt {
         }
         self.check_settings().await?;
         let token = random_token()?;
+        let legacy = match self.credential {
+            Some(Credential::Legacy(verifier)) => Some(verifier),
+            _ => None,
+        };
         match authority::request(Request::Enroll {
             ticket: self.ticket,
             verifier: sha256::hash(&token).0,
             info,
+            legacy,
         })
         .await?
         {

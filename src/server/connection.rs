@@ -2418,7 +2418,8 @@ impl Connection {
         let mut msg_out = Message::new();
         let mut res = LoginResponse::new();
         res.set_error(err.to_string());
-        res.trusted_device_v2_supported = self.trusted_device.is_some();
+        res.trusted_device_v2_supported =
+            self.lr.trusted_device_v2_supported && self.trusted_device.is_some();
         msg_out.set_login_response(res);
         self.send(msg_out).await;
     }

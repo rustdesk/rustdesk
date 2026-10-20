@@ -18,15 +18,17 @@ pub enum Request {
     Begin {
         scope: [u8; TOKEN_BYTES],
         verifier: Option<[u8; TOKEN_BYTES]>,
+        legacy: Option<[u8; TOKEN_BYTES]>,
     },
     Check {
         ticket: Ticket,
-        verifier: Option<[u8; TOKEN_BYTES]>,
+        credential: Option<Credential>,
     },
     Enroll {
         ticket: Ticket,
         verifier: [u8; TOKEN_BYTES],
         info: DeviceInfo,
+        legacy: Option<[u8; TOKEN_BYTES]>,
     },
     List,
     Clear,
@@ -36,10 +38,16 @@ pub enum Request {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Response {
-    Begun(Ticket, bool),
+    Begun(Ticket, Option<Credential>),
     Done,
     Devices(String),
     Unavailable(String),
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub enum Credential {
+    Token([u8; TOKEN_BYTES]),
+    Legacy([u8; TOKEN_BYTES]),
 }
 
 impl std::fmt::Debug for Request {
@@ -61,6 +69,75 @@ impl Request {
             );
         }
         Ok(())
+    }
+
+    fn authorize(self, grants: &mut super::Grants, days: u32) -> ResultType<(Response, bool)> {
+        match self {
+            Self::Begin {
+                scope,
+                verifier,
+                legacy,
+            } => {
+                let ticket = grants.begin(&scope)?;
+                let mut changed = false;
+                let credential = if grants.verify_digest(&ticket, verifier.as_ref(), get_time())? {
+                    changed = verifier
+                        .as_ref()
+                        .is_some_and(|value| grants.confirm_migration(value));
+                    verifier.map(Credential::Token)
+                } else if grants.verify_legacy(&ticket, legacy.as_ref())? {
+                    legacy.map(Credential::Legacy)
+                } else {
+                    None
+                };
+                Ok((Response::Begun(ticket, credential), changed))
+            }
+            Self::Check { ticket, credential } => {
+                let valid = match credential.as_ref() {
+                    Some(Credential::Legacy(verifier)) => {
+                        grants.migration_source(&ticket, verifier)?.is_some()
+                    }
+                    Some(Credential::Token(verifier)) => {
+                        grants.verify_digest(&ticket, Some(verifier), get_time())?
+                    }
+                    None => grants.verify_digest(&ticket, None, get_time())?,
+                };
+                if credential.is_some() && !valid {
+                    bail!("Trusted-device credential expired or was revoked; reconnect and authenticate again");
+                }
+                Ok((Response::Done, false))
+            }
+            enrollment @ Self::Enroll { .. } => {
+                enrollment.enroll(grants, days)?;
+                Ok((Response::Done, true))
+            }
+            _ => bail!("Invalid trusted-device authorization operation"),
+        }
+    }
+
+    fn enroll(self, grants: &mut super::Grants, days: u32) -> ResultType<()> {
+        let Self::Enroll {
+            ticket,
+            verifier,
+            info,
+            legacy,
+        } = self
+        else {
+            bail!("Invalid trusted-device enrollment operation");
+        };
+        if let Some(legacy) = legacy {
+            return grants.migrate(&ticket, (legacy, verifier));
+        }
+        let time = get_time();
+        grants.enroll_digest(
+            &ticket,
+            verifier,
+            DeviceInfo {
+                time,
+                expires_at: Some(super::policy::expires_at(time, days)),
+                ..info
+            },
+        )
     }
 }
 
@@ -150,39 +227,11 @@ pub fn handle(request: Request) -> ResultType<Response> {
     // Validate authentication settings before allowing an unavailable-grants fallback.
     request.check_scope(&settings.scope)?;
     let mut grants = super::load_grants(&storage, &settings.scope)?;
-    match request {
-        Request::Begin { scope, verifier } => {
-            let ticket = grants.begin(&scope)?;
-            let valid = grants.verify_digest(&ticket, verifier.as_ref(), get_time())?;
-            Ok(Response::Begun(ticket, valid))
-        }
-        Request::Check { ticket, verifier } => {
-            let valid = grants.verify_digest(&ticket, verifier.as_ref(), get_time())?;
-            if verifier.is_some() && !valid {
-                bail!("Trusted-device credential expired or was revoked; reconnect and authenticate again");
-            }
-            Ok(Response::Done)
-        }
-        Request::Enroll {
-            ticket,
-            verifier,
-            info,
-        } => {
-            let time = get_time();
-            grants.enroll_digest(
-                &ticket,
-                verifier,
-                DeviceInfo {
-                    time,
-                    expires_at: Some(super::policy::expires_at(time, settings.validity_days)),
-                    ..info
-                },
-            )?;
-            storage.write(&grants).map_err(Unavailable)?;
-            Ok(Response::Done)
-        }
-        _ => bail!("Invalid trusted-device authorization operation"),
+    let (response, changed) = request.authorize(&mut grants, settings.validity_days)?;
+    if changed {
+        storage.write(&grants).map_err(Unavailable)?;
     }
+    Ok(response)
 }
 
 pub async fn manage(clear: bool) -> ResultType<String> {
