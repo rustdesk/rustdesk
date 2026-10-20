@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Seu desktop remoto"><br>
+  <img src="../res/logo-header.svg" alt="RustDesk - O seu ambiente de trabalho remoto"><br>
   <a href="#compilar">Compilar</a> •
   <a href="#como-compilar-com-o-docker">Docker</a> •
   <a href="#estrutura-de-ficheiros">Estrutura</a> •
@@ -13,15 +13,15 @@
 > Os programadores do RustDesk não toleram ou apoiam qualquer uso antiético ou ilegal deste software. O uso indevido, como acesso não autorizado, controlo ou invasão de privacidade, é estritamente contrário às nossas diretrizes. Os autores não se responsabilizam por qualquer uso indevido da aplicação.
 
 
-Converse conosco: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
+Converse connosco: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
 [![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Advanced%20Features-blue)](https://rustdesk.com/pricing.html)
 
-Mais uma solução de desktop remoto, escrita em Rust. Funciona imediatamente, sem necessidade de configuração. Você tem controle total dos seus dados, sem preocupações com segurança. Pode usar nosso servidor de conexão/retransmissão (rendezvous/relay), [configurar o seu próprio](https://rustdesk.com/server) ou [escrever seu próprio servidor de conexão/retransmissão](https://github.com/rustdesk/rustdesk-server-demo).
+Mais uma solução de ambiente de trabalho remoto, escrita em Rust. Funciona imediatamente, sem necessidade de configuração. Tem controlo total dos seus dados, sem preocupações com a segurança. Pode usar o nosso servidor de ligação/retransmissão (rendezvous/relay), [configurar o seu próprio](https://rustdesk.com/server) ou [escrever o seu próprio servidor de ligação/retransmissão](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-O RustDesk agradece as contribuições de todos. Veja [CONTRIBUTING.md](CONTRIBUTING.md) para ajuda em como começar.
+O RustDesk agradece as contribuições de todos. Veja [CONTRIBUTING.md](CONTRIBUTING.md) para obter ajuda para começar.
 
 [**Perguntas Frequentes (FAQ)**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
@@ -38,7 +38,7 @@ O RustDesk agradece as contribuições de todos. Veja [CONTRIBUTING.md](CONTRIBU
 
 ## Dependências
 
-As versões desktop usam Flutter ou Sciter (descontinuado) para a interface gráfica (GUI). Este tutorial é apenas para o Sciter, por ser mais fácil e amigável para começar. Consulte o nosso [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) para instruções de compilação da versão Flutter.
+As versões para ambiente de trabalho usam Flutter ou Sciter (descontinuado) para a interface gráfica (GUI). Este tutorial é apenas para o Sciter, por ser mais fácil e acessível para começar. Consulte o nosso [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) para instruções de compilação da versão Flutter.
 
 Por favor transfira a biblioteca dinâmica do Sciter por conta própria.
 
@@ -166,7 +166,7 @@ Certifique-se de que executa estes comandos a partir da raiz do repositório do 
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: inicia uma ligação entre pares
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Comunica com o [rustdesk-server](https://github.com/rustdesk/rustdesk-server), aguarda por uma ligação direta remota (TCP hole punching) ou uma ligação retransmitida
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: código específico da plataforma
-- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: código Flutter para desktop e dispositivos móveis
+- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: código Flutter para ambiente de trabalho e dispositivos móveis
 
 ## Capturas de Ecrã
 
