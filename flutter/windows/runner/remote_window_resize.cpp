@@ -3,6 +3,7 @@
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
+#include <flutter_windows.h>
 
 #include "remote_window_geometry.h"
 
@@ -48,7 +49,8 @@ class RemoteWindowResize : public flutter::Plugin {
           if (!GetWindowRect(hwnd, &outer) || !GetClientRect(hwnd, &client)) {
             return std::nullopt;
           }
-          const double dpi = GetDpiForWindow(hwnd) / 96.0;
+          const double dpi = FlutterDesktopGetDpiForMonitor(
+              MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)) / 96.0;
           const LONG extra_width = outer.right - outer.left - client.right +
               static_cast<LONG>(std::lround(inset_width_ * dpi));
           const LONG extra_height = outer.bottom - outer.top - client.bottom +

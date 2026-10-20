@@ -1,3 +1,8 @@
+// Keep assertions active in the Release configuration used by CI.
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+
 #include "../remote_window_geometry.h"
 #include <cassert>
 

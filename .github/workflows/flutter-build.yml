@@ -366,6 +366,15 @@ jobs:
               Write-Host "Ingore the printer driver error."
           }
 
+      - name: Run the remote window geometry tests
+        if: ${{ !inputs.upload-artifact }}
+        shell: pwsh
+        run: |
+          cmake --build flutter/build/windows/${{ matrix.job.flutter-arch }} --config Release --target remote_window_geometry_test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "./flutter/build/windows/${{ matrix.job.flutter-arch }}/runner/Release/remote_window_geometry_test.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run the Rust tests
         # x86_64 only: the tests are the same code on arm64, and that runner is the slow one.
         if: ${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}
