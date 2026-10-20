@@ -1,4 +1,5 @@
 use super::policy;
+pub use super::policy::{changes_authentication, update_options};
 use base::config::keys;
 use hbb_common::{
     anyhow::{anyhow, Context},
@@ -11,7 +12,6 @@ use hbb_common::{
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, io::ErrorKind, path::Path};
 
-const AUTH_OPTIONS: [&str; 2] = ["2fa", keys::OPTION_ENABLE_TRUSTED_DEVICES];
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const SYNC_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
@@ -53,7 +53,7 @@ pub async fn update_auth<T: Send + 'static>(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-async fn sync_auth_to_service() -> ResultType<()> {
+pub(super) async fn sync_auth_to_service() -> ResultType<()> {
     use crate::ipc::{connect_trusted_device_service, Data};
     const TIMEOUT_MS: u64 = 1000;
     let mut connection = connect_trusted_device_service(TIMEOUT_MS).await?;
@@ -105,7 +105,7 @@ fn password(config: &Config) -> ResultType<Password> {
     Ok(serde_json::from_value(serde_json::to_value(config)?)?)
 }
 
-fn effective_options(options: HashMap<String, String>) -> HashMap<String, String> {
+pub(super) fn effective_options(options: HashMap<String, String>) -> HashMap<String, String> {
     let mut effective = config::DEFAULT_SETTINGS.read().unwrap().clone();
     effective.extend(options);
     effective.extend(config::OVERWRITE_SETTINGS.read().unwrap().clone());
@@ -167,7 +167,7 @@ fn build(
             .unwrap_or_default(),
     );
     let validity_days = policy::days(&options);
-    let scope = policy::scope(&(&h1, &salt, &totp, enabled), validity_days)?;
+    let scope = sha256::hash(&serde_json::to_vec(&(&h1, &salt, &totp, enabled))?).0;
     Ok(Snapshot {
         scope,
         h1,
@@ -186,13 +186,15 @@ pub fn snapshot() -> ResultType<Snapshot> {
         effective_options(stored_options.options),
         true,
     )?;
-    if !utils::memcmp(&current.scope, &stored.scope) {
+    if !utils::memcmp(&current.scope, &stored.scope)
+        || current.validity_days != stored.validity_days
+    {
         bail!("Trusted-device authentication settings are out of sync; reconnect after configuration sync");
     }
     Ok(current)
 }
 
-fn change<T>(affected: bool, apply: impl FnOnce() -> ResultType<T>) -> ResultType<T> {
+pub(super) fn change<T>(affected: bool, apply: impl FnOnce() -> ResultType<T>) -> ResultType<T> {
     if !affected {
         return apply();
     }
@@ -211,20 +213,10 @@ fn change<T>(affected: bool, apply: impl FnOnce() -> ResultType<T>) -> ResultTyp
 }
 
 pub fn set_options(options: HashMap<String, String>) -> ResultType<()> {
-    let affected = changes_authentication(&options);
-    change(affected, || {
+    policy::change_options(effective_options(options.clone()), || {
         Config::set_options(options);
         Ok(())
     })
-}
-
-pub fn changes_authentication(options: &HashMap<String, String>) -> bool {
-    let old = Config::get_options();
-    let new = effective_options(options.clone());
-    AUTH_OPTIONS
-        .iter()
-        .any(|key| old.get(*key) != new.get(*key))
-        || policy::days(&old) != policy::days(&new)
 }
 
 pub fn import(apply: impl FnOnce() -> ResultType<()>) -> ResultType<()> {
@@ -274,8 +266,9 @@ pub fn set_config(value: Config) -> ResultType<bool> {
 }
 
 pub fn set_config2(value: Config2) -> ResultType<bool> {
-    let affected = changes_authentication(&value.options);
-    change(affected, || Ok(Config2::set(value)))
+    policy::change_options(effective_options(value.options.clone()), || {
+        Ok(Config2::set(value))
+    })
 }
 
 impl Snapshot {

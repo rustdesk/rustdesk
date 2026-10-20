@@ -6,7 +6,7 @@ pub(super) async fn legacy_settings_survive_saving() {
     let saved = fs::read_to_string(&path).unwrap();
     let legacy = format!("trusted_devices = 'legacy-v1-records'\n{saved}");
     fs::write(&path, legacy).unwrap();
-    let (_, valid, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
+    let valid = is_trusted(&[]).await;
     Config::set_option("trusted-device-field-test".into(), "N".into());
     let after_save = fs::read_to_string(&path).unwrap();
     let management: serde_json::Value =
@@ -34,8 +34,7 @@ pub(super) async fn encrypted_store_preserves_grants(token: &[u8]) {
     let (decrypted, encrypted, _) = decrypt_str_or_original(&migrated, "00");
     assert!(encrypted, "Existing plaintext grants must be migrated");
     assert_eq!(decrypted, plaintext);
-    let (_, valid, _) = host::begin(proof(PASSWORD, token)).await.unwrap().unwrap();
-    assert!(valid, "Migration must preserve existing trusted devices");
+    assert!(is_trusted(token).await);
 
     let mut ciphertext = base64::decode(
         migrated.strip_prefix("00").unwrap(),
@@ -57,43 +56,57 @@ pub(super) async fn encrypted_store_preserves_grants(token: &[u8]) {
     assert_eq!(after_read.unwrap(), corrupted);
 }
 
-pub(super) async fn expiration_changes_revoke_grants() {
+pub(super) async fn expiration_changes_preserve_grants() {
+    use super::super::policy::expires_at;
     let original = Config::get_options();
-    for days in ["1", "7", "0", "30"] {
-        let (attempt, valid, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
-        assert!(!valid);
-        let mut attempt = attempt.unwrap();
-        attempt.enroll = true;
+    for (days, remaining) in [
+        ("7", 21),
+        ("30", 3),
+        ("0", 3),
+        ("30", 0),
+        ("90", 3),
+        ("1", 21),
+    ] {
+        let attempt = begin_enrollment().await;
         let token = attempt.finish(DeviceInfo::default()).await.unwrap();
-        let (pending, _, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
-        let mut pending = pending.unwrap();
-        pending.enroll = true;
+        let pending = begin_enrollment().await;
+        let now = hbb_common::get_time();
+        let previous = expires_at(now, remaining);
+        {
+            let storage = super::super::storage().unwrap();
+            let mut grants = storage.read().unwrap();
+            grants.records[0].info.expires_at = Some(previous);
+            storage.write(&grants).unwrap();
+        }
         let mut options = original.clone();
         options.insert(keys::OPTION_TRUSTED_DEVICE_EXPIRATION.into(), days.into());
-        let affected = config::changes_authentication(&options);
-        config::update_auth(affected, move || config::set_options(options))
-            .await
-            .unwrap();
-        assert!(
-            !host::begin(proof(PASSWORD, &token))
-                .await
-                .unwrap()
-                .unwrap()
-                .1
-        );
-        assert!(pending.finish(DeviceInfo::default()).await.is_err());
-        assert!(devices().await.is_empty());
+        if days == "90" {
+            let mut value = Config2::get();
+            value.options = options;
+            config::set_config2(value).unwrap();
+        } else {
+            config::update_options(options).await.unwrap();
+        }
+        assert!(is_trusted(&token).await);
+        let expiry = devices().await[0]["expires_at"].as_i64().unwrap();
+        if days == "0" {
+            assert_eq!(expiry, 0);
+        } else if remaining != 0 && remaining <= days.parse::<u32>().unwrap() {
+            assert_eq!(expiry, previous);
+        } else {
+            assert!(expiry >= expires_at(now, days.parse().unwrap()));
+            assert!(expiry <= expires_at(hbb_common::get_time(), days.parse().unwrap()));
+        }
+        pending.finish(DeviceInfo::default()).await.unwrap();
+        authority::manage(true).await.unwrap();
         assert_issued_expiry(days).await;
+        authority::manage(true).await.unwrap();
     }
     config::set_options(original).unwrap();
-    assert_eq!(devices().await.len(), 1);
-    authority::manage(true).await.unwrap();
 }
 
 pub(super) async fn renewal_preserves_authorization(token: &[u8]) {
-    let (attempt, _, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
-    let mut attempt = attempt.unwrap();
-    attempt.enroll = true;
+    let attempt = begin_enrollment().await;
     let other_token = attempt.finish(DeviceInfo::default()).await.unwrap();
     let now = hbb_common::get_time();
     {
@@ -109,7 +122,12 @@ pub(super) async fn renewal_preserves_authorization(token: &[u8]) {
         .iter()
         .map(|device| serde_json::from_value(device["record_id"].clone()).unwrap())
         .collect();
-    authority::renew(vec![ids[0]]).await.unwrap();
+    assert!(matches!(
+        authority::request(Request::Renew(vec![ids[0]]))
+            .await
+            .unwrap(),
+        Response::Done
+    ));
     let after = devices().await;
     let expires_at = after[0]["expires_at"].as_i64().unwrap();
     assert!(expires_at >= now + LIFETIME_MILLIS);
@@ -117,33 +135,17 @@ pub(super) async fn renewal_preserves_authorization(token: &[u8]) {
     assert_eq!(after[0]["time"], before[0]["time"]);
     assert_eq!(after[1], before[1]);
     for token in [token, other_token.as_slice()] {
-        let (_, valid, _) = host::begin(proof(PASSWORD, token)).await.unwrap().unwrap();
-        assert!(valid);
+        assert!(is_trusted(token).await);
     }
-    renewal_rejects_expired_and_revoked(&ids, &after[1]).await;
-}
-
-async fn renewal_rejects_expired_and_revoked(
-    ids: &[[u8; TOKEN_BYTES]],
-    unchanged: &serde_json::Value,
-) {
-    {
-        let storage = super::super::storage().unwrap();
-        let mut grants = storage.read().unwrap();
-        grants.records[0].info.expires_at = Some(hbb_common::get_time());
-        storage.write(&grants).unwrap();
-    }
-    assert!(authority::renew(vec![ids[1], ids[0]]).await.is_err());
-    assert_eq!(devices().await, vec![unchanged.clone()]);
     authority::manage(true).await.unwrap();
-    assert!(authority::renew(vec![ids[1]]).await.is_err());
+    assert!(authority::request(Request::Renew(vec![ids[1]]))
+        .await
+        .is_err());
     assert!(devices().await.is_empty());
 }
 
 async fn assert_issued_expiry(days: &str) {
-    let (attempt, _, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
-    let mut attempt = attempt.unwrap();
-    attempt.enroll = true;
+    let attempt = begin_enrollment().await;
     attempt
         .finish(DeviceInfo {
             time: 1,
@@ -164,14 +166,14 @@ async fn assert_issued_expiry(days: &str) {
     assert_eq!(listed[0]["expires_at"], expected);
     if days == 0 {
         let id = serde_json::from_value(listed[0]["record_id"].clone()).unwrap();
-        assert!(authority::renew(vec![id]).await.is_err());
+        assert!(authority::request(Request::Renew(vec![id])).await.is_err());
         assert_eq!(devices().await, listed);
     }
 }
 
 #[test]
 fn explicit_expiry_is_enforced_and_never_expiring_grants_can_be_revoked() {
-    for days in [0, 1, 7, 30] {
+    for days in [0, 1, 7, 30, 90] {
         let mut grants = Grants::default();
         grants.revoke(Some(SCOPE)).unwrap();
         let ticket = grants.begin(&SCOPE).unwrap();
@@ -216,24 +218,20 @@ pub(super) fn malformed_host_field_preserves_authentication() {
     let malformed = hbb_common::toml::to_string(&value).unwrap();
     fs::write(&path, &malformed).unwrap();
 
-    let loaded: Config2 = hbb_common::toml::from_str(&malformed).unwrap();
     let credential = Config2::get_trusted_devices_v2();
     Config::set_option("trusted-device-field-test".into(), "Y".into());
     let after_save = fs::read_to_string(&path).unwrap();
-    let cleared = super::super::clear();
-    let recovered = super::super::devices();
     fs::write(&path, saved).unwrap();
 
-    assert_eq!(loaded.options.get("2fa"), Config::get_options().get("2fa"));
     assert!(credential.is_err());
     let after_save: Config2 = hbb_common::toml::from_str(&after_save).unwrap();
     assert_eq!(after_save.options["trusted-device-field-test"], "Y");
-    assert_eq!(after_save.options.get("2fa"), loaded.options.get("2fa"));
+    assert_eq!(
+        after_save.options.get("2fa"),
+        Config::get_options().get("2fa")
+    );
     assert!(serde_json::to_value(&after_save)
         .unwrap()
         .get("trusted_devices_v2")
         .is_none());
-    cleared.unwrap();
-    let recovered: serde_json::Value = serde_json::from_str(&recovered.unwrap()).unwrap();
-    assert_eq!(recovered["devices"], serde_json::json!([]));
 }

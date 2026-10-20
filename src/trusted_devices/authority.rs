@@ -192,17 +192,3 @@ pub async fn manage(clear: bool) -> ResultType<String> {
         _ => bail!("Invalid trusted-device management response"),
     }
 }
-
-pub async fn remove(record_ids: Vec<[u8; TOKEN_BYTES]>) -> ResultType<()> {
-    match request(Request::Remove(record_ids)).await? {
-        Response::Done => Ok(()),
-        _ => bail!("Invalid trusted-device removal response"),
-    }
-}
-
-pub async fn renew(record_ids: Vec<[u8; TOKEN_BYTES]>) -> ResultType<()> {
-    match request(Request::Renew(record_ids)).await? {
-        Response::Done => Ok(()),
-        _ => bail!("Invalid trusted-device renewal response"),
-    }
-}

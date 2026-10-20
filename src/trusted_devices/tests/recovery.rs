@@ -38,13 +38,9 @@ pub(super) async fn unknown_expiration_preserves_login_and_settings() {
 }
 
 pub(super) async fn unusable_grant_scope_keeps_current_password_totp_available() {
-    let (attempt, _, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
-    let mut attempt = attempt.unwrap();
-    attempt.enroll = true;
+    let attempt = begin_enrollment().await;
     let token = attempt.finish(DeviceInfo::default()).await.unwrap();
-    let (pending, _, _) = host::begin(proof(PASSWORD, &[])).await.unwrap().unwrap();
-    let mut pending = pending.unwrap();
-    pending.enroll = true;
+    let pending = begin_enrollment().await;
     config::import(|| Ok(())).unwrap();
     assert!(host::begin(proof("wrong-password", &token)).await.is_err());
     let (attempt, valid, totp) = host::begin(proof(PASSWORD, &token)).await.unwrap().unwrap();

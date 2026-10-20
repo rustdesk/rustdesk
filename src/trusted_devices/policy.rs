@@ -1,10 +1,12 @@
+use super::config;
 use base::config::keys;
-use hbb_common::{sodiumoxide::crypto::hash::sha256, ResultType};
+use hbb_common::{config::Config, get_time, ResultType};
 use std::collections::HashMap;
 
 pub const DEFAULT_DAYS: u32 = 30;
 pub const NEVER_EXPIRE: u32 = 0;
 pub const DAY_MILLIS: i64 = 24 * 60 * 60 * 1000;
+const AUTH_OPTIONS: [&str; 2] = ["2fa", keys::OPTION_ENABLE_TRUSTED_DEVICES];
 
 pub fn days(options: &HashMap<String, String>) -> u32 {
     match options
@@ -14,6 +16,7 @@ pub fn days(options: &HashMap<String, String>) -> u32 {
         None | Some("") | Some("30") => DEFAULT_DAYS,
         Some("1") => 1,
         Some("7") => 7,
+        Some("90") => 90,
         Some("0") => NEVER_EXPIRE,
         _ => {
             const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
@@ -24,16 +27,71 @@ pub fn days(options: &HashMap<String, String>) -> u32 {
     }
 }
 
-pub fn scope(
-    authentication: &impl serde::Serialize,
-    days: u32,
-) -> ResultType<[u8; super::TOKEN_BYTES]> {
-    let mut material = serde_json::to_vec(authentication)?;
-    // Preserve existing V2 grants when the default 30-day policy is unchanged.
-    if days != DEFAULT_DAYS {
-        material.extend_from_slice(&days.to_le_bytes());
+fn authentication_changed(old: &HashMap<String, String>, new: &HashMap<String, String>) -> bool {
+    AUTH_OPTIONS
+        .iter()
+        .any(|key| old.get(*key) != new.get(*key))
+}
+
+pub fn changes_authentication(options: &HashMap<String, String>) -> bool {
+    let old = Config::get_options();
+    let new = config::effective_options(options.clone());
+    authentication_changed(&old, &new) || days(&old) != days(&new)
+}
+
+pub async fn update_options(options: HashMap<String, String>) -> ResultType<()> {
+    let old = Config::get_options();
+    let new = config::effective_options(options.clone());
+    let revoke = authentication_changed(&old, &new);
+    config::update_auth(revoke, move || config::set_options(options)).await?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if !revoke && days(&old) != days(&new) && super::authority::uses_service()? {
+        config::sync_auth_to_service().await?;
     }
-    Ok(sha256::hash(&material).0)
+    Ok(())
+}
+
+pub(super) fn change_options<T>(
+    options: HashMap<String, String>,
+    apply: impl FnOnce() -> ResultType<T>,
+) -> ResultType<T> {
+    let old = Config::get_options();
+    if authentication_changed(&old, &options) {
+        return config::change(true, apply);
+    }
+    if days(&old) == days(&options) {
+        return apply();
+    }
+    let storage = super::storage()?;
+    if !storage.exists()? {
+        return apply();
+    }
+    let now = get_time();
+    let mut grants = super::load_grants(&storage, &config::snapshot()?.scope)?;
+    update_expiration(&mut grants, days(&options), now);
+    storage.write(&grants)?;
+    apply()
+}
+
+pub(super) fn update_expiration(grants: &mut super::Grants, days: u32, now: i64) -> bool {
+    let mut changed = grants.cleanup(now);
+    let expiry = expires_at(now, days);
+    for record in &mut grants.records {
+        let previous = record
+            .info
+            .expires_at
+            .unwrap_or_else(|| record.info.time.saturating_add(super::LIFETIME_MILLIS));
+        let next = if expiry == 0 || previous == 0 {
+            expiry
+        } else {
+            previous.min(expiry)
+        };
+        if next != previous {
+            record.info.expires_at = Some(next);
+            changed = true;
+        }
+    }
+    changed
 }
 
 pub fn expires_at(time: i64, days: u32) -> i64 {

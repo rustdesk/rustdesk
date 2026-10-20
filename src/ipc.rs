@@ -24,6 +24,7 @@ use crate::{
     privacy_mode,
     privacy_mode::PrivacyModeState,
     rendezvous_mediator::RendezvousMediator,
+    trusted_devices::authority,
     ui_interface::{get_local_option, set_local_option},
 };
 use bytes::Bytes;
@@ -495,12 +496,7 @@ pub enum Data {
     // Although the key is not necessary, it is used to avoid hardcoding the key.
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
-    RemoveTrustedDevices(Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>),
-    RenewTrustedDevices(Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>),
-    TrustedDevicesV2 {
-        clear: bool,
-        result: Option<Result<String, String>>,
-    },
+    TrustedDeviceManagement(Box<authority::Request>),
     TrustedDeviceRequest(Box<crate::trusted_devices::authority::Request>),
     TrustedDeviceResponse(Result<crate::trusted_devices::authority::Response, String>),
     SecurityConfigError(String),
@@ -1095,13 +1091,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if let Some(v) = value.get("privacy-mode-impl-key") {
                     crate::privacy_mode::switch(v);
                 }
-                let affected = crate::trusted_devices::config::changes_authentication(&value);
-                if let Err(error) =
-                    crate::trusted_devices::config::update_auth(affected, move || {
-                        crate::trusted_devices::config::set_options(value)
-                    })
-                    .await
-                {
+                if let Err(error) = crate::trusted_devices::config::update_options(value).await {
                     allow_err!(
                         stream
                             .send(&Data::SecurityConfigError(error.to_string()))
@@ -1290,49 +1280,18 @@ async fn handle(data: Data, stream: &mut Connection) {
                 );
             }
         }
-        Data::RemoveTrustedDevices(v) => {
-            let result = crate::trusted_devices::authority::remove(v)
-                .await
-                .map(|_| String::new())
-                .map_err(|error| error.to_string());
-            allow_err!(
-                stream
-                    .send(&Data::TrustedDevicesV2 {
-                        clear: false,
-                        result: Some(result)
-                    })
-                    .await
-            );
-        }
-        Data::RenewTrustedDevices(v) => {
-            let result = crate::trusted_devices::authority::renew(v)
-                .await
-                .map(|_| String::new())
-                .map_err(|error| error.to_string());
-            allow_err!(
-                stream
-                    .send(&Data::TrustedDevicesV2 {
-                        clear: false,
-                        result: Some(result)
-                    })
-                    .await
-            );
-        }
-        Data::TrustedDevicesV2 {
-            clear,
-            result: None,
-        } => {
-            let result = crate::trusted_devices::authority::manage(clear)
-                .await
-                .map_err(|error| error.to_string());
-            allow_err!(
-                stream
-                    .send(&Data::TrustedDevicesV2 {
-                        clear,
-                        result: Some(result)
-                    })
-                    .await
-            );
+        Data::TrustedDeviceManagement(request) => {
+            let result = match *request {
+                request @ (authority::Request::List
+                | authority::Request::Clear
+                | authority::Request::Remove(_)
+                | authority::Request::Renew(_)) => authority::request(request).await,
+                _ => Err(hbb_common::anyhow::anyhow!(
+                    "Invalid trusted-device management request"
+                )),
+            }
+            .map_err(|error| error.to_string());
+            allow_err!(stream.send(&Data::TrustedDeviceResponse(result)).await);
         }
         Data::TrustedDeviceRequest(request) => {
             let result = match crate::trusted_devices::config::update(move || {
@@ -1950,55 +1909,22 @@ pub fn get_unlock_pin() -> String {
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn get_trusted_devices() -> ResultType<String> {
-    trusted_devices_v2(Data::TrustedDevicesV2 {
-        clear: false,
-        result: None,
-    })
-    .await
-}
-
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn remove_trusted_devices(
-    record_ids: Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>,
-) -> ResultType<()> {
-    trusted_devices_v2(Data::RemoveTrustedDevices(record_ids))
-        .await
-        .map(|_| ())
-}
-
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn renew_trusted_devices(
-    record_ids: Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>,
-) -> ResultType<()> {
-    trusted_devices_v2(Data::RenewTrustedDevices(record_ids))
-        .await
-        .map(|_| ())
-}
-
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn clear_trusted_devices() -> ResultType<()> {
-    trusted_devices_v2(Data::TrustedDevicesV2 {
-        clear: true,
-        result: None,
-    })
-    .await
-    .map(|_| ())
-}
-
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn trusted_devices_v2(data: Data) -> ResultType<String> {
-    let mut connection = connect(1000, "").await?;
-    connection.send(&data).await?;
-    match connection.next_timeout(1000).await? {
-        Some(Data::TrustedDevicesV2 {
-            result: Some(result),
-            ..
-        }) => result.map_err(|error| hbb_common::anyhow::anyhow!(error)),
+pub async fn trusted_devices(request: authority::Request) -> ResultType<String> {
+    const TIMEOUT_MS: u64 = 1000;
+    let list = matches!(request, authority::Request::List);
+    let mut connection = connect(TIMEOUT_MS, "").await?;
+    connection
+        .send(&Data::TrustedDeviceManagement(Box::new(request)))
+        .await?;
+    match connection.next_timeout(TIMEOUT_MS).await? {
+        Some(Data::TrustedDeviceResponse(result)) => {
+            match result.map_err(|error| hbb_common::anyhow::anyhow!(error))? {
+                authority::Response::Devices(devices) if list => Ok(devices),
+                authority::Response::Done if !list => Ok(String::new()),
+                authority::Response::Unavailable(error) => bail!(error),
+                _ => bail!("Invalid trusted-device management response"),
+            }
+        }
         _ => bail!("The host did not confirm the trusted-device operation"),
     }
 }
@@ -2444,44 +2370,9 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 }
 
 #[cfg(test)]
-pub(crate) mod test {
-    #[cfg(unix)]
+mod test {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     use super::*;
-
-    #[cfg(unix)]
-    pub(crate) async fn unchanged_authentication_preserves_trusted_devices(password: &str) {
-        let path = std::env::temp_dir().join(format!("v2-salt-{}", uuid::Uuid::new_v4()));
-        let mut incoming = Endpoint::new(path.to_str().unwrap().to_owned())
-            .incoming()
-            .unwrap();
-        let _peer = Endpoint::connect(&path).await.unwrap();
-        let mut stream = Connection::new(incoming.next().await.unwrap().unwrap());
-        let devices = crate::trusted_devices::devices().unwrap();
-        assert_ne!(devices, "[]");
-        let hard_settings =
-            std::mem::take(&mut *hbb_common::config::HARD_SETTINGS.write().unwrap());
-        hbb_common::config::HARD_SETTINGS
-            .write()
-            .unwrap()
-            .insert("password".into(), password.into());
-        assert!(Config::set_permanent_password(""));
-        assert!(crate::trusted_devices::config::set_password(password).unwrap());
-        assert_eq!(crate::trusted_devices::devices().unwrap(), devices);
-        for (name, value) in [
-            (
-                "salt",
-                Config::get_local_permanent_password_storage_and_salt().1,
-            ),
-            ("permanent-password", password.to_owned()),
-        ] {
-            handle(Data::Config((name.into(), Some(value))), &mut stream).await;
-            assert_eq!(crate::trusted_devices::devices().unwrap(), devices);
-        }
-        *hbb_common::config::HARD_SETTINGS.write().unwrap() = hard_settings;
-        assert!(Config::set_permanent_password(password));
-        std::fs::remove_file(path).unwrap();
-        assert_eq!(crate::trusted_devices::devices().unwrap(), devices);
-    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]

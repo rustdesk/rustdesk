@@ -814,7 +814,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("On", ""),
         ("Off", ""),
         ("Trust duration (days)", "信任有效期（天）"),
-        ("Changing this period removes all trusted devices.", "變更此有效期會移除所有受信任裝置。"),
         ("trusted_devices_legacy_tip", "偵測到舊版受信任裝置設定。請使用固定密碼和 2FA 登入，並勾選「信任此裝置」以重新註冊。"),
         ("Renew trust", "延長信任期限"),
     ].iter().cloned().collect();

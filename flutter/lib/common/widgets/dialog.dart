@@ -2875,26 +2875,35 @@ Widget trustedDeviceExpiration({
   required VoidCallback onChanged,
 }) {
   final period = bind.mainGetOptionSync(key: kOptionTrustedDeviceExpiration);
-  const periods = ['1', '7', '30', '0'];
-  return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Text(translate('Trust duration (days)')),
-    ComboBox(
-      keys: periods,
-      values: ['1', '7', '30', translate('Never')],
-      initialKey: periods.contains(period) ? period : '30',
-      enabled: enabled && !isOptionFixed(kOptionTrustedDeviceExpiration),
-      onChanged: (value) async {
-        try {
-          await bind.mainSetOption(
-              key: kOptionTrustedDeviceExpiration, value: value);
-        } catch (error) {
-          showToast(error.toString());
-        }
-        onChanged();
-      },
+  const periods = ['1', '7', '30', '90', '0'];
+  return Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: Wrap(
+      spacing: 12,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(translate('Trust duration (days)')),
+        SizedBox(
+          width: 140,
+          child: ComboBox(
+            keys: periods,
+            values: ['1', '7', '30', '90', translate('Never')],
+            initialKey: periods.contains(period) ? period : '30',
+            enabled: enabled && !isOptionFixed(kOptionTrustedDeviceExpiration),
+            onChanged: (value) async {
+              try {
+                await bind.mainSetOption(
+                    key: kOptionTrustedDeviceExpiration, value: value);
+              } catch (error) {
+                showToast(error.toString());
+              }
+              onChanged();
+            },
+          ),
+        ),
+      ],
     ),
-    Text(translate('Changing this period removes all trusted devices.')),
-  ]);
+  );
 }
 
 Widget trustedDevicesMigrationNotice() => ConstrainedBox(

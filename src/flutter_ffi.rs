@@ -1,5 +1,8 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::keyboard::input_source::{change_input_source, get_cur_session_input_source};
+use crate::{
+    keyboard::input_source::{change_input_source, get_cur_session_input_source},
+    trusted_devices::authority,
+};
 #[cfg(target_os = "linux")]
 use crate::platform::linux::is_x11;
 use crate::{
@@ -2667,7 +2670,7 @@ pub fn main_get_trusted_devices() -> hbb_common::anyhow::Result<String> {
     hbb_common::tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
-        .block_on(crate::ipc::get_trusted_devices())
+        .block_on(crate::ipc::trusted_devices(authority::Request::List))
 }
 
 pub fn main_remove_trusted_devices(json: String) -> hbb_common::anyhow::Result<()> {
@@ -2678,7 +2681,10 @@ pub fn main_remove_trusted_devices(json: String) -> hbb_common::anyhow::Result<(
     hbb_common::tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
-        .block_on(crate::ipc::remove_trusted_devices(record_ids))
+        .block_on(crate::ipc::trusted_devices(authority::Request::Remove(
+            record_ids,
+        )))
+        .map(|_| ())
 }
 
 pub fn main_renew_trusted_devices(json: String) -> hbb_common::anyhow::Result<()> {
@@ -2689,7 +2695,10 @@ pub fn main_renew_trusted_devices(json: String) -> hbb_common::anyhow::Result<()
     hbb_common::tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
-        .block_on(crate::ipc::renew_trusted_devices(record_ids))
+        .block_on(crate::ipc::trusted_devices(authority::Request::Renew(
+            record_ids,
+        )))
+        .map(|_| ())
 }
 
 pub fn main_clear_trusted_devices() -> hbb_common::anyhow::Result<()> {
@@ -2699,7 +2708,8 @@ pub fn main_clear_trusted_devices() -> hbb_common::anyhow::Result<()> {
     hbb_common::tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
-        .block_on(crate::ipc::clear_trusted_devices())
+        .block_on(crate::ipc::trusted_devices(authority::Request::Clear))
+        .map(|_| ())
 }
 
 pub fn main_max_encrypt_len() -> SyncReturn<usize> {

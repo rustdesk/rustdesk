@@ -250,8 +250,23 @@ pub fn initialize() -> ResultType<()> {
     }
     let mut grants: Grants = storage.read()?;
     let current = config::snapshot()?;
-    if !grants.matches_scope(&current.scope) {
-        grants.revoke(Some(current.scope))?;
+    let scope_changed = !grants.matches_scope(&current.scope);
+    if scope_changed {
+        // Earlier V2 builds included nondefault durations in the authentication scope.
+        let mut previous =
+            serde_json::to_vec(&(&current.h1, &current.salt, &current.totp, current.enabled))?;
+        previous.extend_from_slice(&current.validity_days.to_le_bytes());
+        if current.validity_days != policy::DEFAULT_DAYS
+            && grants.matches_scope(&sha256::hash(&previous).0)
+        {
+            grants.scope = Some(current.scope);
+        } else {
+            grants.revoke(Some(current.scope))?;
+        }
+    }
+    if policy::update_expiration(&mut grants, current.validity_days, hbb_common::get_time())
+        || scope_changed
+    {
         storage.write(&grants)?;
     }
     Ok(())
