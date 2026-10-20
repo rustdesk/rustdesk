@@ -813,7 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "Tecla não suportada"),
         ("On", "Ligado"),
         ("Off", "Desligado"),
-        ("api_server_connection_tip", "Dica de ligação ao servidor da API"),
-        ("api_server_empty_tip", "O servidor da API não pode estar vazio"),
+        ("api_server_connection_tip", "O seu servidor personalizado utiliza HTTP não encriptado. Contacte o seu administrador para ativar o HTTPS"),
+        ("api_server_empty_tip", "Com o servidor da API vazio, o seu servidor personalizado utiliza HTTP por predefinição. Contacte o seu administrador para ativar o HTTPS"),
     ].iter().cloned().collect();
 }
