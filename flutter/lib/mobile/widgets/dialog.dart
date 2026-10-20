@@ -187,7 +187,18 @@ void showServerSettingsWithValue(
                       idController: idCtrl,
                       message: translate('api_server_connection_tip'),
                       emptyMessage: translate('api_server_empty_tip'),
-                      resolveApiServer: bind.mainResolveApiServer,
+                      resolveApiServer: (
+                          {required String api, required String custom}) {
+                        final key =
+                            'resolve-api-server:${jsonEncode([api, custom])}';
+                        final response =
+                            jsonDecode(bind.mainGetCommonSync(key: key));
+                        if (response['error'] != null) {
+                          throw FormatException(
+                              'Failed to resolve API server: ${response['error']}');
+                        }
+                        return response['url'] as String;
+                      },
                     ),
                   ),
                   SizedBox(height: 8),

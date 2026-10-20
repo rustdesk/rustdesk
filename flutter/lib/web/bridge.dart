@@ -936,11 +936,6 @@ class RustdeskImpl {
     return Future(() => js.context.callMethod('getByName', ['api_server']));
   }
 
-  String mainResolveApiServer(
-      {required String api, required String custom, dynamic hint}) {
-    return js.context.callMethod('resolveApiServer', [api, custom]);
-  }
-
   Future<void> mainPostRequest(
       {required String url,
       required String body,
@@ -1933,6 +1928,11 @@ class RustdeskImpl {
   }
 
   String mainGetCommonSync({required String key, dynamic hint}) {
+    const prefix = 'resolve-api-server:';
+    if (key.startsWith(prefix)) {
+      return js.context
+          .callMethod('getByName', ['api_server', key.substring(prefix.length)]);
+    }
     throw UnimplementedError("mainGetCommonSync");
   }
 
