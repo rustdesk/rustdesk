@@ -366,6 +366,11 @@ jobs:
               Write-Host "Ingore the printer driver error."
           }
 
+      - name: Run the remote window resize widget tests
+        if: ${{ !inputs.upload-artifact }}
+        working-directory: flutter
+        run: flutter test --no-pub test/remote_resize_area_test.dart --timeout 60s
+
       - name: Run the remote window geometry tests
         if: ${{ !inputs.upload-artifact }}
         shell: pwsh

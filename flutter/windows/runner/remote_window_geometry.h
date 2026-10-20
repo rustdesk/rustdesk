@@ -17,6 +17,12 @@ inline int RemoteResizeHitTest(int hit, const RECT& frame, POINT pointer) {
   }
 }
 
+inline const RECT* RemoteResizeWorkArea(const RECT& outer, const RECT* bounds) {
+  return bounds && outer.left >= bounds->left && outer.top >= bounds->top &&
+          outer.right <= bounds->right && outer.bottom <= bounds->bottom
+      ? bounds : nullptr;
+}
+
 inline void ConstrainRemoteWindow(RECT& rect, WPARAM edge, double ratio,
                                   LONG extra_width, LONG extra_height,
                                   LONG min_width, LONG min_height,

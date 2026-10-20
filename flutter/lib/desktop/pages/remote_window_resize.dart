@@ -32,8 +32,7 @@ class RemoteWindowResize {
     final height = canvas.getDisplayHeight();
     final adaptive =
         view.style == kRemoteViewStyleAdaptive && width > 0 && height > 0;
-    // A mounting page has no style yet; wait for its asynchronous model update.
-    if (view.style.isNotEmpty) enabled.value = adaptive;
+    enabled.value = adaptive;
     _send(adaptive ? width / height : 0.0);
   }
 

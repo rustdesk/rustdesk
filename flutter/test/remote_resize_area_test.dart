@@ -6,6 +6,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/desktop/pages/remote_resize_area.dart';
 import 'package:flutter_hbb/desktop/pages/remote_window_resize.dart';
+import 'package:flutter_hbb/models/model.dart';
+
+class _ConnectingCanvas extends ChangeNotifier implements CanvasModel {
+  @override
+  ViewStyle get viewStyle => ViewStyle.defaultViewStyle();
+  @override
+  int getDisplayWidth() => 1920;
+  @override
+  int getDisplayHeight() => 1080;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   const channel = MethodChannel('mixin.one/flutter_multi_window');
@@ -90,4 +102,27 @@ void main() {
     await mouse.removePointer();
     await tester.pump(const Duration(milliseconds: 350));
   });
+
+  testWidgets(
+      'a connecting tab disables both diagonal resizing and native sizing',
+      (tester) async {
+    const geometryChannel =
+        MethodChannel('org.rustdesk.rustdesk/remote-window-resize');
+    double? ratio;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(geometryChannel, (call) async {
+      ratio = (call.arguments as List).first as double;
+      return null;
+    });
+    addTearDown(
+        () => messenger.setMockMethodCallHandler(geometryChannel, null));
+    final canvas = _ConnectingCanvas();
+    final resize = RemoteWindowResize(canvas, () => true, null);
+    addTearDown(canvas.dispose);
+    addTearDown(resize.dispose);
+    await tester.pump();
+    expect(ratio, 0.0);
+    expect(RemoteWindowResize.enabled.value, isFalse);
+  }, skip: !isWindows);
 }

@@ -65,7 +65,7 @@ int main() {
   const RECT work_area{0, 0, 1920, 1040};
   RECT growing{100, 100, 1900, 1400};
   ConstrainRemoteWindow(growing, WMSZ_BOTTOMRIGHT, 16.0 / 9.0,
-                        16, 40, 300, 200, &work_area);
+                        16, 40, 300, 200, RemoteResizeWorkArea({100, 100, 1100, 700}, &work_area));
   assert(growing.bottom == work_area.bottom && growing.top < 100);
   assert(growing.left >= work_area.left && growing.right <= work_area.right);
   assert(std::abs((growing.bottom - growing.top - 40) -
@@ -77,5 +77,18 @@ int main() {
                         16, 40, 300, 200, &second_monitor);
   assert(oversized.left >= second_monitor.left && oversized.top >= second_monitor.top);
   assert(oversized.right <= second_monitor.right && oversized.bottom <= second_monitor.bottom);
+  // Spanning and partially off-screen windows retain their anchor and size freedom.
+  for (const RECT initial : {RECT{-400, 100, 2300, 1650},
+                             RECT{100, -100, 1100, 500}}) {
+    RECT resized = initial;
+    resized.right += 100;
+    ConstrainRemoteWindow(resized, WMSZ_BOTTOMRIGHT, 16.0 / 9.0,
+                          16, 40, 300, 200, RemoteResizeWorkArea(initial, &work_area));
+    assert(resized.left == initial.left && resized.top == initial.top);
+    if (initial.left < 0)
+      assert(resized.right - resized.left > work_area.right - work_area.left);
+    assert(std::abs((resized.bottom - resized.top - 40) -
+                    (resized.right - resized.left - 16) * 9.0 / 16.0) <= 1);
+  }
 
 }

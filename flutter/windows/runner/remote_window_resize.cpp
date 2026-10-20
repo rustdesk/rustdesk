@@ -101,7 +101,7 @@ class RemoteWindowResize : public flutter::Plugin {
           ConstrainRemoteWindow(*reinterpret_cast<RECT*>(param), edge, ratio_,
               extra_width, extra_height,
               limits.ptMinTrackSize.x, limits.ptMinTrackSize.y,
-              have_bounds ? &monitor.rcWork : nullptr);
+              RemoteResizeWorkArea(outer, have_bounds ? &monitor.rcWork : nullptr));
           // Preserve window_manager's resize events and its existing lifecycle.
           return std::nullopt;
         });
