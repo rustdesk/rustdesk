@@ -228,7 +228,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Username missed", "Nama pengguna tidak sesuai"),
         ("Password missed", "Kata sandi tidak sesuai"),
         ("Wrong credentials", "Nama pengguna atau kata sandi salah"),
-        ("The verification code is incorrect atau sudah kedaluwarsa"),
+        ("The verification code is incorrect or has expired", "Kode verifikasi salah atau sudah kadaluwarsa"),
         ("Edit Tag", "Ubah Tag"),
         ("Forget Password", "Lupakan Kata Sandi"),
         ("Favorites", "Favorit"),
