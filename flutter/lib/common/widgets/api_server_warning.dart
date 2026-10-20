@@ -7,14 +7,10 @@ bool shouldWarnApiServer(String? apiServer, {String? idServer}) {
     return false;
   }
   final uri = Uri.tryParse(api.isEmpty ? 'http://$id' : api);
-  if (uri == null || uri.host.isEmpty) {
-    return true;
-  }
-  if (uri.scheme == 'https') {
+  if (uri == null || uri.host.isEmpty || uri.scheme != 'http') {
     return false;
   }
-  return uri.scheme != 'http' ||
-      !const {'localhost', '127.0.0.1', '::1'}.contains(uri.host);
+  return !const {'localhost', '127.0.0.1', '::1'}.contains(uri.host);
 }
 
 class ApiServerWarning extends StatelessWidget {
