@@ -9,6 +9,7 @@ import '../../models/model.dart';
 import '../widgets/tabbar_widget.dart';
 
 class RemoteWindowResize {
+  static final enabled = ValueNotifier<bool>(false);
   static const _channel =
       MethodChannel('org.rustdesk.rustdesk/remote-window-resize');
 
@@ -29,9 +30,11 @@ class RemoteWindowResize {
     final view = canvas.viewStyle;
     final width = canvas.getDisplayWidth();
     final height = canvas.getDisplayHeight();
-    _send(view.style == kRemoteViewStyleAdaptive && width > 0 && height > 0
-        ? width / height
-        : 0.0);
+    final adaptive =
+        view.style == kRemoteViewStyleAdaptive && width > 0 && height > 0;
+    // A mounting page has no style yet; wait for its asynchronous model update.
+    if (view.style.isNotEmpty) enabled.value = adaptive;
+    _send(adaptive ? width / height : 0.0);
   }
 
   void _send(double ratio) {

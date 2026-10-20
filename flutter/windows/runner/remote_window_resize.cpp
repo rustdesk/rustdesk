@@ -34,6 +34,23 @@ class RemoteWindowResize : public flutter::Plugin {
         }
         values[i] = *value;
       }
+      // The multi-window parent otherwise erases over Flutter's child surface
+      // during resizing, briefly replacing the entire remote image with black.
+      const HWND hwnd = GetParent(registrar_->GetView()->GetNativeWindow());
+      const LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+      if (values[0] > 0 && !(style & WS_CLIPCHILDREN)) {
+        if (!SetWindowLongPtr(hwnd, GWL_STYLE, style | WS_CLIPCHILDREN)) {
+          result->Error("window-style", "Unable to protect Flutter's surface");
+          return;
+        }
+        added_child_clipping_ = true;
+      } else if (values[0] == 0 && added_child_clipping_) {
+        if (!SetWindowLongPtr(hwnd, GWL_STYLE, style & ~WS_CLIPCHILDREN)) {
+          result->Error("window-style", "Unable to restore window painting");
+          return;
+        }
+        added_child_clipping_ = false;
+      }
       ratio_ = values[0];
       inset_width_ = values[1];
       inset_height_ = values[2];
@@ -42,9 +59,29 @@ class RemoteWindowResize : public flutter::Plugin {
     delegate_ = registrar_->RegisterTopLevelWindowProcDelegate(
         [this](HWND hwnd, UINT message, WPARAM edge, LPARAM param)
             -> std::optional<LRESULT> {
-          if (message != WM_SIZING || ratio_ <= 0 || IsZoomed(hwnd)) {
-            return std::nullopt;
+          if (ratio_ <= 0 || IsZoomed(hwnd)) return std::nullopt;
+          if (message == WM_SETCURSOR || message == WM_NCLBUTTONDOWN) {
+            const int hit = message == WM_SETCURSOR
+                ? LOWORD(param) : static_cast<int>(edge);
+            if (hit >= HTLEFT && hit <= HTBOTTOMRIGHT) {
+              RECT frame;
+              POINT pointer;
+              if (GetWindowRect(hwnd, &frame) && GetCursorPos(&pointer)) {
+                const int corner = RemoteResizeHitTest(hit, frame, pointer);
+                if (message == WM_SETCURSOR) {
+                  SetCursor(LoadCursor(nullptr,
+                      corner == HTTOPLEFT || corner == HTBOTTOMRIGHT
+                          ? IDC_SIZENWSE : IDC_SIZENESW));
+                  return TRUE;
+                }
+                if (corner != hit) {
+                  return DefWindowProc(hwnd, message,
+                      static_cast<WPARAM>(corner), param);
+                }
+              }
+            }
           }
+          if (message != WM_SIZING) return std::nullopt;
           RECT outer, client;
           if (!GetWindowRect(hwnd, &outer) || !GetClientRect(hwnd, &client)) {
             return std::nullopt;
@@ -57,15 +94,25 @@ class RemoteWindowResize : public flutter::Plugin {
               static_cast<LONG>(std::lround(inset_height_ * dpi));
           MINMAXINFO limits{};
           SendMessage(hwnd, WM_GETMINMAXINFO, 0, reinterpret_cast<LPARAM>(&limits));
+          MONITORINFO monitor{};
+          monitor.cbSize = sizeof(monitor);
+          const bool have_bounds = GetMonitorInfo(
+              MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor) != FALSE;
           ConstrainRemoteWindow(*reinterpret_cast<RECT*>(param), edge, ratio_,
               extra_width, extra_height,
-              limits.ptMinTrackSize.x, limits.ptMinTrackSize.y);
+              limits.ptMinTrackSize.x, limits.ptMinTrackSize.y,
+              have_bounds ? &monitor.rcWork : nullptr);
           // Preserve window_manager's resize events and its existing lifecycle.
           return std::nullopt;
         });
   }
 
   ~RemoteWindowResize() override {
+    if (added_child_clipping_) {
+      const HWND hwnd = GetParent(registrar_->GetView()->GetNativeWindow());
+      const LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+      SetWindowLongPtr(hwnd, GWL_STYLE, style & ~WS_CLIPCHILDREN);
+    }
     registrar_->UnregisterTopLevelWindowProcDelegate(delegate_);
     channel_.SetMethodCallHandler(nullptr);
   }
@@ -74,6 +121,7 @@ class RemoteWindowResize : public flutter::Plugin {
   flutter::PluginRegistrarWindows* registrar_;
   flutter::MethodChannel<> channel_;
   int delegate_;
+  bool added_child_clipping_ = false;
   double ratio_ = 0;
   double inset_width_ = 0;
   double inset_height_ = 0;

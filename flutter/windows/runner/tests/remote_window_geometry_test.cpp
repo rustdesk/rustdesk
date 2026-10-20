@@ -7,6 +7,15 @@
 #include <cassert>
 
 int main() {
+  const RECT frame{100, 200, 1100, 800};
+  assert(RemoteResizeHitTest(HTLEFT, frame, {100, 350}) == HTTOPLEFT);
+  assert(RemoteResizeHitTest(HTLEFT, frame, {100, 650}) == HTBOTTOMLEFT);
+  assert(RemoteResizeHitTest(HTRIGHT, frame, {1100, 350}) == HTTOPRIGHT);
+  assert(RemoteResizeHitTest(HTRIGHT, frame, {1100, 650}) == HTBOTTOMRIGHT);
+  assert(RemoteResizeHitTest(HTTOP, frame, {350, 200}) == HTTOPLEFT);
+  assert(RemoteResizeHitTest(HTTOP, frame, {850, 200}) == HTTOPRIGHT);
+  assert(RemoteResizeHitTest(HTBOTTOM, frame, {350, 800}) == HTBOTTOMLEFT);
+  assert(RemoteResizeHitTest(HTBOTTOM, frame, {850, 800}) == HTBOTTOMRIGHT);
   // Every edge and corner must fit the remote content, including local chrome.
   for (WPARAM edge = WMSZ_LEFT; edge <= WMSZ_BOTTOMRIGHT; ++edge) {
     RECT rect{100, 200, 1116, 840};
@@ -52,4 +61,21 @@ int main() {
   ConstrainRemoteWindow(rect, WMSZ_BOTTOMRIGHT, 9.0 / 16.0, 24, 60, 400, 300);
   assert(rect.right >= 400 && rect.bottom >= 300);
   assert(std::abs((rect.bottom - 60) - (rect.right - 24) * 16.0 / 9.0) <= 1);
+  // At a screen boundary, the old anchor moves while the touched boundary stays fixed.
+  const RECT work_area{0, 0, 1920, 1040};
+  RECT growing{100, 100, 1900, 1400};
+  ConstrainRemoteWindow(growing, WMSZ_BOTTOMRIGHT, 16.0 / 9.0,
+                        16, 40, 300, 200, &work_area);
+  assert(growing.bottom == work_area.bottom && growing.top < 100);
+  assert(growing.left >= work_area.left && growing.right <= work_area.right);
+  assert(std::abs((growing.bottom - growing.top - 40) -
+                  (growing.right - growing.left - 16) * 9.0 / 16.0) <= 1);
+  // A monitor with a negative origin uses its own bounds, even for an oversized drag.
+  const RECT second_monitor{-1920, -100, 0, 940};
+  RECT oversized{-2500, -800, 1500, 2200};
+  ConstrainRemoteWindow(oversized, WMSZ_TOPLEFT, 16.0 / 9.0,
+                        16, 40, 300, 200, &second_monitor);
+  assert(oversized.left >= second_monitor.left && oversized.top >= second_monitor.top);
+  assert(oversized.right <= second_monitor.right && oversized.bottom <= second_monitor.bottom);
+
 }

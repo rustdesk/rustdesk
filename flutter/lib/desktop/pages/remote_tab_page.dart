@@ -22,6 +22,7 @@ import 'package:bot_toast/bot_toast.dart';
 
 import '../../common/widgets/dialog.dart';
 import '../../models/platform_model.dart';
+import 'remote_resize_area.dart';
 
 class _MenuTheme {
   static const Color blueColor = MyTheme.button;
@@ -230,7 +231,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 )));
     return isMacOS || kUseCompatibleUiMode
         ? tabWidget
-        : Obx(() => SubWindowDragToResizeArea(
+        : Obx(() => RemoteResizeArea(
               key: contentKey,
               child: tabWidget,
               // Specially configured for a better resize area and remote control.
