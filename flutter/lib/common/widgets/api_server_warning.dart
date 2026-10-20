@@ -1,4 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
+
+String _resolveApiServer({required String api, required String custom}) {
+  final key = 'resolve-api-server:${jsonEncode([api, custom])}';
+  final response = jsonDecode(bind.mainGetCommonSync(key: key));
+  if (response['error'] != null) {
+    throw FormatException('Failed to resolve API server: ${response['error']}');
+  }
+  return response['url'] as String;
+}
 
 bool shouldWarnApiServer(String? apiServer) {
   final uri = Uri.tryParse(apiServer?.trim() ?? '');
@@ -22,7 +34,7 @@ class ApiServerWarning extends StatelessWidget {
     required this.idController,
     required this.message,
     required this.emptyMessage,
-    required this.resolveApiServer,
+    this.resolveApiServer = _resolveApiServer,
   });
 
   @override
@@ -32,8 +44,18 @@ class ApiServerWarning extends StatelessWidget {
       builder: (context, child) {
         final apiServer = controller.text;
         final idServer = idController.text;
-        final effectiveApiServer =
-            resolveApiServer(api: apiServer.trim(), custom: idServer.trim());
+        final String effectiveApiServer;
+        try {
+          effectiveApiServer =
+              resolveApiServer(api: apiServer.trim(), custom: idServer.trim());
+        } catch (error, stack) {
+          FlutterError.reportError(FlutterErrorDetails(
+            exception: error,
+            stack: stack,
+            context: ErrorDescription('while resolving the API server warning'),
+          ));
+          return const SizedBox.shrink();
+        }
         if (!shouldWarnApiServer(effectiveApiServer)) {
           return const SizedBox.shrink();
         }
