@@ -274,9 +274,8 @@ pub fn initialize() -> ResultType<()> {
 
 pub fn devices() -> ResultType<String> {
     let storage = storage()?;
-    let legacy = Config2::has_legacy_trusted_devices()?;
     if !storage.exists()? {
-        return Ok(serde_json::json!({ "devices": [], "legacy": legacy }).to_string());
+        return Ok(serde_json::json!({ "devices": [] }).to_string());
     }
     let current = config::snapshot()?;
     let grants = load_grants(&storage, &current.scope)?;
@@ -290,5 +289,5 @@ pub fn devices() -> ResultType<String> {
             info: &record.info,
         })
         .collect();
-    Ok(serde_json::json!({ "devices": devices, "legacy": legacy }).to_string())
+    Ok(serde_json::json!({ "devices": devices }).to_string())
 }

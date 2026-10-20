@@ -2834,9 +2834,8 @@ Future<void> renewTrustedDevice(
 
 void manageTrustedDeviceDialog() async {
   late final RxList<TrustedDevice> trustedDevices;
-  late final TrustedDevices result;
   try {
-    result = await TrustedDevice.get();
+    final result = await TrustedDevice.get();
     trustedDevices = result.devices.obs;
   } catch (error) {
     showToast(error.toString());
@@ -2846,10 +2845,7 @@ void manageTrustedDeviceDialog() async {
   gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate("Manage trusted devices")),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        if (result.legacy) trustedDevicesMigrationNotice(),
-        trustedDevicesTable(trustedDevices, selectedDevices),
-      ]),
+      content: trustedDevicesTable(trustedDevices, selectedDevices),
       actions: [
         Obx(() => dialogButton(translate("Delete"),
                 onPressed: selectedDevices.isEmpty
@@ -2906,15 +2902,9 @@ Widget trustedDeviceExpiration({
   );
 }
 
-Widget trustedDevicesMigrationNotice() => ConstrainedBox(
-    constraints: BoxConstraints(maxWidth: 350),
-    child:
-        Text(translate('trusted_devices_legacy_tip')).marginOnly(bottom: 12));
-
 class TrustedDevices {
   final List<TrustedDevice> devices;
-  final bool legacy;
-  TrustedDevices(this.devices, this.legacy);
+  TrustedDevices(this.devices);
 }
 
 class TrustedDevice {
@@ -2955,7 +2945,7 @@ class TrustedDevice {
       devices.add(TrustedDevice.fromJson(device));
     }
     devices.sort((a, b) => b.time.compareTo(a.time));
-    return TrustedDevices(devices, result['legacy'] as bool);
+    return TrustedDevices(devices);
   }
 }
 

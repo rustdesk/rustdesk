@@ -1398,11 +1398,7 @@ class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
             }
             final result = snapshot.data as TrustedDevices;
             trustedDevices = result.devices.obs;
-            return Column(children: [
-              if (result.legacy) trustedDevicesMigrationNotice(),
-              Expanded(
-                  child: trustedDevicesTable(trustedDevices, selectedDevices)),
-            ]);
+            return trustedDevicesTable(trustedDevices, selectedDevices);
           }),
     );
   }

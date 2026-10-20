@@ -814,7 +814,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("On", "вкл"),
         ("Off", "откл"),
         ("Trust duration (days)", ""),
-        ("trusted_devices_legacy_tip", ""),
         ("Renew trust", ""),
     ].iter().cloned().collect();
 }

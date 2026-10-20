@@ -67,7 +67,14 @@ pub(super) fn change_options<T>(
         return apply();
     }
     let now = get_time();
-    let mut grants = super::load_grants(&storage, &config::snapshot()?.scope)?;
+    let scope = config::snapshot()?.scope;
+    let mut grants = storage.read()?;
+    if !grants.matches_scope(&scope) {
+        const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+        hbb_common::throttled_log!(LOG_INTERVAL, warn,
+            "Trusted-device grants remain out of sync; applying options without changing those grants");
+        return apply();
+    }
     update_expiration(&mut grants, days(&options), now);
     storage.write(&grants)?;
     apply()

@@ -9,13 +9,10 @@ pub(super) async fn legacy_settings_survive_saving() {
     let valid = is_trusted(&[]).await;
     Config::set_option("trusted-device-field-test".into(), "N".into());
     let after_save = fs::read_to_string(&path).unwrap();
-    let management: serde_json::Value =
-        serde_json::from_str(&super::super::devices().unwrap()).unwrap();
     fs::write(&path, saved).unwrap();
     assert!(after_save.contains("legacy-v1-records"));
     assert!(after_save.contains("trusted_devices_v2"));
     assert!(!valid, "Legacy records must not bypass TOTP");
-    assert_eq!(management["legacy"], true);
 }
 
 pub(super) async fn devices() -> Vec<serde_json::Value> {
