@@ -158,6 +158,10 @@ class PlatformFFI {
         _dir = (await getApplicationDocumentsDirectory()).path;
       } catch (e) {
         debugPrint('Failed to get documents directory: $e');
+        // On Linux the path comes from `xdg-user-dir`, which minimal installs
+        // lack. It prints $HOME when no Documents dir is set, so use that:
+        // recent and favorite peers don't load while the app dir is empty.
+        if (isLinux) _dir = Platform.environment['HOME'] ?? '';
       }
       _ffiBind = RustdeskImpl(dylib);
 
