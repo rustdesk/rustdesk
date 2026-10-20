@@ -9,6 +9,10 @@
   <b>Kami membutuhkan bantuanmu untuk menterjemahkan file README dan <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> ke Bahasa Indonesia</b>
 </p>
 
+> [!Caution]
+> **Peringatan Penyalahgunaan:** <br>
+> Pengembang RustDesk tidak membenarkan atau mendukung penggunaan perangkat lunak ini yang tidak etis atau melanggar hukum. Penyalahgunaan, seperti akses tanpa izin, pengambilalihan kendali, atau pelanggaran privasi, sangat dilarang berdasarkan pedoman kami. Para pengembang tidak bertanggung jawab atas penyalahgunaan aplikasi ini.
+
 Mari mengobrol bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
 [![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Fitur%20Lanjutan-blue)](https://rustdesk.com/pricing.html)
