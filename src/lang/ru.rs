@@ -813,5 +813,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "\"{}\" невозможно использовать как сочетание клавиш."),
         ("On", "вкл"),
         ("Off", "откл"),
+        ("Picture in picture", ""),
     ].iter().cloned().collect();
 }

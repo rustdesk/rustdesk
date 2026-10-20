@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/mobile/pages/home_page.dart';
+import 'package:flutter_hbb/mobile/pip_mode.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -154,6 +155,7 @@ class ChatModel with ChangeNotifier {
   ChatUser? get currentUser => _messages[_currentKey]?.chatUser;
 
   showChatIconOverlay({Offset offset = const Offset(200, 50)}) {
+    if (isAndroid && androidInPip.value) return;
     if (chatIconOverlayEntry != null) {
       chatIconOverlayEntry!.remove();
     }
@@ -200,7 +202,10 @@ class ChatModel with ChangeNotifier {
   }
 
   showChatWindowOverlay(
-      {Offset? chatInitPos, bool requestSoftKeyboard = true}) {
+      {Offset? chatInitPos,
+      bool requestSoftKeyboard = true,
+      bool enableSoftKeyboard = true}) {
+    if (isAndroid && androidInPip.value) return;
     if (chatWindowOverlayEntry != null) return;
     isWindowFocus.value = true;
     _blockableOverlayState.setMiddleBlocked(true);
@@ -209,7 +214,9 @@ class ChatModel with ChangeNotifier {
     if (overlayState == null) return;
     if (isMobile) {
       _softKeyboardRequested.value = requestSoftKeyboard;
-      gFFI.invokeMethod("enable_soft_keyboard", true);
+      if (enableSoftKeyboard) {
+        gFFI.invokeMethod("enable_soft_keyboard", true);
+      }
     }
     if (isMobile &&
         !gFFI.chatModel.currentKey.isOut && // not in remote page
@@ -238,7 +245,9 @@ class ChatModel with ChangeNotifier {
       inputNode.addListener(_updateChatInputControl);
       _updateChatInputControl();
     }
-    requestChatInputFocus();
+    if (!isMobile || enableSoftKeyboard) {
+      requestChatInputFocus();
+    }
   }
 
   hideChatWindowOverlay() {

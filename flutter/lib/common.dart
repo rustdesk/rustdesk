@@ -957,6 +957,8 @@ class OverlayDialogManager {
     setMobileActionsOverlayVisible(true);
   }
 
+  bool get hasMobileActionsOverlay => _mobileActionsOverlayEntry != null;
+
   void hideMobileActionsOverlay({store = true}) {
     if (_mobileActionsOverlayEntry != null) {
       _mobileActionsOverlayEntry!.remove();

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/mobile/pip_mode.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
@@ -104,6 +105,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   Worker? _waylandKeyboardGateWorker;
   bool _waylandKeyboardGateInitialized = false;
+  bool _inPip = false;
+  bool _pipSupported = false;
+  bool _restoreMobileActionsAfterPip = false;
+  bool _restoreChatIconAfterPip = false;
+  bool _restoreChatAfterPip = false;
 
   InputModel get inputModel => gFFI.inputModel;
   SessionID get sessionId => gFFI.sessionId;
@@ -179,10 +185,95 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (gFFI.ffiModel.pi.isSet.value) {
       _initWaylandKeyboardGateIfNeeded();
     }
+    if (isAndroid && androidVersion >= 26) {
+      androidInPip.addListener(_onPipChanged);
+      gFFI.invokeMethod(AndroidChannel.kSetPipEligible, true);
+      unawaited(_enablePipIfSupported());
+    }
+  }
+
+  Future<void> _enablePipIfSupported() async {
+    try {
+      final supported = await gFFI
+          .invokeMethodWithResult<bool>(AndroidChannel.kPipSupported);
+      if (!mounted) {
+        return;
+      }
+      if (supported == true) {
+        setState(() => _pipSupported = true);
+        return;
+      }
+      gFFI.invokeMethod(AndroidChannel.kSetPipEligible, false);
+    } catch (e) {
+      debugPrint('picture-in-picture support check failed: $e');
+    }
+  }
+
+  void _onPipChanged() {
+    if (!mounted) return;
+    final inPip = androidInPip.value;
+    if (inPip == _inPip) return;
+    if (inPip) {
+      _stashChromeForPip();
+    } else {
+      _restoreChromeAfterPip();
+    }
+    setState(() => _inPip = inPip);
+    // Leaving PiP restores the full window without an orientation change, so
+    // the canvas keeps the small picture size unless it is measured again.
+    if (!inPip) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) gFFI.canvasModel.updateViewStyle();
+      });
+    }
+  }
+
+  void _stashChromeForPip() {
+    _showEdit = false;
+    _showGestureHelp = false;
+    _mobileFocusNode.unfocus();
+    _physicalFocusNode.requestFocus();
+    _restoreMobileActionsAfterPip = gFFI.dialogManager.hasMobileActionsOverlay;
+    if (_restoreMobileActionsAfterPip) {
+      gFFI.dialogManager.hideMobileActionsOverlay(store: false);
+    }
+    _restoreChatIconAfterPip = gFFI.chatModel.chatIconOverlayEntry != null;
+    if (_restoreChatIconAfterPip) {
+      gFFI.chatModel.hideChatIconOverlay();
+    }
+    _restoreChatAfterPip = gFFI.chatModel.chatWindowOverlayEntry != null;
+    if (_restoreChatAfterPip) {
+      gFFI.chatModel.hideChatWindowOverlay();
+    }
+    gFFI.invokeMethod("enable_soft_keyboard", false);
+  }
+
+  void _restoreChromeAfterPip() {
+    if (_restoreMobileActionsAfterPip) {
+      _restoreMobileActionsAfterPip = false;
+      gFFI.dialogManager.showMobileActionsOverlay(ffi: gFFI);
+    }
+    if (_restoreChatIconAfterPip) {
+      _restoreChatIconAfterPip = false;
+      gFFI.chatModel.showChatIconOverlay();
+    }
+    if (_restoreChatAfterPip) {
+      _restoreChatAfterPip = false;
+      // PiP set FLAG_ALT_FOCUSABLE_IM. Clear it so a later tap can open the
+      // keyboard, without focusing the field and showing it immediately.
+      gFFI.invokeMethod("enable_soft_keyboard", true);
+      gFFI.chatModel.showChatWindowOverlay(
+          requestSoftKeyboard: false, enableSoftKeyboard: false);
+    }
   }
 
   @override
   Future<void> dispose() async {
+    if (isAndroid && androidVersion >= 26) {
+      androidInPip.removeListener(_onPipChanged);
+      androidInPip.value = false;
+      gFFI.invokeMethod(AndroidChannel.kSetPipEligible, false);
+    }
     HardwareKeyboard.instance.removeHandler(_handleLocalKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
@@ -489,7 +580,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final keyboardIsVisible =
         keyboardVisibilityController.isVisible && _showEdit;
-    final showActionButton = !_showBar || keyboardIsVisible || _showGestureHelp;
+    final showActionButton =
+        !_inPip && (!_showBar || keyboardIsVisible || _showGestureHelp);
 
     return WillPopScope(
       onWillPop: () async {
@@ -526,7 +618,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       }
                     });
                   }),
-          bottomNavigationBar: Obx(() => Stack(
+          bottomNavigationBar: _inPip
+              ? null
+              : Obx(() => Stack(
                 alignment: Alignment.bottomCenter,
                 children: [
                   gFFI.ffiModel.pi.isSet.isTrue &&
@@ -561,7 +655,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                   gFFI.canvasModel.updateViewStyle();
                                 });
                               }
-                              return Container(
+                              final session = Container(
                                 color: MyTheme.canvasColor,
                                 child: inputModel.isPhysicalMouse.value
                                     ? getBodyForMobile()
@@ -570,6 +664,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                         ffi: gFFI,
                                       ),
                               );
+                              return _inPip
+                                  ? _PipCanvasSize(child: session)
+                                  : session;
                             }),
                           ),
                   );
@@ -709,23 +806,25 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         child: Stack(children: () {
           final paints = [
             ImagePaint(ffiModel: gFFI.ffiModel),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: QualityMonitor(gFFI.qualityMonitorModel),
-            ),
+            if (!_inPip)
+              Positioned(
+                top: 10,
+                right: 10,
+                child: QualityMonitor(gFFI.qualityMonitorModel),
+              ),
             Obx(() {
               final chatKeyboardRequested =
                   gFFI.chatModel.softKeyboardRequested.value;
               return KeyHelpTools(
-                  keyboardIsVisible: keyboardVisibilityController.isVisible &&
+                  keyboardIsVisible: !_inPip &&
+                      keyboardVisibilityController.isVisible &&
                       (_showEdit || chatKeyboardRequested),
-                  showGestureHelp: _showGestureHelp);
+                  showGestureHelp: !_inPip && _showGestureHelp);
             }),
             SizedBox(
               width: 0,
               height: 0,
-              child: !_showEdit
+              child: _inPip || !_showEdit
                   ? Container()
                   : TextFormField(
                       textInputAction: TextInputAction.newline,
@@ -841,6 +940,28 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               value: e.key + mobileActionMenus.length))
           .toList(),
     ];
+    if (_pipSupported) {
+      final pipItem = PopupMenuItem<int>(
+        value: -1,
+        child: Text(translate('Picture in picture')),
+      );
+      final noteLabel = translate('Note');
+      var noteIndex = -1;
+      for (var i = 0; i < more.length; i++) {
+        final entry = more[i];
+        if (entry is PopupMenuItem<int> &&
+            entry.child is Text &&
+            (entry.child as Text).data == noteLabel) {
+          noteIndex = i;
+          break;
+        }
+      }
+      if (noteIndex >= 0) {
+        more.insert(noteIndex + 1, pipItem);
+      } else {
+        more.add(pipItem);
+      }
+    }
     () async {
       var index = await showMenu(
         context: context,
@@ -849,7 +970,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         elevation: 8,
       );
       if (index != null) {
-        if (index < mobileActionMenus.length) {
+        if (index == -1) {
+          gFFI.invokeMethod(AndroidChannel.kEnterPip);
+        } else if (index < mobileActionMenus.length) {
           mobileActionMenus[index].onPressed?.call();
         } else if (index < mobileActionMenus.length + more.length) {
           menus[index - mobileActionMenus.length].onPressed?.call();
@@ -1198,6 +1321,46 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
               (_fn ? fn : []) +
               (_more ? more : []),
         ));
+  }
+}
+
+/// Refits the remote image while the picture-in-picture window is resized.
+///
+/// Orientation changes already call [CanvasModel.updateViewStyle]. A pinch
+/// keeps the same orientation, so the image would stay at the previous size.
+class _PipCanvasSize extends StatefulWidget {
+  final Widget child;
+
+  const _PipCanvasSize({required this.child});
+
+  @override
+  State<_PipCanvasSize> createState() => _PipCanvasSizeState();
+}
+
+class _PipCanvasSizeState extends State<_PipCanvasSize> {
+  Size? _lastSize;
+  var _updateScheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final height = constraints.maxHeight;
+      if (width.isFinite && height.isFinite) {
+        final size = Size(width, height);
+        if (_lastSize != size) {
+          _lastSize = size;
+          if (!_updateScheduled) {
+            _updateScheduled = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _updateScheduled = false;
+              if (mounted) gFFI.canvasModel.updateViewStyle();
+            });
+          }
+        }
+      }
+      return widget.child;
+    });
   }
 }
 
