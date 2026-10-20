@@ -1179,7 +1179,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 if (mounted) setState(() {});
               },
             ).marginOnly(
-              left: _kCheckBoxLeftMargin + 30 + _kContentHSubMargin,
+              left: _kCheckBoxLeftMargin + 20 + _kContentHSubMargin,
               top: _kContentHMargin,
             ),
         ],
