@@ -162,7 +162,7 @@ Certifique-se de que executa estes comandos a partir da raiz do repositório do 
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: controlo de teclado/rato específico da plataforma.
 - **[libs/clipboard](https://github.com/rustdesk/rustdesk/tree/master/libs/clipboard)**: implementação de copiar e colar ficheiros para Windows, Linux e macOS.
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: interface Sciter obsoleta (descontinuada).
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: serviços de áudio, área de trabalho, entrada e vídeo, e ligações de rede
+- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: serviços de áudio, área de transferência, entrada e vídeo, e ligações de rede
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: inicia uma ligação entre pares
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Comunica com o [rustdesk-server](https://github.com/rustdesk/rustdesk-server), aguarda por uma ligação direta remota (TCP hole punching) ou uma ligação retransmitida
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: código específico da plataforma
