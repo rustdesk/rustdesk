@@ -2763,6 +2763,16 @@ pub fn main_get_common(key: String) -> String {
 }
 
 pub fn main_get_common_sync(key: String) -> SyncReturn<String> {
+    if let Some(args) = key.strip_prefix("resolve-api-server:") {
+        let response = match serde_json::from_str::<(String, String)>(args) {
+            Ok((api, custom)) => serde_json::json!({"url": crate::get_api_server(api, custom)}),
+            Err(err) => {
+                log::trace!("Invalid API server preview arguments: {err}");
+                serde_json::json!({"error": err.to_string()})
+            }
+        };
+        return SyncReturn(response.to_string());
+    }
     // Metadata verification performs blocking network requests. Keep this key on
     // the asynchronous FFI path to avoid blocking the calling Flutter isolate.
     if key.starts_with("verified-download-url-") {
