@@ -117,6 +117,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
+  Future<void> _handwritingSend = Future<void>.value();
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -186,10 +187,47 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (gFFI.ffiModel.pi.isSet.value) {
       _initWaylandKeyboardGateIfNeeded();
     }
+    _bindHandwritingChannel();
+  }
+
+  void _bindHandwritingChannel() {
+    if (!isIOS) return;
+    const channel = MethodChannel('org.rustdesk.rustdesk/handwriting');
+    channel.setMethodCallHandler((call) async {
+      if (!mounted) return 'unmounted';
+      if (!_showEdit) return 'hidden';
+      if (!inputModel.keyboardInputAllowed) return 'blocked';
+      if (gFFI.chatModel.inputNode.hasFocus) return 'chat';
+      if (call.method != 'edit') return 'unknown';
+      final args = call.arguments is Map ? call.arguments as Map : const {};
+      final removed = (args['removed'] as num?)?.toInt() ?? 0;
+      final text = args['text'] is String ? args['text'] as String : '';
+      _handwritingSend = _handwritingSend.then((_) async {
+        try {
+          if (!mounted || !inputModel.keyboardInputAllowed) return;
+          final times = removed < 0 ? 0 : (removed > 32 ? 32 : removed);
+          for (var i = 0; i < times; i++) {
+            inputModel.inputKey('VK_BACK');
+          }
+          if (text == '\n') {
+            inputModel.inputKey('VK_RETURN');
+          } else if (text == ' ') {
+            inputModel.inputKey('VK_SPACE');
+          } else if (text.isNotEmpty) {
+            await bind.sessionInputString(sessionId: sessionId, value: text);
+          }
+        } catch (_) {}
+      });
+      return 'ok';
+    });
   }
 
   @override
   Future<void> dispose() async {
+    if (isIOS) {
+      const MethodChannel('org.rustdesk.rustdesk/handwriting')
+          .setMethodCallHandler(null);
+    }
     HardwareKeyboard.instance.removeHandler(_handleLocalKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
