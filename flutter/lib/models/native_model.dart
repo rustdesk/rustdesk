@@ -59,6 +59,9 @@ class PlatformFFI {
   final _toAndroidChannel = const MethodChannel('mChannel');
 
   RustdeskImpl get ffiBind => _ffiBind;
+  @visibleForTesting
+  void setBindingForTesting(RustdeskImpl binding) => _ffiBind = binding;
+
   F3? _session_get_rgba;
 
   static get localeName => Platform.localeName;
@@ -284,6 +287,10 @@ class PlatformFFI {
   }
 
   void setRgbaCallback(void Function(int, Uint8List) fun) async {}
+
+  // web only
+  void setCursorDataCallback(
+      void Function(String, int, int, int, int, Uint8List) fun) async {}
 
   // web only, decoded WebCodecs frames arriving as ready-made images
   void setVideoFrameCallback(

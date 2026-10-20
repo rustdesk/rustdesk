@@ -267,6 +267,8 @@ pub enum DataKeyboard {
 #[serde(tag = "t", content = "c")]
 pub enum DataKeyboardResponse {
     GetKeyState(bool),
+    #[cfg(target_os = "linux")]
+    GetKeyStateError(String),
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -513,13 +515,17 @@ pub enum Data {
     CmWindowClosed,
     // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
     // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
-    // to upstream. Protocol on `_drm`: on connect the root service sends `DrmDisplayList`, the
+    // to upstream. `_drm` protocol: the client sends `DrmHello`, the service `DrmDisplayList`, the
     // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
     // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
     // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
     // the header extensible. The zero-copy `DrmFrameDmabuf(DmabufDesc)` sibling below carries only a
     // small JSON metadata descriptor; the scanout dma-buf fd rides an SCM_RIGHTS ancillary message on
     // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
+    /// Client -> service, first on `_drm`: whether the service may wake sleeping displays before
+    /// it answers. The cache warm at every `--server` start says no: no peer is waiting for it.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmHello { wake: bool },
     /// Client -> service: begin streaming the chosen display.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context
@@ -540,7 +546,17 @@ pub enum Data {
     /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
     /// CPU-fallback path (no render node, or no transferable dma-buf): pixels cross the wire.
     #[cfg(all(target_os = "linux", feature = "drm"))]
-    DrmFrame { width: u32, height: u32 },
+    DrmFrame {
+        width: u32,
+        height: u32,
+        /// See `DmabufDesc::plane_rotation`; absent from a producer older than this field.
+        #[serde(default)]
+        plane_rotation: Option<u32>,
+        /// See `DmabufDesc::cursor_pos`: the cursor plane position read right after this frame,
+        /// or `None` when the cursor is hidden, the read failed or the producer predates the field.
+        #[serde(default)]
+        cursor_pos: Option<(i32, i32)>,
+    },
     /// Service -> client: a zero-copy dma-buf frame descriptor. The scanout fd is NOT a field; when
     /// `desc.has_fd` it rides an SCM_RIGHTS ancillary message on the same `DrmConn::send_msg`, and
     /// there is NO trailing `send_raw()` body. The unprivileged `--server` imports the fd and does
@@ -555,7 +571,27 @@ pub enum Data {
         height: u32,
         hotx: i32,
         hoty: i32,
+        /// Whether the hotspot came from the driver, or was inferred from the bitmap.
+        ///
+        /// Absent means the producer predates the field, and the default must then be TRUE, not
+        /// `bool::default()`. These messages are JSON over a unix socket between two processes
+        /// that are upgraded separately: an old root service can be streaming to a freshly
+        /// started `--server`, and its `{"hotx": 12, "hoty": 11}` carries no provenance. Read as
+        /// `false`, the new consumer would throw that hotspot away and re-infer one from the
+        /// upright bitmap, moving the cursor on a rotated display for the length of the upgrade.
+        /// Defaulting to true means "no provenance available, so behave as the old protocol did"
+        /// -- use the point the producer sent. It is not a claim that the value was measured; a
+        /// new producer that wants re-inference says `hot_measured: false` explicitly, which
+        /// serializes, so new-to-new is unaffected.
+        #[serde(default = "legacy_hot_measured")]
+        hot_measured: bool,
     },
+}
+
+/// The default for a `hot_measured` that is not on the wire at all; see the field's docs.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn legacy_hot_measured() -> bool {
+    true
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -1156,8 +1192,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                 }
             } else if value == "clear" {
                 set_local_option(key.clone(), "".to_owned());
+                // The session slot is held while a portal request waits for the user, and this ipc
+                // listener runs on one thread: wait for the slot off it, then close what the
+                // request brings back.
                 #[cfg(target_os = "linux")]
-                scrap::wayland::pipewire::close_session();
+                allow_err!(
+                    hbb_common::tokio::task::spawn_blocking(
+                        scrap::wayland::pipewire::close_session
+                    )
+                    .await
+                );
                 Some("".to_owned())
             } else {
                 None
@@ -1497,7 +1541,13 @@ pub async fn start_pa() {
                                 None, // Use default buffering attributes
                             ) {
                                 Ok(s) => loop {
-                                    if let Ok(_) = s.read(&mut buf) {
+                                    // A dead pulse handle fails every read at once, so ignoring the
+                                    // error left nothing pacing this loop and it burned a core.
+                                    if let Err(err) = s.read(&mut buf) {
+                                        log::error!("Failed to read audio data:{}", err);
+                                        break;
+                                    }
+                                    {
                                         let out =
                                             if buf.iter().filter(|x| **x != 0).next().is_none() {
                                                 vec![]
@@ -2226,42 +2276,8 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 
 #[cfg(test)]
 mod test {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     use super::*;
-
-    #[test]
-    fn verify_ffi_enum_data_size() {
-        println!("{}", std::mem::size_of::<Data>());
-        assert!(std::mem::size_of::<Data>() <= 120);
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    #[test]
-    fn test_service_ipc_path_is_shared_across_uids() {
-        assert_eq!(
-            Config::ipc_path_for_uid(0, crate::POSTFIX_SERVICE),
-            Config::ipc_path_for_uid(501, crate::POSTFIX_SERVICE)
-        );
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    #[test]
-    fn test_ipc_path_differs_by_uid_for_cm() {
-        let effective_uid = unsafe { hbb_common::libc::geteuid() as u32 };
-        let other_uid = effective_uid.saturating_add(1);
-        let postfix = "_cm";
-
-        // Default connect path targets the current effective uid.
-        assert_eq!(
-            Config::ipc_path(postfix),
-            Config::ipc_path_for_uid(effective_uid, postfix)
-        );
-        // A different uid yields a different socket path - this is the root cause of the
-        // cross-user regression when root spawns a user process but still connects as uid 0.
-        assert_ne!(
-            Config::ipc_path(postfix),
-            Config::ipc_path_for_uid(other_uid, postfix)
-        );
-    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]

@@ -23,7 +23,7 @@ use hbb_common::{
         sync::mpsc,
         time::{Duration as TokioDuration, Instant},
     },
-    whoami, Stream,
+    whoami, SessionID, Stream,
 };
 use rdev::{Event, EventType::*, KeyCode};
 #[cfg(all(feature = "vram", feature = "flutter"))]
@@ -51,6 +51,10 @@ use crate::common::GrabState;
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
 
+#[cfg(any(target_os = "android", target_os = "ios", test))]
+#[path = "platform/mobile_wheel.rs"]
+mod mobile_wheel;
+
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Clone, Default)]
@@ -72,6 +76,10 @@ pub struct Session<T: InvokeUiSession> {
     pub reconnect_count: Arc<AtomicUsize>,
     pub last_audit_note: Arc<Mutex<String>>,
     pub audit_guid: Arc<Mutex<String>>,
+    // Every cursor shape as the peer sent it, compressed, by the id the UI knows it by. The
+    // peer sends a shape once, and a window asks for it whenever it has to draw it again.
+    #[cfg(feature = "flutter")]
+    pub cursor_shapes: Arc<RwLock<HashMap<u64, CursorData>>>,
 }
 
 #[derive(Clone)]
@@ -913,6 +921,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(any(target_os = "ios"))]
     pub fn handle_flutter_raw_key_event(
         &self,
+        _session_id: SessionID,
         _keyboard_mode: &str,
         _name: &str,
         _platform_code: i32,
@@ -925,6 +934,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(any(target_os = "ios")))]
     pub fn handle_flutter_raw_key_event(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         name: &str,
         platform_code: i32,
@@ -936,6 +946,7 @@ impl<T: InvokeUiSession> Session<T> {
             self._handle_key_flutter_simulation(keyboard_mode, platform_code, down_or_up);
         } else {
             self._handle_raw_key_non_flutter_simulation(
+                session_id,
                 keyboard_mode,
                 platform_code,
                 position_code,
@@ -948,6 +959,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(any(target_os = "ios")))]
     fn _handle_raw_key_non_flutter_simulation(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         platform_code: i32,
         position_code: i32,
@@ -981,11 +993,18 @@ impl<T: InvokeUiSession> Session<T> {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
         };
-        keyboard::client::process_event_with_session(keyboard_mode, &event, Some(lock_modes), self);
+        keyboard::client::process_event_with_session(
+            keyboard_mode,
+            &event,
+            Some(lock_modes),
+            self,
+            session_id,
+        );
     }
 
     pub fn handle_flutter_key_event(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         character: &str,
         usb_hid: i32,
@@ -996,6 +1015,7 @@ impl<T: InvokeUiSession> Session<T> {
             self._handle_key_flutter_simulation(keyboard_mode, usb_hid, down_or_up);
         } else {
             self._handle_key_non_flutter_simulation(
+                session_id,
                 keyboard_mode,
                 character,
                 usb_hid,
@@ -1031,6 +1051,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     fn _handle_key_non_flutter_simulation(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         character: &str,
         usb_hid: i32,
@@ -1092,7 +1113,13 @@ impl<T: InvokeUiSession> Session<T> {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
         };
-        keyboard::client::process_event_with_session(keyboard_mode, &event, Some(lock_modes), self);
+        keyboard::client::process_event_with_session(
+            keyboard_mode,
+            &event,
+            Some(lock_modes),
+            self,
+            session_id,
+        );
     }
 
     // flutter only TODO new input
@@ -1231,6 +1258,12 @@ impl<T: InvokeUiSession> Session<T> {
         let event_type = mask & MOUSE_TYPE_MASK;
         let (x, y) = if event_type == MOUSE_TYPE_WHEEL || event_type == MOUSE_TYPE_TRACKPAD {
             self.get_scroll_xy((x, y))
+        } else {
+            (x, y)
+        };
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let (x, y) = if event_type == MOUSE_TYPE_WHEEL || event_type == MOUSE_TYPE_TRACKPAD {
+            mobile_wheel::mobile_wheel_delta((x, y), &self.lc.read().unwrap().reverse_mouse_wheel)
         } else {
             (x, y)
         };
@@ -1818,7 +1851,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 self.try_change_init_resolution(pi.current_display);
                 let p = self.lc.read().unwrap().should_auto_login();
                 if !p.is_empty() {
-                    input_os_password(p, true, self.clone());
+                    crate::client::auto_login(p, &pi, self.clone());
                 }
             }
             let current = &pi.displays[pi.current_display as usize];
@@ -1935,7 +1968,9 @@ impl<T: InvokeUiSession> Session<T> {
         self.send_key_event(&crate::keyboard::client::event_lock_screen());
     }
     pub fn ctrl_alt_del(&self) {
-        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
+        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del(
+            &self.peer_platform(),
+        ));
     }
 }
 

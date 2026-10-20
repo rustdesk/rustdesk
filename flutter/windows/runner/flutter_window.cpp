@@ -59,19 +59,22 @@ constexpr UINT kForceRedrawMaxTries = 25;
 // per call (each nudge re-enters the 100ms resize wait).
 constexpr UINT kForceRedrawCheapTries = 2;
 
-// Re-enters the embedder's OnWindowSizeChanged by nudging the Flutter child
-// window by 1px and back: this resets the resize target and resends the window
-// metrics. Same as BaseFlutterWindow::ForceChildRefresh() on the
-// rustdesk_desktop_multi_window side.
+// A nonzero intermediate width can time out before Flutter resizes its surface.
+// Restoring the old width then leaves that intermediate resize pending. Zero
+// width resends metrics without creating a new resize target, as in the plugin.
 void ForceChildRefresh(HWND child) {
   if (!child) {
     return;
+  }
+  // FancyZones can queue a hide before the Flutter view is reparented.
+  if ((GetWindowLongPtr(child, GWL_STYLE) & WS_VISIBLE) == 0) {
+    ShowWindow(child, SW_SHOWNA);
   }
   RECT rect;
   GetWindowRect(child, &rect);
   LONG width = rect.right - rect.left;
   LONG height = rect.bottom - rect.top;
-  SetWindowPos(child, nullptr, 0, 0, width + 1, height,
+  SetWindowPos(child, nullptr, 0, 0, 0, height,
                SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_FRAMECHANGED);
   SetWindowPos(child, nullptr, 0, 0, width, height,
                SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_FRAMECHANGED);

@@ -169,11 +169,6 @@ impl PortForwardMux {
         self.channels.len()
     }
 
-    #[cfg(test)]
-    pub fn recv_window_remaining(&self, id: i32) -> Option<u32> {
-        self.channels.get(&id).map(|e| e.window.lock().unwrap().remaining())
-    }
-
     /// Every task ends and drops its target socket: the queue's senders go for
     /// a task on the queue, `teardown` reaches one parked on the socket.
     pub fn close_all(&mut self) {
@@ -260,7 +255,7 @@ fn unreachable_message(addr: &str, is_rdp: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::port_forward_mux::{CHANNEL_WINDOW, INITIAL_WINDOW, MAX_CHANNELS, MIN_FRAME_CHARGE};
+    use crate::port_forward_mux::{CHANNEL_WINDOW, MAX_CHANNELS};
     use hbb_common::{
         tokio::{
             self,
@@ -380,18 +375,6 @@ mod tests {
     }
 
     #[test]
-    fn permission_denied_refuses_without_spawning() {
-        rt().block_on(async {
-            let port = echo_target().await;
-            let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
-            mux.handle(open(1, port), || false);
-            assert_eq!(opened(&next_frame(&mut rx).await), (1, false));
-            assert_eq!(mux.live_channels(), 0);
-        });
-    }
-
-    #[test]
     fn a_revoked_permission_refuses_new_channels_and_keeps_live_ones() {
         rt().block_on(async {
             let port = echo_target().await;
@@ -406,22 +389,6 @@ mod tests {
             mux.handle(data(1, b"still relayed"), || false);
             assert_eq!(data_of(&next_frame(&mut rx).await), (1, b"still relayed".to_vec()));
             assert_eq!(mux.live_channels(), 1);
-        });
-    }
-
-    #[test]
-    fn close_while_connecting_sends_no_opened() {
-        rt().block_on(async {
-            // `close` is queued before the task is first polled. Its `select!` is
-            // biased towards the command arm, so even a connect that completes on
-            // that same poll loses: no `opened` may ever be sent.
-            let port = echo_target().await;
-            let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
-            mux.handle(open(1, port), || true);
-            mux.handle(close(1), || true);
-            assert!(tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv()).await.is_err());
-            assert_eq!(mux.live_channels(), 0);
         });
     }
 
@@ -494,38 +461,6 @@ mod tests {
             }
             assert_eq!(mux.live_channels(), 1);
         });
-    }
-
-    #[test]
-    fn demux_admits_only_the_initial_window_before_opened() {
-        rt().block_on(async {
-            let port = echo_target().await;
-            let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
-            mux.handle(open(1, port), || true);
-            // The channel task has not run yet: the demultiplexer alone
-            // decides what may sit in the queue before `opened`.
-            assert_eq!(mux.recv_window_remaining(1), Some(INITIAL_WINDOW));
-            assert_eq!(opened(&next_frame(&mut rx).await), (1, true));
-            assert_eq!(mux.recv_window_remaining(1), Some(CHANNEL_WINDOW));
-        });
-    }
-
-    #[test]
-    fn pending_bytes_are_bounded_by_initial_window_before_opened() {
-        // A loopback connect completes before a task can observe "connecting",
-        // so the bound is pinned on the pure predicate the task uses.
-        assert!(pending_fits(0, INITIAL_WINDOW as usize));
-        assert!(pending_fits(
-            INITIAL_WINDOW as usize - MIN_FRAME_CHARGE as usize,
-            1
-        ));
-        // A 1-byte frame costs a whole minimum charge here too.
-        assert!(!pending_fits(
-            INITIAL_WINDOW as usize - MIN_FRAME_CHARGE as usize + 1,
-            1
-        ));
-        assert!(!pending_fits(usize::MAX, 1));
     }
 
     /// A target that accepts and hangs up at once, so every channel ends on

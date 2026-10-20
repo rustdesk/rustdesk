@@ -542,6 +542,26 @@ extern "C"
         SHAddToRecentDocs(SHARD_PATHW, path);
     }
 
+    // Hyper-V Enhanced Session names do not have the usual "rdp" prefix.
+    static bool is_rdp_session_by_protocol(DWORD session_id)
+    {
+        LPSTR buffer = nullptr;
+        DWORD bytes = 0;
+        if (!WTSQuerySessionInformationA(
+                WTS_CURRENT_SERVER_HANDLE, session_id, WTSClientProtocolType, &buffer, &bytes)) {
+            flog("Failed to query protocol for session %lu: Windows error %lu\n",
+                session_id, GetLastError());
+            return false;
+        }
+        std::unique_ptr<char, decltype(&WTSFreeMemory)> protocol_info(buffer, WTSFreeMemory);
+        if (!buffer || bytes < sizeof(USHORT)) {
+            flog("Failed to query protocol for session %lu: Windows error %lu\n",
+                session_id, static_cast<DWORD>(ERROR_INVALID_DATA));
+            return false;
+        }
+        return *reinterpret_cast<const USHORT *>(buffer) == WTS_PROTOCOL_TYPE_RDP;
+    }
+
     DWORD get_current_session(BOOL include_rdp)
     {
         auto rdp_or_console = WTSGetActiveConsoleSessionId();
@@ -573,6 +593,10 @@ extern "C"
                     {
                         rdp_or_console = info.SessionId;
                     }
+                    else if (is_rdp_session_by_protocol(info.SessionId))
+                    {
+                        rdp_or_console = info.SessionId;
+                    }
                 }
             }
             WTSFreeMemory(pInfos);
@@ -580,14 +604,16 @@ extern "C"
         return rdp_or_console;
     }
 
-    BOOL is_session_locked(DWORD session_id)
+    // WTSInfoExLevel1.SessionFlags, or WTS_SESSIONSTATE_UNKNOWN when it cannot be read.
+    DWORD get_session_flags(DWORD session_id)
     {
+        DWORD flags = WTS_SESSIONSTATE_UNKNOWN;
+        // WTS_CURRENT_SESSION, which would query the caller's session instead.
         if (session_id == 0xFFFFFFFF) {
-            return FALSE;
+            return flags;
         }
         PWTSINFOEXW pInfo = NULL;
         DWORD bytes = 0;
-        BOOL locked = FALSE;
         if (WTSQuerySessionInformationW(
                 WTS_CURRENT_SERVER_HANDLE,
                 session_id,
@@ -595,13 +621,13 @@ extern "C"
                 (LPWSTR *)&pInfo,
                 &bytes)) {
             if (pInfo && pInfo->Level == 1) {
-                locked = (pInfo->Data.WTSInfoExLevel1.SessionFlags == WTS_SESSIONSTATE_LOCK);
+                flags = (DWORD)pInfo->Data.WTSInfoExLevel1.SessionFlags;
             }
             if (pInfo) {
                 WTSFreeMemory(pInfo);
             }
         }
-        return locked;
+        return flags;
     }
 
     uint32_t get_active_user(PWSTR bufin, uint32_t nin, BOOL rdp)
@@ -665,6 +691,9 @@ extern "C"
                     }
                     else if (include_rdp && !strnicmp(info.pWinStationName, ica, nica)) {
                         sessionIds.push_back(std::wstring(L"ICA:") + std::to_wstring(info.SessionId));
+                    }
+                    else if (include_rdp && is_rdp_session_by_protocol(info.SessionId)) {
+                        sessionIds.push_back(std::wstring(L"RDP:") + std::to_wstring(info.SessionId));
                     }
                 }
             }

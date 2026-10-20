@@ -154,7 +154,7 @@ Harap pastikan bahwa kamu menjalankan perintah ini dari repositori root RustDesk
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: start a peer connection
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Komunikasi dengan [rustdesk-server](https://github.com/rustdesk/rustdesk-server), menunggu untuk remote direct (TCP hole punching) atau relayed connection
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: kode khusus platform
-
+- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: kode Flutter untuk platform desktop dan perangkat seluler
 ## Snapshots
 
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)

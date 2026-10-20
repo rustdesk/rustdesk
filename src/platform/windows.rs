@@ -1,4 +1,4 @@
-use super::{CursorData, ResultType};
+use super::{validate_install_app_name, CursorData, ResultType};
 use crate::{
     common::PORTABLE_APPNAME_RUNTIME_ENV_KEY,
     custom_server::*,
@@ -99,6 +99,7 @@ use winreg::{enums::*, RegKey};
 mod acl;
 mod installer_handoff;
 mod installer_shell;
+mod verified_update;
 mod msi_registry;
 pub(crate) use acl::current_process_user_sid_string;
 pub use acl::{
@@ -110,6 +111,10 @@ use installer_handoff::run_cmds;
 use installer_shell::{
     embedded_shortcut_commands, embedded_tray_shortcut_commands, escape_nested_cmd_ampersands,
     shortcut_bytes, validate_install_value,
+};
+pub use verified_update::{
+    copy_and_verify_update_file_sha256, schedule_current_verified_update_file_cleanup,
+    update_to_verified, VerifiedUpdateFile,
 };
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
@@ -126,17 +131,6 @@ const MSI_WINDOWS_INSTALLER_VALUE: u32 = 1;
 const MSI_EXIT_SUCCESS_REBOOT_INITIATED: u32 = 1641;
 const MSI_EXIT_SUCCESS_REBOOT_REQUIRED: u32 = 3010;
 const HKLM_PREFIX: &str = "HKEY_LOCAL_MACHINE\\";
-
-fn validate_install_app_name(app_name: &str) -> ResultType<()> {
-    if app_name.is_empty()
-        || !app_name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '-')
-    {
-        bail!("Application name must match [a-zA-Z0-9-]+");
-    }
-    Ok(())
-}
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
@@ -565,7 +559,6 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
     fn get_current_session(rdp: BOOL) -> DWORD;
-    fn is_session_locked(session_id: DWORD) -> BOOL;
     fn LaunchProcessWin(
         cmd: *const u16,
         session_id: DWORD,
@@ -1269,7 +1262,7 @@ pub fn is_locked() -> bool {
     let Some(session_id) = get_current_process_session_id() else {
         return false;
     };
-    unsafe { is_session_locked(session_id) == TRUE }
+    is_session_locked_flag(session_id) == Some(true)
 }
 
 #[inline]
@@ -1281,6 +1274,47 @@ pub fn is_logon_ui() -> ResultType<bool> {
     Ok(pids
         .into_iter()
         .any(|pid| get_session_id_of_process(pid) == Some(current_sid)))
+}
+
+// Auto-login types the OS password on this, so a state that cannot be read counts as unlocked.
+// `is_prelogin()` reads a failed query as no user signed in, and `is_logon_ui()` is left out
+// because a LogonUI.exe can outlive the unlock.
+pub fn is_logon_screen() -> bool {
+    let Some(session_id) = get_current_process_session_id() else {
+        return false;
+    };
+    is_session_prelogin(session_id) == Some(true)
+        || is_session_locked_flag(session_id) == Some(true)
+}
+
+fn is_session_prelogin(session_id: u32) -> Option<bool> {
+    extern "C" {
+        fn get_session_user_info(path: *mut u16, n: u32, session_id: u32) -> u32;
+    }
+    let mut buff = [0u16; 256];
+    // The bytes copied include the terminating null, so 0 means the query failed.
+    let n = unsafe { get_session_user_info(buff.as_mut_ptr(), buff.len() as _, session_id) };
+    if n == 0 {
+        return None;
+    }
+    let username = String::from_utf16_lossy(&buff);
+    let username = username.trim_end_matches('\0');
+    Some(username.is_empty() || username == "SYSTEM")
+}
+
+// Windows 7 and Server 2008 R2 report LOCK and UNLOCK the other way round (see WTSINFOEX_LEVEL1).
+fn is_session_locked_flag(session_id: u32) -> Option<bool> {
+    extern "C" {
+        fn get_session_flags(session_id: DWORD) -> DWORD;
+    }
+    const WTS_SESSIONSTATE_LOCK: DWORD = 0;
+    const WTS_SESSIONSTATE_UNLOCK: DWORD = 1;
+    let reversed = !base::platform::windows::is_windows_version_or_greater(6, 2, 0, 0, 0);
+    match unsafe { get_session_flags(session_id) } {
+        WTS_SESSIONSTATE_LOCK => Some(!reversed),
+        WTS_SESSIONSTATE_UNLOCK => Some(reversed),
+        _ => None,
+    }
 }
 
 pub fn is_root() -> bool {
@@ -1354,6 +1388,10 @@ pub fn get_install_options() -> String {
 }
 
 pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static str {
+    if !is_win_10_or_greater() {
+        return "desktopicon startmenu";
+    }
+
     let install_printer = match printer_override {
         Some(override_value) => override_value,
         None => {
@@ -1361,9 +1399,13 @@ pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static st
             let subkey = format!(".{}", app_name.to_lowercase());
             let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
             printer.as_deref() == Some("1")
+                && remote_printer::is_rd_printer_installed(&app_name).unwrap_or_else(|err| {
+                    log::warn!("Failed to check printer installation status: {err}; skipping printer installation");
+                    false
+                })
         }
     };
-    if install_printer && is_win_10_or_greater() {
+    if install_printer {
         "desktopicon startmenu printer"
     } else {
         "desktopicon startmenu"
@@ -3872,33 +3914,6 @@ pub fn handle_custom_client_staging_dir_before_update(
     Ok(())
 }
 
-// Used for auto update and manual update in the main window.
-pub fn update_to(file: &str) -> ResultType<()> {
-    if file.ends_with(".exe") {
-        let custom_client_staging_dir = get_custom_client_staging_dir();
-        if crate::is_custom_client() {
-            handle_custom_client_staging_dir_before_update(&custom_client_staging_dir)?;
-        } else {
-            // Clean up any residual staging directory from previous custom client
-            allow_err!(remove_custom_client_staging_dir(&custom_client_staging_dir));
-        }
-        if !run_uac(file, "--update")? {
-            bail!(
-                "Failed to run the update exe with UAC, error: {:?}",
-                std::io::Error::last_os_error()
-            );
-        }
-    } else if file.ends_with(".msi") {
-        if let Err(e) = update_me_msi(file, false) {
-            bail!("Failed to run the update msi: {}", e);
-        }
-    } else {
-        // unreachable!()
-        bail!("Unsupported update file format: {}", file);
-    }
-    Ok(())
-}
-
 // Don't launch tray app when running with `\qn`.
 // 1. Because `/qn` requires administrator permission and the tray app should be launched with user permission.
 //   Or launching the main window from the tray app will cause the main window to be launched with administrator permission.
@@ -3909,12 +3924,8 @@ pub fn update_to(file: &str) -> ResultType<()> {
 //    3. Restore the tray app sessions.
 //    `1` and `3` must be done in custom actions.
 //    We need also to handle the command line parsing to find the tray processes.
-pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
-    let quiet_args = if quiet { " /qn LAUNCH_TRAY_APP=N" } else { "" };
-    let cmds =
-        format!("chcp 65001 && msiexec /i \"{msi}\"{quiet_args} REBOOT=ReallySuppress /norestart");
-    run_cmds(cmds, false, "update-msi")?;
-    Ok(())
+pub fn update_me_msi(msi: &str, expected_sha256: &str, quiet: bool) -> ResultType<()> {
+    verified_update::install_verified_msi(msi, expected_sha256, quiet)
 }
 
 fn get_import_config(exe: &str) -> String {
@@ -3983,9 +3994,10 @@ pub fn try_remove_temp_update_files() {
         if let Ok(entry) = entry {
             let path = entry.path();
             if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                // Match files like rustdesk-*.msi or rustdesk-*.exe
-                if file_name.starts_with("rustdesk-")
-                    && (file_name.ends_with(".msi") || file_name.ends_with(".exe"))
+                // Match downloaded installers, verified copies, and abandoned handoff scripts.
+                if (file_name.starts_with("rustdesk-")
+                    && (file_name.ends_with(".msi") || file_name.ends_with(".exe")))
+                    || (file_name.starts_with("rustdesk_install_") && file_name.ends_with(".bat"))
                 {
                     // Skip files modified within the last hour to avoid deleting files being downloaded
                     if let Ok(metadata) = std::fs::metadata(&path) {
@@ -4178,14 +4190,6 @@ pub fn is_x64() -> bool {
         GetNativeSystemInfo(&mut sys_info as _);
     }
     unsafe { sys_info.u.s().wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 }
-}
-
-pub fn release_arch_suffix() -> Option<&'static str> {
-    match std::env::consts::ARCH {
-        "x86_64" => Some("x86_64"),
-        "aarch64" => Some("aarch64"),
-        _ => None,
-    }
 }
 
 pub fn try_kill_rustdesk_main_window_process() -> ResultType<()> {
@@ -4749,110 +4753,6 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // Test-only reusable Win32 HANDLE RAII helper.
-    // If a future non-test path needs the same pattern, move it out of this test module.
-    //
-    // This struct is similar to `base::platform::windows::RAIIHandle`,
-    // but `RAIIHandle` depends on `WinApi` crate, while this `HandleGuard` only depends on `windows` crate.
-    struct HandleGuard(WinHANDLE);
-
-    impl HandleGuard {
-        #[inline]
-        fn new(handle: WinHANDLE) -> Self {
-            Self(handle)
-        }
-
-        #[inline]
-        fn get(&self) -> WinHANDLE {
-            self.0
-        }
-    }
-
-    impl Drop for HandleGuard {
-        fn drop(&mut self) {
-            unsafe {
-                if !self.0.is_invalid() {
-                    let _ = WinCloseHandle(self.0);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_is_process_running_as_system_invalid_pid_errors() {
-        assert!(is_process_running_as_system(u32::MAX).is_err());
-    }
-
-    #[test]
-    fn test_is_process_running_as_system_matches_current_process_token_user() {
-        let pid = unsafe { windows::Win32::System::Threading::GetCurrentProcessId() };
-        let actual = is_process_running_as_system(pid).unwrap();
-
-        let expected = unsafe {
-            // Keep this test consistent: use only the `windows` crate APIs/types.
-            let process = HandleGuard::new(
-                WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-                    .expect("WinOpenProcess should succeed for current process"),
-            );
-            let mut token = WinHANDLE::default();
-            WinOpenProcessToken(process.get(), WIN_TOKEN_QUERY, &mut token)
-                .expect("WinOpenProcessToken should succeed for current process");
-            let token = HandleGuard::new(token);
-
-            let mut token_user_size = 0u32;
-            let _ = WinGetTokenInformation(token.get(), TokenUser, None, 0, &mut token_user_size);
-            assert_ne!(token_user_size, 0, "TokenUser size should be non-zero");
-
-            let mut buffer = vec![0u8; token_user_size as usize];
-            WinGetTokenInformation(
-                token.get(),
-                TokenUser,
-                Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
-                token_user_size,
-                &mut token_user_size,
-            )
-            .expect("WinGetTokenInformation(TokenUser) should succeed for current process");
-
-            let min_size = std::mem::size_of::<TOKEN_USER>();
-            assert!(
-                buffer.len() >= min_size,
-                "TokenUser buffer too small (got {}, need >= {})",
-                buffer.len(),
-                min_size
-            );
-            let token_user: TOKEN_USER =
-                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
-            let expected = IsWellKnownSid(token_user.User.Sid, WinLocalSystemSid).as_bool();
-            expected
-        };
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn test_uninstall_cert() {
-        println!("uninstall driver certs: {:?}", cert::uninstall_cert());
-    }
-
-    #[test]
-    fn test_get_unicode_char_by_vk() {
-        let chr = get_char_from_vk(0x41); // VK_A
-        assert_eq!(chr, Some('a'));
-        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
-        assert_eq!(chr, None)
-    }
-
-    #[test]
-    fn install_app_names_enforce_ascii_command_safety() {
-        assert!(validate_install_app_name("RustDesk-Admin1").is_ok());
-        for app_name in ["", "RustDesk_Admin", "RustDesk&whoami", "RustDesk应用"] {
-            assert!(
-                validate_install_app_name(app_name).is_err(),
-                "unsafe application name was accepted: {app_name}"
-            );
-        }
-    }
 
     #[test]
     fn vbs_files_use_utf16le_with_bom_and_crlf() {

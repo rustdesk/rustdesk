@@ -209,6 +209,8 @@ impl Frame<'_> {
 pub enum EncodeInput<'a> {
     YUV(&'a [u8]),
     Texture((*mut c_void, usize)),
+    #[cfg(all(windows, feature = "vram"))]
+    Repeat,
 }
 
 impl<'a> EncodeInput<'a> {

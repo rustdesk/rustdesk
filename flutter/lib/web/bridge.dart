@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:html' as html;
 
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/models/shortcut_model.dart';
 
 final _privateConstructorUsedError = UnsupportedError(
     'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
@@ -26,6 +27,14 @@ sealed class EventToUI {
     int field0,
     bool field1,
   ) = EventToUI_Texture;
+  const factory EventToUI.cursor({
+    required String id,
+    required int hotx,
+    required int hoty,
+    required int width,
+    required int height,
+    required Uint8List colors,
+  }) = EventToUI_Cursor;
 }
 
 class EventToUI_Event implements EventToUI {
@@ -50,7 +59,60 @@ class EventToUI_Texture implements EventToUI {
   bool get field1 => f1;
 }
 
+class EventToUI_Cursor implements EventToUI {
+  const EventToUI_Cursor({
+    required this.id,
+    required this.hotx,
+    required this.hoty,
+    required this.width,
+    required this.height,
+    required this.colors,
+  });
+  final String id;
+  final int hotx;
+  final int hoty;
+  final int width;
+  final int height;
+  final Uint8List colors;
+}
+
+class CursorShape {
+  final int hotx;
+  final int hoty;
+  final int width;
+  final int height;
+  final Uint8List colors;
+
+  const CursorShape({
+    required this.hotx,
+    required this.hoty,
+    required this.width,
+    required this.height,
+    required this.colors,
+  });
+}
+
 class RustdeskImpl {
+  // The core answers through the callback, before callMethod returns.
+  Future<CursorShape?> sessionGetCursorShape(
+      {required UuidValue sessionId, required String id, dynamic hint}) {
+    final completer = Completer<CursorShape?>();
+    js.context.callMethod('getCursorShape', [
+      id,
+      (int hotx, int hoty, int width, int height, Uint8List? colors) {
+        completer.complete(colors == null
+            ? null
+            : CursorShape(
+                hotx: hotx,
+                hoty: hoty,
+                width: width,
+                height: height,
+                colors: colors));
+      }
+    ]);
+    return completer.future;
+  }
+
   Future<void> stopGlobalEventStream({required String appType, dynamic hint}) {
     throw UnimplementedError("stopGlobalEventStream");
   }
@@ -901,7 +963,11 @@ class RustdeskImpl {
   }
 
   String mainGetLocalOption({required String key, dynamic hint}) {
-    return js.context.callMethod('getByName', ['option:local', key]);
+    final v = js.context.callMethod('getByName', ['option:local', key]);
+    if (key == 'lang' && (v == 'pt' || v == 'br')) {
+      return 'pt-br';
+    }
+    return v;
   }
 
   // Do not return the real environment variables.
@@ -924,6 +990,28 @@ class RustdeskImpl {
           'option:local',
           jsonEncode({'name': key, 'value': value})
         ]));
+  }
+
+  // Tell the JS-side matcher (flutter/web/js/src/shortcut_matcher.ts) to
+  // use the same platform-filtered bindings as the Flutter matcher, while
+  // keeping unsupported saved bindings in LocalStorage.
+  void mainReloadKeyboardShortcuts({dynamic hint}) {
+    final config = ShortcutModel.config(active: true);
+    js.context.callMethod('reloadShortcuts', [
+      jsonEncode({
+        'enabled': config.enabled,
+        'pass_through': config.passThrough,
+        'bindings': config.bindings,
+      })
+    ]);
+  }
+
+  // Web has no Rust at runtime, so the defaults seed comes from the
+  // [kDefaultShortcutBindings] canonical in shortcut_constants.dart. Parity
+  // with Rust's `default_bindings()` is enforced by tests on both sides
+  // against `flutter/test/fixtures/default_keyboard_shortcuts.json`.
+  String mainGetDefaultKeyboardShortcuts({dynamic hint}) {
+    return jsonEncode(kDefaultShortcutBindings);
   }
 
   String mainGetInputSource({dynamic hint}) {
@@ -1172,6 +1260,17 @@ class RustdeskImpl {
   }
 
   Future<void> mainInit({required String appDir, dynamic hint}) {
+    // JS -> Dart shortcut bridge. The matcher in flutter/web/js/src/
+    // shortcut_matcher.ts calls `window.onShortcutTriggered(actionId)` when a
+    // binding fires; route it to the active session's ShortcutModel.
+    // Web uses a JS-side connection, so the event does not arrive through the
+    // native session event stream.
+    js.context['onShortcutTriggered'] = (dynamic action) {
+      if (action is String) {
+        ShortcutModel.onWebTriggered(action);
+      }
+    };
+    mainReloadKeyboardShortcuts();
     return Future.value();
   }
 
