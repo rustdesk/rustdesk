@@ -2872,6 +2872,7 @@ Widget trustedDeviceExpiration({
 }) {
   final period = bind.mainGetOptionSync(key: kOptionTrustedDeviceExpiration);
   const periods = ['1', '7', '30', '90', '0'];
+  const desktopDropdownHeight = 36.0;
   return Align(
     alignment: AlignmentDirectional.centerStart,
     child: Wrap(
@@ -2881,6 +2882,7 @@ Widget trustedDeviceExpiration({
         Text(translate('Trust duration (days)')),
         SizedBox(
           width: 140,
+          height: isDesktop || isWebDesktop ? desktopDropdownHeight : null,
           child: ComboBox(
             keys: periods,
             values: ['1', '7', '30', '90', translate('Never')],
