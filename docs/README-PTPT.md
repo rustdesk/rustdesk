@@ -10,7 +10,7 @@
 
 > [!Caution]
 > **Aviso de Isenção de Responsabilidade por Uso Indevido:** <br>
-> Os programadores do RustDesk não toleram ou apoiam qualquer uso antiético ou ilegal deste software. O uso indevido, como acesso não autorizado, controle ou invasão de privacidade, é estritamente contrária às nossas diretrizes. Os autores não se responbilizam por qualquer uso indevido da aplicação.
+> Os programadores do RustDesk não toleram ou apoiam qualquer uso antiético ou ilegal deste software. O uso indevido, como acesso não autorizado, controlo ou invasão de privacidade, é estritamente contrário às nossas diretrizes. Os autores não se responsabilizam por qualquer uso indevido da aplicação.
 
 
 Converse conosco: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
