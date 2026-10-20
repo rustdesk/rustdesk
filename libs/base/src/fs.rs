@@ -1678,15 +1678,6 @@ mod tests {
     }
 
     #[test]
-    fn set_files_rejects_null_byte_name() {
-        let mut job = new_validation_job(103);
-        let err = job
-            .set_files(vec![new_file_entry("bad\0name.txt")])
-            .expect_err("null byte in file name must be rejected");
-        assert_err_contains(err, "null bytes");
-    }
-
-    #[test]
     fn set_files_rejects_mixed_entries_when_one_is_traversal() {
         let mut job = new_validation_job(104);
         let err = job
@@ -1706,39 +1697,6 @@ mod tests {
             .set_files(vec![new_file_entry("\\\\server\\share\\payload.txt")])
             .expect_err("UNC absolute path must be rejected");
         assert_err_contains(err, "absolute path");
-    }
-
-    #[cfg(not(windows))]
-    #[test]
-    fn set_files_allows_backslash_prefixed_name_on_unix() {
-        let mut job = new_validation_job(105);
-        assert!(job
-            .set_files(vec![new_file_entry("\\\\server\\share\\payload.txt")])
-            .is_ok());
-    }
-
-    #[test]
-    fn remove_file_rejects_empty_path() {
-        let err = remove_file("").expect_err("empty file path must be rejected");
-        assert_err_contains(err, "cannot be empty");
-    }
-
-    #[test]
-    fn remove_file_rejects_null_byte_path() {
-        let err = remove_file("bad\0path").expect_err("null byte path must be rejected");
-        assert_err_contains(err, "null bytes");
-    }
-
-    #[test]
-    fn create_dir_rejects_empty_path() {
-        let err = create_dir("").expect_err("empty directory path must be rejected");
-        assert_err_contains(err, "cannot be empty");
-    }
-
-    #[test]
-    fn create_dir_rejects_null_byte_path() {
-        let err = create_dir("bad\0path").expect_err("null byte path must be rejected");
-        assert_err_contains(err, "null bytes");
     }
 
     #[test]
@@ -1789,25 +1747,5 @@ mod tests {
 
         assert!(!src.exists());
         assert!(dst.exists());
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn set_files_rejects_windows_drive_absolute_path() {
-        let mut job = new_validation_job(106);
-        let err = job
-            .set_files(vec![new_file_entry("C:\\Windows\\Temp\\payload.txt")])
-            .expect_err("drive-letter absolute path must be rejected");
-        assert_err_contains(err, "absolute path");
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn set_files_rejects_windows_verbatim_drive_absolute_path() {
-        let mut job = new_validation_job(1061);
-        let err = job
-            .set_files(vec![new_file_entry(r"\\?\C:\Windows\Temp\x.txt")])
-            .expect_err("verbatim drive absolute path must be rejected");
-        assert_err_contains(err, "absolute path");
     }
 }

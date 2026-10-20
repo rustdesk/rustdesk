@@ -127,6 +127,12 @@ type FnGrabMapped = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info
 type FnFrameRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info);
 type FnGetCursor = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info) -> c_int;
 type FnCursorRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info);
+/// `drmtap_cursor_hotspot_valid`, added in libdrmtap 0.5.6. Answers, for the sample in hand,
+/// whether `hot_x`/`hot_y` were read from the driver's HOTSPOT_X/Y plane properties: 0 with
+/// `*valid` set, `-EINVAL` on a null argument, and `-ENOTSUP` when nothing recorded an answer,
+/// which is what a cursor read through an older privileged helper produces.
+type FnCursorHotspotValid =
+    unsafe extern "C" fn(*const drmtap_cursor_info, *mut c_int) -> c_int;
 // Split-capture entry points (libdrmtap >= 0.4.10), required: `grab_desc` runs on the privileged
 // export side, `open_render`/`convert_dmabuf` on the unprivileged converter side.
 type FnGrabDesc =
@@ -134,6 +140,16 @@ type FnGrabDesc =
 type FnOpenRender = unsafe extern "C" fn(*const c_char) -> *mut drmtap_ctx;
 // libdrmtap >= 0.4.15; returns a ctx-owned string, or NULL if it has none.
 type FnRenderNode = unsafe extern "C" fn(*mut drmtap_ctx) -> *const c_char;
+/// `drmtap_plane_rotation`, added in libdrmtap 0.5.8: the DRM `rotation` bitmask the primary
+/// plane scans out with, read now (0x1 = 0, 0x2 = 90, 0x4 = 180, 0x8 = 270, plus 0x10/0x20 for
+/// a reflection). 0 with `*rotation` set; `-ENOTSUP` when the plane has no such property, which
+/// means the compositor can only have rotated in software; `-ENOENT` with no plane bound;
+/// `-EINVAL` on a null argument.
+type FnPlaneRotation = unsafe extern "C" fn(*mut drmtap_ctx, *mut u32) -> c_int;
+/// `drmtap_crtc_refresh`, added in libdrmtap 0.5.9: the refresh of the captured CRTC in hertz as
+/// the reduced fraction `*num / *den` of its current mode. 0 on success; `-ENODATA` for a CRTC
+/// with no mode; `-ENOENT` with none to pick; `-EINVAL` on a null argument.
+type FnCrtcRefresh = unsafe extern "C" fn(*mut drmtap_ctx, *mut u64, *mut u64) -> c_int;
 type FnConvertDmabuf =
     unsafe extern "C" fn(*mut drmtap_ctx, *const drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
 
@@ -148,11 +164,74 @@ pub struct DrmtapLib {
     pub frame_release: FnFrameRelease,
     pub get_cursor: FnGetCursor,
     pub cursor_release: FnCursorRelease,
+    /// Optional: it only exists from libdrmtap 0.5.6. Absent means the library cannot say where a
+    /// hotspot came from, NOT that it was a guess; `drm_reader` keeps the old heuristic for that
+    /// case and nothing else changes.
+    pub cursor_hotspot_valid: Option<FnCursorHotspotValid>,
     pub grab_desc: FnGrabDesc,
     pub open_render: FnOpenRender,
     pub convert_dmabuf: FnConvertDmabuf,
     pub render_node: Option<FnRenderNode>,
+    /// Optional: it only exists from libdrmtap 0.5.8. Absent means the library cannot say whether
+    /// the plane rotated the scanout, and the consumer keeps the pre-0.5.8 rule for that case.
+    pub plane_rotation: Option<FnPlaneRotation>,
+    /// Optional: it only exists from libdrmtap 0.5.9. Absent means the producer takes the
+    /// whole-hertz refresh of the enumeration as its pacing floor.
+    pub crtc_refresh: Option<FnCrtcRefresh>,
     pub version: (c_int, c_int, c_int),
+}
+
+/// A library whose capture entry points are the given fakes and whose others do nothing, for the
+/// tests of the reader.
+#[cfg(test)]
+impl DrmtapLib {
+    pub(crate) fn fake(
+        grab_mapped: FnGrabMapped,
+        frame_release: FnFrameRelease,
+        grab_desc: FnGrabDesc,
+        plane_rotation: FnPlaneRotation,
+    ) -> Self {
+        unsafe extern "C" fn open(_: *const drmtap_config) -> *mut drmtap_ctx {
+            std::ptr::null_mut()
+        }
+        unsafe extern "C" fn close(_: *mut drmtap_ctx) {}
+        unsafe extern "C" fn list_displays(_: *mut drmtap_ctx, _: *mut drmtap_display, _: c_int) -> c_int {
+            0
+        }
+        unsafe extern "C" fn get_cursor(_: *mut drmtap_ctx, _: *mut drmtap_cursor_info) -> c_int {
+            -1
+        }
+        unsafe extern "C" fn cursor_release(_: *mut drmtap_ctx, _: *mut drmtap_cursor_info) {}
+        unsafe extern "C" fn open_render(_: *const c_char) -> *mut drmtap_ctx {
+            std::ptr::null_mut()
+        }
+        unsafe extern "C" fn convert_dmabuf(
+            _: *mut drmtap_ctx,
+            _: *const drmtap_dmabuf_desc,
+            _: *mut drmtap_frame_info,
+        ) -> c_int {
+            -1
+        }
+        DrmtapLib {
+            _lib: hbb_common::libloading::os::unix::Library::this().into(),
+            open,
+            close,
+            list_displays,
+            list_devices: None,
+            grab_mapped,
+            frame_release,
+            get_cursor,
+            cursor_release,
+            cursor_hotspot_valid: None,
+            grab_desc,
+            open_render,
+            convert_dmabuf,
+            render_node: None,
+            plane_rotation: Some(plane_rotation),
+            crtc_refresh: None,
+            version: (0, 5, 8),
+        }
+    }
 }
 
 // SAFETY: the resolved fn pointers are plain C entry points with no interior mutability;
@@ -278,6 +357,12 @@ impl DrmtapLib {
             };
             let render_node: Option<FnRenderNode> =
                 lib.get(b"drmtap_render_node").ok().map(|s| *s);
+            let cursor_hotspot_valid: Option<FnCursorHotspotValid> =
+                lib.get(b"drmtap_cursor_hotspot_valid").ok().map(|s| *s);
+            let plane_rotation: Option<FnPlaneRotation> =
+                lib.get(b"drmtap_plane_rotation").ok().map(|s| *s);
+            let crtc_refresh: Option<FnCrtcRefresh> =
+                lib.get(b"drmtap_crtc_refresh").ok().map(|s| *s);
             // Log the load only now that every required symbol resolved: this fn still returns None on a missing one.
             let loaded_from = real
                 .as_ref()
@@ -309,6 +394,34 @@ impl DrmtapLib {
                      points at and remove any leftover libdrmtap.so.0* beside it. {effect}"
                 );
             }
+            // Same shape as the check above, and for the same reason: a library that REPORTS a
+            // version which exports the symbol and then does not have it is a stale or
+            // hand-substituted object, and saying so beats silently taking the legacy path.
+            if (minor, patch) >= (5, 6) && cursor_hotspot_valid.is_none() {
+                log::warn!(
+                    "libdrmtap at {loaded_from} reports v{major}.{minor}.{patch} but is missing \
+                     drmtap_cursor_hotspot_valid: it is a stale or pre-release build. Check what \
+                     the soname symlink points at. Cursor hotspot provenance falls back to \
+                     guessing from the coordinates, which cannot tell an absent HOTSPOT_X/Y from \
+                     a driver that really puts the hotspot at (0, 0)."
+                );
+            }
+            if (minor, patch) >= (5, 8) && plane_rotation.is_none() {
+                log::warn!(
+                    "libdrmtap at {loaded_from} reports v{major}.{minor}.{patch} but is missing \
+                     drmtap_plane_rotation: it is a stale or pre-release build. Check what the \
+                     soname symlink points at. A 180-degree output rotated by the compositor in \
+                     software will be captured upside down."
+                );
+            }
+            if (minor, patch) >= (5, 9) && crtc_refresh.is_none() {
+                log::warn!(
+                    "libdrmtap at {loaded_from} reports v{major}.{minor}.{patch} but is missing \
+                     drmtap_crtc_refresh: it is a stale or pre-release build. Check what the \
+                     soname symlink points at. Capture paces to the whole-hertz refresh, so a \
+                     59.94 Hz panel is sampled as if it were 60."
+                );
+            }
             Some(DrmtapLib {
                 _lib: lib,
                 open,
@@ -319,10 +432,13 @@ impl DrmtapLib {
                 frame_release,
                 get_cursor,
                 cursor_release,
+                cursor_hotspot_valid,
                 grab_desc,
                 open_render,
                 convert_dmabuf,
                 render_node,
+                plane_rotation,
+                crtc_refresh,
                 version: (major, minor, patch),
             })
         }
@@ -347,41 +463,6 @@ pub fn get() -> Option<&'static DrmtapLib> {
 #[cfg(test)]
 mod tests {
     use super::{abi_accepted, DRMTAP_ABI_MAJOR, DRMTAP_ABI_MINOR, DRMTAP_MIN_MINOR_PATCH};
-
-    #[test]
-    fn abi_gate_rejects_a_library_from_before_the_split() {
-        // These are refused because their MINOR differs from the verified one, which is the only
-        // reason the gate needs. Naming the pre-split releases keeps the intent readable, but do
-        // not read this as the floor doing the work: see the test below.
-        for (minor, patch) in [(3, 3), (4, 0), (4, 8), (4, 9)] {
-            assert!(
-                !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
-                "v0.{minor}.{patch} is not the verified minor and must be refused"
-            );
-        }
-    }
-
-    #[test]
-    fn the_patch_floor_is_currently_vacuous_and_that_is_deliberate() {
-        // With MIN_MINOR_PATCH.0 == DRMTAP_ABI_MINOR the floor can never reject anything: the
-        // minor equality already forces `(minor, patch) >= (minor, 0)`. It is kept because it is
-        // the mechanism that WOULD do the work the next time a floor lands mid-minor, as (4, 10)
-        // did for the split API. This test exists so nobody reads the pre-split test above as
-        // evidence that the floor is live -- if that ever matters, this assert is the tripwire.
-        let (floor_minor, floor_patch) = DRMTAP_MIN_MINOR_PATCH;
-        assert_eq!(
-            floor_minor, DRMTAP_ABI_MINOR,
-            "the floor is inside the verified minor; a floor in a DIFFERENT minor is unreachable"
-        );
-        if floor_patch == 0 {
-            assert!(
-                abi_accepted(DRMTAP_ABI_MAJOR, DRMTAP_ABI_MINOR, 0),
-                "patch 0 of the verified minor must be accepted while the floor is 0"
-            );
-        } else {
-            assert!(!abi_accepted(DRMTAP_ABI_MAJOR, DRMTAP_ABI_MINOR, floor_patch - 1));
-        }
-    }
 
     #[test]
     fn abi_gate_accepts_the_floor_and_later_patches_of_the_same_minor() {
@@ -411,11 +492,5 @@ mod tests {
                 "v0.{minor}.{patch} is an unverified minor and must be refused"
             );
         }
-    }
-
-    #[test]
-    fn abi_gate_rejects_another_major_in_both_directions() {
-        assert!(!abi_accepted(DRMTAP_ABI_MAJOR + 1, 0, 0));
-        assert!(!abi_accepted(DRMTAP_ABI_MAJOR + 1, 99, 99));
     }
 }

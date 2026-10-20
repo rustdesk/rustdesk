@@ -9,6 +9,7 @@ import 'platform_model.dart';
 import 'rustdesk_terminal.dart';
 import 'terminal_copy_shortcut.dart';
 import 'terminal_mouse_drag_reporter.dart';
+import 'terminal_scroll_controller.dart';
 
 part 'terminal_mouse_handler_input.dart';
 part 'terminal_web_clipboard_gesture.dart';
@@ -55,7 +56,7 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
   static const _scrollDown = 1;
 
   final _terminalViewKey = GlobalKey<TerminalViewState>();
-  final _scrollController = ScrollController();
+  late final _scrollController = TerminalScrollController(() => widget.terminal);
   final _mouseDrag = TerminalMouseDragReporter();
   late final WheelButtonFixMouseHandler _mouseHandler;
   TerminalMouseHandler? _previousMouseHandler;

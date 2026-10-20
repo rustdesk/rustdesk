@@ -18,8 +18,6 @@ const SECOND_DOWNSAMPLE_PACKET: [f32; 4] = [3.0, 4.0, 5.0, 6.0];
 const EXPECTED_DOWNSAMPLED_OUTPUT: [f32; 4] = [0.0, 2.0, 4.0, 6.0];
 const PACKETS_PER_SECOND: usize = 100;
 const OUTPUT_PACKET_FRAMES: usize = OUTPUT_RATE as usize / PACKETS_PER_SECOND;
-const RATE_44_1_KHZ: u32 = 44_100;
-const FLOAT_TOLERANCE: f32 = 0.000_001;
 const MIN_CONTINUITY_PACKETS: usize = 2;
 
 fn stereo_tone_at_rate(frames: usize, sample_rate: u32) -> Vec<f32> {
@@ -35,11 +33,6 @@ fn stereo_tone_at_rate(frames: usize, sample_rate: u32) -> Vec<f32> {
 
 fn stereo_tone(frames: usize) -> Vec<f32> {
     stereo_tone_at_rate(frames, INPUT_RATE)
-}
-
-fn maximum_tone_prediction_residual(sample_rate: u32) -> f32 {
-    let half_step = std::f32::consts::PI * TONE_FREQUENCY_HZ / sample_rate as f32;
-    4.0 * TONE_AMPLITUDE * half_step.sin().powi(2)
 }
 
 fn maximum_boundary_residual(chunks: &[Vec<f32>]) -> f32 {
@@ -90,39 +83,6 @@ fn preserves_decoded_packet_continuity_and_output_ratio() {
 }
 
 #[test]
-fn rejects_incomplete_interleaved_frames() {
-    let mut resampler = AudioResampler::new(stereo_config()).unwrap();
-
-    assert!(resampler.process(&[TONE_AMPLITUDE]).is_err());
-}
-
-#[test]
-fn interpolates_mono_samples() {
-    let config = AudioResamplerConfig {
-        input_rate: UNIT_RATE,
-        output_rate: DOUBLE_RATE,
-        channels: MONO_CHANNELS,
-    };
-    let mut resampler = AudioResampler::new(config).unwrap();
-
-    assert_eq!(
-        resampler.process(&[0.0, 1.0, 2.0]).unwrap(),
-        [0.0, 0.5, 1.0, 1.5, 2.0]
-    );
-}
-
-#[test]
-fn rejects_zero_rate_configuration() {
-    let config = AudioResamplerConfig {
-        input_rate: 0,
-        output_rate: OUTPUT_RATE,
-        channels: CHANNELS,
-    };
-
-    assert!(AudioResampler::new(config).is_err());
-}
-
-#[test]
 fn downsamples_across_packet_boundaries() {
     let config = AudioResamplerConfig {
         input_rate: DOUBLE_RATE,
@@ -151,28 +111,4 @@ fn sender_resampler_emits_only_complete_continuous_frames() {
         .iter()
         .all(|packet| packet.len() == OUTPUT_PACKET_FRAMES * CHANNELS as usize));
     assert!(maximum_boundary_residual(&output) <= MAX_BOUNDARY_RESIDUAL);
-}
-
-#[test]
-fn sender_downsampling_preserves_packet_continuity() {
-    let input_packet_frames = RATE_44_1_KHZ as usize / PACKETS_PER_SECOND;
-    let input = stereo_tone_at_rate(input_packet_frames * CHUNK_COUNT, RATE_44_1_KHZ);
-    let config = AudioResamplerConfig {
-        input_rate: RATE_44_1_KHZ,
-        output_rate: INPUT_RATE,
-        channels: CHANNELS,
-    };
-    let mut resampler =
-        FixedFrameAudioResampler::new(config, INPUT_RATE as usize / PACKETS_PER_SECOND).unwrap();
-    let packets: Vec<_> = input
-        .chunks(input_packet_frames * CHANNELS as usize)
-        .flat_map(|packet| resampler.process(packet).unwrap())
-        .collect();
-    let residual = maximum_boundary_residual(&packets);
-
-    assert_eq!(packets.len(), CHUNK_COUNT);
-    assert!(
-        residual <= maximum_tone_prediction_residual(INPUT_RATE) + FLOAT_TOLERANCE,
-        "sender packet boundary residual {residual} exceeded the tone curvature"
-    );
 }

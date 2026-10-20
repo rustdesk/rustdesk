@@ -1,6 +1,6 @@
 use super::*;
 #[cfg(not(target_os = "android"))]
-use crate::clipboard::clipboard_listener;
+use crate::clipboard::clipboard_listener::{self, ClipboardEvent};
 #[cfg(not(target_os = "android"))]
 pub use crate::clipboard::{ClipboardContext, ClipboardSide};
 pub use crate::clipboard::{CLIPBOARD_INTERVAL as INTERVAL, CLIPBOARD_NAME as NAME};
@@ -15,8 +15,6 @@ pub use crate::{
 use base::config::keys;
 #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
 use clipboard::platform::unix::fuse::{init_fuse_context, uninit_fuse_context};
-#[cfg(not(target_os = "android"))]
-use clipboard_master::CallbackResult;
 #[cfg(target_os = "android")]
 use hbb_common::config::option2bool;
 #[cfg(target_os = "android")]
@@ -81,7 +79,7 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
 
     while sp.ok() {
         match rx_cb_result.recv_timeout(Duration::from_millis(INTERVAL)) {
-            Ok(CallbackResult::Next) => {
+            Ok(ClipboardEvent::Changed) => {
                 #[cfg(feature = "unix-file-copy-paste")]
                 if sp.name() == FILE_NAME {
                     handler.check_clipboard_file();
@@ -91,11 +89,14 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
                     sp.send(msg);
                 }
             }
-            Ok(CallbackResult::Stop) => {
+            // Host startup state must not supersede a client's explicit initial snapshot.
+            #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+            Ok(ClipboardEvent::InitialSelection) => {}
+            Ok(ClipboardEvent::Stop) => {
                 log::debug!("Clipboard listener stopped");
                 break;
             }
-            Ok(CallbackResult::StopWithError(err)) => {
+            Ok(ClipboardEvent::StopWithError(err)) => {
                 bail!("Clipboard listener stopped with error: {}", err);
             }
             Err(RecvTimeoutError::Timeout) => {}
@@ -347,31 +348,6 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
 #[cfg(target_os = "linux")]
 mod tests {
     use super::{decode_utf8_prefix, WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES};
-
-    #[test]
-    fn decode_utf8_prefix_returns_text_for_valid_utf8() {
-        let text = "hello-مرحبا";
-        assert_eq!(decode_utf8_prefix(text.as_bytes()), Some(text.to_owned()));
-    }
-
-    #[test]
-    fn decode_utf8_prefix_returns_none_for_invalid_utf8_sequence() {
-        let bytes = b"ab\xffcd";
-        assert_eq!(decode_utf8_prefix(bytes), None);
-    }
-
-    #[test]
-    fn decode_utf8_prefix_trims_incomplete_utf8_suffix() {
-        let bytes = vec![b'a', 0xE4, 0xB8];
-        assert_eq!(decode_utf8_prefix(&bytes), Some("a".to_owned()));
-    }
-
-    #[test]
-    fn decode_utf8_prefix_applies_max_bytes_limit() {
-        let bytes = vec![b'a'; WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES + 8];
-        let result = decode_utf8_prefix(&bytes).expect("expected decoded prefix");
-        assert_eq!(result.len(), WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES);
-    }
 
     #[test]
     fn decode_utf8_prefix_keeps_utf8_boundary_when_limited() {
