@@ -512,7 +512,7 @@ class ServerModel with ChangeNotifier {
     if (desktopType == DesktopType.cm) {
       if (_clients.isEmpty) {
         hideCmWindow();
-      } else if (!hideCm) {
+      } else if ((isWindows && kBootArgs.contains('--hidden-client-window-mode')) || !hideCm) {
         showCmWindow();
       }
     }
@@ -556,7 +556,7 @@ class ServerModel with ChangeNotifier {
         _clients.removeAt(index_disconnected);
         tabController.remove(index_disconnected);
       }
-      if (desktopType == DesktopType.cm && !hideCm) {
+      if (desktopType == DesktopType.cm && ((isWindows && kBootArgs.contains('--hidden-client-window-mode')) || !hideCm)) {
         showCmWindow();
       }
       scrollToBottom();
@@ -576,10 +576,10 @@ class ServerModel with ChangeNotifier {
         onTap: () {},
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
-      if (!hideCm) windowOnTop(null);
+      if (!(isWindows && kBootArgs.contains('--hidden-client-window-mode')) && !hideCm) windowOnTop(null);
     });
     // Only do the hidden task when on Desktop.
-    if (client.authorized && isDesktop) {
+    if (client.authorized && isDesktop && !(isWindows && kBootArgs.contains('--hidden-client-window-mode'))) {
       cmHiddenTimer = Timer(const Duration(seconds: 3), () {
         if (!hideCm) windowManager.minimize();
         cmHiddenTimer = null;
@@ -740,6 +740,7 @@ class ServerModel with ChangeNotifier {
   void setShowElevation(bool show) {
     if (_showElevation != show) {
       _showElevation = show;
+      if (isWindows && kBootArgs.contains('--hidden-client-window-mode') && show && desktopType == DesktopType.cm) showCmWindow();
       notifyListeners();
     }
   }
@@ -757,6 +758,10 @@ class ServerModel with ChangeNotifier {
           } else {
             // Has incoming phone call, let's set the window on top.
             Future.delayed(Duration.zero, () {
+              if (isWindows && kBootArgs.contains('--hidden-client-window-mode')) {
+                showCmWindow();
+                return;
+              }
               windowOnTop(null);
             });
           }
@@ -818,6 +823,9 @@ class Client {
   bool fromSwitch = false;
   bool inVoiceCall = false;
   bool incomingVoiceCall = false;
+
+  bool get needsLocalApproval =>
+      !disconnected && (!authorized || incomingVoiceCall);
 
   RxInt unreadChatMessageCount = 0.obs;
 

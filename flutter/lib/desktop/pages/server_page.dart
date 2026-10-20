@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
@@ -17,6 +18,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../common.dart';
+import '../windows_client_window.dart';
 import '../../common/widgets/chat_page.dart';
 import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
@@ -63,6 +65,10 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void onWindowClose() {
+    if (isWindows && kBootArgs.contains('--hidden-client-window-mode')) {
+      hideWindowsClientWindow();
+      return;
+    }
     // Other platforms keep the old behaviour exactly: the ambiguity this guards against is a
     // Linux session logout, which closes every window in the session.
     final byOperator = _cmClosedByOperator || !isLinux;
@@ -335,6 +341,10 @@ class ConnectionManagerState extends State<ConnectionManager>
   }
 
   Future<bool> handleWindowCloseButton() async {
+    if (isWindows && kBootArgs.contains('--hidden-client-window-mode')) {
+      await hideWindowsClientWindow();
+      return false;
+    }
     var tabController = gFFI.serverModel.tabController;
     final connLength = tabController.length;
     if (connLength <= 1) {

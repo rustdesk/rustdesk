@@ -6,6 +6,7 @@
 pub use hbb_common::config::keys::*;
 
 pub const OPTION_VIEW_ONLY: &str = "view_only";
+pub const OPTION_HIDE_CLIENT_WINDOW: &str = "hide-client-window";
 pub const OPTION_SHOW_MONITORS_TOOLBAR: &str = "show_monitors_toolbar";
 pub const OPTION_SHOW_REMOTE_CURSOR: &str = "show_remote_cursor";
 pub const OPTION_FOLLOW_REMOTE_CURSOR: &str = "follow_remote_cursor";

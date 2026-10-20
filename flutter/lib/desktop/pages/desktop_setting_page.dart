@@ -527,6 +527,13 @@ class _GeneralState extends State<_General> {
     final showAutoUpdate = (isWindows && bind.mainIsInstalled()) ||
     (isMacOS && bind.mainIsInstalled() && bind.mainIsInstalledDaemon(prompt: false) && !bind.isCustomClient());
     final children = <Widget>[
+      if (isWindows && bind.mainIsInstalled())
+        _OptionCheckBox(context, 'Keep client window hidden (restart required)',
+            kOptionHideClientWindow,
+            optGetter: () =>
+                bind.mainGetOptionSync(key: kOptionHideClientWindow) == 'Y',
+            optSetter: (key, enabled) => bind.mainSetOption(
+                key: key, value: enabled ? 'Y' : 'N')),
       if (!isWeb && !incomingOnly)
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             kOptionEnableConfirmClosingTabs,
