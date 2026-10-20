@@ -12,6 +12,23 @@ use scrap::{ImageFormat, ImageRgb};
 
 use crate::ui_session_interface::{InvokeUiSession, Session};
 
+/// Whether a decoded frame should be upscaled and rendered.
+///
+/// Always `true` with the toggle off, so the video loop behaves exactly as
+/// before. With it on, a non-empty queue means newer frames are already
+/// waiting: this one is still decoded (delta codecs need every frame) but
+/// skipped for upscaling/display, which bounds latency to the upscaler's pace.
+pub fn should_render<T: InvokeUiSession>(session: &Session<T>, queue_empty: bool) -> bool {
+    if queue_empty {
+        return true;
+    }
+    !session
+        .lc
+        .read()
+        .map(|lc| lc.get_toggle_option(keys::OPTION_UPSCALER))
+        .unwrap_or(false)
+}
+
 /// Upscale `rgb` in place when the per-session upscaler toggle is on.
 /// No-op unless the frame arrived as a pixel buffer in a supported format.
 /// Over-budget frames are left at native resolution.
