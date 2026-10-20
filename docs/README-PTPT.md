@@ -4,7 +4,7 @@
   <a href="#como-compilar-com-o-docker">Docker</a> •
   <a href="#estrutura-de-arquivos">Estrutura</a> •
   <a href="#capturas-de-tela">Capturas de Ecrã</a><br>
-  [<a href="../README.md">Inglês</a>] | [<a href="docs/README-UA.md">Ucraniano</a>] | [<a href="docs/README-CS.md">Checo</a>] | [<a href="docs/README-ZH.md">Chinês</a>] | [<a href="docs/README-HU.md">Húngaro</a>] | [<a href="docs/README-ES.md">Espanhol</a>] | [<a href="docs/README-FA.md">Persa</a>] | [<a href="docs/README-FR.md">Francês</a>] | [<a href="docs/README-DE.md">Alemão</a>] | [<a href="docs/README-PL.md">Polaco</a>] | [<a href="docs/README-ID.md">Indonésio</a>] | [<a href="docs/README-FI.md">Finlandês</a>] | [<a href="docs/README-ML.md">Malaiala</a>] | [<a href="docs/README-JP.md">Japonês</a>] | [<a href="docs/README-NL.md">Holandês</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Russo</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">Coreano</a>] | [<a href="docs/README-AR.md">Árabe</a>] | [<a href="docs/README-VN.md">Vietnamita</a>] | [<a href="docs/README-DA.md">Dinamarquês</a>] | [<a href="docs/README-GR.md">Grego</a>] | [<a href="docs/README-TR.md">Turco</a>] | [<a href="docs/README-NO.md">Norueguês</a>] | [<a href="docs/README-RO.md">Romeno</a>]<br>
+  [<a href="../README.md">Inglês</a>] | [<a href="README-UA.md">Ucraniano</a>] | [<a href="README-CS.md">Checo</a>] | [<a href="README-ZH.md">Chinês</a>] | [<a href="README-HU.md">Húngaro</a>] | [<a href="README-ES.md">Espanhol</a>] | [<a href="README-FA.md">Persa</a>] | [<a href="README-FR.md">Francês</a>] | [<a href="README-DE.md">Alemão</a>] | [<a href="README-PL.md">Polaco</a>] | [<a href="README-ID.md">Indonésio</a>] | [<a href="README-FI.md">Finlandês</a>] | [<a href="README-ML.md">Malaiala</a>] | [<a href="README-JP.md">Japonês</a>] | [<a href="README-NL.md">Holandês</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Russo</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">Coreano</a>] | [<a href="README-AR.md">Árabe</a>] | [<a href="README-VN.md">Vietnamita</a>] | [<a href="README-DA.md">Dinamarquês</a>] | [<a href="README-GR.md">Grego</a>] | [<a href="README-TR.md">Turco</a>] | [<a href="README-NO.md">Norueguês</a>] | [<a href="README-RO.md">Romeno</a>]<br>
   <b>Precisamos da sua ajuda para traduzir este README, a <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">Interface do RustDesk</a> e a <a href="https://github.com/rustdesk/doc.rustdesk.com">Documentação do RustDesk</a> para o seu idioma nativo</b>
 </p>
 
@@ -21,7 +21,7 @@ Mais uma solução de desktop remoto, escrita em Rust. Funciona imediatamente, s
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-O RustDesk agradece as contribuições de todos. Veja [CONTRIBUTING.md](docs/CONTRIBUTING.md) para ajuda em como começar.
+O RustDesk agradece as contribuições de todos. Veja [CONTRIBUTING.md](CONTRIBUTING.md) para ajuda em como começar.
 
 [**Perguntas Frequentes (FAQ)**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
