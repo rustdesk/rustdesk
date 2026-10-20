@@ -1191,6 +1191,10 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
+pub fn main_resolve_api_server(api: String, custom: String) -> SyncReturn<String> {
+    SyncReturn(crate::get_api_server(api, custom))
+}
+
 pub fn main_deploy_device(token: String, id: String) -> String {
     #[cfg(target_os = "android")]
     {

@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
 
-bool shouldWarnApiServer(String? apiServer, {String? idServer}) {
-  final api = apiServer?.trim() ?? '';
-  final id = idServer?.trim() ?? '';
-  if (api.isEmpty && (id.isEmpty || id == '::1')) {
-    return false;
-  }
-  final uri = Uri.tryParse(api.isEmpty ? 'http://$id' : api);
+bool shouldWarnApiServer(String? apiServer) {
+  final uri = Uri.tryParse(apiServer?.trim() ?? '');
   if (uri == null || uri.host.isEmpty || uri.scheme != 'http') {
     return false;
   }
@@ -18,6 +13,8 @@ class ApiServerWarning extends StatelessWidget {
   final TextEditingController idController;
   final String message;
   final String emptyMessage;
+  final String Function({required String api, required String custom})
+      resolveApiServer;
 
   const ApiServerWarning({
     super.key,
@@ -25,6 +22,7 @@ class ApiServerWarning extends StatelessWidget {
     required this.idController,
     required this.message,
     required this.emptyMessage,
+    required this.resolveApiServer,
   });
 
   @override
@@ -32,8 +30,11 @@ class ApiServerWarning extends StatelessWidget {
     return ListenableBuilder(
       listenable: Listenable.merge([controller, idController]),
       builder: (context, child) {
-        if (!shouldWarnApiServer(controller.text,
-            idServer: idController.text)) {
+        final apiServer = controller.text;
+        final idServer = idController.text;
+        final effectiveApiServer =
+            resolveApiServer(api: apiServer.trim(), custom: idServer.trim());
+        if (!shouldWarnApiServer(effectiveApiServer)) {
           return const SizedBox.shrink();
         }
         return Align(

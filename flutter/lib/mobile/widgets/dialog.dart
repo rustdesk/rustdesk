@@ -187,6 +187,7 @@ void showServerSettingsWithValue(
                       idController: idCtrl,
                       message: translate('api_server_connection_tip'),
                       emptyMessage: translate('api_server_empty_tip'),
+                      resolveApiServer: bind.mainResolveApiServer,
                     ),
                   ),
                   SizedBox(height: 8),

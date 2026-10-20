@@ -936,6 +936,11 @@ class RustdeskImpl {
     return Future(() => js.context.callMethod('getByName', ['api_server']));
   }
 
+  String mainResolveApiServer(
+      {required String api, required String custom, dynamic hint}) {
+    return js.context.callMethod('resolveApiServer', [api, custom]);
+  }
+
   Future<void> mainPostRequest(
       {required String url,
       required String body,
