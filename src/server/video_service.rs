@@ -326,6 +326,10 @@ fn create_capturer(
     _current: usize,
     _portable_service_running: bool,
 ) -> ResultType<Box<dyn TraitCapturer>> {
+    #[cfg(target_os = "macos")]
+    if let Some(capturer) = crate::platform::macos::sck::create_capturer(&display)? {
+        return Ok(capturer);
+    }
     #[cfg(not(windows))]
     let c: Option<Box<dyn TraitCapturer>> = None;
     #[cfg(windows)]
