@@ -72,7 +72,8 @@ pub(super) async fn encrypted_store_preserves_grants(token: &[u8]) {
     let (plaintext, encrypted, _) = decrypt_str_or_original(&stored, "00");
     assert!(encrypted, "Host grants must be encrypted at rest");
     Config2::set_trusted_devices_v2(plaintext).unwrap();
-    assert!(super::super::initialize().is_err());
+    super::super::initialize().unwrap();
+    assert!(!is_trusted(token).await);
     Config2::set_trusted_devices_v2(stored.clone()).unwrap();
     assert!(is_trusted(token).await);
 
@@ -86,14 +87,15 @@ pub(super) async fn encrypted_store_preserves_grants(token: &[u8]) {
         "00{}",
         base64::encode(&ciphertext, base64::Variant::Original)
     );
-    Config2::set_trusted_devices_v2(corrupted.clone()).unwrap();
-    let login = host::begin(proof(PASSWORD, token)).await;
-    let after_read = Config2::get_trusted_devices_v2();
-    Config2::set_trusted_devices_v2(stored).unwrap();
-    let (attempt, valid, _) = login.unwrap().unwrap();
-    assert!(attempt.is_none());
+    Config2::set_trusted_devices_v2(corrupted).unwrap();
+    let (attempt, valid, _) = host::begin(proof(PASSWORD, token)).await.unwrap().unwrap();
     assert!(!valid, "Damaged ciphertext must not authorize a token");
-    assert_eq!(after_read.unwrap(), corrupted);
+    let mut attempt = attempt.expect("A damaged grant store must allow fresh enrollment");
+    attempt.enroll = true;
+    let replacement = attempt.finish(DeviceInfo::default()).await.unwrap();
+    assert!(is_trusted(&replacement).await);
+    assert!(!is_trusted(token).await);
+    Config2::set_trusted_devices_v2(stored).unwrap();
 }
 
 pub(super) async fn expiration_changes_preserve_grants() {

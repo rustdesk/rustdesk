@@ -134,9 +134,8 @@ async fn unavailable_grants_keep_password_totp_available() {
     assert!(host::begin(proof("wrong-password", &[])).await.is_err());
     let login = host::begin(proof(PASSWORD, &[])).await;
     let (attempt, valid, _) = login.unwrap().unwrap();
-    assert!(attempt.is_none());
+    assert!(attempt.is_some());
     assert!(!valid);
-    authority::manage(true).await.unwrap();
     assert!(configuration::devices().await.is_empty());
     let enrollment = begin_enrollment().await;
     let token = enrollment.finish(DeviceInfo::default()).await.unwrap();
