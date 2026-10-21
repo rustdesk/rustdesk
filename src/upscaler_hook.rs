@@ -67,7 +67,7 @@ fn upscale_target(
     rgb: &ImageRgb,
     pixelbuffer: bool,
 ) -> Option<(upscaler::PixelFormat, (usize, usize))> {
-    if !pixelbuffer {
+    if !pixelbuffer || !upscaler::fits_input(rgb.w, rgb.h) {
         return None;
     }
     let fmt = match rgb.fmt() {

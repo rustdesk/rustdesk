@@ -69,15 +69,23 @@ impl PixelFormat {
     }
 }
 
-/// Pixel-budget guard. Returns false for empty frames, size mismatches, or
-/// frames whose 2x output would exceed a sane allocation.
-pub fn fits_budget(w: usize, h: usize, raw_len: usize) -> bool {
+/// Whether a `w`x`h` frame is within the upscaler's pixel budget.
+///
+/// This is the part of [`fits_budget`] that does not depend on the buffer
+/// layout, so callers can decide whether upscaling will be attempted before
+/// a stride-padded frame has been repacked.
+pub fn fits_input(w: usize, h: usize) -> bool {
     if w == 0 || h == 0 {
         return false;
     }
-    match w.checked_mul(h) {
-        Some(px) if px <= MAX_INPUT_PIXELS => {}
-        _ => return false,
+    matches!(w.checked_mul(h), Some(px) if px <= MAX_INPUT_PIXELS)
+}
+
+/// Pixel-budget guard. Returns false for empty frames, size mismatches, or
+/// frames whose 2x output would exceed a sane allocation.
+pub fn fits_budget(w: usize, h: usize, raw_len: usize) -> bool {
+    if !fits_input(w, h) {
+        return false;
     }
     let out_bytes = w
         .checked_mul(SCALE)
@@ -114,6 +122,14 @@ mod tests {
             v.extend_from_slice(&[r, g, b, 255]);
         }
         v
+    }
+
+    #[test]
+    fn budget_matches_input_pixels() {
+        assert!(fits_input(1920, 1080));
+        assert!(!fits_input(2560, 1440));
+        assert!(!fits_input(0, 1));
+        assert!(!fits_input(usize::MAX, 2));
     }
 
     #[test]
