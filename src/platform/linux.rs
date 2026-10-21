@@ -2734,10 +2734,6 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
         return false;
     }
     log::info!("Uninstalling service...");
-    if let Err(error) = crate::trusted_devices::clear() {
-        log::error!("Cannot revoke local trusted devices before service removal: {error}");
-        return false;
-    }
     let cp = switch_service(true);
     let app_name = crate::get_app_name().to_lowercase();
     // systemctl kill rustdesk --tray, execute cp first
