@@ -82,7 +82,8 @@ inline DWORD RemoveService(const wchar_t* name) {
   return error == ERROR_SERVICE_MARKED_FOR_DELETE ? ERROR_SUCCESS : error;
 }
 
-inline DWORD InstallService(const wchar_t* name, const wchar_t* executable) {
+inline DWORD InstallService(const wchar_t* name, const wchar_t* executable,
+                            bool rollback_on_failure) {
   if (!*executable || wcschr(executable, L'"')) {
     return ERROR_INVALID_PARAMETER;
   }
@@ -116,9 +117,9 @@ inline DWORD InstallService(const wchar_t* name, const wchar_t* executable) {
     return ERROR_SUCCESS;
   }
   const DWORD error = GetLastError();
-  // The caller restores stop-service=Y on failure; do not leave a new
-  // auto-start registration behind.
-  if (created && error != ERROR_SERVICE_ALREADY_RUNNING &&
+  // Only manual Start Service restores stop-service=Y on failure. Other
+  // installation paths retain the registration for a later startup attempt.
+  if (rollback_on_failure && created && error != ERROR_SERVICE_ALREADY_RUNNING &&
       !DeleteService(service.get())) {
     const DWORD rollback_error = GetLastError();
     std::fwprintf(stderr,
@@ -138,8 +139,10 @@ inline DWORD RunCommand(int count, wchar_t** args) {
     return ERROR_INVALID_PARAMETER;
   }
   const std::wstring_view operation(args[2]);
-  if (operation == L"install" && count == kInstallArgumentCount) {
-    return InstallService(args[3], args[4]);
+  const bool rollback_on_failure = operation == L"create-service-with-rollback";
+  if ((operation == L"create-service" || rollback_on_failure) &&
+      count == kInstallArgumentCount) {
+    return InstallService(args[3], args[4], rollback_on_failure);
   }
   if (operation == L"remove" && count == kRemoveArgumentCount) {
     return RemoveService(args[3]);

@@ -3396,7 +3396,7 @@ copy /Y \"%RUSTDESK_OUTPUT_DIR%\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsof
 {create_service}
     ",
         import_config = get_import_config(exe),
-        create_service = service_control_command("install", exe, false)?,
+        create_service = service_control_command("create-service-with-rollback", exe, false)?,
     );
     Ok(InstallCommands {
         script,
@@ -3961,7 +3961,7 @@ fn native_after_install_commands(
     if service.is_empty() {
         return Ok(commands);
     }
-    let native_service = service_control_command("install", exe, installed_now)?;
+    let native_service = service_control_command("create-service", exe, installed_now)?;
     if native_service == service {
         return Ok(commands);
     }
@@ -3994,12 +3994,13 @@ pub fn handle_service_control() -> Option<std::process::ExitCode> {
 
 fn service_control_command(operation: &str, exe: &str, installed_now: bool) -> ResultType<String> {
     let app_name = crate::get_app_name();
+    let is_create = matches!(operation, "create-service" | "create-service-with-rollback");
     let legacy = match operation {
-        "install" => get_create_service(exe),
+        "create-service" | "create-service-with-rollback" => get_create_service(exe),
         "remove" => format!("sc stop {app_name}\r\nsc delete {app_name}"),
         _ => bail!("Unsupported service operation: {operation}"),
     };
-    if legacy.is_empty() || (operation == "install" && Config::get_option("stop-service") == "Y") {
+    if legacy.is_empty() || (is_create && Config::get_option("stop-service") == "Y") {
         return Ok(legacy);
     }
     // A fresh installation has just copied this runner. Otherwise only use the
@@ -4016,7 +4017,7 @@ fn service_control_command(operation: &str, exe: &str, installed_now: bool) -> R
         }
     }
     validate_install_value(exe)?;
-    let executable_argument = if operation == "install" {
+    let executable_argument = if is_create {
         format!(" \"{exe}\"")
     } else {
         String::new()

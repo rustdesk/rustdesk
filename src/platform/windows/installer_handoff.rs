@@ -11,7 +11,7 @@ use super::{
     validate_install_app_name, ResultType,
 };
 use gate::InstallGate;
-use hbb_common::{anyhow::anyhow, bail, log};
+use hbb_common::{bail, log};
 use std::{fs, io, path::Path};
 
 const CHCP_RELATIVE_PATH: &str = "chcp.com";
@@ -107,10 +107,11 @@ pub(super) fn run_cmds(cmds: impl Into<InstallCommands>, show: bool, tip: &str) 
     let parameters = protected_install_parameters(&script, &gate)?;
     directory::create(&directory)?;
     let process = launch_elevated(&cmd_path, &parameters, show).map_err(|err| {
-        anyhow!(
-            "Installer handoff failed; protected directory may remain at {}: {err}",
+        log::debug!("Failed to launch elevated installer: {err:#}");
+        err.context(format!(
+            "Installer handoff failed; protected directory may remain at {}",
             directory.display()
-        )
+        ))
     })?;
     gate.wait_for_client(process.handle())?;
     // Keep DELETE-capable handles through UAC cancellation, but close them before
