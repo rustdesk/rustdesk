@@ -497,8 +497,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                   },
                   onExit: (evt) =>
                       widget._mouseFocusScope.value = MouseFocusScope.none,
-                  child: CallbackShortcuts(
-                    bindings: _fileListKeyBindings(),
+                  child: Focus(
+                    canRequestFocus: false,
+                    skipTraversal: true,
+                    onKeyEvent: _onFileListKeyEvent,
                     child: _buildFileList(context, _fileListScrollController),
                   ),
                 ))
@@ -1364,6 +1366,19 @@ class _FileManagerViewState extends State<FileManagerView> {
     scrollController.jumpTo(offset);
     selectedEntries.add(searchResult.first);
     debugPrint("focused on ${searchResult.first.name}");
+  }
+
+  KeyEventResult _onFileListKeyEvent(FocusNode node, KeyEvent event) {
+    // A focused child such as a sort header keeps its default keys, e.g.
+    // Enter to sort.
+    if (!_keyboardNode.hasPrimaryFocus) return KeyEventResult.ignored;
+    for (final binding in _fileListKeyBindings().entries) {
+      if (binding.key.accepts(event, HardwareKeyboard.instance)) {
+        binding.value();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
   }
 
   Map<ShortcutActivator, VoidCallback> _fileListKeyBindings() {
