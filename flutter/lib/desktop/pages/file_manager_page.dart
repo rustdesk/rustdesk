@@ -497,7 +497,12 @@ class _FileManagerViewState extends State<FileManagerView> {
                   },
                   onExit: (evt) =>
                       widget._mouseFocusScope.value = MouseFocusScope.none,
-                  child: _buildFileList(context, _fileListScrollController),
+                  child: Focus(
+                    canRequestFocus: false,
+                    skipTraversal: true,
+                    onKeyEvent: _onFileListKeyEvent,
+                    child: _buildFileList(context, _fileListScrollController),
+                  ),
                 ))
               ],
             ),
@@ -1135,6 +1140,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
           var secondaryPosition = RelativeRect.fromLTRB(0, 0, 0, 0);
           onTap() {
+            _keyboardNode.requestFocus();
             final items = selectedItems;
             // handle double click
             if (_checkDoubleClick(entry)) {
@@ -1361,6 +1367,102 @@ class _FileManagerViewState extends State<FileManagerView> {
     scrollController.jumpTo(offset);
     selectedEntries.add(searchResult.first);
     debugPrint("focused on ${searchResult.first.name}");
+  }
+
+  KeyEventResult _onFileListKeyEvent(FocusNode node, KeyEvent event) {
+    // A focused child such as a sort header keeps its default keys, e.g.
+    // Enter to sort.
+    if (!_keyboardNode.hasPrimaryFocus) return KeyEventResult.ignored;
+    for (final binding in _fileListKeyBindings().entries) {
+      if (binding.key.accepts(event, HardwareKeyboard.instance)) {
+        binding.value();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Map<ShortcutActivator, VoidCallback> _fileListKeyBindings() {
+    int all() => controller.directory.value.entries.length;
+    return {
+      const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+          _moveSelectionByKey(-1, false),
+      const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+          _moveSelectionByKey(1, false),
+      const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): () =>
+          _moveSelectionByKey(-1, true),
+      const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): () =>
+          _moveSelectionByKey(1, true),
+      // Unhandled, they would move keyboard focus to the other pane.
+      const SingleActivator(LogicalKeyboardKey.arrowLeft): () {},
+      const SingleActivator(LogicalKeyboardKey.arrowRight): () {},
+      const SingleActivator(LogicalKeyboardKey.pageUp): () =>
+          _moveSelectionByKey(_pageDelta(false), false),
+      const SingleActivator(LogicalKeyboardKey.pageDown): () =>
+          _moveSelectionByKey(_pageDelta(true), false),
+      const SingleActivator(LogicalKeyboardKey.home): () =>
+          _moveSelectionByKey(-all(), false),
+      const SingleActivator(LogicalKeyboardKey.end): () =>
+          _moveSelectionByKey(all(), false),
+      const SingleActivator(LogicalKeyboardKey.pageUp, shift: true): () =>
+          _moveSelectionByKey(_pageDelta(false), true),
+      const SingleActivator(LogicalKeyboardKey.pageDown, shift: true): () =>
+          _moveSelectionByKey(_pageDelta(true), true),
+      const SingleActivator(LogicalKeyboardKey.home, shift: true): () =>
+          _moveSelectionByKey(-all(), true),
+      const SingleActivator(LogicalKeyboardKey.end, shift: true): () =>
+          _moveSelectionByKey(all(), true),
+      const SingleActivator(LogicalKeyboardKey.enter): _openSelectedDirectory,
+      const SingleActivator(LogicalKeyboardKey.numpadEnter):
+          _openSelectedDirectory,
+    };
+  }
+
+  void _openSelectedDirectory() {
+    final items = selectedItems.items;
+    if (items.length != 1 || items.first.isFile) return;
+    controller.openDirectory(items.first.path);
+    selectedItems.clear();
+  }
+
+  List<Entry> _filteredEntries() {
+    final entries = controller.directory.value.entries;
+    return _searchText.isNotEmpty
+        ? entries.where((element) {
+            return element.name.contains(_searchText.value);
+          }).toList(growable: false)
+        : entries;
+  }
+
+  int _pageDelta(bool down) {
+    final entries = _filteredEntries();
+    final items = selectedItems.items;
+    final index = items.isEmpty ? -1 : entries.indexOf(items.last);
+    final position = _fileListScrollController.position;
+    final first = (position.pixels / kDesktopFileTransferRowHeight).ceil();
+    final last = ((position.pixels + position.viewportDimension) /
+                kDesktopFileTransferRowHeight)
+            .floor() -
+        1;
+    return pageDelta(
+        index >= 0 ? index : (down ? -1 : entries.length), first, last, down);
+  }
+
+  void _moveSelectionByKey(int delta, bool extend) {
+    final filteredEntries = _filteredEntries();
+    final selection =
+        navigateSelection(filteredEntries, selectedItems.items, delta, extend);
+    if (selection.isEmpty) return;
+    selectedItems.items.assignAll(selection.where((e) => !e.isDrive));
+    final position = _fileListScrollController.position;
+    final top =
+        filteredEntries.indexOf(selection.last) * kDesktopFileTransferRowHeight;
+    final bottom = top + kDesktopFileTransferRowHeight;
+    if (top < position.pixels) {
+      _fileListScrollController.jumpTo(top);
+    } else if (bottom > position.pixels + position.viewportDimension) {
+      _fileListScrollController.jumpTo(bottom - position.viewportDimension);
+    }
   }
 
   void _onSelectedChanged(SelectedItems selectedItems, List<Entry> entries,
@@ -1715,6 +1817,36 @@ class _FileManagerViewState extends State<FileManagerView> {
   // openDirectory(String path, {bool isLocal = false}) {
   //   model.openDirectory(path, isLocal: isLocal);
   // }
+}
+
+/// Selection after a navigation key moves it by [delta] rows. A shift range is
+/// returned ordered from its anchor to the moved end, so the first and last
+/// items of [selected] stand for those two ends on the next press without
+/// separate state.
+@visibleForTesting
+List<Entry> navigateSelection(
+    List<Entry> entries, List<Entry> selected, int delta, bool extend) {
+  if (entries.isEmpty) return [];
+  final current = selected.isEmpty ? -1 : entries.indexOf(selected.last);
+  // With nothing selected, moving down starts above the first row and moving
+  // up below the last one, as the Sciter grid did.
+  final lead = current >= 0 ? current : (delta > 0 ? -1 : entries.length);
+  final next = (lead + delta).clamp(0, entries.length - 1);
+  if (!extend || current < 0) return [entries[next]];
+  final first = entries.indexOf(selected.first);
+  final anchor = first < 0 ? current : first;
+  final step = next < anchor ? -1 : 1;
+  return [for (var i = anchor; i != next + step; i += step) entries[i]];
+}
+
+/// Rows a PageUp/PageDown press moves from [lead] while rows [first]..[last]
+/// are fully visible: to that edge first, then a page further, as list views
+/// do.
+@visibleForTesting
+int pageDelta(int lead, int first, int last, bool down) {
+  final page = max(1, last - first);
+  if (down) return lead < last ? last - lead : page;
+  return lead > first ? first - lead : -page;
 }
 
 Widget buildWindowsThisPC(BuildContext context, [TextStyle? textStyle]) {
