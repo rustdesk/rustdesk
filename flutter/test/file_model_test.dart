@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -47,7 +50,72 @@ class _SentRead {
   const _SentRead(this.path, this.includeHidden);
 }
 
+class _FileBinding extends Fake implements RustdeskImpl {
+  int _jobId = 0;
+
+  @override
+  String translate(
+          {required String name, required String locale, dynamic hint}) =>
+      name;
+
+  @override
+  String mainGetCommonSync({required String key, dynamic hint}) =>
+      '${++_jobId}';
+}
+
+class _DeletingController extends FileController {
+  final confirmations = <String>[];
+
+  _DeletingController()
+      : super(
+          isLocal: false,
+          getSessionID: () => _sessionId,
+          rootState: WeakReference(_FakeFFI()),
+          jobController: JobController(() => _sessionId, () => null),
+          fileFetcher: FileFetcher(() => _sessionId),
+          getOtherSideDirectoryData: () =>
+              DirectoryData(FileDirectory(), DirectoryOptions()),
+        );
+
+  @override
+  Future<bool?> showRemoveDialog(
+      String title, String content, bool showCheckbox) async {
+    confirmations.add(content);
+    return true;
+  }
+
+  @override
+  void sendRemoveFile(String path, int fileNum, int actId) {
+    scheduleMicrotask(() {
+      selectedItems.reconcile(
+          selectedItems.items.where((entry) => entry.path != path).toList());
+      unawaited(
+          jobController.jobDone({'id': '$actId', 'file_num': '$fileNum'}));
+    });
+  }
+
+  @override
+  Future<bool> refresh() async => true;
+}
+
 void main() {
+  test('deletion confirms all three files despite refreshed selection',
+      () async {
+    platformFFI.setBindingForTesting(_FileBinding());
+    final controller = _DeletingController();
+    final files = ['ca.crt', 'cert.crt', 'proof.txt']
+        .map((name) => Entry()
+          ..name = name
+          ..path = '/selected/$name')
+        .toList();
+    controller.selectedItems.selectAll(files);
+
+    await controller.removeAction(controller.selectedItems);
+
+    expect(controller.confirmations, files.map((file) => file.path));
+    expect(controller.selectedItems.items, isEmpty);
+  });
+
   test('a fast remote response is matched after registration', () async {
     late final FileFetcher fileFetcher;
     fileFetcher = FileFetcher(
