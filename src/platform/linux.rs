@@ -1935,7 +1935,7 @@ fn get_width_height_from_captures<'t>(caps: &Captures<'t>) -> Option<(i32, i32)>
 #[inline]
 fn get_xrandr_conn_pat(name: &str) -> String {
     format!(
-        r"{}\s+connected.+?(?P<width>\d+)x(?P<height>\d+)\+(?P<x>\d+)\+(?P<y>\d+).*?\n",
+        r"(?m)^{}\s+connected.+?(?P<width>\d+)x(?P<height>\d+)\+(?P<x>\d+)\+(?P<y>\d+).*?\n",
         name
     )
 }
@@ -2015,6 +2015,26 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
         }
     }
     bail!("Failed to find current resolution for {}", name);
+}
+
+#[cfg(test)]
+mod xrandr_tests {
+    use super::*;
+
+    #[test]
+    fn output_name_does_not_match_inside_another_name() {
+        let xrandr_output = "Screen 0: minimum 320 x 200, current 4480 x 1440, maximum 16384 x 16384
+eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 309mm x 174mm
+ 1920x1080 60.01*+ 59.97
+ 1280x720 60.00
+DP-1 connected 2560x1440+1920+0 (normal left inverted right x axis y axis) 597mm x 336mm
+ 2560x1440 59.95*+
+ 1920x1080 60.00
+";
+        let re = Regex::new(&get_xrandr_conn_pat("DP-1")).unwrap();
+        let caps = re.captures(xrandr_output).unwrap();
+        assert_eq!(get_width_height_from_captures(&caps), Some((2560, 1440)));
+    }
 }
 
 pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
