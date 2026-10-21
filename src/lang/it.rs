@@ -813,7 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "'{}' non può essere usato come scorciatoia."),
         ("On", "ON"),
         ("Off", "OFF"),
-        ("api_server_connection_tip", ""),
-        ("api_server_empty_tip", ""),
+        ("api_server_connection_tip", "Il server personalizzato usa 'HTTP non crittografato'. Per abilitare HTTPS contatta l'amministratore."),
+        ("api_server_empty_tip", "Con 'Server API' vuoto, il server personalizzato predefinito è 'HTTP'. Per abilitare HTTPS contatta l'amministratore."),
     ].iter().cloned().collect();
 }
