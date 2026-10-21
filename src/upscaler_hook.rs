@@ -12,21 +12,71 @@ use scrap::{ImageFormat, ImageRgb};
 
 use crate::ui_session_interface::{InvokeUiSession, Session};
 
-/// Whether a decoded frame should be upscaled and rendered.
-///
-/// Always `true` with the toggle off, so the video loop behaves exactly as
-/// before. With it on, a non-empty queue means newer frames are already
-/// waiting: this one is still decoded (delta codecs need every frame) but
-/// skipped for upscaling/display, which bounds latency to the upscaler's pace.
-pub fn should_render<T: InvokeUiSession>(session: &Session<T>, queue_empty: bool) -> bool {
-    if queue_empty {
-        return true;
+/// Frames to skip in a row before rendering one anyway, so that a queue which
+/// never drains cannot leave the display frozen.
+const MAX_SKIPPED_FRAMES: u32 = 10;
+
+/// Per-session render-decimation state for the video thread.
+pub struct RenderGate {
+    skipped: u32,
+}
+
+impl RenderGate {
+    pub const fn new() -> Self {
+        Self { skipped: 0 }
     }
-    !session
-        .lc
-        .read()
-        .map(|lc| lc.get_toggle_option(keys::OPTION_UPSCALER))
-        .unwrap_or(false)
+
+    /// Whether a decoded frame should be upscaled and rendered.
+    ///
+    /// Always `true` when the upscaler is off or the frame could not be
+    /// upscaled anyway (GPU texture, unsupported format, over-budget buffer),
+    /// so those paths render exactly as before. Otherwise, a non-empty queue
+    /// means newer frames are already waiting: this one is still decoded (delta
+    /// codecs need every frame) but skipped. After [`MAX_SKIPPED_FRAMES`] in a
+    /// row one is rendered regardless, which bounds both latency and the
+    /// longest possible freeze under sustained overload.
+    pub fn should_render<T: InvokeUiSession>(
+        &mut self,
+        session: &Session<T>,
+        queue_empty: bool,
+        rgb: &ImageRgb,
+        pixelbuffer: bool,
+    ) -> bool {
+        let upscaler_on = session
+            .lc
+            .read()
+            .map(|lc| lc.get_toggle_option(keys::OPTION_UPSCALER))
+            .unwrap_or(false);
+        let may_skip = !queue_empty && upscaler_on && upscale_target(rgb, pixelbuffer).is_some();
+        self.next(may_skip)
+    }
+
+    fn next(&mut self, may_skip: bool) -> bool {
+        if !may_skip || self.skipped >= MAX_SKIPPED_FRAMES {
+            self.skipped = 0;
+            return true;
+        }
+        self.skipped += 1;
+        false
+    }
+}
+
+/// The upscaled output format and dimensions for this frame, or `None` when the
+/// upscaler cannot process it.
+fn upscale_target(
+    rgb: &ImageRgb,
+    pixelbuffer: bool,
+) -> Option<(upscaler::PixelFormat, (usize, usize))> {
+    if !pixelbuffer {
+        return None;
+    }
+    let fmt = match rgb.fmt() {
+        ImageFormat::ABGR => upscaler::PixelFormat::Abgr,
+        ImageFormat::ARGB => upscaler::PixelFormat::Argb,
+        _ => return None,
+    };
+    let dims = upscaler::upscaled_dimensions(rgb.w, rgb.h)?;
+    Some((fmt, dims))
 }
 
 /// Upscale `rgb` in place when the per-session upscaler toggle is on.
@@ -37,9 +87,6 @@ pub fn maybe_upscale_session_frame<T: InvokeUiSession>(
     rgb: &mut ImageRgb,
     pixelbuffer: bool,
 ) {
-    if !pixelbuffer {
-        return;
-    }
     if !session
         .lc
         .read()
@@ -48,14 +95,9 @@ pub fn maybe_upscale_session_frame<T: InvokeUiSession>(
     {
         return;
     }
-    let fmt = match rgb.fmt() {
-        ImageFormat::ABGR => upscaler::PixelFormat::Abgr,
-        ImageFormat::ARGB => upscaler::PixelFormat::Argb,
-        _ => return,
-    };
     let (w, h) = (rgb.w, rgb.h);
-    let dims = match upscaler::upscaled_dimensions(w, h) {
-        Some(d) => d,
+    let (fmt, dims) = match upscale_target(rgb, pixelbuffer) {
+        Some(target) => target,
         None => return,
     };
     // Decoder buffers can carry per-row stride padding (the macOS texture
@@ -117,6 +159,19 @@ fn pack_rows(raw: &[u8], w: usize, h: usize) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn render_gate_never_starves_the_display() {
+        let mut gate = RenderGate { skipped: 0 };
+        // Frames the upscaler cannot process always render.
+        assert!(gate.next(false));
+        // Stale frames are skipped, but not indefinitely.
+        for _ in 0..MAX_SKIPPED_FRAMES {
+            assert!(!gate.next(true));
+        }
+        assert!(gate.next(true), "must render even if the queue never drains");
+        assert!(!gate.next(true), "counter resets after the forced render");
+    }
 
     #[test]
     fn repacks_padded_rows_and_rejects_garbage() {

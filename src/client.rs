@@ -4002,11 +4002,12 @@ pub fn start_video_thread<F, T>(
         let mut count = 0;
         let mut duration = std::time::Duration::ZERO;
         let mut skip_beginning = 0;
+        let mut gate = crate::upscaler_hook::RenderGate::new();
         loop {
             if let Ok(data) = video_receiver.recv() {
-                // Only the frame arms can mark this frame stale; everything
-                // else renders as usual.
-                let mut render_current = true;
+                // Keyframes render unconditionally; only queued frames can be
+                // judged stale after decode.
+                let mut queue_empty = true;
                 match data {
                     MediaData::VideoFrame(_) | MediaData::VideoQueue => {
                         let vf = match data {
@@ -4015,7 +4016,7 @@ pub fn start_video_thread<F, T>(
                                 *vf
                             }
                             MediaData::VideoQueue => {
-                                let (vf_opt, queue_empty) = {
+                                let (vf_opt, empty_now) = {
                                     let queue = video_queue.read().unwrap();
                                     (queue.pop(), queue.is_empty())
                                 };
@@ -4023,14 +4024,7 @@ pub fn start_video_thread<F, T>(
                                     if discard_queue.read().unwrap().clone() {
                                         continue;
                                     }
-                                    // A newer frame is already queued, so this
-                                    // one is stale: still decoded (delta codecs
-                                    // need every frame) but skipped for
-                                    // upscaling/display to bound latency.
-                                    render_current = crate::upscaler_hook::should_render(
-                                        &session,
-                                        queue_empty,
-                                    );
+                                    queue_empty = empty_now;
                                     vf
                                 } else {
                                     continue;
@@ -4060,7 +4054,12 @@ pub fn start_video_thread<F, T>(
                             let format_changed = handler.decoder.format() != format;
                             match handler.handle_frame(vf, &mut pixelbuffer, &mut tmp_chroma) {
                                 Ok(true) => {
-                                    if render_current {
+                                    if gate.should_render(
+                                        &session,
+                                        queue_empty,
+                                        &handler.rgb,
+                                        pixelbuffer,
+                                    ) {
                                         crate::upscaler_hook::maybe_upscale_session_frame(
                                             &session,
                                             &mut handler.rgb,
