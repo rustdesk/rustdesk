@@ -391,13 +391,6 @@ fn convert_to_tfc_key(key: Key) -> Option<TFC_Key> {
     Some(key)
 }
 
-#[test]
-fn test_key_seq() {
-    // Get 6^ in French.
-    let mut en = Enigo::new();
-    en.key_sequence("^^");
-}
-
 /// Both directions: the failure is silent, so a one-directional test passes against the bug.
 #[test]
 fn test_custom_mouse_dispatch_follows_is_x11() {

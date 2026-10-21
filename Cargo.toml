@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.5.0"
+version = "1.5.1"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -63,6 +63,7 @@ lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
 zstd = "0.13"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 parity-tokio-ipc = { git = "https://github.com/rustdesk-org/parity-tokio-ipc" }
 magnum-opus = { git = "https://github.com/rustdesk-org/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
@@ -201,6 +202,8 @@ gtk = "0.18"
 termios = "0.3"
 terminfo = "0.8"
 winit = "0.30"
+wayland-client = "0.31"
+xkbcommon-dl = { version = "0.4", features = ["x11"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
@@ -270,7 +273,7 @@ os-version = "0.2"
 [dev-dependencies]
 hound = "3.5"
 docopt = "1.1"
-tokio = { version = "1.44", features = ["test-util"] }
+tokio = "1.44"
 
 [package.metadata.bundle]
 name = "RustDesk"

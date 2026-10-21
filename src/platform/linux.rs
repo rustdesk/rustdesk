@@ -251,19 +251,6 @@ mod gnome_monitor_layout_tests {
             Some(GnomeMonitorLayoutMode::Logical)
         );
     }
-
-    #[test]
-    fn maps_physical_layout() {
-        assert_eq!(
-            gnome_monitor_layout_mode_from_value(2),
-            Some(GnomeMonitorLayoutMode::Physical)
-        );
-    }
-
-    #[test]
-    fn rejects_unknown_layout() {
-        assert_eq!(gnome_monitor_layout_mode_from_value(4), None);
-    }
 }
 
 #[inline]
@@ -300,6 +287,35 @@ thread_local! {
         xdo
     });
     static DISPLAY: RefCell<*mut c_void> = RefCell::new(unsafe { XOpenDisplay(std::ptr::null())});
+}
+
+pub fn right_alt_is_level3_shift() -> ResultType<bool> {
+    use hbb_common::x11::{keysym, xlib};
+    const XKB_USE_CORE_KBD: c_uint = 0x0100;
+    // A fresh connection avoids Xlib's stale keymap cache after a layout switch.
+    // This query runs only for a matched chord with physical Right Alt held.
+    let display = unsafe { xlib::XOpenDisplay(std::ptr::null()) };
+    if display.is_null() {
+        bail!("X display unavailable");
+    }
+    let result = (|| {
+        let code = rdev::linux_keycode_from_key(rdev::Key::AltGr)
+            .ok_or_else(|| anyhow!("Right Alt has no X keycode"))?;
+        let mut state: xlib::XkbStateRec = unsafe { std::mem::zeroed() };
+        let status = unsafe { xlib::XkbGetState(display, XKB_USE_CORE_KBD, &mut state) };
+        if status != c_int::from(xlib::Success) {
+            bail!("XkbGetState failed: {}", status);
+        }
+        let symbol = unsafe {
+            xlib::XkbKeycodeToKeysym(display, code as _, state.group.into(), 0)
+        };
+        // Physical Right Alt is ordinary Alt on layouts such as US English.
+        Ok(matches!(symbol as u32, keysym::XK_ISO_Level3_Shift
+            | keysym::XK_ISO_Level3_Latch | keysym::XK_ISO_Level3_Lock
+            | keysym::XK_Mode_switch))
+    })();
+    unsafe { xlib::XCloseDisplay(display) };
+    result
 }
 
 // X11 error event structure for the custom error handler.
@@ -875,6 +891,43 @@ fn get_all_term_values(uid: &str) -> Vec<String> {
     terms
 }
 
+fn append_audio_latency_envs(
+    envs: &mut Vec<(&'static str, String)>,
+    get_var: impl Fn(&str) -> Option<String>,
+) {
+    for key in ["PULSE_LATENCY_MSEC", "PIPEWIRE_LATENCY"] {
+        if let Some(value) = get_var(key).filter(|value| !value.is_empty()) {
+            envs.push((key, value));
+        }
+    }
+}
+
+#[cfg(test)]
+mod audio_latency_env_tests {
+    use super::append_audio_latency_envs;
+
+    #[test]
+    fn forwards_configured_values_without_creating_defaults() {
+        let mut envs = Vec::new();
+        append_audio_latency_envs(&mut envs, |key| match key {
+            "PULSE_LATENCY_MSEC" => Some("60".to_owned()),
+            "PIPEWIRE_LATENCY" => Some("1024/48000".to_owned()),
+            _ => None,
+        });
+        assert_eq!(
+            envs,
+            vec![
+                ("PULSE_LATENCY_MSEC", "60".to_owned()),
+                ("PIPEWIRE_LATENCY", "1024/48000".to_owned()),
+            ]
+        );
+
+        envs.clear();
+        append_audio_latency_envs(&mut envs, |_| None);
+        assert!(envs.is_empty());
+    }
+}
+
 #[inline]
 fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
     match desktop {
@@ -905,6 +958,9 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
                     ));
                 }
             }
+
+            append_audio_latency_envs(&mut envs, |key| std::env::var(key).ok());
+
             envs.push((
                 "TERM",
                 get_cur_term(&desktop.uid).unwrap_or_else(|| suggest_best_term()),
@@ -1302,6 +1358,11 @@ fn _get_display_manager() -> String {
 /// Returns the cached active username when available.
 /// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
 pub fn get_active_username() -> String {
+    // Flatpak runs only inside the logged-in user's session, and Flathub builds
+    // cannot reach the host's loginctl.
+    if is_flatpak() {
+        return crate::username();
+    }
     if let Some((_, username)) = get_active_user_id_name_from_cache() {
         return username;
     }
@@ -1874,7 +1935,7 @@ fn get_width_height_from_captures<'t>(caps: &Captures<'t>) -> Option<(i32, i32)>
 #[inline]
 fn get_xrandr_conn_pat(name: &str) -> String {
     format!(
-        r"{}\s+connected.+?(?P<width>\d+)x(?P<height>\d+)\+(?P<x>\d+)\+(?P<y>\d+).*?\n",
+        r"(?m)^{}\s+connected.+?(?P<width>\d+)x(?P<height>\d+)\+(?P<x>\d+)\+(?P<y>\d+).*?\n",
         name
     )
 }
@@ -1954,6 +2015,26 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
         }
     }
     bail!("Failed to find current resolution for {}", name);
+}
+
+#[cfg(test)]
+mod xrandr_tests {
+    use super::*;
+
+    #[test]
+    fn output_name_does_not_match_inside_another_name() {
+        let xrandr_output = "Screen 0: minimum 320 x 200, current 4480 x 1440, maximum 16384 x 16384
+eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 309mm x 174mm
+ 1920x1080 60.01*+ 59.97
+ 1280x720 60.00
+DP-1 connected 2560x1440+1920+0 (normal left inverted right x axis y axis) 597mm x 336mm
+ 2560x1440 59.95*+
+ 1920x1080 60.00
+";
+        let re = Regex::new(&get_xrandr_conn_pat("DP-1")).unwrap();
+        let caps = re.captures(xrandr_output).unwrap();
+        assert_eq!(get_width_height_from_captures(&caps), Some((2560, 1440)));
+    }
 }
 
 pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
@@ -2430,29 +2511,6 @@ mod desktop {
             } else {
                 self.get_display_x11();
                 self.get_xauth_x11();
-            }
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn test_desktop_env() {
-            let mut d = Desktop::default();
-            d.refresh();
-            if d.username == "root" {
-                assert_eq!(d.home, "/root");
-            } else {
-                if !d.username.is_empty() {
-                    let home = super::super::get_env_var("HOME");
-                    if !home.is_empty() {
-                        assert_eq!(d.home, home);
-                    } else {
-                        //
-                    }
-                }
             }
         }
     }

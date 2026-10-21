@@ -226,11 +226,6 @@ impl CapturePcmSender {
 }
 
 impl CapturePcmReceiver {
-    #[cfg(test)]
-    pub(super) fn pop(&self) -> Option<Vec<f32>> {
-        self.pop_packet().map(|(_, buffer)| buffer)
-    }
-
     fn pop_packet(&self) -> Option<(usize, Vec<f32>)> {
         self.handoff.buffers.lock().unwrap().ready.pop_front()
     }

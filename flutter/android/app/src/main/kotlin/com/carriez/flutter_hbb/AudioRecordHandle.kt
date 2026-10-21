@@ -199,7 +199,7 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
             context,
             Manifest.permission.RECORD_AUDIO
         ) != PackageManager.PERMISSION_GRANTED) {
-            "To start a voice call, enable \"Audio capture\" on the \"Screen share\" page."
+            "To start a voice call, enable \"Audio capture\" on the \"Share screen\" page."
         } else {
             "Failed to start voice call."
         }

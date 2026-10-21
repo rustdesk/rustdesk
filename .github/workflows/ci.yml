@@ -234,7 +234,7 @@ jobs:
             CARGO_TEST_OPTIONS="--lib --bin ${PROJECT_NAME}"
             ;;
           *)
-            CARGO_TEST_OPTIONS="--workspace --no-fail-fast -- --skip test_get_cursor_pos --skip test_get_key_state"
+            CARGO_TEST_OPTIONS="--workspace --no-fail-fast"
             ;;
         esac;
 

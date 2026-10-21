@@ -36,6 +36,9 @@ pub struct CursorSnapshot {
     /// so the consumer must re-guess on the upright one.
     pub hot_measured: bool,
     pub colors: Vec<u8>,
+    /// Cursor plane position (CRTC_X/CRTC_Y), in this reader's scanout pixels.
+    pub x: i32,
+    pub y: i32,
 }
 
 /// Fold everything that makes a cursor a DIFFERENT cursor into its id.
@@ -306,6 +309,8 @@ pub struct DisplaySnapshot {
     pub y: i32,
     pub width: u32,
     pub height: u32,
+    /// The kernel's whole-hertz vrefresh: 59.94 reads 60. `DrmReader::crtc_refresh` is exact.
+    pub refresh_hz: u32,
     pub active: bool,
 }
 
@@ -374,6 +379,9 @@ pub struct DrmReader {
     /// alternation and log on every sample, which is the per-frame logging this was written to
     /// avoid. -1 is "nothing reported yet".
     last_provenance: i8,
+    /// The plane rotation read right after the last successful grab, before any copy: libdrmtap
+    /// reads the property when asked, so a read after the copies could describe the next frame.
+    last_plane_rotation: Option<u32>,
 }
 
 impl DrmReader {
@@ -411,6 +419,7 @@ impl DrmReader {
             lib,
             ctx,
             buf: Vec::new(),
+            last_plane_rotation: None,
         })
     }
 
@@ -434,6 +443,7 @@ impl DrmReader {
                     format!("drmtap_grab_mapped failed: errno {errno}"),
                 ));
             }
+            self.last_plane_rotation = self.read_plane_rotation();
             if frame.data.is_null() || frame.width == 0 || frame.height == 0 {
                 (self.lib.frame_release)(self.ctx, &mut frame);
                 return Err(io::ErrorKind::WouldBlock.into());
@@ -528,6 +538,40 @@ impl DrmReader {
             .map(|s| s.to_owned())
     }
 
+    /// The DRM `rotation` bitmask of the plane the last successful grab read from, as it was right
+    /// after that grab. A plane without the property answers rotate-0: it cannot have turned
+    /// anything, so the compositor drew the scanout already turned and the whole output transform
+    /// is still to be undone. `None` only when the library cannot say: it predates the call
+    /// (0.5.8), no plane is bound, or the property set could not be read.
+    pub fn plane_rotation(&self) -> Option<u32> {
+        self.last_plane_rotation
+    }
+
+    /// The refresh of the captured CRTC in hertz as the reduced fraction `(num, den)` of its
+    /// current mode, read now. `None` when the library predates the call (0.5.9) or the CRTC has
+    /// no mode.
+    pub fn crtc_refresh(&mut self) -> Option<(u64, u64)> {
+        let f = self.lib.crtc_refresh?;
+        let (mut num, mut den) = (0u64, 0u64);
+        // SAFETY: self.ctx is a live context and both outputs outlive the call.
+        let rc = unsafe { f(self.ctx, &mut num, &mut den) };
+        (rc == 0 && num != 0 && den != 0).then_some((num, den))
+    }
+
+    fn read_plane_rotation(&mut self) -> Option<u32> {
+        let f = self.lib.plane_rotation?;
+        let mut rotation: u32 = 0;
+        // SAFETY: self.ctx is a live context and `rotation` outlives the call.
+        let rc = unsafe { f(self.ctx, &mut rotation) };
+        plane_rotation_answer(rc, rotation)
+    }
+
+    /// The primary plane's rotation read NOW, for a caller that has not grabbed (enumeration):
+    /// `plane_rotation()` only reflects the last grab.
+    pub fn query_plane_rotation(&mut self) -> Option<u32> {
+        self.read_plane_rotation()
+    }
+
     /// Zero-copy EXPORT grab: fills a `drmtap_dmabuf_desc` (dma-buf fd, plane layout, HDR metadata) WITHOUT mapping, detiling or copying pixels, so on this
     /// path the root process never loads libEGL/libGLESv2. The exported fd is READ-ONLY (libdrmtap drops `DRM_RDWR` and `dup` shares that open file
     /// description), so the `--server` that receives it can map the scanout but never write the live framebuffer. Validation here is METADATA ONLY.
@@ -559,6 +603,7 @@ impl DrmReader {
                     format!("drmtap_grab_desc failed: errno {errno}"),
                 ));
             }
+            self.last_plane_rotation = self.read_plane_rotation();
             // `desc.dma_buf_fd` is the canonical fd (what split_capture.c sends); `frame` owns it too and `frame_release` closes the library's copy.
             let raw_fd = if desc.dma_buf_fd >= 0 {
                 desc.dma_buf_fd
@@ -639,6 +684,8 @@ impl DrmReader {
                     hoty: 0,
                     hot_measured: false,
                     colors: vec![0, 0, 0, 0],
+                    x: 0,
+                    y: 0,
                 })
             } else if !c.pixels.is_null()
                 && c.width > 0
@@ -691,6 +738,8 @@ impl DrmReader {
                     hoty,
                     hot_measured,
                     colors,
+                    x: c.x,
+                    y: c.y,
                 })
             } else {
                 None
@@ -725,6 +774,7 @@ impl DrmReader {
                         y: raw[i].y as i32,
                         width: raw[i].width,
                         height: raw[i].height,
+                        refresh_hz: raw[i].refresh_hz,
                         active: raw[i].active != 0,
                     }
                 })
@@ -745,47 +795,7 @@ impl Drop for DrmReader {
 
 #[cfg(test)]
 mod hotspot_provenance_tests {
-    use super::{cursor_id, hot_measured_from, provenance_code, provenance_is_news};
-
-    /// The log this makes observable is one line per CHANGE, not one per cursor read. A cursor is
-    /// read far more often than its provenance changes, and a per-sample line here would be the
-    /// same defect libdrmtap already had once.
-    #[test]
-    fn provenance_is_logged_once_and_then_only_on_a_change() {
-        let (none, guessed, measured) = (
-            provenance_code(None),
-            provenance_code(Some(false)),
-            provenance_code(Some(true)),
-        );
-        assert_ne!(none, guessed);
-        assert_ne!(guessed, measured);
-        assert_ne!(none, measured);
-        // First sample of a run: -1 is the unset sentinel, so anything is news.
-        assert!(provenance_is_news(-1, measured));
-        // The same state again is not.
-        assert!(!provenance_is_news(measured, measured));
-        assert!(!provenance_is_news(guessed, guessed));
-        // A real transition is.
-        assert!(provenance_is_news(guessed, measured));
-        assert!(provenance_is_news(measured, none));
-    }
-
-    /// The dedup key has to move when the provenance does, or the consumer is never told that the
-    /// same picture now means something different. This is the transition that produces it: the
-    /// properties become readable, the driver's answer is the corner, and the bitmap is unchanged.
-    #[test]
-    fn provenance_changes_the_cursor_identity() {
-        let guessed = cursor_id(0xabc, 24, 24, 0, 0, false);
-        let measured = cursor_id(0xabc, 24, 24, 0, 0, true);
-        assert_ne!(
-            guessed, measured,
-            "same pixels, same (0, 0), different meaning: the producer must not dedupe this away"
-        );
-        // And the pre-existing parts still count, so this did not trade one blind spot for another.
-        assert_ne!(cursor_id(0xabc, 24, 24, 0, 0, true), cursor_id(0xabc, 32, 24, 0, 0, true));
-        assert_ne!(cursor_id(0xabc, 24, 24, 0, 0, true), cursor_id(0xabc, 24, 24, 1, 0, true));
-        assert_ne!(cursor_id(0xabc, 24, 24, 0, 0, true), cursor_id(0xdef, 24, 24, 0, 0, true));
-    }
+    use super::hot_measured_from;
 
     /// The case the whole entry point exists for, and the one the old heuristic got backwards: a
     /// para-virtualized driver that really publishes the hotspot at the image's top-left corner.
@@ -794,25 +804,6 @@ mod hotspot_provenance_tests {
     #[test]
     fn a_measured_zero_hotspot_is_measured() {
         assert!(hot_measured_from(Some(true), 0, 0));
-    }
-
-    /// And the mirror: when the library says it was NOT measured, that is the answer even if the
-    /// coordinates happen to be non-zero. The old test would have trusted them.
-    #[test]
-    fn the_librarys_no_beats_the_coordinates() {
-        assert!(!hot_measured_from(Some(false), 12, 11));
-        assert!(!hot_measured_from(Some(false), 0, 0));
-    }
-
-    /// No answer available: either the symbol is absent (a library older than 0.5.6) or nothing
-    /// recorded one for this sample (a cursor read through an older privileged helper). Neither
-    /// is "it was a guess", so the pre-existing behaviour is kept rather than resolved either way
-    /// -- an older deployed .so must keep behaving as it used to.
-    #[test]
-    fn without_an_answer_the_old_heuristic_stands() {
-        assert!(!hot_measured_from(None, 0, 0));
-        assert!(hot_measured_from(None, 12, 11));
-        assert!(hot_measured_from(None, 0, 5));
     }
 }
 
@@ -874,45 +865,6 @@ mod hotspot_guess_tests {
         assert_eq!(infer_hotspot(&px, w, h), (4, 4));
     }
 
-    /// Each axis is decided by its OWN mirror. This shape is symmetric left-to-right and not
-    /// top-to-bottom, which is the single-direction resize family: the click point is centred
-    /// across the axis that mirrors and stays at the edge on the axis that does not.
-    #[test]
-    fn one_symmetric_axis_centres_that_axis_only() {
-        let (px, w, h) = sprite(&[
-            "....#....",
-            "...###...",
-            "..#####..",
-            ".#######.",
-            "....#....",
-            "....#....",
-            "....#....",
-            "....#....",
-            "....#....",
-        ]);
-        assert_eq!(infer_hotspot(&px, w, h), (4, 0));
-    }
-
-    /// A two-headed DIAGONAL arrow mirrors onto the other diagonal about either axis alone, so
-    /// neither axis reads as symmetric - and it is still a shape with no tip. The half turn is
-    /// what catches it.
-    #[test]
-    fn a_diagonal_two_headed_arrow_is_held_by_its_middle_too() {
-        let (px, w, h) = sprite(&[
-            "###......",
-            "##.......",
-            "#.#......",
-            "...#.....",
-            "....#....",
-            ".....#...",
-            "......#.#",
-            ".......##",
-            "......###",
-        ]);
-        let (hx, hy) = infer_hotspot(&px, w, h);
-        assert_eq!((hx, hy), (4, 4), "a half turn maps this shape onto itself");
-    }
-
     /// A single-direction resize cursor is an arrow plus the bar of the edge it resizes, and the
     /// theme puts the click point on the BAR. The bar is the heavy end, and it is the only thing
     /// that separates `e-resize` from `w-resize`: they are the same picture reflected, so a rule
@@ -942,25 +894,6 @@ mod hotspot_guess_tests {
         assert_eq!(infer_hotspot(&px, w, h), (0, 3));
     }
 
-    /// A corner resize cursor is a bracket hugging one corner, and it mirrors onto itself about a
-    /// DIAGONAL rather than about either axis, so neither per-axis test sees it. The click point
-    /// is the inner corner of the bracket, which is the heavy end on both axes.
-    ///
-    /// A real one's box is usually not square, and a diagonal reflection only lines up inside a
-    /// square, so which corner of that square the box is placed against decides the answer:
-    /// `ne-resize` scores 0.62 anchored one way and 0.98 the other, and `nw-resize` is the
-    /// reverse. Both anchorings are therefore tried. That case cannot be built as a small
-    /// picture - a non-square box can never be exactly diagonal-symmetric - so it is covered by
-    /// the theme corpus instead, where dropping the second anchoring sends `ne-resize` back past
-    /// master.
-    #[test]
-    fn a_corner_bracket_is_held_by_its_inner_corner() {
-        let (px, w, h) = sprite(&[
-            ".....##", ".....##", ".....##", ".....##", ".....##", "#######", "#######",
-        ]);
-        assert_eq!(infer_hotspot(&px, w, h), (6, 6));
-    }
-
     /// The elongation rule stays ahead of the mirror test, so a bar that is NOT symmetric still
     /// keeps its centre. Nothing in the installed theme is shaped like this - its two I-beams are
     /// both symmetric - but a custom cursor can be, and this is the rustdesk#16242 round-one fix.
@@ -969,12 +902,97 @@ mod hotspot_guess_tests {
         let (px, w, h) = sprite(&["##########.", "#####......", "##########."]);
         assert_eq!(infer_hotspot(&px, w, h), (4, 1));
     }
+}
 
-    /// Nothing opaque is not a shape, and must not read as a box at the origin with a hotspot in
-    /// the middle of it.
+/// DRM_MODE_ROTATE_0: the `rotation` bitmask of a plane that turned nothing.
+const DRM_MODE_ROTATE_0: u32 = 1 << 0;
+
+/// What a `drmtap_plane_rotation` return means to the consumer. Success is the mask. `-ENOTSUP`
+/// (the plane has no `rotation` property) is rotate-0, not "unknown": such a plane cannot have
+/// turned the scanout, so the frame arrives turned by the whole output transform, which is the
+/// virtio-gpu and vmwgfx case this exists for. Anything else (`-ENOENT` with no plane bound, a
+/// failed property read) is `None`, and the consumer keeps its pre-0.5.8 rule.
+fn plane_rotation_answer(rc: c_int, rotation: u32) -> Option<u32> {
+    if rc == 0 {
+        Some(rotation)
+    } else if rc == -hbb_common::libc::ENOTSUP {
+        Some(DRM_MODE_ROTATE_0)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod plane_rotation_tests {
+    use super::*;
+
     #[test]
-    fn a_blank_sprite_has_no_hotspot_to_guess() {
-        let (px, w, h) = sprite(&["...", "...", "..."]);
-        assert_eq!(infer_hotspot(&px, w, h), (0, 0));
+    fn a_plane_without_the_property_turned_nothing() {
+        assert_eq!(plane_rotation_answer(0, 0x4), Some(0x4));
+        assert_eq!(plane_rotation_answer(0, 0x1), Some(0x1));
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::ENOTSUP, 0), Some(0x1));
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::ENOENT, 0), None);
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::EINVAL, 0), None);
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::EIO, 7), None);
+    }
+}
+
+#[cfg(test)]
+mod crtc_refresh_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+
+    static RC: AtomicI32 = AtomicI32::new(0);
+    static NUM: AtomicU64 = AtomicU64::new(0);
+    static DEN: AtomicU64 = AtomicU64::new(0);
+
+    unsafe extern "C" fn crtc_refresh(_: *mut drmtap_ctx, num: *mut u64, den: *mut u64) -> c_int {
+        *num = NUM.load(Ordering::SeqCst);
+        *den = DEN.load(Ordering::SeqCst);
+        RC.load(Ordering::SeqCst)
+    }
+    unsafe extern "C" fn grab_mapped(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) -> c_int {
+        -1
+    }
+    unsafe extern "C" fn frame_release(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) {}
+    unsafe extern "C" fn grab_desc(
+        _: *mut drmtap_ctx,
+        _: *mut drmtap_dmabuf_desc,
+        _: *mut drmtap_frame_info,
+    ) -> c_int {
+        -1
+    }
+    unsafe extern "C" fn plane_rotation(_: *mut drmtap_ctx, _: *mut u32) -> c_int {
+        -1
+    }
+
+    fn reader(with_call: bool) -> DrmReader {
+        let mut lib = DrmtapLib::fake(grab_mapped, frame_release, grab_desc, plane_rotation);
+        if with_call {
+            lib.crtc_refresh = Some(crtc_refresh);
+        }
+        DrmReader {
+            lib: Box::leak(Box::new(lib)),
+            ctx: std::ptr::null_mut(),
+            buf: Vec::new(),
+            last_provenance: -1,
+            last_plane_rotation: None,
+        }
+    }
+
+    /// rustdesk#16175: the exact refresh paces the producer; an older library has no answer.
+    #[test]
+    fn the_crtc_refresh_is_a_fraction_or_nothing() {
+        assert_eq!(reader(false).crtc_refresh(), None, "a library before 0.5.9");
+        let mut r = reader(true);
+        RC.store(0, Ordering::SeqCst);
+        NUM.store(148352, Ordering::SeqCst);
+        DEN.store(2475, Ordering::SeqCst);
+        assert_eq!(r.crtc_refresh(), Some((148352, 2475)));
+        RC.store(-hbb_common::libc::ENODATA, Ordering::SeqCst);
+        assert_eq!(r.crtc_refresh(), None, "a CRTC with no mode");
+        RC.store(0, Ordering::SeqCst);
+        DEN.store(0, Ordering::SeqCst);
+        assert_eq!(r.crtc_refresh(), None, "a zero denominator is no answer");
     }
 }

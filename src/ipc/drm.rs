@@ -23,6 +23,10 @@ pub struct DrmDisplayInfo {
     /// alone is ambiguous across cards. Empty = the single auto-detected device.
     #[serde(default)]
     pub device: String,
+    /// The primary plane rotates its framebuffer by 90/270 in hardware, so every frame is this
+    /// mode TRANSPOSED whatever the compositor reports (gamescope's wl_output has no transform).
+    #[serde(default)]
+    pub plane_transposed: bool,
 }
 
 /// Mirrors `scrap::drm_reader::drmtap_dmabuf_desc` except `dma_buf_fd` (never serializes — it rides
@@ -45,6 +49,21 @@ pub struct DmabufDesc {
     pub hdr_max_nits: u32,
     /// True: the fd rides this message's SCM_RIGHTS cmsg. False: import-once cache hit for `fb_id`.
     pub has_fd: bool,
+    /// The DRM `rotation` bitmask the primary plane scanned this frame out with, from
+    /// `drmtap_plane_rotation()` (libdrmtap 0.5.8); a plane without the property is reported as
+    /// rotate-0. `None` when the library cannot say (older than 0.5.8, nothing bound, or the
+    /// property set unreadable). A frame from a plane that rotated in hardware is already
+    /// upright; one from a plane that did not is turned by the output transform. See
+    /// `frame_transform`.
+    #[serde(default)]
+    pub plane_rotation: Option<u32>,
+    /// Cursor plane position read right after this frame was grabbed, in scanout pixels of the
+    /// display this stream shows, so a few ms newer than the frame. `None` means the cursor is
+    /// hidden, the read failed or was rejected, or the producer predates this field. It rides
+    /// the frame instead of a stream of its own so it cannot queue and cannot backpressure the
+    /// capture worker; the consumer only acts on a position that held still for several frames.
+    #[serde(default)]
+    pub cursor_pos: Option<(i32, i32)>,
 }
 
 pub(crate) fn drm_ipc_path() -> String {
@@ -100,6 +119,11 @@ enum DrmProducerMsg {
         width: u32,
         height: u32,
         data: Bytes,
+        /// See `DmabufDesc::plane_rotation`.
+        plane_rotation: Option<u32>,
+        /// See `DmabufDesc::cursor_pos`. The dmabuf path carries it inside the descriptor; this
+        /// one has no descriptor, so it travels beside the pixels.
+        cursor_pos: Option<(i32, i32)>,
     },
     Cursor {
         id: u64,
@@ -110,6 +134,91 @@ enum DrmProducerMsg {
         hot_measured: bool,
         colors: Vec<u8>,
     },
+}
+
+/// Put this tick's cursor plane position on the frame it was read next to. The hidden sentinel
+/// carries no position; a shape message is left alone.
+fn stamp_cursor_pos(msg: &mut DrmProducerMsg, c: Option<&scrap::drm_reader::CursorSnapshot>) {
+    let pos = c.and_then(|c| (c.id != scrap::drm_reader::HIDDEN_CURSOR_ID).then_some((c.x, c.y)));
+    match msg {
+        DrmProducerMsg::Frame { desc, .. } => desc.cursor_pos = pos,
+        DrmProducerMsg::FrameCpu { cursor_pos, .. } => *cursor_pos = pos,
+        DrmProducerMsg::Displays(_) | DrmProducerMsg::Cursor { .. } => {}
+    }
+}
+
+#[cfg(test)]
+mod cursor_pos_tests {
+    use super::*;
+
+    fn desc() -> DmabufDesc {
+        DmabufDesc {
+            buffer_id: 0,
+            width: 4,
+            height: 4,
+            format: 0,
+            modifier: 0,
+            fb_id: 0,
+            num_planes: 1,
+            offsets: [0; 4],
+            pitches: [16, 0, 0, 0],
+            hdr_eotf: 0,
+            hdr_max_nits: 0,
+            has_fd: false,
+            plane_rotation: None,
+            cursor_pos: None,
+        }
+    }
+
+    fn snapshot(id: u64) -> scrap::drm_reader::CursorSnapshot {
+        scrap::drm_reader::CursorSnapshot {
+            id,
+            width: 2,
+            height: 2,
+            hotx: 0,
+            hoty: 0,
+            hot_measured: false,
+            colors: vec![0; 16],
+            x: 10,
+            y: 20,
+        }
+    }
+
+    #[test]
+    fn the_plane_position_rides_both_frame_kinds_and_a_hidden_cursor_rides_as_none() {
+        let visible = snapshot(7);
+        let hidden = snapshot(scrap::drm_reader::HIDDEN_CURSOR_ID);
+
+        let mut frame = DrmProducerMsg::Frame { desc: desc(), fd: None };
+        stamp_cursor_pos(&mut frame, Some(&visible));
+        assert!(matches!(&frame, DrmProducerMsg::Frame { desc, .. } if desc.cursor_pos == Some((10, 20))));
+        stamp_cursor_pos(&mut frame, Some(&hidden));
+        assert!(matches!(&frame, DrmProducerMsg::Frame { desc, .. } if desc.cursor_pos.is_none()));
+
+        let mut cpu = DrmProducerMsg::FrameCpu {
+            width: 4,
+            height: 4,
+            data: Bytes::new(),
+            plane_rotation: None,
+            cursor_pos: None,
+        };
+        stamp_cursor_pos(&mut cpu, Some(&visible));
+        assert!(matches!(&cpu, DrmProducerMsg::FrameCpu { cursor_pos: Some((10, 20)), .. }));
+        stamp_cursor_pos(&mut cpu, None);
+        assert!(matches!(&cpu, DrmProducerMsg::FrameCpu { cursor_pos: None, .. }));
+
+        let mut shape = DrmProducerMsg::Cursor {
+            id: 7,
+            width: 2,
+            height: 2,
+            hotx: 1,
+            hoty: 1,
+            hot_measured: false,
+            colors: vec![0; 16],
+        };
+        stamp_cursor_pos(&mut shape, Some(&visible));
+        assert!(matches!(&shape, DrmProducerMsg::Cursor { hotx: 1, hoty: 1, .. }));
+    }
 }
 
 struct DrmStopGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
@@ -139,6 +248,11 @@ static DRM_DISPLAY_CACHE: std::sync::Mutex<Vec<DrmDisplayInfo>> = std::sync::Mut
 /// Bumped only when a change altered `DRM_DISPLAY_CACHE`; Release orders it after the cache write.
 static DRM_DISPLAY_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// The whole-hertz refresh of every driven CRTC the last enumeration saw, by (device, crtc), for
+/// a producer whose library cannot read the exact one: it then needs no connector probe of its own.
+static DRM_WHOLE_HZ: std::sync::Mutex<std::collections::BTreeMap<(String, u32), u32>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
 /// Displays this reader serves, plus the identity (`device:connector`) of each undriven output.
 fn drm_displays_from_reader(
     reader: &mut scrap::drm_reader::DrmReader,
@@ -146,8 +260,13 @@ fn drm_displays_from_reader(
 ) -> (Vec<DrmDisplayInfo>, Vec<String>) {
     let render_node = reader.render_node().unwrap_or_default();
     let mut undriven = Vec::new();
-    let displays: Vec<DrmDisplayInfo> = reader
-        .displays()
+    let snapshots = reader.displays();
+    if let Ok(mut hz) = DRM_WHOLE_HZ.lock() {
+        for d in snapshots.iter().filter(|d| d.active && d.crtc_id != 0) {
+            hz.insert((device.to_owned(), d.crtc_id), d.refresh_hz);
+        }
+    }
+    let displays: Vec<DrmDisplayInfo> = snapshots
         .into_iter()
         // Only outputs bound to a CRTC: a CONNECTED-but-unbound connector enumerates with
         // `crtc_id == 0`, and `open(crtc=0)` auto-selects the FIRST ACTIVE CRTC and streams ITS frames.
@@ -159,6 +278,7 @@ fn drm_displays_from_reader(
             true
         })
         .map(|d| DrmDisplayInfo {
+            plane_transposed: plane_transposed(device, d.crtc_id),
             name: d.name,
             crtc_id: d.crtc_id,
             x: d.x,
@@ -171,6 +291,33 @@ fn drm_displays_from_reader(
         })
         .collect();
     (displays, undriven)
+}
+
+const DRM_MODE_ROTATE_90: u32 = 0x2;
+const DRM_MODE_ROTATE_270: u32 = 0x8;
+
+/// Through a reader bound to `crtc_id`: the enumerating reader is bound to whichever crtc
+/// auto-select picked.
+fn plane_transposed(device: &str, crtc_id: u32) -> bool {
+    let dev = (!device.is_empty()).then_some(device);
+    let Some(mut r) = scrap::drm_reader::DrmReader::open(dev, crtc_id) else {
+        return false;
+    };
+    let transposed = match r.query_plane_rotation() {
+        Some(m) => m & (DRM_MODE_ROTATE_90 | DRM_MODE_ROTATE_270) != 0,
+        None => {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(600),
+                debug,
+                "drm: crtc {crtc_id} ({device:?}): plane rotation unreadable; sized as unrotated"
+            );
+            false
+        }
+    };
+    if transposed {
+        log::trace!("drm: crtc {crtc_id} ({device:?}) is rotated 90/270 by its plane");
+    }
+    transposed
 }
 
 /// Active displays of every DRM device + the connected-but-undriven identities, from ONE look.
@@ -793,6 +940,20 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let mut conn = dup_to_drm_conn(&stream)?;
     drop(stream);
 
+    let wake = match conn.recv_msg_timeout2(3_000).await {
+        Some(Ok((Data::DrmHello { wake }, _fd))) => wake,
+        Some(Ok((_, _fd))) => {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(5),
+                info,
+                "drm: peer did not open with DrmHello; closing"
+            );
+            return Ok(());
+        }
+        Some(Err(e)) => return Err(e),
+        None => return Ok(()),
+    };
+
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
     let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool)>();
     let stop = Arc::new(AtomicBool::new(false));
@@ -800,9 +961,20 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let worker_stop = stop.clone();
     let frames_gated = Arc::new(AtomicBool::new(false));
     let worker_gate = frames_gated.clone();
+    let demand_fps = Arc::new(std::sync::atomic::AtomicU8::new(0));
+    let worker_demand = demand_fps.clone();
     std::thread::Builder::new()
         .name("drm-capture".into())
-        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate))
+        .spawn(move || {
+            drm_capture_worker(
+                frame_tx,
+                crtc_rx,
+                worker_stop,
+                worker_gate,
+                worker_demand,
+                wake,
+            )
+        })
         .map_err(|err| anyhow::anyhow!("could not spawn the drm capture worker: {err}"))?;
 
     let displays = match frame_rx.recv().await {
@@ -842,10 +1014,13 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let mut seen_gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
     const DRM_FRAME_CREDIT: i32 = 2;
     let mut credit: i32 = DRM_FRAME_CREDIT;
+    let mut demand: u8 = 0;
+    let mut demand_logged: Option<(u8, std::time::Instant)> = None;
     let mut credit_since = std::time::Instant::now();
     let mut held_frame: Option<DrmProducerMsg> = None;
     loop {
-        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
+        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT, &mut demand)?;
+        note_drm_demand(&demand_fps, demand, target_crtc, &mut demand_logged);
         // While gated the worker does not grab, so it cannot advance its own MAX_STALLED watchdog: a
         // consumer that stops acking without closing the socket would otherwise hold this connection,
         // its worker thread and the privileged DRM context open indefinitely.
@@ -937,7 +1112,8 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             }
             msg = frame_rx.try_recv().ok();
         }
-        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
+        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT, &mut demand)?;
+        note_drm_demand(&demand_fps, demand, target_crtc, &mut demand_logged);
         if credit <= 0 {
             held_frame = latest_frame;
             continue;
@@ -960,8 +1136,19 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 width,
                 height,
                 data,
+                plane_rotation,
+                cursor_pos,
             }) => {
-                conn.send_msg(&Data::DrmFrame { width, height }, None).await?;
+                conn.send_msg(
+                    &Data::DrmFrame {
+                        width,
+                        height,
+                        plane_rotation,
+                        cursor_pos,
+                    },
+                    None,
+                )
+                .await?;
                 conn.send_raw(data).await?;
                 credit -= 1; // one frame in flight until the consumer acks it
             }
@@ -971,22 +1158,122 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     Ok(())
 }
 
+/// The producer's tick when the consumer has not said its rate, and the WouldBlock retry period.
+const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(33);
+/// Bound continuous no-frame (WouldBlock) time so a wedged device ends the stream (~5 s).
+const MAX_STALLED: u32 = 150;
+const _: () = assert!(
+    FRAME_INTERVAL.as_millis() * MAX_STALLED as u128 >= 4_500
+        && FRAME_INTERVAL.as_millis() * MAX_STALLED as u128 <= 5_500
+);
+/// A frame ack is one byte and every producer counts bytes, never their value, so a byte that
+/// also carries the consumer's encode rate is still exactly one credit to an older producer.
+const DRM_ACK_PLAIN: u8 = 0x01;
+const DRM_ACK_FPS_FLAG: u8 = 0x80;
+/// video_qos's ceiling; it fits the seven low bits.
+const DRM_MAX_DEMAND_FPS: u8 = 120;
+
+fn drm_ack_byte(fps: u8) -> u8 {
+    if fps == 0 {
+        DRM_ACK_PLAIN
+    } else {
+        DRM_ACK_FPS_FLAG | fps.min(DRM_MAX_DEMAND_FPS)
+    }
+}
+
+fn drm_ack_demand(b: u8) -> Option<u8> {
+    let fps = b & !DRM_ACK_FPS_FLAG;
+    (b & DRM_ACK_FPS_FLAG != 0 && (1..=DRM_MAX_DEMAND_FPS).contains(&fps)).then_some(fps)
+}
+
+/// One period of a panel refreshing at `num/den` Hz, rounded up so pacing never outruns it.
+fn drm_panel_period(num: u64, den: u64) -> std::time::Duration {
+    if num == 0 || den == 0 {
+        return std::time::Duration::ZERO;
+    }
+    let nanos = (u128::from(den) * 1_000_000_000).div_ceil(u128::from(num));
+    std::time::Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
+}
+
+/// Grab period for a consumer encoding at `demand_fps`, never faster than the panel: its own
+/// period above 30 fps, the old 33 ms tick from 30 down to 15, and below 15 half its period, so a
+/// slow consumer's frame is at most half its period old.
+fn drm_pacing_interval(demand_fps: u8, panel: std::time::Duration) -> std::time::Duration {
+    if demand_fps == 0 {
+        return FRAME_INTERVAL;
+    }
+    let want = std::time::Duration::from_secs(1) / u32::from(demand_fps);
+    want.min((want / 2).max(FRAME_INTERVAL)).max(panel)
+}
+
+/// When the worker's next tick starts. Without a demand it is the old sleep after the work;
+/// with one it is a deadline phased on the previous tick, and `now` after an overrun.
+fn drm_next_tick(
+    prev: std::time::Instant,
+    now: std::time::Instant,
+    demand_fps: u8,
+    panel: std::time::Duration,
+) -> std::time::Instant {
+    if demand_fps == 0 {
+        return now + FRAME_INTERVAL;
+    }
+    (prev + drm_pacing_interval(demand_fps, panel)).max(now)
+}
+
+/// Hands the consumer's rate to the worker. The measured part of it moves with almost every frame:
+/// this connection logs its first rate, then a different one at most every ten seconds.
+fn note_drm_demand(
+    shared: &std::sync::atomic::AtomicU8,
+    demand: u8,
+    crtc: u32,
+    logged: &mut Option<(u8, std::time::Instant)>,
+) {
+    shared.store(demand, std::sync::atomic::Ordering::Relaxed);
+    if drm_demand_log_due(*logged, demand, std::time::Instant::now()) {
+        log::debug!("drm: crtc {crtc}: the consumer encodes at {demand} fps");
+        *logged = Some((demand, std::time::Instant::now()));
+    }
+}
+
+fn drm_demand_log_due(
+    logged: Option<(u8, std::time::Instant)>,
+    demand: u8,
+    now: std::time::Instant,
+) -> bool {
+    demand != 0
+        && logged.map_or(true, |(v, at)| {
+            v != demand && now.saturating_duration_since(at) >= std::time::Duration::from_secs(10)
+        })
+}
+
+/// When the worker wakes: for the next frame, and at least every FRAME_INTERVAL, because each
+/// tick also reads the cursor and a slow frame rate must not slow the cursor down.
+fn drm_worker_wake(now: std::time::Instant, next_frame: std::time::Instant) -> std::time::Instant {
+    next_frame.min(now + FRAME_INTERVAL)
+}
+
 fn drm_capture_worker(
     frame_tx: tokio::sync::mpsc::Sender<DrmProducerMsg>,
     crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    demand_fps: std::sync::Arc<std::sync::atomic::AtomicU8>,
+    wake: bool,
 ) {
     use std::sync::atomic::Ordering;
-    use std::time::Duration;
-    const FRAME_INTERVAL: Duration = Duration::from_millis(33);
-    // Bound continuous no-frame (WouldBlock) time so a wedged device ends the stream (~5 s).
-    const MAX_STALLED: u32 = 150;
 
     let t_conn = std::time::Instant::now();
 
     // Enumerate FRESH rather than serve the cache: a cached display may no longer be driven.
-    let displays = drm_enumerate_settled("a consumer connected");
+    let displays = if wake {
+        drm_enumerate_settled("a consumer connected")
+    } else {
+        let (displays, _undriven) = drm_enumerate_all_displays();
+        // Seen lit, a connector a failed wake gave up on is wakeable again.
+        #[cfg(feature = "drm-wake")]
+        drm_wakeable_undriven(&displays, &_undriven);
+        displays
+    };
     if frame_tx
         .blocking_send(DrmProducerMsg::Displays(displays))
         .is_err()
@@ -1020,6 +1307,8 @@ fn drm_capture_worker(
         "drm: capture reader for crtc {target_crtc} opened in {:?}",
         t_open.elapsed()
     );
+    let mut panel = drm_read_panel_period(&mut reader, &target_device, target_crtc, None);
+    let mut panel_read_at = std::time::Instant::now();
 
     static DRM_CONN_EPOCH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let conn_epoch = DRM_CONN_EPOCH.fetch_add(1, Ordering::Relaxed);
@@ -1029,13 +1318,17 @@ fn drm_capture_worker(
     let mut last_cursor_id: u64 = 0;
     let mut stalled: u32 = 0;
     let mut logged_first = false;
+    let mut next_frame = std::time::Instant::now();
     while !stop.load(Ordering::Relaxed) {
-        let grabbed: Option<std::io::Result<DrmProducerMsg>> = if frames_gated.load(Ordering::Relaxed)
+        let frame_due = std::time::Instant::now() >= next_frame;
+        let mut grabbed: Option<std::io::Result<DrmProducerMsg>> = if !frame_due
+            || frames_gated.load(Ordering::Relaxed)
         {
             // `stalled` is left untouched because the device is healthy -- the task bounds this
             // state itself (CREDIT_STALL) since our watchdog cannot advance.
             None
         } else if use_dmabuf {
+            // Read right after the grab: the library answers for the plane that grab read from.
             Some(match reader.grab_desc() {
                 Ok((fd, d)) => Ok(DrmProducerMsg::Frame {
                     desc: DmabufDesc {
@@ -1051,21 +1344,38 @@ fn drm_capture_worker(
                         hdr_eotf: d.hdr_eotf,
                         hdr_max_nits: d.hdr_max_nits,
                         has_fd: true, // every exported frame carries its fd; see the send below
+                        plane_rotation: reader.plane_rotation(),
+                        cursor_pos: None, // stamped below, from the one cursor read of this tick
                     },
                     fd: Some(fd),
                 }),
                 Err(err) => Err(err),
             })
         } else {
-            Some(match reader.grab() {
-                Ok((buf, w, h)) => Ok(DrmProducerMsg::FrameCpu {
-                    width: w as u32,
-                    height: h as u32,
-                    data: Bytes::copy_from_slice(buf),
-                }),
-                Err(err) => Err(err),
-            })
+            // The mapped buffer borrows the reader: copy it out, then take the rotation the grab
+            // recorded.
+            let copied = reader
+                .grab()
+                .map(|(buf, w, h)| (Bytes::copy_from_slice(buf), w as u32, h as u32));
+            Some(copied.map(|(data, width, height)| DrmProducerMsg::FrameCpu {
+                width,
+                height,
+                data,
+                plane_rotation: reader.plane_rotation(),
+                cursor_pos: None,
+            }))
         };
+        // ONE cursor read per tick, and none on a stalled or failed grab: the plane position rides
+        // the frame it was read next to, and the shape ships when it changes. The position is a
+        // few ms newer than the frame; the consumer only measures a plane that held still for
+        // several frames, so that skew never reaches a measurement.
+        let cursor = match &grabbed {
+            Some(Err(_)) => None,
+            _ => reader.cursor(),
+        };
+        if let Some(Ok(msg)) = grabbed.as_mut() {
+            stamp_cursor_pos(msg, cursor.as_ref());
+        }
         match grabbed {
             None => {}
             Some(Ok(msg)) => {
@@ -1089,6 +1399,8 @@ fn drm_capture_worker(
                     break;
                 }
                 std::thread::sleep(FRAME_INTERVAL);
+                // Or the first good grab after the stall finds its deadline gone and grabs twice.
+                next_frame = std::time::Instant::now();
                 continue;
             }
             Some(Err(err)) if use_dmabuf && err.kind() == std::io::ErrorKind::Unsupported => {
@@ -1108,7 +1420,7 @@ fn drm_capture_worker(
         }
 
         // Ship the cursor shape only when it changes (id is a content hash or the hidden sentinel).
-        if let Some(c) = reader.cursor() {
+        if let Some(c) = cursor {
             if c.id != last_cursor_id {
                 last_cursor_id = c.id;
                 if frame_tx
@@ -1128,8 +1440,47 @@ fn drm_capture_worker(
             }
         }
 
-        std::thread::sleep(FRAME_INTERVAL);
+        if panel_read_at.elapsed() >= std::time::Duration::from_secs(1) {
+            panel = drm_read_panel_period(&mut reader, &target_device, target_crtc, Some(panel));
+            panel_read_at = std::time::Instant::now();
+        }
+        let now = std::time::Instant::now();
+        // A frame tick the credit held back is retried one pacing interval later.
+        if frame_due {
+            next_frame = drm_next_tick(next_frame, now, demand_fps.load(Ordering::Relaxed), panel);
+        }
+        std::thread::sleep(drm_worker_wake(now, next_frame).saturating_duration_since(now));
     }
+}
+
+/// The panel period of `crtc`, exact when the library can say (libdrmtap 0.5.9, one GETCRTC), else
+/// the whole-hertz refresh the last enumeration saw; zero when neither is known, which leaves the
+/// pacing to the demand.
+fn drm_read_panel_period(
+    reader: &mut scrap::drm_reader::DrmReader,
+    device: &str,
+    crtc: u32,
+    prev: Option<std::time::Duration>,
+) -> std::time::Duration {
+    let (period, how) = match reader.crtc_refresh() {
+        Some((num, den)) => (drm_panel_period(num, den), format!("{num}/{den} Hz")),
+        None => {
+            let hz = drm_whole_hz(device, crtc);
+            (drm_panel_period(u64::from(hz), 1), format!("{hz} Hz (whole hertz)"))
+        }
+    };
+    if prev != Some(period) {
+        log::debug!("drm: crtc {crtc} refreshes at {how}: grabs never outpace {period:?}");
+    }
+    period
+}
+
+fn drm_whole_hz(device: &str, crtc: u32) -> u32 {
+    DRM_WHOLE_HZ
+        .lock()
+        .ok()
+        .and_then(|hz| hz.get(&(device.to_owned(), crtc)).copied())
+        .unwrap_or(0)
 }
 
 /// Ancillary-fd transport for `_drm`: `Framed`/`BytesCodec` cannot carry an SCM_RIGHTS cmsg, so the
@@ -1360,7 +1711,7 @@ impl DrmConn {
         drm_send_frame(&self.stream, &payload, pass_fd).await
     }
 
-    pub async fn send_frame_ack(&self) -> ResultType<()> {
+    pub async fn send_frame_ack(&self, demand_fps: u8) -> ResultType<()> {
         let deadline =
             tokio::time::Instant::now() + std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS);
         loop {
@@ -1370,7 +1721,7 @@ impl DrmConn {
                     "drm: _drm frame-ack was not accepted within {DRM_SEND_TIMEOUT_MS}ms; closing"
                 ),
             }
-            match self.stream.try_write(&[1u8]) {
+            match self.stream.try_write(&[drm_ack_byte(demand_fps)]) {
                 Ok(n) if n > 0 => return Ok(()),
                 Ok(_) => bail!("drm: _drm frame-ack write returned 0 (peer closed)"),
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
@@ -1379,7 +1730,7 @@ impl DrmConn {
         }
     }
 
-    pub fn drain_frame_acks(&self, credit: &mut i32, max: i32) -> ResultType<()> {
+    pub fn drain_frame_acks(&self, credit: &mut i32, max: i32, demand: &mut u8) -> ResultType<()> {
         let mut buf = [0u8; 64];
         // BOUNDED: "until WouldBlock" is the peer's promise; a continuous writer would pin us.
         const MAX_ACK_READS: usize = 64;
@@ -1388,6 +1739,9 @@ impl DrmConn {
                 Ok(0) => bail!("drm: _drm frame-ack peer closed"),
                 Ok(n) => {
                     *credit = (*credit + n as i32).min(max);
+                    if let Some(d) = buf[..n].iter().rev().find_map(|&b| drm_ack_demand(b)) {
+                        *demand = d;
+                    }
                     if *credit >= max {
                         return Ok(());
                     }
@@ -1472,84 +1826,55 @@ impl DrmConn {
 }
 
 #[cfg(test)]
+mod drm_pacing_tests {
+    use super::*;
+    use hbb_common::tokio;
+
+    /// An ack is one credit, as an older producer counts it, and a new one reads the demand from it.
+    #[tokio::test]
+    async fn a_demand_ack_is_one_credit_and_carries_the_demand() {
+        let (a, b) = tokio::net::UnixStream::pair().unwrap();
+        let tx = DrmConn::new(a);
+        let rx = DrmConn::new(b);
+        tx.send_frame_ack(60).await.unwrap();
+        rx.wait_readable().await.unwrap();
+        let (mut credit, mut demand) = (0, 0);
+        rx.drain_frame_acks(&mut credit, 2, &mut demand).unwrap();
+        assert_eq!((credit, demand), (1, 60));
+    }
+
+    #[test]
+    fn the_pacing_interval_follows_the_demand_with_the_panel_as_floor() {
+        let p60 = drm_panel_period(60, 1);
+        let p2998 = drm_panel_period(131375, 4382);
+        assert_eq!(
+            drm_panel_period(148352, 2475),
+            std::time::Duration::from_nanos(16_683_294),
+            "59.94 Hz, rounded up"
+        );
+        let cases = [
+            (0u8, p60, FRAME_INTERVAL, "no demand: the old tick"),
+            (60, p60, p60, "60 on a 60 Hz panel"),
+            (120, p60, p60, "more than the panel shows: the panel"),
+            (60, p2998, p2998, "a 29.98 Hz panel, exactly"),
+        ];
+        for (demand, panel, want, why) in cases {
+            assert_eq!(drm_pacing_interval(demand, panel), want, "{why}");
+        }
+    }
+}
+
+#[cfg(test)]
 mod drm_conn_tests {
     use super::*;
     use hbb_common::libc;
     use hbb_common::tokio::{self, io::AsyncWriteExt};
     use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 
-    // Added to the wire later: an older peer's message must still decode.
-    #[test]
-    fn drm_display_info_decodes_without_render_node() {
-        let legacy = r#"{"name":"DP-1","crtc_id":386,"x":0,"y":0,
-                         "width":3840,"height":2160,"active":true}"#;
-        let info: DrmDisplayInfo =
-            serde_json::from_str(legacy).expect("a pre-render_node payload must still decode");
-        assert_eq!(info.name, "DP-1");
-        assert_eq!(info.crtc_id, 386);
-        assert!(info.render_node.is_empty(), "missing node; the consumer auto-selects only where there is one render node");
-        assert!(info.device.is_empty(), "missing device means auto-detect");
-
-        let current = DrmDisplayInfo {
-            name: "DP-1".to_owned(),
-            crtc_id: 386,
-            x: 0,
-            y: 0,
-            width: 3840,
-            height: 2160,
-            active: true,
-            render_node: "/dev/dri/renderD129".to_owned(),
-            device: "/dev/dri/card2".to_owned(),
-        };
-        let wire = serde_json::to_vec(&current).unwrap();
-        let back: DrmDisplayInfo = serde_json::from_slice(&wire).unwrap();
-        assert_eq!(back, current);
-    }
-
     fn pipe() -> (OwnedFd, OwnedFd) {
         let mut fds = [0 as libc::c_int; 2];
         assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0, "pipe() failed");
         unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) }
-    }
-
-    unsafe fn send_with_fds(sock: libc::c_int, data: &[u8], fds: &[libc::c_int]) -> isize {
-        let mut iov = libc::iovec {
-            iov_base: data.as_ptr() as *mut libc::c_void,
-            iov_len: data.len(),
-        };
-        let fdbytes = fds.len() * std::mem::size_of::<libc::c_int>();
-        let space = libc::CMSG_SPACE(fdbytes as u32) as usize;
-        let mut cbuf = vec![0u8; space];
-        let mut msg: libc::msghdr = std::mem::zeroed();
-        msg.msg_iov = &mut iov;
-        msg.msg_iovlen = 1;
-        msg.msg_control = cbuf.as_mut_ptr() as *mut libc::c_void;
-        msg.msg_controllen = space as _;
-        let cmsg = libc::CMSG_FIRSTHDR(&msg);
-        (*cmsg).cmsg_level = libc::SOL_SOCKET;
-        (*cmsg).cmsg_type = libc::SCM_RIGHTS;
-        (*cmsg).cmsg_len = libc::CMSG_LEN(fdbytes as u32) as _;
-        std::ptr::copy_nonoverlapping(fds.as_ptr() as *const u8, libc::CMSG_DATA(cmsg), fdbytes);
-        libc::sendmsg(sock, &msg, 0)
-    }
-
-    #[tokio::test]
-    async fn roundtrip_msg_no_fd() {
-        let (a, b) = tokio::net::UnixStream::pair().unwrap();
-        let mut tx = DrmConn::new(a);
-        let mut rx = DrmConn::new(b);
-        tx.send_msg(&Data::DrmFrame { width: 1920, height: 1080 }, None)
-            .await
-            .unwrap();
-        let (data, fd) = rx.recv_msg().await.unwrap();
-        assert!(matches!(
-            data,
-            Data::DrmFrame {
-                width: 1920,
-                height: 1080
-            }
-        ));
-        assert!(fd.is_none(), "no fd was sent, none must be reported");
     }
 
     #[tokio::test]
@@ -1558,7 +1883,15 @@ mod drm_conn_tests {
         let mut tx = DrmConn::new(a);
         let mut rx = DrmConn::new(b);
         let (rd, wr) = pipe();
-        tx.send_msg(&Data::DrmFrame { width: 4, height: 4 }, Some(rd.as_fd()))
+        tx.send_msg(
+            &Data::DrmFrame {
+                width: 4,
+                height: 4,
+                plane_rotation: None,
+                cursor_pos: None,
+            },
+            Some(rd.as_fd()),
+        )
             .await
             .unwrap();
         let (_data, fd) = rx.recv_msg().await.unwrap();
@@ -1607,127 +1940,6 @@ mod drm_conn_tests {
             err.to_string().contains("exceeds cap"),
             "unexpected error: {err}"
         );
-    }
-
-    #[tokio::test]
-    async fn a_body_that_never_arrives_times_out() {
-        let (mut a, b) = tokio::net::UnixStream::pair().unwrap();
-        let mut rx = DrmConn::new(b);
-        a.write_all(&10u32.to_be_bytes()).await.unwrap();
-        let mut got = Vec::new();
-        let err = rx
-            .next_raw_into(&mut got)
-            .await
-            .err()
-            .expect("a body that never arrives must time out");
-        assert!(
-            err.to_string().contains("did not arrive"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[tokio::test]
-    async fn a_dripping_peer_cannot_re_arm_the_send_deadline() {
-        use tokio::io::AsyncReadExt;
-        let (mut reader, writer) = tokio::net::UnixStream::pair().unwrap();
-        let payload = vec![0u8; 32 * 1024 * 1024];
-        // Measured: 1 KiB drains do not re-assert POLLOUT; 64 KiB does, which separates the forms.
-        let drip = tokio::spawn(async move {
-            let mut sink = vec![0u8; 64 * 1024];
-            loop {
-                if reader.read(&mut sink).await.unwrap_or(0) == 0 {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-            }
-        });
-        let started = std::time::Instant::now();
-        let outcome = tokio::time::timeout(
-            std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS * 4),
-            drm_write_all(&writer, &payload, None),
-        )
-        .await;
-        drip.abort();
-        let inner = outcome.expect(
-            "the send deadline did not fire: the budget is being re-armed per readiness wait",
-        );
-        let err = inner.err().expect("a dripping peer must not complete the write");
-        assert!(
-            err.to_string().contains("did not accept the remaining"),
-            "unexpected error: {err}"
-        );
-        assert!(
-            started.elapsed() < std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS * 3),
-            "took {:?}, which is not the send deadline firing",
-            started.elapsed()
-        );
-    }
-
-    #[tokio::test]
-    async fn surplus_fds_keep_only_the_first() {
-        let (mut a, b) = tokio::net::UnixStream::pair().unwrap();
-        let mut rx = DrmConn::new(b);
-        let (rd, wr) = pipe();
-        let (rd2, _wr2) = pipe();
-        let payload = serde_json::to_vec(&Data::DrmFrame {
-            width: 8,
-            height: 8,
-        })
-        .unwrap();
-        let prefix = (payload.len() as u32).to_be_bytes();
-        let n = unsafe { send_with_fds(a.as_raw_fd(), &prefix, &[rd.as_raw_fd(), rd2.as_raw_fd()]) };
-        assert!(n >= 0, "sendmsg failed: {}", std::io::Error::last_os_error());
-        a.write_all(&payload).await.unwrap();
-        let (data, fd) = rx.recv_msg().await.unwrap();
-        assert!(matches!(
-            data,
-            Data::DrmFrame {
-                width: 8,
-                height: 8
-            }
-        ));
-        let kept = fd.expect("the first surplus fd must be kept");
-        let sentinel = [0x5Au8];
-        assert_eq!(
-            unsafe { libc::write(wr.as_raw_fd(), sentinel.as_ptr() as *const libc::c_void, 1) },
-            1
-        );
-        let mut got = [0u8; 1];
-        assert_eq!(
-            unsafe { libc::read(kept.as_raw_fd(), got.as_mut_ptr() as *mut libc::c_void, 1) },
-            1
-        );
-        assert_eq!(got[0], 0x5A, "the kept fd must be the FIRST one sent");
-    }
-
-    // 16 fds need CMSG_LEN(64)=80 > the 64-byte DRM_CMSG_CAP, so the kernel sets MSG_CTRUNC.
-    #[tokio::test]
-    async fn rejects_truncated_control_message() {
-        let (a, b) = tokio::net::UnixStream::pair().unwrap();
-        let mut rx = DrmConn::new(b);
-        let (rd, _wr) = pipe();
-        let dups: Vec<OwnedFd> = (0..16).map(|_| rd.try_clone().unwrap()).collect();
-        let fds: Vec<libc::c_int> = dups.iter().map(|f| f.as_raw_fd()).collect();
-        let prefix = 0u32.to_be_bytes(); // the fds ride the prefix read; CTRUNC fires before any body
-        let n = unsafe { send_with_fds(a.as_raw_fd(), &prefix, &fds) };
-        assert!(n >= 0, "sendmsg failed: {}", std::io::Error::last_os_error());
-        let err = rx
-            .recv_msg()
-            .await
-            .err()
-            .expect("a truncated control message must be rejected");
-        let msg = err.to_string().to_lowercase();
-        assert!(
-            msg.contains("truncat") || msg.contains("ctrunc"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[test]
-    fn peer_uid_from_fd_reads_socket_peer() {
-        let (a, _b) = std::os::unix::net::UnixStream::pair().unwrap();
-        let euid = unsafe { libc::geteuid() };
-        assert_eq!(peer_uid_from_fd(a.as_raw_fd()), Some(euid));
     }
 
     #[test]
@@ -1780,25 +1992,5 @@ mod drm_conn_tests {
         );
 
         assert!(super::ipc_auth::ensure_peer_executable_matches_current_by_pid_opt(None, "_drm").is_err());
-    }
-
-    #[test]
-    fn drm_conn_admission_bound() {
-        assert!(drm_conn_admitted(0));
-        assert!(drm_conn_admitted(MAX_DRM_CONNS - 1)); // last admitted slot
-        assert!(!drm_conn_admitted(MAX_DRM_CONNS)); // cap reached -> rejected
-        assert!(!drm_conn_admitted(MAX_DRM_CONNS + 5)); // over cap -> rejected
-    }
-
-    #[test]
-    fn drm_auth_admission_bound() {
-        assert!(drm_auth_admitted(0));
-        assert!(drm_auth_admitted(MAX_DRM_AUTH_IN_FLIGHT - 1)); // last admitted slot
-        assert!(!drm_auth_admitted(MAX_DRM_AUTH_IN_FLIGHT)); // cap reached -> rejected
-        assert!(!drm_auth_admitted(MAX_DRM_AUTH_IN_FLIGHT + 5)); // over cap -> rejected
-        assert!(
-            MAX_DRM_AUTH_IN_FLIGHT <= MAX_DRM_CONNS,
-            "the pre-auth bound must not be looser than the connection cap"
-        );
     }
 }

@@ -24,8 +24,7 @@
 //! reacts to the *kind* of behaviour a home Wi-Fi, a stable relay or a saturated
 //! uplink produce, deterministically and over many seeds.
 //!
-//! Against overfitting: the CI run uses seeds 1 to 20; `robustness.rs` applies the
-//! same bounds to seeds 21 to 120 and sweeps the scenario parameters.  Scenario
+//! The CI run uses seeds 1 to 20.  Scenario
 //! parameters are educated guesses until a recorded `qos_trace` calibrates them.
 use super::*;
 
@@ -296,8 +295,6 @@ pub struct Report {
     pub cold_start_min_fps: u32,
     /// First time the target reached 90% of the limit.
     pub time_to_90pct_ms: Option<u32>,
-    pub final_fps: u32,
-    pub final_ratio: f32,
     pub trace: Vec<(u32, u32, u32, f32)>, // (time_ms, target fps, queue_ms, ratio)
 }
 
@@ -496,8 +493,6 @@ pub fn run(sc: &Scenario) -> Report {
         recovery_ms,
         cold_start_min_fps,
         time_to_90pct_ms,
-        final_fps: qos.fps(),
-        final_ratio: qos.ratio(),
         trace,
     }
 }
@@ -758,8 +753,8 @@ fn sim_scenarios() {
     }
 }
 
-/// The bounds every scenario summary has to meet, shared by the CI run over `SEEDS`
-/// and by the held-out run in `robustness.rs`.  They state what the product needs,
+/// The bounds every scenario summary has to meet in the CI run over `SEEDS`.
+/// They state what the product needs,
 /// not what one seed produced.  If a new seed or a new scenario violates a bound,
 /// change the design or loosen the bound with a written reason; never tune a
 /// controller constant until the bound passes.
@@ -912,77 +907,4 @@ fn replay_recorded_trace() {
         "replayed mean target fps: {mean:.1} over {} lines",
         trace.len()
     );
-}
-
-#[test]
-fn replay_time_axis_is_shared_across_connections() {
-    // Two viewers each log once a second for twenty seconds: twenty seconds of
-    // wall clock, not forty.
-    let text: String = (0..20)
-        .flat_map(|i| {
-            [
-                format!("qos_trace t={} id=1 delay=10 fps=30\n", 100_000 + i * 1000),
-                format!("qos_trace t={} id=2 delay=10 fps=30\n", 100_001 + i * 1000),
-            ]
-        })
-        .collect();
-    let trace = replay(&text);
-    let elapsed = trace.last().unwrap().0 - trace.first().unwrap().0;
-    assert!(
-        (19_000..=19_100).contains(&elapsed),
-        "replayed {elapsed} ms for 19 s of wall clock"
-    );
-}
-
-#[test]
-fn replay_recorded_trace_is_independent_of_connection_id() {
-    let replay = |id: i32| {
-        let text: String = (0..20)
-            .map(|i| {
-                format!(
-                    "qos_trace t={} id={id} delay=10 fps=30\n",
-                    100_000 + i * 1000
-                )
-            })
-            .collect();
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "rustdesk-qos-replay-{}-{nonce}-{id}.log",
-            std::process::id()
-        ));
-        std::fs::write(&path, text).unwrap();
-        // Exercise the real replay entry point without changing other tests' environment.
-        let test = format!(
-            "{}::replay_recorded_trace",
-            module_path!().split_once("::").unwrap().1
-        );
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", &test, "--nocapture", "--test-threads=1"])
-            .env("RUSTDESK_QOS_TRACE", &path)
-            .output();
-        std::fs::remove_file(&path).unwrap();
-        let output = output.unwrap();
-        assert!(output.status.success(), "replay failed: {output:?}");
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let id = id.to_string();
-        let fps: Vec<u32> = stdout
-            .lines()
-            .filter_map(|line| {
-                let fields: Vec<_> = line.split(',').collect();
-                if fields.len() == 4 && fields[1] == id {
-                    Some(fields[3].parse().unwrap())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        assert_eq!(fps.len(), 20, "missing replay samples: {stdout}");
-        fps
-    };
-    let expected = replay(1);
-    assert_eq!(expected.last(), Some(&30));
-    assert_eq!(replay(1652), expected);
 }

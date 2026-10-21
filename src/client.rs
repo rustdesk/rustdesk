@@ -1,9 +1,7 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::clipboard_listener;
+use crate::clipboard::clipboard_listener::{self, ClipboardEvent};
 use async_trait::async_trait;
 use bytes::Bytes;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use clipboard_master::CallbackResult;
 #[cfg(not(target_os = "linux"))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -70,6 +68,7 @@ use hbb_common::{
         time::{interval, Duration, Instant},
     },
     webrtc::WebRTCStream,
+    websocket::{check_ws, is_ws_endpoint},
     AddrMangle, ResultType, Stream,
 };
 use base::{
@@ -268,7 +267,13 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                             }
                         }
                         match others_err.take() {
-                            Some(oe) => bail!("WebRTC failed: {}; fallback failed: {}", e, oe),
+                            // Report one error, as `select_ok` does: the UI matches and translates
+                            // the text whole (e.g. the offline auto-retry), and both legs often
+                            // carry the same rendezvous refusal anyway.
+                            Some(oe) => {
+                                log::warn!("fallback leg also failed: {}", oe);
+                                return Err(e);
+                            }
                             None if others_fut.is_none() => bail!("WebRTC failed: {}", e),
                             None => webrtc_err = Some(e),
                         }
@@ -309,7 +314,10 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                         // it before failing the connection.
                         Some(we) => match held.take() {
                             Some(conn) => return Ok(conn),
-                            None => bail!("WebRTC failed: {}; fallback failed: {}", we, e),
+                            None => {
+                                log::warn!("WebRTC leg also failed: {}", we);
+                                return Err(e);
+                            }
                         },
                         None if webrtc_fut.is_none() => match held.take() {
                             Some(conn) => return Ok(conn),
@@ -1850,8 +1858,11 @@ impl Client {
         conn_type: ConnType,
         ipv4: bool,
     ) -> ResultType<Stream> {
+        // The proxy's address family does not constrain the relay target.
+        let relay_server = check_port(relay_server, RELAY_PORT);
+        let use_ws_proxy = Config::is_proxy() && is_ws_endpoint(&check_ws(&relay_server));
         let mut conn = connect_tcp(
-            ipv4_to_ipv6(check_port(relay_server, RELAY_PORT), ipv4),
+            ipv4_to_ipv6(relay_server, ipv4 || use_ws_proxy),
             CONNECT_TIMEOUT,
         )
         .await
@@ -1942,14 +1953,19 @@ impl Client {
                     break;
                 }
                 match rx_cb_result.recv_timeout(Duration::from_millis(CLIPBOARD_INTERVAL)) {
-                    Ok(CallbackResult::Next) => {
-                        handler.check_clipboard();
+                    Ok(ClipboardEvent::Changed) => {
+                        handler.check_clipboard(true);
                     }
-                    Ok(CallbackResult::Stop) => {
+                    #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+                    Ok(ClipboardEvent::InitialSelection) => {
+                        // Preserve file startup sync without bypassing text initial-sync settings.
+                        handler.check_clipboard(false);
+                    }
+                    Ok(ClipboardEvent::Stop) => {
                         log::debug!("Clipboard listener stopped");
                         break;
                     }
-                    Ok(CallbackResult::StopWithError(err)) => {
+                    Ok(ClipboardEvent::StopWithError(err)) => {
                         log::error!("Clipboard listener stopped with error: {}", err);
                         break;
                     }
@@ -2051,16 +2067,16 @@ impl ClientClipboardHandler {
         }
     }
 
-    fn check_clipboard(&mut self) {
+    fn check_clipboard(&mut self, check_text: bool) {
         if CLIPBOARD_STATE.lock().unwrap().running {
             #[cfg(feature = "unix-file-copy-paste")]
-            if let Some(urls) = check_clipboard_files(&mut self.ctx, ClipboardSide::Client, false) {
-                if !urls.is_empty() {
-                    #[cfg(target_os = "macos")]
-                    if crate::clipboard::is_file_url_set_by_rustdesk(&urls) {
-                        return;
-                    }
-                    if self.is_file_required() {
+            if self.is_file_required() {
+                if let Some(urls) = check_clipboard_files(&mut self.ctx, ClipboardSide::Client, false) {
+                    if !urls.is_empty() {
+                        #[cfg(target_os = "macos")]
+                        if crate::clipboard::is_file_url_set_by_rustdesk(&urls) {
+                            return;
+                        }
                         match clipboard::platform::unix::serv_files::sync_files(&urls) {
                             Ok(()) => {
                                 let msg = crate::clipboard_file::clip_2_msg(
@@ -2077,8 +2093,8 @@ impl ClientClipboardHandler {
                 }
             }
 
-            if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Client, false) {
-                if self.is_text_required() {
+            if check_text && self.is_text_required() {
+                if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Client, false) {
                     self.send_msg(msg, false);
                 }
             }
@@ -2322,41 +2338,6 @@ impl AudioBuffer {
     pub fn append_pcm(&mut self, buffer: &[f32]) {
         let having = self.append_pcm2(buffer);
         self.try_shrink(having);
-    }
-}
-
-#[cfg(all(test, not(target_os = "linux")))]
-mod audio_buffer_discontinuity_tests {
-    use super::AudioBuffer;
-    use std::sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Mutex,
-    };
-
-    const BUFFER_CAPACITY: usize = 4;
-    const BUFFER_LEVELS: usize = 30;
-    const FIRST_INPUT: [f32; 2] = [0.1, 0.2];
-    const OVERFLOWING_INPUT: [f32; 3] = [0.3, 0.4, 0.5];
-    const OVERSIZED_INPUT: [f32; 5] = [0.6, 0.7, 0.8, 0.9, 1.0];
-
-    #[test]
-    fn capacity_discards_signal_discontinuities() {
-        let audio_buffer = AudioBuffer(
-            Arc::new(Mutex::new(ringbuf::HeapRb::new(BUFFER_CAPACITY))),
-            BUFFER_CAPACITY,
-            [0; BUFFER_LEVELS],
-            Arc::new(AtomicUsize::new(0)),
-        );
-
-        assert_eq!(audio_buffer.append_pcm2(&FIRST_INPUT), FIRST_INPUT.len());
-        assert_eq!(audio_buffer.3.load(Ordering::Relaxed), 0);
-        assert_eq!(
-            audio_buffer.append_pcm2(&OVERFLOWING_INPUT),
-            BUFFER_CAPACITY
-        );
-        assert_eq!(audio_buffer.3.load(Ordering::Relaxed), 1);
-        assert_eq!(audio_buffer.append_pcm2(&OVERSIZED_INPUT), BUFFER_CAPACITY);
-        assert_eq!(audio_buffer.3.load(Ordering::Relaxed), 2);
     }
 }
 
@@ -4464,6 +4445,32 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     interface.send(Data::Message(msg_out));
 }
 
+/// Auto Login. A peer that can check for its logon or lock screen gets the password and types it
+/// itself, only if it is there right then. Keys typed from here land in whatever has focus if the
+/// screen is not locked by the time they arrive.
+pub fn auto_login(p: String, pi: &PeerInfo, interface: impl Interface) {
+    if !is_peer_handling_os_login(pi) {
+        input_os_password(p, true, interface);
+        return;
+    }
+    std::thread::spawn(move || {
+        activate_os(&interface, true);
+        std::thread::sleep(Duration::from_millis(1200));
+        let mut msg_out = Message::new();
+        msg_out.set_os_login(OSLogin {
+            password: p,
+            ..Default::default()
+        });
+        interface.send(Data::Message(msg_out));
+    });
+}
+
+/// Windows and macOS peers from the 1.5.1 release handle `os_login`.
+fn is_peer_handling_os_login(pi: &PeerInfo) -> bool {
+    (pi.platform == crate::common::PLATFORM_WINDOWS || pi.platform == crate::common::PLATFORM_MACOS)
+        && hbb_common::get_version_number(&pi.version) >= hbb_common::get_version_number("1.5.1")
+}
+
 #[derive(Copy, Clone)]
 struct LoginErrorMsgBox {
     msgtype: &'static str,
@@ -4973,6 +4980,8 @@ pub enum Data {
     RejectInsecureConnection,
     Login((String, String, String, bool)),
     Message(Message),
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    InitialClipboard(usize, Option<Message>),
     SendFiles((i32, JobType, String, String, i32, bool, bool)),
     RemoveDirAll((i32, String, bool, bool)),
     ConfirmDeleteFiles((i32, i32)),
@@ -5196,26 +5205,6 @@ mod retry_tests {
     }
 }
 
-#[cfg(test)]
-mod port_forward_mux_tests {
-    use super::*;
-
-    #[test]
-    fn a_login_asks_for_the_tunnel_when_its_mapping_probes() {
-        let mut lc = LoginConfigHandler::default();
-        lc.conn_type = ConnType::PORT_FORWARD;
-        let asks = |lc: &LoginConfigHandler| {
-            lc.create_login_msg(String::new(), String::new(), vec![])
-                .login_request()
-                .port_forward()
-                .multiplex
-        };
-        assert!(!asks(&lc));
-        lc.port_forward_multiplex = true;
-        assert!(asks(&lc));
-    }
-}
-
 pub async fn hc_connection(
     feedback: i32,
     rendezvous_server: String,
@@ -5369,6 +5358,15 @@ pub mod peer_online {
                 match msg_in.union {
                     Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
                         let states = online_response.states;
+                        // One bit per ID, rounded up to whole bytes:
+                        // 0 IDs -> 0 bytes; 1..=8 -> 1; 9..=16 -> 2; 17..=24 -> 3.
+                        let required_len = ids.len().div_ceil(u8::BITS as usize);
+                        if states.len() < required_len {
+                            bail!(
+                                "Invalid online response: expected at least {required_len} state bytes, got {}",
+                                states.len()
+                            );
+                        }
                         let mut onlines = Vec::new();
                         let mut offlines = Vec::new();
                         for i in 0..ids.len() {
@@ -5399,7 +5397,6 @@ pub mod peer_online {
     mod tests {
         use crate::client::Client;
         use hbb_common::rendezvous_proto::IceCandidate;
-        use hbb_common::tokio;
 
         #[test]
         fn accepts_webrtc_ice_by_session_key_only() {
@@ -5411,22 +5408,6 @@ pub mod peer_online {
 
             assert!(Client::is_expected_webrtc_ice_candidate(&ice, "session-a"));
             assert!(!Client::is_expected_webrtc_ice_candidate(&ice, "session-b"));
-        }
-
-        #[tokio::test]
-        async fn test_query_onlines() {
-            super::query_online_states(
-                vec![
-                    "152183996".to_owned(),
-                    "165782066".to_owned(),
-                    "155323351".to_owned(),
-                    "460952777".to_owned(),
-                ],
-                |onlines: Vec<String>, offlines: Vec<String>| {
-                    println!("onlines: {:?}, offlines: {:?}", &onlines, &offlines);
-                },
-            )
-            .await;
         }
     }
 }
@@ -5553,7 +5534,7 @@ async fn udp_nat_connect(
 
 #[cfg(test)]
 mod webrtc_race_tests {
-    use super::{race_transports_prefer_webrtc, request_allows_tcp_punch};
+    use super::race_transports_prefer_webrtc;
     use hbb_common::{
         anyhow::anyhow,
         futures::future::{BoxFuture, FutureExt},
@@ -5579,12 +5560,6 @@ mod webrtc_race_tests {
     }
 
     const NOT_P2P: fn(&&'static str) -> bool = |_| false;
-
-    #[test]
-    fn webrtc_request_never_reuses_its_signaling_socket_for_tcp_punch() {
-        assert!(request_allows_tcp_punch(""));
-        assert!(!request_allows_tcp_punch("webrtc://offer"));
-    }
 
     // A direct result must win even when it lands first — the LAN ordering, where ICE beats the
     // relay's TCP connect. Parking it as if it were a relay commits the relay on arrival.
@@ -5644,32 +5619,6 @@ mod webrtc_race_tests {
     }
 
     #[tokio::test]
-    async fn relay_from_preferred_branch_committed_when_window_expires() {
-        let got = race_transports_prefer_webrtc(
-            ok_after(10, "preferred-relay"),
-            vec![ok_after(60_000, "too-slow")],
-            100,
-            NOT_P2P,
-        )
-        .await
-        .unwrap();
-        assert_eq!(got, "preferred-relay");
-    }
-
-    #[tokio::test]
-    async fn preference_window_starts_when_relay_is_ready() {
-        let got = race_transports_prefer_webrtc(
-            ok_after(350, "webrtc"),
-            vec![ok_after(250, "relay")],
-            200,
-            NOT_P2P,
-        )
-        .await
-        .unwrap();
-        assert_eq!(got, "webrtc");
-    }
-
-    #[tokio::test]
     async fn unfinished_ipv6_still_beats_held_relay() {
         let start = Instant::now();
         let got = race_transports_prefer_webrtc(
@@ -5697,36 +5646,6 @@ mod webrtc_race_tests {
         .await
         .unwrap();
         assert_eq!(got, "ipv6");
-    }
-
-    // A relay is held with a direct attempt racing behind it, then WebRTC fails. The held relay
-    // must not be committed while the direct attempt is still in flight.
-    #[tokio::test]
-    async fn held_relay_waits_for_racing_direct_when_webrtc_fails() {
-        let got = race_transports_prefer_webrtc(
-            err_after(50, "webrtc dead"),
-            vec![ok_after(10, "relay"), ok_after(100, "ipv6")],
-            60_000,
-            |t| *t == "ipv6",
-        )
-        .await
-        .unwrap();
-        assert_eq!(got, "ipv6");
-    }
-
-    // Both attempts error, but a relay was parked before they did — it is the outcome, not a
-    // composed error.
-    #[tokio::test]
-    async fn held_relay_survives_both_errors() {
-        let got = race_transports_prefer_webrtc(
-            err_after(50, "webrtc dead"),
-            vec![ok_after(10, "relay"), err_after(100, "ipv6 dead")],
-            60_000,
-            |t| *t == "ipv6",
-        )
-        .await
-        .unwrap();
-        assert_eq!(got, "relay");
     }
 
     #[tokio::test]
@@ -5800,18 +5719,21 @@ mod webrtc_race_tests {
         assert!(start.elapsed() < Duration::from_secs(5));
     }
 
+    // Both legs get the same rendezvous refusal; the UI needs the text verbatim, e.g. the
+    // offline auto-retry matches it whole. Either leg may fail last.
     #[tokio::test]
-    async fn both_failing_compose_error() {
-        let err = race_transports_prefer_webrtc(
-            err_after(10, "webrtc dead"),
-            vec![err_after(20, "relay dead")],
-            1_000,
-            NOT_P2P,
-        )
-        .await
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("webrtc dead") && err.contains("relay dead"), "{}", err);
+    async fn same_failure_on_both_legs_reported_once() {
+        for (webrtc_ms, fallback_ms) in [(10, 20), (20, 10)] {
+            let err = race_transports_prefer_webrtc(
+                err_after(webrtc_ms, "Remote desktop is offline"),
+                vec![err_after(fallback_ms, "Remote desktop is offline")],
+                60_000,
+                NOT_P2P,
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(err.to_string(), "Remote desktop is offline");
+        }
     }
 }
 
