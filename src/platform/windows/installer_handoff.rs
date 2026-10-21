@@ -459,7 +459,11 @@ exit /b 0
             copied.display()
         ))
         .expect("install script should be created");
-        let bootstrap = verified_install_bootstrap(&script, dir)
+        // The bootstrap removes its runner directory on its way out, so it gets
+        // one of its own: the markers in `dir` have to outlive it.
+        let runner_dir = dir.join("runner");
+        std::fs::create_dir(&runner_dir).expect("runner directory should be created");
+        let bootstrap = verified_install_bootstrap(&script, &runner_dir)
             .expect("native verifier bootstrap should be generated");
         let output = run_install_bootstrap_for_test(&bootstrap);
         (output.status.code(), copied.exists())
