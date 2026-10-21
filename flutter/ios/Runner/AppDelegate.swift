@@ -35,12 +35,8 @@ private final class HandwritingTextView: UITextView, UITextViewDelegate {
       HandwritingBridge.shared.prepareForHandwritingCommit()
     }
     super.insertText(text)
-    if handledBySession || isHandwritingMode() {
-      publishTextChange(reason: "insert")
-      handledBySession = false
-    } else {
-      forwardInserted(text)
-    }
+    publishTextChange(reason: "insert")
+    handledBySession = false
   }
 
   /// 简体中文手写提交候选字时走这个方法，不会再调用 insertText:。
@@ -54,13 +50,8 @@ private final class HandwritingTextView: UITextView, UITextViewDelegate {
   }
 
   override func deleteBackward() {
-    let handwriting = handledBySession || isHandwritingMode()
     super.deleteBackward()
-    if handwriting {
-      publishTextChange(reason: "delete")
-    } else {
-      forwardDeleted()
-    }
+    publishTextChange(reason: "delete")
   }
 
   func textViewDidChange(_ textView: UITextView) {
@@ -71,8 +62,14 @@ private final class HandwritingTextView: UITextView, UITextViewDelegate {
     let now = text ?? ""
     tracked = now
     if suppressPublish { return }
-    guard handledBySession || isHandwritingMode() else { return }
-    HandwritingBridge.shared.noteLocalText(now)
+    let handwriting = isHandwritingMode()
+    // 拼音组字时文字还带标记，先留在手机上，等确认成汉字再发送。
+    if !handwriting && markedTextRange != nil { return }
+    HandwritingBridge.shared.noteLocalText(now, coalesce: handwriting)
+  }
+
+  override func caretRect(for position: UITextPosition) -> CGRect {
+    .zero
   }
 
   func resetTrackedText() {
@@ -90,7 +87,7 @@ private final class HandwritingTextView: UITextView, UITextViewDelegate {
     fn(self, sel, text as NSString, alternatives, style)
   }
 
-  private func isHandwritingMode() -> Bool {
+  func isHandwritingMode() -> Bool {
     guard let mode = textInputMode ?? UIApplication.shared.textInputMode else { return false }
     let object = mode as NSObject
     for name in ["identifier", "normalizedIdentifier"] {
@@ -161,7 +158,7 @@ private final class HandwritingBridge {
     field.isSelectable = true
     field.backgroundColor = .clear
     field.textColor = .clear
-    field.tintColor = .label
+    field.tintColor = .clear
     field.font = UIFont.systemFont(ofSize: 17)
     field.delegate = field
     NotificationCenter.default.addObserver(
@@ -175,9 +172,17 @@ private final class HandwritingBridge {
 
   private var activating = false
   private var focusTicket = 0
+  var remoteKeyboardArmed = false
   private var restoringInputMode = false
   private var retainedHandwritingMode: NSObject?
   private var lastHandwritingEdit = Date.distantPast
+
+  func setRemoteKeyboardArmed(_ armed: Bool) {
+    remoteKeyboardArmed = armed
+    if !armed {
+      hide()
+    }
+  }
 
   func show(flutterInput: NSObject) -> Bool {
     guard let window = hostWindow() else {
@@ -357,11 +362,15 @@ private final class HandwritingBridge {
   private var latest = ""
   private var flushItem: DispatchWorkItem?
 
-  func noteLocalText(_ text: String) {
-    if text == latest { return }
+  func noteLocalText(_ text: String, coalesce: Bool) {
+    if text == latest && flushItem == nil { return }
     latest = text
-    lastHandwritingEdit = Date()
     flushItem?.cancel()
+    flushItem = nil
+    if !coalesce {
+      flushEditing()
+      return
+    }
     let item = DispatchWorkItem { [weak self] in
       self?.flushEditing()
     }
@@ -631,7 +640,7 @@ private func hookHandwritingCommit() {
     insertingAttributedText = true
     let view = object as? HandwritingTextView
     view?.handledBySession = true
-    if view != nil {
+    if view?.isHandwritingMode() == true {
       HandwritingBridge.shared.prepareForHandwritingCommit()
     }
     fn(object, sel, text)
@@ -675,7 +684,8 @@ private func keepChineseHandwritingKeyboard() {
   let focusBlock: @convention(block) (AnyObject) -> Bool = { object in
     typealias Focus = @convention(c) (AnyObject, Selector) -> Bool
     let fn = unsafeBitCast(focusOriginal, to: Focus.self)
-    if object_getClass(object) === inputClass,
+    if HandwritingBridge.shared.remoteKeyboardArmed,
+       object_getClass(object) === inputClass,
        (object as? NSObject)?.value(forKey: "secureTextEntry") as? Bool != true {
       let target = object as! NSObject
       if HandwritingBridge.shared.show(flutterInput: target) {
@@ -693,7 +703,10 @@ private func keepChineseHandwritingKeyboard() {
   }
   let resignOriginal = method_getImplementation(resignMethod)
   let resignBlock: @convention(block) (AnyObject) -> Bool = { object in
-    HandwritingBridge.shared.hide()
+    let bridge = HandwritingBridge.shared
+    if bridge.remoteKeyboardArmed || bridge.field.isFirstResponder {
+      bridge.hide()
+    }
     typealias Resign = @convention(c) (AnyObject, Selector) -> Bool
     let fn = unsafeBitCast(resignOriginal, to: Resign.self)
     return fn(object, resignSel)
@@ -734,6 +747,18 @@ private func instanceMethod(_ cls: AnyClass, _ sel: Selector) -> Method? {
       name: "org.rustdesk.rustdesk/handwriting",
       binaryMessenger: engine.binaryMessenger
     )
+    HandwritingBridge.shared.channel?.setMethodCallHandler { call, result in
+      switch call.method {
+      case "arm":
+        HandwritingBridge.shared.setRemoteKeyboardArmed(true)
+        result(nil)
+      case "disarm":
+        HandwritingBridge.shared.setRemoteKeyboardArmed(false)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
     GeneratedPluginRegistrant.register(with: engine)
     let controller = FlutterViewController(engine: engine, nibName: nil, bundle: nil)
     let win = UIWindow(frame: UIScreen.main.bounds)

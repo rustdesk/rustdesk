@@ -190,6 +190,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _bindHandwritingChannel();
   }
 
+  Future<void> _setRemoteHandwritingActive(bool active) {
+    if (!isIOS) return Future.value();
+    return const MethodChannel('org.rustdesk.rustdesk/handwriting')
+        .invokeMethod<void>(active ? 'arm' : 'disarm');
+  }
+
   void _bindHandwritingChannel() {
     if (!isIOS) return;
     const channel = MethodChannel('org.rustdesk.rustdesk/handwriting');
@@ -225,6 +231,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   @override
   Future<void> dispose() async {
     if (isIOS) {
+      await _setRemoteHandwritingActive(false);
       const MethodChannel('org.rustdesk.rustdesk/handwriting')
           .setMethodCallHandler(null);
     }
@@ -306,6 +313,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
     // Ensure soft keyboard is not active before user confirms.
     _showEdit = false;
+    unawaited(_setRemoteHandwritingActive(false));
     gFFI.invokeMethod("enable_soft_keyboard", false);
     _mobileFocusNode.unfocus();
     _physicalFocusNode.requestFocus();
@@ -352,9 +360,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       _iosKeyboardWorkaroundTimer?.cancel();
       _iosKeyboardWorkaroundTimer = null;
       _timer?.cancel();
-      _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
+      _timer = Timer(kMobileDelaySoftKeyboardFocus, () async {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
             overlays: SystemUiOverlay.values);
+        if (_showEdit) {
+          await _setRemoteHandwritingActive(true);
+        }
+        if (!mounted) return;
         _mobileFocusNode.requestFocus();
       });
     }
@@ -493,9 +505,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // make sure edit ready, so that keyboard won't show/hide/show/hide happen
       setState(() => _showEdit = true);
       _timer?.cancel();
-      _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
+      _timer = Timer(kMobileDelaySoftKeyboardFocus, () async {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
             overlays: SystemUiOverlay.values);
+        await _setRemoteHandwritingActive(true);
+        if (!mounted) return;
         _mobileFocusNode.requestFocus();
       });
     });
@@ -534,20 +548,23 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                     color: Colors.white,
                   ),
                   backgroundColor: MyTheme.accent,
-                  onPressed: () {
-                    setState(() {
-                      if (keyboardIsVisible) {
+                  onPressed: () async {
+                    if (keyboardIsVisible) {
+                      await _setRemoteHandwritingActive(false);
+                      if (!mounted) return;
+                      setState(() {
                         _showEdit = false;
                         gFFI.invokeMethod("enable_soft_keyboard", false);
                         _mobileFocusNode.unfocus();
                         _physicalFocusNode.requestFocus();
-                      } else if (_showGestureHelp) {
-                        _showGestureHelp = false;
-                      } else {
-                        _showBar = !_showBar;
-                      }
-                    });
-                  }),
+                      });
+                    } else if (_showGestureHelp) {
+                      setState(() => _showGestureHelp = false);
+                    } else {
+                      setState(() => _showBar = !_showBar);
+                    }
+                  },
+                ),
           bottomNavigationBar: Obx(() => Stack(
                 alignment: Alignment.bottomCenter,
                 children: [
@@ -642,7 +659,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.tv),
-                      onPressed: () {
+                      onPressed: () async {
+                        await _setRemoteHandwritingActive(false);
+                        if (!mounted) return;
                         setState(() => _showEdit = false);
                         showOptions(context, widget.id, gFFI.dialogManager);
                       },
@@ -700,7 +719,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.more_vert),
-                      onPressed: () {
+                      onPressed: () async {
+                        await _setRemoteHandwritingActive(false);
+                        if (!mounted) return;
                         setState(() => _showEdit = false);
                         showActions(widget.id);
                       },
@@ -905,6 +926,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   onPressedTextChat(String id, {bool requestSoftKeyboard = true}) {
     if (gFFI.chatModel.chatWindowOverlayEntry == null) {
       setState(() => _showEdit = false);
+      unawaited(_setRemoteHandwritingActive(false));
     }
     gFFI.chatModel.changeCurrentKey(MessageKey(id, ChatModel.clientModeID));
     gFFI.chatModel.toggleChatOverlay(requestSoftKeyboard: requestSoftKeyboard);
