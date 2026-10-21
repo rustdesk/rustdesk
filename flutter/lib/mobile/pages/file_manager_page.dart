@@ -338,20 +338,36 @@ class _FileManagerPageState extends State<FileManagerPage> {
             },
           ),
           actions: [
-            if (isAndroid && showLocal)
-              IconButton(
-                tooltip: translate('Change Path'),
-                icon: const Icon(Icons.folder_open),
-                onPressed: _selectFolder,
-              ),
             PopupMenuButton<String>(
                 tooltip: "",
                 icon: Icon(Icons.more_vert),
                 itemBuilder: (context) {
                   return [
-                    if (isAndroid && showLocal)
-                      const PopupMenuItem(
-                          value: 'workspace', child: Text('RustDesk')),
+                    if (isAndroid && showLocal) ...[
+                      PopupMenuItem(
+                        value: 'workspace',
+                        child: Row(
+                          children: [
+                            Icon(Icons.storage_outlined,
+                                color: Theme.of(context).iconTheme.color),
+                            SizedBox(width: 5),
+                            Text(translate('RustDesk storage')),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'choose_folder',
+                        child: Row(
+                          children: [
+                            Icon(Icons.folder_open_outlined,
+                                color: Theme.of(context).iconTheme.color),
+                            SizedBox(width: 5),
+                            Text('${translate('Other folders')}…'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                    ],
                     PopupMenuItem(
                       child: Row(
                         children: [
@@ -446,6 +462,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 onSelected: (v) {
                   if (v == 'workspace') {
                     _browseWorkspace();
+                  } else if (v == 'choose_folder') {
+                    _selectFolder();
                   } else if (v == "refresh") {
                     currentFileController.refresh();
                   } else if (v == "import") {

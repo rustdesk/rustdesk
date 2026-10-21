@@ -813,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("RustDesk storage", "RustDesk 儲存空間"),
+        ("Other folders", "其他資料夾"),
     ].iter().cloned().collect();
 }
