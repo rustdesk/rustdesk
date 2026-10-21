@@ -130,10 +130,13 @@ const REG_NAME_WINDOWS_INSTALLER: &str = "WindowsInstaller";
 const MSI_WINDOWS_INSTALLER_VALUE: u32 = 1;
 const MSI_EXIT_SUCCESS_REBOOT_INITIATED: u32 = 1641;
 const MSI_EXIT_SUCCESS_REBOOT_REQUIRED: u32 = 3010;
-// Share the 0x5253_xxxx range of the elevated installer script exit codes.
-const UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE: u32 = 0x5253_0009;
-const UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE: u32 = 0x5253_000A;
-const UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE: u32 = 0x5253_000B;
+// Share the 0x5253_xxxx range of the elevated installer script exit codes, so
+// these continue after the last one taken in installer_shell.rs and
+// verified_update.rs. `elevated_install_failure_reason()` turns a code back
+// into a message, so a duplicate would explain a failure as the wrong one.
+const UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE: u32 = 0x5253_000D;
+const UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE: u32 = 0x5253_000E;
+const UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE: u32 = 0x5253_000F;
 const HKLM_PREFIX: &str = "HKEY_LOCAL_MACHINE\\";
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
