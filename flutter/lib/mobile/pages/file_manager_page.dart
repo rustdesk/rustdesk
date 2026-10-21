@@ -149,7 +149,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
       if (selected == null || !mounted) return false;
       final path = selected['path'] as String;
       model.localController.homePath = path;
-      return await model.localController.openDirectory(path);
+      final opened =
+          await model.localController.openDirectory(path, isBack: true);
+      if (opened) model.localController.history.clear();
+      return opened;
     } catch (error) {
       showToast(error.toString());
       return false;
@@ -160,7 +163,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
     try {
       final path = await AndroidDocuments.workspace();
       model.localController.homePath = path;
-      await model.localController.openDirectory(path);
+      if (await model.localController.openDirectory(path, isBack: true)) {
+        model.localController.history.clear();
+      }
     } catch (error) {
       showToast(error.toString());
     }

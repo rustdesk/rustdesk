@@ -1132,6 +1132,20 @@ async fn handle_fs(
         }
         ipc::FS::WriteError { id, file_num, err } => {
             if let Some(job) = fs::remove_job(id, write_jobs) {
+                #[cfg(target_os = "android")]
+                let mut job = job;
+                #[cfg(target_os = "android")]
+                if let Err(error) = job.cancel_document().await {
+                    const CLEANUP_ERROR_LOG_INTERVAL: std::time::Duration =
+                        std::time::Duration::from_secs(60);
+                    hbb_common::throttled_log!(
+                        CLEANUP_ERROR_LOG_INTERVAL,
+                        warn,
+                        "Failed to clean up document transfer {}: {}",
+                        id,
+                        error
+                    );
+                }
                 tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, false, &err)));
                 send_raw(fs::new_error(job.id(), err, file_num), tx);
             }

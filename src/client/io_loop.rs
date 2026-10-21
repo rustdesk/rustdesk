@@ -2154,6 +2154,20 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Error(e)) => {
+                            #[cfg(target_os = "android")]
+                            if let Some(job) = fs::get_job(e.id, &mut self.write_jobs) {
+                                if let Err(error) = job.cancel_document().await {
+                                    const CLEANUP_ERROR_LOG_INTERVAL: Duration =
+                                        Duration::from_secs(60);
+                                    hbb_common::throttled_log!(
+                                        CLEANUP_ERROR_LOG_INTERVAL,
+                                        warn,
+                                        "Failed to clean up document transfer {}: {}",
+                                        e.id,
+                                        error
+                                    );
+                                }
+                            }
                             let job_type = fs::remove_job(e.id, &mut self.write_jobs)
                                 .or_else(|| fs::remove_job(e.id, &mut self.read_jobs))
                                 .map(|j| j.r#type)
