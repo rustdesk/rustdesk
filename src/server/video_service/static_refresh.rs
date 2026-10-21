@@ -81,6 +81,7 @@ pub(super) struct StaticRefresh<'a> {
     #[cfg(test)]
     elapsed_since_encode: Duration,
     repeat_output_counter: usize,
+    repeat_output_limit: usize,
     repeat_no_outputs: usize,
     repeat_failures: usize,
     source_ready: bool,
@@ -133,6 +134,7 @@ impl<'a> StaticRefresh<'a> {
             #[cfg(test)]
             elapsed_since_encode: Duration::ZERO,
             repeat_output_counter: 0,
+            repeat_output_limit: 0,
             repeat_no_outputs: 0,
             repeat_failures: 0,
             source_ready: false,
@@ -143,6 +145,7 @@ impl<'a> StaticRefresh<'a> {
 
     pub(super) fn on_frame(&mut self, _frame: &EncodeInput) {
         self.repeat_output_counter = 0;
+        self.repeat_output_limit = 0;
         self.repeat_no_outputs = 0;
         self.source_ready = false;
         #[cfg(all(windows, feature = "vram"))]
@@ -186,6 +189,11 @@ impl<'a> StaticRefresh<'a> {
         frame_controller: &mut VideoFrameController,
     ) -> ResultType<()> {
         let spf = spf.max(Duration::from_secs(1) / MAX_REPEAT_FPS);
+        self.repeat_output_limit = self.repeat_output_limit.max(max_repeat_frames(
+            self.codec_format,
+            quality,
+            self.hardware_backend,
+        ));
         if !self.source.is_monitor()
             || self.codec_format == CodecFormat::AV1
             || !self.source_ready
@@ -195,8 +203,7 @@ impl<'a> StaticRefresh<'a> {
                     CodecFormat::VP8 | CodecFormat::VP9 | CodecFormat::AV1
                 ))
             || self.repeat_no_outputs >= MAX_REPEAT_NO_OUTPUTS
-            || self.repeat_output_counter
-                >= max_repeat_frames(self.codec_format, quality, self.hardware_backend)
+            || self.repeat_output_counter >= self.repeat_output_limit
             || {
                 #[cfg(not(test))]
                 let elapsed = self.last_encode.elapsed();
@@ -587,6 +594,56 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(rx.len(), expected);
+        sp.on_unsubscribe(1);
+    }
+
+    #[test]
+    fn quality_changes_preserve_the_largest_budget_until_a_new_frame() {
+        let sp = GenericService::new("repeat-quality-change-test".to_owned(), false);
+        let recorder = Arc::new(Mutex::new(None));
+        let mut refresh = new_refresh(
+            VideoSource::Monitor,
+            CodecFormat::H264,
+            &sp,
+            &recorder,
+            0,
+            1,
+            1,
+        );
+        refresh.hardware_backend = HardwareBackend::MediaCodec;
+        let (tx, rx) = mpsc::unbounded_channel();
+        sp.on_subscribe(ConnInner::new(1, None, Some(tx)));
+        let mut encoder = Encoder {
+            codec: Box::new(CountingEncoder(Rc::new(Cell::new(0)))),
+        };
+        for (new_frame, quality, attempts, expected) in [
+            (true, BR_BALANCED, 11, 11),
+            (false, BR_BEST, 20, 20),
+            (false, 0.1, 50, 50),
+            (false, BR_BEST, 50, 50),
+            (false, 0.1, 50, 50),
+            (true, BR_BEST, 20, 60),
+        ] {
+            if new_frame {
+                refresh.on_frame(&EncodeInput::YUV(&[1]));
+                refresh.on_encoded(true);
+            }
+            for _ in 0..attempts {
+                refresh.elapsed_since_encode = Duration::from_secs(1);
+                refresh
+                    .try_encode(
+                        &[1],
+                        Duration::from_millis(33),
+                        quality,
+                        Instant::now(),
+                        0,
+                        &mut encoder,
+                        &mut VideoFrameController::new(0),
+                    )
+                    .unwrap();
+            }
+            assert_eq!(rx.len(), expected);
+        }
         sp.on_unsubscribe(1);
     }
 
