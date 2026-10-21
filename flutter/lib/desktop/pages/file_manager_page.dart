@@ -1140,6 +1140,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               : "${entry.lastModified().toString().replaceAll(".000", "")}   ";
           var secondaryPosition = RelativeRect.fromLTRB(0, 0, 0, 0);
           onTap() {
+            _keyboardNode.requestFocus();
             final items = selectedItems;
             // handle double click
             if (_checkDoubleClick(entry)) {
