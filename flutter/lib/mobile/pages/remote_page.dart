@@ -1352,24 +1352,26 @@ void showOptions(
                               i == cur ? numColorSelected : numColorUnselected,
                           fontWeight: FontWeight.bold))))));
     }
-    final isAll = cur == kAllDisplayValue;
-    children.add(InkWell(
-        onTap: () {
-          if (isAll) return;
-          openMonitorInTheSameTab(kAllDisplayValue, gFFI, pi);
-          gFFI.dialogManager.dismissAll();
-        },
-        child: Ink(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).hintColor),
-                borderRadius: BorderRadius.circular(2),
-                color: isAll ? numBgSelected : null),
-            child: Center(
-                child: Icon(Icons.grid_view_rounded,
-                    size: 20,
-                    color: isAll ? numColorSelected : numColorUnselected)))));
+    if (pi.isSupportMultiUiSession) {
+      final isAll = cur == kAllDisplayValue;
+      children.add(InkWell(
+          onTap: () {
+            if (isAll) return;
+            openMonitorInTheSameTab(kAllDisplayValue, gFFI, pi);
+            gFFI.dialogManager.dismissAll();
+          },
+          child: Ink(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                  border: Border.all(color: Theme.of(context).hintColor),
+                  borderRadius: BorderRadius.circular(2),
+                  color: isAll ? numBgSelected : null),
+              child: Center(
+                  child: Icon(Icons.grid_view_rounded,
+                      size: 20,
+                      color: isAll ? numColorSelected : numColorUnselected)))));
+    }
     displays.add(Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Wrap(

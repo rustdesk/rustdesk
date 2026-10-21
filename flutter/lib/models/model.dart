@@ -1678,7 +1678,8 @@ class FfiModel with ChangeNotifier {
       final oldDisplays = List<Display>.of(_pi.displays);
       final topologyChanged = !listEquals(oldDisplays, newDisplays);
       if (topologyChanged) {
-        parent.target?.imageModel.invalidateDisplayImages();
+        parent.target?.imageModel
+            .reconcileDisplayImages(oldDisplays, newDisplays);
       }
       _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
@@ -1697,6 +1698,9 @@ class FfiModel with ChangeNotifier {
       } else {
         if (_pi.currentDisplay >= 0 &&
             _pi.currentDisplay < _pi.displays.length) {
+          if (topologyChanged) {
+            sessionRefreshVideo(sessionId, _pi);
+          }
           updateCurDisplay(sessionId);
         } else {
           if (_pi.displays.isNotEmpty) {
@@ -1927,12 +1931,24 @@ class VirtualMouseMode with ChangeNotifier {
 class ImageModel with ChangeNotifier {
   ui.Image? _image;
   final Map<int, ui.Image> _images = {};
-  final Set<ui.Image> _pendingDispose = {};
+  final Map<int?, ui.Image> _pendingDispose = {};
   bool _postFrameScheduled = false;
 
-  void _scheduleDispose(ui.Image? img) {
+  void _scheduleDispose(ui.Image? img, {int? display}) {
     if (img == null) return;
-    _pendingDispose.add(img);
+    final existingPending = _pendingDispose[display];
+    if (existingPending != null && existingPending != img) {
+      // An image for this display slot is already awaiting post-frame disposal.
+      // This intermediate replacement was never rendered and can be safely
+      // disposed immediately without accumulating.
+      try {
+        img.dispose();
+      } catch (e) {
+        // ignore
+      }
+      return;
+    }
+    _pendingDispose[display] = img;
     if (!_postFrameScheduled) {
       _postFrameScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1941,10 +1957,11 @@ class ImageModel with ChangeNotifier {
         if (_image != null) currentImages.add(_image!);
         currentImages.addAll(_images.values);
 
-        final toDispose =
-            _pendingDispose.where((i) => !currentImages.contains(i)).toList();
+        final toDispose = _pendingDispose.values
+            .where((i) => !currentImages.contains(i))
+            .toList();
+        _pendingDispose.clear();
         for (var i in toDispose) {
-          _pendingDispose.remove(i);
           try {
             i.dispose();
           } catch (e) {
@@ -1975,10 +1992,28 @@ class ImageModel with ChangeNotifier {
   }
 
   void invalidateDisplayImages() {
-    for (final img in _images.values) {
-      _scheduleDispose(img);
+    for (final entry in _images.entries) {
+      _scheduleDispose(entry.value, display: entry.key);
     }
     _images.clear();
+  }
+
+  void reconcileDisplayImages(
+      List<Display> oldDisplays, List<Display> newDisplays) {
+    final toRemove = <int>[];
+    for (final k in _images.keys) {
+      if (k >= newDisplays.length ||
+          k >= oldDisplays.length ||
+          oldDisplays[k] != newDisplays[k]) {
+        toRemove.add(k);
+      }
+    }
+    for (final k in toRemove) {
+      final img = _images.remove(k);
+      if (img != null) {
+        _scheduleDispose(img, display: k);
+      }
+    }
   }
 
   String id = '';
@@ -2004,8 +2039,8 @@ class ImageModel with ChangeNotifier {
       _scheduleDispose(_image);
       _image = null;
     }
-    for (final img in _images.values) {
-      _scheduleDispose(img);
+    for (final entry in _images.entries) {
+      _scheduleDispose(entry.value, display: entry.key);
     }
     _images.clear();
   }
@@ -2101,13 +2136,13 @@ class ImageModel with ChangeNotifier {
         _images.remove(display);
       }
       if (old != null && old != image) {
-        _scheduleDispose(old);
+        _scheduleDispose(old, display: display);
       }
     } else {
       final old = _image;
       _image = image;
       if (old != null && old != image) {
-        _scheduleDispose(old);
+        _scheduleDispose(old, display: display);
       }
     }
     if (image != null) notifyListeners();
