@@ -1,6 +1,6 @@
 use super::{
-    android, android_descriptor::DocumentDescriptor, DataSource, DataStream, FileTransferBlock,
-    TransferJob,
+    android, android_descriptor::DocumentDescriptor, file_transfer_send_confirm_request,
+    DataSource, DataStream, FileTransferBlock, FileTransferSendConfirmRequest, TransferJob,
 };
 use hbb_common::{anyhow::anyhow, bail, compress::decompress, ResultType};
 use serde_json::{json, Value};
@@ -14,6 +14,7 @@ use tokio::{
 pub(super) struct DocumentTransfer {
     reader: Option<DocumentDescriptor>,
     pending: Option<PendingWrite>,
+    confirmed_file: Option<i32>,
     pub error: Option<String>,
 }
 
@@ -28,6 +29,20 @@ struct PendingWrite {
 impl TransferJob {
     pub fn is_document(&self) -> bool {
         matches!(&self.data_source, DataSource::FilePath(path) if android::is_path(path))
+    }
+
+    pub(super) fn confirm_document(&mut self, request: &FileTransferSendConfirmRequest) {
+        if request.id != self.id {
+            return;
+        }
+        let overwrite = matches!(
+            request.union,
+            Some(file_transfer_send_confirm_request::Union::OffsetBlk(0))
+                | Some(file_transfer_send_confirm_request::Union::Skip(false))
+        );
+        self.document_transfer.confirmed_file = (overwrite
+            && self.files.get(request.file_num as usize).is_some())
+        .then_some(request.file_num);
     }
 
     fn document_path(&self, file_num: usize) -> ResultType<String> {
@@ -111,7 +126,9 @@ impl TransferJob {
         let path = self.document_path(block.file_num as usize)?;
         if self.document_transfer.pending.as_ref().map(|p| &p.path) != Some(&path) {
             self.finish_document().await?;
-            self.document_transfer.pending = Some(begin_write(path).await?);
+            let overwrite = !self.is_remote
+                || self.document_transfer.confirmed_file.take() == Some(block.file_num);
+            self.document_transfer.pending = Some(begin_write(path, overwrite).await?);
             self.file_num = block.file_num;
         }
         let pending = self
@@ -179,9 +196,11 @@ impl TransferJob {
     }
 }
 
-async fn begin_write(path: String) -> ResultType<PendingWrite> {
+async fn begin_write(path: String, overwrite: bool) -> ResultType<PendingWrite> {
     spawn_blocking(move || {
-        let token = android::request(json!({"op": "begin", "path": path}))?;
+        let token = android::request(json!({
+            "op": "begin", "path": path, "overwrite": overwrite
+        }))?;
         let file = android::take_file(&token["fd"])?;
         let descriptor = DocumentDescriptor::new(&token)?;
         Ok(PendingWrite {

@@ -91,7 +91,7 @@ internal class DocumentStorage(private val context: Context) {
     private fun mutate(request: JSONObject, backend: DocumentTree): Any {
         val path = request.getString("path")
         return when (val operation = request.getString("op")) {
-            "begin" -> backend.begin(path)
+            "begin" -> backend.begin(path, request.getBoolean("overwrite"))
             "finish" -> backend.finish(request.getJSONObject("token")).let { true }
             "discard" -> backend.discard(request.getJSONObject("token")).let { true }
             "delete" -> backend.delete(path).let { true }

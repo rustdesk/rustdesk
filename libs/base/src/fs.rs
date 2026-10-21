@@ -1274,6 +1274,10 @@ impl TransferJob {
     }
 
     pub async fn confirm(&mut self, r: &FileTransferSendConfirmRequest) -> bool {
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        if self.is_document() && self.is_remote {
+            self.confirm_document(r);
+        }
         if self.is_download() {
             self.confirm_download(r);
             // Open receiver resume streams in write() so validation errors reach the caller.

@@ -85,8 +85,9 @@ internal class DocumentTree(
     fun open(path: String): JSONObject = descriptors.open(
         resolver.openFileDescriptor(uri(path), "r") ?: throw IOException("Unable to open document"))
 
-    fun begin(path: String): JSONObject {
+    fun begin(path: String, overwrite: Boolean): JSONObject {
         val original = resolve(path)
+        check(original == null || overwrite) { "Document overwrite requires confirmation" }
         require(original == null || metadata(original)?.getBoolean("directory") == false) {
             "Cannot replace a folder with a file"
         }
@@ -96,10 +97,22 @@ internal class DocumentTree(
         val temporary = DocumentsContract.createDocument(resolver, parent, mime(name),
             temporaryName(name, "download"))
             ?: throw IOException("Unable to create the receiving file")
-        val descriptor = resolver.openFileDescriptor(temporary, "rw")
-            ?: throw IOException("Unable to open the receiving file")
-        return descriptors.open(descriptor).put("uri", temporary.toString())
-            .put("path", path).put("original", original?.toString() ?: JSONObject.NULL)
+        try {
+            val descriptor = resolver.openFileDescriptor(temporary, "rw")
+                ?: throw IOException("Unable to open the receiving file")
+            return descriptors.open(descriptor).put("uri", temporary.toString())
+                .put("path", path).put("original", original?.toString() ?: JSONObject.NULL)
+        } catch (error: Exception) {
+            try {
+                check(DocumentsContract.deleteDocument(resolver, temporary)) {
+                    "Unable to remove the receiving file"
+                }
+            } catch (cleanup: Exception) {
+                throw IOException("${error.message ?: error.javaClass.simpleName}; " +
+                    "temporary file cleanup failed: ${cleanup.message}", error)
+            }
+            throw error
+        }
     }
 
     fun finish(token: JSONObject) {

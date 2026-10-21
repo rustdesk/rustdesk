@@ -18,6 +18,9 @@ fn provider(output: &Path, request: &str) -> ResultType<String> {
         Some("stat") if request["path"].as_str().unwrap().ends_with(".txt") => metadata,
         Some("stat") => json!({"name": "Documents", "directory": true, "size": 0, "modified": 0}),
         Some("begin") => {
+            if output.exists() && request["overwrite"].as_bool() == Some(false) {
+                return Ok(json!({"error": "Document overwrite requires confirmation"}).to_string());
+            }
             json!({"fd": File::create(output)?.into_raw_fd(), "descriptor": request["path"]})
         }
         Some("open") => {
@@ -79,6 +82,7 @@ fn sending(path: &str, overwrite_detection: bool) -> TransferJob {
 #[cfg(unix)]
 async fn receive(path: &str, succeeds: bool, output: &Path) {
     let mut job = receiving(path);
+    confirm_overwrite(&mut job, 0).await;
     job.write(FileTransferBlock {
         id: 1,
         data: b"hello, world".to_vec().into(),
@@ -95,7 +99,50 @@ async fn receive(path: &str, succeeds: bool, output: &Path) {
     assert_eq!(eof.is_ok(), succeeds);
     assert_eq!(job.finish_document().await.is_ok(), succeeds);
     assert_eq!(job.job_error().is_some(), !succeeds);
+    job.cancel_document().await.unwrap();
     assert_eq!(std::fs::read(output).unwrap(), b"hello, world");
+}
+
+#[cfg(unix)]
+async fn confirm_overwrite(job: &mut TransferJob, file_num: i32) {
+    let mut confirmation = FileTransferSendConfirmRequest {
+        id: job.id(),
+        file_num,
+        ..Default::default()
+    };
+    confirmation.set_offset_blk(0);
+    job.confirm(&confirmation).await;
+}
+
+#[cfg(unix)]
+async fn overwrite_requires_matching_confirmation(path: &str, output: &Path) {
+    let empty = |file_num| FileTransferBlock {
+        id: 1,
+        file_num,
+        ..Default::default()
+    };
+    std::fs::write(output, b"original").unwrap();
+    let mut job = receiving(&format!("{path}/notes.txt"));
+    assert!(job.write(empty(0)).await.is_err());
+    assert_eq!(std::fs::read(output).unwrap(), b"original");
+
+    let files = ["first.txt", "second.txt"]
+        .map(|name| FileEntry {
+            name: name.into(),
+            ..Default::default()
+        })
+        .to_vec();
+    let mut job = receiving(path).with_files(files.clone()).unwrap();
+    confirm_overwrite(&mut job, 0).await;
+    job.write(empty(0)).await.unwrap();
+    std::fs::write(output, b"second original").unwrap();
+    assert!(job.write(empty(1)).await.is_err());
+    assert_eq!(std::fs::read(output).unwrap(), b"second original");
+
+    let mut job = receiving(path).with_files(files).unwrap();
+    confirm_overwrite(&mut job, 1).await;
+    job.write(empty(1)).await.unwrap();
+    assert!(std::fs::read(output).unwrap().is_empty());
 }
 
 #[cfg(unix)]
@@ -124,6 +171,7 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
     assert_eq!(files[0].size, 12);
     assert!(remove_empty_tree(path).is_err());
     assert!(super::super::remove_file(path).is_err());
+    overwrite_requires_matching_confirmation(path, &output).await;
     for (name, succeeds) in [
         ("notes.txt", true),
         ("failed.txt", false),
@@ -155,6 +203,7 @@ async fn send_and_cancel(path: &str, output: &Path) {
     );
     assert!(sender.read().await.unwrap().unwrap().data.is_empty());
     let mut canceled = receiving(&format!("{path}/canceled.txt"));
+    confirm_overwrite(&mut canceled, 0).await;
     canceled
         .write(FileTransferBlock {
             id: 1,
