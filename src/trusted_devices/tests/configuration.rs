@@ -34,7 +34,7 @@ pub(super) async fn legacy_settings_survive_saving() {
         .find(|device| device["id"] == info.id)
         .unwrap();
     let expiry = device["expires_at"].as_i64().unwrap();
-    assert!(expiry >= now + LIFETIME_MILLIS && expiry <= hbb_common::get_time() + LIFETIME_MILLIS);
+    assert_eq!(expiry, info.time + 90 * day);
     assert!(Config2::get_trusted_device_stores().unwrap().1.is_empty());
     let original = Config::get_options();
     let mut options = original.clone();
@@ -71,16 +71,13 @@ pub(super) async fn encrypted_store_preserves_grants(token: &[u8]) {
     let stored = Config2::get_trusted_devices_v2().unwrap();
     let (plaintext, encrypted, _) = decrypt_str_or_original(&stored, "00");
     assert!(encrypted, "Host grants must be encrypted at rest");
-    Config2::set_trusted_devices_v2(plaintext.clone()).unwrap();
-    super::super::initialize().unwrap();
-    let migrated = Config2::get_trusted_devices_v2().unwrap();
-    let (decrypted, encrypted, _) = decrypt_str_or_original(&migrated, "00");
-    assert!(encrypted, "Existing plaintext grants must be migrated");
-    assert_eq!(decrypted, plaintext);
+    Config2::set_trusted_devices_v2(plaintext).unwrap();
+    assert!(super::super::initialize().is_err());
+    Config2::set_trusted_devices_v2(stored.clone()).unwrap();
     assert!(is_trusted(token).await);
 
     let mut ciphertext = base64::decode(
-        migrated.strip_prefix("00").unwrap(),
+        stored.strip_prefix("00").unwrap(),
         base64::Variant::Original,
     )
     .unwrap();
@@ -92,7 +89,7 @@ pub(super) async fn encrypted_store_preserves_grants(token: &[u8]) {
     Config2::set_trusted_devices_v2(corrupted.clone()).unwrap();
     let login = host::begin(proof(PASSWORD, token)).await;
     let after_read = Config2::get_trusted_devices_v2();
-    Config2::set_trusted_devices_v2(migrated).unwrap();
+    Config2::set_trusted_devices_v2(stored).unwrap();
     let (attempt, valid, _) = login.unwrap().unwrap();
     assert!(attempt.is_none());
     assert!(!valid, "Damaged ciphertext must not authorize a token");
@@ -173,8 +170,8 @@ pub(super) async fn renewal_preserves_authorization(token: &[u8]) {
     ));
     let after = devices().await;
     let expires_at = after[0]["expires_at"].as_i64().unwrap();
-    assert!(expires_at >= now + LIFETIME_MILLIS);
-    assert!(expires_at <= hbb_common::get_time() + LIFETIME_MILLIS);
+    assert!(expires_at >= super::super::policy::expires_at(now, 90));
+    assert!(expires_at <= super::super::policy::expires_at(hbb_common::get_time(), 90));
     assert_eq!(after[0]["time"], before[0]["time"]);
     assert_eq!(after[1], before[1]);
     for token in [token, other_token.as_slice()] {

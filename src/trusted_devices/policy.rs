@@ -3,7 +3,7 @@ use base::config::keys;
 use hbb_common::{config::Config, get_time, ResultType};
 use std::collections::HashMap;
 
-pub const DEFAULT_DAYS: u32 = 30;
+pub const DEFAULT_DAYS: u32 = 90;
 pub const NEVER_EXPIRE: u32 = 0;
 pub const DAY_MILLIS: i64 = 24 * 60 * 60 * 1000;
 const AUTH_OPTIONS: [&str; 2] = ["2fa", keys::OPTION_ENABLE_TRUSTED_DEVICES];
@@ -13,10 +13,10 @@ pub fn days(options: &HashMap<String, String>) -> u32 {
         .get(keys::OPTION_TRUSTED_DEVICE_EXPIRATION)
         .map(String::as_str)
     {
-        None | Some("") | Some("30") => DEFAULT_DAYS,
+        None | Some("") | Some("90") => DEFAULT_DAYS,
         Some("1") => 1,
         Some("7") => 7,
-        Some("90") => 90,
+        Some("30") => 30,
         Some("0") => NEVER_EXPIRE,
         _ => {
             const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
@@ -84,10 +84,9 @@ pub(super) fn update_expiration(grants: &mut super::Grants, days: u32, now: i64)
     let mut changed = grants.cleanup(now);
     let expiry = expires_at(now, days);
     for record in &mut grants.records {
-        let previous = record
-            .info
-            .expires_at
-            .unwrap_or_else(|| record.info.time.saturating_add(super::LIFETIME_MILLIS));
+        let Some(previous) = record.info.expires_at else {
+            continue;
+        };
         let next = if expiry == 0 || previous == 0 {
             expiry
         } else {

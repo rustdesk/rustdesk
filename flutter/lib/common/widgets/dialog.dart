@@ -2888,7 +2888,7 @@ Widget trustedDeviceExpiration({
           child: ComboBox(
             keys: periods,
             values: ['1', '7', '30', '90', translate('Never')],
-            initialKey: periods.contains(period) ? period : '30',
+            initialKey: periods.contains(period) ? period : '90',
             enabled: enabled && !isOptionFixed(kOptionTrustedDeviceExpiration),
             onChanged: (value) async {
               try {
@@ -2914,7 +2914,7 @@ class TrustedDevices {
 class TrustedDevice {
   late final Uint8List recordId;
   late final int time;
-  late final int? expiresAt;
+  late final int expiresAt;
   late final String id;
   late final String name;
   late final String platform;
@@ -2931,9 +2931,7 @@ class TrustedDevice {
 
   String daysRemaining() {
     if (expiresAt == 0) return translate('Never');
-    const lifetime = Duration(days: 30);
-    final expiry = expiresAt ?? time + lifetime.inMilliseconds;
-    final remaining = expiry - DateTime.now().millisecondsSinceEpoch;
+    final remaining = expiresAt - DateTime.now().millisecondsSinceEpoch;
     if (remaining < 0) {
       return '0';
     }

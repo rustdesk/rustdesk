@@ -23,13 +23,12 @@ use serde_derive::{Deserialize, Serialize};
 use storage::GrantsStorage;
 
 pub const TOKEN_BYTES: usize = 32;
-pub const LIFETIME_MILLIS: i64 = policy::DEFAULT_DAYS as i64 * policy::DAY_MILLIS;
 pub const MAX_RECORDS: usize = 32;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct DeviceInfo {
     pub time: i64,
-    // Missing on existing V2 grants; zero means no expiration.
+    // Missing on V1 records until import; zero means no expiration.
     #[serde(default)]
     pub expires_at: Option<i64>,
     pub id: String,
@@ -55,11 +54,11 @@ impl Record {
     }
 
     fn current(&self, now: i64) -> bool {
-        let expiry = self
-            .info
-            .expires_at
-            .unwrap_or_else(|| self.info.time.saturating_add(LIFETIME_MILLIS));
-        now >= self.info.time && (expiry == 0 || now < expiry)
+        now >= self.info.time
+            && self
+                .info
+                .expires_at
+                .is_some_and(|expiry| expiry == 0 || now < expiry)
     }
 }
 
@@ -231,17 +230,7 @@ pub fn initialize() -> ResultType<()> {
     let current = config::snapshot()?;
     let scope_changed = !grants.matches_scope(&current.scope);
     if scope_changed {
-        // Earlier V2 builds included nondefault durations in the authentication scope.
-        let mut previous =
-            serde_json::to_vec(&(&current.h1, &current.salt, &current.totp, current.enabled))?;
-        previous.extend_from_slice(&current.validity_days.to_le_bytes());
-        if current.validity_days != policy::DEFAULT_DAYS
-            && grants.matches_scope(&sha256::hash(&previous).0)
-        {
-            grants.scope = Some(current.scope);
-        } else {
-            grants.revoke(Some(current.scope))?;
-        }
+        grants.revoke(Some(current.scope))?;
     }
     if policy::update_expiration(&mut grants, current.validity_days, hbb_common::get_time())
         || scope_changed

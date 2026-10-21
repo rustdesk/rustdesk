@@ -32,12 +32,12 @@ impl GrantsStorage {
             serde_json::from_slice(&plaintext)
                 .map_err(|_| anyhow!("Invalid trusted-device grants"))?
         } else {
-            serde_json::from_str(&value).map_err(|_| anyhow!("Invalid trusted-device grants"))?
+            return Err(anyhow!("Invalid encrypted trusted-device grants"));
         };
         if !legacy.is_empty() {
             super::legacy::import(&mut grants, &legacy, value.is_empty())?;
         }
-        if !legacy.is_empty() || (!value.is_empty() && !value.starts_with(ENCRYPTION_VERSION)) {
+        if !legacy.is_empty() {
             self.write(&grants)?;
         }
         Ok(grants)

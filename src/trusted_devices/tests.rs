@@ -1,7 +1,7 @@
 use super::{
     authority::{self, Request, Response},
     client::Credentials,
-    config, host, random_token, token_verifier, DeviceInfo, Grants, LIFETIME_MILLIS, TOKEN_BYTES,
+    config, host, random_token, token_verifier, DeviceInfo, Grants, TOKEN_BYTES,
 };
 use base::config::keys;
 use hbb_common::{
@@ -199,12 +199,14 @@ fn only_original_tokens_satisfy_trust_and_use_does_not_refresh_expiry() {
     grants.revoke(Some(SCOPE)).unwrap();
     let ticket = grants.begin(&SCOPE).unwrap();
     let token = random_token().unwrap();
+    let expires_at = super::policy::expires_at(NOW, 90);
     grants
         .enroll_digest(
             &ticket,
             token_verifier(&token).unwrap(),
             DeviceInfo {
                 time: NOW,
+                expires_at: Some(expires_at),
                 ..Default::default()
             },
         )
@@ -222,10 +224,10 @@ fn only_original_tokens_satisfy_trust_and_use_does_not_refresh_expiry() {
     }
     let verifier = token_verifier(&token);
     assert!(grants
-        .verify_digest(&ticket, verifier.as_ref(), NOW + LIFETIME_MILLIS - 1)
+        .verify_digest(&ticket, verifier.as_ref(), expires_at - 1)
         .unwrap());
     assert!(!grants
-        .verify_digest(&ticket, verifier.as_ref(), NOW + LIFETIME_MILLIS)
+        .verify_digest(&ticket, verifier.as_ref(), expires_at)
         .unwrap());
     assert!(grants.begin(&[8; TOKEN_BYTES]).is_err());
 }
