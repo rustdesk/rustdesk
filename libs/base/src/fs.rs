@@ -36,6 +36,12 @@ mod android_transfer;
 #[cfg(any(target_os = "android", all(test, unix)))]
 mod android_descriptor;
 
+pub mod download;
+
+#[cfg(test)]
+#[path = "fs/download_tests.rs"]
+mod download_tests;
+
 pub fn get_next_job_id() -> i32 {
     NEXT_JOB_ID.fetch_add(1, Ordering::SeqCst)
 }
@@ -450,6 +456,8 @@ pub struct TransferJob {
     default_overwrite_strategy: Option<bool>,
     #[serde(skip_serializing)]
     digest: FileDigest,
+    #[serde(skip)]
+    download: Option<download::DownloadState>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -614,6 +622,10 @@ impl TransferJob {
         enable_overwrite_detection: bool,
     ) -> Self {
         log::info!("new write {}", data_source);
+        let is_download = is_remote && r#type == JobType::Generic;
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        let is_download = is_download
+            && !matches!(&data_source, DataSource::FilePath(path) if android::is_path(path));
         Self {
             id,
             r#type,
@@ -625,6 +637,7 @@ impl TransferJob {
             files: Vec::new(),
             total_size: 0,
             enable_overwrite_detection,
+            download: is_download.then(Default::default),
             ..Default::default()
         }
     }
@@ -686,6 +699,9 @@ impl TransferJob {
 
     #[inline]
     pub fn set_files(&mut self, files: Vec<FileEntry>) -> ResultType<()> {
+        if self.is_download() && !self.files.is_empty() {
+            bail!("cannot replace an accepted download file list");
+        }
         validate_transfer_file_names(&files)?;
         if let DataSource::FilePath(base) = &self.data_source {
             for file in &files {
@@ -730,7 +746,12 @@ impl TransferJob {
 
     fn resolve_entry_path(&self, base: &PathBuf, name: &str) -> Option<PathBuf> {
         if self.r#type == JobType::Generic {
-            match join_validated_path(base, name) {
+            let result = if self.is_download() {
+                download::validated_target(base, name)
+            } else {
+                join_validated_path(base, name)
+            };
+            match result {
                 Ok(path) => Some(path),
                 Err(err) => {
                     log::error!("Invalid file name in transfer job {}: {}", self.id, err);
@@ -745,6 +766,12 @@ impl TransferJob {
     pub fn modify_time(&self) {
         #[cfg(any(target_os = "android", all(test, unix)))]
         if self.is_document() {
+            return;
+        }
+        if self.is_download() {
+            if let Err(err) = self.finish_download() {
+                log::error!("Failed to finish download {}: {}", self.id, err);
+            }
             return;
         }
         if self.r#type == JobType::Printer {
@@ -773,6 +800,9 @@ impl TransferJob {
     pub fn remove_download_file(&self) {
         #[cfg(any(target_os = "android", all(test, unix)))]
         if self.is_document() {
+            return;
+        }
+        if self.is_download() && self.data_stream.is_none() {
             return;
         }
         if self.r#type == JobType::Printer {
@@ -807,6 +837,9 @@ impl TransferJob {
     }
 
     pub async fn write(&mut self, block: FileTransferBlock) -> ResultType<()> {
+        if self.is_download() {
+            return self.write_download(block).await;
+        }
         if block.id != self.id {
             bail!("Wrong id");
         }
@@ -1241,6 +1274,13 @@ impl TransferJob {
     }
 
     pub async fn confirm(&mut self, r: &FileTransferSendConfirmRequest) -> bool {
+        if self.is_download() {
+            self.confirm_download(r);
+            // Open receiver resume streams in write() so validation errors reach the caller.
+            if matches!(r.union, Some(file_transfer_send_confirm_request::Union::OffsetBlk(offset)) if offset > 0) {
+                return true;
+            }
+        }
         if self.file_num() != r.file_num {
             // This branch will always be hit if:
             // 1. `confirm()` is called in `ui_cm_interface.rs`

@@ -67,7 +67,7 @@ fn receiving(path: &str) -> TransferJob {
         DataSource::FilePath(path.into()),
         0,
         false,
-        false,
+        true,
         false,
     )
     .with_files(vec![FileEntry::default()])

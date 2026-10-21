@@ -891,6 +891,43 @@ fn get_all_term_values(uid: &str) -> Vec<String> {
     terms
 }
 
+fn append_audio_latency_envs(
+    envs: &mut Vec<(&'static str, String)>,
+    get_var: impl Fn(&str) -> Option<String>,
+) {
+    for key in ["PULSE_LATENCY_MSEC", "PIPEWIRE_LATENCY"] {
+        if let Some(value) = get_var(key).filter(|value| !value.is_empty()) {
+            envs.push((key, value));
+        }
+    }
+}
+
+#[cfg(test)]
+mod audio_latency_env_tests {
+    use super::append_audio_latency_envs;
+
+    #[test]
+    fn forwards_configured_values_without_creating_defaults() {
+        let mut envs = Vec::new();
+        append_audio_latency_envs(&mut envs, |key| match key {
+            "PULSE_LATENCY_MSEC" => Some("60".to_owned()),
+            "PIPEWIRE_LATENCY" => Some("1024/48000".to_owned()),
+            _ => None,
+        });
+        assert_eq!(
+            envs,
+            vec![
+                ("PULSE_LATENCY_MSEC", "60".to_owned()),
+                ("PIPEWIRE_LATENCY", "1024/48000".to_owned()),
+            ]
+        );
+
+        envs.clear();
+        append_audio_latency_envs(&mut envs, |_| None);
+        assert!(envs.is_empty());
+    }
+}
+
 #[inline]
 fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
     match desktop {
@@ -921,6 +958,9 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
                     ));
                 }
             }
+
+            append_audio_latency_envs(&mut envs, |key| std::env::var(key).ok());
+
             envs.push((
                 "TERM",
                 get_cur_term(&desktop.uid).unwrap_or_else(|| suggest_best_term()),

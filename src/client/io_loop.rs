@@ -809,7 +809,16 @@ impl<T: InvokeUiSession> Remote<T> {
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     let to = match r#type {
-                        fs::JobType::Generic => fs::DataSource::FilePath(PathBuf::from(&to)),
+                        fs::JobType::Generic => {
+                            if let Err(err) = fs::download::validate_download_name(
+                                &path,
+                                self.handler.peer_platform() == "Windows",
+                            ) {
+                                self.handle_job_status(id, -1, Some(err.to_string()));
+                                return true;
+                            }
+                            fs::DataSource::FilePath(PathBuf::from(&to))
+                        }
                         fs::JobType::Printer => {
                             fs::DataSource::MemoryCursor(std::io::Cursor::new(Vec::new()))
                         }
@@ -1867,6 +1876,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                     fs::transform_windows_path(&mut entries);
                                 }
                             }
+                            if fd.id <= 0 {
+                                if let Err(err) = fs::download::validate_listing(
+                                    &entries,
+                                    self.handler.peer_platform() == "Windows",
+                                ) {
+                                    self.handle_job_status(fd.id, -1, Some(err.to_string()));
+                                    return true;
+                                }
+                            }
                             // We cannot call cancel_transfer_job/handle_job_status while holding
                             // a mutable borrow from fs::get_job(&mut self.write_jobs), so defer
                             // the error handling until after the borrow scope ends.
@@ -1907,8 +1925,6 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Digest(digest)) => {
-                            #[cfg(target_os = "android")]
-                            let mut document_error = None;
                             if digest.is_upload {
                                 if let Some(job) = fs::get_job(digest.id, &mut self.read_jobs) {
                                     if let Some(file) = job.files().get(digest.file_num as usize) {
@@ -1965,7 +1981,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                                     peer_ver,
                                                 );
                                             #[cfg(target_os = "android")]
-                                            let digest_result = {
+                                            let digest_result = if job.is_document() {
                                                 let path = write_path.clone();
                                                 let digest = digest.clone();
                                                 let resume = is_support_resume && job.is_resume;
@@ -1977,13 +1993,12 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 .await
                                                 .map_err(hbb_common::anyhow::Error::from)
                                                 .and_then(|result| result)
+                                            } else {
+                                                job.download_digest(is_support_resume, &digest)
                                             };
                                             #[cfg(not(target_os = "android"))]
-                                            let digest_result = fs::is_write_need_confirmation(
-                                                is_support_resume && job.is_resume,
-                                                &write_path,
-                                                &digest,
-                                            );
+                                            let digest_result =
+                                                job.download_digest(is_support_resume, &digest);
                                             match digest_result {
                                                 Ok(res) => match res {
                                                     DigestCheckResult::IsSame => {
@@ -2041,37 +2056,39 @@ impl<T: InvokeUiSession> Remote<T> {
                                                         union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                                                         ..Default::default()
                                                     };
-                                                        job.confirm(&req).await;
+                                                        // This did not approve replacing an existing local file.
                                                         let msg = new_send_confirm(req);
                                                         allow_err!(peer.send(&msg).await);
                                                     }
                                                 },
                                                 Err(err) => {
-                                                    #[cfg(target_os = "android")]
-                                                    if job.is_document() {
-                                                        document_error = Some(err.to_string());
-                                                    }
-                                                    println!("error receiving digest: {}", err);
+                                                    self.cancel_transfer_job(digest.id, peer).await;
+                                                    self.handle_job_status(
+                                                        digest.id,
+                                                        -1,
+                                                        Some(err.to_string()),
+                                                    );
+                                                    return true;
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                            #[cfg(target_os = "android")]
-                            if let Some(error) = document_error {
-                                self.cancel_transfer_job(digest.id, peer).await;
-                                self.handle_job_status(digest.id, digest.file_num, Some(error));
-                            }
                         }
                         Some(file_response::Union::Block(block)) => {
+                            let id = block.id;
+                            let mut write_error = None;
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                                if let Err(_err) = job.write(block).await {
-                                    // to-do: add "skip" for writing job
-                                }
+                                let result = job.write(block).await;
                                 if job.r#type == fs::JobType::Generic {
+                                    write_error = result.err().map(|err| err.to_string());
                                     self.update_jobs_status();
                                 }
+                            }
+                            if let Some(err) = write_error {
+                                self.cancel_transfer_job(id, peer).await;
+                                self.handle_job_status(id, -1, Some(err));
                             }
                         }
                         Some(file_response::Union::Done(d)) => {
@@ -2081,8 +2098,11 @@ impl<T: InvokeUiSession> Remote<T> {
                             if let Some(job) = fs::remove_job(d.id, &mut self.write_jobs) {
                                 #[cfg(target_os = "android")]
                                 let mut job = job;
-                                job.modify_time();
-                                err = job.job_error();
+                                err = job
+                                    .finish_download()
+                                    .err()
+                                    .map(|err| err.to_string())
+                                    .or_else(|| job.job_error());
                                 #[cfg(target_os = "android")]
                                 if let Err(error) = job.finish_document().await {
                                     err = Some(error.to_string());
