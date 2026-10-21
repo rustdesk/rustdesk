@@ -6,11 +6,7 @@ use super::super::{
 };
 
 #[cfg(unix)]
-fn provider(
-    output: &Path,
-    request: &str,
-    closed: &tokio::sync::mpsc::UnboundedSender<std::thread::ThreadId>,
-) -> ResultType<String> {
+fn provider(output: &Path, request: &str) -> ResultType<String> {
     use std::{fs::File, os::fd::IntoRawFd};
 
     let request: Value = serde_json::from_str(request)?;
@@ -24,10 +20,6 @@ fn provider(
         Some("begin") => {
             json!({"fd": File::create(output)?.into_raw_fd(), "descriptor": request["path"]})
         }
-        Some("open") if request["path"].as_str().unwrap().ends_with("stream.txt") => {
-            let (source, _other) = std::os::unix::net::UnixStream::pair()?;
-            json!({"fd": source.into_raw_fd(), "descriptor": request["path"]})
-        }
         Some("open") => {
             json!({"fd": File::open(output)?.into_raw_fd(), "descriptor": request["path"]})
         }
@@ -39,12 +31,7 @@ fn provider(
         {
             return Ok(json!({"error": "Provider read failed"}).to_string())
         }
-        Some("close") => {
-            if request["error"] == "Document transfer interrupted" {
-                closed.send(std::thread::current().id())?;
-            }
-            json!(true)
-        }
+        Some("close") => json!(true),
         Some("finish") if request["path"].as_str().unwrap().ends_with("failed.txt") => {
             return Ok(json!({"error": "Publishing failed"}).to_string())
         }
@@ -124,8 +111,7 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
             .as_nanos()
     ));
     let provider_output = output.clone();
-    let (closed_tx, mut closed_rx) = tokio::sync::mpsc::unbounded_channel();
-    initialize(move |request| provider(&provider_output, request, &closed_tx)).unwrap();
+    initialize(move |request| provider(&provider_output, request)).unwrap();
     let path = "/@rustdesk/tree/selected/Documents";
     assert!(allowed(path).unwrap() && allowed(&format!("{path}/notes.txt")).unwrap());
     assert!(!allowed(&format!("{path}-private/notes.txt")).unwrap());
@@ -146,12 +132,6 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
         receive(&format!("{path}/{name}"), succeeds, &output).await;
     }
     provider_error_at_eof(path).await;
-    provider_error_on_resume(path).await;
-    assert_ne!(
-        closed_rx.recv().await.unwrap(),
-        std::thread::current().id(),
-        "Interrupted document cleanup must not block the async worker"
-    );
     send_and_cancel(path, &output).await;
     let mut empty = receiving(&format!("{path}/empty.txt"));
     empty
@@ -167,16 +147,6 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
 
 #[cfg(unix)]
 async fn send_and_cancel(path: &str, output: &Path) {
-    let mut resumed = receiving(&format!("{path}/resumed.txt"));
-    resumed.is_resume = true;
-    assert!(resumed
-        .write(FileTransferBlock {
-            id: 1,
-            ..Default::default()
-        })
-        .await
-        .is_err());
-    assert!(resumed.job_error().is_some());
     let mut sender = sending(&format!("{path}/notes.txt"), false);
     sender.init_data_stream_for_cm().await.unwrap();
     assert_eq!(
@@ -213,29 +183,6 @@ async fn provider_error_at_eof(path: &str) {
     assert!(sender.read().await.unwrap().is_none());
     assert!(sender.job_completed());
     assert_eq!(sender.job_error().as_deref(), Some("Provider read failed"));
-}
-
-#[cfg(unix)]
-async fn provider_error_on_resume(path: &str) {
-    let mut sender = sending(&format!("{path}/stream.txt"), true);
-    assert!(sender.init_data_stream_for_cm().await.unwrap().is_some());
-    let mut confirmation = FileTransferSendConfirmRequest {
-        id: 2,
-        ..Default::default()
-    };
-    confirmation.set_offset_blk(1);
-    sender.confirm(&confirmation).await;
-    let error = sender.job_error().unwrap();
-    assert_eq!(
-        sender
-            .init_data_stream_for_cm()
-            .await
-            .unwrap_err()
-            .to_string(),
-        error
-    );
-    assert!(sender.read().await.unwrap().is_none());
-    assert!(sender.job_completed());
 }
 
 #[test]

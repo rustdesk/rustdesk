@@ -750,7 +750,7 @@ class FileController {
       return;
     }
     final isWindows = options.value.isWindows;
-    await Future.forEach(items.items.toList(), (Entry item) async {
+    await Future.forEach(items.items, (Entry item) async {
       final jobID = JobController.jobID.next();
       var title = "";
       var content = "";
@@ -1162,8 +1162,7 @@ class JobController {
   }
 
   Future<bool> jobDone(Map<String, dynamic> evt) async {
-    final waitingForResult = jobResultListener.isListening;
-    if (waitingForResult) {
+    if (jobResultListener.isListening) {
       jobResultListener.complete(evt);
       // return;
     }
@@ -1214,8 +1213,7 @@ class JobController {
     if (job.type == JobType.deleteDir) {
       return job.state == JobState.done;
     } else {
-      // An awaiting file-deletion batch refreshes when removeAction finishes.
-      return job.type != JobType.deleteFile || !waitingForResult;
+      return true;
     }
   }
 
