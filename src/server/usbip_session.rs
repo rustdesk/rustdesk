@@ -8,8 +8,10 @@ use super::{
     usbip_mux::{self, UsbipMux},
     usbip_pull::{self, UsbPullState},
 };
-use base::message_proto::*;
-use hbb_common::{log, tokio::sync::Semaphore};
+use base::{config::keys, message_proto::*};
+use hbb_common::{
+    config::Config, log, rendezvous_proto::ControlPermissions, tokio::sync::Semaphore,
+};
 use std::sync::Arc;
 
 pub struct UsbSession {
@@ -56,7 +58,7 @@ impl UsbSession {
         match ch.union {
             Some(usb_channel::Union::PushRequest(r)) => {
                 if !permitted() {
-                    log::debug!("usb push denied: no permission");
+                    log::trace!("usb push denied: no permission");
                     self.pull.refuse_push_request(r.bus_id);
                     return;
                 }
@@ -94,6 +96,26 @@ impl UsbSession {
         };
         usbip_mux::send(tx, msg);
     }
+}
+
+/// USB forwarding follows the access mode like the other permissions, except
+/// that an explicit denial, local (`enable-usbip=N`) or central
+/// (`Permission.usb` off), also holds under Full Access, and Screen Share
+/// never allows it.
+pub fn permitted(control_permissions: &Option<ControlPermissions>) -> bool {
+    use hbb_common::rendezvous_proto::control_permissions::Permission;
+    let central = control_permissions
+        .as_ref()
+        .and_then(|p| crate::get_control_permission(p.permissions, Permission::usb));
+    allowed(
+        &Config::get_option(keys::OPTION_ACCESS_MODE),
+        &Config::get_option(keys::OPTION_ENABLE_USBIP),
+        central,
+    )
+}
+
+fn allowed(access_mode: &str, local: &str, central: Option<bool>) -> bool {
+    access_mode != "view" && local != "N" && central != Some(false)
 }
 
 /// A `UsbChannel` frame on an authorized desktop connection. USB state exists
@@ -144,6 +166,21 @@ pub fn revoke_unless_permitted(session: &mut Option<UsbSession>, permitted: impl
 mod tests {
     use super::*;
     use hbb_common::tokio::sync::mpsc;
+
+    #[test]
+    fn explicit_denial_wins_and_screen_share_never_allows() {
+        // Full Access and Custom allow by default.
+        assert!(allowed("full", "", None));
+        assert!(allowed("", "", None));
+        // An explicit local or central denial holds in every mode.
+        assert!(!allowed("full", "N", None));
+        assert!(!allowed("full", "", Some(false)));
+        assert!(!allowed("full", "N", Some(true)));
+        assert!(!allowed("", "Y", Some(false)));
+        // A central allowance cannot open Screen Share.
+        assert!(!allowed("view", "", Some(true)));
+        assert!(!allowed("view", "Y", None));
+    }
 
     #[test]
     fn bind_without_permission_is_refused_without_state() {

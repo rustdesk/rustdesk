@@ -118,6 +118,10 @@ pub fn bind_device(bus_id: &str, bind: bool) -> bool {
 /// use, so wait for usbip-host to release it (an unprivileged sysfs read)
 /// rather than retry the privileged unbind, each try of which is a prompt.
 pub fn unbind_device_when_released(bus_id: &str) -> bool {
+    // Already unshared (or unplugged): a retry has nothing left to do.
+    if !shared_bus_ids().contains(bus_id) {
+        return true;
+    }
     if crate::client::usbip_attach::is_valid_bus_id(bus_id) {
         let status = std::path::Path::new(USBIP_HOST_DRIVER_DIR)
             .join(bus_id)
@@ -135,36 +139,65 @@ pub fn unbind_device_when_released(bus_id: &str) -> bool {
 }
 
 lazy_static::lazy_static! {
-    // Bindings a closed session made and failed to unshare. A push of one of
-    // them is refused and retries the unshare instead of adopting it.
-    static ref RELEASE_PENDING: std::sync::Mutex<std::collections::HashSet<String>> =
+    // Bindings no session owns any more and that are not unshared yet, each
+    // `true` while one unshare of it runs. A push of one of them is refused
+    // and retries the unshare instead of adopting it, so nothing can bind it
+    // again before its entry goes.
+    static ref RELEASE_PENDING: std::sync::Mutex<std::collections::HashMap<String, bool>> =
         Default::default();
 }
 
 /// Blocking. Unshares a binding no session owns any more, keeping it pending
 /// if that fails.
-pub(crate) fn release_orphaned(bus_id: &str) {
-    if unbind_device_when_released(bus_id) {
-        RELEASE_PENDING.lock().unwrap().remove(bus_id);
+fn release_orphaned(bus_id: &str) {
+    {
+        let mut pending = RELEASE_PENDING.lock().unwrap();
+        if pending.get(bus_id) == Some(&true) {
+            return;
+        }
+        pending.insert(bus_id.to_owned(), true);
+    }
+    finish_release(bus_id);
+}
+
+fn finish_release(bus_id: &str) {
+    let released = unbind_device_when_released(bus_id);
+    let mut pending = RELEASE_PENDING.lock().unwrap();
+    if released {
+        pending.remove(bus_id);
     } else {
         log::error!("usb push: failed to unshare {} after its session closed, will retry", bus_id);
-        RELEASE_PENDING.lock().unwrap().insert(bus_id.to_owned());
+        pending.insert(bus_id.to_owned(), false);
     }
 }
 
 fn is_release_pending(bus_id: &str) -> bool {
-    RELEASE_PENDING.lock().unwrap().contains(bus_id)
+    RELEASE_PENDING.lock().unwrap().contains_key(bus_id)
+}
+
+/// Marks every pending unshare that is not already running as running and
+/// returns them, so each one has a single worker and a retry cannot outlive
+/// its entry.
+fn claim_pending_releases(pending: &mut std::collections::HashMap<String, bool>) -> Vec<String> {
+    pending
+        .iter_mut()
+        .filter(|(_, running)| !**running)
+        .map(|(bus_id, running)| {
+            *running = true;
+            bus_id.clone()
+        })
+        .collect()
 }
 
 /// Retries every pending unshare on its own thread.
 fn retry_pending_releases() {
-    let pending: Vec<String> = RELEASE_PENDING.lock().unwrap().iter().cloned().collect();
-    if pending.is_empty() {
+    let claimed = claim_pending_releases(&mut RELEASE_PENDING.lock().unwrap());
+    if claimed.is_empty() {
         return;
     }
     std::thread::spawn(move || {
-        for bus_id in pending {
-            release_orphaned(&bus_id);
+        for bus_id in claimed {
+            finish_release(&bus_id);
         }
     });
 }
@@ -368,7 +401,7 @@ impl Session<FlutterHandler> {
     /// track and show in the UI, and it can't drift out of sync with the
     /// button label the way share-then-separately-push could.
     pub fn usb_push(&self, bus_id: String) {
-        let Some(rt) = self.ui_handler.usb.session_runtime() else {
+        let Some((rt, round)) = self.ui_handler.usb.session_runtime_round() else {
             self.push_event_(
                 "usb_push_result",
                 &[("bus_id", json!(&bus_id)), ("error", json!("Not connected"))],
@@ -436,14 +469,29 @@ impl Session<FlutterHandler> {
                 );
                 return;
             }
-            log::info!("usb push: shared {}, asking peer to attach", bus_id);
-            if !session.ui_handler.usb.share_owned_add(bus_id.clone()) {
-                log::info!("usb push: session closed while sharing {}", bus_id);
-                unbind_device_when_released(&bus_id);
+            // Only offered on the connection that asked for it: after a
+            // disconnect or reconnect the bind is undone instead.
+            let usb = &session.ui_handler.usb;
+            let pushed = usb.in_round(round, || {
+                let owned = usb.share_owned_add(bus_id.clone());
+                if owned {
+                    usb.share_pending_add(bus_id.clone());
+                    session.usb_push_request(bus_id.clone());
+                }
+                owned
+            });
+            if pushed == Some(true) {
+                log::info!("usb push: shared {}, asked peer to attach", bus_id);
                 return;
             }
-            session.ui_handler.usb.share_pending_add(bus_id.clone());
-            session.usb_push_request(bus_id);
+            log::info!("usb push: connection ended while sharing {}, unsharing", bus_id);
+            release_orphaned(&bus_id);
+            session.push_event_(
+                "usb_push_result",
+                &[("bus_id", json!(&bus_id)), ("error", json!("Not connected"))],
+                &[],
+                &[],
+            );
         });
     }
 
@@ -457,6 +505,9 @@ impl Session<FlutterHandler> {
         // Revoke the authorization to open a channel for this device in case
         // the peer never did (e.g. unpushed before its `Open` arrived).
         self.ui_handler.usb.share_pending_remove(&bus_id);
+        // Before the channel goes, so its relay ending is not taken for the
+        // peer ending the push (`release_ended_push`).
+        let release = self.ui_handler.usb.share_release_begin(&bus_id);
         if let Some(channel_id) = self.ui_handler.usb.share_channel_for_bus_id(&bus_id) {
             log::info!("usb push: unpushing {} (channel {})", bus_id, channel_id);
             self.usb_close_forward(channel_id);
@@ -464,7 +515,6 @@ impl Session<FlutterHandler> {
         } else {
             log::info!("usb push: unpushing {} with no live channel", bus_id);
         }
-        let release = self.ui_handler.usb.share_release_begin(&bus_id);
         let session = self.clone();
         std::thread::spawn(move || {
             let released = release.then(|| release_push(&session.ui_handler.usb, &bus_id));
@@ -490,11 +540,57 @@ impl Session<FlutterHandler> {
 
 /// Finishes undoing a push that `share_release_begin` started: unbinds
 /// `bus_id`, and keeps it recorded if that fails, so a retry or closing the
-/// session can still release it. Blocking.
+/// session can still release it -- or, once the session is closed, keeps it
+/// pending process-wide. Blocking.
 pub(crate) fn release_push(state: &UsbClientState, bus_id: &str) -> bool {
     let released = unbind_device_when_released(bus_id);
-    state.share_release_end(bus_id, released);
+    if !state.share_release_end(bus_id, released) {
+        log::error!("usb push: failed to unshare {} after its session closed, will retry", bus_id);
+        RELEASE_PENDING.lock().unwrap().insert(bus_id.to_owned(), false);
+    }
     released
+}
+
+/// The peer's use of a device this session pushed ended without an unpush
+/// (its relay ended, the peer closed it or refused it, or the connection
+/// went): unshare it so it does not stay bound with nobody using it. A
+/// no-op if it is not pushed here or already being undone.
+pub(crate) fn release_ended_push(handler: &FlutterHandler, bus_id: String) {
+    handler.usb.share_pending_remove(&bus_id);
+    if !handler.usb.share_release_begin(&bus_id) {
+        return;
+    }
+    spawn_release(handler, vec![bus_id]);
+}
+
+/// The connection carrying the peer's imports ended, so nothing this
+/// session pushed is in use any more.
+pub(crate) fn release_all_pushes(handler: &FlutterHandler) {
+    let releasing = handler.usb.share_release_all_begin();
+    if !releasing.is_empty() {
+        spawn_release(handler, releasing);
+    }
+}
+
+/// Blocking work, and it must outlive the connection's runtime.
+fn spawn_release(handler: &FlutterHandler, bus_ids: Vec<String>) {
+    let handler = handler.clone();
+    std::thread::spawn(move || {
+        for bus_id in bus_ids {
+            let error = if release_push(&handler.usb, &bus_id) {
+                log::info!("usb push: unshared {} after its forwarding ended", bus_id);
+                String::new()
+            } else {
+                format!("Failed to unshare {}", bus_id)
+            };
+            handler.push_event_(
+                "usb_push_result",
+                &[("bus_id", json!(&bus_id)), ("error", json!(error))],
+                &[],
+                &[],
+            );
+        }
+    });
 }
 
 #[cfg(test)]
@@ -530,6 +626,18 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
         let by_bus_id = |id: &str| devices.iter().find(|d| d.bus_id == id).unwrap();
         assert!(!by_bus_id("1-3").shared);
         assert!(by_bus_id("2-2").shared);
+    }
+
+    #[test]
+    fn a_pending_unshare_has_one_worker_at_a_time() {
+        let mut pending = std::collections::HashMap::from([("1-1".to_string(), false)]);
+        assert_eq!(claim_pending_releases(&mut pending), vec!["1-1".to_string()]);
+        // A second refresh while the first unshare runs gets nothing to do.
+        assert!(claim_pending_releases(&mut pending).is_empty());
+        // Once that unshare is done the entry is gone, so no stale retry is
+        // left to unbind the device after someone binds it again.
+        pending.remove("1-1");
+        assert!(claim_pending_releases(&mut pending).is_empty());
     }
 
     #[test]

@@ -178,7 +178,12 @@ impl UsbipMux {
                     return;
                 }
                 if b.bind && shared_bus_ids().contains(&b.bus_id) {
-                    log::info!("usbip: {} is shared outside this session, refusing", b.bus_id);
+                    hbb_common::throttled_log!(
+                        usbip_flow::PEER_LOG_INTERVAL,
+                        info,
+                        "usbip: {} is shared outside this session, refusing",
+                        b.bus_id
+                    );
                     self.reply(bind_result_msg(
                         b.bus_id,
                         b.bind,
@@ -238,11 +243,13 @@ impl UsbipMux {
             }
             Some(usb_channel::Union::Data(d)) => {
                 let Some(entry) = self.channels.get(&d.channel_id) else {
-                    log::debug!("usb forward data for unknown channel {}", d.channel_id);
+                    log::trace!("usb forward data for unknown channel {}", d.channel_id);
                     return;
                 };
                 if !entry.flow.admit(d.data.len()) {
-                    log::warn!(
+                    hbb_common::throttled_log!(
+                        usbip_flow::PEER_LOG_INTERVAL,
+                        warn,
                         "usb forward: data frame ({} bytes) over the window on channel {}, closing",
                         d.data.len(),
                         d.channel_id
@@ -263,7 +270,16 @@ impl UsbipMux {
             }
             Some(usb_channel::Union::WindowUpdate(w)) => {
                 if let Some(entry) = self.channels.get(&w.channel_id) {
-                    entry.flow.grant(w.add);
+                    if !entry.flow.grant(w.add) {
+                        hbb_common::throttled_log!(
+                            usbip_flow::PEER_LOG_INTERVAL,
+                            warn,
+                            "usb forward: window update for more than was sent on channel {}, closing",
+                            w.channel_id
+                        );
+                        self.channels.remove(&w.channel_id);
+                        self.reply(close_msg(w.channel_id));
+                    }
                 }
             }
             Some(usb_channel::Union::Close(c)) => {
@@ -284,7 +300,12 @@ impl UsbipMux {
             // sign dispatch would route this id's later Data/Close frames to
             // `usbip_pull` instead of back here, orphaning the relay task
             // and its TCP connection to the local usbipd forever.
-            log::warn!("usb forward: rejecting open with non-pull channel id {}", id);
+            hbb_common::throttled_log!(
+                usbip_flow::PEER_LOG_INTERVAL,
+                warn,
+                "usb forward: rejecting open with non-pull channel id {}",
+                id
+            );
             return;
         }
         self.channels.retain(|_, e| !e.inbound.is_closed());
@@ -293,7 +314,9 @@ impl UsbipMux {
             return;
         }
         if !is_bound(&self.bound, &open.bus_id) {
-            log::warn!(
+            hbb_common::throttled_log!(
+                usbip_flow::PEER_LOG_INTERVAL,
+                warn,
                 "usb forward: rejecting open of {:?}, not shared by this session",
                 open.bus_id
             );
@@ -305,11 +328,16 @@ impl UsbipMux {
             return;
         }
         if self.channels.contains_key(&id) {
-            log::debug!("ignoring open for live usb channel {}", id);
+            log::trace!("ignoring open for live usb channel {}", id);
             return;
         }
         if self.channels.len() >= MAX_LIVE_CHANNELS {
-            log::warn!("usb forward: rejecting open, {} channels already live", self.channels.len());
+            hbb_common::throttled_log!(
+                usbip_flow::PEER_LOG_INTERVAL,
+                warn,
+                "usb forward: rejecting open, {} channels already live",
+                self.channels.len()
+            );
             self.reply(opened_msg(id, false, "Too many open USB channels".into()));
             return;
         }
@@ -369,37 +397,61 @@ lazy_static::lazy_static! {
     // Bindings whose session is gone and whose unshare failed. They stay
     // recorded so a new Bind for them is refused and the unshare retried,
     // instead of another session adopting the device.
-    static ref RELEASE_PENDING: Mutex<HashSet<String>> = Default::default();
+    // Each `true` while one unshare of it runs, so a retry has a single
+    // worker and cannot outlive the entry it was started for.
+    static ref RELEASE_PENDING: Mutex<HashMap<String, bool>> = Default::default();
 }
 
 /// Blocking; the caller holds the privileged permit. Unshares a binding no
 /// session owns any more, keeping it pending if that fails.
 fn release_orphaned(bus_id: &str) {
-    if bind_device_when_released(bus_id, false) {
-        RELEASE_PENDING.lock().unwrap().remove(bus_id);
+    {
+        let mut pending = RELEASE_PENDING.lock().unwrap();
+        if pending.get(bus_id) == Some(&true) {
+            return;
+        }
+        pending.insert(bus_id.to_owned(), true);
+    }
+    finish_release(bus_id);
+}
+
+fn finish_release(bus_id: &str) {
+    let released = bind_device_when_released(bus_id, false);
+    let mut pending = RELEASE_PENDING.lock().unwrap();
+    if released {
+        pending.remove(bus_id);
     } else {
         log::error!("usbip: failed to unshare {} after its session ended, will retry", bus_id);
-        RELEASE_PENDING.lock().unwrap().insert(bus_id.to_owned());
+        pending.insert(bus_id.to_owned(), false);
     }
 }
 
 fn is_release_pending(bus_id: &str) -> bool {
-    RELEASE_PENDING.lock().unwrap().contains(bus_id)
+    RELEASE_PENDING.lock().unwrap().contains_key(bus_id)
 }
 
 /// Retries every pending unshare in the background, when the permit is free.
 pub(super) fn retry_pending_releases(privileged: Arc<Semaphore>) {
-    let pending: Vec<String> = RELEASE_PENDING.lock().unwrap().iter().cloned().collect();
-    if pending.is_empty() {
-        return;
-    }
     let Ok(permit) = privileged.try_acquire_owned() else {
         return;
     };
+    let claimed: Vec<String> = RELEASE_PENDING
+        .lock()
+        .unwrap()
+        .iter_mut()
+        .filter(|(_, running)| !**running)
+        .map(|(bus_id, running)| {
+            *running = true;
+            bus_id.clone()
+        })
+        .collect();
+    if claimed.is_empty() {
+        return;
+    }
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        for bus_id in pending {
-            release_orphaned(&bus_id);
+        for bus_id in claimed {
+            finish_release(&bus_id);
         }
     });
 }
@@ -447,7 +499,12 @@ async fn run_channel(
             }
             Ok(None) => return,
             Err(_) => {
-                log::warn!("usb forward: channel {} import request timed out, closing", id);
+                hbb_common::throttled_log!(
+                    usbip_flow::PEER_LOG_INTERVAL,
+                    warn,
+                    "usb forward: channel {} import request timed out, closing",
+                    id
+                );
                 send(&tx, close_msg(id));
                 return;
             }
@@ -455,7 +512,9 @@ async fn run_channel(
     }
     let requested = usbip_flow::parse_import_request_busid(&prefix);
     if requested.as_deref() != Some(bus_id.as_str()) {
-        log::error!(
+        hbb_common::throttled_log!(
+            usbip_flow::PEER_LOG_INTERVAL,
+            error,
             "usb forward: channel {} import request {:?} does not match authorized {:?}, refusing",
             id, requested, bus_id
         );
@@ -531,13 +590,18 @@ fn list_local_devices() -> Vec<UsbDevice> {
     let output = match usbip_command().args(["list", "-p", "-l"]).output() {
         Ok(o) => o,
         Err(err) => {
-            log::error!("usbip list failed: {}", err);
+            hbb_common::throttled_log!(
+                usbip_flow::PEER_LOG_INTERVAL,
+                error,
+                "usbip list failed: {}",
+                err
+            );
             return Vec::new();
         }
     };
     let shared = shared_bus_ids();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    log::debug!(
+    log::trace!(
         "usbip list status={:?} stdout={:?} stderr={:?}",
         output.status,
         stdout,
@@ -619,6 +683,10 @@ fn bind_device(bus_id: &str, bind: bool) -> bool {
 /// release it (an unprivileged sysfs read) instead of retrying the
 /// privileged unbind, each attempt of which would be another password prompt.
 fn bind_device_when_released(bus_id: &str, bind: bool) -> bool {
+    // Already unshared (or unplugged): a retry has nothing left to do.
+    if !bind && !shared_bus_ids().contains(bus_id) {
+        return true;
+    }
     if !bind && is_valid_bus_id(bus_id) {
         let status = std::path::Path::new(USBIP_HOST_DRIVER_DIR)
             .join(bus_id)
@@ -781,7 +849,7 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
 
     #[test]
     fn bind_of_a_device_whose_earlier_unshare_failed_is_refused() {
-        RELEASE_PENDING.lock().unwrap().insert("88-8".into());
+        RELEASE_PENDING.lock().unwrap().insert("88-8".into(), false);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let privileged = Arc::new(Semaphore::new(1));
         let mut mux = UsbipMux::new(tx, privileged.clone());

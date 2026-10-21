@@ -1254,11 +1254,14 @@ impl InvokeUiSession for FlutterHandler {
     #[cfg(target_os = "linux")]
     fn register_session_runtime(&self, round: u32, handle: hbb_common::tokio::runtime::Handle) {
         self.usb.register_runtime(round, handle);
+        crate::client::usbip_share::release_all_pushes(self);
     }
 
     #[cfg(target_os = "linux")]
     fn unregister_session_runtime(&self, round: u32) {
-        self.usb.unregister_runtime(round);
+        if self.usb.unregister_runtime(round) {
+            crate::client::usbip_share::release_all_pushes(self);
+        }
     }
 }
 

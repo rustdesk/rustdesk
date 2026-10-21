@@ -2024,6 +2024,53 @@ class RustdeskImpl {
         ]));
   }
 
+  // USB forwarding is Linux desktop only; the web never offers it.
+  Future<void> sessionRequestUsbDevices(
+      {required UuidValue sessionId, dynamic hint}) {
+    throw UnimplementedError("sessionRequestUsbDevices");
+  }
+
+  Future<void> sessionUsbBind(
+      {required UuidValue sessionId,
+      required String busId,
+      required bool bind,
+      dynamic hint}) {
+    throw UnimplementedError("sessionUsbBind");
+  }
+
+  Future<void> sessionUsbAttach(
+      {required UuidValue sessionId, required String busId, dynamic hint}) {
+    throw UnimplementedError("sessionUsbAttach");
+  }
+
+  Future<void> sessionUsbDetach(
+      {required UuidValue sessionId, required String busId, dynamic hint}) {
+    throw UnimplementedError("sessionUsbDetach");
+  }
+
+  Future<void> sessionUsbLocalDevices(
+      {required UuidValue sessionId, dynamic hint}) {
+    throw UnimplementedError("sessionUsbLocalDevices");
+  }
+
+  Future<void> sessionUsbLocalBind(
+      {required UuidValue sessionId,
+      required String busId,
+      required bool bind,
+      dynamic hint}) {
+    throw UnimplementedError("sessionUsbLocalBind");
+  }
+
+  Future<void> sessionUsbPush(
+      {required UuidValue sessionId, required String busId, dynamic hint}) {
+    throw UnimplementedError("sessionUsbPush");
+  }
+
+  Future<void> sessionUsbUnpush(
+      {required UuidValue sessionId, required String busId, dynamic hint}) {
+    throw UnimplementedError("sessionUsbUnpush");
+  }
+
   Future<int?> sessionGetEdgeScrollEdgeThickness(
       {required UuidValue sessionId, dynamic hint}) {
     final thickness = js.context.callMethod(

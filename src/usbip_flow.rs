@@ -11,6 +11,7 @@ use crate::port_forward_mux::{charge, MIN_FRAME_CHARGE};
 use base::message_proto::*;
 use hbb_common::{
     bytes::Bytes,
+    log,
     tokio::{
         io::{AsyncRead, AsyncReadExt},
         sync::Notify,
@@ -26,14 +27,19 @@ pub const CHANNEL_WINDOW: u32 = 64 * 1024;
 pub const MAX_DATA: usize = 16 * 1024;
 const UPDATE_THRESHOLD: u32 = CHANNEL_WINDOW / 2;
 
+/// For log lines a peer can trigger at will, e.g. by sending bad frames.
+pub const PEER_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// Enough queue slots for a whole window of minimum-charge frames, so a
 /// channel's inbound queue can only fill up if the peer overran its window,
 /// which `Flow::admit` rejects first.
 pub const QUEUE_FRAMES: usize = (CHANNEL_WINDOW / MIN_FRAME_CHARGE) as usize;
 
-/// Sender-side credit, never above our own window whatever the peer grants.
+/// Sender side: what was charged for data sent and not yet credited back.
+/// Credit is only ever the window minus that, so the peer can return what it
+/// was sent and no more.
 struct Credit {
-    credit: Mutex<u32>,
+    outstanding: Mutex<u32>,
     notify: Notify,
 }
 
@@ -41,10 +47,11 @@ impl Credit {
     async fn take(&self, max: usize) -> usize {
         loop {
             {
-                let mut credit = self.credit.lock().unwrap();
-                if *credit >= MIN_FRAME_CHARGE {
-                    let n = (*credit as usize).min(max);
-                    *credit -= n as u32;
+                let mut outstanding = self.outstanding.lock().unwrap();
+                let available = CHANNEL_WINDOW - *outstanding;
+                if available >= MIN_FRAME_CHARGE {
+                    let n = (available as usize).min(max);
+                    *outstanding += n as u32;
                     return n;
                 }
             }
@@ -52,12 +59,17 @@ impl Credit {
         }
     }
 
-    fn add(&self, n: u32) {
+    /// `false` if `n` is more than is outstanding.
+    fn release(&self, n: u32) -> bool {
         {
-            let mut credit = self.credit.lock().unwrap();
-            *credit = credit.saturating_add(n).min(CHANNEL_WINDOW);
+            let mut outstanding = self.outstanding.lock().unwrap();
+            if n > *outstanding {
+                return false;
+            }
+            *outstanding -= n;
         }
         self.notify.notify_one();
+        true
     }
 }
 
@@ -103,7 +115,7 @@ impl Flow {
     pub fn new() -> Self {
         Self {
             credit: Arc::new(Credit {
-                credit: Mutex::new(CHANNEL_WINDOW),
+                outstanding: Mutex::new(0),
                 notify: Notify::new(),
             }),
             window: Arc::new(Mutex::new(Window {
@@ -125,10 +137,11 @@ impl Flow {
         len <= MAX_DATA && self.window.lock().unwrap().accept(len)
     }
 
-    /// Credit the peer returned in a `UsbForwardWindowUpdate`, capped at our
-    /// own window whatever the peer claims.
-    pub fn grant(&self, add: u32) {
-        self.credit.add(add);
+    /// Credit the peer returned in a `UsbForwardWindowUpdate`. `false` is a
+    /// protocol violation (more than it was sent and has not yet returned):
+    /// the caller closes the channel.
+    pub fn grant(&self, add: u32) -> bool {
+        self.credit.release(add)
     }
 
     /// Records `n` bytes written to the local socket; returns the credit to
@@ -148,10 +161,16 @@ impl Flow {
         let mut buf = vec![0u8; MAX_DATA];
         loop {
             let allow = self.credit.take(MAX_DATA).await;
-            let got = reader.read(&mut buf[..allow]).await.unwrap_or(0);
+            let got = match reader.read(&mut buf[..allow]).await {
+                Ok(got) => got,
+                Err(err) => {
+                    log::warn!("usb relay: local socket read failed: {}", err);
+                    0
+                }
+            };
             let spent = if got == 0 { 0 } else { charge(got) };
             if (spent as usize) < allow {
-                self.credit.add(allow as u32 - spent);
+                self.credit.release(allow as u32 - spent);
             }
             if got == 0 || !send(Bytes::copy_from_slice(&buf[..got])) {
                 return;
@@ -269,9 +288,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn excess_credit_from_the_peer_does_not_widen_the_window() {
+    async fn forged_or_repeated_window_updates_are_refused() {
         let flow = Flow::new();
-        flow.grant(u32::MAX);
+        assert!(!flow.grant(1));
         let data = vec![7u8; CHANNEL_WINDOW as usize * 2];
         let mut sent = 0usize;
         let _ = tokio::time::timeout(
@@ -284,6 +303,8 @@ mod tests {
         )
         .await;
         assert_eq!(sent, CHANNEL_WINDOW as usize);
+        assert!(flow.grant(CHANNEL_WINDOW));
+        assert!(!flow.grant(CHANNEL_WINDOW));
     }
 
     #[tokio::test]

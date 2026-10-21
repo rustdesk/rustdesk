@@ -19,10 +19,7 @@ use hbb_common::{
     },
     tokio_util::sync::CancellationToken,
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
 
 // Each live channel here is a privileged `usbip attach` plus its own local
 // vhci port, a much heavier resource than a plain relay task -- kept far
@@ -81,19 +78,14 @@ struct Entry {
     bus_id: String,
     inbound: mpsc::Sender<Inbound>,
     flow: Flow,
-    /// Local vhci port, once `usbip attach` reports it -- needed to run
-    /// `usbip detach -p <port>` when the controller unpushes. Set from the
-    /// spawned `pull()` task, which has no `&mut self` access back here.
-    attached_port: Arc<Mutex<Option<i32>>>,
-    /// Signals the spawned `pull()` task that this channel closed while it
-    /// was still attaching, so it detaches the port itself once `usbip
-    /// attach` finishes instead of leaving it owned by nothing (`handle_close`
-    /// already ran and won't run again for this id by the time that happens).
     cancel: CancellationToken,
 }
 
 /// Removing a channel by any path stops its listener and relay, even one
-/// blocked on its socket.
+/// blocked on its socket. The vhci import lives on the relay's socket, which
+/// ends in our own listener: once that closes, the kernel detaches the port
+/// exactly as `usbip detach` would (both raise `VDEV_EVENT_DOWN`), so there
+/// is no privileged step left that could fail or name a reused port.
 impl Drop for Entry {
     fn drop(&mut self) {
         self.cancel.cancel();
@@ -164,7 +156,6 @@ impl UsbPullState {
         log::info!("usb push: peer offered {} on channel {}", bus_id, id);
 
         let (inbound_tx, inbound_rx) = mpsc::channel(usbip_flow::QUEUE_FRAMES);
-        let attached_port = Arc::new(Mutex::new(None));
         let cancel = CancellationToken::new();
         let flow = Flow::new();
         self.channels.insert(
@@ -173,23 +164,11 @@ impl UsbPullState {
                 bus_id: bus_id.clone(),
                 inbound: inbound_tx,
                 flow: flow.clone(),
-                attached_port: attached_port.clone(),
                 cancel: cancel.clone(),
             },
         );
 
-        let privileged = self.privileged.clone();
-        tokio::spawn(pull(
-            id,
-            bus_id,
-            tx,
-            inbound_rx,
-            attached_port,
-            cancel,
-            flow,
-            permit,
-            privileged,
-        ));
+        tokio::spawn(pull(id, bus_id, tx, inbound_rx, cancel, flow, permit));
     }
 
     /// Routes `Opened`/`Data`/`Close` frames whose `channel_id` belongs to
@@ -200,7 +179,15 @@ impl UsbPullState {
 
     pub fn handle_window_update(&mut self, w: UsbForwardWindowUpdate) {
         if let Some(entry) = self.channels.get(&w.channel_id) {
-            entry.flow.grant(w.add);
+            if !entry.flow.grant(w.add) {
+                hbb_common::throttled_log!(
+                    usbip_flow::PEER_LOG_INTERVAL,
+                    warn,
+                    "usb push: window update for more than was sent on channel {}, closing",
+                    w.channel_id
+                );
+                self.close_overflowed_channel(w.channel_id);
+            }
         }
     }
 
@@ -214,25 +201,12 @@ impl UsbPullState {
         );
     }
 
-    /// The controller unpushing: detach locally, then drop the channel so
-    /// its relay task ends. Cancels the entry regardless of whether attach
-    /// has finished yet -- if it hasn't, `pull()` notices once it does and
-    /// detaches the port itself (see `Entry::cancel`'s doc comment), since
-    /// this function only runs once per channel and can't do it later.
+    /// The controller unpushing: dropping the entry detaches the port, or,
+    /// if `usbip attach` is still running, makes `pull()` drop it once it is
+    /// done.
     pub fn handle_close(&mut self, c: UsbForwardClose) {
-        let Some(entry) = self.channels.remove(&c.channel_id) else {
-            return;
-        };
-        entry.cancel.cancel();
-        let port = *entry.attached_port.lock().unwrap();
-        if let Some(port) = port {
-            log::info!("usb push: peer unpushed channel {}, detaching port {}", c.channel_id, port);
-            detach_port(port, self.privileged.clone());
-        } else {
-            log::info!(
-                "usb push: peer unpushed channel {} before it finished attaching",
-                c.channel_id
-            );
+        if self.channels.remove(&c.channel_id).is_some() {
+            log::info!("usb push: peer unpushed channel {}", c.channel_id);
         }
     }
 
@@ -247,12 +221,14 @@ impl UsbPullState {
 
     fn forward(&mut self, channel_id: i32, msg: Inbound) {
         let Some(entry) = self.channels.get(&channel_id) else {
-            log::debug!("usb push: frame for unknown channel {}", channel_id);
+            log::trace!("usb push: frame for unknown channel {}", channel_id);
             return;
         };
         if let Inbound::Data(data) = &msg {
             if !entry.flow.admit(data.len()) {
-                log::warn!(
+                hbb_common::throttled_log!(
+                    usbip_flow::PEER_LOG_INTERVAL,
+                    warn,
                     "usb push: data frame ({} bytes) over the window on channel {}, closing",
                     data.len(),
                     channel_id
@@ -268,61 +244,24 @@ impl UsbPullState {
         }
     }
 
-    /// Overflow (oversized frame or a full queue): the same port-leak race
-    /// item C fixed for an explicit unpush (`handle_close`) applies here too
-    /// -- cancel any in-flight attach and detach if one already finished --
-    /// plus tell the peer, since it doesn't otherwise learn we gave up on
-    /// this channel and would keep its own side alive until session end.
+    /// A protocol violation: drop the channel (detaching its port, see
+    /// `Entry`) and tell the peer, which otherwise keeps its side alive until
+    /// the session ends.
     fn close_overflowed_channel(&mut self, channel_id: i32) {
-        if let Some(entry) = self.channels.remove(&channel_id) {
-            entry.cancel.cancel();
-            if let Some(port) = *entry.attached_port.lock().unwrap() {
-                detach_port(port, self.privileged.clone());
-            }
-        }
+        self.channels.remove(&channel_id);
         send(&self.tx, close_msg(channel_id));
     }
 
-    /// Session teardown (peer disconnected, connection lost): cancels every
-    /// channel's in-flight attach and detaches any port that had already
-    /// finished attaching, same as an explicit unpush for each. A device
-    /// left attached with no surviving session to unpush it is worse than
-    /// detaching it here -- there would be no way to reach it again except
-    /// locally on the controlled machine.
+    /// Session teardown or a withdrawn permission: every channel is dropped,
+    /// which detaches every port, and the peer is told so it releases what it
+    /// shared for them -- by bus id too, since a push still attaching has no
+    /// channel the peer knows yet.
     pub fn close_all(&mut self) {
         for (id, entry) in self.channels.drain() {
             send(&self.tx, close_msg(id));
-            entry.cancel.cancel();
-            if let Some(port) = *entry.attached_port.lock().unwrap() {
-                detach_port(port, self.privileged.clone());
-            }
+            send(&self.tx, push_result_msg(entry.bus_id.clone(), "USB forwarding ended".into()));
         }
     }
-}
-
-/// Fire-and-forget (spawns its own blocking task) so callers don't need to
-/// already be inside one. Waits for `privileged` rather than giving up: a
-/// port left attached stays attached.
-fn detach_port(port: i32, privileged: Arc<Semaphore>) {
-    tokio::spawn(async move {
-        let permit = privileged.acquire_owned().await;
-        let _ = tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            detach_blocking(port);
-        })
-        .await;
-    });
-}
-
-/// Blocking; the caller holds the privileged permit.
-fn detach_blocking(port: i32) -> bool {
-    let ok = crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]);
-    if ok {
-        log::info!("usb push: detached port {}", port);
-    } else {
-        log::error!("usb push: failed to detach port {}", port);
-    }
-    ok
 }
 
 /// Mirrors `client/usbip_attach.rs::attach()`: bind a local listener to play
@@ -334,11 +273,9 @@ async fn pull(
     bus_id: String,
     tx: Sender,
     inbound: mpsc::Receiver<Inbound>,
-    attached_port: Arc<Mutex<Option<i32>>>,
     cancel: CancellationToken,
     flow: Flow,
     permit: OwnedSemaphorePermit,
-    privileged: Arc<Semaphore>,
 ) {
     let listener = match TcpListener::bind("127.0.0.1:0").await {
         Ok(l) => l,
@@ -357,66 +294,19 @@ async fn pull(
         }
     };
 
-    let relay_tx = tx.clone();
-    let relay_bus_id = bus_id.clone();
-    let relay_attached_port = attached_port.clone();
-    let relay_privileged = privileged.clone();
-    // Kept so a failed/cancelled attach can abort it below instead of
-    // leaving it parked on an `accept()` that the peer's real `usbip
-    // attach` process -- which only exists if our own attach succeeded --
-    // will now never make.
-    let relay_cancel = cancel.clone();
-    let accept_task = tokio::spawn(async move {
-        let relay = async {
-            match listener.accept().await {
-                Ok((socket, _)) => {
-                    run_channel(
-                        id,
-                        relay_bus_id,
-                        socket,
-                        relay_tx,
-                        inbound,
-                        relay_attached_port,
-                        flow,
-                        relay_privileged,
-                        relay_cancel.clone(),
-                    )
-                    .await
-                }
-                Err(err) => log::error!("usb push: accept failed: {}", err),
-            }
-        };
-        tokio::select! {
-            _ = relay => {}
-            _ = relay_cancel.cancelled() => {}
-        }
-    });
+    // Kept so a failed or cancelled attach can abort it below.
+    let accept_task = accept_relay(listener, id, bus_id.clone(), tx.clone(), inbound, flow, cancel.clone());
 
     if cancel.is_cancelled() {
         accept_task.abort();
         return;
     }
     let attach_bus_id = bus_id.clone();
-    let attach_cancel = cancel.clone();
+    // An attach that finishes after its channel is gone needs no undoing:
+    // its socket closed with the relay, which detached it.
     let local_port = match tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        let local_port = usb_attach_privileged(port, &attach_bus_id)?;
-        // Settled here, not after the await below: this closure runs to the
-        // end even when the task awaiting it is gone. `handle_close` and
-        // `close_all` cancel before they read the slot, so under its lock
-        // either they see the port and detach it, or this sees the cancel.
-        let mut slot = attached_port.lock().unwrap();
-        if attach_cancel.is_cancelled() {
-            drop(slot);
-            log::info!(
-                "usb push: {} attached on local port {} after channel {} was closed, detaching",
-                attach_bus_id, local_port, id
-            );
-            detach_blocking(local_port);
-            return None;
-        }
-        *slot = Some(local_port);
-        Some(local_port)
+        usb_attach_privileged(port, &attach_bus_id)
     })
     .await
     {
@@ -433,13 +323,19 @@ async fn pull(
     }
 
     match local_port {
-        Some(local_port) => {
+        Some(local_port) if !accept_task.is_finished() => {
             log::info!(
                 "usb push: attached {} on local port {} (channel {})",
                 bus_id, local_port, id
             );
             send(&tx, push_result_msg(bus_id, String::new()));
         }
+        Some(_) => {
+            log::info!("usb push: channel {} ended while {} was attaching", id, bus_id);
+            send(&tx, push_result_msg(bus_id, "USB forwarding ended".into()));
+        }
+        // Also when `usbip port` failed after a successful attach: aborting
+        // closes the relay's socket, which detaches what was attached.
         None => {
             accept_task.abort();
             let message = format!("Failed to push {}", bus_id);
@@ -447,6 +343,35 @@ async fn pull(
             send(&tx, push_result_msg(bus_id, message));
         }
     }
+}
+
+/// Accepts the one connection `usbip attach` makes and relays it. The import
+/// lives on that socket, so ending this task by any path -- the channel's
+/// token, an abort, the relay finishing -- also detaches whatever was
+/// attached on it.
+fn accept_relay(
+    listener: TcpListener,
+    id: i32,
+    bus_id: String,
+    tx: Sender,
+    inbound: mpsc::Receiver<Inbound>,
+    flow: Flow,
+    cancel: CancellationToken,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let relay = async {
+            match listener.accept().await {
+                Ok((socket, _)) => {
+                    run_channel(id, bus_id, socket, tx, inbound, flow, cancel.clone()).await
+                }
+                Err(err) => log::error!("usb push: accept failed: {}", err),
+            }
+        };
+        tokio::select! {
+            _ = relay => {}
+            _ = cancel.cancelled() => {}
+        }
+    })
 }
 
 // `Option`, not `Regex` directly -- see the identical comment in
@@ -504,9 +429,7 @@ async fn run_channel(
     socket: TcpStream,
     tx: Sender,
     mut inbound: mpsc::Receiver<Inbound>,
-    attached_port: Arc<Mutex<Option<i32>>>,
     flow: Flow,
-    privileged: Arc<Semaphore>,
     cancel: CancellationToken,
 ) {
     send(&tx, open_msg(id, bus_id.clone()));
@@ -567,14 +490,6 @@ async fn run_channel(
     to_tunnel.abort();
     if local_ended {
         send(&tx, close_msg(id));
-        // Otherwise a push whose local transport just closes on its own (not
-        // via an explicit unpush) leaves this port attached to the controlled
-        // machine's vhci driver indefinitely -- nothing else ever detaches it
-        // once this task returns.
-        if let Some(port) = attached_port.lock().unwrap().take() {
-            log::info!("usb push: channel {} relay ended, detaching port {}", id, port);
-            detach_port(port, privileged);
-        }
     }
 }
 
@@ -595,7 +510,6 @@ mod tests {
                 bus_id: String::new(),
                 inbound,
                 flow: Flow::new(),
-                attached_port: Arc::new(Mutex::new(None)),
                 cancel: cancel.clone(),
             },
             cancel,
@@ -659,7 +573,6 @@ mod tests {
                 bus_id: "1-1".into(),
                 inbound,
                 flow: Flow::new(),
-                attached_port: Arc::new(Mutex::new(None)),
                 cancel: CancellationToken::new(),
             },
         );
@@ -773,12 +686,50 @@ Port 00: <Port in Use> at High Speed(480Mbps)
             socket,
             tx,
             inbound_rx,
-            Arc::new(Mutex::new(None)),
             Flow::new(),
-            Arc::new(Semaphore::new(1)),
             CancellationToken::new(),
         ));
         (relay, inbound_tx, rx)
+    }
+
+    /// Plays the kernel's end of an import: connects to the relay's listener
+    /// the way `usbip attach` does.
+    async fn accepted_import(
+        cancel: CancellationToken,
+    ) -> (tokio::task::JoinHandle<()>, TcpStream, mpsc::Sender<Inbound>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (inbound_tx, inbound_rx) = mpsc::channel(4);
+        let task = accept_relay(listener, -1, "1-1".into(), tx, inbound_rx, Flow::new(), cancel);
+        let import = TcpStream::connect(addr).await.unwrap();
+        // The relay announces the channel once it holds the socket.
+        rx.recv().await.expect("the relay must open its channel");
+        (task, import, inbound_tx)
+    }
+
+    async fn assert_closed(mut import: TcpStream) {
+        use tokio::io::AsyncReadExt;
+        let mut buf = [0u8; 1];
+        let read = tokio::time::timeout(std::time::Duration::from_secs(5), import.read(&mut buf));
+        assert_eq!(read.await.expect("the import socket must close").unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn attach_finishing_after_its_channel_ended_leaves_no_import() {
+        let cancel = CancellationToken::new();
+        let (_task, import, _inbound) = accepted_import(cancel.clone()).await;
+        // `handle_close`, `close_all` or a protocol violation dropped the entry.
+        cancel.cancel();
+        assert_closed(import).await;
+    }
+
+    #[tokio::test]
+    async fn attach_rolled_back_after_port_discovery_failed_leaves_no_import() {
+        let (task, import, _inbound) = accepted_import(CancellationToken::new()).await;
+        // What `pull()` does when `usbip attach` succeeded but `usbip port` did not.
+        task.abort();
+        assert_closed(import).await;
     }
 
     #[tokio::test]
@@ -794,8 +745,9 @@ Port 00: <Port in Use> at High Speed(480Mbps)
     }
 
     #[tokio::test]
-    async fn peer_close_ends_both_halves_without_echoing_close() {
-        let (ours, _theirs) = socket_pair().await;
+    async fn peer_close_closes_the_import_socket_without_echoing_close() {
+        use tokio::io::AsyncReadExt;
+        let (ours, mut theirs) = socket_pair().await;
         let (relay, inbound_tx, mut rx) = run_opened_relay(ours).await;
         drop(inbound_tx);
         tokio::time::timeout(std::time::Duration::from_secs(5), relay)
@@ -803,5 +755,9 @@ Port 00: <Port in Use> at High Speed(480Mbps)
             .expect("relay must end once the peer's side is gone")
             .unwrap();
         assert_eq!(close_count(&mut rx), 0);
+        // The kernel holds this end of an import and detaches it on EOF.
+        let mut buf = [0u8; 1];
+        let read = tokio::time::timeout(std::time::Duration::from_secs(5), theirs.read(&mut buf));
+        assert_eq!(read.await.expect("the import socket must close").unwrap(), 0);
     }
 }

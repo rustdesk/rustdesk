@@ -21,7 +21,9 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
             if !crate::client::usbip_attach::is_valid_bus_id(&r.bus_id)
                 || !handler.usb.share_owned(&r.bus_id)
             {
-                log::warn!(
+                hbb_common::throttled_log!(
+                    crate::usbip_flow::PEER_LOG_INTERVAL,
+                    warn,
                     "usb push: ignoring result for {:?}: not pushed by this session",
                     r.bus_id
                 );
@@ -34,18 +36,7 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
                     "usb push: peer failed to attach {}: {}, rolling back share",
                     r.bus_id, r.error
                 );
-                handler.usb.share_pending_remove(&r.bus_id);
-                if handler.usb.share_release_begin(&r.bus_id) {
-                    let usb = handler.usb.clone();
-                    let bus_id = r.bus_id.clone();
-                    std::thread::spawn(move || {
-                        if crate::client::usbip_share::release_push(&usb, &bus_id) {
-                            log::info!("usb push: rolled back share of {}", bus_id);
-                        } else {
-                            log::error!("usb push: rollback unshare of {} also failed", bus_id);
-                        }
-                    });
-                }
+                crate::client::usbip_share::release_ended_push(handler, r.bus_id.clone());
             }
             let event_data: Vec<(&str, serde_json::Value)> = vec![
                 ("bus_id", serde_json::json!(&r.bus_id)),
@@ -80,9 +71,14 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
                 notify_closed(handler, d.channel_id);
             }
         }
-        Some(Union::WindowUpdate(w)) => handler.usb.window_update(w.channel_id, w.add),
+        Some(Union::WindowUpdate(w)) => {
+            if handler.usb.window_update(w.channel_id, w.add) {
+                notify_closed(handler, w.channel_id);
+            }
+        }
+        // Ends the relay, which releases the push (see `Open` below).
         Some(Union::Close(c)) => {
-            log::info!("usb push: peer closed channel {}", c.channel_id);
+            log::trace!("usb push: peer closed channel {}", c.channel_id);
             handler.usb.unregister_share_channel(c.channel_id);
         }
         // The peer pulling one of the devices we're sharing. Only ever
@@ -103,9 +99,12 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
                 return;
             };
             if !handler.usb.share_pending_take(&open.bus_id) {
-                log::warn!(
+                hbb_common::throttled_log!(
+                    crate::usbip_flow::PEER_LOG_INTERVAL,
+                    warn,
                     "usb push: rejecting open for {} (channel {}): not pending",
-                    open.bus_id, id
+                    open.bus_id,
+                    id
                 );
                 return;
             }
@@ -113,6 +112,7 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
             let (tx, rx) = tokio::sync::mpsc::channel(crate::usbip_flow::QUEUE_FRAMES);
             let flow = crate::usbip_flow::Flow::new();
             let cancel = handler.usb.register_share_channel(id, open.bus_id.clone(), tx, flow.clone());
+            let bus_id = open.bus_id.clone();
             let relay = crate::client::usbip_share::run_channel(
                 id,
                 open.bus_id,
@@ -121,11 +121,14 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
                 flow,
                 cancel.clone(),
             );
+            let handler = handler.clone();
             tokio::spawn(async move {
                 tokio::select! {
                     _ = relay => {}
                     _ = cancel.cancelled() => {}
                 }
+                // The peer's import ran over this relay, so it is over too.
+                crate::client::usbip_share::release_ended_push(&handler, bus_id);
             });
         }
         _ => {}

@@ -5,7 +5,6 @@
 use crate::{client::usbip_attach::Inbound, usbip_flow::Flow};
 use hbb_common::{
     bytes::Bytes,
-    log,
     tokio::{runtime::Handle, sync::mpsc},
     tokio_util::sync::CancellationToken,
 };
@@ -13,7 +12,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{
         atomic::{AtomicBool, AtomicI32, Ordering},
-        RwLock,
+        Arc, RwLock,
     },
 };
 
@@ -62,12 +61,12 @@ pub(crate) struct UsbClientState {
     // bus_ids in `share_owned` whose unpush or rollback is running; the
     // record itself stays until that succeeds.
     share_releasing: RwLock<HashSet<String>>,
-    // Local vhci ports this session attached (pull direction) and has not
-    // detached yet, with the peer's bus id each one imports. The bus id
-    // alone is ambiguous: another peer may export the same one.
-    attached_ports: RwLock<HashMap<i32, String>>,
-    // Set once `close` has run: an attach or bind finishing after that must
-    // be undone by whoever finished it.
+    // Forward channel id -> the peer's bus id and the local vhci port it is
+    // attached on. The import lives on that channel's relay socket, so it
+    // is recorded only while the relay is registered and goes with it.
+    attached: RwLock<HashMap<i32, (String, i32)>>,
+    // Set once `close` has run: a bind finishing after that must be undone
+    // by whoever finished it.
     closed: AtomicBool,
     // This session's own `io_loop` runtime, registered once `io_loop` starts
     // running on it -- lets `usb_attach`/`usb_push`/etc, called from
@@ -101,8 +100,12 @@ impl UsbClientState {
         cancel
     }
 
+    /// Dropping the relay closes its socket, and with it ends the import on
+    /// that socket: the kernel detaches the port.
     pub(crate) fn unregister_forward_channel(&self, channel_id: i32) {
-        self.forward_channels.write().unwrap().remove(&channel_id);
+        let mut channels = self.forward_channels.write().unwrap();
+        channels.remove(&channel_id);
+        self.attached.write().unwrap().remove(&channel_id);
     }
 
     /// `true` if the channel had to be dropped; the caller then tells the
@@ -121,7 +124,12 @@ impl UsbClientState {
             None => return false,
         };
         if failed {
-            log::warn!("usb forward: closing channel {} (window overrun or relay gone)", channel_id);
+            hbb_common::throttled_log!(
+                crate::usbip_flow::PEER_LOG_INTERVAL,
+                warn,
+                "usb forward: closing channel {} (window overrun or relay gone)",
+                channel_id
+            );
             self.unregister_forward_channel(channel_id);
         }
         failed
@@ -182,7 +190,12 @@ impl UsbClientState {
             None => return false,
         };
         if failed {
-            log::warn!("usb push: closing channel {} (window overrun or relay gone)", channel_id);
+            hbb_common::throttled_log!(
+                crate::usbip_flow::PEER_LOG_INTERVAL,
+                warn,
+                "usb push: closing channel {} (window overrun or relay gone)",
+                channel_id
+            );
             self.unregister_share_channel(channel_id);
         }
         failed
@@ -190,7 +203,9 @@ impl UsbClientState {
 
     /// Credit the peer returned on channel `channel_id`, whichever direction
     /// it belongs to (see the sign convention in `client::usbip_channel`).
-    pub(crate) fn window_update(&self, channel_id: i32, add: u32) {
+    /// `true` if the channel had to be dropped for claiming more than it was
+    /// sent, as for `forward_send`.
+    pub(crate) fn window_update(&self, channel_id: i32, add: u32) -> bool {
         let flow = if channel_id >= 0 {
             self.forward_channels
                 .read()
@@ -204,9 +219,21 @@ impl UsbClientState {
                 .get(&channel_id)
                 .map(|relay| relay.flow.clone())
         };
-        if let Some(flow) = flow {
-            flow.grant(add);
+        if flow.map_or(true, |flow| flow.grant(add)) {
+            return false;
         }
+        hbb_common::throttled_log!(
+            crate::usbip_flow::PEER_LOG_INTERVAL,
+            warn,
+            "usb: closing channel {} (window update for more than was sent)",
+            channel_id
+        );
+        if channel_id >= 0 {
+            self.unregister_forward_channel(channel_id);
+        } else {
+            self.unregister_share_channel(channel_id);
+        }
+        true
     }
 
     pub(crate) fn share_pending_add(&self, bus_id: String) {
@@ -253,36 +280,59 @@ impl UsbClientState {
 
     /// Ends what `share_release_begin` started. The push stays recorded
     /// unless it was undone, so a retry or `close` can still release it.
-    pub(crate) fn share_release_end(&self, bus_id: &str, released: bool) {
-        if released {
-            self.share_owned.write().unwrap().remove(bus_id);
+    /// `false` if it failed after the session closed: nothing here tracks
+    /// it any more and the caller must keep it pending.
+    pub(crate) fn share_release_end(&self, bus_id: &str, released: bool) -> bool {
+        let mut owned = self.share_owned.write().unwrap();
+        let tracked = released || !self.closed.load(Ordering::SeqCst);
+        if released || !tracked {
+            owned.remove(bus_id);
         }
         self.share_releasing.write().unwrap().remove(bus_id);
+        tracked
     }
 
-    /// `false` once the session is closing; the caller must then detach
-    /// `port` itself, since teardown has already run.
-    pub(crate) fn attached_port_add(&self, port: i32, bus_id: String) -> bool {
-        let mut ports = self.attached_ports.write().unwrap();
-        if self.closed.load(Ordering::SeqCst) {
+    /// Starts undoing every push not already being undone.
+    pub(crate) fn share_release_all_begin(&self) -> Vec<String> {
+        let owned = self.share_owned.read().unwrap();
+        let mut releasing = self.share_releasing.write().unwrap();
+        owned
+            .iter()
+            .filter(|bus_id| releasing.insert(bus_id.to_string()))
+            .cloned()
+            .collect()
+    }
+
+    /// Records the port `usbip attach` reported for the import on forward
+    /// channel `channel_id`. `false` if that relay is already gone: the
+    /// import ended with its socket and there is nothing to own.
+    pub(crate) fn attached_port_add(&self, channel_id: i32, bus_id: String, port: i32) -> bool {
+        let channels = self.forward_channels.read().unwrap();
+        if !channels.contains_key(&channel_id) {
             return false;
         }
-        ports.insert(port, bus_id);
+        self.attached.write().unwrap().insert(channel_id, (bus_id, port));
         true
     }
 
-    pub(crate) fn attached_port_take(&self, port: i32) -> Option<String> {
-        self.attached_ports.write().unwrap().remove(&port)
+    /// The forward channel carrying this session's import of the peer's
+    /// `bus_id` (a peer exports each bus id once).
+    pub(crate) fn attached_channel_of(&self, bus_id: &str) -> Option<i32> {
+        self.attached
+            .read()
+            .unwrap()
+            .iter()
+            .find_map(|(channel_id, (b, _))| (b == bus_id).then_some(*channel_id))
     }
 
     /// The local port this session attached the peer's `bus_id` on, for the
     /// device list to show what is actually attached.
     pub(crate) fn attached_port_of(&self, bus_id: &str) -> Option<i32> {
-        self.attached_ports
+        self.attached
             .read()
             .unwrap()
-            .iter()
-            .find_map(|(port, b)| (b == bus_id).then_some(*port))
+            .values()
+            .find_map(|(b, port)| (b == bus_id).then_some(*port))
     }
 
     /// The runtime `register_runtime` recorded once `io_loop` started running
@@ -298,6 +348,24 @@ impl UsbClientState {
             .map(|(_, handle)| handle.clone())
     }
 
+    /// The runtime and the connection round it belongs to, for an operation
+    /// to check with `in_round` once it finishes.
+    pub(crate) fn session_runtime_round(&self) -> Option<(Handle, u32)> {
+        self.session_runtime
+            .read()
+            .unwrap()
+            .as_ref()
+            .map(|(round, handle)| (handle.clone(), *round))
+    }
+
+    /// Runs `f` only while `round` is still the registered one, so a late
+    /// operation of an earlier connection cannot act on a newer one: a new
+    /// round registers here before it installs its sender.
+    pub(crate) fn in_round<R>(&self, round: u32, f: impl FnOnce() -> R) -> Option<R> {
+        let guard = self.session_runtime.read().unwrap();
+        (guard.as_ref().map(|(r, _)| *r) == Some(round)).then(f)
+    }
+
     /// Relay channels belong to the connection that opened them, so a new
     /// round starts without any: whatever an earlier round left behind (its
     /// relays may have been cancelled before they could unregister) goes.
@@ -310,21 +378,26 @@ impl UsbClientState {
     /// otherwise a newer round already overwrote it (reconnect started a
     /// new `io_loop` before this one finished tearing down), and clearing
     /// unconditionally would drop that newer, still-live handle instead of
-    /// this stale one.
-    pub(crate) fn unregister_runtime(&self, round: u32) {
+    /// this stale one. `true` if it did, i.e. the connection ended.
+    pub(crate) fn unregister_runtime(&self, round: u32) -> bool {
         let mut guard = self.session_runtime.write().unwrap();
-        if guard.as_ref().map(|(r, _)| *r) == Some(round) {
-            *guard = None;
-            drop(guard);
-            self.clear_channels();
+        if guard.as_ref().map(|(r, _)| *r) != Some(round) {
+            return false;
         }
+        *guard = None;
+        drop(guard);
+        self.clear_channels();
+        true
     }
 
-    /// Dropping every registered sender makes each relay's next `recv()`
-    /// return `None`, so it ends instead of running orphaned. Device
-    /// ownership (`share_owned`, `attached_ports`) is not touched.
+    /// Dropping every relay ends it and closes its socket, which also ends
+    /// every import this session attached. Pushes (`share_owned`) are left
+    /// to the caller.
     fn clear_channels(&self) {
-        self.forward_channels.write().unwrap().clear();
+        let mut forward = self.forward_channels.write().unwrap();
+        forward.clear();
+        self.attached.write().unwrap().clear();
+        drop(forward);
         self.share_channels.write().unwrap().clear();
         self.share_bus_ids.write().unwrap().clear();
         self.share_pending.write().unwrap().clear();
@@ -337,25 +410,24 @@ impl UsbClientState {
     /// shared device open -- even after nothing else can reach this state
     /// to ask it to stop. Dropping every registered sender here makes each
     /// task's next `recv()` return `None`, so it notices and cleans itself
-    /// up instead of running orphaned indefinitely.
-    pub(crate) fn close(&self) {
-        self.clear_channels();
-        let ports = {
-            let mut ports = self.attached_ports.write().unwrap();
+    /// up instead of running orphaned indefinitely, and closing their
+    /// sockets ends this session's imports. Every push is unshared; one that
+    /// fails stays pending process-wide (`usbip_share::release_push`).
+    pub(crate) fn close(self: &Arc<Self>) {
+        {
+            let _owned = self.share_owned.write().unwrap();
             self.closed.store(true, Ordering::SeqCst);
-            std::mem::take(&mut *ports).into_keys().collect::<Vec<_>>()
-        };
-        let owned = std::mem::take(&mut *self.share_owned.write().unwrap());
-        if ports.is_empty() && owned.is_empty() {
+        }
+        self.clear_channels();
+        let releasing = self.share_release_all_begin();
+        if releasing.is_empty() {
             return;
         }
         // The session's runtime is going away with it, so a plain thread.
+        let state = self.clone();
         std::thread::spawn(move || {
-            for port in ports {
-                crate::client::usbip_attach::detach_blocking(port);
-            }
-            for bus_id in owned {
-                crate::client::usbip_share::release_orphaned(&bus_id);
+            for bus_id in releasing {
+                crate::client::usbip_share::release_push(&state, &bus_id);
             }
         });
     }
@@ -371,6 +443,33 @@ mod tests {
         let second = UsbClientState::next_channel_id();
         assert!(first >= 0);
         assert!(second > first);
+    }
+
+    #[tokio::test]
+    async fn late_attach_of_an_older_round_neither_registers_nor_reaches_the_newer_one() {
+        let state = UsbClientState::default();
+        state.register_runtime(1, Handle::current());
+        let id = UsbClientState::next_channel_id();
+        let (tx, _rx) = mpsc::channel(1);
+        state.register_forward_channel(id, tx, Flow::new());
+        // Reconnect: the new round drops the old round's relays.
+        state.register_runtime(2, Handle::current());
+        assert!(!state.attached_port_add(id, "1-1".into(), 0));
+        assert_eq!(state.attached_port_of("1-1"), None);
+        assert!(state.in_round(1, || ()).is_none());
+        assert!(state.in_round(2, || ()).is_some());
+    }
+
+    #[test]
+    fn attachment_goes_with_its_relay() {
+        let state = UsbClientState::default();
+        let id = UsbClientState::next_channel_id();
+        let (tx, _rx) = mpsc::channel(1);
+        state.register_forward_channel(id, tx, Flow::new());
+        assert!(state.attached_port_add(id, "1-1".into(), 3));
+        assert_eq!(state.attached_port_of("1-1"), Some(3));
+        state.unregister_forward_channel(id);
+        assert_eq!(state.attached_port_of("1-1"), None);
     }
 
     #[test]

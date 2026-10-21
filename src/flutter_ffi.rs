@@ -775,13 +775,13 @@ pub fn session_usb_attach(session_id: SessionID, bus_id: String) {
     let _ = (session_id, bus_id);
 }
 
-pub fn session_usb_detach(session_id: SessionID, port: i32) {
+pub fn session_usb_detach(session_id: SessionID, bus_id: String) {
     #[cfg(target_os = "linux")]
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.usb_detach(port);
+        session.usb_detach(bus_id);
     }
     #[cfg(not(target_os = "linux"))]
-    let _ = (session_id, port);
+    let _ = (session_id, bus_id);
 }
 
 pub fn session_usb_local_devices(session_id: SessionID) {

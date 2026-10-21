@@ -2405,7 +2405,7 @@ impl Connection {
         }
         let control_permissions = &self.control_permissions;
         super::usbip_session::handle_channel(&mut self.usbip, self.inner.tx.as_ref(), ch, || {
-            Self::permission(keys::OPTION_ALLOW_USBIP, control_permissions)
+            super::usbip_session::permitted(control_permissions)
         });
     }
 
@@ -2413,7 +2413,7 @@ impl Connection {
     fn revoke_usb_if_not_permitted(&mut self) {
         let control_permissions = &self.control_permissions;
         super::usbip_session::revoke_unless_permitted(&mut self.usbip, || {
-            Self::permission(keys::OPTION_ALLOW_USBIP, control_permissions)
+            super::usbip_session::permitted(control_permissions)
         });
     }
 
@@ -2736,7 +2736,6 @@ impl Connection {
                 keys::OPTION_ENABLE_RECORD_SESSION => Some(Permission::recording),
                 keys::OPTION_ENABLE_BLOCK_INPUT => Some(Permission::block_input),
                 keys::OPTION_ENABLE_PRIVACY_MODE => Some(Permission::privacy_mode),
-                keys::OPTION_ALLOW_USBIP => Some(Permission::usb),
                 _ => None,
             };
             if let Some(permission) = permission {
