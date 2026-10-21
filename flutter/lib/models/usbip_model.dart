@@ -62,15 +62,17 @@ class UsbipModel with ChangeNotifier {
   /// Called when the underlying session dies unexpectedly (peer/network
   /// loss) rather than a clean detach/unpush -- the `usb_bind_result` these
   /// pending sets are waiting on will never arrive from a gone peer, so the
-  /// toggle buttons would stay disabled forever otherwise. Local state
-  /// (`attachedPorts`/`localDevices`) is left as-is: a pull-direction attach
-  /// is a local `usbip attach`, so the device may still genuinely be
-  /// attached on this machine even though the peer is gone.
+  /// toggle buttons would stay disabled forever otherwise. Attachments end
+  /// with the connection that carried them; pushes are unshared on the Rust
+  /// side, which reports each one.
   void clearPendingOnDisconnect() {
-    if (pendingBusIds.isEmpty && localPendingBusIds.isEmpty) return;
+    if (pendingBusIds.isEmpty &&
+        localPendingBusIds.isEmpty &&
+        attachedPorts.isEmpty) return;
     pendingBusIds.clear();
     localPendingBusIds.clear();
     _pendingShareForAttach.clear();
+    attachedPorts.clear();
     lastError = 'Connection lost';
     notifyListeners();
   }
@@ -83,11 +85,9 @@ class UsbipModel with ChangeNotifier {
 
   /// One action either way, mirroring the local-devices Push/Unpush design:
   /// attaching asks the peer to share first, then attaches once that's
-  /// confirmed (`handleBindResult` completes the sequence); detaching
-  /// detaches locally first, then asks the peer to unshare -- the peer
-  /// retries that unshare briefly on its own if it's still momentarily
-  /// "busy" from the detach, so there's nothing to sequence here for that
-  /// direction.
+  /// confirmed (`handleBindResult` completes the sequence); detaching is one
+  /// call, which detaches locally and only then asks the peer to unshare,
+  /// and its bind result ends it.
   void toggleAttach(String busId, bool attach) {
     remoteErrors.remove(busId);
     pendingBusIds.add(busId);
@@ -96,12 +96,7 @@ class UsbipModel with ChangeNotifier {
       _pendingShareForAttach.add(busId);
       bind.sessionUsbBind(sessionId: _sessionId, busId: busId, bind: true);
     } else {
-      final port = attachedPorts[busId];
-      if (port != null) {
-        bind.sessionUsbDetach(sessionId: _sessionId, port: port);
-        attachedPorts.remove(busId);
-      }
-      bind.sessionUsbBind(sessionId: _sessionId, busId: busId, bind: false);
+      bind.sessionUsbDetach(sessionId: _sessionId, busId: busId);
     }
   }
 
@@ -158,6 +153,15 @@ class UsbipModel with ChangeNotifier {
       bind.sessionUsbBind(sessionId: _sessionId, busId: busId, bind: false);
     }
     notifyListeners();
+  }
+
+  /// The relay carrying an attachment ended (detach, the peer closing it,
+  /// revocation), and the kernel detached the port with it.
+  void handleDetached(Map<String, dynamic> evt) {
+    final busId = evt['bus_id']?.toString() ?? '';
+    if (attachedPorts.remove(busId) != null) {
+      notifyListeners();
+    }
   }
 
   // Local devices are read straight off this machine, so there's no network

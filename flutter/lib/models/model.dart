@@ -374,6 +374,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.usbipModel.handleBindResult(evt);
       } else if (name == 'usb_attached') {
         parent.target?.usbipModel.handleAttached(evt);
+      } else if (name == 'usb_detached') {
+        parent.target?.usbipModel.handleDetached(evt);
       } else if (name == 'usb_local_device_list') {
         parent.target?.usbipModel.updateLocalDeviceList(evt);
       } else if (name == 'usb_push_result') {

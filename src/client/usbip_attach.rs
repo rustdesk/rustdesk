@@ -27,7 +27,7 @@ pub enum Inbound {
     Closed,
 }
 
-pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
+pub async fn attach(session: Session<FlutterHandler>, bus_id: String, round: u32) {
     let listener = match TcpListener::bind("127.0.0.1:0").await {
         Ok(l) => l,
         Err(err) => {
@@ -43,32 +43,21 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
         }
     };
 
+    let id = UsbClientState::next_channel_id();
     let relay_session = session.clone();
     let relay_bus_id = bus_id.clone();
-    // Kept so a failed attach can abort it instead of leaving it parked on
-    // an `accept()` that no `usbip attach` process will ever make.
+    // Kept so a failed attach can abort it, which also closes an accepted
+    // socket and with it anything attached on it.
     let accept_task = tokio::spawn(async move {
         match listener.accept().await {
-            Ok((socket, _)) => run_channel(relay_session, relay_bus_id, socket).await,
+            Ok((socket, _)) => run_channel(relay_session, relay_bus_id, socket, id, round).await,
             Err(err) => log::error!("usb attach: accept failed: {}", err),
         }
     });
 
     let attach_bus_id = bus_id.clone();
-    let usb = session.ui_handler.usb.clone();
     let local_port = match tokio::task::spawn_blocking(move || {
-        let local_port = usb_attach_privileged(port, &attach_bus_id)?;
-        // Settled here, not after the await below: this closure runs to the
-        // end even when the session's runtime is shut down under it.
-        if usb.attached_port_add(local_port, attach_bus_id.clone()) {
-            return Some(local_port);
-        }
-        log::info!(
-            "usb attach: session closed while attaching {}, detaching port {}",
-            attach_bus_id, local_port
-        );
-        detach_blocking(local_port);
-        None
+        usb_attach_privileged(port, &attach_bus_id)
     })
     .await
     {
@@ -78,6 +67,10 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
             None
         }
     };
+    // An attach whose relay already ended (disconnect, revocation, or a new
+    // connection round clearing the old one's channels) ended with it.
+    let local_port =
+        local_port.filter(|&p| session.ui_handler.usb.attached_port_add(id, bus_id.clone(), p));
     match local_port {
         Some(local_port) => {
             session.ui_handler.push_event_(
@@ -92,8 +85,12 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
                 &[],
             );
         }
+        // Also when `usbip port` failed after a successful attach: aborting
+        // closes the relay's socket, which detaches what was attached.
         None => {
             accept_task.abort();
+            session.ui_handler.usb.unregister_forward_channel(id);
+            session.ui_handler.usb.in_round(round, || session.usb_close_forward(id));
             let message = format!("Failed to attach {}", bus_id);
             log::error!("usb attach: `usbip attach` failed: {}", message);
             session.ui_handler.push_event_(
@@ -204,23 +201,30 @@ fn parse_attached_port(output: &str, listener_port: u16, bus_id: &str) -> Option
     None
 }
 
-pub(crate) fn detach_blocking(port: i32) -> bool {
-    let ok = crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]);
-    if !ok {
-        log::error!("usb detach: failed to detach port {}", port);
-    }
-    ok
-}
-
-async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: TcpStream) {
-    let id = UsbClientState::next_channel_id();
+async fn run_channel(
+    session: Session<FlutterHandler>,
+    bus_id: String,
+    socket: TcpStream,
+    id: i32,
+    round: u32,
+) {
     let (tx, rx) = mpsc::channel::<Inbound>(usbip_flow::QUEUE_FRAMES);
     let flow = Flow::new();
-    let cancel = session.ui_handler.usb.register_forward_channel(id, tx, flow.clone());
+    let usb = &session.ui_handler.usb;
+    // An attach started on an earlier connection must not open a channel on
+    // a newer one: dropping the socket here makes it fail instead.
+    let Some(cancel) = usb.in_round(round, || usb.register_forward_channel(id, tx, flow.clone()))
+    else {
+        log::info!("usb attach: connection ended before {} was attached", bus_id);
+        return;
+    };
     tokio::select! {
-        _ = relay(session, bus_id, socket, id, rx, flow, cancel.clone()) => {}
+        _ = relay(session.clone(), bus_id.clone(), socket, id, rx, flow, cancel.clone()) => {}
         _ = cancel.cancelled() => {}
     }
+    // However it ended, the socket is closed now and the import on it with it.
+    session.ui_handler.usb.unregister_forward_channel(id);
+    session.ui_handler.push_event_("usb_detached", &[("bus_id", json!(bus_id))], &[], &[]);
 }
 
 async fn relay(
@@ -340,9 +344,9 @@ async fn relay(
 impl Session<FlutterHandler> {
     pub fn usb_attach(&self, bus_id: String) {
         let session = self.clone();
-        match self.ui_handler.usb.session_runtime() {
-            Some(rt) => {
-                rt.spawn(attach(session, bus_id));
+        match self.ui_handler.usb.session_runtime_round() {
+            Some((rt, round)) => {
+                rt.spawn(attach(session, bus_id, round));
             }
             None => self.ui_handler.push_event_(
                 "usb_attached",
@@ -358,20 +362,16 @@ impl Session<FlutterHandler> {
         }
     }
 
-    /// Local only, so it runs without the session's runtime, which is gone
-    /// once the connection drops. A failed detach keeps the port recorded so
-    /// closing the session still detaches it.
-    pub fn usb_detach(&self, port: i32) {
-        let Some(bus_id) = self.ui_handler.usb.attached_port_take(port) else {
-            log::warn!("usb detach: port {} was not attached by this session", port);
-            return;
-        };
-        let usb = self.ui_handler.usb.clone();
-        std::thread::spawn(move || {
-            if !detach_blocking(port) {
-                usb.attached_port_add(port, bus_id);
-            }
-        });
+    /// Stops using the peer's `bus_id`: dropping the relay closes the socket
+    /// the import lives on, which detaches the port in the kernel just as
+    /// `usbip detach` would, with no privileged step that could fail. Only
+    /// then is the peer asked to unshare it; its bind result ends the action.
+    pub fn usb_detach(&self, bus_id: String) {
+        if let Some(channel_id) = self.ui_handler.usb.attached_channel_of(&bus_id) {
+            self.ui_handler.usb.unregister_forward_channel(channel_id);
+            self.usb_close_forward(channel_id);
+        }
+        self.usb_bind(bus_id, false);
     }
 }
 
