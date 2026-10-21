@@ -734,18 +734,16 @@ fn import_config(path: &str) {
         log::info!("Empty source config, skipped");
         return;
     }
-    // Revoking grants for Config also updates Config2's modification time.
-    let import_config2 = get_modified_time(&path2) > get_modified_time(&Config2::file());
     if get_modified_time(&path) > get_modified_time(&Config::file())
         && get_modified_time(&path) < get_exe_time()
     {
-        if let Err(error) = crate::trusted_devices::config::import(|| store_path(Config::file(), config)) {
+        if let Err(error) = store_path(Config::file(), config) {
             log::error!("Config import failed: {error}");
         }
     }
     let config2: Config2 = load_path(path2.into());
-    if import_config2 {
-        if let Err(error) = crate::trusted_devices::config::import(|| store_path(Config2::file(), config2.without_trusted_devices_v2())) {
+    if get_modified_time(&path2) > get_modified_time(&Config2::file()) {
+        if let Err(error) = store_path(Config2::file(), config2) {
             log::error!("Config import failed: {error}");
         }
     }

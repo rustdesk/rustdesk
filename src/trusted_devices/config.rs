@@ -219,15 +219,6 @@ pub fn set_options(options: HashMap<String, String>) -> ResultType<()> {
     })
 }
 
-pub fn import(apply: impl FnOnce() -> ResultType<()>) -> ResultType<()> {
-    let storage = super::storage()?;
-    let mut grants = super::Grants::default();
-    grants.revoke(None)?;
-    storage.write(&grants)?;
-    // Imported files become the runtime settings when the host next starts.
-    apply()
-}
-
 pub fn set_password(value: &str) -> ResultType<bool> {
     change(changes_password(value), || {
         Ok(Config::set_permanent_password(value))

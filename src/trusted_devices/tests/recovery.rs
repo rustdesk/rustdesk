@@ -41,7 +41,12 @@ pub(super) async fn unusable_grant_scope_keeps_current_password_totp_available()
     let attempt = begin_enrollment().await;
     let token = attempt.finish(DeviceInfo::default()).await.unwrap();
     let pending = begin_enrollment().await;
-    config::import(|| Ok(())).unwrap();
+    {
+        let storage = super::super::storage().unwrap();
+        let mut grants = Grants::default();
+        grants.revoke(None).unwrap();
+        storage.write(&grants).unwrap();
+    }
     assert!(host::begin(proof("wrong-password", &token)).await.is_err());
     let (attempt, valid, totp) = host::begin(proof(PASSWORD, &token)).await.unwrap().unwrap();
     assert!(attempt.is_none());
