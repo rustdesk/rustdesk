@@ -372,8 +372,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         ),
       if (enable2fa && _enableTrustedDevices)
         SettingsTile(
-          title: trustedDeviceExpiration(
+          title: Text(translate('Trust duration (days)')),
+          trailing: trustedDeviceExpiration(
             enabled: true,
+            showLabel: false,
             onChanged: () {
               if (mounted) setState(() {});
             },

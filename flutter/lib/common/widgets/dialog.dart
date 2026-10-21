@@ -2869,20 +2869,22 @@ void manageTrustedDeviceDialog() async {
 Widget trustedDeviceExpiration({
   required bool enabled,
   required VoidCallback onChanged,
+  bool showLabel = true,
 }) {
   final period = bind.mainGetOptionSync(key: kOptionTrustedDeviceExpiration);
   const periods = ['1', '7', '30', '90', '0'];
-  const desktopDropdownHeight = 36.0;
+  const dropdownHeight = 36.0;
   return Align(
     alignment: AlignmentDirectional.centerStart,
     child: Wrap(
       spacing: 12,
+      runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(translate('Trust duration (days)')),
+        if (showLabel) Text(translate('Trust duration (days)')),
         SizedBox(
-          width: 140,
-          height: isDesktop || isWebDesktop ? desktopDropdownHeight : null,
+          width: isDesktop || isWebDesktop ? 140 : 100,
+          height: dropdownHeight,
           child: ComboBox(
             keys: periods,
             values: ['1', '7', '30', '90', translate('Never')],
