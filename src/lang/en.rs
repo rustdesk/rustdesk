@@ -288,5 +288,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-already-bound-to", "Already bound to"),
         ("shortcut-mobile-physical-keyboard-tip", "Recording requires a physical keyboard. Soft keyboards are not supported."),
         ("shortcut-key-not-supported", "\"{}\" can't be used as a shortcut."),
+        ("api_server_connection_tip", "Your custom server uses unencrypted HTTP. Contact your administrator to enable HTTPS."),
+        ("api_server_empty_tip", "With API Server empty, your custom server defaults to HTTP. Contact your administrator to enable HTTPS."),
     ].iter().cloned().collect();
 }
