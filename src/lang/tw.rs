@@ -817,5 +817,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("api_server_empty_tip", "API 伺服器留空時，自訂伺服器預設使用 HTTP。請聯絡管理員啟用 HTTPS。"),
         ("RustDesk storage", "RustDesk 儲存空間"),
         ("Other folders", "其他資料夾"),
+        ("Choose which folder remote devices can access. You can change it later in {}.", "選擇允許遠端裝置存取的資料夾。之後可在 {} 中變更。"),
     ].iter().cloned().collect();
 }

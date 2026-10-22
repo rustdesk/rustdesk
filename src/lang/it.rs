@@ -817,5 +817,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("api_server_empty_tip", "Con 'Server API' vuoto, il server personalizzato predefinito è 'HTTP'. Per abilitare HTTPS contatta l'amministratore."),
         ("RustDesk storage", ""),
         ("Other folders", ""),
+        ("Choose which folder remote devices can access. You can change it later in {}.", ""),
     ].iter().cloned().collect();
 }
