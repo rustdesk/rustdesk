@@ -1,10 +1,7 @@
-use super::{wide_string, ResultType};
-use hbb_common::{
-    anyhow::anyhow,
-    bail,
-    base64::{engine::general_purpose::STANDARD, Engine as _},
-    log,
+use super::{
+    installer_files::ProtectedInstallFile, installer_handoff::directory, wide_string, ResultType,
 };
+use hbb_common::{anyhow::anyhow, bail, log};
 use std::{
     ffi::OsString,
     io, mem,
@@ -26,7 +23,7 @@ use windows::{
 };
 
 pub(super) const CMD_RELATIVE_PATH: &str = "cmd.exe";
-pub(super) const BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE: u32 = 0x5253_0008;
+pub(super) const BATCH_SHORTCUT_COPY_FAILURE_EXIT_CODE: u32 = 0x5253_0008;
 pub(super) const WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS: usize = 2048;
 const SHORTCUT_ICON_INDEX: i32 = 0;
 
@@ -71,26 +68,29 @@ pub(super) fn shortcut_bytes(
     Ok(bytes)
 }
 
-pub(super) fn embedded_shortcut_commands(bytes: Vec<u8>, filename: &str, name: &str) -> String {
-    let encoded = STANDARD.encode(bytes);
-    let encoded_path = format!("%~f0.{name}.b64");
-    format!(
-        "> \"{encoded_path}\" echo {encoded}\r\n\
-         certutil -f -decode \"{encoded_path}\" \"%RUSTDESK_OUTPUT_DIR%\\{filename}\" > nul || exit /b {BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE}"
-    )
+pub(super) fn staged_shortcut_commands(
+    bytes: Vec<u8>,
+    filename: &str,
+) -> ResultType<(String, ProtectedInstallFile)> {
+    validate_install_value(filename)?;
+    let file = ProtectedInstallFile::new(&directory::path()?.with_extension("lnk"), &bytes)?;
+    let source = path_for_cmd_environment(file.path())?;
+    let commands = format!(
+        "copy /B /Y \"{source}\" \"%RUSTDESK_OUTPUT_DIR%\\{filename}\" > nul || exit /b {BATCH_SHORTCUT_COPY_FAILURE_EXIT_CODE}"
+    );
+    Ok((commands, file))
 }
 
-pub(super) fn embedded_tray_shortcut_commands(
+pub(super) fn staged_tray_shortcut_commands(
     app_name: &str,
     exe: &str,
     icon_location: Option<&str>,
-) -> ResultType<String> {
+) -> ResultType<(String, ProtectedInstallFile)> {
     let filename = format!("{app_name} Tray.lnk");
-    Ok(embedded_shortcut_commands(
+    staged_shortcut_commands(
         shortcut_bytes(exe, Some("--tray"), icon_location)?,
         &filename,
-        "tray_shortcut",
-    ))
+    )
 }
 
 pub(super) fn validate_install_value(value: &str) -> ResultType<()> {
@@ -133,14 +133,6 @@ pub(super) fn path_for_cmd_environment(path: &Path) -> ResultType<&str> {
         bail!("Path is unsafe for an elevated cmd.exe handoff: {:?}", path);
     }
     Ok(value)
-}
-
-// Bootstrap assignments are parsed before DisableDelayedExpansion takes effect.
-// Escape carets first so `^!` preserves each literal exclamation mark.
-pub(super) fn path_for_cmd_assignment(path: &Path) -> ResultType<String> {
-    Ok(path_for_cmd_environment(path)?
-        .replace('^', "^^")
-        .replace('!', "^!"))
 }
 
 pub(super) fn trusted_install_environment() -> ResultType<String> {
@@ -201,7 +193,25 @@ fn initialize_shell_com() -> ResultType<Option<ShellComGuard>> {
     Ok(Some(ShellComGuard))
 }
 
-struct ProcessHandle(HANDLE);
+pub(super) struct ProcessHandle(HANDLE);
+impl ProcessHandle {
+    pub(super) fn handle(&self) -> HANDLE {
+        self.0
+    }
+
+    pub(super) fn wait(self) -> ResultType<u32> {
+        let wait_result = unsafe { Threading::WaitForSingleObject(self.0, Threading::INFINITE) };
+        if wait_result == Foundation::WAIT_FAILED {
+            return Err(io::Error::last_os_error().into());
+        }
+        if wait_result != Foundation::WAIT_OBJECT_0 {
+            bail!("Unexpected elevated process wait result: {}", wait_result.0);
+        }
+        let mut exit_code = 0;
+        unsafe { Threading::GetExitCodeProcess(self.0, &mut exit_code) }?;
+        Ok(exit_code)
+    }
+}
 
 impl Drop for ProcessHandle {
     fn drop(&mut self) {
@@ -217,11 +227,11 @@ fn elevated_working_directory(executable: &Path) -> ResultType<&Path> {
         .ok_or_else(|| anyhow!("Elevated executable has no parent directory"))
 }
 
-pub(super) fn run_elevated_and_wait(
+pub(super) fn launch_elevated(
     executable: &Path,
     parameters: &str,
     show: bool,
-) -> ResultType<u32> {
+) -> ResultType<ProcessHandle> {
     let parameter_chars = parameters.encode_utf16().count();
     if parameter_chars >= WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS {
         bail!("Elevated command is too long: {parameter_chars} UTF-16 characters");
@@ -249,17 +259,7 @@ pub(super) fn run_elevated_and_wait(
     if info.hProcess.0.is_null() {
         bail!("Windows did not return an elevated process handle");
     }
-    let process = ProcessHandle(info.hProcess);
-    let wait_result = unsafe { Threading::WaitForSingleObject(process.0, Threading::INFINITE) };
-    if wait_result == Foundation::WAIT_FAILED {
-        return Err(io::Error::last_os_error().into());
-    }
-    if wait_result != Foundation::WAIT_OBJECT_0 {
-        bail!("Unexpected elevated process wait result: {}", wait_result.0);
-    }
-    let mut exit_code = 0;
-    unsafe { Threading::GetExitCodeProcess(process.0, &mut exit_code) }?;
-    Ok(exit_code)
+    Ok(ProcessHandle(info.hProcess))
 }
 
 // Escape `^` before using it to escape `&` so both survive nested cmd.exe parsing.

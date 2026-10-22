@@ -22,7 +22,7 @@ use windows::{
     },
 };
 
-pub(super) fn path() -> ResultType<PathBuf> {
+pub(in crate::platform::windows) fn path() -> ResultType<PathBuf> {
     let system = get_system_executable("")?;
     let windows = system
         .parent()
