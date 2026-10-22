@@ -419,6 +419,7 @@ fn ui_parent(
                     if !last_line.is_empty() && initial_password.is_some() {
                         log::error!("received not empty line: {last_line}, clear initial password");
                         initial_password = None;
+                        first = true;
                     }
                 }
             }
