@@ -840,7 +840,7 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
     use hbb_common::sleep;
     for i in 1..=tries {
         sleep(i as f32 * CONFIG_SYNC_INTERVAL_SECS).await;
-        match crate::ipc::connect_service(1000).await {
+        match crate::ipc::connect_trusted_device_service(1000).await {
             Ok(mut conn) => {
                 if !synced {
                     if conn.send(&Data::SyncConfig(None)).await.is_ok() {
@@ -852,36 +852,25 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                     #[cfg(target_os = "macos")]
                                     let _chk_pk = crate::CheckIfResendPk::new();
                                     if !config.is_empty() {
-                                        if cfg0.0 != config {
-                                            match crate::trusted_devices::config::set_config(
-                                                config.clone(),
-                                            ) {
-                                                Ok(_) => {
-                                                    cfg0.0 = config;
-                                                    log::info!("sync config from root");
-                                                }
-                                                Err(error) => {
-                                                    crate::trusted_devices::config::log_sync_error(
-                                                        error,
-                                                    )
-                                                }
+                                        let result =
+                                            crate::trusted_devices::config::update(move || {
+                                                crate::trusted_devices::config::sync_config(
+                                                    config.clone(),
+                                                    config2.clone(),
+                                                )?;
+                                                Ok((config, config2))
+                                            })
+                                            .await;
+                                        match result {
+                                            Ok(configs) => cfg0 = configs,
+                                            Err(error) => {
+                                                crate::trusted_devices::config::log_sync_error(
+                                                    error,
+                                                );
+                                                continue;
                                             }
                                         }
-                                        if cfg0.1 != config2 {
-                                            match crate::trusted_devices::config::set_config2(
-                                                config2.clone(),
-                                            ) {
-                                                Ok(_) => {
-                                                    cfg0.1 = config2;
-                                                    log::info!("sync config2 from root");
-                                                }
-                                                Err(error) => {
-                                                    crate::trusted_devices::config::log_sync_error(
-                                                        error,
-                                                    )
-                                                }
-                                            }
-                                        }
+                                        log::info!("sync config from root");
                                     } else {
                                         // only on macos, because this issue was only reproduced on macos
                                         #[cfg(target_os = "macos")]
@@ -922,7 +911,7 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                         match conn.send(&Data::SyncConfig(Some(cfg.clone().into()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
-                                match crate::ipc::connect_service(1000).await {
+                                match crate::ipc::connect_trusted_device_service(1000).await {
                                     Ok(mut _conn) => {
                                         conn = _conn;
                                         log::info!("reconnected to ipc_service");

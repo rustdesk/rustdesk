@@ -107,6 +107,7 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
         .unwrap();
     assert!(!is_trusted(&token).await);
     service_operations_share_and_revoke_persisted_grants().await;
+    recovery::service_sync_preserves_grants_and_revocations().await;
     unavailable_grants_keep_password_totp_available().await;
     password_write_failure_is_reported().await;
 }
@@ -152,6 +153,12 @@ async fn unavailable_grants_keep_password_totp_available() {
 async fn service_operations_share_and_revoke_persisted_grants() {
     let enrollment = begin_enrollment().await;
     let token = enrollment.finish(DeviceInfo::default()).await.unwrap();
+    let synced = serde_json::to_value(Config2::get()).unwrap();
+    assert!(
+        synced["trusted_devices_v2"].as_str()
+            == Some(Config2::get_trusted_devices_v2().unwrap().as_str()),
+        "The service configuration snapshot must include newly enrolled grants"
+    );
     let (pending, valid, _) = host::begin(proof(PASSWORD, &token)).await.unwrap().unwrap();
     let mut pending = pending.unwrap();
     assert!(valid);
@@ -180,7 +187,7 @@ async fn service_operations_share_and_revoke_persisted_grants() {
     let stale_config: Config2 = hbb_common::config::load_path(Config2::file());
     assert_eq!(configuration::devices().await.len(), 1);
     authority::manage(true).await.unwrap();
-    // Neither configuration sync nor another process's settings may restore grants.
+    // Ordinary settings saves must not restore grants from a stale snapshot.
     config::set_config2(stale_config).unwrap();
     Config::set_option("trusted-device-test-option".into(), "Y".into());
     assert!(remaining.check().await.is_err());

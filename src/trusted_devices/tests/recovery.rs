@@ -1,5 +1,29 @@
 use super::*;
 
+pub(super) async fn service_sync_preserves_grants_and_revocations() {
+    let token = begin_enrollment()
+        .await
+        .finish(DeviceInfo::default())
+        .await
+        .unwrap();
+    let settings = Config::get();
+    let issued = Config2::get_for_sync().unwrap();
+    Config2::set_trusted_devices_v2(String::new()).unwrap();
+    config::sync_config(settings.clone(), issued.clone()).unwrap();
+    assert!(is_trusted(&token).await);
+    assert!(Config2::get_for_sync().unwrap() == issued);
+
+    authority::manage(true).await.unwrap();
+    let revoked = Config2::get_for_sync().unwrap();
+    // A separate login-screen process writes disk without updating this cache.
+    hbb_common::config::store_path(Config2::file(), issued.clone()).unwrap();
+    assert!(Config2::get() == revoked);
+    assert!(Config2::get_for_sync().unwrap() == issued);
+    config::sync_config(settings, revoked).unwrap();
+    assert!(!is_trusted(&token).await);
+    assert!(configuration::devices().await.is_empty());
+}
+
 pub(super) async fn unknown_expiration_preserves_login_and_settings() {
     let original = Config::get_options();
     let key = keys::OPTION_TRUSTED_DEVICE_EXPIRATION;

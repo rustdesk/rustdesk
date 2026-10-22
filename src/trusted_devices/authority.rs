@@ -41,7 +41,6 @@ pub enum Response {
     Begun(Ticket, Option<Credential>),
     Done,
     Devices(String),
-    Unavailable(String),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -169,37 +168,15 @@ pub(super) fn uses_service() -> ResultType<bool> {
 
 pub async fn request(request: Request) -> ResultType<Response> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if uses_service()? {
-        use crate::ipc::{connect_trusted_device_service, Data};
-        const TIMEOUT_MS: u64 = 1000;
-        // Revoke the inactive user copy before the service acknowledges management.
-        if matches!(&request, Request::Clear | Request::Remove(_)) {
-            let local = request.clone();
-            super::config::update(move || handle(local)).await?;
-        }
-        let mut connection = connect_trusted_device_service(TIMEOUT_MS).await?;
-        connection
-            .send(&Data::TrustedDeviceRequest(Box::new(request)))
+    let sync = !matches!(&request, Request::Check { .. } | Request::List);
+    let response = super::config::update(move || handle(request)).await?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if sync && uses_service()? {
+        super::config::sync_auth_to_service()
             .await
             .map_err(Unavailable)?;
-        return match connection
-            .next_timeout(TIMEOUT_MS)
-            .await
-            .map_err(Unavailable)?
-        {
-            Some(Data::TrustedDeviceResponse(Ok(Response::Unavailable(error)))) => {
-                Err(Unavailable(hbb_common::anyhow::anyhow!(error)).into())
-            }
-            Some(Data::TrustedDeviceResponse(result)) => {
-                result.map_err(|error| hbb_common::anyhow::anyhow!(error))
-            }
-            _ => Err(Unavailable(hbb_common::anyhow::anyhow!(
-                "The system service did not confirm the trusted-device operation"
-            ))
-            .into()),
-        };
     }
-    super::config::update(move || handle(request)).await
+    Ok(response)
 }
 
 pub fn handle(request: Request) -> ResultType<Response> {

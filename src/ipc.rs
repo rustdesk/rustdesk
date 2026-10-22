@@ -497,7 +497,6 @@ pub enum Data {
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
     TrustedDeviceManagement(Box<authority::Request>),
-    TrustedDeviceRequest(Box<crate::trusted_devices::authority::Request>),
     TrustedDeviceResponse(Result<crate::trusted_devices::authority::Response, String>),
     SecurityConfigError(String),
     #[cfg(all(target_os = "windows", feature = "flutter"))]
@@ -613,12 +612,6 @@ fn legacy_hot_measured() -> bool {
 #[tokio::main(flavor = "current_thread")]
 pub async fn start(postfix: &str) -> ResultType<()> {
     let mut incoming = new_listener(postfix).await?;
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if postfix == crate::POSTFIX_SERVICE {
-        allow_err!(
-            crate::trusted_devices::config::update(crate::trusted_devices::initialize).await
-        );
-    }
     loop {
         if let Some(result) = incoming.next().await {
             match result {
@@ -649,23 +642,20 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     break;
                                 }
                                 Ok(Some(data)) => {
-                                    // On Linux/macOS, the protected `_service` channel syncs config
-                                    // and handles shared trusted-device grants for the active user.
+                                    // On Linux/macOS, the protected `_service` channel is used only for
+                                    // syncing config between root service and the active user process.
                                     //
                                     // NOTE: `is_service_ipc_postfix()` also includes `_uinput_*`, but those
                                     // channels are handled by the dedicated uinput listener/protocol in
                                     // `src/server/uinput.rs` and therefore do not share this Data enum
-                                    // allowlist. The configuration/trusted-device allowlist is scoped to the
+                                    // allowlist. The SyncConfig allowlist here is intentionally scoped to the
                                     // `_service` channel only.
                                     //
                                     // Keep this explicit branch to avoid policy drift between `_service` and
                                     // uinput IPC paths while still minimizing exposed message surface here.
                                     #[cfg(any(target_os = "linux", target_os = "macos"))]
                                     if postfix == crate::POSTFIX_SERVICE {
-                                        if matches!(
-                                            &data,
-                                            Data::SyncConfig(_) | Data::TrustedDeviceRequest(_)
-                                        ) {
+                                        if matches!(&data, Data::SyncConfig(_)) {
                                             handle(data, &mut stream).await;
                                         } else {
                                             log::warn!(
@@ -760,7 +750,8 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
                 // NOTE: On Linux/macOS, some IPC sockets are intentionally world-connectable
                 // (0666) so the active (non-root) user process can connect. Authorization is
                 // enforced at accept-time for these channels, and the protected `_service`
-                // channel is further restricted to configuration and trusted-device requests.
+                // channel is further restricted by an explicit message allowlist (SyncConfig
+                // only).
                 let socket_mode = if config::is_service_ipc_postfix(postfix) {
                     0o0666
                 } else {
@@ -1110,8 +1101,15 @@ async fn handle(data: Data, stream: &mut Connection) {
             let (config, config2) = *configs;
             let _chk = CheckIfRestart::new();
             if let Err(error) = crate::trusted_devices::config::update(move || {
-                crate::trusted_devices::config::set_config(config)
-                    .and_then(|_| crate::trusted_devices::config::set_config2(config2))
+                #[cfg(any(target_os = "linux", target_os = "macos"))]
+                {
+                    crate::trusted_devices::config::sync_config(config, config2)
+                }
+                #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+                {
+                    crate::trusted_devices::config::set_config(config)
+                        .and_then(|_| crate::trusted_devices::config::set_config2(config2))
+                }
             })
             .await
             {
@@ -1125,11 +1123,24 @@ async fn handle(data: Data, stream: &mut Connection) {
             allow_err!(stream.send(&Data::SyncConfig(None)).await);
         }
         Data::SyncConfig(None) => {
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            let config2 = match crate::trusted_devices::config::update(Config2::get_for_sync).await
+            {
+                Ok(config2) => config2,
+                Err(error) => {
+                    allow_err!(
+                        stream
+                            .send(&Data::SecurityConfigError(error.to_string()))
+                            .await
+                    );
+                    return;
+                }
+            };
+            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+            let config2 = Config2::get();
             allow_err!(
                 stream
-                    .send(&Data::SyncConfig(Some(
-                        (Config::get(), Config2::get()).into()
-                    )))
+                    .send(&Data::SyncConfig(Some((Config::get(), config2).into())))
                     .await
             );
         }
@@ -1291,19 +1302,6 @@ async fn handle(data: Data, stream: &mut Connection) {
                 )),
             }
             .map_err(|error| error.to_string());
-            allow_err!(stream.send(&Data::TrustedDeviceResponse(result)).await);
-        }
-        Data::TrustedDeviceRequest(request) => {
-            let result = match crate::trusted_devices::config::update(move || {
-                crate::trusted_devices::authority::handle(*request)
-            })
-            .await
-            {
-                Err(error) if error.is::<crate::trusted_devices::authority::Unavailable>() => Ok(
-                    crate::trusted_devices::authority::Response::Unavailable(error.to_string()),
-                ),
-                result => result.map_err(|error| error.to_string()),
-            };
             allow_err!(stream.send(&Data::TrustedDeviceResponse(result)).await);
         }
         Data::InstallOption(opt) => match opt {
@@ -1921,7 +1919,6 @@ pub async fn trusted_devices(request: authority::Request) -> ResultType<String> 
             match result.map_err(|error| hbb_common::anyhow::anyhow!(error))? {
                 authority::Response::Devices(devices) if list => Ok(devices),
                 authority::Response::Done if !list => Ok(String::new()),
-                authority::Response::Unavailable(error) => bail!(error),
                 _ => bail!("Invalid trusted-device management response"),
             }
         }

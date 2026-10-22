@@ -57,10 +57,9 @@ pub(super) async fn sync_auth_to_service() -> ResultType<()> {
     use crate::ipc::{connect_trusted_device_service, Data};
     const TIMEOUT_MS: u64 = 1000;
     let mut connection = connect_trusted_device_service(TIMEOUT_MS).await?;
+    let config2 = update(Config2::get_for_sync).await?;
     connection
-        .send(&Data::SyncConfig(Some(
-            (Config::get(), Config2::get()).into(),
-        )))
+        .send(&Data::SyncConfig(Some((Config::get(), config2).into())))
         .await?;
     match connection.next_timeout(TIMEOUT_MS).await? {
         Some(Data::SyncConfig(None)) => Ok(()),
@@ -250,16 +249,28 @@ pub fn set_salt(salt: &str) -> ResultType<()> {
     })
 }
 
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn set_config(value: Config) -> ResultType<bool> {
     let affected =
         normalize(password(&Config::get())?, false) != normalize(password(&value)?, false);
     change(affected, || Ok(Config::set(value)))
 }
 
+#[cfg(any(not(any(target_os = "linux", target_os = "macos")), test))]
 pub fn set_config2(value: Config2) -> ResultType<bool> {
     policy::change_options(effective_options(value.options.clone()), || {
         Ok(Config2::set(value))
     })
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+pub fn sync_config(config: Config, config2: Config2) -> ResultType<()> {
+    let _storage = super::storage()?;
+    // The accepting server has already applied revocation and duration changes.
+    Config::set(config);
+    Config2::set(config2.clone());
+    snapshot()?;
+    config2.sync_trusted_devices()
 }
 
 impl Snapshot {
