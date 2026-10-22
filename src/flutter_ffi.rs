@@ -817,7 +817,7 @@ pub fn session_input_key(
         }
     };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::flutter_mcp::with_human_input(session_id, send);
+    crate::flutter_mcp::with_human_key_input(session_id, &name, down, press, send);
     #[cfg(any(target_os = "android", target_os = "ios"))]
     send();
 }

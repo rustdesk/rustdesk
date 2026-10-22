@@ -28,6 +28,10 @@ lazy_static::lazy_static! {
 pub struct ConnectionInput {
     pub id: SessionID,
     owner: RwLock<InputOwner>,
+    /// Keys the human holds through the legacy key API, which reports names
+    /// instead of forwarded events. Recorded under the same gate as the send,
+    /// so a handoff can release them before the agent takes over.
+    human_keys: Mutex<HashSet<String>>,
 }
 
 impl Default for ConnectionInput {
@@ -35,6 +39,7 @@ impl Default for ConnectionInput {
         Self {
             id: SessionID::new_v4(),
             owner: Default::default(),
+            human_keys: Default::default(),
         }
     }
 }
@@ -99,7 +104,7 @@ impl InputOwner {
             }
         }
         for key in self.agent_keys.drain() {
-            session.input_key(&key, false, false, false, false, false, false);
+            session.input_key_unswapped(&key, false, false, false, false, false, false);
         }
     }
 
@@ -141,15 +146,22 @@ pub fn set_agent_control(session_id: SessionID, grant_id: String) {
         *owner = InputOwner::default();
         return;
     }
+    // Human keys held through the legacy key API are not part of the forwarded
+    // event tracker, so release them here. The owner lock is held, so no human
+    // send can be recorded between the release and the grant below.
+    for key in session.ui_handler.mcp.human_keys.lock().unwrap().drain() {
+        session.input_key(&key, false, false, false, false, false, false);
+    }
     owner.grant(grant_id, |buttons, pan| {
-        let current = crate::flutter::sessions::get_session_by_session_id(
-            &crate::flutter::get_cur_session_id(),
-        );
-        if current
-            .as_ref()
-            .map_or(false, |s| std::sync::Arc::ptr_eq(s, &session))
-        {
-            crate::keyboard::release_remote_keys_for_session(&session, session_id);
+        // Forwarded human keys are tracked for the tab that has focus, and the
+        // grant covers the whole connection. Release them through that tab as
+        // long as it shares this connection, so a grant that lands on a sibling
+        // tab still cleans up what the focused one left down.
+        let current_id = crate::flutter::get_cur_session_id();
+        if let Some(current) = crate::flutter::sessions::get_session_by_session_id(&current_id) {
+            if current.ui_handler.mcp.id == session.ui_handler.mcp.id {
+                crate::keyboard::release_remote_keys_for_session(&current, current_id);
+            }
         }
         let swap = session.get_toggle_option("swap-left-right-mouse".to_owned());
         for button in [1, 2, 4, 8, 16] {
@@ -197,6 +209,7 @@ pub fn close_connection(session: &crate::flutter::FlutterSession) {
     // Finish in-flight native sends and revoke before the connection queues Close.
     let mut owner = session.ui_handler.mcp.owner.write().unwrap();
     owner.release_agent(session);
+    session.ui_handler.mcp.human_keys.lock().unwrap().clear();
     *owner = InputOwner::default();
 }
 
@@ -225,7 +238,7 @@ pub fn input_key(
         return "Linux peers do not support holding ordinary keys across calls. Use action press."
             .into();
     }
-    session.input_key(name, down, press, alt, ctrl, shift, command);
+    session.input_key_unswapped(name, down, press, alt, ctrl, shift, command);
     if down && !press {
         owner.agent_keys.insert(name.to_owned());
     } else {
@@ -254,6 +267,35 @@ pub fn with_human_input(session_id: SessionID, send: impl FnOnce()) {
     if owner.accepts(None) {
         send();
     }
+}
+
+/// The legacy key API sends a named key instead of a forwarded event, so the
+/// handoff cannot find the keys it left down in the event tracker. Record them
+/// while the human gate is held, so releasing them at the grant cannot race a
+/// human key-down.
+pub fn with_human_key_input(
+    session_id: SessionID,
+    name: &str,
+    down: bool,
+    press: bool,
+    send: impl FnOnce(),
+) {
+    let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
+        return;
+    };
+    let owner = session.ui_handler.mcp.owner.read().unwrap();
+    if !owner.accepts(None) {
+        return;
+    }
+    if !press {
+        let mut keys = session.ui_handler.mcp.human_keys.lock().unwrap();
+        if down {
+            keys.insert(name.to_owned());
+        } else {
+            keys.remove(name);
+        }
+    }
+    send();
 }
 
 pub fn input_os_password(session_id: SessionID, value: String) {
@@ -412,6 +454,43 @@ pub fn save_screenshot(sid: &str, path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::Data;
+    use base::message_proto::{
+        key_event::Union as KeyUnion, message::Union as MessageUnion, ControlKey, KeyEvent,
+    };
+    use hbb_common::tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
+
+    /// Stands in for the peer: every outbound message lands here.
+    fn capture(session: &crate::flutter::FlutterSession) -> UnboundedReceiver<Data> {
+        let (tx, rx) = unbounded_channel();
+        *session.sender.write().unwrap() = Some(tx);
+        rx
+    }
+
+    fn sent_keys(rx: &mut UnboundedReceiver<Data>) -> Vec<KeyEvent> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|data| match data {
+                Data::Message(msg) => match msg.union {
+                    Some(MessageUnion::KeyEvent(evt)) => Some(evt),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn control_key(evt: &KeyEvent) -> Option<ControlKey> {
+        match evt.union {
+            Some(KeyUnion::ControlKey(ck)) => Some(ck.enum_value_or_default()),
+            _ => None,
+        }
+    }
+
+    fn keys_of(keys: &[KeyEvent]) -> Vec<String> {
+        keys.iter()
+            .map(|k| format!("{:?} down={} press={}", k.union, k.down, k.press))
+            .collect()
+    }
 
     fn session() -> (SessionID, crate::flutter::FlutterSession) {
         let id = SessionID::new_v4();
@@ -858,5 +937,164 @@ mod tests {
         assert!(!save_screenshot(&late, &path).unwrap().is_empty());
         assert_eq!(std::fs::read(&*path).unwrap(), b"other session");
         std::fs::remove_file(&*path).unwrap();
+    }
+
+    #[test]
+    fn handoff_releases_a_key_held_through_the_legacy_key_api() {
+        let (session_id, session) = session();
+        let mut rx = capture(&session);
+        let human_key = |down: bool, press: bool| {
+            crate::flutter_ffi::session_input_key(
+                session_id,
+                "VK_UP".to_owned(),
+                down,
+                press,
+                false,
+                false,
+                false,
+                false,
+            )
+        };
+
+        // Held through the legacy API: no forwarded event ever sees this key.
+        human_key(true, false);
+        let keys = sent_keys(&mut rx);
+        assert_eq!(keys.len(), 1, "{:?}", keys_of(&keys));
+        assert!(
+            control_key(&keys[0]) == Some(ControlKey::UpArrow)
+                && keys[0].down
+                && !keys[0].press,
+            "{:?}",
+            keys_of(&keys)
+        );
+
+        // The agent takes over; the peer must see the key come up first.
+        set_agent_control(session_id, "grant".to_owned());
+        let keys = sent_keys(&mut rx);
+        assert!(
+            keys.iter()
+                .any(|k| control_key(k) == Some(ControlKey::UpArrow) && !k.down),
+            "no release for the held key: {:?}",
+            keys_of(&keys)
+        );
+
+        // The human key-up after the grant is dropped, so it cannot arrive
+        // after the agent's own input.
+        human_key(false, false);
+        assert!(sent_keys(&mut rx).is_empty());
+
+        // The agent still gets its input.
+        assert!(input_key(session_id, "grant", "VK_DOWN", false, true, false, false, false, false)
+            .is_empty());
+        assert_eq!(sent_keys(&mut rx).len(), 1);
+        set_agent_control(session_id, String::new());
+        crate::flutter_ffi::session_close(session_id);
+    }
+
+    #[test]
+    fn handoff_releases_forwarded_keys_held_by_a_sibling_tab() {
+        let (a, connection) = session();
+        let b = SessionID::new_v4();
+        crate::flutter::sessions::insert_session(
+            b,
+            hbb_common::rendezvous_proto::ConnType::DEFAULT_CONN,
+            connection.clone(),
+        );
+        // The human types in tab b; the agent grant lands on tab a.
+        crate::flutter::set_cur_session_id(b);
+        let mut rx = capture(&connection);
+
+        let press = rdev::Event {
+            time: std::time::SystemTime::now(),
+            unicode: None,
+            platform_code: 0,
+            position_code: 0,
+            event_type: rdev::EventType::KeyPress(rdev::Key::UpArrow),
+            usb_hid: 0,
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            extra_data: 0,
+        };
+        let forwarded = crate::keyboard::event_to_key_events(
+            "windows".to_owned(),
+            &press,
+            crate::keyboard::get_keyboard_mode_enum("legacy"),
+            None,
+        );
+        assert!(!forwarded.is_empty(), "the press must be forwardable");
+
+        set_agent_control(a, "grant".to_owned());
+        let keys = sent_keys(&mut rx);
+        assert!(
+            keys.iter()
+                .any(|k| control_key(k) == Some(ControlKey::UpArrow) && !k.down),
+            "no release through the focused sibling tab: {:?}",
+            keys_of(&keys)
+        );
+        set_agent_control(a, String::new());
+        crate::flutter_ffi::session_close(a);
+        crate::flutter_ffi::session_close(b);
+    }
+
+    #[test]
+    fn agent_keys_ignore_the_human_swap_preference() {
+        let (session_id, session) = session();
+        session
+            .lc
+            .write()
+            .unwrap()
+            .set_toggle_option_for_test("allow_swap_key", true);
+        let mut rx = capture(&session);
+        set_agent_control(session_id, "grant".to_owned());
+        sent_keys(&mut rx);
+
+        // The agent asked for Control, so Control goes on the wire.
+        assert!(
+            input_key(session_id, "grant", "VK_CONTROL", true, false, false, false, false, false)
+                .is_empty()
+        );
+        let keys = sent_keys(&mut rx);
+        assert_eq!(keys.len(), 1, "{:?}", keys_of(&keys));
+        assert!(
+            control_key(&keys[0]) == Some(ControlKey::Control) && keys[0].down,
+            "{:?}",
+            keys_of(&keys)
+        );
+
+        // Revoking releases the key the agent pressed, not its swapped form.
+        set_agent_control(session_id, String::new());
+        let keys = sent_keys(&mut rx);
+        assert!(
+            keys.iter()
+                .any(|k| control_key(k) == Some(ControlKey::Control) && !k.down),
+            "release did not match the pressed key: {:?}",
+            keys_of(&keys)
+        );
+        assert!(
+            !keys
+                .iter()
+                .any(|k| control_key(k) == Some(ControlKey::Meta)),
+            "agent input was swapped: {:?}",
+            keys_of(&keys)
+        );
+
+        // Human input keeps honoring the preference.
+        crate::flutter_ffi::session_input_key(
+            session_id,
+            "VK_CONTROL".to_owned(),
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+        );
+        let keys = sent_keys(&mut rx);
+        assert_eq!(keys.len(), 1, "{:?}", keys_of(&keys));
+        assert!(
+            control_key(&keys[0]) == Some(ControlKey::Meta),
+            "human input ignored the swap preference: {:?}",
+            keys_of(&keys)
+        );
+        crate::flutter_ffi::session_close(session_id);
     }
 }

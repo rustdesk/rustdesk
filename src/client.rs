@@ -3502,6 +3502,16 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Sets a toggle that is otherwise stored in the peer config on disk. Used
+    /// by tests that need a preference such as the Control/Command swap.
+    #[cfg(test)]
+    pub fn set_toggle_option_for_test(&mut self, name: &str, value: bool) {
+        match name {
+            "allow_swap_key" => self.config.allow_swap_key.v = value,
+            _ => unimplemented!("no test hook for {name}"),
+        }
+    }
+
     pub fn is_privacy_mode_supported(&self) -> bool {
         if let Some(features) = &self.features {
             features.privacy_mode

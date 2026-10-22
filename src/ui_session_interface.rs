@@ -771,10 +771,22 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn send_key_event(&self, evt: &KeyEvent) {
+        self.send_key_event_with_swap(evt, true);
+    }
+
+    /// Agent input names the remote key explicitly, so the local preference for
+    /// swapping Control and Command must not rewrite it.
+    pub fn send_key_event_unswapped(&self, evt: &KeyEvent) {
+        self.send_key_event_with_swap(evt, false);
+    }
+
+    fn send_key_event_with_swap(&self, evt: &KeyEvent, swap: bool) {
         // mode: legacy(0), map(1), translate(2), auto(3)
 
         let mut msg = evt.clone();
-        self.swap_modifier_key(&mut msg);
+        if swap {
+            self.swap_modifier_key(&mut msg);
+        }
         let mut msg_out = Message::new();
         msg_out.set_key_event(msg);
         self.send(Data::Message(msg_out));
@@ -899,13 +911,42 @@ impl<T: InvokeUiSession> Session<T> {
         shift: bool,
         command: bool,
     ) {
+        self._input_key_by_name(name, down, press, alt, ctrl, shift, command, true);
+    }
+
+    /// The MCP input path sends the key it names, without applying the local
+    /// Control/Command swap preference.
+    pub fn input_key_unswapped(
+        &self,
+        name: &str,
+        down: bool,
+        press: bool,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        self._input_key_by_name(name, down, press, alt, ctrl, shift, command, false);
+    }
+
+    fn _input_key_by_name(
+        &self,
+        name: &str,
+        down: bool,
+        press: bool,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+        swap: bool,
+    ) {
         let chars: Vec<char> = name.chars().collect();
         if chars.len() == 1 {
             let key = Key::_Raw(chars[0] as _);
-            self._input_key(key, down, press, alt, ctrl, shift, command);
+            self._input_key(key, down, press, alt, ctrl, shift, command, swap);
         } else {
             if let Some(key) = KEY_MAP.get(name) {
-                self._input_key(key.clone(), down, press, alt, ctrl, shift, command);
+                self._input_key(key.clone(), down, press, alt, ctrl, shift, command, swap);
             }
         }
     }
@@ -1132,6 +1173,7 @@ impl<T: InvokeUiSession> Session<T> {
         ctrl: bool,
         shift: bool,
         command: bool,
+        swap: bool,
     ) {
         let v = if press {
             3
@@ -1161,7 +1203,11 @@ impl<T: InvokeUiSession> Session<T> {
         keyboard::client::legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
         key_event.mode = KeyboardMode::Legacy.into();
 
-        self.send_key_event(&key_event);
+        if swap {
+            self.send_key_event(&key_event);
+        } else {
+            self.send_key_event_unswapped(&key_event);
+        }
     }
 
     pub fn send_touch_scale(&self, scale: i32, alt: bool, ctrl: bool, shift: bool, command: bool) {
