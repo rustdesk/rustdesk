@@ -199,7 +199,9 @@ class _UsbipPageState extends State<UsbipPage> {
 /// as a floating window over that session. It does not block the remote
 /// screen: an elevation prompt there must stay reachable while it is open.
 void toggleUsbForwardingWindow(BuildContext context, FFI ffi) {
-  final open = _usbWindows.remove(ffi.sessionId);
+  final model = ffi.usbipModel;
+  final open = model.window;
+  model.window = null;
   if (open != null && open.mounted) {
     open.remove();
     return;
@@ -216,7 +218,7 @@ void toggleUsbForwardingWindow(BuildContext context, FFI ffi) {
   late final OverlayEntry entry;
   void close() {
     if (entry.mounted) entry.remove();
-    _usbWindows.remove(ffi.sessionId);
+    if (model.window == entry) model.window = null;
   }
 
   entry = OverlayEntry(
@@ -265,12 +267,11 @@ void toggleUsbForwardingWindow(BuildContext context, FFI ffi) {
     ),
   );
   overlayState.insert(entry);
-  _usbWindows[ffi.sessionId] = entry;
+  model.window = entry;
 }
 
 const double _kUsbWindowWidth = 460;
 const double _kUsbWindowHeight = 440;
-final Map<SessionID, OverlayEntry> _usbWindows = {};
 final _usbWindowPosition =
     overlay.DraggableKeyPosition('draggablePositionUsbWindow');
 bool _usbWindowPositionLoaded = false;
