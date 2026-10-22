@@ -497,6 +497,8 @@ pub enum Data {
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
     TrustedDeviceManagement(Box<authority::Request>),
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    TrustedDeviceRequest(Box<authority::Request>),
     TrustedDeviceResponse(Result<crate::trusted_devices::authority::Response, String>),
     SecurityConfigError(String),
     #[cfg(all(target_os = "windows", feature = "flutter"))]
@@ -612,6 +614,17 @@ fn legacy_hot_measured() -> bool {
 #[tokio::main(flavor = "current_thread")]
 pub async fn start(postfix: &str) -> ResultType<()> {
     let mut incoming = new_listener(postfix).await?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if postfix == crate::POSTFIX_SERVICE {
+        #[cfg(target_os = "macos")]
+        crate::trusted_devices::config::update(
+            crate::trusted_devices::authority::register_service_authority,
+        )
+        .await?;
+        allow_err!(
+            crate::trusted_devices::config::update(crate::trusted_devices::initialize).await
+        );
+    }
     loop {
         if let Some(result) = incoming.next().await {
             match result {
@@ -642,20 +655,30 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     break;
                                 }
                                 Ok(Some(data)) => {
-                                    // On Linux/macOS, the protected `_service` channel is used only for
-                                    // syncing config between root service and the active user process.
+                                    // The protected `_service` channel syncs settings and owns grants.
                                     //
                                     // NOTE: `is_service_ipc_postfix()` also includes `_uinput_*`, but those
                                     // channels are handled by the dedicated uinput listener/protocol in
                                     // `src/server/uinput.rs` and therefore do not share this Data enum
-                                    // allowlist. The SyncConfig allowlist here is intentionally scoped to the
+                                    // allowlist. The configuration/grant allowlist is scoped to the
                                     // `_service` channel only.
                                     //
                                     // Keep this explicit branch to avoid policy drift between `_service` and
                                     // uinput IPC paths while still minimizing exposed message surface here.
                                     #[cfg(any(target_os = "linux", target_os = "macos"))]
                                     if postfix == crate::POSTFIX_SERVICE {
-                                        if matches!(&data, Data::SyncConfig(_)) {
+                                        if let Data::TrustedDeviceRequest(request) = data {
+                                            let result =
+                                                crate::trusted_devices::service::handle_request(
+                                                    *request,
+                                                )
+                                                .await;
+                                            allow_err!(
+                                                stream
+                                                    .send(&Data::TrustedDeviceResponse(result))
+                                                    .await
+                                            );
+                                        } else if matches!(&data, Data::SyncConfig(_)) {
                                             handle(data, &mut stream).await;
                                         } else {
                                             log::warn!(
@@ -750,8 +773,7 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
                 // NOTE: On Linux/macOS, some IPC sockets are intentionally world-connectable
                 // (0666) so the active (non-root) user process can connect. Authorization is
                 // enforced at accept-time for these channels, and the protected `_service`
-                // channel is further restricted by an explicit message allowlist (SyncConfig
-                // only).
+                // channel is further restricted to configuration and grant requests.
                 let socket_mode = if config::is_service_ipc_postfix(postfix) {
                     0o0666
                 } else {

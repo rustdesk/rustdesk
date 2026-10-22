@@ -271,6 +271,9 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
             Err(e) => {
                 log::error!("run osascript failed: {}", e);
             }
+            Ok(status) if !status.success() => {
+                log::error!("Service installation failed: {status}");
+            }
             _ => {
                 let installed = std::path::Path::new(&agent_plist_file).exists();
                 log::info!("Agent file {} installed: {}", agent_plist_file, installed);

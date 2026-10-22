@@ -41,6 +41,7 @@ pub enum Response {
     Begun(Ticket, Option<Credential>),
     Done,
     Devices(String),
+    Unavailable(String),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -148,38 +149,66 @@ impl std::fmt::Debug for Response {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(super) fn uses_service() -> ResultType<bool> {
-    if crate::platform::is_root() || !crate::platform::is_installed() {
-        return Ok(false);
-    }
     #[cfg(target_os = "macos")]
     {
         use hbb_common::anyhow::Context;
-        // The app bundle may be installed without its optional background service.
-        return std::path::Path::new(&format!(
+        let registered = std::path::Path::new(&format!(
             "/Library/LaunchDaemons/{}_service.plist",
             crate::get_full_name()
         ))
         .try_exists()
-        .context("Inspect trusted-device system service registration");
+        .context("Inspect trusted-device system service registration")?;
+        // Uninstalling the service must not reactivate a stale per-user grant store.
+        return Ok(registered
+            || service_authority_path()
+                .try_exists()
+                .context("Inspect trusted-device service ownership")?);
     }
     #[cfg(target_os = "linux")]
-    Ok(true)
+    Ok(crate::platform::is_installed() && (!crate::platform::is_root() || crate::is_server()))
+}
+
+#[cfg(target_os = "macos")]
+fn service_authority_path() -> std::path::PathBuf {
+    std::path::Path::new("/Library/Preferences").join(format!(
+        "{}_trusted_devices_service",
+        crate::get_full_name()
+    ))
+}
+
+#[cfg(target_os = "macos")]
+pub fn register_service_authority() -> ResultType<()> {
+    use hbb_common::anyhow::Context;
+    if !crate::platform::is_root() {
+        bail!("Registering trusted-device service ownership requires root privileges");
+    }
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(service_authority_path())
+        .context("Register trusted-device service ownership")?;
+    file.sync_all()
+        .context("Persist trusted-device service ownership")
 }
 
 pub async fn request(request: Request) -> ResultType<Response> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    let sync = !matches!(&request, Request::Check { .. } | Request::List);
-    let response = super::config::update(move || handle(request)).await?;
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if sync && uses_service()? {
-        super::config::sync_auth_to_service()
-            .await
-            .map_err(Unavailable)?;
+    if uses_service()? {
+        #[cfg(target_os = "linux")]
+        super::service::sync_pending_auth().await?;
+        return super::service::request(request).await;
     }
-    Ok(response)
+    super::config::update(move || handle(request)).await
 }
 
 pub fn handle(request: Request) -> ResultType<Response> {
+    #[cfg(target_os = "macos")]
+    if (!crate::platform::is_root() || crate::is_server()) && uses_service()? {
+        return Err(Unavailable(hbb_common::anyhow::anyhow!(
+            "Trusted-device authority changed; retry the operation"
+        ))
+        .into());
+    }
     match request {
         Request::Clear => {
             super::clear()?;

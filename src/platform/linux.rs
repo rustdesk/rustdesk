@@ -2704,14 +2704,13 @@ pub fn run_me_with(secs: u32) {
         .ok();
 }
 
-fn switch_service(stop: bool) -> String {
+fn switch_service(stop: bool) -> ResultType<String> {
     // SECURITY: Use trusted home directory lookup via getpwuid instead of $HOME env var
     // to prevent confused-deputy attacks where an attacker manipulates environment variables.
     let home = get_home_dir_trusted()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
-    Config::set_option("stop-service".into(), if stop { "Y" } else { "" }.into());
-    if !home.is_empty() && home != "/root" && !Config::get().is_empty() {
+    let commands = if !home.is_empty() && home != "/root" && !Config::get().is_empty() {
         let app_name_lower = crate::get_app_name().to_lowercase();
         let app_name0 = crate::get_app_name();
         let config_subdir = format!(".config/{}", app_name_lower);
@@ -2721,11 +2720,17 @@ fn switch_service(stop: bool) -> String {
         let src1 = shell_quote(&format!("{}/{}/{}.toml", home, config_subdir, app_name0));
         let src2 = shell_quote(&format!("{}/{}/{}2.toml", home, config_subdir, app_name0));
         let dst = shell_quote(&format!("/root/{}/", config_subdir));
+        let dst2 = shell_quote(&format!("/root/{}/{}2.toml", config_subdir, app_name0));
+        let executable = shell_quote(&std::env::current_exe()?.to_string_lossy());
 
-        format!("cp -f {} {}; cp -f {} {};", src1, dst, src2, dst)
+        format!(
+            "cp -f {src1} {dst}; if [ -f {src2} ]; then {executable} --copy-service-config {src2} {dst2} || exit 1; fi;"
+        )
     } else {
         "".to_owned()
-    }
+    };
+    Config::set_option("stop-service".into(), if stop { "Y" } else { "" }.into());
+    Ok(commands)
 }
 
 pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
@@ -2734,7 +2739,13 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
         return false;
     }
     log::info!("Uninstalling service...");
-    let cp = switch_service(true);
+    let cp = match switch_service(true) {
+        Ok(cp) => cp,
+        Err(error) => {
+            log::error!("Failed to prepare service stop: {error}");
+            return false;
+        }
+    };
     let app_name = crate::get_app_name().to_lowercase();
     // systemctl kill rustdesk --tray, execute cp first
     if !run_cmds_privileged(&format!(
@@ -2756,7 +2767,13 @@ pub fn install_service() -> bool {
         return false;
     }
     log::info!("Installing service...");
-    let cp = switch_service(false);
+    let cp = match switch_service(false) {
+        Ok(cp) => cp,
+        Err(error) => {
+            log::error!("Failed to prepare service start: {error}");
+            return false;
+        }
+    };
     let app_name = crate::get_app_name().to_lowercase();
     if !run_cmds_privileged(&format!(
         "{cp} systemctl enable {app_name}; systemctl start {app_name};"

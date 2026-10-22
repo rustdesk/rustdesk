@@ -36,6 +36,30 @@ fn finish_macos_update(result: hbb_common::ResultType<()>) -> Option<CoreMainAct
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub fn copy_service_config(args: &[String]) -> hbb_common::ResultType<()> {
+    if !crate::platform::is_root() {
+        hbb_common::bail!("Copying service configuration requires root privileges");
+    }
+    let [_, source, destination] = args else {
+        hbb_common::bail!("Expected source and destination service configuration paths");
+    };
+    #[cfg(target_os = "macos")]
+    {
+        if std::path::Path::new(destination) != config::Config2::file() {
+            hbb_common::bail!("Expected the system service configuration destination");
+        }
+        crate::trusted_devices::authority::register_service_authority()?;
+        if !std::path::Path::new(source).try_exists()? {
+            return Ok(());
+        }
+    }
+    crate::trusted_devices::service::copy_config(
+        std::path::Path::new(source),
+        std::path::Path::new(destination),
+    )
+}
+
 /// shared by flutter and sciter main function
 ///
 /// [Note]
@@ -217,6 +241,16 @@ pub fn core_main() -> Option<CoreMainAction> {
         }
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        if args[0] == "--copy-service-config" {
+            if let Err(error) = copy_service_config(&args) {
+                log::error!("Failed to copy service configuration: {error}");
+                eprintln!("Failed to copy service configuration: {error}");
+                // The Linux Flutter runner treats a false core_main result as success.
+                std::process::exit(1);
+            }
+            return None;
+        }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         // Root CLI management commands must talk to the user `--server` main IPC.
         // Example: `sudo rustdesk --option custom-rendezvous-server` should query the

@@ -843,6 +843,11 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
         match crate::ipc::connect_trusted_device_service(1000).await {
             Ok(mut conn) => {
                 if !synced {
+                    #[cfg(target_os = "linux")]
+                    if let Err(error) = crate::trusted_devices::service::sync_pending_auth().await {
+                        crate::trusted_devices::config::log_sync_error(error);
+                        continue;
+                    }
                     if conn.send(&Data::SyncConfig(None)).await.is_ok() {
                         if let Ok(Some(data)) = conn.next_timeout(1000).await {
                             match data {
@@ -854,7 +859,7 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                     if !config.is_empty() {
                                         let result =
                                             crate::trusted_devices::config::update(move || {
-                                                crate::trusted_devices::config::sync_config(
+                                                crate::trusted_devices::service::sync_from_service(
                                                     config.clone(),
                                                     config2.clone(),
                                                 )?;
@@ -900,6 +905,11 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
 
                 loop {
                     sleep(CONFIG_SYNC_INTERVAL_SECS).await;
+                    #[cfg(target_os = "linux")]
+                    if let Err(error) = crate::trusted_devices::service::sync_pending_auth().await {
+                        crate::trusted_devices::config::log_sync_error(error);
+                        continue;
+                    }
                     let cfg = (Config::get(), Config2::get());
                     let should_sync = cfg != cfg0 || (is_root_config_empty && !cfg.0.is_empty());
                     if should_sync {
