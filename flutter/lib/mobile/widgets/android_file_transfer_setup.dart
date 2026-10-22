@@ -7,6 +7,8 @@ import '../../models/platform_model.dart';
 import '../../utils/android_documents.dart';
 
 const _setupOption = 'android-file-transfer-folder-setup';
+const _folderChoicePadding = EdgeInsets.fromLTRB(12, 12, 12, 0);
+const _folderChoiceSpacing = 4.0;
 
 enum _FolderChoice { workspace, other, skip }
 
@@ -56,6 +58,10 @@ bool _canConfigureSharedFolder(FFI ffi) =>
 CustomAlertDialog _setupDialog(void Function([dynamic]) close) {
   final settingsPath =
       '${translate('Settings')} → ${translate('Transfer file')} → ${translate('Change Path')}';
+  final choiceStyle = OutlinedButton.styleFrom(
+    alignment: AlignmentDirectional.centerStart,
+    minimumSize: const Size(0, kMinInteractiveDimension),
+  );
   return CustomAlertDialog(
     title: Text(translate('Transfer file')),
     content: Column(
@@ -64,13 +70,25 @@ CustomAlertDialog _setupDialog(void Function([dynamic]) close) {
       children: [
         Text(translate(
             'Choose which folder remote devices can access. You can change it later in {$settingsPath}.')),
-        ListTile(
-          title: Text(translate('RustDesk storage')),
-          onTap: () => close(_FolderChoice.workspace),
-        ),
-        ListTile(
-          title: Text('${translate('Other folders')}…'),
-          onTap: () => close(_FolderChoice.other),
+        Padding(
+          padding: _folderChoicePadding,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              OutlinedButton(
+                style: choiceStyle,
+                onPressed: () => close(_FolderChoice.workspace),
+                child: Text(translate('RustDesk storage')),
+              ),
+              const SizedBox(height: _folderChoiceSpacing),
+              OutlinedButton(
+                style: choiceStyle,
+                onPressed: () => close(_FolderChoice.other),
+                child: Text('${translate('Other folders')}…'),
+              ),
+            ],
+          ),
         ),
       ],
     ),
