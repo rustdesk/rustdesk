@@ -359,11 +359,27 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           onToggle: isOptionFixed(kOptionEnableTrustedDevices)
               ? null
               : (v) async {
-                  mainSetBoolOption(kOptionEnableTrustedDevices, v);
-                  setState(() {
-                    _enableTrustedDevices = v;
-                  });
+                  try {
+                    await mainSetBoolOption(kOptionEnableTrustedDevices, v);
+                    if (!mounted) return;
+                    setState(() {
+                      _enableTrustedDevices = v;
+                    });
+                  } catch (error) {
+                    showToast(error.toString());
+                  }
                 },
+        ),
+      if (enable2fa && _enableTrustedDevices)
+        SettingsTile(
+          title: Text(translate('Trust duration (days)')),
+          trailing: trustedDeviceExpiration(
+            enabled: true,
+            showLabel: false,
+            onChanged: () {
+              if (mounted) setState(() {});
+            },
+          ),
         ),
       if (enable2fa && _enableTrustedDevices)
         SettingsTile(
@@ -1382,8 +1398,8 @@ class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
             if (snapshot.hasError) {
               return Center(child: Text('Error: ${snapshot.error}'));
             }
-            final devices = snapshot.data as List<TrustedDevice>;
-            trustedDevices = devices.obs;
+            final result = snapshot.data as TrustedDevices;
+            trustedDevices = result.devices.obs;
             return trustedDevicesTable(trustedDevices, selectedDevices);
           }),
     );
