@@ -911,8 +911,7 @@ class FfiModel with ChangeNotifier {
     // Android may cut network access for a backgrounded app, so the drops that causes are
     // deferred to resume: retryable errors and the DNS lookup failure, which Rust never retries.
     // A close the peer chose (manual, inactivity) is not retryable and must still end the session.
-    if (isAndroid &&
-        _androidAppBackgrounded &&
+    if (_androidAppBackgrounded &&
         ((title == 'Connection Error' &&
                 (evt['hasRetry'] == 'true' ||
                     (text is String &&
@@ -1016,12 +1015,10 @@ class FfiModel with ChangeNotifier {
   }
 
   void onAndroidAppPaused() {
-    if (!isAndroid) return;
     _androidAppBackgrounded = true;
   }
 
   void onAndroidAppResumed() {
-    if (!isAndroid) return;
     _androidAppBackgrounded = false;
     if (!_androidBackgroundInterruptedConnection ||
         parent.target?.closed == true) {
