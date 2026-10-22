@@ -61,11 +61,12 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
             d.channel_id,
             crate::client::usbip_attach::Inbound::Data(d.data),
         ),
-        Some(Union::Close(c)) if c.channel_id >= 0 => forward(
-            handler,
-            c.channel_id,
-            crate::client::usbip_attach::Inbound::Closed,
-        ),
+        // Dropping the channel cancels its relay even while it is blocked
+        // writing to a local socket that stopped reading; a queued `Closed`
+        // would not be seen then.
+        Some(Union::Close(c)) if c.channel_id >= 0 => {
+            handler.usb.unregister_forward_channel(c.channel_id)
+        }
         Some(Union::Data(d)) => {
             if handler.usb.share_send(d.channel_id, d.data) {
                 notify_closed(handler, d.channel_id);

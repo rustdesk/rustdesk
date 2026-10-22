@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -33,6 +33,8 @@ class UsbipModel with ChangeNotifier {
 
   List<UsbDeviceInfo> devices = [];
   bool loading = false;
+  // The open floating window, kept here so it goes with the session.
+  OverlayEntry? window;
   String? lastError;
 
   // busId -> local vhci port, for devices attached from this side.
@@ -66,9 +68,11 @@ class UsbipModel with ChangeNotifier {
   /// with the connection that carried them; pushes are unshared on the Rust
   /// side, which reports each one.
   void clearPendingOnDisconnect() {
-    if (pendingBusIds.isEmpty &&
+    if (!loading &&
+        pendingBusIds.isEmpty &&
         localPendingBusIds.isEmpty &&
         attachedPorts.isEmpty) return;
+    loading = false;
     pendingBusIds.clear();
     localPendingBusIds.clear();
     _pendingShareForAttach.clear();

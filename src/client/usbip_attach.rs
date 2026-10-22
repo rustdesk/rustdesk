@@ -24,7 +24,6 @@ use serde_json::json;
 pub enum Inbound {
     Opened { success: bool, message: String },
     Data(Bytes),
-    Closed,
 }
 
 pub async fn attach(session: Session<FlutterHandler>, bus_id: String, round: u32) {
@@ -330,7 +329,7 @@ async fn relay(
                         session.send(Data::Message(usbip_flow::window_update_msg(id, add)));
                     }
                 }
-                Some(Inbound::Closed) | Some(Inbound::Opened { .. }) | None => break false,
+                Some(Inbound::Opened { .. }) | None => break false,
             },
         }
     };
