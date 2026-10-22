@@ -813,6 +813,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "Não é possível usar \"{}\" como atalho."),
         ("On", "Ativado"),
         ("Off", "Desativado"),
+        ("api_server_connection_tip", ""),
+        ("api_server_empty_tip", ""),
         ("MCP server", ""),
         ("Enable MCP server", ""),
         ("Let agents connect and take control without asking", ""),

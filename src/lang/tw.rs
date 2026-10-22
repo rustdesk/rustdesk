@@ -813,6 +813,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", ""),
         ("On", ""),
         ("Off", ""),
+        ("api_server_connection_tip", "自訂伺服器正在使用未加密的 HTTP。請聯絡管理員啟用 HTTPS。"),
+        ("api_server_empty_tip", "API 伺服器留空時，自訂伺服器預設使用 HTTP。請聯絡管理員啟用 HTTPS。"),
         ("MCP server", "MCP 伺服器"),
         ("Enable MCP server", "啟用 MCP 伺服器"),
         ("Let agents connect and take control without asking", "允許 Agent 無需詢問即可連線並接管控制"),

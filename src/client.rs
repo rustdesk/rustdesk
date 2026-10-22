@@ -267,7 +267,13 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                             }
                         }
                         match others_err.take() {
-                            Some(oe) => bail!("WebRTC failed: {}; fallback failed: {}", e, oe),
+                            // Report one error, as `select_ok` does: the UI matches and translates
+                            // the text whole (e.g. the offline auto-retry), and both legs often
+                            // carry the same rendezvous refusal anyway.
+                            Some(oe) => {
+                                log::warn!("fallback leg also failed: {}", oe);
+                                return Err(e);
+                            }
                             None if others_fut.is_none() => bail!("WebRTC failed: {}", e),
                             None => webrtc_err = Some(e),
                         }
@@ -308,7 +314,10 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                         // it before failing the connection.
                         Some(we) => match held.take() {
                             Some(conn) => return Ok(conn),
-                            None => bail!("WebRTC failed: {}; fallback failed: {}", we, e),
+                            None => {
+                                log::warn!("WebRTC leg also failed: {}", we);
+                                return Err(e);
+                            }
                         },
                         None if webrtc_fut.is_none() => match held.take() {
                             Some(conn) => return Ok(conn),
@@ -5708,6 +5717,23 @@ mod webrtc_race_tests {
         .unwrap();
         assert_eq!(got, "ipv6");
         assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    // Both legs get the same rendezvous refusal; the UI needs the text verbatim, e.g. the
+    // offline auto-retry matches it whole. Either leg may fail last.
+    #[tokio::test]
+    async fn same_failure_on_both_legs_reported_once() {
+        for (webrtc_ms, fallback_ms) in [(10, 20), (20, 10)] {
+            let err = race_transports_prefer_webrtc(
+                err_after(webrtc_ms, "Remote desktop is offline"),
+                vec![err_after(fallback_ms, "Remote desktop is offline")],
+                60_000,
+                NOT_P2P,
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(err.to_string(), "Remote desktop is offline");
+        }
     }
 }
 
