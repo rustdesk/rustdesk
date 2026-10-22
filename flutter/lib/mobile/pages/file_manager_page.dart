@@ -148,11 +148,21 @@ class _FileManagerPageState extends State<FileManagerPage> {
       final selected = await AndroidDocuments.selectFolder();
       if (selected == null || !mounted) return false;
       final path = selected['path'] as String;
+      final previousHome = model.localController.homePath;
       model.localController.homePath = path;
-      final opened =
-          await model.localController.openDirectory(path, isBack: true);
-      if (opened) model.localController.history.clear();
-      return opened;
+      try {
+        final opened =
+            await model.localController.openDirectory(path, isBack: true);
+        if (opened) {
+          model.localController.history.clear();
+        } else {
+          model.localController.homePath = previousHome;
+        }
+        return opened;
+      } catch (_) {
+        model.localController.homePath = previousHome;
+        rethrow;
+      }
     } catch (error) {
       showToast(error.toString());
       return false;
@@ -162,9 +172,17 @@ class _FileManagerPageState extends State<FileManagerPage> {
   Future<void> _browseWorkspace() async {
     try {
       final path = await AndroidDocuments.workspace();
+      final previousHome = model.localController.homePath;
       model.localController.homePath = path;
-      if (await model.localController.openDirectory(path, isBack: true)) {
-        model.localController.history.clear();
+      try {
+        if (await model.localController.openDirectory(path, isBack: true)) {
+          model.localController.history.clear();
+        } else {
+          model.localController.homePath = previousHome;
+        }
+      } catch (_) {
+        model.localController.homePath = previousHome;
+        rethrow;
       }
     } catch (error) {
       showToast(error.toString());
