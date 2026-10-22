@@ -124,6 +124,8 @@ class FfiModel with ChangeNotifier {
   DateTime? _offlineReconnectStartTime;
   bool _androidDocumentPickerActive = false;
   bool _androidDocumentPickerInterruptedConnection = false;
+  bool _androidAppBackgrounded = false;
+  bool _androidBackgroundInterruptedConnection = false;
   bool _viewOnly = false;
   bool _showMyCursor = false;
   WeakReference<FFI> parent;
@@ -258,6 +260,8 @@ class FfiModel with ChangeNotifier {
     _timer = null;
     _androidDocumentPickerActive = false;
     _androidDocumentPickerInterruptedConnection = false;
+    _androidAppBackgrounded = false;
+    _androidBackgroundInterruptedConnection = false;
     resetRestartReconnectState();
     clearPermissions();
     waitForImageTimer?.cancel();
@@ -904,6 +908,16 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
+    // Android may cut network access for a backgrounded app, so errors raised meanwhile
+    // (e.g. a DNS lookup failure, which Rust never auto-retries) are deferred to resume.
+    if (isAndroid &&
+        _androidAppBackgrounded &&
+        (title == 'Connection Error' ||
+            (type == 'restarting-show' && title == 'Connecting...'))) {
+      _androidBackgroundInterruptedConnection = true;
+      return;
+    }
+
     // Disable relative mouse mode on any error-type message to ensure cursor is released.
     // This includes connection errors, session-ending messages, elevation errors, etc.
     // Safety: releasing pointer lock on errors prevents the user from being stuck.
@@ -994,6 +1008,23 @@ class FfiModel with ChangeNotifier {
       return;
     }
     _androidDocumentPickerInterruptedConnection = false;
+    reconnect(parent.target!.dialogManager, sessionId, false);
+  }
+
+  void onAndroidAppPaused() {
+    if (!isAndroid) return;
+    _androidAppBackgrounded = true;
+    _androidBackgroundInterruptedConnection = false;
+  }
+
+  void onAndroidAppResumed() {
+    if (!isAndroid) return;
+    _androidAppBackgrounded = false;
+    if (!_androidBackgroundInterruptedConnection ||
+        parent.target?.closed == true) {
+      return;
+    }
+    _androidBackgroundInterruptedConnection = false;
     reconnect(parent.target!.dialogManager, sessionId, false);
   }
 

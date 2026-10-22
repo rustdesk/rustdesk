@@ -225,6 +225,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       trySyncClipboard();
     }
+    if (state == AppLifecycleState.paused) {
+      gFFI.ffiModel.onAndroidAppPaused();
+    } else if (state == AppLifecycleState.resumed) {
+      gFFI.ffiModel.onAndroidAppResumed();
+    }
   }
 
   // For client side
