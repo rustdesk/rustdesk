@@ -968,6 +968,19 @@ pub async fn start_listen<T: InvokeUiCM>(
         }
     }
     cm.remove_connection(current_id, true);
+    for job in &mut write_jobs {
+        if let Err(error) = job.cancel_document().await {
+            const CLEANUP_ERROR_LOG_INTERVAL: std::time::Duration =
+                std::time::Duration::from_secs(60);
+            hbb_common::throttled_log!(
+                CLEANUP_ERROR_LOG_INTERVAL,
+                warn,
+                "Failed to clean up document transfer {} on disconnect: {}",
+                job.id(),
+                error
+            );
+        }
+    }
 }
 
 #[cfg(not(any(target_os = "ios")))]
