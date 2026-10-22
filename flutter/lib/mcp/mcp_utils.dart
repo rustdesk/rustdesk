@@ -7,6 +7,32 @@ const String mcpNotReadyMessage =
     'authentication. Check the RustDesk window, then call list_sessions and '
     'retry once `ready` is true.';
 
+/// At most one in-flight operation per key.
+///
+/// A call that arrives while an operation is pending joins it instead of
+/// starting a second one, and the entry is only removed by the operation that
+/// created it, so a late completion cannot drop a newer one.
+class McpSingleFlight<T> {
+  final Map<String, Future<T>> _pending = {};
+
+  /// The pending operation for [key], or null when there is none.
+  Future<T>? pending(String key) => _pending[key];
+
+  /// Joins the pending operation for [key], or starts [open] when there is
+  /// none. [open] runs synchronously up to its first await, so two callers
+  /// cannot both observe an empty slot.
+  Future<T> start(String key, Future<T> Function() open) {
+    final pending = _pending[key];
+    if (pending != null) return pending;
+    final created = open();
+    _pending[key] = created;
+    created.whenComplete(() {
+      if (identical(_pending[key], created)) _pending.remove(key);
+    }).ignore();
+    return created;
+  }
+}
+
 Map<String, String> mcpMouseMessage({
   String type = '',
   String buttons = '',

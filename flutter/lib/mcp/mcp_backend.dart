@@ -168,8 +168,7 @@ class RustDeskMcpBackend implements McpBackend {
 
   /// Connections still waiting for approval or for their window, by peer id.
   /// They outlive the call that started them, so a late answer is kept.
-  final Map<String, Future<({String sessionId, McpInputState input})>>
-      _opening = {};
+  final _opening = McpSingleFlight<({String sessionId, McpInputState input})>();
 
   /// Pending control requests, by native connection id.
   final Map<String, ({String id, Future<McpInputState?> result})>
@@ -274,15 +273,17 @@ class RustDeskMcpBackend implements McpBackend {
       {String? password}) async {
     peerId = peerId.replaceAll(' ', '');
     final deadline = DateTime.now().add(_kCallBudget);
-    var opening = _opening[peerId];
+    var opening = _opening.pending(peerId);
     if (opening == null) {
       for (final s in await listSessions()) {
         if (s['peer_id'] == peerId) return s;
       }
-      opening = _opening[peerId] = _open(peerId);
-      opening.whenComplete(() {
-        _opening.remove(peerId);
-      }).ignore();
+      // Listing sessions may have taken long enough for another call to
+      // register its own opening; join that one instead of starting a second
+      // approval flow. Nothing can interleave between this check and the
+      // registration it guards, and only the operation that registered an
+      // entry can remove it.
+      opening = _opening.start(peerId, () => _open(peerId));
     }
     final ({String sessionId, McpInputState input}) opened;
     try {
