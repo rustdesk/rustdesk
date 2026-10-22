@@ -1,6 +1,10 @@
 use super::*;
 
 #[cfg(unix)]
+#[path = "android_write_tests.rs"]
+mod write_tests;
+
+#[cfg(unix)]
 use super::super::{
     DataSource, FileTransferBlock, FileTransferSendConfirmRequest, JobType, TransferJob,
 };
@@ -17,6 +21,10 @@ fn provider(output: &Path, request: &str) -> ResultType<String> {
         Some("list") => json!([metadata]),
         Some("stat") if request["path"].as_str().unwrap().ends_with(".txt") => metadata,
         Some("stat") => json!({"name": "Documents", "directory": true, "size": 0, "modified": 0}),
+        Some("begin") if request["path"].as_str().unwrap().contains("write-error") => {
+            std::fs::write(output, b"partial")?;
+            json!({"fd": File::open(output)?.into_raw_fd(), "descriptor": request["path"]})
+        }
         Some("begin") => {
             if output.exists() && request["overwrite"].as_bool() == Some(false) {
                 return Ok(json!({"error": "Document overwrite requires confirmation"}).to_string());
@@ -221,6 +229,7 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
     }
     provider_error_at_eof(path).await;
     send_and_cancel(path, &output).await;
+    write_tests::failed_block_cleans_pending_receive(path, &output).await;
     let mut empty = receiving(&format!("{path}/empty.txt"));
     empty
         .write(FileTransferBlock {

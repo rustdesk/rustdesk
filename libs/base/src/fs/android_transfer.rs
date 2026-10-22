@@ -115,6 +115,17 @@ impl TransferJob {
         let result = self.write_document_block(&block).await;
         if let Err(error) = &result {
             self.document_transfer.error = Some(error.to_string());
+            if let Err(cleanup_error) = self.cancel_document().await {
+                const CLEANUP_ERROR_LOG_INTERVAL: std::time::Duration =
+                    std::time::Duration::from_secs(60);
+                hbb_common::throttled_log!(
+                    CLEANUP_ERROR_LOG_INTERVAL,
+                    warn,
+                    "Failed to clean up document transfer {}: {}",
+                    self.id,
+                    cleanup_error
+                );
+            }
         }
         result
     }
