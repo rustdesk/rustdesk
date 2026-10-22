@@ -239,7 +239,7 @@ pub fn need_fs_cm_send_files() -> bool {
     }
 }
 
-/// Android peers may access the app workspace and explicitly shared document locations.
+/// Android peers may access only the current shared file-transfer location.
 ///
 /// Every peer supplied path must be validated with this before it reaches the
 /// filesystem, for reads, writes, renames, creations and deletions alike. The path is
@@ -288,7 +288,7 @@ pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
     if !path.is_absolute() || path.components().any(|c| c == Component::ParentDir) {
         return false;
     }
-    let home = Config::get_home();
+    let home = base::fs::get_path(&base::fs::get_home_as_string());
     let home = home.canonicalize().unwrap_or(home);
     if home.as_os_str().is_empty() {
         return false;

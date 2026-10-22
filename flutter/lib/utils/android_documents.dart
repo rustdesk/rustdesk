@@ -26,9 +26,9 @@ class AndroidDocuments {
     }
   }
 
-  static Future<String> workspace() async {
-    final path =
-        await gFFI.invokeMethodWithResult<String>('document_workspace');
+  static Future<String> workspace({bool share = false}) async {
+    final path = await gFFI
+        .invokeMethodWithResult<String>('document_workspace', {'share': share});
     if (path == null || path.isEmpty) {
       throw StateError('App workspace is unavailable');
     }

@@ -34,6 +34,13 @@ internal class DocumentStorage(private val context: Context) {
 
     fun home(): String? = prefs.getString(DEFAULT_LOCATION, null)
 
+    fun shareWorkspace(): String {
+        check(prefs.edit().remove(DEFAULT_LOCATION).commit()) {
+            "Unable to remember the shared folder"
+        }
+        return (context.getExternalFilesDir(null) ?: context.filesDir).path
+    }
+
     fun select(uri: Uri, flags: Int, share: Boolean): JSONObject {
         require(uri.scheme == "content") { "Invalid document selection" }
         val grants = flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or

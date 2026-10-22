@@ -146,6 +146,45 @@ async fn overwrite_requires_matching_confirmation(path: &str, output: &Path) {
 }
 
 #[cfg(unix)]
+async fn host_upload_respects_overwrite_support(path: &str, output: &Path) {
+    for (overwrite_detection, exists) in [(false, false), (false, true), (true, true)] {
+        if exists {
+            std::fs::write(output, b"original").unwrap();
+        }
+        let mut job = TransferJob::new_write(
+            1,
+            JobType::Generic,
+            String::new(),
+            DataSource::FilePath(format!("{path}/notes.txt").into()),
+            0,
+            false,
+            false,
+            overwrite_detection,
+        )
+        .with_files(vec![FileEntry::default()])
+        .unwrap();
+        let result = job
+            .write(FileTransferBlock {
+                id: 1,
+                data: b"replacement".to_vec().into(),
+                ..Default::default()
+            })
+            .await;
+        if exists && !overwrite_detection {
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "Document overwrite requires confirmation"
+            );
+            assert_eq!(std::fs::read(output).unwrap(), b"original");
+        } else {
+            result.unwrap();
+            job.finish_document().await.unwrap();
+            assert_eq!(std::fs::read(output).unwrap(), b"replacement");
+        }
+    }
+}
+
+#[cfg(unix)]
 #[tokio::test]
 async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failure() {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -171,6 +210,7 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
     assert_eq!(files[0].size, 12);
     assert!(remove_empty_tree(path).is_err());
     assert!(super::super::remove_file(path).is_err());
+    host_upload_respects_overwrite_support(path, &output).await;
     overwrite_requires_matching_confirmation(path, &output).await;
     for (name, succeeds) in [
         ("notes.txt", true),

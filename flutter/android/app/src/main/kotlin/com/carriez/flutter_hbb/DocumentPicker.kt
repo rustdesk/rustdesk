@@ -12,7 +12,11 @@ internal class DocumentPicker(private val activity: Activity) {
 
     fun handle(call: MethodCall, result: MethodChannel.Result): Boolean {
         when (call.method) {
-            "document_workspace" -> result.success((activity.getExternalFilesDir(null) ?: activity.filesDir).path)
+            "document_workspace" -> if (call.argument<Boolean>("share") == true) {
+                run(result) { storage.shareWorkspace() }
+            } else {
+                result.success((activity.getExternalFilesDir(null) ?: activity.filesDir).path)
+            }
             "document_folder" -> pick(result, call.argument<Boolean>("share") == true)
             else -> return false
         }

@@ -289,6 +289,27 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
 
   Future<void> _selectFolder() async {
     try {
+      final workspace = await gFFI.dialogManager.show<bool>(
+          (_, close, __) => CustomAlertDialog(
+                title: Text(translate('Change Path')),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  ListTile(
+                    title: Text(translate('RustDesk storage')),
+                    onTap: () => close(true),
+                  ),
+                  ListTile(
+                    title: Text('${translate('Other folders')}…'),
+                    onTap: () => close(false),
+                  ),
+                ]),
+              ),
+          backDismiss: true,
+          clickMaskDismiss: true);
+      if (workspace == null) return;
+      if (workspace) {
+        showToast(await AndroidDocuments.workspace(share: true));
+        return;
+      }
       final selected = await AndroidDocuments.selectFolder(share: true);
       if (selected != null) {
         showToast(AndroidDocuments.displayPath(selected['path'] as String));

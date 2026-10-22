@@ -126,7 +126,8 @@ impl TransferJob {
         let path = self.document_path(block.file_num as usize)?;
         if self.document_transfer.pending.as_ref().map(|p| &p.path) != Some(&path) {
             self.finish_document().await?;
-            let overwrite = !self.is_remote
+            // Upload senders handle confirmation when overwrite detection is supported.
+            let overwrite = (!self.is_remote && self.enable_overwrite_detection)
                 || self.document_transfer.confirmed_file.take() == Some(block.file_num);
             self.document_transfer.pending = Some(begin_write(path, overwrite).await?);
             self.file_num = block.file_num;
