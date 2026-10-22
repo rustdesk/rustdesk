@@ -5,7 +5,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
 
-Future<ui.Image> createTestImage(int width, int height) async {
+ui.Image createTestImage(int width, int height) {
   final recorder = ui.PictureRecorder();
   final canvas = ui.Canvas(recorder);
   canvas.drawRect(
@@ -13,7 +13,7 @@ Future<ui.Image> createTestImage(int width, int height) async {
     Paint()..color = const Color(0xFF00FF00),
   );
   final picture = recorder.endRecording();
-  return picture.toImage(width, height);
+  return picture.toImageSync(width, height);
 }
 
 class _DummyCanvas extends Fake implements CanvasModel {
@@ -70,14 +70,14 @@ void main() {
       final model = ImageModel(WeakReference(ffi));
 
       // Deliver an initial image for display 0
-      final img0 = await createTestImage(10, 10);
+      final img0 = createTestImage(10, 10);
       await model.update(img0, display: 0);
       expect(model.getImage(0), equals(img0));
 
       // Deliver 10 replacement images without pumping frames (simulating paused/background state)
       final replacements = <ui.Image>[];
       for (int i = 1; i <= 10; i++) {
-        final img = await createTestImage(10, 10);
+        final img = createTestImage(10, 10);
         replacements.add(img);
         await model.update(img, display: 0);
       }
