@@ -440,6 +440,11 @@ class FileController {
       };
       for (final dir in dirs) {
         if (await _openDirectoryPath(dir, isBack: true)) {
+          final documentRoot = RegExp(r'^/@rustdesk/tree/[^/]+/[^/]+')
+              .stringMatch(directory.value.path);
+          if (isLocal && documentRoot != null) {
+            homePath = documentRoot;
+          }
           return true;
         }
       }
