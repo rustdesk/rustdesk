@@ -815,7 +815,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "Desativado"),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
-        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Para iniciar uma chamada de voz, ative \"Captura de áudio\" na página \"Compartilhar Tela\"."),
         ("Enable USB forwarding", "Ativar encaminhamento USB"),
         ("USB forwarding", "Encaminhamento USB"),
         ("Loading...", "Carregando..."),
@@ -824,6 +823,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use remote devices on this computer", ""),
         ("Forwarding", ""),
         ("Confirm on the remote computer if asked", ""),
-        ("Confirm on this computer and on the remote computer if asked", "")
+        ("Confirm on this computer and on the remote computer if asked", ""),
     ].iter().cloned().collect();
 }

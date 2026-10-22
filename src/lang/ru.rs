@@ -823,6 +823,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use remote devices on this computer", "Использовать устройства удалённого компьютера на этом компьютере"),
         ("Forwarding", "Проброшено"),
         ("Confirm on the remote computer if asked", "При запросе подтвердите на удалённом компьютере"),
-        ("Confirm on this computer and on the remote computer if asked", "При запросе подтвердите на этом и на удалённом компьютере")
+        ("Confirm on this computer and on the remote computer if asked", "При запросе подтвердите на этом и на удалённом компьютере"),
     ].iter().cloned().collect();
 }
