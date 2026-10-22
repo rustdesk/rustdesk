@@ -187,20 +187,23 @@ impl TransferJob {
             token,
         } = pending;
         drop(file);
-        descriptor.close("Document transfer canceled").await?;
-        spawn_blocking(move || {
-            android::request(json!({
-                "op": "discard", "path": path, "token": token
-            }))
-        })
-        .await??;
-        Ok(())
+        let result = descriptor.close("Document transfer canceled").await;
+        discard_write(path, token, result).await
     }
 
     pub(super) async fn seek_document(&mut self, offset: u64) -> ResultType<()> {
         let Some(DataStream::FileStream(file)) = self.data_stream.as_mut() else {
             bail!("Document receives must be restarted after interruption");
         };
+        let entry = self
+            .files
+            .get(self.file_num as usize)
+            .ok_or(anyhow!("Wrong file number"))?;
+        if offset > 0 && entry.modified_time == 0 {
+            bail!(
+                "Cannot resume a document with an unknown modification time; restart the transfer"
+            );
+        }
         file.seek(std::io::SeekFrom::Start(offset)).await?;
         self.finished_size += offset;
         self.transferred += offset;
@@ -232,10 +235,31 @@ async fn finish_write(pending: PendingWrite) -> ResultType<()> {
         path,
         token,
     } = pending;
-    file.flush().await?;
-    file.sync_all().await?;
+    let written: ResultType<()> = async {
+        file.flush().await?;
+        file.sync_all().await?;
+        Ok(())
+    }
+    .await;
     drop(file);
-    descriptor.close("").await?;
+    let message = written
+        .as_ref()
+        .err()
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    let closed = descriptor.close(&message).await;
+    let result = match (written, closed) {
+        (Err(error), Err(close_error)) => Err(anyhow!(
+            "{}; closing document failed: {}",
+            error,
+            close_error
+        )),
+        (Err(error), _) | (_, Err(error)) => Err(error),
+        _ => Ok(()),
+    };
+    if result.is_err() {
+        return discard_write(path, token, result).await;
+    }
     spawn_blocking(move || {
         android::request(json!({
             "op": "finish", "path": path, "token": token
@@ -243,4 +267,24 @@ async fn finish_write(pending: PendingWrite) -> ResultType<()> {
     })
     .await??;
     Ok(())
+}
+
+async fn discard_write(path: String, token: Value, result: ResultType<()>) -> ResultType<()> {
+    let cleanup: ResultType<()> = async {
+        spawn_blocking(move || {
+            android::request(json!({
+                "op": "discard", "path": path, "token": token
+            }))
+        })
+        .await??;
+        Ok(())
+    }
+    .await;
+    match (result, cleanup) {
+        (Err(error), Err(cleanup)) => {
+            bail!("{}; temporary document cleanup failed: {}", error, cleanup)
+        }
+        (Err(error), _) | (_, Err(error)) => Err(error),
+        _ => Ok(()),
+    }
 }

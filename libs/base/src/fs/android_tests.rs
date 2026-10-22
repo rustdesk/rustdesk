@@ -48,6 +48,9 @@ fn provider(output: &Path, request: &str) -> ResultType<String> {
         }
         Some("finish") => json!(true),
         Some("discard") => {
+            if request["path"].as_str().unwrap().contains("discard-error") {
+                bail!("Provider cleanup failed");
+            }
             std::fs::remove_file(output)?;
             json!(true)
         }
@@ -220,16 +223,14 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
     assert!(super::super::remove_file(path).is_err());
     host_upload_respects_overwrite_support(path, &output).await;
     overwrite_requires_matching_confirmation(path, &output).await;
-    for (name, succeeds) in [
-        ("notes.txt", true),
-        ("failed.txt", false),
-        ("broken.txt", false),
-    ] {
+    for (name, succeeds) in [("notes.txt", true), ("failed.txt", false)] {
         receive(&format!("{path}/{name}"), succeeds, &output).await;
     }
     provider_error_at_eof(path).await;
     send_and_cancel(path, &output).await;
     write_tests::failed_block_cleans_pending_receive(path, &output).await;
+    write_tests::failed_finalization_discards_partial_data(path, &output).await;
+    write_tests::changed_source_without_timestamp_rejects_resume(path, &output).await;
     let mut empty = receiving(&format!("{path}/empty.txt"));
     empty
         .write(FileTransferBlock {
