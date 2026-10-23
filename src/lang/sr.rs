@@ -815,5 +815,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", ""),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
+        ("Enable USB forwarding", "Omogući USB prosleđivanje"),
+        ("USB forwarding", "USB prosleđivanje"),
+        ("Loading...", "Učitavanje..."),
+        ("No USB devices", "Nema USB uređaja"),
+        ("Use my devices on the remote computer", ""),
+        ("Use remote devices on this computer", ""),
+        ("Forwarding", ""),
+        ("Confirm on the remote computer if asked", ""),
+        ("Confirm on this computer and on the remote computer if asked", ""),
     ].iter().cloned().collect();
 }

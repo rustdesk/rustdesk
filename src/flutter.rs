@@ -257,6 +257,8 @@ pub struct FlutterHandler {
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
     peer_info: Arc<RwLock<PeerInfo>>,
     use_texture_render: Arc<AtomicBool>,
+    #[cfg(target_os = "linux")]
+    pub(crate) usb: Arc<crate::client::usbip_state::UsbClientState>,
 }
 
 impl Default for FlutterHandler {
@@ -268,7 +270,19 @@ impl Default for FlutterHandler {
             use_texture_render: Arc::new(
                 AtomicBool::new(crate::ui_interface::use_texture_render()),
             ),
+            #[cfg(target_os = "linux")]
+            usb: Default::default(),
         }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl FlutterHandler {
+    /// Any one of this handler's registered UI sessions works: they all share
+    /// the one connection USB forwarding runs over.
+    pub(crate) fn any_session(&self) -> Option<FlutterSession> {
+        let sid = self.session_handlers.read().unwrap().keys().next().copied()?;
+        sessions::get_session_by_session_id(&sid)
     }
 }
 
@@ -902,6 +916,7 @@ impl InvokeUiSession for FlutterHandler {
         let mut features: HashMap<&str, bool> = Default::default();
         for ref f in pi.features.iter() {
             features.insert("privacy_mode", f.privacy_mode);
+            features.insert("usbip", f.usbip);
         }
         // compatible with 1.1.9
         if get_version_number(&pi.version) < get_version_number("1.2.0") {
@@ -1188,6 +1203,64 @@ impl InvokeUiSession for FlutterHandler {
             Some(_) => {
                 log::warn!("Unhandled terminal response type");
             }
+        }
+    }
+
+    fn handle_usb_channel(&self, ch: UsbChannel) {
+        use base::message_proto::usb_channel::Union;
+
+        match ch.union {
+            Some(Union::DeviceList(list)) => {
+                let devices: Vec<serde_json::Value> = list
+                    .devices
+                    .iter()
+                    .map(|d| {
+                        // What this session has actually attached, so a
+                        // reopened dialog shows the real state.
+                        #[cfg(target_os = "linux")]
+                        let attached_port = self.usb.attached_port_of(&d.bus_id).unwrap_or(-1);
+                        #[cfg(not(target_os = "linux"))]
+                        let attached_port = -1;
+                        json!({
+                            "bus_id": d.bus_id,
+                            "vendor": d.vendor,
+                            "product": d.product,
+                            "shared": d.shared,
+                            "attached_port": attached_port,
+                        })
+                    })
+                    .collect();
+                self.push_event_("usb_device_list", &[("devices", json!(devices))], &[], &[]);
+            }
+            Some(Union::BindResult(r)) => {
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("bus_id", json!(&r.bus_id)),
+                    ("bind", json!(r.bind)),
+                    ("error", json!(&r.error)),
+                ];
+                self.push_event_("usb_bind_result", &event_data, &[], &[]);
+            }
+            // Everything else (PushResult, Opened/Data/Close forwarding,
+            // push-side Open authorization) is USB-forwarding-specific
+            // routing/auth/task-spawning, not shared plumbing -- lives in
+            // its own module instead of inline in this shared trait impl.
+            #[cfg(target_os = "linux")]
+            other => crate::client::usbip_channel::handle(self, other),
+            #[cfg(not(target_os = "linux"))]
+            _ => {}
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn register_session_runtime(&self, round: u32, handle: hbb_common::tokio::runtime::Handle) {
+        self.usb.register_runtime(round, handle);
+        crate::client::usbip_share::release_all_pushes(self);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn unregister_session_runtime(&self, round: u32) {
+        if self.usb.unregister_runtime(round) {
+            crate::client::usbip_share::release_all_pushes(self);
         }
     }
 }
@@ -2107,6 +2180,8 @@ pub mod sessions {
                 Some(_) => {
                     if write_lock.is_empty() {
                         remove_peer_key = Some(peer_key.clone());
+                        #[cfg(target_os = "linux")]
+                        s.ui_handler.usb.close();
                     } else {
                         check_remove_unused_displays(None, id, s, &write_lock);
                     }

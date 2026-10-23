@@ -8,6 +8,7 @@ import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/login.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/pages/usbip_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -606,6 +607,16 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       TTextMenu(
           child: Text(translate('TCP tunneling')),
           onPressed: () => connectWithToken(isTcpTunneling: true)),
+    );
+  }
+  if (isDefaultConn &&
+      isLinux &&
+      pi.platform == kPeerPlatformLinux &&
+      pi.features.usbip) {
+    v.add(
+      TTextMenu(
+          child: Text('${translate('USB forwarding')} (beta)'),
+          onPressed: () => toggleUsbForwardingWindow(context, ffi)),
     );
   }
   // note

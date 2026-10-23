@@ -1245,6 +1245,13 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 enabled: enabled, fakeValue: fakeValue),
             _OptionCheckBox(context, 'Enable terminal', kOptionEnableTerminal,
                 enabled: enabled, fakeValue: fakeValue),
+            // An explicit USB denial also holds under Full Access, so the
+            // box stays editable there and shows the real value.
+            if (isLinux)
+              _OptionCheckBox(
+                  context, 'Enable USB forwarding', kOptionEnableUsbip,
+                  enabled: enabled,
+                  fakeValue: mode == _AccessMode.view ? false : null),
             _OptionCheckBox(
                 context, 'Enable TCP tunneling', kOptionEnableTunnel,
                 enabled: enabled, fakeValue: fakeValue),

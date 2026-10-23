@@ -815,5 +815,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "откл"),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
+        ("Enable USB forwarding", "Включить проброс USB"),
+        ("USB forwarding", "Проброс USB"),
+        ("Loading...", "Загрузка..."),
+        ("No USB devices", "Нет USB-устройств"),
+        ("Use my devices on the remote computer", "Использовать мои устройства на удалённом компьютере"),
+        ("Use remote devices on this computer", "Использовать устройства удалённого компьютера на этом компьютере"),
+        ("Forwarding", "Проброшено"),
+        ("Confirm on the remote computer if asked", "При запросе подтвердите на удалённом компьютере"),
+        ("Confirm on this computer and on the remote computer if asked", "При запросе подтвердите на этом и на удалённом компьютере"),
     ].iter().cloned().collect();
 }

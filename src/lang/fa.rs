@@ -813,5 +813,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "این کلید برای میانبر پشتیبانی نمی‌شود."),
         ("On", "روشن"),
         ("Off", "خاموش"),
+        ("Enable USB forwarding", "فعال‌سازی هدایت USB"),
+        ("USB forwarding", "هدایت USB"),
+        ("Loading...", "در حال بارگذاری..."),
+        ("No USB devices", "هیچ دستگاه USB وجود ندارد"),
+        ("Use my devices on the remote computer", ""),
+        ("Use remote devices on this computer", ""),
+        ("Forwarding", ""),
+        ("Confirm on the remote computer if asked", ""),
+        ("Confirm on this computer and on the remote computer if asked", ""),
     ].iter().cloned().collect();
 }

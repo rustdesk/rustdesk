@@ -815,5 +815,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "OFF"),
         ("api_server_connection_tip", "Il server personalizzato usa 'HTTP non crittografato'. Per abilitare HTTPS contatta l'amministratore."),
         ("api_server_empty_tip", "Con 'Server API' vuoto, il server personalizzato predefinito è 'HTTP'. Per abilitare HTTPS contatta l'amministratore."),
+        ("Enable USB forwarding", ""),
+        ("USB forwarding", ""),
+        ("Loading...", ""),
+        ("No USB devices", ""),
+        ("Use my devices on the remote computer", ""),
+        ("Use remote devices on this computer", ""),
+        ("Forwarding", ""),
+        ("Confirm on the remote computer if asked", ""),
+        ("Confirm on this computer and on the remote computer if asked", ""),
     ].iter().cloned().collect();
 }

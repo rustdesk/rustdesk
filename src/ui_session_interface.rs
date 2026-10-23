@@ -841,6 +841,92 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
+    // USB forwarding methods
+    pub fn request_usb_devices(&self) {
+        let mut ch = UsbChannel::new();
+        ch.set_list_devices(UsbListDevicesRequest::new());
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_bind(&self, bus_id: String, bind: bool) {
+        let mut ch = UsbChannel::new();
+        ch.set_bind(UsbBind {
+            bus_id,
+            bind,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_open_forward(&self, channel_id: i32, bus_id: String) {
+        let mut ch = UsbChannel::new();
+        ch.set_open(UsbForwardOpen {
+            channel_id,
+            bus_id,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_forward_data(&self, channel_id: i32, data: bytes::Bytes) {
+        let mut ch = UsbChannel::new();
+        ch.set_data(UsbForwardData {
+            channel_id,
+            data,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_close_forward(&self, channel_id: i32) {
+        let mut ch = UsbChannel::new();
+        ch.set_close(UsbForwardClose {
+            channel_id,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    /// Push direction: raw "attach the device I just bound locally" message
+    /// -- the peer pulls it via `usb_open_forward`'s message shape, in
+    /// reverse. Platform-specific code (`Session<FlutterHandler>::usb_push`
+    /// on Linux) shares the device locally before calling this.
+    pub fn usb_push_request(&self, bus_id: String) {
+        let mut ch = UsbChannel::new();
+        ch.set_push_request(UsbPushRequest {
+            bus_id,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    /// Push direction: reply to a peer's `usb_open_forward`-equivalent for
+    /// one of the devices we're sharing.
+    pub fn usb_reply_opened(&self, channel_id: i32, success: bool, message: String) {
+        let mut ch = UsbChannel::new();
+        ch.set_opened(UsbForwardOpened {
+            channel_id,
+            success,
+            message,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
     pub fn capture_displays(&self, add: Vec<i32>, sub: Vec<i32>, set: Vec<i32>) {
         let mut misc = Misc::new();
         misc.set_capture_displays(CaptureDisplays {
@@ -1775,6 +1861,26 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn printer_request(&self, id: i32, path: String);
     fn handle_screenshot_resp(&self, sid: String, msg: String);
     fn handle_terminal_response(&self, response: TerminalResponse);
+    /// `ch` carries both simple control responses (`device_list`,
+    /// `bind_result`) and the forwarded USB/IP byte stream (`opened`,
+    /// `data`, `close`); implementations route the latter to the local
+    /// attach-side relay rather than the UI. Default no-op: USB forwarding is
+    /// Flutter/Linux-only, so other `InvokeUiSession` implementations (e.g.
+    /// the Sciter UI) don't need to know about it.
+    fn handle_usb_channel(&self, _ch: UsbChannel) {}
+    /// `usb_attach`/`usb_push`/etc. are called from Flutter's FFI worker
+    /// pool, which has no ambient Tokio runtime of its own -- these let
+    /// that path borrow this session's own `io_loop` runtime (registered
+    /// once `io_loop` starts running on it) instead of creating a separate
+    /// background one just to have somewhere to `tokio::spawn`. `round`
+    /// identifies which `io_loop` invocation this is: on reconnect, a new
+    /// round can register its own runtime before the old round's cleanup
+    /// runs, and that cleanup must not clear a newer round's handle out
+    /// from under it -- `unregister_session_runtime` only takes effect if
+    /// `round` still matches whatever is currently registered. Default
+    /// no-op: only the Flutter/Linux implementation needs it.
+    fn register_session_runtime(&self, _round: u32, _handle: tokio::runtime::Handle) {}
+    fn unregister_session_runtime(&self, _round: u32) {}
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -1976,6 +2082,21 @@ impl<T: InvokeUiSession> Session<T> {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
+    // Registers this function's own `#[tokio::main]`-created runtime so USB
+    // forwarding's FFI-thread entry points can borrow it instead of creating
+    // a separate background one -- see `register_session_runtime`'s doc
+    // comment. Unregistered on every exit path via the guard's `Drop`.
+    struct RuntimeUnregisterGuard<T: InvokeUiSession>(Session<T>, u32);
+    impl<T: InvokeUiSession> Drop for RuntimeUnregisterGuard<T> {
+        fn drop(&mut self) {
+            self.0.unregister_session_runtime(self.1);
+        }
+    }
+    let _runtime_guard = handler.is_default().then(|| {
+        handler.register_session_runtime(round, tokio::runtime::Handle::current());
+        RuntimeUnregisterGuard(handler.clone(), round)
+    });
+
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let (sender, receiver) = mpsc::unbounded_channel::<Data>();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
