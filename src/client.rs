@@ -4423,7 +4423,7 @@ pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
 /// * `p` - The password.
 /// * `activate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
-fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
+pub(crate) fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     let input_password = !p.is_empty();
     if activate {
         // Click event is used to bring up the password input box.
