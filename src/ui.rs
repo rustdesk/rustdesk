@@ -36,6 +36,7 @@ lazy_static::lazy_static! {
 
 struct UIHostHandler;
 
+/// Keeps the Sciter frame alive while installing platform hooks and running its event loop.
 pub fn start(args: &mut [String]) {
     #[cfg(target_os = "macos")]
     crate::platform::delegate::show_dock();
