@@ -683,11 +683,19 @@ class MainActivity : FlutterActivity() {
 
     private fun canonicalExportSource(path: String): File? {
         val original = File(path).absoluteFile
-        val canonical = canonicalAppScopedFile(path) ?: return null
+        val canonical = canonicalAppScopedFile(path) ?: canonicalLogFile(path) ?: return null
         return canonical.takeIf {
             original.path == canonical.path && (canonical.isFile || canonical.isDirectory)
         }
     }
+
+    private fun canonicalLogFile(path: String): File? = runCatching {
+        val root = (application as MainApplication).documentStorage.logDirectory().canonicalFile
+        val file = File(path).canonicalFile
+        file.takeIf {
+            it == root || it.path.startsWith(root.path + File.separator)
+        }
+    }.getOrNull()
 
     private fun snapshotExportSource(source: File): ExportSource? {
         val safeSource = canonicalExportSource(source.path) ?: return null

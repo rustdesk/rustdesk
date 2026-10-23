@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Base64
 import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 
 private const val TREE_ROOT = "/@rustdesk/tree/"
@@ -33,6 +34,17 @@ internal class DocumentStorage(private val context: Context) {
     private val descriptors = DocumentDescriptors()
 
     fun home(): String? = prefs.getString(DEFAULT_LOCATION, null)
+
+    @Suppress("DEPRECATION")
+    fun logDirectory(): File {
+        val media = context.externalMediaDirs.firstOrNull()
+            ?: throw IOException("External media storage is unavailable")
+        val directory = File(media, "RustDesk")
+        if (!directory.mkdirs() && !directory.isDirectory) {
+            throw IOException("Unable to create log directory: $directory")
+        }
+        return directory
+    }
 
     fun shareWorkspace(): String {
         check(prefs.edit().remove(DEFAULT_LOCATION).commit()) {
@@ -83,6 +95,7 @@ internal class DocumentStorage(private val context: Context) {
     private fun execute(request: JSONObject): Any? {
         val operation = request.getString("op")
         if (operation == "home") return home()
+        if (operation == "log_directory") return logDirectory().absolutePath
         if (operation == "close") return descriptors.close(request)
         val path = request.getString("path")
         val backend = backend(path)

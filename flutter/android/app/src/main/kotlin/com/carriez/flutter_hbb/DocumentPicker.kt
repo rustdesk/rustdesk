@@ -2,6 +2,8 @@ package com.carriez.flutter_hbb
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
+import android.provider.DocumentsContract
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import kotlin.concurrent.thread
@@ -12,6 +14,7 @@ internal class DocumentPicker(private val activity: Activity) {
 
     fun handle(call: MethodCall, result: MethodChannel.Result): Boolean {
         when (call.method) {
+            "document_log_directory" -> run(result) { storage.logDirectory().absolutePath }
             "document_workspace" -> if (call.argument<Boolean>("share") == true) {
                 run(result) { storage.shareWorkspace() }
             } else {
@@ -32,6 +35,14 @@ internal class DocumentPicker(private val activity: Activity) {
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                activity.contentResolver.persistedUriPermissions.none {
+                    DocumentsContract.isTreeUri(it.uri)
+                }) {
+                intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,
+                    DocumentsContract.buildDocumentUri(
+                        "com.android.externalstorage.documents", "primary:Android/media"))
+            }
             pending = result to share
             activity.startActivityForResult(intent, REQUEST_DOCUMENT)
         } catch (error: Exception) {

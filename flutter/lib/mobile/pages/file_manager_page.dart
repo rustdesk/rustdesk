@@ -254,14 +254,22 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   Future<void> _exportLogs() async {
     final String home;
+    final String logDirectory;
     try {
       home = await AndroidDocuments.workspace();
+      final path =
+          await gFFI.invokeMethodWithResult<String>('document_log_directory');
+      if (path == null || path.isEmpty) {
+        throw StateError('Log directory is unavailable');
+      }
+      logDirectory = path;
     } catch (error) {
       showToast(error.toString());
       return;
     }
     final appDir = PathUtil.join(home, appName, false);
     final paths = [
+      logDirectory,
       PathUtil.join(appDir, 'Logs', false),
       PathUtil.join(appDir, 'ScreenRecord', false),
     ].where((p) => File(p).existsSync() || Directory(p).existsSync()).toList();
