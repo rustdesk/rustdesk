@@ -1176,9 +1176,11 @@ impl Connection {
                     #[cfg(windows)]
                     conn.portable_check();
                     #[cfg(windows)]
-                    if let Some(msg) = conn.privacy_mode_waiting.as_ref().and_then(|w| w.reply()) {
+                    if let Some(reply) = conn.privacy_mode_waiting.as_ref().and_then(|w| w.reply()) {
                         conn.privacy_mode_waiting = None;
-                        conn.send(msg).await;
+                        if let Some(msg) = reply {
+                            conn.send(msg).await;
+                        }
                     }
                     raii::AuthedConnID::check_wake_lock_on_setting_changed();
                     if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
