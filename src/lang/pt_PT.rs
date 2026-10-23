@@ -815,5 +815,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "Desligado"),
         ("api_server_connection_tip", "O seu servidor personalizado utiliza HTTP não encriptado. Contacte o seu administrador para ativar o HTTPS."),
         ("api_server_empty_tip", "Com o servidor da API vazio, o seu servidor personalizado utiliza HTTP por predefinição. Contacte o seu administrador para ativar o HTTPS."),
+        ("Headless display", "Ecrã sem monitor"),
+        ("headless_display_tip", "Quando nenhum monitor está ligado, força uma saída de vídeo desconectada para que haja um ecrã a capturar. É liberada assim que um monitor for ligado noutra saída."),
     ].iter().cloned().collect();
 }

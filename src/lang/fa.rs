@@ -813,5 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "این کلید برای میانبر پشتیبانی نمی‌شود."),
         ("On", "روشن"),
         ("Off", "خاموش"),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
     ].iter().cloned().collect();
 }

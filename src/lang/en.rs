@@ -290,5 +290,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "\"{}\" can't be used as a shortcut."),
         ("api_server_connection_tip", "Your custom server uses unencrypted HTTP. Contact your administrator to enable HTTPS."),
         ("api_server_empty_tip", "With API Server empty, your custom server defaults to HTTP. Contact your administrator to enable HTTPS."),
+        ("headless_display_tip", "When no monitor is attached, force a disconnected display output on so there is a screen to capture. Released again as soon as a monitor is plugged into another output."),
     ].iter().cloned().collect();
 }

@@ -815,5 +815,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", ""),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
+        ("Headless display", "Pantalla sin monitor"),
+        ("headless_display_tip", "Cuando no hay ningún monitor conectado, fuerza una salida de vídeo desconectada para que haya una pantalla que capturar. Se libera en cuanto se conecta un monitor en otra salida."),
     ].iter().cloned().collect();
 }
