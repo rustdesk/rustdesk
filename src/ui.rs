@@ -88,7 +88,10 @@ pub fn start(args: &mut [String]) {
     #[cfg(target_os = "macos")]
     crate::platform::delegate::make_menubar(frame.get_host(), args.is_empty());
     #[cfg(windows)]
-    crate::platform::try_set_window_foreground(frame.get_hwnd() as _);
+    unsafe {
+        // SAFETY: frame owns the live window used by this call.
+        crate::platform::try_set_window_foreground(frame.get_hwnd() as _);
+    }
     let page;
     if args.len() > 1 && args[0] == "--play" {
         args[0] = "--connect".to_owned();
@@ -132,7 +135,8 @@ pub fn start(args: &mut [String]) {
         #[cfg(windows)]
         {
             let hw = frame.get_host().get_hwnd();
-            crate::platform::windows::enable_lowlevel_keyboard(hw as _);
+            // SAFETY: hw comes from this application's live Sciter host window.
+            unsafe { crate::platform::windows::enable_lowlevel_keyboard(hw as _) };
         }
         let mut iter = args.iter();
         let Some(cmd) = iter.next() else {
