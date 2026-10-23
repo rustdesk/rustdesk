@@ -411,6 +411,15 @@ class FileController {
     return DirectoryData(directory.value, options.value);
   }
 
+  Future<void> _restoreWorkspaceHome(String savedDir) async {
+    if (savedDir.isEmpty || AndroidDocuments.isPath(savedDir)) return;
+    final workspace = await AndroidDocuments.workspace();
+    if (PathUtil.posixContext.equals(workspace, savedDir) ||
+        PathUtil.posixContext.isWithin(workspace, savedDir)) {
+      homePath = workspace;
+    }
+  }
+
   Future<void> onReady() async {
     if (isLocal) {
       options.value.home = await bind.mainGetHomeDir();
@@ -427,6 +436,7 @@ class FileController {
 
     var savedDir = (await bind.sessionGetPeerOption(
         sessionId: sessionId, name: isLocal ? "local_dir" : "remote_dir"));
+    if (isAndroid && isLocal) await _restoreWorkspaceHome(savedDir);
     if (savedDir.isNotEmpty && !_isPathAllowed(savedDir)) {
       savedDir = options.value.home;
       await bind.sessionPeerOption(

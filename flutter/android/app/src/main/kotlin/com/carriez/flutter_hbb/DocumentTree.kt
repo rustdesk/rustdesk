@@ -75,8 +75,12 @@ internal class DocumentTree(
             check(matches.size <= 1) { "The provider returned multiple documents named $name" }
             val child = matches.singleOrNull()
             current = child?.first ?: if (createParents) {
-                DocumentsContract.createDocument(resolver, current, Document.MIME_TYPE_DIR, name)
+                val created = DocumentsContract.createDocument(resolver, current, Document.MIME_TYPE_DIR, name)
                     ?: throw IOException("Unable to create folder $name")
+                check(metadata(created)?.getString("name") == name) {
+                    "The provider cannot preserve folder name: $name"
+                }
+                created
             } else return null
         }
         return current
