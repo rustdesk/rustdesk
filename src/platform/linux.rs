@@ -1577,6 +1577,7 @@ fn get_default_pa_monitor() -> Option<String> {
         .map_err(|err| log::warn!("Failed to get the default sink {}: {:?}", sink, err))
         .ok()?
         .monitor_name
+        .filter(|name| !name.is_empty())
 }
 
 pub fn get_pa_source_name(desc: &str) -> String {
