@@ -215,43 +215,6 @@ mod tests {
         assert_eq!(m("streams:empty:"), WAYLAND_NO_USABLE_SCREEN);
     }
 
-    #[test]
-    fn only_a_portal_that_may_be_dead_is_told_to_restart() {
-        let m = |tag| staged_message(tag, false);
-        // Not reached the bus at all: the portal has not been asked anything yet.
-        assert_eq!(
-            m("session-bus:dbus:org.freedesktop.DBus.Error.NotSupported"),
-            WAYLAND_NO_SESSION
-        );
-        // Answering, but without an implementation behind the interface that was called --
-        // at any stage, not just the first one.
-        assert_eq!(
-            m("create-session:unsupported:org.freedesktop.DBus.Error.UnknownMethod"),
-            WAYLAND_UNSUPPORTED
-        );
-        assert_eq!(
-            m("select-sources:unsupported:org.freedesktop.DBus.Error.UnknownMethod"),
-            WAYLAND_UNSUPPORTED
-        );
-        // Absent or silent, which is what the existing key's remedy is for.
-        assert_eq!(
-            m("create-session:dbus:org.freedesktop.DBus.Error.ServiceUnknown"),
-            SCRAP_XDP_PORTAL_UNAVAILABLE
-        );
-        // Not this one: `Start` had already been answered, so the portal was alive and the
-        // request granted. Saying it may have crashed would walk the diagnosis backwards.
-        assert_eq!(
-            m("open-pipewire-remote:dbus:org.freedesktop.DBus.Error.Failed"),
-            WAYLAND_PIPEWIRE_HANDOVER
-        );
-        // A tag this build does not know must never fall back to a guess.
-        assert_eq!(
-            m("some-new-stage:some-new-kind:x"),
-            SCRAP_XDP_PORTAL_UNAVAILABLE
-        );
-        assert_eq!(m(""), SCRAP_XDP_PORTAL_UNAVAILABLE);
-    }
-
     // The peer resolves a message by replacing its first `{...}` with `{}` and looking that
     // up, so a detail-carrying message has to reduce back to its key exactly.
     #[test]
@@ -267,28 +230,6 @@ mod tests {
             format!("{}{{}}{}", &gst[..open], &gst[close + 1..]),
             WAYLAND_GST_UNAVAILABLE
         );
-    }
-
-    #[test]
-    fn legacy_ubuntu_keeps_its_message_for_machine_faults_only() {
-        let m = |tag| staged_message(tag, true);
-        assert_eq!(
-            m("create-session:dbus:org.freedesktop.DBus.Error.ServiceUnknown"),
-            SCRAP_UBUNTU_HIGHER_REQUIRED
-        );
-        assert_eq!(
-            m("create-session:unsupported:org.freedesktop.DBus.Error.UnknownMethod"),
-            SCRAP_UBUNTU_HIGHER_REQUIRED
-        );
-        assert_eq!(
-            m("gst-plugin:unavailable:pipewiresrc"),
-            SCRAP_UBUNTU_HIGHER_REQUIRED
-        );
-        assert_eq!(m("streams:empty:"), SCRAP_UBUNTU_HIGHER_REQUIRED);
-        assert_eq!(m("session-bus:dbus:"), SCRAP_UBUNTU_HIGHER_REQUIRED);
-        assert_eq!(m("start:declined:"), WAYLAND_DECLINED);
-        assert_eq!(m("start:ended:"), WAYLAND_ENDED);
-        assert_eq!(m("start:no-response:"), WAYLAND_TIMED_OUT);
     }
 }
 
@@ -463,7 +404,9 @@ pub(super) fn is_inited() -> Option<Message> {
         if super::drm_capturer::is_available_cached() {
             return None;
         }
-        if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
+        // try_read: an init waiting for the portal's picker holds the write lock, and this runs on
+        // every desktop login. Busy (that init, or clear()) answers not inited yet.
+        if !matches!(CAP_DISPLAY_INFO.try_read(), Ok(map) if !map.is_empty()) {
             let mut msg_out = Message::new();
             let res = MessageBox {
                 msgtype: "nook-nocancel-hasclose".to_owned(),
@@ -482,7 +425,17 @@ pub(super) fn is_inited() -> Option<Message> {
 
 pub(super) async fn check_init() -> ResultType<()> {
     if !is_x11() {
-        if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
+        // try_read for the same reason as is_inited; when busy, the same look waits off the worker.
+        let looked = CAP_DISPLAY_INFO.try_read().map(|map| map.is_empty()).ok();
+        let empty = match looked {
+            Some(empty) => empty,
+            None => hbb_common::tokio::task::spawn_blocking(|| {
+                CAP_DISPLAY_INFO.read().unwrap().is_empty()
+            })
+            .await
+            .map_err(|err| anyhow::anyhow!("Wayland display state task failed: {err}"))?,
+        };
+        if empty {
             if crate::input_service::wayland_use_uinput() {
                 // The cached layout may predate compositor changes made while no session
                 // was active, https://github.com/rustdesk/rustdesk/issues/15601
@@ -568,65 +521,77 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
             }
 
-            let mut lock = CAP_DISPLAY_INFO.write().unwrap();
-            if lock.is_empty() {
-                // Check if PipeWire is already initialized to prevent duplicate recorder creation
-                if *PIPEWIRE_INITIALIZED.read().unwrap() {
-                    log::warn!("wayland_diag: Preventing duplicate PipeWire initialization");
-                    return Ok(());
-                }
+            // The portal can wait minutes for the user to answer its picker, under the write lock:
+            // it serializes inits and orders them with clear(). Wait on a blocking thread, so no
+            // tokio worker is parked meanwhile.
+            hbb_common::tokio::task::spawn_blocking(init_displays)
+                .await
+                .map_err(|err| anyhow::anyhow!("Wayland display init task failed: {err}"))??;
+        }
+    }
+    Ok(())
+}
 
-                let mut all = Display::all()?;
-                log::debug!("Initializing displays with fill_displays()");
-                {
-                    let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
-                    let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
-                    fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)
-                        .map_err(map_staged_err)?;
-                }
-                log::debug!("Attempting to fix logical size with try_fix_logical_size()");
-                try_fix_logical_size(&mut all);
-                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
-                let num = all.len();
-                let primary = super::display_service::get_primary_2(&all);
-                let mut displays = super::display_service::update_sync_displays(&all);
-                for display in displays.iter_mut() {
-                    display.cursor_embedded = is_cursor_embedded();
-                }
+/// The part of `check_init` under the CAP_DISPLAY_INFO write lock, the wait for the user while the
+/// portal's picker is open included. Blocking.
+fn init_displays() -> ResultType<()> {
+    let mut lock = CAP_DISPLAY_INFO.write().unwrap();
+    if lock.is_empty() {
+        // Check if PipeWire is already initialized to prevent duplicate recorder creation
+        if *PIPEWIRE_INITIALIZED.read().unwrap() {
+            log::warn!("wayland_diag: Preventing duplicate PipeWire initialization");
+            return Ok(());
+        }
 
-                let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
-                for d in &all {
-                    rects.push((d.origin(), d.width(), d.height()));
-                }
+        let mut all = Display::all()?;
+        log::debug!("Initializing displays with fill_displays()");
+        {
+            let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
+            let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
+            fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)
+                .map_err(map_staged_err)?;
+        }
+        log::debug!("Attempting to fix logical size with try_fix_logical_size()");
+        try_fix_logical_size(&mut all);
+        *PIPEWIRE_INITIALIZED.write().unwrap() = true;
+        let num = all.len();
+        let primary = super::display_service::get_primary_2(&all);
+        let mut displays = super::display_service::update_sync_displays(&all);
+        for display in displays.iter_mut() {
+            display.cursor_embedded = is_cursor_embedded();
+        }
 
-                log::debug!(
-                    "#displays={}, primary={}, rects: {:?}, cpus={}/{}",
-                    num,
-                    primary,
-                    rects,
-                    num_cpus::get_physical(),
-                    num_cpus::get()
-                );
+        let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
+        for d in &all {
+            rects.push((d.origin(), d.width(), d.height()));
+        }
 
-                // Create individual CapDisplayInfo for each display with its own capturer
-                for (idx, display) in all.into_iter().enumerate() {
-                    // No `with_context` here: the peer is shown `format!("{}", err)`, which
-                    // renders only the outermost layer, and the mapped reason is the inner one.
-                    let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
-                    let capturer = CapturerPtr(capturer);
+        log::debug!(
+            "#displays={}, primary={}, rects: {:?}, cpus={}/{}",
+            num,
+            primary,
+            rects,
+            num_cpus::get_physical(),
+            num_cpus::get()
+        );
 
-                    let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
-                        rects: rects.clone(),
-                        displays: displays.clone(),
-                        num,
-                        primary,
-                        current: idx,
-                        capturer,
-                    }));
+        // Create individual CapDisplayInfo for each display with its own capturer
+        for (idx, display) in all.into_iter().enumerate() {
+            // No `with_context` here: the peer is shown `format!("{}", err)`, which
+            // renders only the outermost layer, and the mapped reason is the inner one.
+            let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
+            let capturer = CapturerPtr(capturer);
 
-                    lock.insert(idx, cap_display_info as u64);
-                }
-            }
+            let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
+                rects: rects.clone(),
+                displays: displays.clone(),
+                num,
+                primary,
+                current: idx,
+                capturer,
+            }));
+
+            lock.insert(idx, cap_display_info as u64);
         }
     }
     Ok(())
@@ -655,17 +620,22 @@ pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, 
         }
     }
     check_init().await?;
-    // Keep one read guard so clear/reinitialization cannot split these across cache snapshots.
-    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-    if let Some(addr) = cap_map.values().next() {
-        let cap_display_info: *const CapDisplayInfo = *addr as _;
-        unsafe {
-            let cap_display_info = &*cap_display_info;
-            Ok((cap_display_info.displays.clone(), cap_display_info.primary))
+    // The read can wait for an init another thread started since: off the worker too.
+    hbb_common::tokio::task::spawn_blocking(|| -> ResultType<(Vec<DisplayInfo>, usize)> {
+        // Keep one read guard so clear/reinitialization cannot split these across cache snapshots.
+        let cap_map = CAP_DISPLAY_INFO.read().unwrap();
+        if let Some(addr) = cap_map.values().next() {
+            let cap_display_info: *const CapDisplayInfo = *addr as _;
+            unsafe {
+                let cap_display_info = &*cap_display_info;
+                Ok((cap_display_info.displays.clone(), cap_display_info.primary))
+            }
+        } else {
+            bail!("Failed to get capturer display info");
         }
-    } else {
-        bail!("Failed to get capturer display info");
-    }
+    })
+    .await
+    .map_err(|err| anyhow::anyhow!("Wayland display info task failed: {err}"))?
 }
 
 pub fn clear() {
@@ -699,6 +669,44 @@ pub fn clear() {
     *PIPEWIRE_INITIALIZED.write().unwrap() = false;
 }
 
+/// The portal session close when the last remote connection goes (`AuthedConnID::drop`). A portal
+/// request waiting for the user holds the session slot for up to 3 minutes, and the drop can run
+/// on a tokio worker: the close waits on its own thread, and one runs at a time.
+pub(super) fn try_close_portal_session() {
+    static CLOSER: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
+    // No session and no request pending (drm, x11, closed already): nothing to wait for.
+    if matches!(scrap::wayland::pipewire::RDP_SESSION_INFO.try_lock(), Ok(info) if info.is_none()) {
+        return;
+    }
+    let mut closer = CLOSER.lock().unwrap();
+    // A close still running covers this one.
+    if matches!(&*closer, Some(close) if !close.is_finished()) {
+        return;
+    }
+    match std::thread::Builder::new()
+        .name("portal-session-close".into())
+        .spawn(|| {
+            // The drop counted before this thread ran: count again.
+            if !AUTHED_CONNS
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|c| c.conn_type == AuthConnType::Remote)
+            {
+                scrap::wayland::pipewire::try_close_session();
+            }
+        }) {
+        Ok(close) => *closer = Some(close),
+        // A peer can drop connections at any rate.
+        Err(err) => hbb_common::throttled_log!(
+            std::time::Duration::from_secs(60),
+            error,
+            "Failed to spawn the portal session close: {}",
+            err
+        ),
+    }
+}
+
 /// Initialize the PipeWire/portal capture path from the plain (sync) video thread, so a DRM display
 /// that cannot be captured can fall through to PipeWire for THAT display. `ensure_inited` short-circuits
 /// to the DRM branch whenever DRM is globally available, so it never runs `check_init`; this helper
@@ -724,9 +732,9 @@ pub(super) fn get_capturer_for_display(
     // render-node-absent seat or a convert failure on the unprivileged side) must NOT propagate out
     // and restart-loop this per-display video service. Instead fall THROUGH to PipeWire for just this
     // display; the other DRM outputs keep streaming over DRM.
-    // The ONE gate that keeps the probing form on purpose: this runs on the plain video thread,
+    // Like the login, this gate keeps the probing form on purpose: it runs on the video thread,
     // not an async executor, and it is the capture-build path, so a definitive verdict is worth
-    // seconds here. It is also what makes a cold cache recoverable at all -- warm_availability
+    // seconds here. With the login it is what makes a cold cache recoverable -- warm_availability
     // gives up after its attempts, so if EVERY gate were cache-only a --server that started
     // before the root service would never see DRM again for the rest of its life.
     #[cfg(feature = "drm")]

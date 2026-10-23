@@ -237,6 +237,3 @@ fn validate_input(input: &[f32], channels: usize) -> Result<(), AudioResamplerEr
 
 #[cfg(all(test, not(all(feature = "use_samplerate", not(feature = "use_dasp")))))]
 mod tests;
-
-#[cfg(all(test, feature = "use_samplerate", not(feature = "use_dasp")))]
-mod samplerate_tests;

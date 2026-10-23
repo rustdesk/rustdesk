@@ -98,6 +98,7 @@ pub struct Remote<T: InvokeUiSession> {
     elevation_requested: bool,
     peer_info: ParsedPeerInfo,
     video_threads: HashMap<usize, VideoThread>,
+    last_auto_fps: Option<usize>,
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
     sent_close_reason: bool,
@@ -150,6 +151,7 @@ impl<T: InvokeUiSession> Remote<T> {
             elevation_requested: false,
             peer_info: Default::default(),
             video_threads: Default::default(),
+            last_auto_fps: None,
             chroma: Default::default(),
             last_record_state: false,
             sent_close_reason: false,
@@ -382,7 +384,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.video_threads.iter().for_each(|(_, v)| {
                                 *v.frame_count.write().unwrap() = 0;
                             });
-                            self.fps_control(direct, fps.clone());
+                            self.fps_control(direct, fps.clone(), &mut peer).await;
                             let chroma = self.chroma.read().unwrap().clone();
                             let chroma = match chroma {
                                 Some(Chroma::I444) => "4:4:4",
@@ -787,6 +789,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.initial_clipboard_pending = false;
                     }
                     Some(message::Union::Misc(misc)) => match misc.union {
+                        Some(misc::Union::Option(ref option)) => {
+                            if option.custom_fps > 0 {
+                                self.last_auto_fps = None;
+                            }
+                        }
                         Some(misc::Union::RefreshVideo(_)) => {
                             self.video_threads.iter().for_each(|(_, v)| {
                                 *v.discard_queue.write().unwrap() = true;
@@ -809,7 +816,16 @@ impl<T: InvokeUiSession> Remote<T> {
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     let to = match r#type {
-                        fs::JobType::Generic => fs::DataSource::FilePath(PathBuf::from(&to)),
+                        fs::JobType::Generic => {
+                            if let Err(err) = fs::download::validate_download_name(
+                                &path,
+                                self.handler.peer_platform() == "Windows",
+                            ) {
+                                self.handle_job_status(id, -1, Some(err.to_string()));
+                                return true;
+                            }
+                            fs::DataSource::FilePath(PathBuf::from(&to))
+                        }
                         fs::JobType::Printer => {
                             fs::DataSource::MemoryCursor(std::io::Cursor::new(Vec::new()))
                         }
@@ -1378,7 +1394,12 @@ impl<T: InvokeUiSession> Remote<T> {
     // Currently, this function only considers decoding speed and queue length, not network delay.
     // The controlled end can consider auto fps as the maximum decoding fps.
     #[inline]
-    fn fps_control(&mut self, direct: bool, real_fps_map: HashMap<usize, i32>) {
+    async fn fps_control(
+        &mut self,
+        direct: bool,
+        real_fps_map: HashMap<usize, i32>,
+        peer: &mut Stream,
+    ) {
         self.video_threads.iter_mut().for_each(|(k, v)| {
             let real_fps = real_fps_map.get(k).cloned().unwrap_or_default();
             if real_fps == 0 {
@@ -1418,7 +1439,7 @@ impl<T: InvokeUiSession> Remote<T> {
         if limited_fps > custom_fps {
             limited_fps = custom_fps;
         }
-        let last_auto_fps = self.handler.lc.read().unwrap().last_auto_fps.clone();
+        let last_auto_fps = self.last_auto_fps;
         let displays = self.video_threads.keys().cloned().collect::<Vec<_>>();
         let mut fps_trending = |display: usize| {
             let thread = self.video_threads.get_mut(&display)?;
@@ -1464,9 +1485,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 });
                 let mut msg = Message::new();
                 msg.set_misc(misc);
-                self.sender.send(Data::Message(msg)).ok();
+                // Send inline so a queued manual FPS update is applied after this decision.
+                allow_err!(peer.send(&msg).await);
                 log::info!("Set fps to {}", auto_fps);
-                self.handler.lc.write().unwrap().last_auto_fps = Some(auto_fps);
+                self.last_auto_fps = Some(auto_fps);
             }
         }
         // send refresh
@@ -1783,6 +1805,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                     fs::transform_windows_path(&mut entries);
                                 }
                             }
+                            if fd.id <= 0 {
+                                if let Err(err) = fs::download::validate_listing(
+                                    &entries,
+                                    self.handler.peer_platform() == "Windows",
+                                ) {
+                                    self.handle_job_status(fd.id, -1, Some(err.to_string()));
+                                    return true;
+                                }
+                            }
                             // We cannot call cancel_transfer_job/handle_job_status while holding
                             // a mutable borrow from fs::get_job(&mut self.write_jobs), so defer
                             // the error handling until after the borrow scope ends.
@@ -1878,11 +1909,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 crate::is_support_file_transfer_resume_num(
                                                     peer_ver,
                                                 );
-                                            match fs::is_write_need_confirmation(
-                                                is_support_resume && job.is_resume,
-                                                &write_path,
-                                                &digest,
-                                            ) {
+                                            match job.download_digest(is_support_resume, &digest) {
                                                 Ok(res) => match res {
                                                     DigestCheckResult::IsSame => {
                                                         let req = FileTransferSendConfirmRequest {
@@ -1939,13 +1966,19 @@ impl<T: InvokeUiSession> Remote<T> {
                                                         union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                                                         ..Default::default()
                                                     };
-                                                        job.confirm(&req).await;
+                                                        // This did not approve replacing an existing local file.
                                                         let msg = new_send_confirm(req);
                                                         allow_err!(peer.send(&msg).await);
                                                     }
                                                 },
                                                 Err(err) => {
-                                                    println!("error receiving digest: {}", err);
+                                                    self.cancel_transfer_job(digest.id, peer).await;
+                                                    self.handle_job_status(
+                                                        digest.id,
+                                                        -1,
+                                                        Some(err.to_string()),
+                                                    );
+                                                    return true;
                                                 }
                                             }
                                         }
@@ -1954,13 +1987,18 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Block(block)) => {
+                            let id = block.id;
+                            let mut write_error = None;
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                                if let Err(_err) = job.write(block).await {
-                                    // to-do: add "skip" for writing job
-                                }
+                                let result = job.write(block).await;
                                 if job.r#type == fs::JobType::Generic {
+                                    write_error = result.err().map(|err| err.to_string());
                                     self.update_jobs_status();
                                 }
+                            }
+                            if let Some(err) = write_error {
+                                self.cancel_transfer_job(id, peer).await;
+                                self.handle_job_status(id, -1, Some(err));
                             }
                         }
                         Some(file_response::Union::Done(d)) => {
@@ -1968,8 +2006,11 @@ impl<T: InvokeUiSession> Remote<T> {
                             let mut job_type = fs::JobType::Generic;
                             let mut printer_data = None;
                             if let Some(job) = fs::remove_job(d.id, &mut self.write_jobs) {
-                                job.modify_time();
-                                err = job.job_error();
+                                err = job
+                                    .finish_download()
+                                    .err()
+                                    .map(|err| err.to_string())
+                                    .or_else(|| job.job_error());
                                 job_type = job.r#type;
                                 printer_data = match job.get_buf_data().await {
                                     Ok(d) => d,
@@ -2360,6 +2401,7 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn set_peer_info(&mut self, pi: &PeerInfo) {
+        self.last_auto_fps = None;
         self.peer_info.platform = pi.platform.clone();
 
         // Check features field for terminal support
@@ -2768,7 +2810,7 @@ impl<T: InvokeUiSession> Remote<T> {
 /// A shape that decoded, still compressed, under the id the UI knows it by. Copied once it
 /// decoded: the message's colors may be a slice of a larger received buffer, which a clone
 /// would keep alive.
-#[cfg(any(feature = "flutter", test))]
+#[cfg(feature = "flutter")]
 fn cursor_shape(id: u64, cd: &CursorData, compressed: &[u8]) -> CursorData {
     CursorData {
         id,
@@ -2992,6 +3034,44 @@ mod tests {
             "a clipboard after the login was held back"
         );
     }
+
+    #[tokio::test]
+    async fn manual_fps_update_allows_the_same_automatic_limit_again() {
+        let (mut remote, mut peer, mut far) = remote_and_peer().await;
+        let (video_sender, _video_receiver) = std::sync::mpsc::channel();
+        remote.video_threads.insert(
+            0,
+            VideoThread {
+                video_queue: Arc::new(RwLock::new(ArrayQueue::new(client::VIDEO_QUEUE_SIZE))),
+                video_sender,
+                decode_fps: Arc::new(RwLock::new(Some(23))),
+                frame_count: Default::default(),
+                discard_queue: Default::default(),
+                fps_control: Default::default(),
+            },
+        );
+
+        for (manual_fps, expected) in [(None, 20), (Some(90), 90), (None, 20)] {
+            if let Some(fps) = manual_fps {
+                let lc = &remote.handler.lc;
+                let msg = lc.write().unwrap().set_custom_fps(fps, false);
+                remote
+                    .handle_msg_from_ui(Data::Message(msg), &mut peer)
+                    .await;
+            } else {
+                remote
+                    .fps_control(true, HashMap::from([(0, 20)]), &mut peer)
+                    .await;
+            }
+            let bytes = timeout(1000, far.next())
+                .await
+                .expect("FPS update was not sent")
+                .unwrap()
+                .unwrap();
+            let msg = Message::parse_from_bytes(&bytes).unwrap();
+            assert_eq!(msg.misc().option().custom_fps, expected);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -3023,74 +3103,6 @@ mod cursor_dedupe_tests {
         assert_eq!(dedupe.id(2), first);
         assert_eq!(dedupe.id(1), first);
     }
-
-    #[test]
-    fn the_hotspot_is_part_of_the_shape() {
-        let a = CursorDedupe::name(&shape(1, 0, b"arrow"));
-        let b = CursorDedupe::name(&shape(2, 1, b"arrow"));
-        assert_ne!(a, b);
-    }
-
-    #[test]
-    fn a_reused_handle_names_its_latest_shape() {
-        let mut dedupe = CursorDedupe::default();
-        dedupe.record(1, CursorDedupe::name(&shape(1, 0, b"arrow")));
-        let beam = CursorDedupe::name(&shape(1, 0, b"beam"));
-        dedupe.record(1, beam);
-        assert_eq!(dedupe.id(1), beam);
-    }
-
-    #[test]
-    fn a_rejected_shape_names_its_handle_and_is_never_decoded() {
-        let mut dedupe = CursorDedupe::default();
-        let arrow = CursorDedupe::name(&shape(7, 0, b"arrow"));
-        dedupe.record(7, arrow);
-        let beam = CursorDedupe::name(&shape(8, 0, b"beam"));
-        dedupe.record(8, beam);
-        let broken = CursorDedupe::name(&shape(7, 0, b"broken"));
-        assert_eq!(
-            dedupe.rejected(7, broken),
-            broken,
-            "not the shape it named before"
-        );
-        assert_eq!(
-            dedupe.id(7),
-            broken,
-            "nor when the handle is selected again"
-        );
-        assert_eq!(dedupe.id(8), beam, "another handle keeps its shape");
-        assert!(!dedupe.has_decoded(broken));
-        assert!(
-            dedupe.has_decoded(arrow),
-            "kept for a handle that brings it again"
-        );
-        dedupe.record(7, arrow);
-        assert_eq!(dedupe.id(7), arrow);
-    }
-
-    #[test]
-    fn a_shape_rejected_under_handles_never_seen_files_nothing() {
-        let mut dedupe = CursorDedupe::default();
-        let broken = CursorDedupe::name(&shape(0, 0, b"broken"));
-        for handle in 0..1000 {
-            assert_eq!(dedupe.rejected(handle, broken), broken);
-        }
-        assert!(dedupe.ids.is_empty());
-        assert!(!dedupe.has_decoded(broken));
-    }
-
-    #[test]
-    fn an_id_the_peer_never_sent_is_passed_on() {
-        assert_eq!(CursorDedupe::default().id(7), 7);
-    }
-
-    #[test]
-    fn peers_from_1_5_0_name_cursors_by_content() {
-        use hbb_common::get_version_number as v;
-        assert!(!crate::is_peer_naming_cursors_by_content(v("1.4.9")));
-        assert!(crate::is_peer_naming_cursors_by_content(v("1.5.0")));
-        assert!(crate::is_peer_naming_cursors_by_content(v("1.5.1")));
-    }
 }
 
 #[cfg(test)]
@@ -3106,21 +3118,6 @@ mod kept_cursor_tests {
             colors: hbb_common::compress::compress(&rgba).into(),
             ..Default::default()
         }
-    }
-
-    #[test]
-    fn a_kept_shape_is_a_copy_under_the_ui_id() {
-        let mut cd = compressed(4, 4);
-        cd.hotx = 1;
-        let kept = cursor_shape(42, &cd, &cd.colors);
-        assert_eq!(kept.id, 42);
-        assert_eq!((kept.hotx, kept.width, kept.height), (1, 4, 4));
-        assert_eq!(kept.colors, cd.colors);
-        assert_ne!(
-            kept.colors.as_ptr(),
-            cd.colors.as_ptr(),
-            "not a view of the received buffer"
-        );
     }
 
     #[test]

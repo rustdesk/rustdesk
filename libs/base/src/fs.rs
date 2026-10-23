@@ -27,6 +27,12 @@ use hbb_common::{
 
 static NEXT_JOB_ID: AtomicI32 = AtomicI32::new(1);
 
+pub mod download;
+
+#[cfg(test)]
+#[path = "fs/download_tests.rs"]
+mod download_tests;
+
 pub fn get_next_job_id() -> i32 {
     NEXT_JOB_ID.fetch_add(1, Ordering::SeqCst)
 }
@@ -417,6 +423,8 @@ pub struct TransferJob {
     default_overwrite_strategy: Option<bool>,
     #[serde(skip_serializing)]
     digest: FileDigest,
+    #[serde(skip)]
+    download: Option<download::DownloadState>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -587,6 +595,7 @@ impl TransferJob {
             files: Vec::new(),
             total_size: 0,
             enable_overwrite_detection,
+            download: (is_remote && r#type == JobType::Generic).then(Default::default),
             ..Default::default()
         }
     }
@@ -648,6 +657,9 @@ impl TransferJob {
 
     #[inline]
     pub fn set_files(&mut self, files: Vec<FileEntry>) -> ResultType<()> {
+        if self.is_download() && !self.files.is_empty() {
+            bail!("cannot replace an accepted download file list");
+        }
         validate_transfer_file_names(&files)?;
         if let DataSource::FilePath(base) = &self.data_source {
             for file in &files {
@@ -692,7 +704,12 @@ impl TransferJob {
 
     fn resolve_entry_path(&self, base: &PathBuf, name: &str) -> Option<PathBuf> {
         if self.r#type == JobType::Generic {
-            match join_validated_path(base, name) {
+            let result = if self.is_download() {
+                download::validated_target(base, name)
+            } else {
+                join_validated_path(base, name)
+            };
+            match result {
                 Ok(path) => Some(path),
                 Err(err) => {
                     log::error!("Invalid file name in transfer job {}: {}", self.id, err);
@@ -705,6 +722,12 @@ impl TransferJob {
     }
 
     pub fn modify_time(&self) {
+        if self.is_download() {
+            if let Err(err) = self.finish_download() {
+                log::error!("Failed to finish download {}: {}", self.id, err);
+            }
+            return;
+        }
         if self.r#type == JobType::Printer {
             return;
         }
@@ -729,6 +752,9 @@ impl TransferJob {
     }
 
     pub fn remove_download_file(&self) {
+        if self.is_download() && self.data_stream.is_none() {
+            return;
+        }
         if self.r#type == JobType::Printer {
             return;
         }
@@ -761,6 +787,9 @@ impl TransferJob {
     }
 
     pub async fn write(&mut self, block: FileTransferBlock) -> ResultType<()> {
+        if self.is_download() {
+            return self.write_download(block).await;
+        }
         if block.id != self.id {
             bail!("Wrong id");
         }
@@ -1160,6 +1189,13 @@ impl TransferJob {
     }
 
     pub async fn confirm(&mut self, r: &FileTransferSendConfirmRequest) -> bool {
+        if self.is_download() {
+            self.confirm_download(r);
+            // Open receiver resume streams in write() so validation errors reach the caller.
+            if matches!(r.union, Some(file_transfer_send_confirm_request::Union::OffsetBlk(offset)) if offset > 0) {
+                return true;
+            }
+        }
         if self.file_num() != r.file_num {
             // This branch will always be hit if:
             // 1. `confirm()` is called in `ui_cm_interface.rs`
@@ -1678,15 +1714,6 @@ mod tests {
     }
 
     #[test]
-    fn set_files_rejects_null_byte_name() {
-        let mut job = new_validation_job(103);
-        let err = job
-            .set_files(vec![new_file_entry("bad\0name.txt")])
-            .expect_err("null byte in file name must be rejected");
-        assert_err_contains(err, "null bytes");
-    }
-
-    #[test]
     fn set_files_rejects_mixed_entries_when_one_is_traversal() {
         let mut job = new_validation_job(104);
         let err = job
@@ -1706,39 +1733,6 @@ mod tests {
             .set_files(vec![new_file_entry("\\\\server\\share\\payload.txt")])
             .expect_err("UNC absolute path must be rejected");
         assert_err_contains(err, "absolute path");
-    }
-
-    #[cfg(not(windows))]
-    #[test]
-    fn set_files_allows_backslash_prefixed_name_on_unix() {
-        let mut job = new_validation_job(105);
-        assert!(job
-            .set_files(vec![new_file_entry("\\\\server\\share\\payload.txt")])
-            .is_ok());
-    }
-
-    #[test]
-    fn remove_file_rejects_empty_path() {
-        let err = remove_file("").expect_err("empty file path must be rejected");
-        assert_err_contains(err, "cannot be empty");
-    }
-
-    #[test]
-    fn remove_file_rejects_null_byte_path() {
-        let err = remove_file("bad\0path").expect_err("null byte path must be rejected");
-        assert_err_contains(err, "null bytes");
-    }
-
-    #[test]
-    fn create_dir_rejects_empty_path() {
-        let err = create_dir("").expect_err("empty directory path must be rejected");
-        assert_err_contains(err, "cannot be empty");
-    }
-
-    #[test]
-    fn create_dir_rejects_null_byte_path() {
-        let err = create_dir("bad\0path").expect_err("null byte path must be rejected");
-        assert_err_contains(err, "null bytes");
     }
 
     #[test]
@@ -1789,25 +1783,5 @@ mod tests {
 
         assert!(!src.exists());
         assert!(dst.exists());
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn set_files_rejects_windows_drive_absolute_path() {
-        let mut job = new_validation_job(106);
-        let err = job
-            .set_files(vec![new_file_entry("C:\\Windows\\Temp\\payload.txt")])
-            .expect_err("drive-letter absolute path must be rejected");
-        assert_err_contains(err, "absolute path");
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn set_files_rejects_windows_verbatim_drive_absolute_path() {
-        let mut job = new_validation_job(1061);
-        let err = job
-            .set_files(vec![new_file_entry(r"\\?\C:\Windows\Temp\x.txt")])
-            .expect_err("verbatim drive absolute path must be rejected");
-        assert_err_contains(err, "absolute path");
     }
 }

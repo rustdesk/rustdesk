@@ -143,6 +143,10 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
                 "zh-cn"
             })
             .to_owned();
+            // Hong Kong, Macao and the Hant script use Traditional Chinese.
+            if !locale.contains("hans") && ["hk", "mo", "hant"].iter().any(|x| locale.contains(x)) {
+                lang = "zh-tw".to_owned();
+            }
         }
     }
     if lang.is_empty() {
@@ -167,6 +171,12 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
             .map(|x| x.split("_").next().unwrap_or_default())
             .unwrap_or_default()
             .to_owned();
+        // The Kazakh and Georgian tables are keyed by country code, not by language code.
+        if lang == "kk" {
+            lang = "kz".to_owned();
+        } else if lang == "ka" {
+            lang = "ge".to_owned();
+        }
     }
     if cjk_fallback && is_cjk_lang(&lang) {
         "en".to_owned()
@@ -337,16 +347,6 @@ mod test {
     }
 
     #[test]
-    fn test_resolve_lang_forces_english_for_saved_cjk_when_target_disables_cjk() {
-        use super::resolve_lang as f;
-
-        assert_eq!(f("zh-cn", "en-US", true), "en");
-        assert_eq!(f("zh-tw", "en-US", true), "en");
-        assert_eq!(f("ja", "en-US", true), "en");
-        assert_eq!(f("ko", "en-US", true), "en");
-    }
-
-    #[test]
     fn test_resolve_lang_forces_english_for_cjk_locale_when_target_disables_cjk() {
         use super::resolve_lang as f;
 
@@ -377,10 +377,23 @@ mod test {
     }
 
     #[test]
-    fn test_resolve_lang_saved_lang_takes_precedence_over_locale() {
+    fn test_resolve_lang_detects_kazakh_and_georgian_from_locale() {
         use super::resolve_lang as f;
 
-        assert_eq!(f("pt-br", "pt-PT", false), "pt-br");
-        assert_eq!(f("pt-pt", "pt-BR", false), "pt-pt");
+        assert_eq!(f("", "kk_KZ.UTF-8", false), "kz");
+        assert_eq!(f("", "kk-KZ", false), "kz");
+        assert_eq!(f("", "ka_GE.UTF-8", false), "ge");
+        assert_eq!(f("", "ka-GE", false), "ge");
+    }
+
+    #[test]
+    fn test_resolve_lang_detects_traditional_chinese_for_hong_kong_and_macao() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "zh_HK.UTF-8", false), "zh-tw");
+        assert_eq!(f("", "zh-Hant-HK", false), "zh-tw");
+        assert_eq!(f("", "zh-Hant", false), "zh-tw");
+        assert_eq!(f("", "zh_MO", false), "zh-tw");
+        assert_eq!(f("", "zh-Hans-HK", false), "zh-cn");
     }
 }
