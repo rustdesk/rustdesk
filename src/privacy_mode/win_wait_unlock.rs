@@ -75,12 +75,12 @@ pub fn wait_for_unlock(impl_key: &str, conn_id: i32, waiting: &mut Option<Waitin
         info,
         "Privacy mode: the session is locked, waiting for the unlock"
     );
-    let turn_ons = TURN_ONS.load(Ordering::SeqCst);
+    let mut turn_ons = TURN_ONS.load(Ordering::SeqCst);
     *waiting = Some(WaitingTurnOn::spawn(
         impl_key.to_owned(),
         conn_id,
         input_desktop,
-        move |cancelled| turn_on(&effective_key, conn_id, turn_ons, cancelled),
+        move |cancelled| turn_on(&effective_key, conn_id, &mut turn_ons, cancelled),
     ));
     true
 }
@@ -188,7 +188,7 @@ fn is_supported(impl_key: &str) -> bool {
 fn turn_on(
     effective_key: &str,
     conn_id: i32,
-    turn_ons: usize,
+    turn_ons: &mut usize,
     cancelled: &AtomicBool,
 ) -> Option<ResultType<bool>> {
     // `turn_on_locked` would fall back to another implementation.
@@ -272,18 +272,22 @@ fn turn_on_locked(
 // user at the PC may have turned it off again with Ctrl+P, and this one mustn't undo that.
 fn unless_stale(
     cancelled: &AtomicBool,
-    turn_ons: usize,
+    turn_ons: &mut usize,
     turn_on: impl FnOnce() -> ResultType<bool>,
 ) -> Option<ResultType<bool>> {
     if cancelled.load(Ordering::SeqCst) {
         return None;
     }
-    if TURN_ONS.load(Ordering::SeqCst) != turn_ons {
+    if TURN_ONS.load(Ordering::SeqCst) != *turn_ons {
         return Some(Err(anyhow!(
             "Another connection turned privacy mode on, or tried to, meanwhile"
         )));
     }
-    Some(turn_on())
+    let res = turn_on();
+    // This request's own attempt counted too, and a retry mustn't take it for another
+    // connection's. Still under `PRIVACY_MODE`, so no other attempt is in the count yet.
+    *turn_ons = TURN_ONS.load(Ordering::SeqCst);
+    Some(res)
 }
 
 // Only meaningful on the waiting thread: a new thread starts on the user's desktop
@@ -332,6 +336,9 @@ mod tests {
     use super::*;
     use hbb_common::anyhow::anyhow;
     use std::sync::mpsc;
+
+    // The tests that move `TURN_ONS` take turns, so one doesn't see another's attempt.
+    static COUNT: Mutex<()> = Mutex::new(());
 
     // Each desktop check takes the next entry of `desktops` (the last one repeats) and each
     // turn-on the next of `results` (then success). After `waits` waits the request is
@@ -420,10 +427,28 @@ mod tests {
 
     #[test]
     fn a_request_queued_before_another_connections_turn_on_is_not_made() {
-        let queued = TURN_ONS.load(Ordering::SeqCst);
+        let _count = COUNT.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut queued = TURN_ONS.load(Ordering::SeqCst);
         TURN_ONS.fetch_add(1, Ordering::SeqCst);
-        let res = unless_stale(&AtomicBool::new(false), queued, || panic!("turned on"));
+        let res = unless_stale(&AtomicBool::new(false), &mut queued, || panic!("turned on"));
         assert!(matches!(res, Some(Err(_))));
+    }
+
+    #[test]
+    fn a_retry_after_its_own_failed_attempt_is_still_made() {
+        let _count = COUNT.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut queued = TURN_ONS.load(Ordering::SeqCst);
+        let cancelled = AtomicBool::new(false);
+        let res = unless_stale(&cancelled, &mut queued, || {
+            note_turn_on();
+            refused_by_the_lock_screen()
+        });
+        assert!(matches!(res, Some(Err(_))));
+        let res = unless_stale(&cancelled, &mut queued, || {
+            note_turn_on();
+            Ok(true)
+        });
+        assert!(matches!(res, Some(Ok(true))));
     }
 
     #[test]
