@@ -1,12 +1,14 @@
 //! Native state behind the MCP server that runs in the Flutter main window.
 
 use crate::{
+    client::{Data, Interface, Key, KEY_MAP},
     flutter_ffi::SessionID,
     input::{
         MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_MASK, MOUSE_TYPE_UP,
     },
+    keyboard::client::legacy_modifiers,
 };
-use base::message_proto::ScreenshotResponse;
+use base::message_proto::{KeyboardMode, KeyEvent, Message, ScreenshotResponse};
 use std::{
     collections::{HashSet, VecDeque},
     fs::OpenOptions,
@@ -42,6 +44,45 @@ impl Default for ConnectionInput {
             human_keys: Default::default(),
         }
     }
+}
+
+/// Agent input names the remote key it wants, so the local Control/Command swap
+/// preference must not rewrite it. Human input keeps going through
+/// `Session::input_key`, which applies the preference.
+fn send_agent_key(
+    session: &crate::flutter::FlutterSession,
+    name: &str,
+    down: bool,
+    press: bool,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) {
+    let chars: Vec<char> = name.chars().collect();
+    let key = if chars.len() == 1 {
+        Key::_Raw(chars[0] as _)
+    } else if let Some(key) = KEY_MAP.get(name) {
+        key.clone()
+    } else {
+        return;
+    };
+    let mut key_event = KeyEvent::new();
+    match key {
+        Key::Chr(chr) => key_event.set_chr(chr),
+        Key::ControlKey(control_key) => key_event.set_control_key(control_key),
+        Key::_Raw(raw) => key_event.set_chr(raw),
+    }
+    if press {
+        key_event.press = true;
+    } else if down {
+        key_event.down = true;
+    }
+    legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
+    key_event.mode = KeyboardMode::Legacy.into();
+    let mut msg_out = Message::new();
+    msg_out.set_key_event(key_event);
+    session.send(Data::Message(msg_out));
 }
 
 #[derive(Default)]
@@ -104,7 +145,7 @@ impl InputOwner {
             }
         }
         for key in self.agent_keys.drain() {
-            session.input_key_unswapped(&key, false, false, false, false, false, false);
+            send_agent_key(session, &key, false, false, false, false, false, false);
         }
     }
 
@@ -238,7 +279,7 @@ pub fn input_key(
         return "Linux peers do not support holding ordinary keys across calls. Use action press."
             .into();
     }
-    session.input_key_unswapped(name, down, press, alt, ctrl, shift, command);
+    send_agent_key(&session, name, down, press, alt, ctrl, shift, command);
     if down && !press {
         owner.agent_keys.insert(name.to_owned());
     } else {
@@ -1042,7 +1083,7 @@ mod tests {
             .lc
             .write()
             .unwrap()
-            .set_toggle_option_for_test("allow_swap_key", true);
+            .toggle_option("allow_swap_key".to_owned());
         let mut rx = capture(&session);
         set_agent_control(session_id, "grant".to_owned());
         sent_keys(&mut rx);
