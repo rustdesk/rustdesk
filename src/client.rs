@@ -4079,7 +4079,12 @@ pub fn start_video_thread<F, T>(
                                         *chroma.write().unwrap() = tmp_chroma;
                                     }
 
-                                    // fps calculation
+                                    // Decoder throughput for the adaptive-FPS
+                                    // controller: every decoded frame counts,
+                                    // including skipped ones. The quality
+                                    // monitor's FPS is not this value; it is
+                                    // derived from `video_callback` calls in
+                                    // io_loop, i.e. presented frames only.
                                     fps_calculate(
                                         &mut skip_beginning,
                                         &fps,
