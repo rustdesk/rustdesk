@@ -1424,7 +1424,17 @@ pub fn is_prelogin() -> bool {
     }
     let name = get_active_username();
     if let Ok(res) = run_cmds(&format!("getent passwd {}", name)) {
-        return res.contains("/bin/false") || res.contains("/usr/sbin/nologin");
+        return res.lines().any(|entry| {
+            let shell = entry.trim().rsplit(':').next().unwrap_or_default();
+            matches!(
+                shell,
+                "/bin/false"
+                    | "/usr/bin/false"
+                    | "/usr/sbin/nologin"
+                    | "/sbin/nologin"
+                    | "/usr/bin/nologin"
+            )
+        });
     }
     false
 }
