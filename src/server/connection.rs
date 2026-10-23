@@ -1249,6 +1249,7 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    /// Consumes ordered input until disconnect, reasserting input blocking on receive errors.
     fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
         #[cfg(all(windows, feature = "coalesce-mouse-moves"))]
         let mut receiver = input_queue::coalesce_mouse_moves(receiver);
@@ -4160,6 +4161,7 @@ impl Connection {
     }
 
     #[cfg(target_os = "windows")]
+    /// Closes the temporary logon token after checking administrator membership.
     fn handle_administrator_check(
         &mut self,
         username: &str,
@@ -4195,6 +4197,7 @@ impl Connection {
     }
 
     #[cfg(target_os = "windows")]
+    /// Selects the active session token for the installed Windows terminal path.
     fn handle_installed_user(&mut self) -> Option<&'static str> {
         let session_id = crate::platform::get_current_session_id(true);
         if session_id == 0xFFFFFFFF {
