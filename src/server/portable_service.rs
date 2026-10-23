@@ -1529,6 +1529,8 @@ pub mod client {
         }
     }
 
+    /// Reads the portable-service cursor snapshot, or queries Win32 when it is inactive.
+    /// Set `pci.cbSize` before calling; `FALSE` indicates that no snapshot was obtained.
     pub fn get_cursor_info(pci: &mut CURSORINFO) -> BOOL {
         if RUNNING.lock().unwrap().clone() {
             let mut option = SHMEM.lock().unwrap();
