@@ -2630,7 +2630,10 @@ connect(BuildContext context, String id,
     }
   } else {
     if (isAndroid) {
-      if (!await AndroidDocuments.requireLogFolder() || !context.mounted) return;
+      if (!await AndroidDocuments.requireLogFolder() || !context.mounted) {
+        if (isTerminal) bind.mainSetEnv(key: 'IS_TERMINAL_ADMIN', value: null);
+        return;
+      }
     }
     if (isFileTransfer) {
       if (isWeb) {
