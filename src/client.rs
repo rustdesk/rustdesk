@@ -4191,16 +4191,25 @@ pub mod peer_online {
         } else {
             crate::check_port(server, hbb_common::config::RENDEZVOUS_PORT)
         };
-        let tmp: Vec<&str> = rendezvous_server.split(":").collect();
-        if tmp.len() != 2 {
+        connect_tcp(online_server(&rendezvous_server)?, CONNECT_TIMEOUT).await
+    }
+
+    // The online state service listens one port below the rendezvous server.
+    // `check_port` writes an IPv6 server as `[addr]:port`, so split off the port
+    // at the last colon instead of splitting at every colon.
+    fn online_server(rendezvous_server: &str) -> ResultType<String> {
+        let Some((host, port)) = rendezvous_server.rsplit_once(':') else {
+            bail!("Invalid server address: {}", rendezvous_server);
+        };
+        // A host that contains a colon is an IPv6 address and must be in brackets.
+        if host.contains(':') && !(host.starts_with('[') && host.ends_with(']')) {
             bail!("Invalid server address: {}", rendezvous_server);
         }
-        let port: u16 = tmp[1].parse()?;
+        let port: u16 = port.parse()?;
         if port == 0 {
             bail!("Invalid server address: {}", rendezvous_server);
         }
-        let online_server = format!("{}:{}", tmp[0], port - 1);
-        connect_tcp(online_server, CONNECT_TIMEOUT).await
+        Ok(format!("{}:{}", host, port - 1))
     }
 
     async fn query_online_states_(
@@ -4285,6 +4294,25 @@ pub mod peer_online {
                 },
             )
             .await;
+        }
+
+        #[test]
+        fn online_server_is_one_port_below_the_rendezvous_server() {
+            use super::online_server;
+
+            assert_eq!(
+                online_server("example.com:21116").unwrap(),
+                "example.com:21115"
+            );
+            assert_eq!(online_server("192.0.2.1:21116").unwrap(), "192.0.2.1:21115");
+            assert_eq!(
+                online_server("[2001:db8::1]:21116").unwrap(),
+                "[2001:db8::1]:21115"
+            );
+            assert_eq!(online_server("[::1]:21116").unwrap(), "[::1]:21115");
+            assert!(online_server("example.com").is_err());
+            assert!(online_server("example.com:0").is_err());
+            assert!(online_server("2001:db8::1:21116").is_err());
         }
     }
 }
