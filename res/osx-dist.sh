@@ -2,7 +2,7 @@
 
 echo $MACOS_CODESIGN_IDENTITY
 cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid --locked
-cd flutter; flutter pub get; cd -
+cd flutter; flutter pub get --enforce-lockfile; cd -
 ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
 ./build.py --flutter
 rm rustdesk-$VERSION.dmg

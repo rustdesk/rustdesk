@@ -337,6 +337,17 @@ prebuild)
 		-e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
 		flutter/pubspec.yaml
 
+	# Temporary copy bridge lockfile into `pubspec.lock`
+	# so that `flutter packages pub get --enforce-lockfile` does
+	# not err out
+
+	if [ ! -f "flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock" ]; then
+		echo "ERROR: Lockfile 'flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock' does not exist!"
+		exit 1
+	fi
+
+	cp "flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock" flutter/pubspec.lock
+
 	# Download Flutter dependencies
 
 	pushd flutter
@@ -450,7 +461,7 @@ build)
 	pushd flutter
 
 	flutter clean
-	flutter packages pub get
+	flutter packages pub get --enforce-lockfile
 
 	popd # flutter
 

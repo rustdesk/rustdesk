@@ -6,4 +6,4 @@ flutter pub get
 # call `flutter clean` if cargo build fails
 # export LLVM_HOME=/Library/Developer/CommandLineTools/usr/
 cargo build --locked --features flutter
-flutter run $@
+flutter run "$@"

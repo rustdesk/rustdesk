@@ -14,6 +14,10 @@
 #   git checkout -- flutter/lib/common.dart flutter/pubspec.yaml flutter/pubspec.lock
 set -euo pipefail
 
+# Lockfile name for bridge builder
+# TODO: Change whenever Flutter version is bumped!
+BRIDGE_PUBSPEC_LOCKFILE_NAME='pubspec-bridge-3.44.8.lock'
+
 flutter --version | grep -q "Flutter 3\.44\." || {
   echo "Flutter 3.44.x must be on PATH; found:" >&2
   flutter --version | grep "^Flutter" >&2 || true
@@ -24,7 +28,29 @@ flutter --version | grep -q "Flutter 3\.44\." || {
 bash .github/patches/apply_flutter_3.44_source_patches.sh
 
 # Populate the pub cache with the 3.44 dependency resolution.
-(cd flutter && flutter pub get)
+pushd flutter
+if [ ! -f "${BRIDGE_PUBSPEC_LOCKFILE_NAME}" ]; then
+  echo "ERROR: Lockfile '${BRIDGE_PUBSPEC_LOCKFILE_NAME}' does not exist!"
+  echo ""
+  echo "Please run 'flutter packages pub get', review resulting 'pubspec.lock''"
+  echo "and copy it to '${BRIDGE_PUBSPEC_LOCKFILE_NAME}'"
+  echo "(or whatever Flutter version is used for this bridge!)"
+  echo ""
+
+  exit 1
+fi
+cp "${BRIDGE_PUBSPEC_LOCKFILE_NAME}" pubspec.lock
+if ! flutter packages pub get --enforce-lockfile; then
+  echo "ERROR: Lockfile '${BRIDGE_PUBSPEC_LOCKFILE_NAME}' needs to be updated!"
+  echo ""
+  echo "Please run 'flutter packages pub get', review resulting 'pubspec.lock''"
+  echo "and copy it to '${BRIDGE_PUBSPEC_LOCKFILE_NAME}'"
+  echo "(or whatever Flutter version is used for this bridge!)"
+  echo ""
+
+  exit 1
+fi
+popd
 
 # qr_code_scanner 1.0.1 (unmaintained) reads platformViewRegistry from
 # dart:ui, which Flutter 3.44 removed; point it at dart:ui_web instead. The
