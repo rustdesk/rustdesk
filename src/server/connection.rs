@@ -4167,7 +4167,8 @@ impl Connection {
     ) -> Option<&'static str> {
         let check_admin_res =
             crate::platform::get_logon_user_token(username, password).map(|token| {
-                let is_token_admin = crate::platform::is_user_token_admin(token);
+                // SAFETY: the successful logon returned this live token; it is closed below.
+                let is_token_admin = unsafe { crate::platform::is_user_token_admin(token) };
                 unsafe {
                     hbb_common::allow_err!(CloseHandle(HANDLE(token as _)));
                 };
@@ -4201,7 +4202,8 @@ impl Connection {
         }
         let token = crate::platform::get_user_token(session_id, true);
         if !token.is_null() {
-            match crate::platform::ensure_primary_token(token) {
+            // SAFETY: get_user_token returned an owned token, with no concurrent users.
+            match unsafe { crate::platform::ensure_primary_token(token) } {
                 Ok(t) => {
                     self.terminal_user_token = Some(TerminalUserToken::CurrentLogonUser(
                         crate::terminal_service::UserToken::new(t as usize),

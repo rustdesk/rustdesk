@@ -1529,7 +1529,7 @@ pub mod client {
         }
     }
 
-    pub fn get_cursor_info(pci: PCURSORINFO) -> BOOL {
+    pub fn get_cursor_info(pci: &mut CURSORINFO) -> BOOL {
         if RUNNING.lock().unwrap().clone() {
             let mut option = SHMEM.lock().unwrap();
             option
