@@ -1,3 +1,5 @@
+#[cfg(all(windows, feature = "coalesce-mouse-moves"))]
+use super::MessageInput;
 use std::{
     sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError},
     time::Duration,
@@ -6,6 +8,28 @@ use std::{
 // Bound each scan so a producer that never stops cannot starve input delivery.
 const MAX_SCAN: usize = 256;
 
+/// Keeps Windows mouse coalescing within the same input context and movement type.
+#[cfg(all(windows, feature = "coalesce-mouse-moves"))]
+pub(super) fn coalesce_mouse_moves(
+    receiver: Receiver<MessageInput>,
+) -> LatestReceiver<MessageInput, impl Fn(&MessageInput, &MessageInput) -> bool> {
+    LatestReceiver::new(receiver, |current, next| match (current, next) {
+        (MessageInput::Mouse(current), MessageInput::Mouse(next)) => {
+            current.simulate
+                && next.simulate
+                && !current.show_cursor
+                && !next.show_cursor
+                && current.conn_id == next.conn_id
+                && current.username == next.username
+                && current.argb == next.argb
+                && current.msg.mask & crate::input::MOUSE_TYPE_MASK == crate::input::MOUSE_TYPE_MOVE
+                && current.msg.mask == next.msg.mask
+                && current.msg.modifiers == next.msg.modifiers
+        }
+        _ => false,
+    })
+}
+
 pub(super) struct LatestReceiver<T, F> {
     receiver: Receiver<T>,
     pending: Option<T>,
@@ -13,6 +37,7 @@ pub(super) struct LatestReceiver<T, F> {
 }
 
 impl<T, F: Fn(&T, &T) -> bool> LatestReceiver<T, F> {
+    /// `can_replace` must accept only events where `next` supersedes `current`.
     pub(super) fn new(receiver: Receiver<T>, can_replace: F) -> Self {
         Self {
             receiver,
@@ -21,6 +46,8 @@ impl<T, F: Fn(&T, &T) -> bool> LatestReceiver<T, F> {
         }
     }
 
+    /// Waits only for the first event, then scans queued events without blocking.
+    /// The first non-replaceable event is retained for the next call.
     pub(super) fn recv_timeout(&mut self, timeout: Duration) -> Result<T, RecvTimeoutError> {
         let mut current = match self.pending.take() {
             Some(value) => value,
