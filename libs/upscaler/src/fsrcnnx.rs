@@ -169,7 +169,7 @@ pub(crate) fn upscale(raw: &[u8], w: usize, h: usize, fmt: PixelFormat) -> Optio
     std::thread::scope(|s| {
         let mut handles = Vec::with_capacity(n_threads);
         for chunk in tiles.chunks(per_thread) {
-            handles.push(s.spawn(move || {
+            let spawned = std::thread::Builder::new().spawn_scoped(s, move || {
                 let mut feat = max_patch_buf();
                 let mut buf_a = max_patch_buf();
                 let mut buf_b = max_patch_buf();
@@ -184,7 +184,16 @@ pub(crate) fn upscale(raw: &[u8], w: usize, h: usize, fmt: PixelFormat) -> Optio
                     done.push(((tx, ty, tw, th), tile_buf[..box_len].to_vec()));
                 }
                 done
-            }));
+            });
+            match spawned {
+                Ok(handle) => handles.push(handle),
+                // The OS refused a thread (limit reached). Fall back to the
+                // native frame instead of panicking on the video thread.
+                Err(_) => {
+                    failed = true;
+                    break;
+                }
+            }
         }
         for handle in handles {
             match handle.join() {
