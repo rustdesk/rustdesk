@@ -1564,9 +1564,19 @@ pub fn get_pa_monitor() -> String {
 // The first monitor in the source list can belong to an output the desktop does not play to.
 fn get_default_pa_monitor() -> Option<String> {
     use pulsectl::controllers::*;
-    let mut handler = SinkController::create().ok()?;
-    let sink = handler.get_server_info().ok()?.default_sink_name?;
-    handler.get_device_by_name(&sink).ok()?.monitor_name
+    let mut handler = SinkController::create()
+        .map_err(|err| log::warn!("Failed to create SinkController: {:?}", err))
+        .ok()?;
+    let sink = handler
+        .get_server_info()
+        .map_err(|err| log::warn!("Failed to get the PulseAudio server info: {:?}", err))
+        .ok()?
+        .default_sink_name?;
+    handler
+        .get_device_by_name(&sink)
+        .map_err(|err| log::warn!("Failed to get the default sink {}: {:?}", sink, err))
+        .ok()?
+        .monitor_name
 }
 
 pub fn get_pa_source_name(desc: &str) -> String {
