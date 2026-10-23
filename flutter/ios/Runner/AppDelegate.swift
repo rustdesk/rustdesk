@@ -1,5 +1,6 @@
 import UIKit
 import Flutter
+import AVFoundation
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -8,6 +9,12 @@ import Flutter
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+    do {
+      // Mix remote audio with other apps while still respecting silent mode.
+      try AVAudioSession.sharedInstance().setCategory(.ambient)
+    } catch {
+      NSLog("Failed to configure audio mixing: %@", error.localizedDescription)
+    }
     dummyMethodToEnforceBundling();
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

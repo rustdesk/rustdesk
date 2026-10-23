@@ -18,6 +18,10 @@ fn main() {
 
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
 fn main() -> std::process::ExitCode {
+    #[cfg(windows)]
+    if let Some(exit_code) = platform::handle_service_control() {
+        return exit_code;
+    }
     #[cfg(all(windows, not(feature = "inline")))]
     unsafe {
         winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
