@@ -143,6 +143,10 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
                 "zh-cn"
             })
             .to_owned();
+            // Hong Kong, Macao and the Hant script use Traditional Chinese.
+            if !locale.contains("hans") && ["hk", "mo", "hant"].iter().any(|x| locale.contains(x)) {
+                lang = "zh-tw".to_owned();
+            }
         }
     }
     if lang.is_empty() {
@@ -380,5 +384,16 @@ mod test {
         assert_eq!(f("", "kk-KZ", false), "kz");
         assert_eq!(f("", "ka_GE.UTF-8", false), "ge");
         assert_eq!(f("", "ka-GE", false), "ge");
+    }
+
+    #[test]
+    fn test_resolve_lang_detects_traditional_chinese_for_hong_kong_and_macao() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "zh_HK.UTF-8", false), "zh-tw");
+        assert_eq!(f("", "zh-Hant-HK", false), "zh-tw");
+        assert_eq!(f("", "zh-Hant", false), "zh-tw");
+        assert_eq!(f("", "zh_MO", false), "zh-tw");
+        assert_eq!(f("", "zh-Hans-HK", false), "zh-cn");
     }
 }
