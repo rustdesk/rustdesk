@@ -1940,68 +1940,66 @@ fn get_xrandr_conn_pat(name: &str) -> String {
     )
 }
 
-pub fn resolutions(name: &str) -> Vec<Resolution> {
-    match run_cmds("xrandr --query | tr -s ' '") {
-        Ok(xrandr_output) => resolutions_from_xrandr(name, &xrandr_output),
-        Err(e) => {
-            log::error!("Failed to run xrandr query, {}", e);
-            vec![]
-        }
-    }
-}
+// The mode lines below an output. A mode name can have a suffix after its size, like the "i" of
+// "1920x1080i", so a TV's interlaced mode does not end the list.
+const XRANDR_MODES_PAT: &str = r"(?P<resolutions>(\s*\d+x\d+\S*\s+\d+.*\n)+)";
 
-fn resolutions_from_xrandr(name: &str, xrandr_output: &str) -> Vec<Resolution> {
-    // A mode name can have a suffix after its size, like the "i" of "1920x1080i", so a TV's
-    // interlaced mode does not end the list.
-    let resolutions_pat = r"(?P<resolutions>(\s*\d+x\d+\S*\s+\d+.*\n)+)";
+pub fn resolutions(name: &str) -> Vec<Resolution> {
+    let resolutions_pat = XRANDR_MODES_PAT;
     let connected_pat = get_xrandr_conn_pat(name);
     let mut v = vec![];
     if let Ok(re) = Regex::new(&format!("{}{}", connected_pat, resolutions_pat)) {
-        // There'are different kinds of xrandr output.
-        /*
-        1.
-        Screen 0: minimum 320 x 175, current 1920 x 1080, maximum 1920 x 1080
-        default connected 1920x1080+0+0 0mm x 0mm
-         1920x1080 10.00*
-         1280x720 25.00
-         1680x1050 60.00
-        Virtual2 disconnected (normal left inverted right x axis y axis)
-        Virtual3 disconnected (normal left inverted right x axis y axis)
+        match run_cmds("xrandr --query | tr -s ' '") {
+            Ok(xrandr_output) => {
+                // There'are different kinds of xrandr output.
+                /*
+                1.
+                Screen 0: minimum 320 x 175, current 1920 x 1080, maximum 1920 x 1080
+                default connected 1920x1080+0+0 0mm x 0mm
+                 1920x1080 10.00*
+                 1280x720 25.00
+                 1680x1050 60.00
+                Virtual2 disconnected (normal left inverted right x axis y axis)
+                Virtual3 disconnected (normal left inverted right x axis y axis)
 
-        Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384
-        eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 344mm x 193mm
-        1920x1080     60.01*+  60.01    59.97    59.96    59.93
-        1680x1050     59.95    59.88
-        1600x1024     60.17
+                Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384
+                eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 344mm x 193mm
+                1920x1080     60.01*+  60.01    59.97    59.96    59.93
+                1680x1050     59.95    59.88
+                1600x1024     60.17
 
-        XWAYLAND0 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
-        Virtual1 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
-        HDMI-0 connected (normal left inverted right x axis y axis)
+                XWAYLAND0 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
+                Virtual1 connected primary 1920x984+0+0 (normal left inverted right x axis y axis) 0mm x 0mm
+                HDMI-0 connected (normal left inverted right x axis y axis)
 
-        rdp0 connected primary 1920x1080+0+0 0mm x 0mm
-            */
-        if let Some(caps) = re.captures(xrandr_output) {
-            if let Some(resolutions) = caps.name("resolutions") {
-                let resolution_pat =
-                    r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+\D*)+)\s*\n";
-                let Ok(resolution_re) = Regex::new(&format!(r"{}", resolution_pat)) else {
-                    log::error!("Regex new failed");
-                    return vec![];
-                };
-                for resolution_caps in resolution_re.captures_iter(resolutions.as_str()) {
-                    if let Some((width, height)) = get_width_height_from_captures(&resolution_caps)
-                    {
-                        let resolution = Resolution {
-                            width,
-                            height,
-                            ..Default::default()
+                rdp0 connected primary 1920x1080+0+0 0mm x 0mm
+                    */
+                if let Some(caps) = re.captures(&xrandr_output) {
+                    if let Some(resolutions) = caps.name("resolutions") {
+                        let resolution_pat =
+                            r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+\D*)+)\s*\n";
+                        let Ok(resolution_re) = Regex::new(&format!(r"{}", resolution_pat)) else {
+                            log::error!("Regex new failed");
+                            return vec![];
                         };
-                        if !v.contains(&resolution) {
-                            v.push(resolution);
+                        for resolution_caps in resolution_re.captures_iter(resolutions.as_str()) {
+                            if let Some((width, height)) =
+                                get_width_height_from_captures(&resolution_caps)
+                            {
+                                let resolution = Resolution {
+                                    width,
+                                    height,
+                                    ..Default::default()
+                                };
+                                if !v.contains(&resolution) {
+                                    v.push(resolution);
+                                }
+                            }
                         }
                     }
                 }
             }
+            Err(e) => log::error!("Failed to run xrandr query, {}", e),
         }
     }
 
@@ -2053,11 +2051,15 @@ HDMI-0 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis
  640x480 75.00 59.94
 DP-0 disconnected (normal left inverted right x axis y axis)
 ";
-        let sizes: Vec<_> = resolutions_from_xrandr("HDMI-0", xrandr_output)
-            .iter()
-            .map(|r| (r.width, r.height))
-            .collect();
-        assert_eq!(sizes, vec![(1920, 1080), (1280, 720), (640, 480)]);
+        let re = Regex::new(&format!(
+            "{}{}",
+            get_xrandr_conn_pat("HDMI-0"),
+            XRANDR_MODES_PAT
+        ))
+        .unwrap();
+        let caps = re.captures(xrandr_output).unwrap();
+        assert!(caps["resolutions"].contains(" 1280x720 "));
+        assert!(caps["resolutions"].contains(" 640x480 "));
     }
 }
 
