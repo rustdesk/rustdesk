@@ -8,8 +8,8 @@ use std::{
 // Bound each scan so a producer that never stops cannot starve input delivery.
 const MAX_SCAN: usize = 256;
 
-/// Keeps Windows mouse coalescing within the same input context and movement type.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+/// Keeps Windows mouse coalescing within the same input context and movement type.
 pub(super) fn coalesce_mouse_moves(
     receiver: Receiver<MessageInput>,
 ) -> LatestReceiver<MessageInput, impl Fn(&MessageInput, &MessageInput) -> bool> {
@@ -151,7 +151,6 @@ mod tests {
     }
 
     #[test]
-    /// Keeps the sender connected to exercise the empty-queue timeout after the final release.
     fn long_burst_keeps_progress_and_final_release() {
         let (tx, rx) = channel();
         for x in 0..10_000 {
