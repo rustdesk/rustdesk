@@ -73,6 +73,9 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
 #[cfg(windows)]
 use crate::virtual_display_manager;
+#[cfg(any(all(windows, feature = "coalesce-mouse-moves"), test))]
+#[path = "input_queue.rs"]
+mod input_queue;
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 const FAILURE_IDX_ID_WHITELIST: usize = 2;
@@ -1247,6 +1250,25 @@ impl Connection {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
+        #[cfg(all(windows, feature = "coalesce-mouse-moves"))]
+        let mut receiver = input_queue::LatestReceiver::new(receiver, |current, next| {
+            match (current, next) {
+                (MessageInput::Mouse(current), MessageInput::Mouse(next)) => {
+                    current.simulate
+                        && next.simulate
+                        && !current.show_cursor
+                        && !next.show_cursor
+                        && current.conn_id == next.conn_id
+                        && current.username == next.username
+                        && current.argb == next.argb
+                        && current.msg.mask & crate::input::MOUSE_TYPE_MASK
+                            == crate::input::MOUSE_TYPE_MOVE
+                        && current.msg.mask == next.msg.mask
+                        && current.msg.modifiers == next.msg.modifiers
+                }
+                _ => false,
+            }
+        });
         let mut block_input_mode = false;
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         {
