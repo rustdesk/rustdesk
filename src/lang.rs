@@ -167,6 +167,12 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
             .map(|x| x.split("_").next().unwrap_or_default())
             .unwrap_or_default()
             .to_owned();
+        // The Kazakh and Georgian tables are keyed by country code, not by language code.
+        if lang == "kk" {
+            lang = "kz".to_owned();
+        } else if lang == "ka" {
+            lang = "ge".to_owned();
+        }
     }
     if cjk_fallback && is_cjk_lang(&lang) {
         "en".to_owned()
@@ -364,5 +370,15 @@ mod test {
         assert_eq!(f("", "pt_BR", false), "pt-br");
         assert_eq!(f("", "pt-AO", false), "pt-pt");
         assert_eq!(f("", "pt-MZ", false), "pt-pt");
+    }
+
+    #[test]
+    fn test_resolve_lang_detects_kazakh_and_georgian_from_locale() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "kk_KZ.UTF-8", false), "kz");
+        assert_eq!(f("", "kk-KZ", false), "kz");
+        assert_eq!(f("", "ka_GE.UTF-8", false), "ge");
+        assert_eq!(f("", "ka-GE", false), "ge");
     }
 }
