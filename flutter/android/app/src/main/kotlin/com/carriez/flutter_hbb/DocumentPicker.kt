@@ -15,7 +15,8 @@ internal class DocumentPicker(private val activity: Activity) {
 
     fun handle(call: MethodCall, result: MethodChannel.Result): Boolean {
         when (call.method) {
-            "document_require_log_folder" -> requireLogFolder(result)
+            "document_require_log_folder" ->
+                requireLogFolder(result, call.argument<Boolean>("checkOnly") == true)
             "document_log_directory" -> run(result) { storage.logDirectory().absolutePath }
             "document_workspace" -> if (call.argument<Boolean>("share") == true) {
                 run(result) { storage.shareWorkspace() }
@@ -39,11 +40,11 @@ internal class DocumentPicker(private val activity: Activity) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                 activity.contentResolver.persistedUriPermissions.none {
-                    DocumentsContract.isTreeUri(it.uri)
+                    DocumentsContract.isTreeUri(it.uri) && !storage.logs.isLogGrant(it.uri)
                 }) {
                 intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,
                     DocumentsContract.buildDocumentUri(
-                        "com.android.externalstorage.documents", "primary:Android/media"))
+                        "com.android.externalstorage.documents", "primary:Documents"))
             }
             pending = result to share
             activity.startActivityForResult(intent, REQUEST_DOCUMENT)
@@ -98,7 +99,7 @@ internal class DocumentPicker(private val activity: Activity) {
         }
     }
 
-    private fun requireLogFolder(result: MethodChannel.Result) {
+    private fun requireLogFolder(result: MethodChannel.Result, checkOnly: Boolean) {
         if (pending != null || pendingLogFolder != null) {
             result.error("picker_in_progress", "Another document picker is already open", null)
             return
@@ -106,16 +107,18 @@ internal class DocumentPicker(private val activity: Activity) {
         pendingLogFolder = result
         thread {
             val ready = runCatching { storage.logs.ensureReady() }
-            activity.runOnUiThread { completeLogFolderCheck(result, ready) }
+            activity.runOnUiThread { completeLogFolderCheck(result, ready, checkOnly) }
         }
     }
 
-    private fun completeLogFolderCheck(result: MethodChannel.Result, ready: Result<Boolean>) {
+    private fun completeLogFolderCheck(
+        result: MethodChannel.Result, ready: Result<Boolean>, checkOnly: Boolean
+    ) {
         if (pendingLogFolder !== result) return
         ready.fold(onSuccess = {
-            if (it) {
+            if (it || checkOnly) {
                 pendingLogFolder = null
-                result.success(true)
+                result.success(it)
             } else {
                 pickLogFolder(result)
             }

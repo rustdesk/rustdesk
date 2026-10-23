@@ -818,5 +818,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk storage", "RustDesk 存储空间"),
         ("Other folders", "其他文件夹"),
         ("Choose which folder remote devices can access. You can change it later in {}.", "选择允许远程设备访问的文件夹。以后可在 {} 中修改。"),
+        ("This folder is used to store RustDesk logs.", "此目录用于存放 RustDesk 日志。"),
     ].iter().cloned().collect();
 }

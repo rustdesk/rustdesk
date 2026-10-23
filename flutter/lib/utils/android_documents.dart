@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+
 import '../common.dart';
 
 class AndroidDocuments {
@@ -38,12 +40,19 @@ class AndroidDocuments {
   static Future<bool> requireLogFolder() async {
     gFFI.ffiModel.beginAndroidDocumentPicker();
     try {
-      final ready = await gFFI
-          .invokeMethodWithResult<bool>('document_require_log_folder');
+      final ready = await gFFI.invokeMethodWithResult<bool>(
+          'document_require_log_folder', {'checkOnly': true});
       if (ready == null) {
         throw StateError('Log directory setup did not complete');
       }
-      return ready;
+      if (ready) return true;
+      if (!await _confirmLogFolder()) return false;
+      final selected = await gFFI
+          .invokeMethodWithResult<bool>('document_require_log_folder');
+      if (selected == null) {
+        throw StateError('Log directory setup did not complete');
+      }
+      return selected;
     } catch (error) {
       showToast(error.toString());
       return false;
@@ -51,4 +60,27 @@ class AndroidDocuments {
       gFFI.ffiModel.endAndroidDocumentPicker();
     }
   }
+
+  static Future<bool> _confirmLogFolder() async =>
+      await gFFI.dialogManager.show<bool>(
+        (_, close, __) => CustomAlertDialog(
+          title: Text(translate('Permissions')),
+          content: Text(
+              '${translate('This folder is used to store RustDesk logs.')}\n\nAndroid/media/RustDesk'),
+          actions: [
+            TextButton(
+              onPressed: () => close(false),
+              child: Text(translate('Cancel')),
+            ),
+            TextButton(
+              onPressed: () => close(true),
+              child: Text(translate('Continue')),
+            ),
+          ],
+          onCancel: () => close(false),
+        ),
+        backDismiss: true,
+        forceGlobal: true,
+      ) ==
+      true;
 }

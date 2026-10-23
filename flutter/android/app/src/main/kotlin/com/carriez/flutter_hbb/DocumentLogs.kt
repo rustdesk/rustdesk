@@ -22,6 +22,8 @@ internal class DocumentLogs(private val context: Context) {
 
     private fun grant(): Uri? = prefs.getString(LOG_GRANT, null)?.let(Uri::parse)
 
+    fun isLogGrant(uri: Uri): Boolean = uri == grant()
+
     fun hasPermission(): Boolean {
         val uri = grant() ?: return false
         return resolver.persistedUriPermissions.any {
