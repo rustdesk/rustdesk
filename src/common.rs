@@ -1228,6 +1228,11 @@ pub fn get_api_server(api: String, custom: String) -> String {
     if res.ends_with('/') {
         res.pop();
     }
+    // A configured api server is used as-is; the compatibility rewrite below
+    // only applies to the address derived from the rendezvous server.
+    if is_configured_api_server(&res) {
+        return res;
+    }
     if res.starts_with("https")
         && res.ends_with(":21114")
         && get_builtin_option(keys::OPTION_ALLOW_HTTPS_21114) != "Y"
@@ -1235,6 +1240,19 @@ pub fn get_api_server(api: String, custom: String) -> String {
         return res.replace(":21114", "");
     }
     res
+}
+
+fn is_configured_api_server(res: &str) -> bool {
+    if res.is_empty() {
+        return false;
+    }
+    #[cfg(windows)]
+    if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
+        if !lic.api.is_empty() {
+            return res == lic.api.trim_end_matches('/');
+        }
+    }
+    res == Config::get_option(keys::OPTION_API_SERVER).trim_end_matches('/')
 }
 
 fn get_api_server_(api: String, custom: String) -> String {
@@ -3220,6 +3238,26 @@ mod tests {
             get_api_server_("".to_owned(), "2001:db8::1".to_owned()),
             "http://[2001:db8::1]:21114"
         );
+    }
+
+    #[test]
+    fn test_configured_api_server_is_used_as_is() {
+        let option = Config::get_option(keys::OPTION_API_SERVER);
+
+        // A configured api server is used as-is, port included.
+        for configured in [
+            "https://api.example.com:21114",
+            "https://api.example.com:21114/",
+            "https://api.example.com:9443",
+        ] {
+            Config::set_option(keys::OPTION_API_SERVER.to_owned(), configured.to_owned());
+            assert_eq!(
+                get_api_server("".to_owned(), "".to_owned()),
+                configured.trim_end_matches('/')
+            );
+        }
+
+        Config::set_option(keys::OPTION_API_SERVER.to_owned(), option);
     }
 
     #[test]
