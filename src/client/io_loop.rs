@@ -3033,6 +3033,44 @@ mod tests {
             "a clipboard after the login was held back"
         );
     }
+
+    #[tokio::test]
+    async fn manual_fps_update_allows_the_same_automatic_limit_again() {
+        let (mut remote, mut peer, mut far) = remote_and_peer().await;
+        let (video_sender, _video_receiver) = std::sync::mpsc::channel();
+        remote.video_threads.insert(
+            0,
+            VideoThread {
+                video_queue: Arc::new(RwLock::new(ArrayQueue::new(client::VIDEO_QUEUE_SIZE))),
+                video_sender,
+                decode_fps: Arc::new(RwLock::new(Some(23))),
+                frame_count: Default::default(),
+                discard_queue: Default::default(),
+                fps_control: Default::default(),
+            },
+        );
+
+        for (manual_fps, expected) in [(None, 20), (Some(90), 90), (None, 20)] {
+            if let Some(fps) = manual_fps {
+                let lc = &remote.handler.lc;
+                let msg = lc.write().unwrap().set_custom_fps(fps, false);
+                remote
+                    .handle_msg_from_ui(Data::Message(msg), &mut peer)
+                    .await;
+            } else {
+                remote
+                    .fps_control(true, HashMap::from([(0, 20)]), &mut peer)
+                    .await;
+            }
+            let bytes = timeout(1000, far.next())
+                .await
+                .expect("FPS update was not sent")
+                .unwrap()
+                .unwrap();
+            let msg = Message::parse_from_bytes(&bytes).unwrap();
+            assert_eq!(msg.misc().option().custom_fps, expected);
+        }
+    }
 }
 
 #[cfg(test)]
