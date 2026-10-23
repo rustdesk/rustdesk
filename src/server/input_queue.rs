@@ -1,4 +1,4 @@
-#[cfg(all(windows, feature = "coalesce-mouse-moves"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use super::MessageInput;
 use std::{
     sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError},
@@ -9,7 +9,7 @@ use std::{
 const MAX_SCAN: usize = 256;
 
 /// Keeps Windows mouse coalescing within the same input context and movement type.
-#[cfg(all(windows, feature = "coalesce-mouse-moves"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(super) fn coalesce_mouse_moves(
     receiver: Receiver<MessageInput>,
 ) -> LatestReceiver<MessageInput, impl Fn(&MessageInput, &MessageInput) -> bool> {
@@ -90,48 +90,64 @@ mod tests {
         );
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     #[test]
-    fn preserves_buttons_keys_wheel_relative_and_context_changes() {
-        // Kind 0 is absolute movement. Other kinds must stay in their original order.
-        let input = [
-            (1, 0, 0),
-            (0, 1, 0),
-            (0, 2, 0),
-            (2, 2, 0),
-            (3, 65, 0),
-            (4, 1, 0),
-            (5, 7, 0),
-            (5, 8, 0),
-            (0, 3, 0),
-            (0, 4, 1),
-            (0, 5, 1),
-            (2, 5, 1),
+    fn real_mouse_inputs_coalesce_without_crossing_barriers() {
+        use super::super::InputMouse;
+        use crate::input::*;
+        use base::message_proto::{ControlKey, MouseEvent};
+
+        let mouse = |x| InputMouse {
+            msg: MouseEvent {
+                x,
+                mask: MOUSE_TYPE_MOVE,
+                ..Default::default()
+            },
+            conn_id: 1,
+            username: "test".into(),
+            argb: 0,
+            simulate: true,
+            show_cursor: false,
+        };
+        let changes: &[fn(&mut InputMouse)] = &[
+            |_| {},
+            |m| m.msg.mask = MOUSE_TYPE_DOWN,
+            |m| m.msg.mask = MOUSE_TYPE_UP,
+            |m| m.msg.mask = MOUSE_TYPE_WHEEL,
+            |m| m.msg.mask = MOUSE_TYPE_MOVE_RELATIVE,
+            |m| m.simulate = false,
+            |m| m.show_cursor = true,
+            |m| m.conn_id += 1,
+            |m| m.username.push('2'),
+            |m| m.argb = 1,
+            |m| m.msg.mask |= MOUSE_BUTTON_LEFT << 3,
+            |m| m.msg.modifiers.push(ControlKey::Shift.into()),
         ];
-        let (tx, rx) = channel();
-        for event in input {
-            tx.send(event).unwrap();
+        for (case, change) in changes.iter().enumerate() {
+            for change_first in [false, true] {
+                let mut first = mouse(1);
+                let mut second = mouse(2);
+                change(if change_first {
+                    &mut first
+                } else {
+                    &mut second
+                });
+                let (tx, rx) = channel();
+                tx.send(MessageInput::Mouse(first)).unwrap();
+                tx.send(MessageInput::Mouse(second)).unwrap();
+                drop(tx);
+                let mut rx = coalesce_mouse_moves(rx);
+                let mut positions = Vec::new();
+                while let Ok(MessageInput::Mouse(event)) = rx.recv_timeout(Duration::ZERO) {
+                    positions.push(event.msg.x);
+                }
+                let expected = if case == 0 { vec![2] } else { vec![1, 2] };
+                assert_eq!(
+                    positions, expected,
+                    "case {case}, change_first {change_first}"
+                );
+            }
         }
-        drop(tx);
-        let mut rx = LatestReceiver::new(rx, |a, b| a.0 == 0 && b.0 == 0 && a.2 == b.2);
-        let mut output = Vec::new();
-        while let Ok(event) = rx.recv_timeout(Duration::ZERO) {
-            output.push(event);
-        }
-        assert_eq!(
-            output,
-            [
-                (1, 0, 0),
-                (0, 2, 0),
-                (2, 2, 0),
-                (3, 65, 0),
-                (4, 1, 0),
-                (5, 7, 0),
-                (5, 8, 0),
-                (0, 3, 0),
-                (0, 5, 1),
-                (2, 5, 1),
-            ]
-        );
     }
 
     #[test]
