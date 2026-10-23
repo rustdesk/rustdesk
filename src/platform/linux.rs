@@ -1595,9 +1595,18 @@ pub fn get_default_pa_source() -> Option<(String, String)> {
             // pulsectl's `get_default_device` looks up the default sink's name here.
             let default_source = handler
                 .get_server_info()
+                .map_err(|err| log::warn!("Failed to get the PulseAudio server info: {:?}", err))
                 .ok()
                 .and_then(|info| info.default_source_name);
-            if let Some(Ok(dev)) = default_source.map(|name| handler.get_device_by_name(&name)) {
+            let device = default_source.and_then(|name| {
+                handler
+                    .get_device_by_name(&name)
+                    .map_err(|err| {
+                        log::warn!("Failed to get the default source {}: {:?}", name, err)
+                    })
+                    .ok()
+            });
+            if let Some(dev) = device {
                 return Some((
                     dev.name.unwrap_or("".to_owned()),
                     dev.description.unwrap_or("".to_owned()),
