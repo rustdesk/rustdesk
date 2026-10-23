@@ -1322,7 +1322,12 @@ fn get_cm() -> bool {
 }
 
 pub fn is_login_wayland() -> bool {
-    let files = ["/etc/gdm3/custom.conf", "/etc/gdm/custom.conf"];
+    // Debian's gdm3 reads /etc/gdm3/daemon.conf instead of custom.conf.
+    let files = [
+        "/etc/gdm3/custom.conf",
+        "/etc/gdm/custom.conf",
+        "/etc/gdm3/daemon.conf",
+    ];
     match (
         Regex::new(r"# *WaylandEnable *= *false"),
         Regex::new(r"WaylandEnable *= *true"),
