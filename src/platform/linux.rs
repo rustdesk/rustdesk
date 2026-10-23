@@ -1550,12 +1550,23 @@ where
 }
 
 pub fn get_pa_monitor() -> String {
+    if let Some(monitor) = get_default_pa_monitor() {
+        return monitor;
+    }
     get_pa_sources()
         .drain(..)
         .map(|x| x.0)
         .filter(|x| x.contains("monitor"))
         .next()
         .unwrap_or("".to_owned())
+}
+
+// The first monitor in the source list can belong to an output the desktop does not play to.
+fn get_default_pa_monitor() -> Option<String> {
+    use pulsectl::controllers::*;
+    let mut handler = SinkController::create().ok()?;
+    let sink = handler.get_server_info().ok()?.default_sink_name?;
+    handler.get_device_by_name(&sink).ok()?.monitor_name
 }
 
 pub fn get_pa_source_name(desc: &str) -> String {
