@@ -135,7 +135,7 @@ internal class DocumentPicker(private val activity: Activity) {
             putExtra(Intent.EXTRA_TITLE, "Allow logs in Android/media/RustDesk")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 putExtra(DocumentsContract.EXTRA_INITIAL_URI,
-                    DocumentsContract.buildDocumentUri(DocumentLogs.AUTHORITY, DocumentLogs.PARENT_ID))
+                    DocumentsContract.buildDocumentUri(DocumentLogs.AUTHORITY, DocumentLogs.DIRECTORY_ID))
             }
         }
         try {

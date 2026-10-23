@@ -817,5 +817,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Other folders", ""),
         ("Choose which folder remote devices can access. You can change it later in {}.", ""),
         ("This folder is used to store RustDesk logs.", ""),
+        ("Choose folder", ""),
     ].iter().cloned().collect();
 }

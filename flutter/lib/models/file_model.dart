@@ -449,6 +449,7 @@ class FileController {
         options.value.home,
       };
       for (final dir in dirs) {
+        if (isAndroid && isLocal) await _restoreWorkspaceHome(dir);
         if (await _openDirectoryPath(dir, isBack: true)) {
           final documentRoot = RegExp(r'^/@rustdesk/tree/[^/]+/[^/]+')
               .stringMatch(directory.value.path);

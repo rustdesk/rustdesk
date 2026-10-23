@@ -218,7 +218,7 @@ internal class DocumentLogs(private val context: Context) {
         const val AUTHORITY = "com.android.externalstorage.documents"
         const val PARENT_ID = "primary:Android/media"
         private const val DIRECTORY_NAME = "RustDesk"
-        private const val DIRECTORY_ID = "$PARENT_ID/$DIRECTORY_NAME"
+        const val DIRECTORY_ID = "$PARENT_ID/$DIRECTORY_NAME"
         private const val LOG_GRANT = "log-folder"
         private const val GRANT_FLAGS = Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION

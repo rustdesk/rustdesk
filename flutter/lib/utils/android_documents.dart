@@ -69,12 +69,8 @@ class AndroidDocuments {
               '${translate('This folder is used to store RustDesk logs.')}\n\nAndroid/media/RustDesk'),
           actions: [
             TextButton(
-              onPressed: () => close(false),
-              child: Text(translate('Cancel')),
-            ),
-            TextButton(
               onPressed: () => close(true),
-              child: Text(translate('Continue')),
+              child: Text(translate('Choose folder')),
             ),
           ],
           onCancel: () => close(false),
