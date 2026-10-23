@@ -41,6 +41,7 @@ import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
+import 'utils/android_documents.dart';
 
 import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
@@ -2628,6 +2629,9 @@ connect(BuildContext context, String id,
       });
     }
   } else {
+    if (isAndroid) {
+      if (!await AndroidDocuments.requireLogFolder() || !context.mounted) return;
+    }
     if (isFileTransfer) {
       if (isWeb) {
         Navigator.push(
