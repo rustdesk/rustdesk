@@ -5225,6 +5225,8 @@ impl Connection {
             match turn_on_res {
                 Some(Ok(res)) => {
                     if res {
+                        #[cfg(windows)]
+                        privacy_mode::win_wait_unlock::note_turn_on();
                         let err_msg = privacy_mode::check_privacy_mode_err(
                             self.inner.id,
                             self.display_idx,

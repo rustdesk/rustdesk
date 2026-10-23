@@ -4,18 +4,18 @@
 
 use super::{
     close_other_remote_connections_for_privacy, get_privacy_mode_conn_id, get_supported_impl,
-    get_supported_privacy_mode_impl, turn_on_privacy_locked, INVALID_PRIVACY_MODE_CONN_ID,
-    PRIVACY_MODE, PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY, TURN_ONS,
+    get_supported_privacy_mode_impl, PrivacyMode, INVALID_PRIVACY_MODE_CONN_ID, PRIVACY_MODE,
+    PRIVACY_MODE_CREATOR, PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY,
 };
 use crate::{
     common::{make_privacy_mode_msg, make_privacy_mode_msg_with_details},
     platform::{desktop_changed, is_locked},
 };
 use base::message_proto::{back_notification::PrivacyModeState, Message};
-use hbb_common::{anyhow::anyhow, log, ResultType};
+use hbb_common::{anyhow::anyhow, ResultType};
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Condvar, Mutex, MutexGuard, PoisonError, TryLockError,
     },
     thread,
@@ -23,6 +23,9 @@ use std::{
 };
 
 const POLL: Duration = Duration::from_secs(1);
+// Lets a request waiting for the unlock tell that a connection has turned privacy mode on since
+// it was queued.
+static TURN_ONS: AtomicUsize = AtomicUsize::new(0);
 // Polls after the unlock during which a failure caused by the secure desktop is retried.
 const SETTLE_POLLS: u32 = 5;
 
@@ -95,7 +98,12 @@ impl WaitingTurnOn {
             let res = turn_on_when_ready(desktop, || turn_on(&worker.cancelled), || worker.wait());
             if let Some(res) = res {
                 if let Err(e) = &res {
-                    log::error!("Failed to turn on privacy mode. {}", e);
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(60),
+                        error,
+                        "Failed to turn on privacy mode. {}",
+                        e
+                    );
                 }
                 *worker.lock() = Some(res);
             }
@@ -183,7 +191,7 @@ fn turn_on(
     turn_ons: usize,
     cancelled: &AtomicBool,
 ) -> Option<ResultType<bool>> {
-    // `turn_on_privacy_locked` would fall back to another implementation.
+    // `turn_on_locked` would fall back to another implementation.
     if !is_supported(effective_key) {
         return Some(Err(anyhow!("Unsupported privacy mode: {}", effective_key)));
     }
@@ -194,14 +202,67 @@ fn turn_on(
             info,
             "Privacy mode: the session is unlocked, turning it on"
         );
-        turn_on_privacy_locked(&mut privacy_mode, effective_key, conn_id)
+        turn_on_locked(&mut privacy_mode, effective_key, conn_id)
             .unwrap_or_else(|| Err(anyhow!("Not supported")))
     })?;
     drop(privacy_mode);
     if matches!(res, Ok(true)) {
+        note_turn_on();
         close_other_remote_connections_for_privacy(conn_id);
     }
     Some(res)
+}
+
+/// Called whenever a connection has turned privacy mode on.
+pub fn note_turn_on() {
+    TURN_ONS.fetch_add(1, Ordering::SeqCst);
+}
+
+// `turn_on_privacy_sync`'s body, for a caller that already holds `PRIVACY_MODE`.
+fn turn_on_locked(
+    privacy_mode_lock: &mut Option<Box<dyn PrivacyMode>>,
+    impl_key: &str,
+    conn_id: i32,
+) -> Option<ResultType<bool>> {
+    // Check or switch privacy mode implementation
+    let impl_key = get_supported_impl(impl_key);
+
+    let mut cur_impl_key = "".to_string();
+    if let Some(privacy_mode) = privacy_mode_lock.as_ref() {
+        cur_impl_key = privacy_mode.get_impl_key().to_string();
+        let check_on_conn_id = privacy_mode.check_on_conn_id(conn_id);
+        match check_on_conn_id.as_ref() {
+            Ok(true) => {
+                if cur_impl_key == impl_key {
+                    // Same peer, same implementation.
+                    return Some(Ok(true));
+                } else {
+                    // Same peer, switch to new implementation.
+                }
+            }
+            Err(_) => return Some(check_on_conn_id),
+            _ => {}
+        }
+    }
+
+    if cur_impl_key != impl_key {
+        if let Some(creator) = PRIVACY_MODE_CREATOR
+            .lock()
+            .unwrap()
+            .get(&(&impl_key as &str))
+        {
+            if let Some(privacy_mode) = privacy_mode_lock.as_mut() {
+                privacy_mode.clear();
+            }
+
+            *privacy_mode_lock = Some(creator(&impl_key));
+        } else {
+            return Some(Err(anyhow!("Unsupported privacy mode: {}", impl_key)));
+        }
+    }
+
+    // turn on privacy mode
+    Some(privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id))
 }
 
 // Called under `PRIVACY_MODE`, so no turn-on or turn-off lands between the check and the

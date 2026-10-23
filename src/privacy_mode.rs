@@ -39,11 +39,6 @@ pub const TURN_OFF_OTHER_ID: &'static str =
     "Failed to turn off privacy mode that belongs to someone else.";
 pub const NO_PHYSICAL_DISPLAYS: &'static str = "no_need_privacy_mode_no_physical_displays_tip";
 
-// Lets a request waiting for the unlock tell that another connection has turned privacy mode
-// on since it was queued.
-#[cfg(windows)]
-static TURN_ONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
 pub const PRIVACY_MODE_IMPL_WIN_MAG: &str = "privacy_mode_impl_mag";
 pub const PRIVACY_MODE_IMPL_WIN_EXCLUDE_FROM_CAPTURE: &str =
     "privacy_mode_impl_exclude_from_capture";
@@ -259,14 +254,7 @@ async fn turn_on_privacy_async(impl_key: String, conn_id: i32) -> Option<ResultT
 fn turn_on_privacy_sync(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
     // Check if privacy mode is already on or occupied by another one
     let mut privacy_mode_lock = PRIVACY_MODE.lock().unwrap();
-    turn_on_privacy_locked(&mut privacy_mode_lock, impl_key, conn_id)
-}
 
-fn turn_on_privacy_locked(
-    privacy_mode_lock: &mut Option<Box<dyn PrivacyMode>>,
-    impl_key: &str,
-    conn_id: i32,
-) -> Option<ResultType<bool>> {
     // Check or switch privacy mode implementation
     let impl_key = get_supported_impl(impl_key);
 
@@ -305,12 +293,7 @@ fn turn_on_privacy_locked(
     }
 
     // turn on privacy mode
-    let res = privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id);
-    #[cfg(windows)]
-    if matches!(res, Ok(true)) {
-        TURN_ONS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    }
-    Some(res)
+    Some(privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id))
 }
 
 #[cfg(not(target_os = "ios"))]
