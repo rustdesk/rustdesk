@@ -133,13 +133,13 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
   @override
   Widget build(BuildContext context) {
     final virtualMouseMode = _virtualMouseMode;
-    if (!virtualMouseMode.showVirtualMouse ||
-        KeyboardVisibilityController().isVisible) {
+    final hidden = !virtualMouseMode.showVirtualMouse ||
+        KeyboardVisibilityController().isVisible;
+    if (hidden) {
       _cursorModel.blockEvents = false;
       isSpecialHoldDragActive = false;
-      return const Offstage();
     }
-    return LayoutBuilder(
+    final controls = LayoutBuilder(
       builder: (context, constraints) {
         final viewportSize = constraints.biggest;
         final buttonPositions = _defaultMouseButtonPositions(viewportSize);
@@ -172,6 +172,11 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
           ],
         );
       },
+    );
+    return GestureDetector(
+      // Stay mounted while controls hide so pending taps cannot reach the canvas.
+      onTap: () {},
+      child: hidden ? const Offstage() : controls,
     );
   }
 }

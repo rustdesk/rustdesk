@@ -79,7 +79,7 @@ void _setScreen(WidgetTester tester, Size size) {
 }
 
 Future<void> _pumpControls(WidgetTester tester, _FFI ffi,
-    {double bottom = 0, double right = 0}) async {
+    {double bottom = 0, double right = 0, VoidCallback? onCanvasTap}) async {
   await tester.pumpWidget(MaterialApp(
     home: Scaffold(
       bottomNavigationBar: SizedBox(height: bottom),
@@ -87,7 +87,12 @@ Future<void> _pumpControls(WidgetTester tester, _FFI ffi,
         padding: EdgeInsets.only(right: right),
         child: SizedBox.expand(
           key: const Key('viewport'),
-          child: FloatingMouseWidgets(ffi: ffi),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onCanvasTap,
+            onDoubleTap: onCanvasTap == null ? null : () {},
+            child: FloatingMouseWidgets(ffi: ffi),
+          ),
         ),
       ),
     ),
@@ -155,8 +160,19 @@ void main() {
     };
     binding.positions.addAll(saved);
     final ffi = _FFI();
-    await _pumpControls(tester, ffi);
-    await _pumpControls(tester, ffi, bottom: 200, right: 400);
+    var canvasTaps = 0;
+    void onCanvasTap() => canvasTaps++;
+    await _pumpControls(tester, ffi, onCanvasTap: onCanvasTap);
+    await tester.tap(_right);
+    await tester.pump(const Duration(milliseconds: 50));
+    await _pumpControls(tester, ffi,
+        bottom: 200, right: 400, onCanvasTap: onCanvasTap);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(canvasTaps, 0);
+    expect(ffi.inputModel.events, [
+      ('down', MouseButtons.right),
+      ('up', MouseButtons.right),
+    ]);
     _expectControlsInside(tester);
     expect(tester.getRect(_left).topLeft, const Offset(120, 145));
     expect(tester.getRect(_right).topLeft, const Offset(220, 145));
@@ -171,7 +187,9 @@ void main() {
       (tester) async {
     _setScreen(tester, const Size(800, 400));
     final ffi = _FFI();
-    await _pumpControls(tester, ffi);
+    var canvasTaps = 0;
+    void onCanvasTap() => canvasTaps++;
+    await _pumpControls(tester, ffi, onCanvasTap: onCanvasTap);
     final gesture = await tester.startGesture(tester.getCenter(_left));
     await tester.pump(const Duration(milliseconds: 201));
     await gesture.moveBy(const Offset(5, 0));
@@ -179,7 +197,7 @@ void main() {
     expect(ffi.cursorModel.shouldBlock(1, 1), isTrue);
     expect(isSpecialHoldDragActive, isTrue);
     KeyboardVisibilityTesting.setVisibilityForTesting(true);
-    await _pumpControls(tester, ffi, bottom: 280);
+    await _pumpControls(tester, ffi, bottom: 280, onCanvasTap: onCanvasTap);
     expect(find.byType(FloatingLeftRightButton), findsNothing);
     expect(_wheel, findsNothing);
     expect(ffi.cursorModel.blockedRects, isEmpty);
@@ -190,7 +208,11 @@ void main() {
       ('up', MouseButtons.left),
     ]);
     await gesture.up();
-    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(canvasTaps, 0);
+    await tester.tapAt(const Offset(50, 50));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(canvasTaps, 1);
     expect(ffi.inputModel.events, [
       ('down', MouseButtons.left),
       ('up', MouseButtons.left),
