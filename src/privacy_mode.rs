@@ -30,6 +30,8 @@ pub mod macos;
 mod win_virtual_display;
 #[cfg(windows)]
 pub use win_virtual_display::restore_reg_connectivity;
+#[cfg(windows)]
+pub mod win_wait_unlock;
 
 pub const INVALID_PRIVACY_MODE_CONN_ID: i32 = 0;
 pub const OCCUPIED: &'static str = "Privacy occupied by another one.";
@@ -290,6 +292,8 @@ fn turn_on_privacy_sync(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>
         }
     }
 
+    #[cfg(windows)]
+    win_wait_unlock::note_turn_on();
     // turn on privacy mode
     Some(privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id))
 }
