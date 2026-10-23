@@ -86,6 +86,7 @@ impl PrivacyModeImpl {
     }
 
     // mainly from https://github.com/rustdesk-org/rustdesk/blob/44c3a52ca8502cf53b58b59db130611778d34dbe/libs/scrap/src/dxgi/mod.rs#L365
+    /// Snapshots active non-mirroring displays, falling back to registry modes when needed.
     fn set_displays(&mut self) {
         self.displays.clear();
         self.virtual_displays.clear();
@@ -169,6 +170,8 @@ impl PrivacyModeImpl {
         }
     }
 
+    /// Rebases attached displays around the first virtual display and returns its name.
+    /// The caller must populate `virtual_displays` before selecting its first entry.
     fn set_primary_display(&mut self) -> ResultType<String> {
         // Multiple virtual displays with different origins are tested.
         let display = &self.virtual_displays[0];
