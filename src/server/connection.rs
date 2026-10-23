@@ -4197,7 +4197,7 @@ impl Connection {
     }
 
     #[cfg(target_os = "windows")]
-    /// Selects the active session token for the installed Windows terminal path.
+    /// The service account may differ from the desktop user; terminals must use the session user's token.
     fn handle_installed_user(&mut self) -> Option<&'static str> {
         let session_id = crate::platform::get_current_session_id(true);
         if session_id == 0xFFFFFFFF {
