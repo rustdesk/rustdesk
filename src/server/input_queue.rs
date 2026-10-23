@@ -150,8 +150,8 @@ mod tests {
         }
     }
 
-    /// Keeps the sender connected to exercise the empty-queue timeout after the final release.
     #[test]
+    /// Keeps the sender connected to exercise the empty-queue timeout after the final release.
     fn long_burst_keeps_progress_and_final_release() {
         let (tx, rx) = channel();
         for x in 0..10_000 {
