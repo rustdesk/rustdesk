@@ -1945,8 +1945,12 @@ fn get_xrandr_conn_pat(name: &str) -> String {
     )
 }
 
+// The mode lines below an output. A mode name can have a suffix after its size, like the "i" of
+// "1920x1080i", so a TV's interlaced mode does not end the list.
+const XRANDR_MODES_PAT: &str = r"(?P<resolutions>(\s*\d+x\d+\S*\s+\d+.*\n)+)";
+
 pub fn resolutions(name: &str) -> Vec<Resolution> {
-    let resolutions_pat = r"(?P<resolutions>(\s*\d+x\d+\s+\d+.*\n)+)";
+    let resolutions_pat = XRANDR_MODES_PAT;
     let connected_pat = get_xrandr_conn_pat(name);
     let mut v = vec![];
     if let Ok(re) = Regex::new(&format!("{}{}", connected_pat, resolutions_pat)) {
@@ -2039,6 +2043,28 @@ DP-1 connected 2560x1440+1920+0 (normal left inverted right x axis y axis) 597mm
         let re = Regex::new(&get_xrandr_conn_pat("DP-1")).unwrap();
         let caps = re.captures(xrandr_output).unwrap();
         assert_eq!(get_width_height_from_captures(&caps), Some((2560, 1440)));
+    }
+
+    #[test]
+    fn interlaced_mode_does_not_end_the_mode_list() {
+        let xrandr_output =
+            "Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384
+HDMI-0 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 1600mm x 900mm
+ 1920x1080 60.00*+ 59.94 50.00
+ 1920x1080i 60.00 59.94 50.00
+ 1280x720 60.00 59.94 50.00
+ 640x480 75.00 59.94
+DP-0 disconnected (normal left inverted right x axis y axis)
+";
+        let re = Regex::new(&format!(
+            "{}{}",
+            get_xrandr_conn_pat("HDMI-0"),
+            XRANDR_MODES_PAT
+        ))
+        .unwrap();
+        let caps = re.captures(xrandr_output).unwrap();
+        assert!(caps["resolutions"].contains(" 1280x720 "));
+        assert!(caps["resolutions"].contains(" 640x480 "));
     }
 }
 
