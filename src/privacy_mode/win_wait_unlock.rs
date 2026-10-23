@@ -23,8 +23,8 @@ use std::{
 };
 
 const POLL: Duration = Duration::from_secs(1);
-// Lets a request waiting for the unlock tell that a connection has turned privacy mode on since
-// it was queued.
+// Lets a request waiting for the unlock tell that a connection has turned privacy mode on, or
+// tried to, since it was queued.
 static TURN_ONS: AtomicUsize = AtomicUsize::new(0);
 // Polls after the unlock during which a failure caused by the secure desktop is retried.
 const SETTLE_POLLS: u32 = 5;
@@ -207,13 +207,14 @@ fn turn_on(
     })?;
     drop(privacy_mode);
     if matches!(res, Ok(true)) {
-        note_turn_on();
         close_other_remote_connections_for_privacy(conn_id);
     }
     Some(res)
 }
 
-/// Called whenever a connection has turned privacy mode on.
+/// Called under `PRIVACY_MODE` right before any connection turns privacy mode on. Counting the
+/// attempt, not the success, keeps the count inside the lock without reshaping the caller; a
+/// failed attempt only makes a waiting request give up.
 pub fn note_turn_on() {
     TURN_ONS.fetch_add(1, Ordering::SeqCst);
 }
@@ -261,6 +262,7 @@ fn turn_on_locked(
         }
     }
 
+    note_turn_on();
     // turn on privacy mode
     Some(privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id))
 }
@@ -278,7 +280,7 @@ fn unless_stale(
     }
     if TURN_ONS.load(Ordering::SeqCst) != turn_ons {
         return Some(Err(anyhow!(
-            "Privacy mode was turned on by another connection meanwhile"
+            "Another connection turned privacy mode on, or tried to, meanwhile"
         )));
     }
     Some(turn_on())

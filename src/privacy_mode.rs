@@ -292,6 +292,8 @@ fn turn_on_privacy_sync(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>
         }
     }
 
+    #[cfg(windows)]
+    win_wait_unlock::note_turn_on();
     // turn on privacy mode
     Some(privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id))
 }
