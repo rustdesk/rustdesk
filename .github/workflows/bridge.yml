@@ -85,18 +85,81 @@ jobs:
 
       - name: Install flutter rust bridge deps
         shell: bash
+        env:
+          FLUTTER_BRIDGE_VERSION: ${{ matrix.job.flutter-version }}
         run: |
-          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
-          if [[ "${{ matrix.job.flutter-version }}" == "3.22.3" ]]; then
+          cargo install cargo-expand --version "${CARGO_EXPAND_VERSION}" --locked
+          cargo install flutter_rust_bridge_codegen --version "${FLUTTER_RUST_BRIDGE_VERSION}" --features "uuid" --locked
+          if [ "${FLUTTER_BRIDGE_VERSION}" == "3.22.3" ]; then
             # Default Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.
             sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
-          else
+          elif [ "${FLUTTER_BRIDGE_VERSION}" == "3.44.8" ]; then
             # Flutter 3.44 bridge for Windows arm64: match that build's source/pubspec state so the
             # generated *.freezed.dart compiles against the same Flutter/freezed it resolves.
             bash .github/patches/apply_flutter_3.44_source_patches.sh
+          else
+            # basilgello: Bail out as we dont know which version of flutter to use
+            # This requires devs to add the correct Flutter version into
+            # the matrix above and regenerate lockfile if it is not there yet
+            # or if it is outdated
+            echo "ERROR: Unknown Flutter version to build the bridge!"
+            echo ""
+            echo "Please see bridge.yml for instructions!"
+            echo ""
+            exit 1
           fi
-          pushd flutter && flutter pub get && popd
+          # Set proper bridge lockfile in place and try to get packages locked
+          BRIDGE_LOCKFILE_EXISTS=1
+          BRIDGE_LOCKFILE_DIFFERS=0
+          if [ -f "flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock" ]; then
+            # basilgello: Copy bridge lockfile into pubspec.lock and let
+            # `flutter packages pub get` check it
+            cp "flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock" "flutter/pubspec.lock"
+          else
+            BRIDGE_LOCKFILE_EXISTS=0
+          fi
+          pushd flutter
+          if ! flutter packages pub get --enforce-lockfile; then
+            # basilgello: re-generate lockfile and abort the workflow with error
+            # to signal the devs that pubspec-bridge.lock differs from the
+            # generated one
+            flutter packages pub get
+            if [ "${BRIDGE_LOCKFILE_EXISTS}" -eq 0 ]; then
+              echo "ERROR: Lockfile 'pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock' does not exist!"
+              echo ""
+              echo "Maybe Flutter version used for bridge generation was bumped?"
+              echo ""
+              echo "If so, check the contents of file below and copy them"
+              echo "to 'pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock'!"
+              echo ""
+            fi
+            if ! git diff --quiet --exit-code "pubspec.lock" "pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock"; then
+              BRIDGE_LOCKFILE_DIFFERS=1
+
+              echo "ERROR: Lockfile 'pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock' differs!"
+              echo ""
+              echo "Lockfile 'pubspec.lock' generated with 'pubspec.yaml'"
+              echo "patched for Flutter version ${FLUTTER_BRIDGE_VERSION}"
+              echo "differs from what we locked in the repository"
+              echo "(pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock)"
+              echo ""
+              echo "Please verify manually if the new dependencies are OK"
+              echo "and copy the regenerated 'pubspec.lock' file into"
+              echo "'pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock'"
+              echo "then commit and PR it!"
+              echo ""
+            fi
+            if [ "${BRIDGE_LOCKFILE_EXISTS}" -eq 0 ] || [ "${BRIDGE_LOCKFILE_DIFFERS}" -eq 1 ]; then
+              echo "Contents of pubspec.lock:"
+              echo "=========================="
+              cat pubspec.lock
+              echo "=========================="
+              echo ""
+
+              exit 1
+            fi
+          fi
+          popd
 
       - name: Run flutter rust bridge
         run: |
