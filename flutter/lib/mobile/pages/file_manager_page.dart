@@ -273,22 +273,22 @@ class _FileManagerPageState extends State<FileManagerPage> {
       PathUtil.join(appDir, 'Logs', false),
       PathUtil.join(appDir, 'ScreenRecord', false),
     ].where((p) => File(p).existsSync() || Directory(p).existsSync()).toList();
-    if (paths.isEmpty) {
-      showToast(translate('Failed'));
-      return;
-    }
-    await _exportPaths(paths);
+    await _exportPaths(paths, includeDocumentLogs: true);
   }
 
-  Future<void> _exportPaths(Iterable<String> paths) async {
+  Future<void> _exportPaths(Iterable<String> paths,
+      {bool includeDocumentLogs = false}) async {
     try {
-      final result = await _runAndroidDocumentPicker(() =>
-          gFFI.invokeMethodWithResult<Map<dynamic, dynamic>>(
-              AndroidChannel.kExportFiles, {'paths': paths.toList()}));
+      final result = await _runAndroidDocumentPicker(() => gFFI
+              .invokeMethodWithResult<Map<dynamic, dynamic>>(
+                  AndroidChannel.kExportFiles, {
+            'paths': paths.toList(),
+            if (includeDocumentLogs) 'documentLogs': true,
+          }));
       if (result == null) return;
       final exported = result['exported'] as int? ?? 0;
       final failed = result['failed'] as int? ?? 0;
-      if (failed > 0) {
+      if (failed > 0 || (includeDocumentLogs && exported == 0)) {
         showToast(translate('Failed'));
       } else if (exported > 0) {
         showToast(translate('Successful'));

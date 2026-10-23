@@ -32,6 +32,7 @@ internal fun documentEntry(name: String, directory: Boolean, size: Long = 0): JS
 internal class DocumentStorage(private val context: Context) {
     private val prefs = context.getSharedPreferences(DOCUMENT_PREFS, Context.MODE_PRIVATE)
     private val descriptors = DocumentDescriptors()
+    val logs = DocumentLogs(context)
 
     fun home(): String? = prefs.getString(DEFAULT_LOCATION, null)
 
@@ -39,11 +40,7 @@ internal class DocumentStorage(private val context: Context) {
     fun logDirectory(): File {
         val media = context.externalMediaDirs.firstOrNull()
             ?: throw IOException("External media storage is unavailable")
-        val directory = File(media, "RustDesk")
-        if (!directory.mkdirs() && !directory.isDirectory) {
-            throw IOException("Unable to create log directory: $directory")
-        }
-        return directory
+        return File(media, "RustDesk")
     }
 
     fun shareWorkspace(): String {
@@ -96,6 +93,7 @@ internal class DocumentStorage(private val context: Context) {
         val operation = request.getString("op")
         if (operation == "home") return home()
         if (operation == "log_directory") return logDirectory().absolutePath
+        if (operation == "log_write") return logs.write(request.getString("message"))
         if (operation == "close") return descriptors.close(request)
         val path = request.getString("path")
         val backend = backend(path)

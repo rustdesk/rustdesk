@@ -60,7 +60,7 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
                 .with_tag("ffi"), // logs will show under mytag tag
         );
         #[cfg(not(debug_assertions))]
-        initialize_android_log();
+        crate::platform::android_log::initialize();
         #[cfg(feature = "mediacodec")]
         scrap::mediacodec::check_mediacodec();
         crate::common::test_rendezvous_server();
@@ -80,33 +80,6 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     {
         // core_main's init_log does not work for flutter since it is only applied to its load_library in main.c
         hbb_common::init_log(false, "flutter_ffi");
-    }
-}
-
-#[cfg(all(target_os = "android", not(debug_assertions)))]
-fn initialize_android_log() {
-    use log::Log;
-
-    let directory = fs::android::request(serde_json::json!({"op": "log_directory"}))
-        .and_then(|value| Ok(serde_json::from_value::<String>(value)?));
-    match directory {
-        Ok(directory) => {
-            // An absolute directory replaces init_log's workspace-relative path.
-            hbb_common::init_log(false, &directory);
-        }
-        Err(error) => android_logger::AndroidLogger::new(
-            android_logger::Config::default()
-                .with_max_level(log::LevelFilter::Error)
-                .with_tag("ffi"),
-        )
-        .log(
-            &log::Record::builder()
-                .level(log::Level::Error)
-                .args(format_args!(
-                    "Unable to initialize Android file logging: {error}"
-                ))
-                .build(),
-        ),
     }
 }
 
@@ -3057,6 +3030,8 @@ pub mod server_side {
         if let Ok(home_dir) = env.get_string(&home_dir) {
             *config::APP_HOME_DIR.write().unwrap() = home_dir.into();
         }
+        #[cfg(not(debug_assertions))]
+        crate::platform::android_log::initialize();
         if let Ok(custom_client_config) = env.get_string(&custom_client_config) {
             if !custom_client_config.is_empty() {
                 let custom_client_config: String = custom_client_config.into();

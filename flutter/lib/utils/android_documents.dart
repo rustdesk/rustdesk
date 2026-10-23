@@ -34,4 +34,21 @@ class AndroidDocuments {
     }
     return path;
   }
+
+  static Future<bool> requireLogFolder() async {
+    gFFI.ffiModel.beginAndroidDocumentPicker();
+    try {
+      final ready = await gFFI
+          .invokeMethodWithResult<bool>('document_require_log_folder');
+      if (ready == null) {
+        throw StateError('Log directory setup did not complete');
+      }
+      return ready;
+    } catch (error) {
+      showToast(error.toString());
+      return false;
+    } finally {
+      gFFI.ffiModel.endAndroidDocumentPicker();
+    }
+  }
 }

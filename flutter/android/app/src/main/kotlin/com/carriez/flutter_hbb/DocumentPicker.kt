@@ -10,10 +10,12 @@ import kotlin.concurrent.thread
 
 internal class DocumentPicker(private val activity: Activity) {
     private var pending: Pair<MethodChannel.Result, Boolean>? = null
+    private var pendingLogFolder: MethodChannel.Result? = null
     private val storage = (activity.application as MainApplication).documentStorage
 
     fun handle(call: MethodCall, result: MethodChannel.Result): Boolean {
         when (call.method) {
+            "document_require_log_folder" -> requireLogFolder(result)
             "document_log_directory" -> run(result) { storage.logDirectory().absolutePath }
             "document_workspace" -> if (call.argument<Boolean>("share") == true) {
                 run(result) { storage.shareWorkspace() }
@@ -27,7 +29,7 @@ internal class DocumentPicker(private val activity: Activity) {
     }
 
     private fun pick(result: MethodChannel.Result, share: Boolean) {
-        if (pending != null) {
+        if (pending != null || pendingLogFolder != null) {
             result.error("picker_in_progress", "Another document picker is already open", null)
             return
         }
@@ -52,6 +54,19 @@ internal class DocumentPicker(private val activity: Activity) {
     }
 
     fun onResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == REQUEST_LOG_FOLDER) {
+            val result = pendingLogFolder ?: return true
+            pendingLogFolder = null
+            if (resultCode != Activity.RESULT_OK || data?.data == null) {
+                result.success(false)
+            } else {
+                run(result) {
+                    storage.logs.select(requireNotNull(data.data), data.flags)
+                    true
+                }
+            }
+            return true
+        }
         if (requestCode != REQUEST_DOCUMENT) return false
         val (result, share) = pending ?: return true
         pending = null
@@ -66,6 +81,8 @@ internal class DocumentPicker(private val activity: Activity) {
     }
 
     fun close() {
+        pendingLogFolder?.error("picker_closed", "Log directory selection was interrupted", null)
+        pendingLogFolder = null
         pending?.first?.error("picker_closed", "Document selection was interrupted", null)
         pending = null
     }
@@ -81,7 +98,53 @@ internal class DocumentPicker(private val activity: Activity) {
         }
     }
 
+    private fun requireLogFolder(result: MethodChannel.Result) {
+        if (pending != null || pendingLogFolder != null) {
+            result.error("picker_in_progress", "Another document picker is already open", null)
+            return
+        }
+        pendingLogFolder = result
+        thread {
+            val ready = runCatching { storage.logs.ensureReady() }
+            activity.runOnUiThread { completeLogFolderCheck(result, ready) }
+        }
+    }
+
+    private fun completeLogFolderCheck(result: MethodChannel.Result, ready: Result<Boolean>) {
+        if (pendingLogFolder !== result) return
+        ready.fold(onSuccess = {
+            if (it) {
+                pendingLogFolder = null
+                result.success(true)
+            } else {
+                pickLogFolder(result)
+            }
+        }, onFailure = {
+            pendingLogFolder = null
+            result.error("log_directory_failed", it.message, null)
+        })
+    }
+
+    private fun pickLogFolder(result: MethodChannel.Result) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            putExtra(Intent.EXTRA_TITLE, "Allow logs in Android/media/RustDesk")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                putExtra(DocumentsContract.EXTRA_INITIAL_URI,
+                    DocumentsContract.buildDocumentUri(DocumentLogs.AUTHORITY, DocumentLogs.PARENT_ID))
+            }
+        }
+        try {
+            activity.startActivityForResult(intent, REQUEST_LOG_FOLDER)
+        } catch (error: Exception) {
+            pendingLogFolder = null
+            result.error("picker_unavailable", error.message, null)
+        }
+    }
+
     companion object {
         private const val REQUEST_DOCUMENT = 4251
+        private const val REQUEST_LOG_FOLDER = 4252
     }
 }

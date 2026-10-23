@@ -16,6 +16,7 @@ import '../desktop/pages/server_page.dart' as desktop;
 import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
 import '../mobile/widgets/android_file_transfer_setup.dart';
+import '../utils/android_documents.dart';
 import 'model.dart';
 
 const kLoginDialogTag = "LOGIN";
@@ -433,6 +434,7 @@ class ServerModel with ChangeNotifier {
 
   /// Start the screen sharing service.
   Future<void> startService() async {
+    if (isAndroid && !await AndroidDocuments.requireLogFolder()) return;
     _isStart = true;
     notifyListeners();
     parent.target?.ffiModel.updateEventListener(parent.target!.sessionId, "");
