@@ -8,8 +8,8 @@ use std::{
 // Bound each scan so a producer that never stops cannot starve input delivery.
 const MAX_SCAN: usize = 256;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 /// Keeps Windows mouse coalescing within the same input context and movement type.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(super) fn coalesce_mouse_moves(
     receiver: Receiver<MessageInput>,
 ) -> LatestReceiver<MessageInput, impl Fn(&MessageInput, &MessageInput) -> bool> {
