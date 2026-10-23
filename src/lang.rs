@@ -392,6 +392,7 @@ mod test {
 
         assert_eq!(f("", "zh_HK.UTF-8", false), "zh-tw");
         assert_eq!(f("", "zh-Hant-HK", false), "zh-tw");
+        assert_eq!(f("", "zh-Hant", false), "zh-tw");
         assert_eq!(f("", "zh_MO", false), "zh-tw");
         assert_eq!(f("", "zh-Hans-HK", false), "zh-cn");
     }
