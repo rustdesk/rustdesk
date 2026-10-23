@@ -1425,7 +1425,10 @@ pub fn is_prelogin() -> bool {
     let name = get_active_username();
     if let Ok(res) = run_cmds(&format!("getent passwd {}", name)) {
         // A greeter account's shell is /bin/false or nologin under /usr/sbin, /sbin or /usr/bin.
-        return res.contains("/bin/false") || res.contains("/nologin");
+        return res.lines().any(|entry| {
+            let shell = entry.trim().rsplit(':').next().unwrap_or_default();
+            shell.ends_with("/false") || shell.ends_with("/nologin")
+        });
     }
     false
 }
