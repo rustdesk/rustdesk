@@ -199,6 +199,7 @@ pub fn clip_cursor(rect: Option<(i32, i32, i32, i32)>) -> bool {
 
 pub fn reset_input_cache() {}
 
+/// Returns the visible cursor handle, or `None` while Windows hides the cursor.
 pub fn get_cursor() -> ResultType<Option<u64>> {
     unsafe {
         let mut ci: CURSORINFO = mem::zeroed();
@@ -217,6 +218,7 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
 struct IconInfo(ICONINFO);
 
 impl IconInfo {
+    /// Takes ownership of the bitmap copies from `GetIconInfo`; `Drop` releases them.
     fn new(icon: HICON) -> ResultType<Self> {
         unsafe {
             let mut ii = mem::zeroed();
