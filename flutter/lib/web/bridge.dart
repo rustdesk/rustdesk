@@ -1928,6 +1928,11 @@ class RustdeskImpl {
   }
 
   String mainGetCommonSync({required String key, dynamic hint}) {
+    const prefix = 'resolve-api-server:';
+    if (key.startsWith(prefix)) {
+      return js.context
+          .callMethod('getByName', ['api_server', key.substring(prefix.length)]);
+    }
     throw UnimplementedError("mainGetCommonSync");
   }
 

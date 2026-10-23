@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/utils/download_paths.dart';
 import 'package:flutter_hbb/utils/event_loop.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
@@ -627,6 +628,17 @@ class FileController {
     final transferJobIds = <int>[];
     for (var from in items.items) {
       final jobID = jobController.addTransferJob(from, isRemoteToLocal);
+      // Keep this check before PathUtil.join: Rust does not receive the selected
+      // root separately, and Web transfers bypass Rust validation.
+      if (isRemoteToLocal &&
+          !DownloadPaths.validName(from.name, windows: isWindows)) {
+        jobController.jobError({
+          'id': '$jobID',
+          'file_num': '0',
+          'err': 'Invalid file name: ${from.name}',
+        });
+        continue;
+      }
       transferJobs.add((from, jobID));
       transferJobIds.add(jobID);
     }
@@ -648,6 +660,15 @@ class FileController {
     if (isWeb ||
         (!isLocal &&
             versionCmp(rootState.target!.ffiModel.pi.version, '1.3.3') < 0)) {
+      return;
+    }
+
+    if (isRemoteToLocal) {
+      for (final (entry, jobID) in transferJobs) {
+        if (entry.isDirectory) {
+          await _downloadEmptyDirectories(entry, jobID, otherSideData);
+        }
+      }
       return;
     }
 
@@ -681,6 +702,35 @@ class FileController {
         createDirWithRemote(dir, isRemote);
       }
     });
+  }
+
+  Future<void> _downloadEmptyDirectories(
+      Entry entry, int jobID, DirectoryData destination) async {
+    try {
+      final emptyDirs = await fileFetcher.readEmptyDirs(
+          entry.path, false, destination.options.showHidden);
+      final localRoot = PathUtil.join(destination.directory.path, entry.name,
+          destination.options.isWindows);
+      final paths = emptyDirs
+          .map((dir) => DownloadPaths.mapDirectory(
+              entry.path, dir.path, localRoot,
+              remoteWindows: options.value.isWindows,
+              localWindows: destination.options.isWindows))
+          .toList();
+      for (final path in paths) {
+        await DownloadPaths.ensureNoLinks(destination.directory.path, path);
+      }
+      for (final path in paths) {
+        await createDirWithRemote(path, false);
+      }
+    } on FormatException catch (err) {
+      await bind.sessionCancelJob(sessionId: sessionId, actId: jobID);
+      jobController.jobError({
+        'id': '$jobID',
+        'file_num': '0',
+        'err': err.message,
+      });
+    }
   }
 
   bool _removeCheckboxRemember = false;
@@ -1120,6 +1170,11 @@ class JobController {
       return true;
     }
     final job = jobTable[jobIndex];
+    if (job.type == JobType.transfer &&
+        job.isRemoteToLocal &&
+        job.state == JobState.error) {
+      return true;
+    }
     job.recvJobRes = true;
     if (job.type == JobType.deleteFile) {
       job.state = JobState.done;
