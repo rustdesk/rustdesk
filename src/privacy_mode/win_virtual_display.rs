@@ -86,14 +86,14 @@ impl PrivacyModeImpl {
     }
 
     // mainly from https://github.com/rustdesk-org/rustdesk/blob/44c3a52ca8502cf53b58b59db130611778d34dbe/libs/scrap/src/dxgi/mod.rs#L365
+    /// Snapshots active non-mirroring displays, falling back to registry modes when needed.
     fn set_displays(&mut self) {
         self.displays.clear();
         self.virtual_displays.clear();
 
         let mut i: DWORD = 0;
         loop {
-            #[allow(invalid_value)]
-            let mut dd: DISPLAY_DEVICEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            let mut dd: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
             dd.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as _;
             let ok = unsafe { EnumDisplayDevicesW(std::ptr::null(), i, &mut dd as _, 0) };
             if ok == FALSE {
@@ -105,8 +105,7 @@ impl PrivacyModeImpl {
             {
                 continue;
             }
-            #[allow(invalid_value)]
-            let mut dm: DEVMODEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            let mut dm: DEVMODEW = unsafe { std::mem::zeroed() };
             dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
             dm.dmDriverExtra = 0;
             unsafe {
@@ -171,13 +170,14 @@ impl PrivacyModeImpl {
         }
     }
 
+    /// Rebases attached displays around the first virtual display and returns its name.
+    /// The caller must populate `virtual_displays` before selecting its first entry.
     fn set_primary_display(&mut self) -> ResultType<String> {
         // Multiple virtual displays with different origins are tested.
         let display = &self.virtual_displays[0];
         let display_name = std::string::String::from_utf16(&display.name)?;
 
-        #[allow(invalid_value)]
-        let mut new_primary_dm: DEVMODEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+        let mut new_primary_dm: DEVMODEW = unsafe { std::mem::zeroed() };
         new_primary_dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
         new_primary_dm.dmDriverExtra = 0;
         unsafe {
@@ -221,8 +221,7 @@ impl PrivacyModeImpl {
 
             let mut i: DWORD = 0;
             loop {
-                #[allow(invalid_value)]
-                let mut dd: DISPLAY_DEVICEW = std::mem::MaybeUninit::uninit().assume_init();
+                let mut dd: DISPLAY_DEVICEW = std::mem::zeroed();
                 dd.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as _;
                 if FALSE
                     == EnumDisplayDevicesW(NULL as _, i, &mut dd, EDD_GET_DEVICE_INTERFACE_NAME)
@@ -238,8 +237,7 @@ impl PrivacyModeImpl {
                     continue;
                 }
 
-                #[allow(invalid_value)]
-                let mut dm: DEVMODEW = std::mem::MaybeUninit::uninit().assume_init();
+                let mut dm: DEVMODEW = std::mem::zeroed();
                 dm.dmSize = std::mem::size_of::<DEVMODEW>() as _;
                 dm.dmDriverExtra = 0;
                 if FALSE

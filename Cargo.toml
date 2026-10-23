@@ -21,6 +21,7 @@ name = "service"
 path = "src/service.rs"
 
 [features]
+coalesce-mouse-moves = []
 inline = []
 use_samplerate = ["samplerate", "libsamplerate-sys"]
 use_rubato = ["rubato"]
