@@ -15,6 +15,54 @@ import argparse
 import sys
 from pathlib import Path
 
+
+def get_flutter_linux_arch(machine=None):
+    machine = (machine or platform.machine()).lower()
+    arch = {
+        'aarch64': 'arm64',
+        'amd64': 'x64',
+        'arm64': 'arm64',
+        'loong64': 'loong64',
+        'loongarch64': 'loong64',
+        'x64': 'x64',
+        'x86_64': 'x64',
+    }.get(machine)
+    if arch is None:
+        raise RuntimeError(f'unsupported machine for Flutter Linux: {machine}')
+    return arch
+
+
+def get_flutter_linux_build_command(machine=None):
+    command = 'flutter build linux --release'
+    if get_flutter_linux_arch(machine) == 'loong64':
+        command += ' --target-platform linux-loong64'
+    return command
+
+
+def get_flutter_linux_build_dirs(machine=None):
+    arch = get_flutter_linux_arch(machine)
+    build_dir = f'build/linux/{arch}/release/bundle/'
+    return build_dir, f'flutter/{build_dir}'
+
+
+def deb_arch_from_machine(machine):
+    arch = {
+        'aarch64': 'arm64',
+        'amd64': 'amd64',
+        'arm64': 'arm64',
+        'armv7': 'armhf',
+        'armv7l': 'armhf',
+        'loong64': 'loong64',
+        'loongarch64': 'loongarch64',
+        'x64': 'amd64',
+        'x86_64': 'amd64',
+    }.get(machine.lower())
+    if arch is None:
+        raise RuntimeError(
+            f'unsupported machine for Debian packaging: {machine}; set DEB_ARCH')
+    return arch
+
+
 # Captured at import, while cwd is still the repo root: before Python 3.9 the main script's __file__
 # stays relative (bpo-20443), so abspath() re-resolves it against the cwd -- and the ubuntu18.04
 # packaging container runs 3.6 and chdir's into flutter/ before it reaches the libdrmtap code.
@@ -31,20 +79,27 @@ if windows:
 elif osx:
     flutter_build_dir = 'build/macos/Build/Products/Release/'
 else:
-    flutter_build_dir = 'build/linux/x64/release/bundle/'
-flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
+    flutter_build_dir = None
+flutter_build_dir_2 = (f'flutter/{flutter_build_dir}'
+                       if flutter_build_dir is not None else None)
 skip_cargo = False
 
 
 def get_deb_arch() -> str:
     custom_arch = os.environ.get("DEB_ARCH")
-    if custom_arch is None:
-        return "amd64"
-    return custom_arch
+    if custom_arch:
+        return custom_arch
+    try:
+        dpkg_arch = subprocess.check_output(
+            ['dpkg', '--print-architecture']).decode().strip()
+        if dpkg_arch:
+            return dpkg_arch
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    return deb_arch_from_machine(platform.machine())
 
 def get_deb_extra_depends() -> str:
-    custom_arch = os.environ.get("DEB_ARCH")
-    if custom_arch == "armhf": # for arm32v7 libsciter-gtk.so
+    if get_deb_arch() == "armhf": # for arm32v7 libsciter-gtk.so
         return ", libatomic1"
     return ""
 
@@ -739,7 +794,7 @@ def build_flutter_deb(version, features):
         system2(f'cargo build --locked --features {features} --lib --release')
         ffi_bindgen_function_refactor()
     os.chdir('flutter')
-    system2('flutter build linux --release')
+    system2(get_flutter_linux_build_command())
     system2('mkdir -p tmpdeb/usr/bin/')
     system2('mkdir -p tmpdeb/usr/share/rustdesk')
     system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
@@ -960,7 +1015,7 @@ def build_flutter_arch_manjaro(version, features):
         system2(f'cargo build --locked --features {features} --lib --release')
     ffi_bindgen_function_refactor()
     os.chdir('flutter')
-    system2('flutter build linux --release')
+    system2(get_flutter_linux_build_command())
     system2(f'strip {flutter_build_dir}/lib/librustdesk.so')
     os.chdir('../res')
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
@@ -998,7 +1053,7 @@ def build_flutter_windows(version, features, skip_portable_pack):
 
 
 def main():
-    global skip_cargo
+    global flutter_build_dir, flutter_build_dir_2, skip_cargo
     parser = make_parser()
     args = parser.parse_args()
 
@@ -1022,6 +1077,8 @@ def main():
     version = get_version()
     features = ','.join(get_features(args))
     flutter = args.flutter
+    if flutter and not windows and not osx:
+        flutter_build_dir, flutter_build_dir_2 = get_flutter_linux_build_dirs()
     if not flutter:
         system2('python3 res/inline-sciter.py')
     print(args.skip_cargo)

@@ -111,6 +111,10 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Test build architecture helpers
+      if: runner.os == 'Linux'
+      run: python3 res/test_build_arch.py
+
     - name: Install prerequisites
       shell: bash
       run: |

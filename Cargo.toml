@@ -221,6 +221,11 @@ exclude = ["vdi/host"]
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
 [patch.crates-io]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
+nix023 = { package = "nix", git = "https://github.com/Flutter-Dart-loong64/nix.git", rev = "03d60be7e04b8b41175d78f0c5e41a74ae23a230" }
+nix025 = { package = "nix", git = "https://github.com/Flutter-Dart-loong64/nix.git", rev = "cc26a733b0314a3e9a5db9ec180386893d22e772" }
+nix026 = { package = "nix", git = "https://github.com/Flutter-Dart-loong64/nix.git", rev = "87b10c3ae8ceb18ea7fe890bdffab955ebae1e6e" }
+mozjpeg = { git = "https://github.com/Flutter-Dart-loong64/mozjpeg-rust.git", rev = "f9970f2ba88e136db0f5532983c14573ecb0b037" }
+mozjpeg-sys = { git = "https://github.com/Flutter-Dart-loong64/mozjpeg-sys.git", rev = "5489d3b8eab946069330dbe0a6b7b8e1861bf001" }
 # Upstream reserves a frame's whole declared length as soon as its header is in, so a header alone
 # buys an allocation the size it names, bounded only by max_frame_size. This fork grows the read
 # buffer one read_buffer_size chunk at a time as the bytes actually arrive. Patched rather than
