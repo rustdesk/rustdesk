@@ -1379,6 +1379,20 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
+    fn auto_login(&self) {
+        if self.handler.is_view_camera() {
+            return;
+        }
+        let lc = self.handler.lc.read().unwrap();
+        let p = lc.should_auto_login();
+        if p.is_empty() {
+            return;
+        }
+        if let Some(pi) = lc.peer_info.as_ref() {
+            crate::client::auto_login(p, pi, self.handler.clone());
+        }
+    }
+
     fn contains_key_frame(vf: &VideoFrame) -> bool {
         use video_frame::Union::*;
         match &vf.union {
@@ -1556,6 +1570,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.adapt_size();
                         self.send_toggle_virtual_display_msg(peer).await;
                         self.send_toggle_privacy_mode_msg(peer).await;
+                        self.auto_login();
                     }
                     self.video_format = CodecFormat::from(&vf);
 
@@ -3070,6 +3085,42 @@ mod tests {
             let msg = Message::parse_from_bytes(&bytes).unwrap();
             assert_eq!(msg.misc().option().custom_fps, expected);
         }
+    }
+
+    #[tokio::test]
+    async fn auto_login_sends_the_password_after_the_first_video_frame() {
+        let (mut remote, mut peer, _far) = remote_and_peer().await;
+        *remote.handler.sender.write().unwrap() = Some(remote.sender.clone());
+        {
+            let mut lc = remote.handler.lc.write().unwrap();
+            lc.config.lock_after_session_end.v = true;
+            let options = &mut lc.config.options;
+            options.insert("auto-login".to_owned(), "Y".to_owned());
+            options.insert("os-password".to_owned(), "test os password".to_owned());
+            lc.peer_info = Some(PeerInfo {
+                platform: crate::common::PLATFORM_WINDOWS.to_owned(),
+                version: "1.5.1".to_owned(),
+                ..Default::default()
+            });
+        }
+        let mut frame = Message::new();
+        frame.set_video_frame(VideoFrame::new());
+        remote
+            .handle_msg_from_peer(&frame.write_to_bytes().unwrap(), &mut peer)
+            .await;
+
+        let sent_os_login = async {
+            while let Some(data) = remote.receiver.recv().await {
+                if matches!(data, Data::Message(msg) if msg.has_os_login()) {
+                    return true;
+                }
+            }
+            false
+        };
+        assert!(
+            timeout(3000, sent_os_login).await.unwrap_or(false),
+            "no password after the first frame"
+        );
     }
 }
 

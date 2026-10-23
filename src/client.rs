@@ -4444,17 +4444,23 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     interface.send(Data::Message(msg_out));
 }
 
-/// Auto Login. A peer that can check for its logon or lock screen gets the password and types it
-/// itself, only if it is there right then. Keys typed from here land in whatever has focus if the
-/// screen is not locked by the time they arrive.
+/// Auto Login's click, sent at login. On a sleeping peer it is the input that wakes the display.
+pub fn activate_os_for_auto_login(interface: impl Interface) {
+    std::thread::spawn(move || activate_os(&interface, true));
+}
+
+/// Auto Login, sent after the first video frame: a peer woken from sleep drops keys sent before
+/// its lock screen is drawn. A peer that can check for its logon or lock screen gets the password
+/// and types it itself, only if it is there right then. Keys typed from here land in whatever has
+/// focus if the screen is not locked by the time they arrive.
 pub fn auto_login(p: String, pi: &PeerInfo, interface: impl Interface) {
-    if !is_peer_handling_os_login(pi) {
-        input_os_password(p, true, interface);
-        return;
-    }
+    let peer_handles_os_login = is_peer_handling_os_login(pi);
     std::thread::spawn(move || {
-        activate_os(&interface, true);
         std::thread::sleep(Duration::from_millis(1200));
+        if !peer_handles_os_login {
+            _input_os_password(p, false, interface);
+            return;
+        }
         let mut msg_out = Message::new();
         msg_out.set_os_login(OSLogin {
             password: p,
