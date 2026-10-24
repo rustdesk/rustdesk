@@ -219,7 +219,7 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
     let files = super::super::get_recursive_files(path, false).unwrap();
     assert_eq!(files[0].name, "notes.txt");
     assert_eq!(files[0].size, 12);
-    assert!(remove_empty_tree(path).is_err());
+    assert!(remove_empty_tree(path).unwrap_err().to_string() == "Cannot delete a shared root");
     assert!(super::super::remove_file(path).is_err());
     host_upload_respects_overwrite_support(path, &output).await;
     overwrite_requires_matching_confirmation(path, &output).await;

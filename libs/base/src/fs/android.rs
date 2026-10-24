@@ -193,6 +193,11 @@ pub fn remove_file(path: &str) -> ResultType<()> {
 }
 
 pub fn remove_empty_tree(path: &str) -> ResultType<()> {
+    validate(path)?;
+    let tree_prefix = Path::new(ROOT).join("tree");
+    if Path::new(path).parent().and_then(Path::parent) == Some(tree_prefix.as_path()) {
+        bail!("Cannot delete a shared root");
+    }
     let mut directories = vec![path.to_owned()];
     let mut index = 0;
     while index < directories.len() {
