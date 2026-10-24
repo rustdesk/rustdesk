@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../common.dart';
 import '../generated_bridge.dart';
+import '../utils/app_dir.dart';
 
 final class RgbaFrame extends Struct {
   @Uint32()
@@ -158,6 +159,8 @@ class PlatformFFI {
         _dir = (await getApplicationDocumentsDirectory()).path;
       } catch (e) {
         debugPrint('Failed to get documents directory: $e');
+        _dir = appDirAfterLookupFailure(
+            isLinux: isLinux, environment: Platform.environment);
       }
       _ffiBind = RustdeskImpl(dylib);
 
