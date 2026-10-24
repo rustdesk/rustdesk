@@ -56,8 +56,6 @@ bool _canConfigureSharedFolder(FFI ffi) =>
                 key: kOptionEnablePermChangeInAcceptWindow)));
 
 CustomAlertDialog _setupDialog(void Function([dynamic]) close) {
-  final settingsPath =
-      '${translate('Settings')} → ${translate('Transfer file')} → ${translate('Change Path')}';
   final choiceStyle = OutlinedButton.styleFrom(
     alignment: AlignmentDirectional.centerStart,
     minimumSize: const Size(0, kMinInteractiveDimension),
@@ -69,7 +67,7 @@ CustomAlertDialog _setupDialog(void Function([dynamic]) close) {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(translate(
-            'Choose which folder remote devices can access. You can change it later in {$settingsPath}.')),
+            'Choose which folder remote devices can access. You can change it later in {}.')),
         Padding(
           padding: _folderChoicePadding,
           child: Column(

@@ -14,7 +14,9 @@ class _Binding extends Fake implements RustdeskImpl {
   @override
   String translate(
           {required String name, required String locale, dynamic hint}) =>
-      name.replaceFirstMapped(RegExp(r'\{(.*?)\}'), (match) => match[1]!);
+      name == 'Choose which folder remote devices can access. You can change it later in {}.'
+          ? 'Choose which folder remote devices can access.'
+          : name.replaceFirstMapped(RegExp(r'\{(.*?)\}'), (match) => match[1]!);
 
   @override
   String getLocalFlutterOption({required String k, dynamic hint}) =>
@@ -69,8 +71,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('RustDesk storage'), findsOneWidget);
     expect(find.text('Other folders…'), findsOneWidget);
-    expect(find.textContaining('remote devices can access'), findsOneWidget);
-    expect(find.textContaining('Settings → Transfer file → Change Path'),
+    expect(find.text('Choose which folder remote devices can access.'),
         findsOneWidget);
 
     await tester.tap(find.text('Skip'));

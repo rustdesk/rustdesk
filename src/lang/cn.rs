@@ -817,7 +817,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("api_server_empty_tip", "API 服务器留空时，自定义服务器默认使用 HTTP。请联系管理员启用 HTTPS。"),
         ("RustDesk storage", "RustDesk 存储空间"),
         ("Other folders", "其他文件夹"),
-        ("Choose which folder remote devices can access. You can change it later in {}.", "选择允许远程设备访问的文件夹。以后可在 {} 中修改。"),
+        ("Choose which folder remote devices can access. You can change it later in {}.", "选择允许远程设备访问的文件夹。"),
         ("android-logs-folder-tip", "请选择用于保存 RustDesk 日志文件的文件夹。"),
         ("Choose folder", "选择文件夹"),
     ].iter().cloned().collect();

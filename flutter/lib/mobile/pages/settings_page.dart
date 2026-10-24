@@ -19,7 +19,6 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../widgets/deploy_dialog.dart';
 import '../../models/shortcut_model.dart';
-import '../../utils/android_documents.dart';
 import '../widgets/dialog.dart';
 import 'home_page.dart';
 import 'mobile_keyboard_shortcuts_page.dart';
@@ -285,70 +284,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     } else {
       return false;
     }
-  }
-
-  Future<void> _selectFolder() async {
-    try {
-      final workspace = await gFFI.dialogManager.show<bool>(
-          (_, close, __) => CustomAlertDialog(
-                title: Text(translate('Change Path')),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  ListTile(
-                    title: Text(translate('RustDesk storage')),
-                    onTap: () => close(true),
-                  ),
-                  ListTile(
-                    title: Text('${translate('Other folders')}…'),
-                    onTap: () => close(false),
-                  ),
-                ]),
-              ),
-          backDismiss: true,
-          clickMaskDismiss: true);
-      if (workspace == null) return;
-      if (workspace) {
-        showToast(await AndroidDocuments.workspace(share: true));
-        await bind.setLocalFlutterOption(
-            k: 'android-file-transfer-folder-setup', v: 'Y');
-        return;
-      }
-      final selected = await AndroidDocuments.selectFolder(share: true);
-      if (selected != null) {
-        await bind.setLocalFlutterOption(
-            k: 'android-file-transfer-folder-setup', v: 'Y');
-        showToast(AndroidDocuments.displayPath(selected['path'] as String));
-      }
-    } catch (error) {
-      showToast(error.toString());
-    }
-  }
-
-  CustomSettingsSection _fileTransferSection() {
-    return CustomSettingsSection(
-      child: ListenableBuilder(
-        listenable: gFFI.serverModel,
-        builder: (context, _) {
-          final permissionChangeLocked =
-              gFFI.serverModel.clients.any((c) => !c.disconnected) &&
-                  !option2bool(
-                    kOptionEnablePermChangeInAcceptWindow,
-                    bind.mainGetBuildinOption(
-                        key: kOptionEnablePermChangeInAcceptWindow),
-                  );
-          return SettingsSection(
-            title: Text(translate('Transfer file')),
-            tiles: [
-              SettingsTile(
-                title: Text(translate('Change Path')),
-                leading: const Icon(Icons.folder_open),
-                enabled: !permissionChangeLocked,
-                onPressed: (_) => _selectFolder(),
-              ),
-            ],
-          );
-        },
-      ),
-    );
   }
 
   @override
@@ -1096,11 +1031,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             title: Text(translate("Share screen")),
             tiles: shareScreenTiles,
           ),
-        if (isAndroid &&
-            !disabledSettings &&
-            !outgoingOnly &&
-            !hideSecuritySettings)
-          _fileTransferSection(),
         if (!bind.isIncomingOnly()) defaultDisplaySection(),
         if (isAndroid &&
             !disabledSettings &&

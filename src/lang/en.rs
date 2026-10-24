@@ -291,5 +291,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("api_server_connection_tip", "Your custom server uses unencrypted HTTP. Contact your administrator to enable HTTPS."),
         ("api_server_empty_tip", "With API Server empty, your custom server defaults to HTTP. Contact your administrator to enable HTTPS."),
         ("android-logs-folder-tip", "Choose a folder to store RustDesk log files."),
+        ("Choose which folder remote devices can access. You can change it later in {}.", "Choose which folder remote devices can access."),
     ].iter().cloned().collect();
 }
