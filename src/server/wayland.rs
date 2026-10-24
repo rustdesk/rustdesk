@@ -256,6 +256,20 @@ struct CapDisplayInfo {
     capturer: CapturerPtr,
 }
 
+fn cleanup_capturers(lock: &mut HashMap<usize, u64>) {
+    for (_, addr) in lock.drain() {
+        let cap_display_info: *mut CapDisplayInfo = addr as _;
+        unsafe {
+            if !cap_display_info.is_null() {
+                if !(*cap_display_info).capturer.0.is_null() {
+                    let _ = Box::from_raw((*cap_display_info).capturer.0);
+                }
+                let _ = Box::from_raw(cap_display_info);
+            }
+        }
+    }
+}
+
 /// Uinput desktop rect from the DRM display list, for a login screen where no compositor can be
 /// asked. `(minx, maxx, miny, maxy)`, in delivered-orientation physical pixels (a rotated
 /// output counts transposed, matching its frames): no compositor here applied a scale, so
@@ -553,7 +567,10 @@ fn init_displays() -> ResultType<()> {
         }
         log::debug!("Attempting to fix logical size with try_fix_logical_size()");
         try_fix_logical_size(&mut all);
-        *PIPEWIRE_INITIALIZED.write().unwrap() = true;
+        if all.is_empty() {
+            scrap::wayland::pipewire::close_session();
+            bail!("Failed to get capturer display info");
+        }
         let num = all.len();
         let primary = super::display_service::get_primary_2(&all);
         let mut displays = super::display_service::update_sync_displays(&all);
@@ -579,8 +596,15 @@ fn init_displays() -> ResultType<()> {
         for (idx, display) in all.into_iter().enumerate() {
             // No `with_context` here: the peer is shown `format!("{}", err)`, which
             // renders only the outermost layer, and the mapped reason is the inner one.
-            let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
-            let capturer = CapturerPtr(capturer);
+            let capturer = match Capturer::new(display) {
+                Ok(c) => CapturerPtr(Box::into_raw(Box::new(c))),
+                Err(e) => {
+                    cleanup_capturers(&mut lock);
+                    *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+                    scrap::wayland::pipewire::close_session();
+                    return Err(e.into());
+                }
+            };
 
             let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
                 rects: rects.clone(),
@@ -593,6 +617,8 @@ fn init_displays() -> ResultType<()> {
 
             lock.insert(idx, cap_display_info as u64);
         }
+
+        *PIPEWIRE_INITIALIZED.write().unwrap() = true;
     }
     Ok(())
 }
