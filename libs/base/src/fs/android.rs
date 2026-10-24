@@ -77,7 +77,7 @@ struct Metadata {
     name: String,
     directory: bool,
     size: i64,
-    modified: u64,
+    modified: i64,
 }
 
 fn entry(value: Value) -> ResultType<FileEntry> {
@@ -96,7 +96,7 @@ fn entry(value: Value) -> ResultType<FileEntry> {
         is_hidden: meta.name.starts_with('.'),
         name: meta.name,
         size: if meta.directory { 0 } else { meta.size as u64 },
-        modified_time: meta.modified,
+        modified_time: meta.modified.max(0) as u64,
         ..Default::default()
     })
 }
@@ -237,6 +237,7 @@ pub fn take_file(value: &Value) -> ResultType<std::fs::File> {
 #[cfg(any(target_os = "android", all(test, unix)))]
 pub(super) async fn open(
     path: String,
+    expected: (u64, u64),
 ) -> ResultType<(
     tokio::fs::File,
     super::android_descriptor::DocumentDescriptor,
@@ -245,6 +246,10 @@ pub(super) async fn open(
         let token = request(json!({"op": "open", "path": path}))?;
         let file = take_file(&token["fd"])?;
         let descriptor = super::android_descriptor::DocumentDescriptor::new(&token)?;
+        let current = stat(&path)?.ok_or(anyhow!("Document no longer exists"))?;
+        if (current.modified_time, current.size) != expected {
+            bail!("Document changed since it was listed; restart the transfer");
+        }
         Ok::<_, hbb_common::anyhow::Error>((file, descriptor))
     })
     .await??;
@@ -254,3 +259,19 @@ pub(super) async fn open(
 #[cfg(test)]
 #[path = "android_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+
+    #[test]
+    fn negative_modification_time_is_unknown() {
+        for modified in [-1, 0, 1] {
+            let metadata = entry(json!({
+                "name": "notes.txt", "directory": false, "size": 12, "modified": modified
+            }))
+            .unwrap();
+            assert_eq!(metadata.modified_time, modified.max(0) as u64);
+        }
+    }
+}

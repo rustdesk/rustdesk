@@ -56,6 +56,7 @@ pub(super) async fn failed_finalization_discards_partial_data(path: &str, output
 pub(super) async fn changed_source_without_timestamp_rejects_resume(path: &str, output: &Path) {
     let path = format!("{path}/notes.txt");
     std::fs::write(output, b"old contents").unwrap();
+    stale_metadata_rejects_send(&path).await;
     let mut sender = sending(&path, true);
     let original_digest = sender.init_data_stream_for_cm().await.unwrap();
     assert_eq!(original_digest, Some((0, b"old contents".len() as u64)));
@@ -94,4 +95,17 @@ pub(super) async fn changed_source_without_timestamp_rejects_resume(path: &str, 
     );
     assert!(fresh.read().await.unwrap().unwrap().data.is_empty());
     std::fs::remove_file(output).unwrap();
+}
+
+async fn stale_metadata_rejects_send(path: &str) {
+    for (size, modified_time) in [(12, 1), (13, 0)] {
+        let mut sender = sending(path, true)
+            .with_files(vec![FileEntry {
+                size,
+                modified_time,
+                ..Default::default()
+            }])
+            .unwrap();
+        assert!(sender.init_data_stream_for_cm().await.is_err());
+    }
 }

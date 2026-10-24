@@ -70,7 +70,15 @@ impl TransferJob {
         if self.data_stream.is_some() {
             return Ok(false);
         }
-        let result = android::open(self.document_path(self.file_num as usize)?).await;
+        let entry = self
+            .files
+            .get(self.file_num as usize)
+            .ok_or(anyhow!("Wrong file number"))?;
+        let result = android::open(
+            self.document_path(self.file_num as usize)?,
+            (entry.modified_time, entry.size),
+        )
+        .await;
         self.file_confirmed = false;
         self.file_is_waiting = false;
         match result {
