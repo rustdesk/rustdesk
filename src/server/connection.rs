@@ -3640,6 +3640,16 @@ impl Connection {
                                 self.read_dir(&rd.path, rd.include_hidden);
                             }
                             Some(file_action::Union::AllFiles(f)) => {
+                                #[cfg(target_os = "android")]
+                                if fs::android::is_path(std::path::Path::new(&f.path)) {
+                                    self.send_fs(ipc::FS::ReadAllFiles {
+                                        path: f.path,
+                                        id: f.id,
+                                        include_hidden: f.include_hidden,
+                                        conn_id: self.inner.id(),
+                                    });
+                                    return true;
+                                }
                                 if crate::common::need_fs_cm_send_files() {
                                     self.send_fs(ipc::FS::ReadAllFiles {
                                         path: f.path,

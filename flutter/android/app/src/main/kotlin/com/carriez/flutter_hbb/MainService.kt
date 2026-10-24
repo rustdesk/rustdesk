@@ -248,13 +248,6 @@ class MainService : Service() {
         updateScreenInfo(resources.configuration.orientation)
         initNotification()
 
-        val logs = (application as MainApplication).documentStorage.logs
-        if (!logs.hasPermission()) {
-            Log.e(logTag, "Service requires access to ${logs.directoryPath}. Open the app to grant access.")
-            stopSelf()
-            return
-        }
-
         // keep the config dir same with flutter
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
@@ -351,10 +344,6 @@ class MainService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!(application as MainApplication).documentStorage.logs.hasPermission()) {
-            stopSelf(startId)
-            return START_NOT_STICKY
-        }
         Log.d("whichService", "this service: ${Thread.currentThread()}")
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACT_INIT_MEDIA_PROJECTION_AND_SERVICE) {

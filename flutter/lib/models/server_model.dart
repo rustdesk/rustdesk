@@ -401,7 +401,10 @@ class ServerModel with ChangeNotifier {
         stopService();
       }
     } else {
-      if (isAndroid && !await showAndroidFileTransferSetup(gFFI)) return;
+      if (isAndroid) {
+        await AndroidDocuments.requireLogFolder();
+        await showAndroidFileTransferSetup(gFFI);
+      }
       await checkRequestNotificationPermission();
       if (bind.mainGetLocalOption(key: kOptionDisableFloatingWindow) != 'Y') {
         await checkFloatingWindowPermission();
@@ -433,7 +436,6 @@ class ServerModel with ChangeNotifier {
 
   /// Start the screen sharing service.
   Future<void> startService() async {
-    if (isAndroid && !await AndroidDocuments.requireLogFolder()) return;
     _isStart = true;
     notifyListeners();
     parent.target?.ffiModel.updateEventListener(parent.target!.sessionId, "");
