@@ -7041,7 +7041,7 @@ dependencies = [
 [[package]]
 name = "rust-pulsectl"
 version = "0.2.12"
-source = "git+https://github.com/rustdesk-org/pulsectl#aa34dde499aa912a3abc5289cc0b547bd07dd6e2"
+source = "git+https://github.com/rustdesk-org/pulsectl#d2ec086b5770dce934a66956364d09df8cc9484c"
 dependencies = [
  "libpulse-binding",
 ]
