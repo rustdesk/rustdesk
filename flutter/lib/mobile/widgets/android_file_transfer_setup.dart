@@ -19,6 +19,7 @@ Future<bool> showAndroidFileTransferSetup(FFI ffi) async {
   }
 
   try {
+    if (isAndroid && !await AndroidDocuments.requireLogFolder()) return false;
     final choice = await ffi.dialogManager.show<_FolderChoice>(
       (_, close, __) => _setupDialog(close),
       backDismiss: true,

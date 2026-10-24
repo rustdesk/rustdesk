@@ -38,10 +38,7 @@ internal class DocumentPicker(private val activity: Activity) {
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                activity.contentResolver.persistedUriPermissions.none {
-                    DocumentsContract.isTreeUri(it.uri) && !storage.logs.isLogGrant(it.uri)
-                }) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,
                     DocumentsContract.buildDocumentUri(
                         "com.android.externalstorage.documents", "primary:Documents"))
@@ -135,7 +132,7 @@ internal class DocumentPicker(private val activity: Activity) {
             putExtra(Intent.EXTRA_TITLE, "Allow logs in Android/media/RustDesk")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 putExtra(DocumentsContract.EXTRA_INITIAL_URI,
-                    DocumentsContract.buildDocumentUri(DocumentLogs.AUTHORITY, DocumentLogs.DIRECTORY_ID))
+                    DocumentsContract.buildDocumentUri(DocumentLogs.AUTHORITY, storage.logs.initialDirectoryId()))
             }
         }
         try {
