@@ -731,6 +731,8 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut first_frame = true;
     // Set once the encoder emits its first packet; until then it may legitimately return nothing.
     let mut encoder_warmed_up = false;
+    // Tracks the bounded warm-up window: cleared on the first real (non-empty) output.
+    let mut warmup_start: Option<Instant> = None;
     let capture_width = c.width;
     let capture_height = c.height;
     let mut static_refresh = static_refresh::StaticRefresh::new(
@@ -882,6 +884,14 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_height,
                     )?;
                     static_refresh.on_frame_encoded(&result);
+                    // Only a not-yet-warmed encoder treats empty output as warm-up; VPX
+                    // rate-control can drop frames after warm-up without meaning the codec failed.
+                    if !encoder_warmed_up && check_warmup_timeout(&mut warmup_start, &result.send_conn_ids) {
+                        warmup_start = None;
+                        encoder.disable();
+                        log::error!("switch due to warm-up timeout (3s with no output)");
+                        bail!("SWITCH");
+                    }
                     frame_controller.set_send(now, result.send_conn_ids);
                     send_counter += 1;
                 }
@@ -931,6 +941,12 @@ fn run(vs: VideoService) -> ResultType<()> {
                     }
                 }
                 if !encoder.latency_free() && yuv.len() > 0 {
+                    // Reset the repeated-frame budget only during initial warm-up, once the
+                    // encoder has produced output it keeps its budget so unchanged frames are
+                    // not re-encoded forever on a static desktop.
+                    if !encoder_warmed_up && warmup_start.is_some() {
+                        repeat_encode_counter = 0;
+                    }
                     // yun.len() > 0 means the frame is not texture.
                     if repeat_encode_counter < repeat_encode_max {
                         repeat_encode_counter += 1;
@@ -948,6 +964,14 @@ fn run(vs: VideoService) -> ResultType<()> {
                             capture_height,
                         )?
                         .send_conn_ids;
+                        // Only a not-yet-warmed encoder treats empty output as warm-up; VPX
+                        // rate-control can drop frames after warm-up without meaning the codec failed.
+                        if !encoder_warmed_up && check_warmup_timeout(&mut warmup_start, &send_conn_ids) {
+                            warmup_start = None;
+                            encoder.disable();
+                            log::error!("switch due to warm-up timeout (3s with no output)");
+                            bail!("SWITCH");
+                        }
                         static_refresh.on_encoded(!send_conn_ids.is_empty());
                         frame_controller.set_send(now, send_conn_ids);
                         send_counter += 1;
@@ -1273,6 +1297,29 @@ fn refresh_allowed(unfed: bool, warmed_up: bool, latency_free: bool) -> bool {
     !cfg!(target_os = "macos") || unfed || warmed_up || latency_free
 }
 
+/// Returns true if the encoder warm-up window has expired (encoder unhealthy).
+/// Returns false if still within the bounded 3-second warm-up period.
+/// Resets the timer whenever a real frame is delivered (non-empty send set).
+fn check_warmup_timeout(
+    warmup_start: &mut Option<Instant>,
+    send_conn_ids: &HashSet<i32>,
+) -> bool {
+    if send_conn_ids.is_empty() {
+        if warmup_start.is_none() {
+            *warmup_start = Some(Instant::now());
+        }
+        warmup_start.as_ref().map_or(false, |start| start.elapsed().as_secs() >= 3)
+    } else {
+        *warmup_start = None;
+        false
+    }
+}
+
+/// Encode one frame through the current encoder and distribute the result.
+/// Empty warm-up output before the encoder has ever produced a frame is
+/// returned as a no-op empty result, so the caller can bound that phase with
+/// the warm-up window; real encode errors count toward the error counter and
+/// may switch encoders.
 #[inline]
 fn handle_one_frame(
     display: usize,
@@ -1315,6 +1362,16 @@ fn handle_one_frame(
             send_conn_ids = sp.send_video_frame(msg);
         }
         Err(e) => {
+            // Encoder warm-up (empty output) is flow control, not an error, but only
+            // before the encoder has produced its first frame. After warm-up a sustained
+            // empty output is a real fault and must fall through to the error counter so
+            // it is bounded and recovers, not swallowed forever.
+            if !*encoder_warmed_up && e.to_string() == "encoder warm-up pending" {
+                return Ok(static_refresh::FrameEncodeResult {
+                    send_conn_ids: Default::default(),
+                    vpx_no_output: false,
+                });
+            }
             vpx_no_output = e.is::<scrap::VpxNoOutput>();
             *encode_fail_counter += 1;
             // Encoding errors are not frequent except on Android
@@ -1576,6 +1633,8 @@ fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, da
 #[cfg(test)]
 mod tests {
     use super::refresh_allowed;
+    use super::check_warmup_timeout;
+    use std::{collections::HashSet, time::{Duration, Instant}};
 
     #[test]
     fn refresh_waits_for_hw_encoder_warmup() {
@@ -1588,5 +1647,24 @@ mod tests {
         assert!(refresh_allowed(false, false, true));
         // Nothing fed yet: no warm-up to lose, and a refresh can restart a stalled capturer.
         assert!(refresh_allowed(true, false, false));
+
+    }
+    #[test]
+    fn warmup_window_is_bounded() {
+        let empty: HashSet<i32> = HashSet::new();
+        let sent: HashSet<i32> = [1, 2, 3].iter().copied().collect();
+
+        // First empty output opens the window; still within the bound.
+        let mut warmup: Option<Instant> = None;
+        assert!(!check_warmup_timeout(&mut warmup, &empty));
+
+        // A real frame clears the window; the next empty output starts a fresh
+        // window rather than continuing the old one.
+        assert!(!check_warmup_timeout(&mut warmup, &sent));
+        assert!(!check_warmup_timeout(&mut warmup, &empty));
+
+        // A window that has run past the bound reads as unhealthy.
+        let mut expired = Some(Instant::now() - Duration::from_secs(3));
+        assert!(check_warmup_timeout(&mut expired, &empty));
     }
 }

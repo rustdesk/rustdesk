@@ -111,6 +111,10 @@ impl EncoderApi for HwRamEncoder {
         }
     }
 
+    /// Encode the frame; returns encoded frames when the encoder produced a
+    /// packet, or an "encoder warm-up pending" error when the encoder accepted
+    /// the frame but no packet is ready yet - callers treat that as flow
+    /// control rather than a hard failure.
     fn encode_to_message(&mut self, input: EncodeInput, ms: i64) -> ResultType<VideoFrame> {
         let mut vf = VideoFrame::new();
         let mut frames = Vec::new();
@@ -137,7 +141,7 @@ impl EncoderApi for HwRamEncoder {
             }
             Ok(vf)
         } else {
-            Err(anyhow!("no valid frame"))
+            Err(anyhow!("encoder warm-up pending"))
         }
     }
 
