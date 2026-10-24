@@ -135,6 +135,9 @@ impl Grants {
         info: DeviceInfo,
     ) -> ResultType<()> {
         self.check_ticket(ticket)?;
+        if !info.id.is_empty() {
+            self.records.retain(|record| record.info.id != info.id);
+        }
         let now = info.time;
         self.records.push(Record {
             verifier,
