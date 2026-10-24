@@ -129,7 +129,7 @@ internal class DocumentPicker(private val activity: Activity) {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-            putExtra(Intent.EXTRA_TITLE, "Allow logs in Android/media/RustDesk")
+            putExtra(Intent.EXTRA_TITLE, "Allow logs in ${storage.logs.directoryPath}")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 putExtra(DocumentsContract.EXTRA_INITIAL_URI,
                     DocumentsContract.buildDocumentUri(DocumentLogs.AUTHORITY, storage.logs.initialDirectoryId()))

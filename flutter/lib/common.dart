@@ -34,14 +34,12 @@ import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
 import 'mobile/pages/view_camera_page.dart';
 import 'mobile/pages/terminal_page.dart';
-import 'mobile/widgets/android_file_transfer_setup.dart';
 import 'desktop/pages/remote_page.dart' as desktop_remote;
 import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
 import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
-import 'utils/android_documents.dart';
 
 import 'package:flutter_hbb/native/win32.dart'
     if (dart.library.html) 'package:flutter_hbb/web/win32.dart';
@@ -2629,12 +2627,6 @@ connect(BuildContext context, String id,
       });
     }
   } else {
-    if (isAndroid) {
-      if (!await AndroidDocuments.requireLogFolder() || !context.mounted) {
-        if (isTerminal) bind.mainSetEnv(key: 'IS_TERMINAL_ADMIN', value: null);
-        return;
-      }
-    }
     if (isFileTransfer) {
       if (isWeb) {
         Navigator.push(
@@ -2648,9 +2640,6 @@ connect(BuildContext context, String id,
           ),
         );
       } else {
-        if (isAndroid) {
-          if (!await showAndroidFileTransferSetup(gFFI) || !context.mounted) return;
-        }
         Navigator.push(
           context,
           MaterialPageRoute(

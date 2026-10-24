@@ -1,25 +1,53 @@
 use base::fs::android;
 use hbb_common::{
-    flexi_logger::{opt_format, writers::LogWriter, DeferredNow, Logger},
+    config::Config,
+    flexi_logger::{
+        opt_format,
+        writers::{FileLogWriter, LogWriter},
+        Age, Cleanup, Criterion, DeferredNow, FileSpec, FlexiLoggerError, Logger, Naming,
+    },
     log::{Level, LevelFilter, Log, Record},
     log_throttle::LogThrottle,
 };
 use std::{io, sync::Once, time::Duration};
 
 const ERROR_INTERVAL: Duration = Duration::from_secs(60);
+const DEFAULT_LOG_MAX_BYTES: u64 = 16 * 1024 * 1024;
+const DEFAULT_LOG_FILE_COUNT: usize = 90;
 
 pub fn initialize() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
         let result = Logger::try_with_env_or_str("debug,reqwest=warn,hyper_util=warn,rustls=warn,webrtc-sctp=warn,webrtc=warn,webrtc_ice::agent::agent_internal=error,webrtc::peer_connection=error")
-            .and_then(|logger| logger.log_to_writer(Box::new(DocumentWriter)).start());
+            .and_then(|logger| {
+                let default_writer = FileLogWriter::builder(FileSpec::default().directory(Config::log_path()))
+                    .format(opt_format)
+                    .rotate(
+                        Criterion::AgeOrSize(Age::Day, DEFAULT_LOG_MAX_BYTES),
+                        Naming::Timestamps,
+                        Cleanup::KeepLogFiles(DEFAULT_LOG_FILE_COUNT),
+                    )
+                    .try_build();
+                logger.log_to_writer(Box::new(DocumentWriter { default_writer })).start()
+            });
         if let Err(error) = result {
             report_error(&error);
         }
     });
 }
 
-struct DocumentWriter;
+struct DocumentWriter {
+    default_writer: Result<FileLogWriter, FlexiLoggerError>,
+}
+
+impl DocumentWriter {
+    fn write_default(&self, now: &mut DeferredNow, record: &Record) -> io::Result<()> {
+        self.default_writer
+            .as_ref()
+            .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))?
+            .write(now, record)
+    }
+}
 
 impl LogWriter for DocumentWriter {
     fn write(&self, now: &mut DeferredNow, record: &Record) -> io::Result<()> {
@@ -38,25 +66,35 @@ impl LogWriter for DocumentWriter {
         }));
         match result {
             Ok(value) if value.as_bool() == Some(true) => Ok(()),
-            Ok(value) if value.as_bool() == Some(false) => {
-                // Startup diagnostics precede the first user-granted log directory.
-                logcat().log(record);
-                Ok(())
-            }
+            Ok(value) if value.as_bool() == Some(false) => self.write_default(now, record),
             result => {
                 let error = match result {
                     Err(error) => error.to_string(),
                     _ => "Invalid document logger response".to_owned(),
                 };
-                report_error(&error);
-                Err(io::Error::new(io::ErrorKind::Other, error))
+                let result = self.write_default(now, record).map_err(|default_error| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "Public log directory: {error}; default log directory: {default_error}"
+                        ),
+                    )
+                });
+                match &result {
+                    Ok(()) => report_error(&format!(
+                        "{error}; writing to the original default log directory"
+                    )),
+                    Err(error) => report_error(error),
+                }
+                result
             }
         }
     }
 
     fn flush(&self) -> io::Result<()> {
-        // The Android writer writes directly to an unbuffered file stream.
-        Ok(())
+        self.default_writer
+            .as_ref()
+            .map_or(Ok(()), |writer| writer.flush())
     }
 }
 

@@ -58,7 +58,7 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 val logs = (context.applicationContext as MainApplication).documentStorage.logs
                 if (!logs.ensureReady()) {
-                    Log.e(logTag, "Boot startup requires writable logs in Android/media/RustDesk. Open RustDesk to grant access.")
+                    Log.e(logTag, "Boot startup requires writable logs in ${logs.directoryPath}. Open the app to grant access.")
                     return@thread
                 }
                 startService()

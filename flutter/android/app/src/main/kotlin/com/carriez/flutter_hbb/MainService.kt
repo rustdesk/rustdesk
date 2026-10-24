@@ -248,8 +248,9 @@ class MainService : Service() {
         updateScreenInfo(resources.configuration.orientation)
         initNotification()
 
-        if (!(application as MainApplication).documentStorage.logs.hasPermission()) {
-            Log.e(logTag, "Service requires access to Android/media/RustDesk. Open RustDesk to grant access.")
+        val logs = (application as MainApplication).documentStorage.logs
+        if (!logs.hasPermission()) {
+            Log.e(logTag, "Service requires access to ${logs.directoryPath}. Open the app to grant access.")
             stopSelf()
             return
         }

@@ -308,10 +308,14 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (workspace == null) return;
       if (workspace) {
         showToast(await AndroidDocuments.workspace(share: true));
+        await bind.setLocalFlutterOption(
+            k: 'android-file-transfer-folder-setup', v: 'Y');
         return;
       }
       final selected = await AndroidDocuments.selectFolder(share: true);
       if (selected != null) {
+        await bind.setLocalFlutterOption(
+            k: 'android-file-transfer-folder-setup', v: 'Y');
         showToast(AndroidDocuments.displayPath(selected['path'] as String));
       }
     } catch (error) {

@@ -313,7 +313,6 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleFile() async {
-    if (isAndroid && !_fileOk && !await showAndroidFileTransferSetup(gFFI)) return;
     if (clients.any((c) => !c.disconnected)) {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
