@@ -54,7 +54,6 @@ def system2(cmd):
         sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
         sys.exit(-1)
 
-
 def get_version():
     with open("Cargo.toml", encoding="utf-8") as fh:
         for line in fh:
@@ -103,6 +102,25 @@ def parse_rc_features(feature):
     else:
         raise Exception(f'Unsupported features param {feature}')
 
+def download_flutter_deps_lockfile():
+    exit_code = os.system('flutter packages pub get --enforce-lockfile')
+    if exit_code != 0:
+        exit_code = os.system('flutter packages pub get')
+        if exit_code != 0:
+            sys.stderr.write("Error occurred when executing: `flutter packages pub get`. Exiting.\n")
+            sys.exit(-1)
+
+        sys.stderr.write("Error occurred when executing: `flutter packages pub get --enforce-lockfile`. Exiting.\n")
+        sys.stderr.write("\n")
+        sys.stderr.write("Contents of pubspec.lock after unprotected `flutter packages pub get`:\n")
+        sys.stderr.write("===================\n")
+
+        with open('pubspec.lock', 'rb') as f:
+            blob = f.read().decode('utf-8')
+            sys.stderr.write(blob)
+
+        sys.stderr.write("===================\n")
+        sys.exit(-1)
 
 def make_parser():
     parser = argparse.ArgumentParser(description='Build script.')
@@ -184,6 +202,7 @@ def generate_build_script_for_docker():
     with open("/tmp/build.sh", "w") as f:
         f.write('''
             #!/bin/bash
+            set -eo pipefail
             # environment
             export CPATH="$(clang -v 2>&1 | grep "Selected GCC installation: " | cut -d' ' -f4-)/include"
             # flutter
@@ -196,7 +215,32 @@ def generate_build_script_for_docker():
             dart pub global activate ffigen --version 5.0.1
             pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
             pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . --locked && popd
-            pushd flutter && flutter pub get && popd
+            pushd flutter
+            if ! flutter packages pub get --enforce-lockfile; then
+              # basilgello: re-generate lockfile and abort the workflow with error
+              # to signal the devs that pubspec-bridge.lock differs from the
+              # generated one
+              flutter packages pub get
+              if ! git diff --quiet --exit-code "pubspec.lock"; then
+                echo "ERROR: Lockfile 'pubspec.lock' differs!"
+                echo ""
+                echo "Lockfile 'pubspec.lock' generated with 'pubspec.yaml'"
+                echo "differs from what we locked in the repository"
+                echo ""
+                echo "Please verify manually if the new dependencies are OK"
+                echo "and update the regenerated 'pubspec.lock' file"
+                echo "then commit and PR it!"
+                echo ""
+                echo "Contents of pubspec.lock:"
+                echo "=========================="
+                cat pubspec.lock
+                echo "=========================="
+                echo ""
+
+                exit 1
+              fi
+            fi
+            popd
             ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
             # install vcpkg
             pushd /opt
@@ -739,6 +783,7 @@ def build_flutter_deb(version, features):
         system2(f'cargo build --locked --features {features} --lib --release')
         ffi_bindgen_function_refactor()
     os.chdir('flutter')
+    download_flutter_deps_lockfile()
     system2('flutter build linux --release')
     system2('mkdir -p tmpdeb/usr/bin/')
     system2('mkdir -p tmpdeb/usr/share/rustdesk')
@@ -944,6 +989,7 @@ def build_flutter_dmg(version, features):
     # so the universal-by-default ARCHS_STANDARD doesn't try to link a missing slice.
     # FLUTTER_XCODE_* env vars are forwarded to xcodebuild as build settings.
     mac_arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
+    system2(f'FLUTTER_XCODE_ARCHS={mac_arch} FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES flutter packages pub get --enforce-lockfile')
     system2(
         f'FLUTTER_XCODE_ARCHS={mac_arch} FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES flutter build macos --release')
     system2('cp -rf ../target/release/service ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/')
@@ -960,6 +1006,7 @@ def build_flutter_arch_manjaro(version, features):
         system2(f'cargo build --locked --features {features} --lib --release')
     ffi_bindgen_function_refactor()
     os.chdir('flutter')
+    download_flutter_deps_lockfile()
     system2('flutter build linux --release')
     system2(f'strip {flutter_build_dir}/lib/librustdesk.so')
     os.chdir('../res')
@@ -973,6 +1020,7 @@ def build_flutter_windows(version, features, skip_portable_pack):
             print("cargo build failed, please check rust source code.")
             exit(-1)
     os.chdir('flutter')
+    download_flutter_deps_lockfile()
     system2('flutter build windows --release')
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',

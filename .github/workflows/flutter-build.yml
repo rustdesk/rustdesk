@@ -275,10 +275,12 @@ jobs:
       - name: Patch RustDesk sources for Flutter 3.44 (arm64)
         # arm64 is the only target on Flutter 3.44; apply its source/pubspec deltas on the fly
         # (shared with the 3.44 bridge job) so the committed sources stay on Flutter 3.24.5.
-        # `flutter build` then runs `pub get`, regenerating pubspec.lock for the bumped deps.
         if: ${{ matrix.job.arch == 'aarch64' }}
         shell: bash
-        run: bash .github/patches/apply_flutter_3.44_source_patches.sh
+        run: |
+          set -eo pipefail
+          bash .github/patches/apply_flutter_3.44_source_patches.sh
+          cp flutter/pubspec-bridge-3.44.8.lock flutter/pubspec.lock
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -814,12 +816,41 @@ jobs:
         run: |
           rustup target add ${{ matrix.job.target }}
           cargo build --locked --features flutter,hwcodec --release --target aarch64-apple-ios --lib
-          
+
       - name: Upload liblibrustdesk.a Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: liblibrustdesk.a
           path: target/aarch64-apple-ios/release/liblibrustdesk.a
+
+      - name: Download Rustdesk Flutter dependencies using lockfile
+        shell: bash
+        run: |
+          pushd flutter
+          if ! flutter packages pub get --enforce-lockfile; then
+            # basilgello: re-generate lockfile and abort the workflow with error
+            # to signal the devs that pubspec-bridge.lock differs from the
+            # generated one
+            flutter packages pub get
+            if ! git diff --quiet --exit-code "pubspec.lock"; then
+              echo "ERROR: Lockfile 'pubspec.lock' differs!"
+              echo ""
+              echo "Lockfile 'pubspec.lock' generated with 'pubspec.yaml'"
+              echo "differs from what we locked in the repository"
+              echo ""
+              echo "Please verify manually if the new dependencies are OK"
+              echo "and update the regenerated 'pubspec.lock' file"
+              echo "then commit and PR it!"
+              echo ""
+              echo "Contents of pubspec.lock:"
+              echo "=========================="
+              cat pubspec.lock
+              echo "=========================="
+              echo ""
+
+              exit 1
+            fi
+          fi
 
       - name: Build rustdesk
         shell: bash
@@ -975,6 +1006,35 @@ jobs:
         with:
           name: bridge-artifact
           path: ./
+
+      - name: Download Rustdesk Flutter dependencies using lockfile
+        shell: bash
+        run: |
+          pushd flutter
+          if ! flutter packages pub get --enforce-lockfile; then
+            # basilgello: re-generate lockfile and abort the workflow with error
+            # to signal the devs that pubspec-bridge.lock differs from the
+            # generated one
+            flutter packages pub get
+            if ! git diff --quiet --exit-code "pubspec.lock"; then
+              echo "ERROR: Lockfile 'pubspec.lock' differs!"
+              echo ""
+              echo "Lockfile 'pubspec.lock' generated with 'pubspec.yaml'"
+              echo "differs from what we locked in the repository"
+              echo ""
+              echo "Please verify manually if the new dependencies are OK"
+              echo "and update the regenerated 'pubspec.lock' file"
+              echo "then commit and PR it!"
+              echo ""
+              echo "Contents of pubspec.lock:"
+              echo "=========================="
+              cat pubspec.lock
+              echo "=========================="
+              echo ""
+
+              exit 1
+            fi
+          fi
 
       - name: Run the Dart tests
         if: ${{ !inputs.upload-artifact && matrix.job.arch == 'aarch64' }}
@@ -1506,6 +1566,35 @@ jobs:
           name: librustdesk.so.${{ matrix.job.target }}
           path: ./target/${{ matrix.job.target }}/release/liblibrustdesk.so
 
+      - name: Download Rustdesk Flutter dependencies using lockfile
+        shell: bash
+        run: |
+          pushd flutter
+          if ! flutter packages pub get --enforce-lockfile; then
+            # basilgello: re-generate lockfile and abort the workflow with error
+            # to signal the devs that pubspec-bridge.lock differs from the
+            # generated one
+            flutter packages pub get
+            if ! git diff --quiet --exit-code "pubspec.lock"; then
+              echo "ERROR: Lockfile 'pubspec.lock' differs!"
+              echo ""
+              echo "Lockfile 'pubspec.lock' generated with 'pubspec.yaml'"
+              echo "differs from what we locked in the repository"
+              echo ""
+              echo "Please verify manually if the new dependencies are OK"
+              echo "and update the regenerated 'pubspec.lock' file"
+              echo "then commit and PR it!"
+              echo ""
+              echo "Contents of pubspec.lock:"
+              echo "=========================="
+              cat pubspec.lock
+              echo "=========================="
+              echo ""
+
+              exit 1
+            fi
+          fi
+
       - name: Build rustdesk
         shell: bash
         env:
@@ -1715,6 +1804,35 @@ jobs:
         with:
           name: librustdesk.so.i686-linux-android
           path: ./flutter/android/app/src/main/jniLibs/x86
+
+      - name: Download Rustdesk Flutter dependencies using lockfile
+        shell: bash
+        run: |
+          pushd flutter
+          if ! flutter packages pub get --enforce-lockfile; then
+            # basilgello: re-generate lockfile and abort the workflow with error
+            # to signal the devs that pubspec-bridge.lock differs from the
+            # generated one
+            flutter packages pub get
+            if ! git diff --quiet --exit-code "pubspec.lock"; then
+              echo "ERROR: Lockfile 'pubspec.lock' differs!"
+              echo ""
+              echo "Lockfile 'pubspec.lock' generated with 'pubspec.yaml'"
+              echo "differs from what we locked in the repository"
+              echo ""
+              echo "Please verify manually if the new dependencies are OK"
+              echo "and update the regenerated 'pubspec.lock' file"
+              echo "then commit and PR it!"
+              echo ""
+              echo "Contents of pubspec.lock:"
+              echo "=========================="
+              cat pubspec.lock
+              echo "=========================="
+              echo ""
+
+              exit 1
+            fi
+          fi
 
       - name: Build rustdesk
         shell: bash
@@ -2010,6 +2128,7 @@ jobs:
             case ${{ matrix.job.arch }} in
               aarch64)
                 export PATH=/opt/flutter-elinux/bin:$PATH
+                sed -i "s/flutter packages pub get --enforce-lockfile/flutter-elinux packages pub get --enforce-lockfile/g" ./build.py
                 sed -i "s/flutter build linux --release/flutter-elinux build linux --verbose/g" ./build.py
                 sed -i "s/x64\/release/arm64\/release/g" ./build.py
               ;;
@@ -2905,6 +3024,30 @@ jobs:
           popd
 
           pushd flutter
+          if ! flutter packages pub get --enforce-lockfile; then
+            # basilgello: re-generate lockfile and abort the workflow with error
+            # to signal the devs that pubspec-bridge.lock differs from the
+            # generated one
+            flutter packages pub get
+            if ! git diff --quiet --exit-code "pubspec.lock"; then
+              echo "ERROR: Lockfile 'pubspec.lock' differs!"
+              echo ""
+              echo "Lockfile 'pubspec.lock' generated with 'pubspec.yaml'"
+              echo "differs from what we locked in the repository"
+              echo ""
+              echo "Please verify manually if the new dependencies are OK"
+              echo "and update the regenerated 'pubspec.lock' file"
+              echo "then commit and PR it!"
+              echo ""
+              echo "Contents of pubspec.lock:"
+              echo "=========================="
+              cat pubspec.lock
+              echo "=========================="
+              echo ""
+
+              exit 1
+            fi
+          fi
           flutter build web --release
           cd build
           cp ../web/README.md web

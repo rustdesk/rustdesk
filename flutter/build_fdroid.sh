@@ -40,7 +40,7 @@ prepare_flutter() {
 
 	# Patch flutter
 
-	if dpkg --compare-versions "${VERSION}" ge "3.24.4"; then
+	if dpkg --compare-versions "${VERSION}" ge "3.24.4" && dpkg --compare-versions "${VERSION}" lt "3.44.0"; then
 		git apply "${ROOTDIR}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
 	fi
 
@@ -324,11 +324,7 @@ prebuild)
 
 	# Install Flutter bridge version
 
-	# Unbraced on purpose: F-Droid recipes rewrite the braced form with sed to
-	# pin a version, but the bridge generator only works with the Flutter
-	# version bridge.yml uses
-
-	prepare_flutter "$FLUTTER_BRIDGE_VERSION" "${HOME}/flutter"
+	prepare_flutter "${FLUTTER_BRIDGE_VERSION}" "${HOME}/flutter"
 
 	# Save changes
 
@@ -340,6 +336,17 @@ prebuild)
 		-i \
 		-e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
 		flutter/pubspec.yaml
+
+	# Temporary copy bridge lockfile into `pubspec.lock`
+	# so that `flutter packages pub get --enforce-lockfile` does
+	# not err out
+
+	if [ ! -f "flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock" ]; then
+		echo "ERROR: Lockfile 'flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock' does not exist!"
+		exit 1
+	fi
+
+	cp "flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock" flutter/pubspec.lock
 
 	# Download Flutter dependencies
 
@@ -454,7 +461,7 @@ build)
 	pushd flutter
 
 	flutter clean
-	flutter packages pub get
+	flutter packages pub get --enforce-lockfile
 
 	popd # flutter
 
