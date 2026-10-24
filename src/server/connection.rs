@@ -1419,6 +1419,7 @@ impl Connection {
         let whitelist: Vec<String> = Config::get_option("whitelist")
             .split(",")
             .filter(|x| !x.is_empty())
+            .map(str::trim)
             .map(|x| x.to_owned())
             .collect();
         if !whitelist.is_empty()
