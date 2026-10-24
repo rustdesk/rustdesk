@@ -277,7 +277,10 @@ jobs:
         # (shared with the 3.44 bridge job) so the committed sources stay on Flutter 3.24.5.
         if: ${{ matrix.job.arch == 'aarch64' }}
         shell: bash
-        run: bash .github/patches/apply_flutter_3.44_source_patches.sh
+        run: |
+          set -eo pipefail
+          bash .github/patches/apply_flutter_3.44_source_patches.sh
+          cp flutter/pubspec-bridge-3.44.8.lock flutter/pubspec.lock
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
