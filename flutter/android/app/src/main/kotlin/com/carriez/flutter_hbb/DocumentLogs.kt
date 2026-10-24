@@ -3,12 +3,10 @@ package com.carriez.flutter_hbb
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import android.util.Log
-import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.UUID
@@ -27,11 +25,6 @@ internal class DocumentLogs(private val context: Context) {
     private var failure: Exception? = null
 
     private fun grant(): Uri? = prefs.getString(LOG_GRANT, null)?.let(Uri::parse)
-
-    fun initialDirectoryId(): String {
-        val directory = File(Environment.getExternalStorageDirectory(), directoryPath)
-        return if (directory.isDirectory) directoryId else PARENT_ID
-    }
 
     fun hasPermission(): Boolean {
         val uri = grant() ?: return false
