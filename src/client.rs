@@ -5296,48 +5296,88 @@ pub mod peer_online {
             f(onlines, offlines)
         } else {
             let query_timeout = std::time::Duration::from_millis(3_000);
-            match query_online_states_(&ids, query_timeout).await {
-                Ok((onlines, offlines)) => {
-                    f(onlines, offlines);
-                }
-                Err(e) => {
-                    log::debug!("query onlines, {}", &e);
+            // Peers may carry an "id@server" suffix pointing to another rendezvous
+            // server; query each server for its own peers, otherwise they always
+            // show as offline.
+            let mut groups: std::collections::HashMap<String, Vec<String>> = Default::default();
+            for id in ids {
+                let server = id.split_once('@').map(|(_, s)| s).unwrap_or("").to_owned();
+                groups.entry(server).or_default().push(id);
+            }
+            let mut onlines = Vec::new();
+            let mut offlines = Vec::new();
+            let results = hbb_common::futures::future::join_all(groups.into_iter().map(
+                |(server, ids)| async move { query_online_states_(&ids, &server, query_timeout).await },
+            ))
+            .await;
+            for result in results {
+                match result {
+                    Ok((on, off)) => {
+                        onlines.extend(on);
+                        offlines.extend(off);
+                    }
+                    Err(e) => {
+                        log::debug!("query onlines, {}", &e);
+                    }
                 }
             }
+            f(onlines, offlines);
         }
     }
 
-    async fn create_online_stream() -> ResultType<Stream> {
-        let (rendezvous_server, _servers, _contained) =
-            crate::get_rendezvous_server(READ_TIMEOUT).await;
-        let tmp: Vec<&str> = rendezvous_server.split(":").collect();
-        if tmp.len() != 2 {
+    async fn create_online_stream(server: &str) -> ResultType<Stream> {
+        let server = server.split('?').next().unwrap_or_default();
+        let rendezvous_server = if server.is_empty() {
+            crate::get_rendezvous_server(READ_TIMEOUT).await.0
+        } else if server == super::PUBLIC_SERVER {
+            crate::check_port(
+                hbb_common::config::RENDEZVOUS_SERVERS[0],
+                hbb_common::config::RENDEZVOUS_PORT,
+            )
+        } else {
+            crate::check_port(server, hbb_common::config::RENDEZVOUS_PORT)
+        };
+        connect_tcp(online_server(&rendezvous_server)?, CONNECT_TIMEOUT).await
+    }
+
+    // The online state service listens one port below the rendezvous server.
+    // `check_port` writes an IPv6 server as `[addr]:port`, so split off the port
+    // at the last colon instead of splitting at every colon.
+    fn online_server(rendezvous_server: &str) -> ResultType<String> {
+        let Some((host, port)) = rendezvous_server.rsplit_once(':') else {
+            bail!("Invalid server address: {}", rendezvous_server);
+        };
+        // A host that contains a colon is an IPv6 address and must be in brackets.
+        if host.contains(':') && !(host.starts_with('[') && host.ends_with(']')) {
             bail!("Invalid server address: {}", rendezvous_server);
         }
-        let port: u16 = tmp[1].parse()?;
+        let port: u16 = port.parse()?;
         if port == 0 {
             bail!("Invalid server address: {}", rendezvous_server);
         }
-        let online_server = format!("{}:{}", tmp[0], port - 1);
-        connect_tcp(online_server, CONNECT_TIMEOUT).await
+        Ok(format!("{}:{}", host, port - 1))
     }
 
     async fn query_online_states_(
         ids: &Vec<String>,
+        server: &str,
         timeout: std::time::Duration,
     ) -> ResultType<(Vec<String>, Vec<String>)> {
+        let query_ids: Vec<String> = ids
+            .iter()
+            .map(|id| id.split('@').next().unwrap_or(id).to_owned())
+            .collect();
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_request(OnlineRequest {
             id: Config::get_id(),
-            peers: ids.clone(),
+            peers: query_ids,
             ..Default::default()
         });
 
-        let mut socket = match create_online_stream().await {
+        let mut socket = match create_online_stream(server).await {
             Ok(s) => s,
             Err(e) => {
-                log::debug!("Failed to create peers online stream, {e}");
-                return Ok((vec![], ids.clone()));
+                bail!("Failed to create peers online stream, {e}");
             }
         };
         // TODO: Use long connections to avoid socket creation
@@ -5345,8 +5385,7 @@ pub mod peer_online {
         // we may face the following error:
         // An established connection was aborted by the software in your host machine. (os error 10053)
         if let Err(e) = socket.send(&msg_out).await {
-            log::debug!("Failed to send peers online states query, {e}");
-            return Ok((vec![], ids.clone()));
+            bail!("Failed to send peers online states query, {e}");
         }
         // Retry for 2 times to get the online response
         for _ in 0..2 {
@@ -5407,6 +5446,25 @@ pub mod peer_online {
 
             assert!(Client::is_expected_webrtc_ice_candidate(&ice, "session-a"));
             assert!(!Client::is_expected_webrtc_ice_candidate(&ice, "session-b"));
+        }
+
+        #[test]
+        fn online_server_is_one_port_below_the_rendezvous_server() {
+            use super::online_server;
+
+            assert_eq!(
+                online_server("example.com:21116").unwrap(),
+                "example.com:21115"
+            );
+            assert_eq!(online_server("192.0.2.1:21116").unwrap(), "192.0.2.1:21115");
+            assert_eq!(
+                online_server("[2001:db8::1]:21116").unwrap(),
+                "[2001:db8::1]:21115"
+            );
+            assert_eq!(online_server("[::1]:21116").unwrap(), "[::1]:21115");
+            assert!(online_server("example.com").is_err());
+            assert!(online_server("example.com:0").is_err());
+            assert!(online_server("2001:db8::1:21116").is_err());
         }
     }
 }
