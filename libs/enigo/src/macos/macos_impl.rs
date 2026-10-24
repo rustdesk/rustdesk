@@ -199,6 +199,14 @@ impl Default for Enigo {
     }
 }
 
+fn key_sequence_events(source: &CGEventSource, cluster: &str) -> Result<[CGEvent; 2], ()> {
+    let key_down = CGEvent::new_keyboard_event(source.clone(), 0, true)?;
+    key_down.set_string(cluster);
+    let key_up = CGEvent::new_keyboard_event(source.clone(), 0, false)?;
+    key_up.set_string(cluster);
+    Ok([key_down, key_up])
+}
+
 impl MouseControllable for Enigo {
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -426,9 +434,10 @@ impl KeyboardControllable for Enigo {
         let clusters = UnicodeSegmentation::graphemes(sequence, true).collect::<Vec<&str>>();
         for cluster in clusters {
             if let Some(src) = self.event_source.as_ref() {
-                if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), 0, true) {
-                    event.set_string(cluster);
-                    self.post(event, None);
+                if let Ok(events) = key_sequence_events(src, cluster) {
+                    for event in events {
+                        self.post(event, None);
+                    }
                 } else {
                     hbb_common::throttled_log!(
                         KEYBOARD_ERROR_LOG_INTERVAL,
@@ -917,3 +926,17 @@ fn get_map(name: &str, layout: *const u8) -> Map<char, CGKeyCode> {
     map
 }
 unsafe impl Send for Enigo {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_sequence_creates_balanced_events() {
+        let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).unwrap();
+        let [key_down, key_up] = key_sequence_events(&source, "a").unwrap();
+
+        assert_eq!(key_down.get_type() as u32, CGEventType::KeyDown as u32);
+        assert_eq!(key_up.get_type() as u32, CGEventType::KeyUp as u32);
+    }
+}
