@@ -104,7 +104,7 @@ internal class DocumentLogs(private val context: Context) {
     @Synchronized
     fun select(uri: Uri, flags: Int) {
         require(isLogGrant(uri)) {
-            "Select $directoryPath or a parent folder within Android/media for logs"
+            "Please select Android/media."
         }
         val permissions = flags and GRANT_FLAGS
         require(permissions == GRANT_FLAGS) { "Read and write access is required for logs" }

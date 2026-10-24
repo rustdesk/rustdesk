@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../common.dart';
 
@@ -54,7 +55,10 @@ class AndroidDocuments {
       }
       return selected;
     } catch (error) {
-      showToast(error.toString());
+      debugPrint('Log directory setup failed: $error');
+      showToast(error is PlatformException
+          ? error.message ?? translate('Failed')
+          : error.toString());
       return false;
     } finally {
       gFFI.ffiModel.endAndroidDocumentPicker();
