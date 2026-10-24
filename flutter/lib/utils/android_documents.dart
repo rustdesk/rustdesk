@@ -66,7 +66,7 @@ class AndroidDocuments {
         (_, close, __) => CustomAlertDialog(
           title: Text(translate('Permissions')),
           content: Text(
-              '${translate('This folder is used to store RustDesk logs.')}\n\nAndroid/media/RustDesk'),
+              '${translate('android-logs-folder-tip')}\n'),
           actions: [
             TextButton(
               onPressed: () => close(true),
