@@ -1604,6 +1604,15 @@ class InputModel {
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
     if (isViewOnly && !showMyCursor) return;
+    if (isAndroid &&
+        (e.kind == ui.PointerDeviceKind.stylus ||
+            e.kind == ui.PointerDeviceKind.invertedStylus)) {
+      // Hover must not switch pen contact from touch gestures to mouse input.
+      final canvasPosition = _pointerPositionForRemoteCanvas(e);
+      handleMouse({'type': _kMouseEventMove, 'buttons': 0}, canvasPosition,
+          edgeScroll: useEdgeScroll);
+      return;
+    }
     if (e.kind != ui.PointerDeviceKind.mouse) return;
 
     // May fix https://github.com/rustdesk/rustdesk/issues/13009
