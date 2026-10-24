@@ -1042,6 +1042,7 @@ jobs:
           cargo test --locked --release --lib --features "$FEATURES"
           # Opt-in, and its macOS tests run nowhere else.
           cargo test --locked --release -p clipboard --features unix-file-copy-paste
+          cargo test --locked --release -p enigo --lib macos::macos_impl::tests::mouse_events_preserve_click_count -- --exact
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
