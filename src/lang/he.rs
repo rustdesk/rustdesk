@@ -791,7 +791,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-reset-confirm-tip", "פעולה זו תחליף את כל הצירופים שהגדרת בקבוצת ברירת המחדל. להמשיך?"),
         ("Monitor", "מסך"),
         ("Keyboard", "מקלדת"),
-        ("Toggle fullscreen", "החלף למצב מסך מלא"),
+        ("Toggle fullscreen", "הפעל או בטל מצב מסך מלא"),
         ("Switch to next display", "עבור למסך הבא"),
         ("Switch to previous display", "עבור למסך הקודם"),
         ("Switch to next tab", "עבור לכרטיסייה הבאה"),
