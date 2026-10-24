@@ -815,5 +815,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "Kapalı"),
         ("api_server_connection_tip", "Özel sunucunuz şifrelenmemiş HTTP kullanıyor. HTTPS'yi etkinleştirmesi için yöneticinize başvurun."),
         ("api_server_empty_tip", "API sunucusu alanı boş bırakıldığında özel sunucunuz varsayılan olarak HTTP kullanır. HTTPS'yi etkinleştirmesi için yöneticinize başvurun."),
+        ("RustDesk storage", ""),
+        ("Other folders", ""),
+        ("Choose which folder remote devices can access. You can change it later in {}.", ""),
+        ("android-logs-folder-tip", ""),
+        ("Choose folder", ""),
     ].iter().cloned().collect();
 }

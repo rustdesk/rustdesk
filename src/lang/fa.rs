@@ -813,5 +813,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "این کلید برای میانبر پشتیبانی نمی‌شود."),
         ("On", "روشن"),
         ("Off", "خاموش"),
+        ("RustDesk storage", ""),
+        ("Other folders", ""),
+        ("Choose which folder remote devices can access. You can change it later in {}.", ""),
+        ("android-logs-folder-tip", ""),
+        ("Choose folder", ""),
     ].iter().cloned().collect();
 }
