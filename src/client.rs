@@ -4002,8 +4002,12 @@ pub fn start_video_thread<F, T>(
         let mut count = 0;
         let mut duration = std::time::Duration::ZERO;
         let mut skip_beginning = 0;
+        let mut gate = crate::upscaler_hook::RenderGate::new();
         loop {
             if let Ok(data) = video_receiver.recv() {
+                // Keyframes render unconditionally; only queued frames can be
+                // judged stale after decode.
+                let mut queue_empty = true;
                 match data {
                     MediaData::VideoFrame(_) | MediaData::VideoQueue => {
                         let vf = match data {
@@ -4012,10 +4016,15 @@ pub fn start_video_thread<F, T>(
                                 *vf
                             }
                             MediaData::VideoQueue => {
-                                if let Some(vf) = video_queue.read().unwrap().pop() {
+                                let (vf_opt, empty_now) = {
+                                    let queue = video_queue.read().unwrap();
+                                    (queue.pop(), queue.is_empty())
+                                };
+                                if let Some(vf) = vf_opt {
                                     if discard_queue.read().unwrap().clone() {
                                         continue;
                                     }
+                                    queue_empty = empty_now;
                                     vf
                                 } else {
                                     continue;
@@ -4045,12 +4054,24 @@ pub fn start_video_thread<F, T>(
                             let format_changed = handler.decoder.format() != format;
                             match handler.handle_frame(vf, &mut pixelbuffer, &mut tmp_chroma) {
                                 Ok(true) => {
-                                    video_callback(
-                                        display,
-                                        &mut handler.rgb,
-                                        handler.texture.texture,
+                                    if gate.should_render(
+                                        &session,
+                                        queue_empty,
+                                        &handler.rgb,
                                         pixelbuffer,
-                                    );
+                                    ) {
+                                        crate::upscaler_hook::maybe_upscale_session_frame(
+                                            &session,
+                                            &mut handler.rgb,
+                                            pixelbuffer,
+                                        );
+                                        video_callback(
+                                            display,
+                                            &mut handler.rgb,
+                                            handler.texture.texture,
+                                            pixelbuffer,
+                                        );
+                                    }
 
                                     // chroma
                                     if tmp_chroma.is_some() && last_chroma != tmp_chroma {
@@ -4058,7 +4079,12 @@ pub fn start_video_thread<F, T>(
                                         *chroma.write().unwrap() = tmp_chroma;
                                     }
 
-                                    // fps calculation
+                                    // Decoder throughput for the adaptive-FPS
+                                    // controller: every decoded frame counts,
+                                    // including skipped ones. The quality
+                                    // monitor's FPS is not this value; it is
+                                    // derived from `video_callback` calls in
+                                    // io_loop, i.e. presented frames only.
                                     fps_calculate(
                                         &mut skip_beginning,
                                         &fps,

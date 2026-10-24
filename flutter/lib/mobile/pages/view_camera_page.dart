@@ -566,6 +566,15 @@ class ImagePaint extends StatelessWidget {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
     var s = c.scale;
+    // The upscaler doubles the camera frame while the canvas still reports the
+    // native size; keep the larger image inside that native rectangle.
+    final image = m.image;
+    final nativeWidth = c.getDisplayWidth().toDouble();
+    if (image != null &&
+        nativeWidth > 0 &&
+        (image.width / nativeWidth - 2).abs() < 0.01) {
+      s /= 2;
+    }
     final adjust = c.getAdjustY();
     return CustomPaint(
       painter: ImagePainter(

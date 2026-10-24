@@ -65,6 +65,7 @@ mod updater;
 mod ui_cm_interface;
 mod ui_interface;
 mod ui_session_interface;
+mod upscaler_hook;
 
 mod hbbs_http;
 

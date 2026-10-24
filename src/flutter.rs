@@ -492,17 +492,31 @@ impl VideoRenderer {
         }
 
         if info.size.0 != rgba.w || info.size.1 != rgba.h {
-            log::error!(
-                "width/height mismatch: ({},{}) != ({},{})",
-                info.size.0,
-                info.size.1,
-                rgba.w,
-                rgba.h
-            );
-            // Peer info's handling is async and may be late than video frame's handling
-            // Allow peer info not set, but not allow wrong width/height for correct local cursor position
-            if info.size != (0, 0) {
-                return false;
+            // Client-side upscalers (e.g. FSRCNNX) change frame dimensions
+            // after decode while peer info still reports native size. A frame
+            // at exactly 2x or 1/2 the tracked size in both axes is the toggle
+            // flipping, not stale peer info: follow it. Anything else keeps
+            // the guard below so a late peer info cannot misplace the cursor.
+            // `size` has no other readers (`set_size` resets it on every peer
+            // update), so tracking the actual frame cannot leak anywhere.
+            fn doubled(a: usize, b: usize) -> bool {
+                a.checked_mul(2) == Some(b) || b.checked_mul(2) == Some(a)
+            }
+            if doubled(info.size.0, rgba.w) && doubled(info.size.1, rgba.h) {
+                info.size = (rgba.w, rgba.h);
+            } else {
+                log::error!(
+                    "width/height mismatch: ({},{}) != ({},{})",
+                    info.size.0,
+                    info.size.1,
+                    rgba.w,
+                    rgba.h
+                );
+                // Peer info's handling is async and may be late than video frame's handling
+                // Allow peer info not set, but not allow wrong width/height for correct local cursor position
+                if info.size != (0, 0) {
+                    return false;
+                }
             }
         }
         if let Some(func) = &self.on_rgba_func {
