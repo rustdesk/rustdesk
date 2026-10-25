@@ -2,7 +2,7 @@ use hbb_common::{
     anyhow::anyhow,
     bail,
     config::Config,
-    get_time,
+    get_time, log,
     password_security::{decrypt_vec_or_original, encrypt_vec_or_original},
     ResultType,
 };
@@ -88,13 +88,31 @@ pub fn generate2fa() -> String {
     "".to_owned()
 }
 
+// Only an installed Windows build has a separate host account whose config the UI cannot write,
+// so that is the one case where storing the secret locally would leave 2FA unenforced while the
+// UI reports it as on.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn strict_2fa_activation() -> bool {
+    #[cfg(windows)]
+    return crate::platform::is_cur_exe_the_installed();
+    #[cfg(not(windows))]
+    return false;
+}
+
 pub fn verify2fa(code: String) -> bool {
     if let Some((info, totp)) = CURRENT_2FA.lock().unwrap().as_ref() {
         if let Ok(res) = totp.check_current(&code) {
             if res {
                 if let Ok(v) = info.into_string() {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    crate::ipc::set_option("2fa", &v);
+                    if strict_2fa_activation() {
+                        if let Err(e) = crate::ipc::set_option_confirmed("2fa", &v) {
+                            log::error!("Failed to enable 2fa, the host did not confirm it: {e}");
+                            return false;
+                        }
+                    } else {
+                        crate::ipc::set_option("2fa", &v);
+                    }
                     #[cfg(any(target_os = "android", target_os = "ios"))]
                     Config::set_option("2fa".to_owned(), v);
                     return res;

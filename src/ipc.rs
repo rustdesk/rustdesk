@@ -1930,6 +1930,43 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     Ok(())
 }
 
+// 2FA is enforced by whichever process owns main IPC, reading its own config. On an installed
+// Windows setup that is the service account, which the UI cannot write to. Storing the secret
+// only in the caller's config there leaves the UI claiming a second factor the host will never
+// ask for, so activation is remote-first: the host's own map is read, updated and acknowledged
+// before anything is written locally, and a failed attempt leaves no local trace.
+//
+// `get_options` is unusable here: it falls back to the caller's config when its own query fails,
+// which would send a stale map back as if it were the host's, and it writes to the local config
+// on the way, which would persist the new value before the update is acknowledged.
+pub fn set_option_confirmed(key: &str, value: &str) -> ResultType<()> {
+    set_option_confirmed_(key, value)
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn set_option_confirmed_(key: &str, value: &str) -> ResultType<()> {
+    let _nat = CheckTestNatType::new();
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::Options(None)).await?;
+    let mut options = match c.next_timeout(1000).await? {
+        Some(Data::Options(Some(options))) => options,
+        _ => bail!("the host did not return its options"),
+    };
+    if value.is_empty() {
+        options.remove(key);
+    } else {
+        options.insert(key.to_owned(), value.to_owned());
+    }
+    c.send(&Data::Options(Some(options.clone()))).await?;
+    // The acknowledgement carries no payload, so nothing from it is logged or inspected.
+    match c.next_timeout(1000).await? {
+        Some(Data::Options(None)) => {}
+        _ => bail!("the host did not acknowledge the options update"),
+    }
+    Config::set_options(options);
+    Ok(())
+}
+
 #[inline]
 async fn get_nat_type_(ms_timeout: u64) -> ResultType<i32> {
     let mut c = connect(ms_timeout, "").await?;
