@@ -1,0 +1,11 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "RustDesk controller UI module.",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {
+    "libentry.so": "file:./src/main/cpp/types/libentry"
+  }
+}

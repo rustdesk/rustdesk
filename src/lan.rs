@@ -23,7 +23,7 @@ use std::{
 
 type Message = RendezvousMessage;
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 pub(super) fn start_listening() -> ResultType<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], get_broadcast_port()));
     let socket = std::net::UdpSocket::bind(addr)?;

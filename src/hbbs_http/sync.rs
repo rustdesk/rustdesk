@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 use crate::{common::API_LOG_INTERVAL, ui_interface::get_builtin_option, Connection};
 use hbb_common::{
     config::{self, Config, LocalConfig},
@@ -19,23 +19,23 @@ const TIME_HEARTBEAT: Duration = Duration::from_secs(15);
 const UPLOAD_SYSINFO_TIMEOUT: Duration = Duration::from_secs(120);
 const TIME_CONN: Duration = Duration::from_secs(3);
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 lazy_static::lazy_static! {
     static ref SENDER : Mutex<broadcast::Sender<Vec<i32>>> = Mutex::new(start_hbbs_sync());
     static ref PRO: Arc<Mutex<bool>> = Default::default();
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 pub fn start() {
     let _sender = SENDER.lock().unwrap();
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 pub fn signal_receiver() -> broadcast::Receiver<Vec<i32>> {
     SENDER.lock().unwrap().subscribe()
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 fn start_hbbs_sync() -> broadcast::Sender<Vec<i32>> {
     let (tx, _rx) = broadcast::channel::<Vec<i32>>(16);
     std::thread::spawn(move || start_hbbs_sync_async());
@@ -82,7 +82,7 @@ impl InfoUploaded {
     }
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 #[tokio::main(flavor = "current_thread")]
 async fn start_hbbs_sync_async() {
     let mut interval = crate::rustdesk_interval(tokio::time::interval_at(
@@ -336,7 +336,7 @@ async fn handle_config_options(
 }
 
 #[allow(unused)]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 pub fn is_pro() -> bool {
     PRO.lock().unwrap().clone()
 }

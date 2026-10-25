@@ -123,7 +123,7 @@ impl Drop for SimpleCallOnReturn {
 pub fn global_init() -> bool {
     #[cfg(all(target_os = "linux", feature = "drm"))]
     crate::platform::linux::dispatch_wayland_display_probe();
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         if !crate::platform::linux::is_x11() {
             crate::server::wayland::init();
@@ -369,7 +369,7 @@ pub fn set_sound_input(device: String) {
 
 /// Get system's default sound input device name.
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_default_sound_input() -> Option<String> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -702,7 +702,7 @@ pub fn test_nat_type() {
         }
         IS_RUNNING.store(true, Ordering::SeqCst);
 
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         crate::ipc::get_socks_ws();
         let is_direct = Config::get_socks().is_none() && !config::use_ws();
         if !is_direct {
@@ -789,9 +789,9 @@ async fn test_nat_type_() -> ResultType<bool> {
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, bool) {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::get_license_from_exe_name() {
@@ -814,7 +814,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
 }
 
 #[inline]
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 fn get_rendezvous_server_(_ms_timeout: u64) -> (String, Vec<String>) {
     (
         Config::get_rendezvous_server(),
@@ -823,19 +823,19 @@ fn get_rendezvous_server_(_ms_timeout: u64) -> (String, Vec<String>) {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 async fn get_rendezvous_server_(ms_timeout: u64) -> (String, Vec<String>) {
     crate::ipc::get_rendezvous_server(ms_timeout).await
 }
 
 #[inline]
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 pub async fn get_nat_type(_ms_timeout: u64) -> i32 {
     Config::get_nat_type()
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     crate::ipc::get_nat_type(ms_timeout).await
 }
@@ -874,9 +874,9 @@ pub fn test_rendezvous_server() {
 }
 
 pub fn refresh_rendezvous_server() {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     test_rendezvous_server();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     std::thread::spawn(|| {
         if crate::ipc::test_rendezvous_server().is_err() {
             test_rendezvous_server();
@@ -925,16 +925,16 @@ pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::p
 #[inline]
 pub fn username() -> String {
     // fix bug of whoami
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     return whoami::username().trim_end_matches('\0').to_owned();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
 // Exactly the implementation of "whoami::hostname()".
 // This wrapper is to suppress warnings.
 #[inline(always)]
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 pub fn whoami_hostname() -> String {
     let mut hostname = whoami::fallible::hostname().unwrap_or_else(|_| "localhost".to_string());
     hostname.make_ascii_lowercase();
@@ -943,7 +943,7 @@ pub fn whoami_hostname() -> String {
 
 #[inline]
 pub fn hostname() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         #[allow(unused_mut)]
         let mut name = whoami_hostname();
@@ -954,7 +954,7 @@ pub fn hostname() -> String {
         }
         name
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
@@ -2122,7 +2122,7 @@ pub fn make_empty_dirs_response_to_json(res: &ReadEmptyDirsResponse) -> String {
 /// 1. Try to send the url scheme from ipc.
 /// 2. If failed to send the url scheme, we open a new main window to handle this url scheme.
 pub fn handle_url_scheme(url: String) {
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     if let Err(err) = crate::ipc::send_url_scheme(url.clone()) {
         log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
         let _ = crate::run_me(vec![url]);
@@ -2148,9 +2148,9 @@ pub async fn get_key(sync: bool) -> String {
             return lic.key;
         }
     }
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_env = "ohos"))]
     let mut key = Config::get_option("key");
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     let mut key = if sync {
         Config::get_option("key")
     } else {

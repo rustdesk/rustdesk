@@ -1,4 +1,4 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::clipboard_listener::{self, ClipboardEvent};
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -83,9 +83,9 @@ use scrap::{
     CodecFormat, ImageFormat, ImageRgb, ImageTexture,
 };
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::CLIPBOARD_INTERVAL;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::{check_clipboard, ClipboardSide};
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -138,7 +138,7 @@ pub const AUDIO_BUFFER_MS: usize = 3000;
 pub(crate) struct ClientClipboardContext;
 
 #[cfg(not(feature = "flutter"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub(crate) struct ClientClipboardContext {
     pub cfg: SessionPermissionConfig,
     pub tx: UnboundedSender<Data>,
@@ -163,7 +163,7 @@ lazy_static::lazy_static! {
     static ref AUDIO_HOST: Host = cpal::default_host();
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
 }
@@ -175,7 +175,7 @@ lazy_static::lazy_static! {
 
 const PUBLIC_SERVER: &str = "public";
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_key_state(key: enigo::Key) -> bool {
     use enigo::KeyboardControllable;
     #[cfg(target_os = "macos")]
@@ -1900,7 +1900,7 @@ impl Client {
         if crate::flutter::sessions::has_connected_sessions_running(ConnType::DEFAULT_CONN) {
             return;
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_env = "ohos")))]
         clipboard_listener::unsubscribe(Self::CLIENT_CLIPBOARD_NAME);
         CLIPBOARD_STATE.lock().unwrap().running = false;
         #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
@@ -1919,7 +1919,7 @@ impl Client {
     // After all sessions are end, the loop exists.
     //
     // If clipboard update is detected, the text will be sent to all sessions by `send_clipboard_msg`.
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn try_start_clipboard(
         _client_clip_ctx: Option<ClientClipboardContext>,
     ) -> Option<UnboundedReceiver<()>> {
@@ -2029,14 +2029,14 @@ impl ClipboardState {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 struct ClientClipboardHandler {
     ctx: Option<crate::clipboard::ClipboardContext>,
     #[cfg(not(feature = "flutter"))]
     client_clip_ctx: Option<ClientClipboardContext>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 impl ClientClipboardHandler {
     fn is_text_required(&self) -> bool {
         #[cfg(feature = "flutter")]
@@ -2140,7 +2140,7 @@ impl ClientClipboardHandler {
 #[derive(Default)]
 pub struct AudioHandler {
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     simple: Option<psimple::Simple>,
     #[cfg(not(target_os = "linux"))]
     audio_buffer: AudioBuffer,
@@ -2342,7 +2342,7 @@ impl AudioBuffer {
 }
 
 impl AudioHandler {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         use psimple::Simple;
         use pulse::sample::{Format, Spec};
@@ -2372,7 +2372,15 @@ impl AudioHandler {
     }
 
     /// Start the audio playback.
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_env = "ohos")]
+    fn start_audio(&mut self, _format0: AudioFormat) -> ResultType<()> {
+        // Audio playback is not implemented for the OpenHarmony controller yet;
+        // the peer will be told audio is unsupported and frames are dropped.
+        bail!("audio playback is not supported on OpenHarmony yet");
+    }
+
+    /// Start the audio playback.
+    #[cfg(not(any(target_os = "linux", target_env = "ohos")))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         let device = AUDIO_HOST
             .default_output_device()
@@ -2444,10 +2452,12 @@ impl AudioHandler {
             Ok(d) => {
                 #[cfg(target_os = "windows")]
                 let playback_failed = self.cancel_pending_playback();
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 let keep_existing_stream = self.simple.is_some()
                     && self.sample_rate.0 == f.sample_rate
                     && u32::from(self.channels) == f.channels;
+                #[cfg(target_env = "ohos")]
+                let keep_existing_stream = false;
                 #[cfg(not(target_os = "linux"))]
                 let keep_existing_stream = self.audio_stream.is_some()
                     && self.sample_rate.0 == f.sample_rate
@@ -2510,7 +2520,7 @@ impl AudioHandler {
         {
             return;
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if self.simple.is_none() {
             log::trace!("PulseAudio simple binding does not exists");
             return;
@@ -2545,11 +2555,16 @@ impl AudioHandler {
                 };
                 self.audio_buffer.append_pcm(&buffer);
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             {
                 let data_u8 =
                     unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
                 self.simple.as_mut().map(|x| x.write(data_u8));
+            }
+            #[cfg(target_env = "ohos")]
+            {
+                // No audio playback on OpenHarmony yet; drop the decoded frames.
+                let _ = (buffer, n);
             }
         });
     }
@@ -2664,7 +2679,11 @@ impl VideoHandler {
         let luid = Self::get_adapter_luid();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
         let rgba_format =
-            if cfg!(feature = "flutter") && (cfg!(windows) || cfg!(target_os = "linux")) {
+            // ohos blits the ImageRgb straight into the XComponent surface,
+            // whose default format is RGBA8888 (bytes R,G,B,A = libyuv ABGR).
+            if (cfg!(feature = "flutter") && (cfg!(windows) || cfg!(target_os = "linux")))
+                || cfg!(target_env = "ohos")
+            {
                 ImageFormat::ABGR
             } else {
                 ImageFormat::ARGB

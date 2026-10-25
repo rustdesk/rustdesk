@@ -74,9 +74,9 @@ impl TOTPInfo {
 }
 
 pub fn generate2fa() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let id = crate::ipc::get_id();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let id = Config::get_id();
     if let Ok(info) = TOTPInfo::gen_totp_info(id, 6) {
         if let Ok(totp) = info.new_totp() {
@@ -132,9 +132,9 @@ impl TelegramBot {
 
     fn save(&self) -> ResultType<()> {
         let s = self.into_string()?;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         crate::ipc::set_option("bot", &s);
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
         Config::set_option("bot".to_owned(), s);
         Ok(())
     }
