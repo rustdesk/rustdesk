@@ -99,6 +99,27 @@ class _DeletingController extends FileController {
 }
 
 void main() {
+  testWidgets('slow SAF empty-directory responses are accepted',
+      (tester) async {
+    const path = '/@rustdesk/tree/grant/root';
+    final fetcher = FileFetcher(() => _sessionId);
+    final result = expectLater(
+      fetcher.registerReadEmptyDirsTask(false, path).then(
+          (directories) => directories.map((directory) => directory.path)),
+      completion(['$path/empty']),
+    );
+
+    await tester.pump(const Duration(seconds: 3));
+    fetcher.tryCompleteEmptyDirsTask(
+        jsonEncode({
+          'path': path,
+          'empty_dirs': [jsonDecode(_directoryJson('$path/empty'))],
+        }),
+        'false');
+    await result;
+    await tester.pump(const Duration(seconds: 30));
+  });
+
   test('deletion confirms all five files despite refreshed selection',
       () async {
     platformFFI.setBindingForTesting(_FileBinding());

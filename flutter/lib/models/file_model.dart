@@ -1569,7 +1569,10 @@ class FileFetcher {
     final c = Completer<List<FileDirectory>>();
     tasks[path] = c;
 
-    Timer(Duration(seconds: 2), () {
+    final timeout = AndroidDocuments.isPath(path)
+        ? _kRemoteReadDirTimeout
+        : const Duration(seconds: 2);
+    Timer(timeout, () {
       tasks.remove(path);
       if (c.isCompleted) return;
       c.completeError("Failed to read empty dirs, timeout");
