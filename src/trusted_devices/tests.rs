@@ -274,6 +274,7 @@ fn controller_credentials_are_bound_and_storage_errors_surface() {
             .unwrap()
             .is_none());
     }
+    recovery::corrupt_controller_credentials_allow_reenrollment(&credentials, &peer_id);
     let corrupt = format!("{}\ninvalid = [\n", fs::read_to_string(&path).unwrap());
     for corrupt in [corrupt.as_bytes(), b"\xff"] {
         fs::write(&path, corrupt).unwrap();

@@ -427,7 +427,8 @@ pub fn try_set_options(m: HashMap<String, String>) -> hbb_common::ResultType<()>
     {
         if !crate::trusted_devices::config::changes_authentication(&m) {
             *OPTIONS.lock().unwrap() = m.clone();
-            return ipc::set_options(m);
+            hbb_common::allow_err!(ipc::set_options(m));
+            return Ok(());
         }
         ipc::set_options(m.clone())?;
         *OPTIONS.lock().unwrap() = m;

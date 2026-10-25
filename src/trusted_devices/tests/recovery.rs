@@ -1,5 +1,28 @@
 use super::*;
 
+pub(super) fn corrupt_controller_credentials_allow_reenrollment(
+    credentials: &Credentials,
+    peer_id: &str,
+) {
+    let token = credentials.load().unwrap().unwrap();
+    let info = PeerConfig::load(peer_id).info;
+    let mut saved: serde_json::Value =
+        serde_json::from_str(&PeerConfig::get_trusted_device_v2(peer_id).unwrap()).unwrap();
+    saved["ciphertext"] = serde_json::json!([]);
+    let undecryptable = saved.to_string();
+    saved["ciphertext"] = serde_json::json!(hbb_common::password_security::symmetric_crypt(
+        &token[..TOKEN_BYTES - 1],
+        true
+    )
+    .unwrap());
+    for corrupt in ["{".to_owned(), undecryptable, saved.to_string()] {
+        PeerConfig::set_trusted_device_v2(peer_id, corrupt, info.clone()).unwrap();
+        assert_eq!(credentials.load().unwrap(), None);
+        credentials.save(&token, info.clone()).unwrap();
+        assert_eq!(credentials.load().unwrap(), Some(token.clone()));
+    }
+}
+
 pub(super) async fn service_sync_preserves_grants_and_revocations() {
     let token = begin_enrollment()
         .await

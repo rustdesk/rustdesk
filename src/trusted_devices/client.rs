@@ -167,10 +167,22 @@ impl Credentials {
 
     pub fn load(&self) -> ResultType<Option<Vec<u8>>> {
         let value = PeerConfig::get_trusted_device_v2(&self.peer_id)?;
+        match self.decode(&value) {
+            Ok(token) => Ok(token),
+            Err(error) => {
+                const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+                hbb_common::throttled_log!(LOG_INTERVAL, warn,
+                    "Ignoring invalid trusted-device credential; re-enrollment is available: {error}");
+                Ok(None)
+            }
+        }
+    }
+
+    fn decode(&self, value: &str) -> ResultType<Option<Vec<u8>>> {
         if value.is_empty() {
             return Ok(None);
         }
-        let saved: SavedToken = serde_json::from_str(&value)
+        let saved: SavedToken = serde_json::from_str(value)
             .map_err(|_| anyhow!("Invalid stored trusted-device credential"))?;
         if saved.issuer != self.issuer {
             return Ok(None);
