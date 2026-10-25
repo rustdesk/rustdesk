@@ -130,7 +130,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       value: gFFI.serverModel,
       child: Container(
         width: isIncomingOnly ? 280.0 : 200.0,
-        color: Theme.of(context).colorScheme.background,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.alphaBlend(MyTheme.accent.withOpacity(0.14),
+                  Theme.of(context).colorScheme.background),
+              Theme.of(context).colorScheme.background,
+            ],
+          ),
+        ),
         child: Stack(
           children: [
             Column(

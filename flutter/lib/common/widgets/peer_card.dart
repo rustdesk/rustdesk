@@ -48,7 +48,7 @@ class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
   var _menuPos = RelativeRect.fill;
   final double _cardRadius = 16;
-  final double _tileRadius = 5;
+  final double _tileRadius = 12;
   final double _borderWidth = 2;
 
   @override
