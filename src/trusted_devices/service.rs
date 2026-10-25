@@ -11,10 +11,10 @@ const PENDING_REVOCATION_EXTENSION: &str = "trusted-device-revocation";
 
 #[cfg(target_os = "macos")]
 pub(super) fn is_stopped() -> ResultType<bool> {
-    if Config::get_option("stop-service") != "Y" {
+    if !super::authority::uses_service()? {
         return Ok(false);
     }
-    // Only service removal permits offline edits, not an unreachable registered service.
+    // "Start" resumes incoming connections without reinstalling the daemon.
     Path::new(&format!(
         "/Library/LaunchDaemons/{}_service.plist",
         crate::get_full_name()

@@ -57,15 +57,13 @@ async fn stopped_service_password_changes() {
     config::set_options(without_2fa).unwrap();
     Config2::set_trusted_devices_v2(String::new()).unwrap();
     #[cfg(target_os = "macos")]
-    {
-        Config::set_option("stop-service".into(), "Y".into());
+    for stopped in ["Y", ""] {
+        Config::set_option("stop-service".into(), stopped.into());
         assert!(
-            config::update_auth(true, || config::set_password("stopped-service-password"))
-                .await
-                .unwrap()
+            !service::is_stopped().unwrap(),
+            "The incoming-connections setting must not make a standalone profile service-owned"
         );
     }
-    #[cfg(not(target_os = "macos"))]
     assert!(
         service::update_stopped_auth(|| config::set_password("stopped-service-password")).unwrap()
     );
