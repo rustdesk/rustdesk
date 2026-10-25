@@ -36,6 +36,71 @@ class RelativeMouseState {
 }
 
 class MainFlutterWindow: NSWindow {
+    private static var didSetupWindowNotifications = false
+
+    static func setupWindowLifecycle() {
+        guard !CommandLine.arguments.contains("--cm") else { return }
+        guard !didSetupWindowNotifications else { return }
+        didSetupWindowNotifications = true
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            if NSApp.activationPolicy() != .regular {
+                NSApp.setActivationPolicy(.regular)
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeMainNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            if NSApp.activationPolicy() != .regular {
+                NSApp.setActivationPolicy(.regular)
+            }
+        }
+    }
+
+    @objc static func openMainWindow() {
+        DispatchQueue.main.async {
+            guard !CommandLine.arguments.contains("--cm") else { return }
+            if NSApp.activationPolicy() != .regular {
+                NSApp.setActivationPolicy(.regular)
+            }
+
+            let window = NSApp.windows.first(where: { $0 is MainFlutterWindow })
+            if let window = window {
+                window.collectionBehavior.insert([.moveToActiveSpace, .fullScreenAuxiliary])
+                if window.isMiniaturized {
+                    window.deminiaturize(nil)
+                }
+                window.makeKeyAndOrderFront(nil)
+                window.orderFrontRegardless()
+            }
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    static func onWindowClosed() {
+        DispatchQueue.main.async {
+            guard !CommandLine.arguments.contains("--cm") else { return }
+            let hasVisibleWindows = NSApp.windows.contains { window in
+                window.canBecomeMain && (window.isVisible || window.isMiniaturized)
+            }
+            if hasVisibleWindows {
+                return
+            }
+
+            if NSApp.activationPolicy() != .accessory {
+                NSApp.setActivationPolicy(.accessory)
+            }
+            NSApp.deactivate()
+        }
+    }
+
     private static let fullscreenWorkAreaSizes = NSMapTable<NSWindow, NSValue>(
         keyOptions: [.weakMemory, .objectPointerPersonality],
         valueOptions: .strongMemory
@@ -62,16 +127,18 @@ class MainFlutterWindow: NSWindow {
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
         self.setFrame(windowFrame, display: true)
+        self.collectionBehavior.insert([.moveToActiveSpace, .fullScreenAuxiliary])
         // register self method handler
         let registrar = flutterViewController.registrar(forPlugin: "RustDeskPlugin")
         setMethodHandler(registrar: registrar)
+        MainFlutterWindow.setupWindowLifecycle()
 
         RegisterGeneratedPlugins(registry: flutterViewController)
 
         FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
-            // Register the plugin which you want access from other isolate.
-            // DesktopLifecyclePlugin.register(with: controller.registrar(forPlugin: "DesktopLifecyclePlugin"))
-            // Note: copy below from above RegisterGeneratedPlugins
+            if !CommandLine.arguments.contains("--cm") && NSApp.activationPolicy() != .regular {
+                NSApp.setActivationPolicy(.regular)
+            }
             self.setMethodHandler(registrar: controller.registrar(forPlugin: "RustDeskPlugin"))
             DesktopDropPlugin.register(with: controller.registrar(forPlugin: "DesktopDropPlugin"))
             DeviceInfoPlusMacosPlugin.register(with: controller.registrar(forPlugin: "DeviceInfoPlusMacosPlugin"))
@@ -203,6 +270,12 @@ class MainFlutterWindow: NSWindow {
         channel.setMethodCallHandler({
             (call, result) -> Void in
                 switch call.method {
+                case "onWindowClose":
+                    MainFlutterWindow.onWindowClosed()
+                    result(nil)
+                case "openMainWindow":
+                    MainFlutterWindow.openMainWindow()
+                    result(nil)
                 case "setWindowTheme":
                     let arg = call.arguments as! [String: Any]
                     let themeName = arg["themeName"] as? String

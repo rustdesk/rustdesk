@@ -12,7 +12,16 @@ class AppDelegate: FlutterAppDelegate {
     
     override func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
         if (launched) {
+            MainFlutterWindow.openMainWindow();
             handle_applicationShouldOpenUntitledFile();
+        }
+        return true
+    }
+
+    override func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if launched && !flag {
+            MainFlutterWindow.openMainWindow()
+            return false
         }
         return true
     }
