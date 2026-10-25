@@ -237,23 +237,26 @@ pub fn take_file(value: &Value) -> ResultType<std::fs::File> {
 #[cfg(any(target_os = "android", all(test, unix)))]
 pub(super) async fn open(
     path: String,
-    expected: (u64, u64),
 ) -> ResultType<(
     tokio::fs::File,
     super::android_descriptor::DocumentDescriptor,
+    Option<(u64, u64)>,
 )> {
-    let (file, descriptor) = tokio::task::spawn_blocking(move || {
+    use std::os::unix::fs::MetadataExt;
+
+    let (file, descriptor, digest) = tokio::task::spawn_blocking(move || {
         let token = request(json!({"op": "open", "path": path}))?;
         let file = take_file(&token["fd"])?;
         let descriptor = super::android_descriptor::DocumentDescriptor::new(&token)?;
-        let current = stat(&path)?.ok_or(anyhow!("Document no longer exists"))?;
-        if (current.modified_time, current.size) != expected {
-            bail!("Document changed since it was listed; restart the transfer");
-        }
-        Ok::<_, hbb_common::anyhow::Error>((file, descriptor))
+        let metadata = file.metadata()?;
+        // Stream inode timestamps do not identify the source document's version.
+        let digest = metadata
+            .is_file()
+            .then(|| (metadata.mtime().max(0) as u64, metadata.len()));
+        Ok::<_, hbb_common::anyhow::Error>((file, descriptor, digest))
     })
     .await??;
-    Ok((tokio::fs::File::from_std(file), descriptor))
+    Ok((tokio::fs::File::from_std(file), descriptor, digest))
 }
 
 #[cfg(test)]

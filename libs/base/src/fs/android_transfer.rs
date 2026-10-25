@@ -70,19 +70,17 @@ impl TransferJob {
         if self.data_stream.is_some() {
             return Ok(false);
         }
-        let entry = self
-            .files
-            .get(self.file_num as usize)
-            .ok_or(anyhow!("Wrong file number"))?;
-        let result = android::open(
-            self.document_path(self.file_num as usize)?,
-            (entry.modified_time, entry.size),
-        )
-        .await;
+        let result = android::open(self.document_path(self.file_num as usize)?).await;
         self.file_confirmed = false;
         self.file_is_waiting = false;
         match result {
-            Ok((file, descriptor)) => {
+            Ok((file, descriptor, digest)) => {
+                let entry = self
+                    .files
+                    .get_mut(self.file_num as usize)
+                    .ok_or(anyhow!("Wrong file number"))?;
+                entry.modified_time = digest.map_or(0, |(modified, _)| modified);
+                entry.size = digest.map_or(entry.size, |(_, size)| size);
                 self.data_stream = Some(DataStream::FileStream(file));
                 self.document_transfer.reader = Some(descriptor);
             }

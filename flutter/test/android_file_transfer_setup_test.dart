@@ -14,9 +14,7 @@ class _Binding extends Fake implements RustdeskImpl {
   @override
   String translate(
           {required String name, required String locale, dynamic hint}) =>
-      name == 'Choose which folder remote devices can access. You can change it later in {}.'
-          ? 'Choose which folder remote devices can access.'
-          : name.replaceFirstMapped(RegExp(r'\{(.*?)\}'), (match) => match[1]!);
+      name;
 
   @override
   String getLocalFlutterOption({required String k, dynamic hint}) =>

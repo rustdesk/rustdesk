@@ -1,5 +1,47 @@
 use super::*;
 
+pub(super) fn open_source(output: &Path, request: &Value) -> ResultType<Value> {
+    use std::{fs::File, io::Write, os::fd::IntoRawFd};
+
+    let fd = if request["path"].as_str().unwrap().ends_with("stream.txt") {
+        let (reader, mut writer) = std::os::unix::net::UnixStream::pair()?;
+        writer.write_all(&std::fs::read(output)?)?;
+        reader.into_raw_fd()
+    } else {
+        let file = File::open(output)?;
+        let replacement = output.with_extension("replacement");
+        if replacement.exists() {
+            std::fs::rename(replacement, output)?;
+        }
+        file.into_raw_fd()
+    };
+    Ok(json!({"fd": fd, "descriptor": request["path"]}))
+}
+
+pub(super) async fn replacement_preserves_opened_digest(path: &str, output: &Path) {
+    use filetime::{set_file_mtime, FileTime};
+
+    std::fs::write(output, b"old contents").unwrap();
+    set_file_mtime(output, FileTime::from_unix_time(1, 0)).unwrap();
+    let replacement = output.with_extension("replacement");
+    std::fs::write(&replacement, b"new contents").unwrap();
+    set_file_mtime(&replacement, FileTime::from_unix_time(2, 0)).unwrap();
+    let path = format!("{path}/notes.txt");
+    let mut sender = sending(&path, true);
+    assert_eq!(
+        sender.init_data_stream_for_cm().await.unwrap(),
+        Some((1, 12))
+    );
+    confirm_overwrite(&mut sender, 0).await;
+    assert_eq!(
+        sender.read().await.unwrap().unwrap().data.as_ref(),
+        b"old contents"
+    );
+    assert!(sender.read().await.unwrap().unwrap().data.is_empty());
+    let mut next = sending(&path, true);
+    assert_eq!(next.init_data_stream_for_cm().await.unwrap(), Some((2, 12)));
+}
+
 pub(super) async fn failed_block_cleans_pending_receive(path: &str, output: &Path) {
     for name in ["write-error.txt", "write-error-broken.txt"] {
         let mut job = receiving(&format!("{path}/{name}"));
@@ -54,9 +96,10 @@ pub(super) async fn failed_finalization_discards_partial_data(path: &str, output
 }
 
 pub(super) async fn changed_source_without_timestamp_rejects_resume(path: &str, output: &Path) {
-    let path = format!("{path}/notes.txt");
     std::fs::write(output, b"old contents").unwrap();
-    stale_metadata_rejects_send(&path).await;
+    filetime::set_file_mtime(output, filetime::FileTime::from_unix_time(0, 0)).unwrap();
+    stale_metadata_uses_current_digest(&format!("{path}/notes.txt")).await;
+    let path = format!("{path}/stream.txt");
     let mut sender = sending(&path, true);
     let original_digest = sender.init_data_stream_for_cm().await.unwrap();
     assert_eq!(original_digest, Some((0, b"old contents".len() as u64)));
@@ -97,7 +140,7 @@ pub(super) async fn changed_source_without_timestamp_rejects_resume(path: &str, 
     std::fs::remove_file(output).unwrap();
 }
 
-async fn stale_metadata_rejects_send(path: &str) {
+async fn stale_metadata_uses_current_digest(path: &str) {
     for (size, modified_time) in [(12, 1), (13, 0)] {
         let mut sender = sending(path, true)
             .with_files(vec![FileEntry {
@@ -106,6 +149,15 @@ async fn stale_metadata_rejects_send(path: &str) {
                 ..Default::default()
             }])
             .unwrap();
-        assert!(sender.init_data_stream_for_cm().await.is_err());
+        assert_eq!(
+            sender.init_data_stream_for_cm().await.unwrap(),
+            Some((0, b"old contents".len() as u64))
+        );
+        confirm_overwrite(&mut sender, 0).await;
+        assert_eq!(
+            sender.read().await.unwrap().unwrap().data.as_ref(),
+            b"old contents"
+        );
+        assert!(sender.read().await.unwrap().unwrap().data.is_empty());
     }
 }

@@ -17,7 +17,6 @@ internal class DocumentPicker(private val activity: Activity) {
         when (call.method) {
             "document_require_log_folder" ->
                 requireLogFolder(result, call.argument<Boolean>("checkOnly") == true)
-            "document_log_directory" -> run(result) { storage.logDirectory().absolutePath }
             "document_workspace" -> if (call.argument<Boolean>("share") == true) {
                 run(result) { storage.shareWorkspace() }
             } else {

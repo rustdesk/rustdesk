@@ -66,8 +66,7 @@ CustomAlertDialog _setupDialog(void Function([dynamic]) close) {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(translate(
-            'Choose which folder remote devices can access. You can change it later in {}.')),
+        Text(translate('Choose which folder remote devices can access.')),
         Padding(
           padding: _folderChoicePadding,
           child: Column(

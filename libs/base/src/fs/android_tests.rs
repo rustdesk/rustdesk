@@ -14,7 +14,8 @@ fn provider(output: &Path, request: &str) -> ResultType<String> {
     use std::{fs::File, os::fd::IntoRawFd};
 
     let request: Value = serde_json::from_str(request)?;
-    let metadata = json!({"name": "notes.txt", "directory": false, "size": 12, "modified": 0});
+    let modified = output.metadata().map_or(0, |m| std::os::unix::fs::MetadataExt::mtime(&m));
+    let metadata = json!({"name": "notes.txt", "directory": false, "size": 12, "modified": modified});
     let value = match request["op"].as_str() {
         Some("home") => json!("/@rustdesk/tree/selected/Documents"),
         Some("allowed") => json!(true),
@@ -31,9 +32,7 @@ fn provider(output: &Path, request: &str) -> ResultType<String> {
             }
             json!({"fd": File::create(output)?.into_raw_fd(), "descriptor": request["path"]})
         }
-        Some("open") => {
-            json!({"fd": File::open(output)?.into_raw_fd(), "descriptor": request["path"]})
-        }
+        Some("open") => write_tests::open_source(output, &request)?,
         Some("close")
             if request["descriptor"]
                 .as_str()
@@ -230,6 +229,7 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
     send_and_cancel(path, &output).await;
     write_tests::failed_block_cleans_pending_receive(path, &output).await;
     write_tests::failed_finalization_discards_partial_data(path, &output).await;
+    write_tests::replacement_preserves_opened_digest(path, &output).await;
     write_tests::changed_source_without_timestamp_rejects_resume(path, &output).await;
     let mut empty = receiving(&format!("{path}/empty.txt"));
     empty

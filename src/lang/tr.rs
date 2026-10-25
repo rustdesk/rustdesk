@@ -817,7 +817,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("api_server_empty_tip", "API sunucusu alanı boş bırakıldığında özel sunucunuz varsayılan olarak HTTP kullanır. HTTPS'yi etkinleştirmesi için yöneticinize başvurun."),
         ("RustDesk storage", ""),
         ("Other folders", ""),
-        ("Choose which folder remote devices can access. You can change it later in {}.", ""),
+        ("Choose which folder remote devices can access.", ""),
         ("android-logs-folder-tip", ""),
         ("Choose folder", ""),
         ("Please select Android → media.", ""),
