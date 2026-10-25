@@ -36,7 +36,7 @@ pub async fn update_auth<T: Send + 'static>(
     affected: bool,
     apply: impl FnOnce() -> ResultType<T> + Send + 'static,
 ) -> ResultType<T> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     if affected && update(super::service::is_stopped).await? {
         return update(move || super::service::update_stopped_auth(apply)).await;
     }
@@ -62,7 +62,6 @@ pub async fn update_auth<T: Send + 'static>(
 pub(super) async fn sync_auth_to_service() -> ResultType<()> {
     use crate::ipc::{connect_trusted_device_service, Data};
     const TIMEOUT_MS: u64 = 1000;
-    #[cfg(target_os = "linux")]
     let _sync_permit = {
         use hbb_common::tokio::sync::Semaphore;
         const MAX_CONCURRENT_SYNCS: usize = 1;
@@ -70,7 +69,6 @@ pub(super) async fn sync_auth_to_service() -> ResultType<()> {
         // Serialize revoke/sync/ack so queued callers re-read the pending marker.
         AUTH_SYNC.acquire().await?
     };
-    #[cfg(target_os = "linux")]
     let pending = super::service::revoke_pending_auth().await?;
     let mut connection = connect_trusted_device_service(TIMEOUT_MS).await?;
     let config2 = update(Config2::get_for_sync).await?;
@@ -79,7 +77,6 @@ pub(super) async fn sync_auth_to_service() -> ResultType<()> {
         .await?;
     match connection.next_timeout(TIMEOUT_MS).await? {
         Some(Data::SyncConfig(None)) => {
-            #[cfg(target_os = "linux")]
             if let Some(pending) = pending {
                 update(move || super::service::acknowledge_revocation(&pending)).await?;
             }

@@ -6,8 +6,23 @@ use hbb_common::{
 };
 use std::{fs, io::ErrorKind, path::Path};
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 const PENDING_REVOCATION_EXTENSION: &str = "trusted-device-revocation";
+
+#[cfg(target_os = "macos")]
+pub(super) fn is_stopped() -> ResultType<bool> {
+    if Config::get_option("stop-service") != "Y" {
+        return Ok(false);
+    }
+    // Only service removal permits offline edits, not an unreachable registered service.
+    Path::new(&format!(
+        "/Library/LaunchDaemons/{}_service.plist",
+        crate::get_full_name()
+    ))
+    .try_exists()
+    .map(|registered| !registered)
+    .context("Inspect stopped system service registration")
+}
 
 #[cfg(target_os = "linux")]
 pub(super) fn is_stopped() -> ResultType<bool> {
@@ -25,7 +40,7 @@ pub(super) fn is_stopped() -> ResultType<bool> {
     Ok(std::str::from_utf8(&output.stdout)?.trim() == "inactive")
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn read_pending_revocation(path: &Path) -> ResultType<Option<Vec<u8>>> {
     match fs::read(path.with_extension(PENDING_REVOCATION_EXTENSION)) {
         // Presence requests revocation; the contents only distinguish overlapping edits.
@@ -35,13 +50,13 @@ fn read_pending_revocation(path: &Path) -> ResultType<Option<Vec<u8>>> {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub(super) fn pending_revocation() -> ResultType<Option<Vec<u8>>> {
     let _storage = super::storage()?;
     read_pending_revocation(&Config2::file())
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub(super) fn update_stopped_auth<T>(apply: impl FnOnce() -> ResultType<T>) -> ResultType<T> {
     use std::io::Write;
     if super::storage()?.exists()? {
@@ -62,7 +77,7 @@ pub(super) fn update_stopped_auth<T>(apply: impl FnOnce() -> ResultType<T>) -> R
     Ok(result)
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub(super) fn acknowledge_revocation(expected: &[u8]) -> ResultType<()> {
     let _storage = super::storage()?;
     // A newer offline edit must survive acknowledgment of an earlier upload.
@@ -73,7 +88,7 @@ pub(super) fn acknowledge_revocation(expected: &[u8]) -> ResultType<()> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(super) async fn revoke_pending_auth() -> ResultType<Option<Vec<u8>>> {
     let pending = config::update(pending_revocation).await?;
     if pending.is_some()
@@ -87,7 +102,7 @@ pub(super) async fn revoke_pending_auth() -> ResultType<Option<Vec<u8>>> {
     Ok(pending)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub async fn sync_pending_auth() -> ResultType<()> {
     if config::update(pending_revocation).await?.is_some() {
         config::sync_auth_to_service().await?;
@@ -172,7 +187,7 @@ pub fn copy_config(source: &Path, destination: &Path) -> ResultType<()> {
         Err(error) if error.kind() == ErrorKind::NotFound => {}
         Err(error) => return Err(error).context("Read destination service configuration"),
     }
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     if read_pending_revocation(source)?.is_some() {
         incoming.remove("trusted_devices");
         incoming.remove("trusted_devices_v2");

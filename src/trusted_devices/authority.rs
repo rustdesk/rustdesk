@@ -194,7 +194,6 @@ pub fn register_service_authority() -> ResultType<()> {
 pub async fn request(request: Request) -> ResultType<Response> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     if uses_service()? {
-        #[cfg(target_os = "linux")]
         super::service::sync_pending_auth().await?;
         return super::service::request(request).await;
     }

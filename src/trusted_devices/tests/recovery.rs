@@ -56,6 +56,16 @@ async fn stopped_service_password_changes() {
     without_2fa.remove("2fa");
     config::set_options(without_2fa).unwrap();
     Config2::set_trusted_devices_v2(String::new()).unwrap();
+    #[cfg(target_os = "macos")]
+    {
+        Config::set_option("stop-service".into(), "Y".into());
+        assert!(
+            config::update_auth(true, || config::set_password("stopped-service-password"))
+                .await
+                .unwrap()
+        );
+    }
+    #[cfg(not(target_os = "macos"))]
     assert!(
         service::update_stopped_auth(|| config::set_password("stopped-service-password")).unwrap()
     );
@@ -63,8 +73,13 @@ async fn stopped_service_password_changes() {
         .unwrap()
         .verify_password(&proof("stopped-service-password", &[]))
         .unwrap();
-    let earlier = service::pending_revocation().unwrap().unwrap();
+    let earlier = service::pending_revocation()
+        .unwrap()
+        .expect("Offline authentication edits must queue root-grant revocation");
     assert!(service::update_stopped_auth(|| config::set_password(PASSWORD)).unwrap());
+    #[cfg(target_os = "macos")]
+    config::update_options(options).await.unwrap();
+    #[cfg(not(target_os = "macos"))]
     service::update_stopped_auth(|| config::set_options(options)).unwrap();
     service::acknowledge_revocation(&earlier).unwrap();
     service::copy_config(&Config2::file(), &install_path).unwrap();
