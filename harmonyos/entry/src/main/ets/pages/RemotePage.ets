@@ -27,11 +27,8 @@ const LONG_PRESS_MS = 500;
 // Window after a tap in which starting a drag presses the left button
 // (hold-drag, mirrors the Flutter client's mouse mode).
 const DRAG_AFTER_TAP_MS = 350;
-// Cursor overlay: drawn just above the fingertip (tip of the arrow at the
-// touch point) so it is not hidden by the finger, and the idle delay before
-// it fades after the last touch.
-const CURSOR_OFFSET_Y = -24;
-const CURSOR_HIDE_MS = 1500;
+// Idle delay before the zoomed-pan scrollbar indicators fade.
+const HIDE_DELAY_MS = 1500;
 // Viewport zoom clamp: 1 = fit-to-screen, up to 8x magnification.
 const MAX_ZOOM = 8;
 // Multi-finger tap detection (onTouch): a touch counts as a tap when every
@@ -102,6 +99,28 @@ struct ScrollbarIndicator {
     .width(this.vertical ? 8 : this.trackLength)
     .height(this.vertical ? this.trackLength : 8)
     .margin({ right: this.vertical ? 2 : 0, bottom: this.vertical ? 0 : 2 })
+  }
+}
+
+// Toolbar toggle chip: a custom component rather than a @Builder because a
+// by-value @Builder param never re-renders when the state variable changes,
+// so the selected state would never light up. @Prop syncs from the parent.
+@Component
+struct ToggleChip {
+  @Prop label: ResourceStr = '';
+  @Prop on: boolean = false;
+  onTap: () => void = (): void => {};
+
+  build() {
+    Text(this.label)
+      .fontSize(12)
+      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+      .borderRadius(6)
+      .backgroundColor(this.on ? '#3A7BD5' : '#EEEEEE')
+      .fontColor(this.on ? '#FFFFFF' : '#333333')
+      .onClick(() => {
+        this.onTap();
+      })
   }
 }
 
@@ -190,12 +209,6 @@ struct RemotePage {
   private lastPtrY: number = 0;
   // Quick-actions panel (three-finger tap / toolbar button).
   @State showQuickActions: boolean = false;
-  // Touch cursor overlay (component-local px) shown while touching so the
-  // finger does not cover the remote pointer position.
-  @State cursorX: number = 0;
-  @State cursorY: number = 0;
-  @State cursorVisible: boolean = false;
-  private cursorHideTimer: number = -1;
   // Scrollbar indicators while zoomed and panning.
   @State showScrollbars: boolean = false;
   private scrollbarTimer: number = -1;
@@ -669,9 +682,8 @@ struct RemotePage {
       this.vptrMouse((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_UP);
       return;
     }
-    this.showCursor(this.tapMidX, this.tapMidY + CURSOR_OFFSET_Y);
-    this.cursorMouse((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_DOWN, this.tapMidX, this.tapMidY);
-    this.cursorMouse((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_UP, this.tapMidX, this.tapMidY);
+    this.mouseAt((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_DOWN, this.tapMidX, this.tapMidY);
+    this.mouseAt((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_UP, this.tapMidX, this.tapMidY);
   }
 
   // Quick-actions panel (task manager, Ctrl+Alt+Del, Alt+F4, ...).
@@ -729,6 +741,9 @@ struct RemotePage {
     this.vptrX = this.remoteCursorDrawn() ? this.rcurX * this.cursorScale() : this.videoW / 2;
     this.vptrY = this.remoteCursorDrawn() ? this.rcurY * this.cursorScale() : this.videoH / 2;
     this.vptrClamp();
+    // The two modes are mutually exclusive: the virtual pointer replaces the
+    // remote-cursor overlay while it is active.
+    this.showRemoteCursor = false;
     this.pointerMode = true;
   }
 
@@ -747,29 +762,14 @@ struct RemotePage {
       this.vptrMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP);
       this.vptrDragging = false;
     }
-    this.cursorVisible = false;
+    // Back to cursor mode: restore the remote-cursor overlay.
+    this.showRemoteCursor = true;
   }
 
-  // Show the touch cursor at a finger position (component-local vp) and
-  // schedule its hide; every touch event refreshes the timer so the cursor
-  // stays visible throughout a gesture.
-  private showCursor(x: number, y: number): void {
-    this.cursorX = x;
-    this.cursorY = y;
-    this.cursorVisible = true;
-    if (this.cursorHideTimer >= 0) {
-      clearTimeout(this.cursorHideTimer);
-    }
-    this.cursorHideTimer = setTimeout((): void => {
-      this.cursorVisible = false;
-      this.cursorHideTimer = -1;
-    }, CURSOR_HIDE_MS) as number;
-  }
-
-  // Send a mouse event at the arrow-tip position: the finger sits CURSOR_OFFSET_Y
-  // below the pointer it steers, so every event targets the tip, not the pad.
-  private cursorMouse(mask: number, fingerX: number, fingerY: number): void {
-    this.mouse(mask, this.mapX(fingerX), this.mapY(fingerY + CURSOR_OFFSET_Y));
+  // Send a mouse event at a finger position (component-local vp). The
+  // finger itself steers the pointer; no local arrow overlay is drawn.
+  private mouseAt(mask: number, fingerX: number, fingerY: number): void {
+    this.mouse(mask, this.mapX(fingerX), this.mapY(fingerY));
   }
 
   // Flash the scrollbars while zoomed; called on any pan/zoom change.
@@ -785,7 +785,7 @@ struct RemotePage {
     this.scrollbarTimer = setTimeout((): void => {
       this.showScrollbars = false;
       this.scrollbarTimer = -1;
-    }, CURSOR_HIDE_MS) as number;
+    }, HIDE_DELAY_MS) as number;
   }
 
   // Viewport position of the video's top-left corner in the container, in vp,
@@ -1010,11 +1010,10 @@ struct RemotePage {
                       this.vptrRightHeld = true;
                       return;
                     }
-                    this.showCursor(this.fingerX(e), this.fingerY(e) + CURSOR_OFFSET_Y);
-                    this.cursorMouse((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_DOWN,
-                                     this.fingerX(e), this.fingerY(e));
-                    this.cursorMouse((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_UP,
-                                     this.fingerX(e), this.fingerY(e));
+                    this.mouseAt((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_DOWN,
+                                 this.fingerX(e), this.fingerY(e));
+                    this.mouseAt((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_UP,
+                                 this.fingerX(e), this.fingerY(e));
                   }),
                 // Double tap is detected manually in onClick instead of
                 // TapGesture({count: 2}): the tap recognizer never fired for
@@ -1025,6 +1024,12 @@ struct RemotePage {
                   .onActionStart((e: GestureEvent) => {
                     this.lastPtrX = this.fingerX(e);
                     this.lastPtrY = this.fingerY(e);
+                    // A multi-finger touch also drives the one-finger
+                    // recognizers; park the remote cursor while two-finger
+                    // zoom / scroll owns the gesture.
+                    if (this.touchTracks.length >= 2 || this.pinching) {
+                      return;
+                    }
                     if (this.pointerMode) {
                       // Trackpad drag: press only after a tap armed the left
                       // button; a plain drag just moves the cursor.
@@ -1039,11 +1044,19 @@ struct RemotePage {
                     // a hold-drag started right after a tap.
                     this.panDragging = Date.now() - this.lastTapMs < DRAG_AFTER_TAP_MS;
                     if (this.panDragging) {
-                      this.cursorMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_DOWN,
-                                       this.fingerX(e), this.fingerY(e));
+                      this.mouseAt((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_DOWN,
+                                   this.fingerX(e), this.fingerY(e));
                     }
                   })
                   .onActionUpdate((e: GestureEvent) => {
+                    // Parked while a multi-finger gesture is in flight; see
+                    // onActionStart. Keep lastPtr fresh so a pinch that ends
+                    // with one finger still down resumes without a jump.
+                    if (this.touchTracks.length >= 2 || this.pinching) {
+                      this.lastPtrX = this.fingerX(e);
+                      this.lastPtrY = this.fingerY(e);
+                      return;
+                    }
                     if (this.pointerMode) {
                       // Finger travel moves the virtual cursor relatively
                       // (trackpad feel), clamped to the video.
@@ -1055,8 +1068,7 @@ struct RemotePage {
                       this.vptrMouse(MOUSE_TYPE_MOVE);
                       return;
                     }
-                    this.showCursor(this.fingerX(e), this.fingerY(e) + CURSOR_OFFSET_Y);
-                    this.cursorMouse(MOUSE_TYPE_MOVE, this.fingerX(e), this.fingerY(e));
+                    this.mouseAt(MOUSE_TYPE_MOVE, this.fingerX(e), this.fingerY(e));
                   })
                   .onActionEnd((e: GestureEvent) => {
                     if (this.pointerMode) {
@@ -1071,8 +1083,8 @@ struct RemotePage {
                       return;
                     }
                     if (this.panDragging) {
-                      this.cursorMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP,
-                                       this.fingerX(e), this.fingerY(e));
+                      this.mouseAt((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP,
+                                   this.fingerX(e), this.fingerY(e));
                       this.panDragging = false;
                     }
                   })
@@ -1089,8 +1101,8 @@ struct RemotePage {
                       return;
                     }
                     if (this.panDragging) {
-                      this.cursorMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP,
-                                       this.lastPtrX, this.lastPtrY);
+                      this.mouseAt((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP,
+                                   this.lastPtrX, this.lastPtrY);
                       this.panDragging = false;
                     }
                   })
@@ -1119,19 +1131,18 @@ struct RemotePage {
                 this.vptrMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP);
                 return;
               }
-              this.showCursor(e.x, e.y + CURSOR_OFFSET_Y);
               const now = Date.now();
               if (now - this.lastTapMs < DRAG_AFTER_TAP_MS) {
                 // Second tap inside the double-tap window: a remote
                 // double-click instead of click + hold-drag arming.
                 this.lastTapMs = 0;
-                this.cursorMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_DOWN, e.x, e.y);
-                this.cursorMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP, e.x, e.y);
+                this.mouseAt((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_DOWN, e.x, e.y);
+                this.mouseAt((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP, e.x, e.y);
                 return;
               }
               this.lastTapMs = now;
-              this.cursorMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_DOWN, e.x, e.y);
-              this.cursorMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP, e.x, e.y);
+              this.mouseAt((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_DOWN, e.x, e.y);
+              this.mouseAt((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP, e.x, e.y);
             })
             .parallelGesture(
               GestureGroup(GestureMode.Parallel,
@@ -1150,11 +1161,20 @@ struct RemotePage {
                     if (s > MAX_ZOOM) {
                       s = MAX_ZOOM;
                     }
+                    // fingerList localX/Y live in the component's unscaled
+                    // space while viewX/Y are container vp, so the focal
+                    // delta carries a gain of viewScale. Zoom about the
+                    // focal and fold the gain in: a plain focal delta pans
+                    // at 1/viewScale, which locks the viewport when zoomed.
+                    const fx = this.focalX(e);
+                    const fy = this.focalY(e);
+                    this.viewX += this.viewScale * (fx - this.videoW / 2) -
+                      s * (this.lastFocalX - this.videoW / 2);
+                    this.viewY += this.viewScale * (fy - this.videoH / 2) -
+                      s * (this.lastFocalY - this.videoH / 2);
                     this.viewScale = s;
-                    this.viewX += this.focalX(e) - this.lastFocalX;
-                    this.viewY += this.focalY(e) - this.lastFocalY;
-                    this.lastFocalX = this.focalX(e);
-                    this.lastFocalY = this.focalY(e);
+                    this.lastFocalX = fx;
+                    this.lastFocalY = fy;
                     this.clampPan();
                     this.pokeScrollbars();
                   })
@@ -1171,10 +1191,11 @@ struct RemotePage {
                   })
                   .onActionUpdate((e: GestureEvent) => {
                     if (this.viewScale > 1) {
-                      // Zoomed: the pinch gesture owns this touch (it zooms
-                      // and pans via its focal point); only track the offsets
-                      // so a pan that starts after the pinch lifts resumes
-                      // smoothly.
+                      // Zoomed: while the pinch recognizer holds the touch it
+                      // zooms and pans via its focal point; only track the
+                      // offsets so a pan that starts after the pinch lifts
+                      // resumes smoothly. When the pinch has ended (e.g. one
+                      // finger lifted) this pan pans the viewport.
                       if (this.pinching) {
                         this.lastWheelOffsetX = e.offsetX;
                         this.lastWheelOffsetY = e.offsetY;
@@ -1224,24 +1245,11 @@ struct RemotePage {
           .height(this.videoH > 0 ? this.videoH : '100%')
           .scale({ x: this.viewScale, y: this.viewScale })
           .translate({ x: this.viewX, y: this.viewY })
-          // Touch cursor: a standard arrow pointer whose tip sits at the
-          // touch point, offset just above the fingertip. Drawn with Path so
-          // it looks like a real mouse cursor (white fill, black outline).
-          // Hit-test disabled so it never steals touches from the video.
-          // In pointer mode this same arrow is the virtual trackpad cursor
-          // (tip at the virtual pointer position) and stays visible.
-          if (this.cursorVisible) {
-            Path()
-              .commands('M 0 0 L 0 21 L 5.5 16 L 9 24 L 12.5 22.5 L 9 15 L 16 15 Z')
-              .fill('#FFFFFF')
-              .stroke('#000000')
-              .strokeWidth(1.5)
-              .strokeOpacity(0.9)
-              .width(24)
-              .height(26)
-              .position({ x: this.cursorX, y: this.cursorY })
-              .hitTestBehavior(HitTestMode.None)
-          } else if (this.pointerMode) {
+          // Touch mode draws no local arrow overlay: the peer's real cursor
+          // (the remote cursor overlay, or the cursor embedded in the video)
+          // already shows where clicks land. Pointer mode still draws its
+          // virtual trackpad cursor below.
+          if (this.pointerMode) {
             Path()
               .commands('M 0 0 L 0 21 L 5.5 16 L 9 24 L 12.5 22.5 L 9 15 L 16 15 Z')
               .fill('#FFFFFF')
@@ -1330,14 +1338,26 @@ struct RemotePage {
               })
           }
           Row({ space: 8 }) {
-            this.ToggleChip('Ctrl', this.ctrlOn, (): void => {
-              this.ctrlOn = !this.ctrlOn;
+            ToggleChip({
+              label: 'Ctrl',
+              on: this.ctrlOn,
+              onTap: (): void => {
+                this.ctrlOn = !this.ctrlOn;
+              }
             })
-            this.ToggleChip('Alt', this.altOn, (): void => {
-              this.altOn = !this.altOn;
+            ToggleChip({
+              label: 'Alt',
+              on: this.altOn,
+              onTap: (): void => {
+                this.altOn = !this.altOn;
+              }
             })
-            this.ToggleChip('Shift', this.shiftOn, (): void => {
-              this.shiftOn = !this.shiftOn;
+            ToggleChip({
+              label: 'Shift',
+              on: this.shiftOn,
+              onTap: (): void => {
+                this.shiftOn = !this.shiftOn;
+              }
             })
             Blank()
             this.ToolButton($r('app.string.keyboard'), (): void => {
@@ -1346,14 +1366,29 @@ struct RemotePage {
           }
           .width('100%')
           Row({ space: 8 }) {
-            this.ToggleChip($r('app.string.remote_cursor'), this.showRemoteCursor, (): void => {
-              this.showRemoteCursor = !this.showRemoteCursor;
+            ToggleChip({
+              label: $r('app.string.remote_cursor'),
+              on: this.showRemoteCursor,
+              onTap: (): void => {
+                // Mutually exclusive with pointer mode: tapping this chip
+                // while it is on leaves pointer mode (which re-enables it).
+                if (this.showRemoteCursor) {
+                  this.leavePointerMode();
+                  this.showRemoteCursor = false;
+                  return;
+                }
+                this.showRemoteCursor = true;
+              }
             })
-            this.ToggleChip($r('app.string.pointer_mode'), this.pointerMode, (): void => {
-              if (this.pointerMode) {
-                this.leavePointerMode();
-              } else {
-                this.enterPointerMode();
+            ToggleChip({
+              label: $r('app.string.pointer_mode'),
+              on: this.pointerMode,
+              onTap: (): void => {
+                if (this.pointerMode) {
+                  this.leavePointerMode();
+                } else {
+                  this.enterPointerMode();
+                }
               }
             })
             this.ToolButton($r('app.string.quick_actions'), (): void => {
@@ -1652,19 +1687,6 @@ struct RemotePage {
     .onAreaChange((_oldArea: Area, newArea: Area) => {
       this.isLandscape = (newArea.width as number) > (newArea.height as number);
     })
-  }
-
-  @Builder
-  ToggleChip(label: ResourceStr, on: boolean, onTap: () => void) {
-    Text(label)
-      .fontSize(12)
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .borderRadius(6)
-      .backgroundColor(on ? '#3A7BD5' : '#EEEEEE')
-      .fontColor(on ? '#FFFFFF' : '#333333')
-      .onClick(() => {
-        onTap();
-      })
   }
 
   @Builder
