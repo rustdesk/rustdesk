@@ -7,6 +7,7 @@ import '../common.dart';
 
 class AndroidDocuments {
   static const root = '/@rustdesk/';
+  static const _androidO = 26;
 
   static bool isPath(String path) => path.startsWith(root);
 
@@ -47,7 +48,7 @@ class AndroidDocuments {
         throw StateError('Log directory setup did not complete');
       }
       if (ready) return true;
-      if (!await _confirmLogFolder()) return false;
+      if (androidVersion >= _androidO && !await _confirmLogFolder()) return false;
       final selected = await gFFI
           .invokeMethodWithResult<bool>('document_require_log_folder');
       if (selected == null) {
