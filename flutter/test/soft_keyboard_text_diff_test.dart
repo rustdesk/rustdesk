@@ -33,5 +33,24 @@ void main() {
       expect(replace.backspaces, 1);
       expect(replace.newStr, '😃');
     });
+
+    test('distinguishes typed 1 from padding', () {
+      // A '1' the user typed must not be mistaken for the padding marker.
+      final diff =
+          softKeyboardTextDiff('$initText' 'a1', '$initText' 'b1');
+      expect(diff.backspaces, 2);
+      expect(diff.newStr, 'b1');
+
+      // Deleting past the typed text consumes padding as backspace credit.
+      final consumed =
+          softKeyboardTextDiff(initText, '1' * (initText.length - 1));
+      expect(consumed.backspaces, 1);
+      expect(consumed.newStr, isEmpty);
+
+      // Clearing the whole field deletes only the typed text, not padding.
+      final cleared = softKeyboardTextDiff('$initText' 'a', '');
+      expect(cleared.backspaces, 1);
+      expect(cleared.newStr, isEmpty);
+    });
   });
 }

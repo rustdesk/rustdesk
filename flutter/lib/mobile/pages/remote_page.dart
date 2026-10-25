@@ -28,27 +28,39 @@ import '../widgets/custom_scale_widget.dart';
 
 final initText = '1' * 1024;
 
-// Returns the edit that turns the text after the last '1' marker of [oldValue]
-// into that of [newValue]: how many characters to delete and the replacement
-// text. Compared in code points so surrogate pairs (e.g. emoji) are never
-// split and each deleted character gets exactly one backspace.
+// Returns the edit that turns the typed text of [oldValue] into that of
+// [newValue]: how many characters to delete and the replacement text. The
+// hidden field keeps a run of '1' padding before the typed text, so the typed
+// tail starts after the leading '1's. Compared in code points so surrogate
+// pairs (e.g. emoji) are never split and each deleted character gets exactly
+// one backspace.
 ({int backspaces, String newStr}) softKeyboardTextDiff(
     String oldValue, String newValue) {
-  var i = newValue.length - 1;
-  for (; i >= 0 && newValue[i] != '1'; --i) {}
-  var j = oldValue.length - 1;
-  for (; j >= 0 && oldValue[j] != '1'; --j) {}
-  if (i < j) j = i;
-  final oldRunes = oldValue.substring(j + 1).runes.toList(growable: false);
-  final newRunes = newValue.substring(j + 1).runes.toList(growable: false);
+  var i = 0;
+  while (i < oldValue.length && oldValue[i] == '1') {
+    ++i;
+  }
+  var j = 0;
+  while (j < newValue.length && newValue[j] == '1') {
+    ++j;
+  }
+  final oldRunes = oldValue.substring(i).runes.toList(growable: false);
+  final newRunes = newValue.substring(j).runes.toList(growable: false);
   var common = 0;
   for (;
       common < oldRunes.length &&
           common < newRunes.length &&
           oldRunes[common] == newRunes[common];
       ++common) {}
+  var backspaces = oldRunes.length - common;
+  // '1' padding past the end of the typed text acts as backspace credit: a
+  // consumed padding char means one remote backspace. A mass clear removes
+  // the whole run in one event but still means only one backspace.
+  if (backspaces == 0 && i > j) {
+    backspaces = 1;
+  }
   return (
-    backspaces: oldRunes.length - common,
+    backspaces: backspaces,
     newStr: String.fromCharCodes(newRunes.skip(common)),
   );
 }
@@ -403,10 +415,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       oldValue = '';
     }
     // Same diff algorithm as _handleIOSSoftKeyboardInput: a length-only diff
-    // misses in-place IME edits (e.g. Vietnamese Telex "oo" -> "ô"), so compare
-    // the tails after the last '1' marker instead. Composing updates are sent
-    // too: a commit that produces the same text does not fire onChanged, so
-    // skipping them can leave the remote text behind.
+    // misses in-place IME edits (e.g. Vietnamese Telex "oo" -> "ô"), so
+    // compare the typed tails after the '1' padding instead. Composing updates
+    // are sent too: a commit that produces the same text does not fire
+    // onChanged, so skipping them can leave the remote text behind.
     final diff = softKeyboardTextDiff(oldValue, newValue);
     var newStr = diff.newStr;
 
