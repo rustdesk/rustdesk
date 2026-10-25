@@ -11,8 +11,9 @@ use crate::hwcodec::*;
 use crate::mediacodec::{MediaCodecDecoder, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT};
 #[cfg(feature = "vram")]
 use crate::vram::*;
+#[cfg(not(target_env = "ohos"))]
+use crate::aom::{self, AomDecoder, AomEncoder, AomEncoderConfig};
 use crate::{
-    aom::{self, AomDecoder, AomEncoder, AomEncoderConfig},
     common::GoogleImage,
     vpxcodec::{self, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
     CodecFormat, EncodeInput, EncodeYuvFormat, ImageRgb, ImageTexture,
@@ -50,6 +51,7 @@ pub const ENCODE_NEED_SWITCH: &'static str = "ENCODE_NEED_SWITCH";
 #[derive(Debug, Clone)]
 pub enum EncoderCfg {
     VPX(VpxEncoderConfig),
+    #[cfg(not(target_env = "ohos"))]
     AOM(AomEncoderConfig),
     #[cfg(feature = "hwcodec")]
     HWRAM(HwRamEncoderConfig),
@@ -103,6 +105,7 @@ impl DerefMut for Encoder {
 pub struct Decoder {
     vp8: Option<VpxDecoder>,
     vp9: Option<VpxDecoder>,
+    #[cfg(not(target_env = "ohos"))]
     av1: Option<AomDecoder>,
     #[cfg(feature = "hwcodec")]
     h264_ram: Option<HwRamDecoder>,
@@ -137,6 +140,7 @@ impl Encoder {
             EncoderCfg::VPX(_) => Ok(Encoder {
                 codec: Box::new(VpxEncoder::new(config, i444)?),
             }),
+            #[cfg(not(target_env = "ohos"))]
             EncoderCfg::AOM(_) => Ok(Encoder {
                 codec: Box::new(AomEncoder::new(config, i444)?),
             }),
@@ -364,6 +368,7 @@ impl Encoder {
                 VpxVideoCodecId::VP8 => CodecFormat::VP8,
                 VpxVideoCodecId::VP9 => CodecFormat::VP9,
             },
+            #[cfg(not(target_env = "ohos"))]
             EncoderCfg::AOM(_) => CodecFormat::AV1,
             #[cfg(feature = "hwcodec")]
             EncoderCfg::HWRAM(hw) => {
@@ -410,6 +415,7 @@ impl Encoder {
                 VpxVideoCodecId::VP8 => false,
                 VpxVideoCodecId::VP9 => decodings.iter().all(|d| d.1.i444.vp9),
             },
+            #[cfg(not(target_env = "ohos"))]
             EncoderCfg::AOM(_) => decodings.iter().all(|d| d.1.i444.av1),
             #[cfg(feature = "hwcodec")]
             EncoderCfg::HWRAM(_) => false,
@@ -433,7 +439,8 @@ impl Decoder {
         let mut decoding = SupportedDecoding {
             ability_vp8: 1,
             ability_vp9: 1,
-            ability_av1: if disable_av1() { 0 } else { 1 },
+            // No libaom on ohos: never advertise AV1 decoding.
+            ability_av1: if disable_av1() || cfg!(target_env = "ohos") { 0 } else { 1 },
             i444: Some(CodecAbility {
                 vp9: true,
                 av1: true,
@@ -500,7 +507,10 @@ impl Decoder {
 
     pub fn new(format: CodecFormat, _luid: Option<i64>) -> Decoder {
         log::info!("try create new decoder, format: {format:?}, _luid: {_luid:?}");
+        #[cfg(not(target_env = "ohos"))]
         let (mut vp8, mut vp9, mut av1) = (None, None, None);
+        #[cfg(target_env = "ohos")]
+        let (mut vp8, mut vp9) = (None, None);
         #[cfg(feature = "hwcodec")]
         let (mut h264_ram, mut h265_ram) = (None, None);
         #[cfg(feature = "vram")]
@@ -528,12 +538,17 @@ impl Decoder {
                 }
                 valid = vp9.is_some();
             }
+            #[cfg(not(target_env = "ohos"))]
             CodecFormat::AV1 => {
                 match AomDecoder::new() {
                     Ok(v) => av1 = Some(v),
                     Err(e) => log::error!("create AV1 decoder failed: {}", e),
                 }
                 valid = av1.is_some();
+            }
+            #[cfg(target_env = "ohos")]
+            CodecFormat::AV1 => {
+                log::error!("AV1 decoder is not available on this platform");
             }
             CodecFormat::H264 => {
                 #[cfg(feature = "vram")]
@@ -599,6 +614,7 @@ impl Decoder {
         Decoder {
             vp8,
             vp9,
+            #[cfg(not(target_env = "ohos"))]
             av1,
             #[cfg(feature = "hwcodec")]
             h264_ram,
@@ -651,12 +667,17 @@ impl Decoder {
                     bail!("vp9 decoder not available");
                 }
             }
+            #[cfg(not(target_env = "ohos"))]
             video_frame::Union::Av1s(av1s) => {
                 if let Some(av1) = &mut self.av1 {
                     Decoder::handle_av1s_video_frame(av1, av1s, rgb, chroma)
                 } else {
                     bail!("av1 decoder not available");
                 }
+            }
+            #[cfg(target_env = "ohos")]
+            video_frame::Union::Av1s(_) => {
+                bail!("av1 decoder not available");
             }
             #[cfg(any(feature = "hwcodec", feature = "vram"))]
             video_frame::Union::H264s(h264s) => {
@@ -736,6 +757,7 @@ impl Decoder {
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb
+    #[cfg(not(target_env = "ohos"))]
     fn handle_av1s_video_frame(
         decoder: &mut AomDecoder,
         av1s: &EncodedVideoFrames,
@@ -1037,6 +1059,7 @@ fn disable_av1() -> bool {
 }
 
 #[cfg(not(target_os = "ios"))]
+#[cfg(not(target_env = "ohos"))]
 pub fn test_av1() {
     use base::config::keys::OPTION_AV1_TEST;
     use hbb_common::rand::Rng;

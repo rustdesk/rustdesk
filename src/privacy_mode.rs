@@ -294,7 +294,7 @@ fn turn_on_privacy_sync(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>
     Some(privacy_mode_lock.as_mut()?.turn_on_privacy(conn_id))
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 pub(crate) fn close_other_remote_connections_for_privacy(owner_id: i32) {
     use crate::server::{AuthConnType, AUTHED_CONNS};
 

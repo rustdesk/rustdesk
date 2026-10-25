@@ -1,15 +1,16 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::{clipboard_listener, update_clipboard, ClipboardSide};
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 use crate::{audio_service, clipboard::CLIPBOARD_INTERVAL, ConnInner, CLIENT_SERVER};
 use crate::{
     client::{
         self, new_voice_call_request, Client, Data, Interface, MediaData, MediaSender,
         QualityStatus, MILLI1, SEC30,
     },
-    common::get_default_sound_input,
     ui_session_interface::{InvokeUiSession, Session},
 };
+#[cfg(not(target_env = "ohos"))]
+use crate::common::get_default_sound_input;
 
 // Empirical no-data window before exposing the restart reconnect state to the UI.
 // Restart msgbox text is kept as a legacy UI fallback; Flutter handles the type as a control event.
@@ -41,7 +42,7 @@ use base::{
 ))]
 use clipboard::ContextSend;
 use crossbeam_queue::ArrayQueue;
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 use hbb_common::{
     allow_err,
@@ -592,7 +593,7 @@ impl<T: InvokeUiSession> Remote<T> {
             return None;
         }
         // iOS does not have this server.
-        #[cfg(not(any(target_os = "ios")))]
+        #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
         {
             // NOTE:
             // The client server and --server both use the same sound input device.
@@ -660,7 +661,7 @@ impl<T: InvokeUiSession> Remote<T> {
             });
             return Some(tx);
         }
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_env = "ohos"))]
         {
             None
         }
@@ -678,7 +679,7 @@ impl<T: InvokeUiSession> Remote<T> {
         self.sent_close_reason = true;
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn start_initial_clipboard_sync(&mut self) {
         let peer_info = {
             let lc = self.handler.lc.read().unwrap();
@@ -722,7 +723,7 @@ impl<T: InvokeUiSession> Remote<T> {
     // Linux listener creation returns before X11/Wayland has subscribed to changes.
     // Capture after readiness so changes during the read can invalidate the snapshot.
     // A separate task keeps a stalled backend from blocking the connection loop.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn spawn_initial_clipboard_read_after_ready(&self, read_clipboard: impl FnOnce() + Send + 'static) {
         // Initial-sync wait budget, not a protocol-defined startup deadline.
         const CLIPBOARD_READY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -776,7 +777,7 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::ToggleClipboardFile => {
                 self.check_clipboard_file_context();
             }
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
             Data::InitialClipboard(generation, msg) => {
                 // A live update supersedes any initial snapshot still being prepared.
                 if !self.initial_clipboard_pending {
@@ -1785,7 +1786,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             #[cfg(not(target_os = "ios"))]
                             let rx = Client::try_start_clipboard(None);
                             #[cfg(not(feature = "flutter"))]
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                             let rx = Client::try_start_clipboard(Some(
                                 crate::client::ClientClipboardContext {
                                     cfg: self.handler.get_permission_config(),
@@ -1797,7 +1798,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 },
                             ));
                             // To make sure current text clipboard data is updated.
-                            #[cfg(not(target_os = "ios"))]
+                            #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
                             if let Some(mut rx) = rx {
                                 timeout(CLIPBOARD_INTERVAL, rx.recv()).await.ok();
                             }
@@ -1805,7 +1806,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             // `is_connected`` becomes true after the first PeerInfo.
                             // Reconnects create a new Remote. Refreshes after a generation change
                             // use a separate entry point and are not blocked by this guard.
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                             if !self.is_connected
                                 && self.handler.is_text_clipboard_required()
                                 && self.handler.lc.read().unwrap().sync_init_clipboard.v
@@ -1873,12 +1874,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             let session_id = self.handler.lc.read().unwrap().session_id;
                             crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
                         }
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                         {
                             self.initial_clipboard_pending = false;
                             update_clipboard(vec![cb], ClipboardSide::Client);
                         }
-                        #[cfg(target_os = "ios")]
+                        #[cfg(any(target_os = "ios", target_env = "ohos"))]
                         {
                             let content = if cb.compress {
                                 hbb_common::compress::decompress(&cb.content)
@@ -1911,12 +1912,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             let session_id = self.handler.lc.read().unwrap().session_id;
                             crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
                         }
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                         {
                             self.initial_clipboard_pending = false;
                             update_clipboard(_mcb.clipboards, ClipboardSide::Client);
                         }
-                        #[cfg(target_os = "ios")]
+                        #[cfg(any(target_os = "ios", target_env = "ohos"))]
                         {
                             if let Some(cb) = _mcb
                                 .clipboards
