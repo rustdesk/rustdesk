@@ -402,7 +402,11 @@ class ServerModel with ChangeNotifier {
       }
     } else {
       if (isAndroid) {
-        await AndroidDocuments.requireLogFolder();
+        try {
+          await AndroidDocuments.requireLogFolder();
+        } catch (_) {
+          return;
+        }
         await showAndroidFileTransferSetup(gFFI);
       }
       await checkRequestNotificationPermission();

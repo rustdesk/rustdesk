@@ -3,7 +3,6 @@ package com.carriez.flutter_hbb
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
@@ -20,7 +19,6 @@ internal class DocumentLogs(private val context: Context) {
     private val appDirectoryId = "$PARENT_ID/$appName"
     private val directoryId = "$appDirectoryId/Logs"
     val directoryPath = directoryId.substringAfter(':')
-    private val legacy = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) LegacyDocumentLogs(context) else null
     private var output: ParcelFileDescriptor.AutoCloseOutputStream? = null
     private var written = 0L
     private var openedDay = 0L
@@ -29,7 +27,6 @@ internal class DocumentLogs(private val context: Context) {
     private fun grant(): Uri? = prefs.getString(LOG_GRANT, null)?.let(Uri::parse)
 
     fun hasPermission(): Boolean {
-        legacy?.let { return it.hasPermission() }
         val uri = grant() ?: return false
         if (!isLogGrant(uri)) return false
         return resolver.persistedUriPermissions.any {
@@ -100,7 +97,7 @@ internal class DocumentLogs(private val context: Context) {
     @Synchronized
     fun select(uri: Uri, flags: Int) {
         require(isLogGrant(uri)) {
-            "Please select Android/media."
+            "Please select Android → media."
         }
         val permissions = flags and GRANT_FLAGS
         require(permissions == GRANT_FLAGS) { "Read and write access is required for logs" }
@@ -115,7 +112,6 @@ internal class DocumentLogs(private val context: Context) {
 
     @Synchronized
     fun ensureReady(): Boolean {
-        legacy?.let { return it.ensureReady() }
         if (!hasPermission()) return false
         val uri = grant() ?: return false
         val root = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
@@ -128,7 +124,6 @@ internal class DocumentLogs(private val context: Context) {
 
     @Synchronized
     fun write(message: String): Boolean {
-        legacy?.let { return it.write(message) }
         val uri = grant() ?: return false
         failure?.let { throw IOException("File logging stopped: ${it.message}", it) }
         try {
@@ -217,7 +212,6 @@ internal class DocumentLogs(private val context: Context) {
     }
 
     fun exportTo(destination: Uri): Int {
-        legacy?.let { return it.exportTo(destination) }
         val uri = grant() ?: return 0
         check(hasPermission()) { "Log directory access was revoked" }
         val parent = DocumentsContract.buildDocumentUriUsingTree(
@@ -239,20 +233,14 @@ internal class DocumentLogs(private val context: Context) {
 
     private fun currentDay(): Long = System.currentTimeMillis() / TimeUnit.DAYS.toMillis(1)
 
-    @Synchronized
-    fun selectLegacy() {
-        val logs = legacy ?: throw IOException("Legacy log storage is unavailable")
-        logs.select()
-    }
-
     companion object {
         const val AUTHORITY = "com.android.externalstorage.documents"
         const val PARENT_ID = "primary:Android/media"
-        internal const val LOG_GRANT = "log-folder"
+        private const val LOG_GRANT = "log-folder"
         private const val GRANT_FLAGS = Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        internal const val MAX_LOG_BYTES = 16L * 1024 * 1024
-        internal const val MAX_LOG_FILES = 90
-        internal val LOG_NAME = Regex("rustdesk-[0-9]+-[0-9a-f-]{36}\\.txt")
+        private const val MAX_LOG_BYTES = 16L * 1024 * 1024
+        private const val MAX_LOG_FILES = 90
+        private val LOG_NAME = Regex("rustdesk-[0-9]+-[0-9a-f-]{36}\\.txt")
     }
 }

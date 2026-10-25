@@ -7,7 +7,6 @@ import '../common.dart';
 
 class AndroidDocuments {
   static const root = '/@rustdesk/';
-  static const _androidO = 26;
 
   static bool isPath(String path) => path.startsWith(root);
 
@@ -48,7 +47,7 @@ class AndroidDocuments {
         throw StateError('Log directory setup did not complete');
       }
       if (ready) return true;
-      if (androidVersion >= _androidO && !await _confirmLogFolder()) return false;
+      if (!await _confirmLogFolder()) return false;
       final selected = await gFFI
           .invokeMethodWithResult<bool>('document_require_log_folder');
       if (selected == null) {
@@ -57,10 +56,22 @@ class AndroidDocuments {
       return selected;
     } catch (error) {
       debugPrint('Log directory setup failed: $error');
-      showToast(error is PlatformException
-          ? error.message ?? translate('Failed')
-          : error.toString());
-      return false;
+      await gFFI.dialogManager.show<void>(
+        (_, close, __) => CustomAlertDialog(
+          title: Text(translate('Error')),
+          content: Text(error is PlatformException
+              ? translate(error.message ?? 'Failed')
+              : error.toString()),
+          actions: [
+            TextButton(onPressed: close, child: Text(translate('OK'))),
+          ],
+          onSubmit: close,
+          onCancel: close,
+        ),
+        backDismiss: true,
+        forceGlobal: true,
+      );
+      rethrow;
     } finally {
       gFFI.ffiModel.endAndroidDocumentPicker();
     }

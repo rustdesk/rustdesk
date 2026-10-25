@@ -1,12 +1,9 @@
 package com.carriez.flutter_hbb
 
-import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.provider.DocumentsContract
-import com.hjq.permissions.OnPermissionCallback
-import com.hjq.permissions.XXPermissions
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import kotlin.concurrent.thread
@@ -129,10 +126,6 @@ internal class DocumentPicker(private val activity: Activity) {
     }
 
     private fun pickLogFolder(result: MethodChannel.Result) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            requestLegacyLogPermission(result)
-            return
-        }
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
@@ -147,40 +140,6 @@ internal class DocumentPicker(private val activity: Activity) {
         } catch (error: Exception) {
             pendingLogFolder = null
             result.error("picker_unavailable", error.message, null)
-        }
-    }
-
-    private fun requestLegacyLogPermission(result: MethodChannel.Result) {
-        try {
-            XXPermissions.with(activity)
-                .permission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                // Target-SDK checks in this library reject permissions restricted to old Android.
-                .unchecked()
-                .request(object : OnPermissionCallback {
-                    override fun onGranted(permissions: MutableList<String>, allGranted: Boolean) {
-                        completeLegacyLogPermission(result, allGranted)
-                    }
-
-                    override fun onDenied(permissions: MutableList<String>, doNotAskAgain: Boolean) {
-                        completeLegacyLogPermission(result, false)
-                    }
-                })
-        } catch (error: Exception) {
-            pendingLogFolder = null
-            result.error("log_permission_failed", error.message, null)
-        }
-    }
-
-    private fun completeLegacyLogPermission(result: MethodChannel.Result, granted: Boolean) {
-        if (pendingLogFolder !== result) return
-        pendingLogFolder = null
-        if (!granted) {
-            result.success(false)
-            return
-        }
-        run(result) {
-            storage.logs.selectLegacy()
-            true
         }
     }
 

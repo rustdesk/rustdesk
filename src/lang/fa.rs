@@ -818,5 +818,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Choose which folder remote devices can access. You can change it later in {}.", ""),
         ("android-logs-folder-tip", ""),
         ("Choose folder", ""),
+        ("Please select Android → media.", ""),
     ].iter().cloned().collect();
 }

@@ -820,5 +820,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Choose which folder remote devices can access. You can change it later in {}.", "選擇允許遠端裝置存取的資料夾。"),
         ("android-logs-folder-tip", ""),
         ("Choose folder", ""),
+        ("Please select Android → media.", "請選擇 Android → media。"),
     ].iter().cloned().collect();
 }
