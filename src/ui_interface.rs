@@ -818,7 +818,7 @@ pub fn peer_exists(id: &str) -> bool {
 
 #[inline]
 pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
-    config::LanPeers::load()
+    let mut peers: Vec<_> = config::LanPeers::load()
         .peers
         .iter()
         .map(|peer| {
@@ -829,7 +829,31 @@ pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
                 ("platform", peer.platform.clone()),
             ])
         })
-        .collect()
+        .collect();
+    // Online Tailscale machines are listed next to the LAN ones, identified by their tailnet IP.
+    for ts in crate::tailscale::get_peers().into_iter().filter(|p| p.online) {
+        if peers.iter().all(|p| p.get("id") != Some(&ts.ip)) {
+            peers.push(HashMap::<&str, String>::from_iter([
+                ("id", ts.ip),
+                ("username", String::new()),
+                ("hostname", ts.hostname),
+                ("platform", tailscale_platform(&ts.os)),
+            ]));
+        }
+    }
+    peers
+}
+
+/// Maps Tailscale's OS names to the platform names the peer cards know about.
+fn tailscale_platform(os: &str) -> String {
+    match os {
+        "linux" => "Linux",
+        "windows" => "Windows",
+        "macOS" => "Mac OS",
+        "android" => "Android",
+        other => other,
+    }
+    .to_owned()
 }
 
 #[inline]
