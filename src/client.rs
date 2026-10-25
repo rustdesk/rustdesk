@@ -885,9 +885,22 @@ impl Client {
             }
         }
         if !exchanged && legacy_secure {
-            secure_tcp(&mut socket, &key)
-                .await
-                .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
+            secure_tcp(&mut socket, &key).await.map_err(|e| {
+                // Only an elapsed read deadline shows the exchange never completed, and only a
+                // token makes it worth naming: this branch also runs for a switch code alone,
+                // and `secure_tcp` fails after a server did start an exchange too.
+                if token.is_empty() || !exchange_timed_out(&e) {
+                    return anyhow!("Failed to secure tcp: {}", e);
+                }
+                anyhow!(
+                    concat!(
+                        "Failed to secure tcp: {}. The rendezvous server did not complete the ",
+                        "key exchange that protects the account token, so the token was ",
+                        "withheld. Connecting while logged out does not need it."
+                    ),
+                    e
+                )
+            })?;
         }
         // A token or switch code has always taken this socket straight to the punch without
         // waiting for the UDP NAT test. The WebRTC exchange does not replace that wait, it only
@@ -1806,7 +1819,22 @@ impl Client {
                 .with_context(|| "Failed to connect to rendezvous server")?;
 
             if !key.is_empty() && (!token.is_empty() || !switch_code.is_empty()) {
-                secure_tcp(&mut socket, key).await?;
+                secure_tcp(&mut socket, key).await.map_err(|e| {
+                    // Same condition as the direct path. The wording deliberately avoids an
+                    // uppercase `Failed`: `on_establish_connection_error` reads that as a
+                    // non-timeout failure and would stop offering the relay hint here.
+                    if token.is_empty() || !exchange_timed_out(&e) {
+                        return e;
+                    }
+                    anyhow!(
+                        concat!(
+                            "secure tcp timed out before the rendezvous server completed the ",
+                            "key exchange that protects the account token, so the token was ",
+                            "withheld: {}"
+                        ),
+                        e
+                    )
+                })?;
             }
 
             ipv4 = socket.local_addr().is_ipv4();
@@ -5274,6 +5302,14 @@ async fn hc_connection_(
         }
     }
     Ok(())
+}
+
+// `secure_tcp` reports an elapsed read deadline as `tokio`'s `Elapsed`, which is the only
+// failure that shows the rendezvous server never completed the exchange. Matching the rendered
+// text instead would also catch unrelated errors that happen to mention a deadline.
+fn exchange_timed_out(e: &hbb_common::anyhow::Error) -> bool {
+    e.downcast_ref::<hbb_common::tokio::time::error::Elapsed>()
+        .is_some()
 }
 
 pub mod peer_online {

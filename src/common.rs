@@ -2253,9 +2253,14 @@ async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> 
     key_exchange(conn, key, log_on_success).await.map(|_| ())
 }
 
-/// The server's key exchange on `conn`. `Ok(true)` once the stream is encrypted. `Ok(false)`
-/// when the server sent something else first, nothing parseable, or closed: `secure_tcp`
-/// tolerates that for servers from before the exchange, `secure_tcp_required` does not.
+/// The server's key exchange on `conn`.
+///
+/// `Ok(true)` once the exchange completed and the stream is encrypted. `Ok(false)` when the
+/// first read completed without a valid exchange: a non-exchange or malformed frame, EOF, or a
+/// read error. `Err` when the key is not a valid rendezvous public key, which is decided before
+/// any read, when the read deadline elapsed, or when a recognized exchange failed validation or
+/// transmission. `secure_tcp` tolerates only `Ok(false)`; both variants propagate `Err`, so a
+/// server that stays silent is an error on either path rather than a tolerated one.
 async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> ResultType<bool> {
     let rs_pk = get_rs_pk(key);
     let Some(rs_pk) = rs_pk else {
@@ -2334,10 +2339,11 @@ async fn secure_tcp_silent(conn: &mut Stream, key: &str) -> ResultType<()> {
 }
 
 /// Like [`secure_tcp`], but returns only once the server's key exchange has actually encrypted
-/// the stream; a server that answers with anything else, or with nothing, is an error, so the
-/// caller can withhold what it was about to send instead of sending it in the clear.
-/// `secure_tcp` keeps tolerating such a server, which the paths from before the exchange depend
-/// on. WebSocket is treated as `secure_tcp` treats it, as a transport that is encrypted already.
+/// the stream, so the caller can withhold what it was about to send instead of sending it in
+/// the clear. A server that answers with a non-exchange frame is an error here while
+/// `secure_tcp` tolerates it, which the paths from before the exchange depend on. A server that
+/// stays silent until its read deadline elapses is an error on both paths. WebSocket is treated
+/// as `secure_tcp` treats it, as a transport that is encrypted already.
 pub async fn secure_tcp_required(conn: &mut Stream, key: &str) -> ResultType<()> {
     if use_ws() {
         return Ok(());
@@ -3352,9 +3358,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_secure_tcp_required_refuses_a_server_without_the_exchange() {
+    async fn test_secure_tcp_required_refuses_a_non_exchange_first_message() {
         let (key, _) = server_key();
-        // A server from before the exchange answers the first message with something else.
+        // A complete non-exchange frame, not a silent pre-exchange server: a real one waits for
+        // the client to speak first, which both paths treat as an error once the deadline is up.
         let serve = |mut s: hbb_common::tcp::FramedStream| async move {
             let mut msg = RendezvousMessage::new();
             msg.set_register_peer_response(RegisterPeerResponse::new());
