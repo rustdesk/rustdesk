@@ -2245,6 +2245,8 @@ class CanvasModel with ChangeNotifier {
   bool _locked = false;
   double _devicePixelRatio = 1.0;
   Size _size = Size.zero;
+  // mobile only, space taken by a toolbar docked beside the canvas
+  EdgeInsets mobileToolbarInsets = EdgeInsets.zero;
   // the tabbar over the image
   // double tabBarHeight = 0.0;
   // the window border's width
@@ -2344,6 +2346,8 @@ class CanvasModel with ChangeNotifier {
     if (isMobile) {
       // Account for horizontal safe area insets on both orientations.
       w = w - mediaData.padding.left - mediaData.padding.right;
+      w = w - mobileToolbarInsets.horizontal;
+      h = h - mobileToolbarInsets.vertical;
       // Vertically, subtract the bottom keyboard inset (viewInsets.bottom) and any
       // bottom overlay (e.g. key-help tools) so the canvas is not covered.
       h = h -

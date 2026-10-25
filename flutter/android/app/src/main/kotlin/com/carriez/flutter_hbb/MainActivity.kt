@@ -118,6 +118,24 @@ class MainActivity : FlutterActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    // Samsung DeX keeps the Meta (Windows) key and shortcuts like Alt+Tab for itself
+    // unless the focused app asks for them through this non-public Samsung API.
+    private fun requestSamsungMetaKeyEvent(enable: Boolean): String {
+        return try {
+            val cls = Class.forName("com.samsung.android.view.SemWindowManager")
+            val manager = cls.getMethod("getInstance").invoke(null)
+            cls.getMethod(
+                "requestMetaKeyEvent",
+                ComponentName::class.java,
+                Boolean::class.javaPrimitiveType
+            ).invoke(manager, componentName, enable)
+            "ok"
+        } catch (e: Throwable) {
+            Log.w(logTag, "requestMetaKeyEvent unavailable: $e")
+            e.javaClass.simpleName
+        }
+    }
+
     private fun requestMediaProjection() {
         val intent = Intent(this, PermissionRequestTransparentActivity::class.java).apply {
             action = ACT_REQUEST_MEDIA_PROJECTION
@@ -364,6 +382,9 @@ class MainActivity : FlutterActivity() {
                     } else {
                         result.success(true)
                     }
+                }
+                "capture_system_keys" -> {
+                    result.success(requestSamsungMetaKeyEvent(call.arguments as Boolean))
                 }
                 "enable_soft_keyboard" -> {
                     // https://blog.csdn.net/hanye2020/article/details/105553780
