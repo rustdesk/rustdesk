@@ -5277,15 +5277,118 @@ async fn hc_connection_(
 }
 
 pub mod peer_online {
+    use crate::{check_port, increase_port, ui_interface::handle_relay_id};
     use hbb_common::{
         anyhow::bail,
-        config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT},
+        config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS},
+        futures::future::join_all,
         log,
         rendezvous_proto::*,
         sleep,
         socket_client::connect_tcp,
         ResultType, Stream,
     };
+    use std::collections::{HashMap, HashSet};
+
+    /// A peer the query will ask about: the id the caller passed in, and the bare id
+    /// registered with the rendezvous server that owns it.
+    struct PlannedPeer {
+        original: String,
+        wire: String,
+    }
+
+    /// `None` keeps the globally configured server, which is the only server the query
+    /// knew about before peers could carry one of their own.
+    type OnlineEndpoint = Option<String>;
+
+    /// Reads a peer id the way `LoginConfigHandler::initialize` does, so the status query
+    /// asks the same server a connection to that peer would.
+    fn plan_online_query(ids: &[String]) -> Vec<(OnlineEndpoint, Vec<PlannedPeer>)> {
+        let mut order: Vec<OnlineEndpoint> = Vec::new();
+        let mut groups: HashMap<OnlineEndpoint, Vec<PlannedPeer>> = HashMap::new();
+        for id in ids {
+            let (endpoint, wire) = if id.contains('@') {
+                // Same split as `LoginConfigHandler::initialize`: anything after a second
+                // `@` is not part of the server.
+                let mut v = id.split('@');
+                let raw_id = v.next().unwrap_or_default();
+                let server = v
+                    .next()
+                    .unwrap_or_default()
+                    .split('?')
+                    .next()
+                    .unwrap_or_default();
+                let host = if server == super::PUBLIC_SERVER {
+                    check_port(RENDEZVOUS_SERVERS[0], RENDEZVOUS_PORT)
+                } else {
+                    check_port(server, RENDEZVOUS_PORT)
+                };
+                (
+                    Some(increase_port(host, -1)),
+                    handle_relay_id(raw_id).to_owned(),
+                )
+            } else {
+                (None, id.clone())
+            };
+            if !groups.contains_key(&endpoint) {
+                order.push(endpoint.clone());
+            }
+            groups.entry(endpoint).or_default().push(PlannedPeer {
+                original: id.clone(),
+                wire,
+            });
+        }
+        order
+            .into_iter()
+            .filter_map(|k| groups.remove(&k).map(|v| (k, v)))
+            .collect()
+    }
+
+    /// Maps one group's bare-id answer back onto the ids the caller passed in, and reports
+    /// whether the group answered at all. An `Err` group contributes nothing, so those peers
+    /// keep whatever state they already had.
+    fn remap_group_result(
+        peers: &[PlannedPeer],
+        result: ResultType<(Vec<String>, Vec<String>)>,
+        onlines: &mut Vec<String>,
+        offlines: &mut Vec<String>,
+    ) -> bool {
+        let Ok((group_onlines, group_offlines)) = result else {
+            return false;
+        };
+        let group_onlines: HashSet<String> = group_onlines.into_iter().collect();
+        let group_offlines: HashSet<String> = group_offlines.into_iter().collect();
+        for peer in peers {
+            if group_onlines.contains(&peer.wire) {
+                onlines.push(peer.original.clone());
+            } else if group_offlines.contains(&peer.wire) {
+                offlines.push(peer.original.clone());
+            }
+        }
+        true
+    }
+
+    /// `None` means no group answered, so the caller leaves every peer's state alone, as
+    /// the single-server path does when its query fails.
+    async fn query_grouped_online_states(
+        ids: &Vec<String>,
+        timeout: std::time::Duration,
+    ) -> Option<(Vec<String>, Vec<String>)> {
+        let plan = plan_online_query(ids);
+        let results = join_all(plan.iter().map(|(endpoint, peers)| {
+            let endpoint = endpoint.clone();
+            let wire_ids: Vec<String> = peers.iter().map(|p| p.wire.clone()).collect();
+            async move { query_online_states_(endpoint.as_deref(), &wire_ids, timeout).await }
+        }))
+        .await;
+        let mut onlines = Vec::new();
+        let mut offlines = Vec::new();
+        let mut any_answered = false;
+        for ((_, peers), result) in plan.iter().zip(results) {
+            any_answered |= remap_group_result(peers, result, &mut onlines, &mut offlines);
+        }
+        any_answered.then_some((onlines, offlines))
+    }
 
     pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
         let test = false;
@@ -5296,7 +5399,15 @@ pub mod peer_online {
             f(onlines, offlines)
         } else {
             let query_timeout = std::time::Duration::from_millis(3_000);
-            match query_online_states_(&ids, query_timeout).await {
+            if ids.iter().any(|id| id.contains('@')) {
+                if let Some((onlines, offlines)) =
+                    query_grouped_online_states(&ids, query_timeout).await
+                {
+                    f(onlines, offlines);
+                }
+                return;
+            }
+            match query_online_states_(None, &ids, query_timeout).await {
                 Ok((onlines, offlines)) => {
                     f(onlines, offlines);
                 }
@@ -5323,6 +5434,7 @@ pub mod peer_online {
     }
 
     async fn query_online_states_(
+        endpoint: Option<&str>,
         ids: &Vec<String>,
         timeout: std::time::Duration,
     ) -> ResultType<(Vec<String>, Vec<String>)> {
@@ -5333,7 +5445,11 @@ pub mod peer_online {
             ..Default::default()
         });
 
-        let mut socket = match create_online_stream().await {
+        let stream = match endpoint {
+            Some(addr) => connect_tcp(addr, CONNECT_TIMEOUT).await,
+            None => create_online_stream().await,
+        };
+        let mut socket = match stream {
             Ok(s) => s,
             Err(e) => {
                 log::debug!("Failed to create peers online stream, {e}");
@@ -5394,8 +5510,110 @@ pub mod peer_online {
 
     #[cfg(test)]
     mod tests {
+        use super::*;
         use crate::client::Client;
         use hbb_common::rendezvous_proto::IceCandidate;
+
+        fn plan_of(ids: &[&str]) -> Vec<(OnlineEndpoint, Vec<(String, String)>)> {
+            let ids: Vec<String> = ids.iter().map(|s| s.to_string()).collect();
+            plan_online_query(&ids)
+                .into_iter()
+                .map(|(endpoint, peers)| {
+                    (
+                        endpoint,
+                        peers
+                            .into_iter()
+                            .map(|p| (p.original, p.wire))
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect()
+        }
+
+        #[test]
+        fn plans_a_query_per_server_with_bare_wire_ids() {
+            let plan = plan_of(&[
+                "111",
+                "222@example.com",
+                "333/r@example.com:21116",
+                "444@other.com?key=abc",
+            ]);
+
+            assert_eq!(
+                plan,
+                vec![
+                    (None, vec![("111".to_owned(), "111".to_owned())]),
+                    (
+                        Some("example.com:21115".to_owned()),
+                        vec![
+                            ("222@example.com".to_owned(), "222".to_owned()),
+                            ("333/r@example.com:21116".to_owned(), "333".to_owned()),
+                        ]
+                    ),
+                    (
+                        Some("other.com:21115".to_owned()),
+                        vec![("444@other.com?key=abc".to_owned(), "444".to_owned())]
+                    ),
+                ]
+            );
+        }
+
+        #[test]
+        fn resolves_the_public_server_alias() {
+            let plan = plan_of(&["555@public"]);
+            let expected = increase_port(check_port(RENDEZVOUS_SERVERS[0], RENDEZVOUS_PORT), -1);
+
+            assert_eq!(plan.len(), 1);
+            assert_eq!(plan[0].0, Some(expected));
+            assert_eq!(plan[0].1, vec![("555@public".to_owned(), "555".to_owned())]);
+        }
+
+        #[test]
+        fn ignores_anything_after_a_second_separator() {
+            let plan = plan_of(&["666@example.com@ignored"]);
+
+            assert_eq!(plan.len(), 1);
+            assert_eq!(plan[0].0, Some("example.com:21115".to_owned()));
+            assert_eq!(
+                plan[0].1,
+                vec![("666@example.com@ignored".to_owned(), "666".to_owned())]
+            );
+        }
+
+        #[test]
+        fn remaps_results_onto_the_ids_the_caller_passed() {
+            let peers = vec![
+                PlannedPeer {
+                    original: "222@example.com".to_owned(),
+                    wire: "222".to_owned(),
+                },
+                PlannedPeer {
+                    original: "333/r@example.com".to_owned(),
+                    wire: "333".to_owned(),
+                },
+            ];
+            let mut onlines = Vec::new();
+            let mut offlines = Vec::new();
+
+            assert!(remap_group_result(
+                &peers,
+                Ok((vec!["222".to_owned()], vec!["333".to_owned()])),
+                &mut onlines,
+                &mut offlines,
+            ));
+            assert_eq!(onlines, vec!["222@example.com".to_owned()]);
+            assert_eq!(offlines, vec!["333/r@example.com".to_owned()]);
+
+            // An errored group answers for nobody, so those peers keep their current state.
+            assert!(!remap_group_result(
+                &peers,
+                Err(hbb_common::anyhow::anyhow!("timeout")),
+                &mut onlines,
+                &mut offlines,
+            ));
+            assert_eq!(onlines.len(), 1);
+            assert_eq!(offlines.len(), 1);
+        }
 
         #[test]
         fn accepts_webrtc_ice_by_session_key_only() {
