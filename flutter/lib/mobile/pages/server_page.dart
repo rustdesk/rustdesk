@@ -663,13 +663,14 @@ class _PermissionCheckerState extends State<PermissionChecker> {
               !bind.isDisableSettings() &&
               !bind.isOutgoingOnly() &&
               bind.mainGetBuildinOption(key: kOptionHideSecuritySetting) != 'Y')
-            Padding(
-              padding:
+            ListTile(
+              dense: true,
+              contentPadding:
                   const EdgeInsetsDirectional.only(start: _folderOptionIndent),
-              child: TextButton(
-                onPressed: permissionChangeLocked ? null : _selectFolder,
-                child: Text(translate('Change Path')),
-              ),
+              title: Text(translate('Change Path')),
+              trailing: const Icon(Icons.chevron_right),
+              enabled: !permissionChangeLocked,
+              onTap: _selectFolder,
             ),
           hasAudioPermission
               ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
