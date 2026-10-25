@@ -11,6 +11,8 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 internal class DocumentLogs(private val context: Context) {
     private val resolver = context.contentResolver
@@ -23,6 +25,14 @@ internal class DocumentLogs(private val context: Context) {
     private var written = 0L
     private var openedDay = 0L
     private var failure: Exception? = null
+    private val lock = ReentrantLock()
+
+    init {
+        setEnabled(grant() != null)
+    }
+
+    @androidx.annotation.Keep
+    private external fun setEnabled(enabled: Boolean)
 
     private fun grant(): Uri? = prefs.getString(LOG_GRANT, null)?.let(Uri::parse)
 
@@ -94,13 +104,13 @@ internal class DocumentLogs(private val context: Context) {
         return parent
     }
 
-    @Synchronized
-    fun select(uri: Uri, flags: Int) {
+    fun select(uri: Uri, flags: Int) = lock.withLock {
         require(isLogGrant(uri)) {
             "Please select Android → media."
         }
         val permissions = flags and GRANT_FLAGS
         require(permissions == GRANT_FLAGS) { "Read and write access is required for logs" }
+        setEnabled(false)
         resolver.takePersistableUriPermission(uri, permissions)
         ensureDirectory(uri)
         closeOutput()
@@ -110,8 +120,8 @@ internal class DocumentLogs(private val context: Context) {
         check(ensureReady()) { "Log directory access was revoked" }
     }
 
-    @Synchronized
-    fun ensureReady(): Boolean {
+    fun ensureReady(): Boolean = lock.withLock {
+        setEnabled(false)
         if (!hasPermission()) return false
         val uri = grant() ?: return false
         val root = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
@@ -119,11 +129,20 @@ internal class DocumentLogs(private val context: Context) {
         ensureDirectory(uri)
         failure = null
         if (output == null) openNext(uri)
+        setEnabled(true)
         return true
     }
 
-    @Synchronized
     fun write(message: String): Boolean {
+        if (!lock.tryLock()) return false
+        return try {
+            writeLocked(message)
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    private fun writeLocked(message: String): Boolean {
         val uri = grant() ?: return false
         failure?.let { throw IOException("File logging stopped: ${it.message}", it) }
         try {
@@ -139,6 +158,7 @@ internal class DocumentLogs(private val context: Context) {
             written += bytes.size
             return true
         } catch (error: Exception) {
+            setEnabled(false)
             failure = error
             try {
                 closeOutput()

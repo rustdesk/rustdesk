@@ -9,11 +9,30 @@ use hbb_common::{
     log::{Level, LevelFilter, Log, Record},
     log_throttle::LogThrottle,
 };
-use std::{io, sync::Once, time::Duration};
+use std::{
+    io,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Once,
+    },
+    time::Duration,
+};
 
 const ERROR_INTERVAL: Duration = Duration::from_secs(60);
 const DEFAULT_LOG_MAX_BYTES: u64 = 16 * 1024 * 1024;
 const DEFAULT_LOG_FILE_COUNT: usize = 90;
+
+// The first bridge request initializes Kotlin's persisted log-folder selection.
+static PUBLIC_LOGS_ENABLED: AtomicBool = AtomicBool::new(true);
+
+#[no_mangle]
+pub extern "system" fn Java_com_carriez_flutter_1hbb_DocumentLogs_setEnabled(
+    _env: jni::JNIEnv,
+    _instance: jni::objects::JObject,
+    enabled: jni::sys::jboolean,
+) {
+    PUBLIC_LOGS_ENABLED.store(enabled != jni::sys::JNI_FALSE, Ordering::Relaxed);
+}
 
 pub fn initialize() {
     static INIT: Once = Once::new();
@@ -55,6 +74,9 @@ impl LogWriter for DocumentWriter {
         if record.target() == "jni" || record.target().starts_with("jni::") {
             logcat().log(record);
             return Ok(());
+        }
+        if !PUBLIC_LOGS_ENABLED.load(Ordering::Relaxed) {
+            return self.write_default(now, record);
         }
         let mut message = Vec::new();
         opt_format(&mut message, now, record)?;

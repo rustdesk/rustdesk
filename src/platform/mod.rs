@@ -23,7 +23,7 @@ pub mod linux;
 #[cfg(target_os = "linux")]
 pub mod gtk_sudo;
 
-#[cfg(all(target_os = "android", not(debug_assertions)))]
+#[cfg(target_os = "android")]
 pub mod android_log;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
