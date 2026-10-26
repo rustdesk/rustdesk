@@ -250,6 +250,23 @@ enum RenderType {
     Texture,
 }
 
+/// Outcome of handing a decoded GPU frame to the plugin's direct path.
+///
+/// The caller needs to know both whether the frame was presented and whether
+/// the UI still has to be told about the render type: telling it per frame
+/// would flood the event stream, telling it never leaves the "waiting for
+/// image" dialog on screen forever.
+#[cfg(target_os = "macos")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum FrameTaken {
+    /// Not presented, the caller must fall back to the RGBA path.
+    No,
+    /// Presented.
+    Yes,
+    /// Presented, and the render type changed so the UI must be notified once.
+    YesNewRenderType,
+}
+
 #[derive(Clone)]
 pub struct FlutterHandler {
     // ui session id -> display handler data
@@ -331,7 +348,7 @@ pub(super) fn vt_zero_copy_state() -> &'static str {
         if *VT_ZEROCOPY_ENABLED {
             "on"
         } else {
-            "off (RUSTDESK_VT_ZEROCOPY=0) - the texture render path will not paint"
+            "off (RUSTDESK_VT_ZEROCOPY=0)"
         }
     }
     #[cfg(not(target_os = "macos"))]
@@ -618,13 +635,14 @@ impl VideoRenderer {
 
     /// Hand one decoded GPU frame to the plugin.
     ///
-    /// Returns true when the plugin accepted it (it will present the frame).
-    /// A false return means the caller must deliver the same decoded frame
-    /// through the RGBA path.
+    /// `No` means the caller must deliver the same decoded frame through the
+    /// RGBA path. `Yes` means it was presented; `YesNewRenderType` additionally
+    /// means the UI still has to be told, which happens once per render type
+    /// change instead of once per frame.
     #[cfg(target_os = "macos")]
-    pub fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> bool {
+    pub fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> FrameTaken {
         let Some(func) = &self.on_pixelbuffer_func else {
-            return false;
+            return FrameTaken::No;
         };
         let mut write_lock = self.map_display_sessions.write().unwrap();
         let opt_info = if !self.is_support_multi_ui_session {
@@ -633,10 +651,10 @@ impl VideoRenderer {
             write_lock.get_mut(&display)
         };
         let Some(info) = opt_info else {
-            return false;
+            return FrameTaken::No;
         };
         if info.texture_rgba_ptr == usize::default() {
-            return false;
+            return FrameTaken::No;
         }
         let accepted = unsafe {
             func(
@@ -647,30 +665,38 @@ impl VideoRenderer {
                 pixelbuffer.pixfmt(),
             )
         } != 0;
-        if accepted {
-            // This path never touches `size`, so a session that missed the
-            // asynchronous `session_set_size` would keep mapping the local
-            // cursor against (0,0). Adopt the frame size the same way on_rgba
-            // does.
-            if info.size == (0, 0) {
-                log::info!(
-                    "display #{display}: adopting frame size ({},{}) as the session size (direct path)",
-                    pixelbuffer.width(),
-                    pixelbuffer.height()
-                );
-                info.size = (pixelbuffer.width() as usize, pixelbuffer.height() as usize);
-            }
-            if info.notify_render_type != Some(RenderType::PixelBuffer) {
-                log::info!(
-                    "display #{display}: plugin accepted the decoded GPU frame directly ({},{}, pixfmt {})",
-                    pixelbuffer.width(),
-                    pixelbuffer.height(),
-                    pixelbuffer.pixfmt()
-                );
-                info.notify_render_type = Some(RenderType::PixelBuffer);
-            }
+        if !accepted {
+            return FrameTaken::No;
         }
-        accepted
+        // This path never touches `size`, so a session that missed the
+        // asynchronous `session_set_size` would keep mapping the local
+        // cursor against (0,0). Adopt the frame size the same way on_rgba
+        // does.
+        if info.size == (0, 0) {
+            log::info!(
+                "display #{display}: adopting frame size ({},{}) as the session size (direct path)",
+                pixelbuffer.width(),
+                pixelbuffer.height()
+            );
+            info.size = (pixelbuffer.width() as usize, pixelbuffer.height() as usize);
+        }
+        if info.notify_render_type == Some(RenderType::PixelBuffer) {
+            return FrameTaken::Yes;
+        }
+        log::info!(
+            "display #{display}: plugin accepted the decoded GPU frame directly ({},{}, pixfmt {})",
+            pixelbuffer.width(),
+            pixelbuffer.height(),
+            pixelbuffer.pixfmt()
+        );
+        info.notify_render_type = Some(RenderType::PixelBuffer);
+        FrameTaken::YesNewRenderType
+    }
+
+    /// Whether the loaded plugin exports the direct GPU frame entry point.
+    #[cfg(target_os = "macos")]
+    pub fn pixelbuffer_supported(&self) -> bool {
+        self.on_pixelbuffer_func.is_some()
     }
 
     pub fn reset_all_display_render_type(&self) {
@@ -790,6 +816,28 @@ impl FlutterHandler {
         self.use_texture_render
             .store(crate::ui_interface::use_texture_render(), Ordering::Relaxed);
         self.display_rgbas.write().unwrap().clear();
+        #[cfg(target_os = "macos")]
+        self.sync_gpu_frames_wanted();
+    }
+
+    /// Keep the decoder in step with what this session's renderers can present.
+    ///
+    /// Turning the direct path off has to reach the decoder, not just this
+    /// render layer: the decoder stops producing software pixels for a frame as
+    /// soon as it hands out the GPU one, so rejecting that frame afterwards
+    /// would freeze the picture.
+    #[cfg(target_os = "macos")]
+    pub fn sync_gpu_frames_wanted(&self) {
+        let supported = self
+            .session_handlers
+            .read()
+            .unwrap()
+            .values()
+            .any(|h| h.renderer.pixelbuffer_supported());
+        let wanted = *VT_ZEROCOPY_ENABLED
+            && self.use_texture_render.load(Ordering::Relaxed)
+            && supported;
+        scrap::set_gpu_frames_wanted(wanted);
     }
 }
 
@@ -1036,11 +1084,23 @@ impl InvokeUiSession for FlutterHandler {
         }
         let mut delivered = false;
         for (_, session) in self.session_handlers.read().unwrap().iter() {
-            if session.renderer.on_pixelbuffer(display, pixelbuffer) {
-                if let Some(stream) = &session.event_stream {
-                    stream.add(EventToUI::Texture(display, true));
+            match session.renderer.on_pixelbuffer(display, pixelbuffer) {
+                FrameTaken::No => {}
+                taken => {
+                    if taken == FrameTaken::YesNewRenderType {
+                        if let Some(stream) = &session.event_stream {
+                            // `false`, not `true`: the plugin texture is the
+                            // texture_rgba_renderer one. Sending `true` makes the
+                            // Flutter side drop the event, because macOS has no
+                            // GPU texture renderer, and then it never runs
+                            // onEvent2UIRgba(), which is what dismisses the
+                            // "waiting for image" dialog and initialises the
+                            // canvas geometry.
+                            stream.add(EventToUI::Texture(display, false));
+                        }
+                    }
+                    delivered = true;
                 }
-                delivered = true;
             }
         }
         delivered
@@ -1569,6 +1629,11 @@ pub fn session_start_(
     if let Some(session) = sessions::get_session_by_session_id(session_id) {
         let is_first_ui_session = session.session_handlers.read().unwrap().len() == 1;
         if !is_connected && is_first_ui_session {
+            // The decoder must agree with this renderer before the first frame,
+            // otherwise it hands out GPU frames nobody presents and the picture
+            // stalls without software pixels to fall back to.
+            #[cfg(target_os = "macos")]
+            session.ui_handler.sync_gpu_frames_wanted();
             log::info!(
                 "Session {} start, use texture render: {}, vt zero-copy: {}",
                 id,

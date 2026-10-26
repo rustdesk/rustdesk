@@ -37,3 +37,14 @@ pub use ::hwcodec::ffmpeg_ram::pixelbuffer::PixelBufferFrame;
 pub type PixelBufferOutput = Option<::hwcodec::ffmpeg_ram::pixelbuffer::PixelBufferFrame>;
 #[cfg(not(target_os = "macos"))]
 pub type PixelBufferOutput = Option<std::convert::Infallible>;
+
+/// Tell the decoder whether the renderer can take decoded GPU frames.
+///
+/// When it cannot, the decoder keeps producing software frames exactly like the
+/// RGBA path always did.  This has to be a decoder-side decision: the decoder
+/// skips its software transfer as soon as it hands out a GPU frame, so a caller
+/// that rejects one afterwards has nothing left to present.
+#[cfg(target_os = "macos")]
+pub fn set_gpu_frames_wanted(wanted: bool) {
+    ::hwcodec::ffmpeg_ram::set_pixelbuffer_wanted(wanted);
+}
