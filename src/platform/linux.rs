@@ -607,7 +607,20 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
                 unsafe {
                     let img = XFixesGetCursorImage(*d);
                     if !img.is_null() {
-                        res = Some((*img).cursor_serial as u64);
+                        // An application that hides the cursor inside its window, as VNC viewers
+                        // do, leaves XFixes returning a fully transparent image. Relaying it would
+                        // blank the controller's pointer, so report no cursor and leave the
+                        // controller the shape it already has, which is what the Windows path does
+                        // when CURSOR_SHOWING is clear. The count is taken first so a zero-sized
+                        // image never builds a slice over `pixels`.
+                        let count = (*img).width as usize * (*img).height as usize;
+                        let visible = count != 0
+                            && !super::cursor_image_is_fully_transparent(
+                                std::slice::from_raw_parts((*img).pixels, count),
+                            );
+                        if visible {
+                            res = Some((*img).cursor_serial as u64);
+                        }
                         XFree(img as _);
                     }
                 }
