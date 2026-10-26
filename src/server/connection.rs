@@ -5614,21 +5614,29 @@ impl Connection {
         check_file_limit: bool,
     ) {
         #[cfg(target_os = "android")]
-        let result = tokio::task::spawn_blocking(move || {
-            fs::TransferJob::new_read(
-                id,
-                job_type,
-                "".to_string(),
-                data_source,
-                file_num,
-                include_hidden,
-                false,
-                overwrite_detection,
-            )
-        })
-        .await
-        .map_err(hbb_common::anyhow::Error::from)
-        .and_then(|result| result);
+        let result = {
+            let is_document = matches!(&data_source, fs::DataSource::FilePath(path) if fs::android::is_path(path));
+            let read = move || {
+                fs::TransferJob::new_read(
+                    id,
+                    job_type,
+                    "".to_string(),
+                    data_source,
+                    file_num,
+                    include_hidden,
+                    false,
+                    overwrite_detection,
+                )
+            };
+            if is_document {
+                tokio::task::spawn_blocking(read)
+                    .await
+                    .map_err(hbb_common::anyhow::Error::from)
+                    .and_then(|result| result)
+            } else {
+                read()
+            }
+        };
         #[cfg(not(target_os = "android"))]
         let result = fs::TransferJob::new_read(
             id,

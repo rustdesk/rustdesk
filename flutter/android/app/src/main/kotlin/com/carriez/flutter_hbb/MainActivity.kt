@@ -635,7 +635,8 @@ class MainActivity : FlutterActivity() {
                             (it as? String)?.let(::canonicalExportSource)
                         }
                         val rejected = paths.size - sources.size
-                        if (sources.isEmpty() && !documentLogs) {
+                        if (sources.isEmpty() && (!documentLogs ||
+                            !(application as MainApplication).documentStorage.logs.hasPermission())) {
                             result.success(mapOf("exported" to 0, "failed" to rejected))
                         } else if (pendingPicker != null) {
                             result.error("picker_in_progress", "Another document picker is already open", null)

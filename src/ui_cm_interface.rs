@@ -1208,12 +1208,16 @@ async fn handle_fs(
                     if let fs::DataSource::FilePath(p) = &job.data_source {
                         let path = get_string(&fs::TransferJob::join(p, &file.name));
                         #[cfg(target_os = "android")]
-                        let digest_result = spawn_blocking(move || {
+                        let digest_result = if fs::android::is_path(path.as_ref()) {
+                            spawn_blocking(move || {
+                                is_write_need_confirmation(is_resume, &path, &digest)
+                            })
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                        } else {
                             is_write_need_confirmation(is_resume, &path, &digest)
-                        })
-                        .await
-                        .map_err(hbb_common::anyhow::Error::from)
-                        .and_then(|result| result);
+                        };
                         #[cfg(not(target_os = "android"))]
                         let digest_result = is_write_need_confirmation(is_resume, &path, &digest);
                         match digest_result {

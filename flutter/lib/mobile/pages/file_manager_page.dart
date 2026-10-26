@@ -257,7 +257,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
       if (result == null) return;
       final exported = result['exported'] as int? ?? 0;
       final failed = result['failed'] as int? ?? 0;
-      if (failed > 0 || (includeDocumentLogs && exported == 0)) {
+      if (includeDocumentLogs && exported > 0 && failed > 0) {
+        showToast('${translate('Successful')}: $exported, '
+            '${translate('Failed')}: $failed');
+      } else if (failed > 0 || (includeDocumentLogs && exported == 0)) {
         showToast(translate('Failed'));
       } else if (exported > 0) {
         showToast(translate('Successful'));

@@ -862,7 +862,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     let result = {
                         let source = fs::DataSource::FilePath(PathBuf::from(&path));
                         let destination = to.clone();
-                        tokio::task::spawn_blocking(move || {
+                        let read = move || {
                             fs::TransferJob::new_read(
                                 id,
                                 r#type,
@@ -873,10 +873,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                 is_remote,
                                 od,
                             )
-                        })
-                        .await
-                        .map_err(hbb_common::anyhow::Error::from)
-                        .and_then(|result| result)
+                        };
+                        if fs::android::is_path(path.as_ref()) {
+                            tokio::task::spawn_blocking(read)
+                                .await
+                                .map_err(hbb_common::anyhow::Error::from)
+                                .and_then(|result| result)
+                        } else {
+                            read()
+                        }
                     };
                     #[cfg(not(target_os = "android"))]
                     let result = fs::TransferJob::new_read(
@@ -954,7 +959,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     let result = {
                         let source = fs::DataSource::FilePath(PathBuf::from(&path));
                         let destination = to.clone();
-                        tokio::task::spawn_blocking(move || {
+                        let read = move || {
                             fs::TransferJob::new_read(
                                 id,
                                 r#type,
@@ -965,10 +970,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                 is_remote,
                                 od,
                             )
-                        })
-                        .await
-                        .map_err(hbb_common::anyhow::Error::from)
-                        .and_then(|result| result)
+                        };
+                        if fs::android::is_path(path.as_ref()) {
+                            tokio::task::spawn_blocking(read)
+                                .await
+                                .map_err(hbb_common::anyhow::Error::from)
+                                .and_then(|result| result)
+                        } else {
+                            read()
+                        }
                     };
                     #[cfg(not(target_os = "android"))]
                     let result = fs::TransferJob::new_read(
@@ -1134,7 +1144,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         .insert(id, RemoveJob::new(Vec::new(), path, sep, is_remote));
                 } else {
                     #[cfg(target_os = "android")]
-                    let result = {
+                    let result = if fs::android::is_path(path.as_ref()) {
                         let path = path.clone();
                         tokio::task::spawn_blocking(move || {
                             fs::get_recursive_files(&path, include_hidden)
@@ -1142,6 +1152,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         .await
                         .map_err(hbb_common::anyhow::Error::from)
                         .and_then(|result| result)
+                    } else {
+                        fs::get_recursive_files(&path, include_hidden)
                     };
                     #[cfg(not(target_os = "android"))]
                     let result = fs::get_recursive_files(&path, include_hidden);
@@ -1192,10 +1204,14 @@ impl<T: InvokeUiSession> Remote<T> {
                     allow_err!(peer.send(&msg_out).await);
                 } else {
                     #[cfg(target_os = "android")]
-                    let result = tokio::task::spawn_blocking(move || fs::remove_file(&path))
-                        .await
-                        .map_err(hbb_common::anyhow::Error::from)
-                        .and_then(|result| result);
+                    let result = if fs::android::is_path(path.as_ref()) {
+                        tokio::task::spawn_blocking(move || fs::remove_file(&path))
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                    } else {
+                        fs::remove_file(&path)
+                    };
                     #[cfg(not(target_os = "android"))]
                     let result = fs::remove_file(&path);
                     match result {
@@ -1221,10 +1237,14 @@ impl<T: InvokeUiSession> Remote<T> {
                     allow_err!(peer.send(&msg_out).await);
                 } else {
                     #[cfg(target_os = "android")]
-                    let result = tokio::task::spawn_blocking(move || fs::create_dir(&path))
-                        .await
-                        .map_err(hbb_common::anyhow::Error::from)
-                        .and_then(|result| result);
+                    let result = if fs::android::is_path(path.as_ref()) {
+                        tokio::task::spawn_blocking(move || fs::create_dir(&path))
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                    } else {
+                        fs::create_dir(&path)
+                    };
                     #[cfg(not(target_os = "android"))]
                     let result = fs::create_dir(&path);
                     match result {
@@ -1251,13 +1271,16 @@ impl<T: InvokeUiSession> Remote<T> {
                     allow_err!(peer.send(&msg_out).await);
                 } else {
                     #[cfg(target_os = "android")]
-                    let err =
+                    let err = if fs::android::is_path(path.as_ref()) {
                         tokio::task::spawn_blocking(move || fs::rename_file(&path, &new_name))
                             .await
                             .map_err(hbb_common::anyhow::Error::from)
                             .and_then(|result| result)
-                            .err()
-                            .map(|e| e.to_string());
+                    } else {
+                        fs::rename_file(&path, &new_name)
+                    }
+                    .err()
+                    .map(|e| e.to_string());
                     #[cfg(not(target_os = "android"))]
                     let err = fs::rename_file(&path, &new_name)
                         .err()
