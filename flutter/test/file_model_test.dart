@@ -99,26 +99,38 @@ class _DeletingController extends FileController {
 }
 
 void main() {
-  testWidgets('slow SAF empty-directory responses are accepted',
-      (tester) async {
-    const path = '/@rustdesk/tree/grant/root';
-    final fetcher = FileFetcher(() => _sessionId);
-    final result = expectLater(
-      fetcher.registerReadEmptyDirsTask(false, path).then(
-          (directories) => directories.map((directory) => directory.path)),
-      completion(['$path/empty']),
-    );
-
-    await tester.pump(const Duration(seconds: 3));
-    fetcher.tryCompleteEmptyDirsTask(
-        jsonEncode({
-          'path': path,
-          'empty_dirs': [jsonDecode(_directoryJson('$path/empty'))],
-        }),
-        'false');
-    await result;
-    await tester.pump(const Duration(seconds: 30));
-  });
+  for (final reconnect in [false, true]) {
+    testWidgets('SAF retry after ${reconnect ? 'reconnect' : 'completion'}',
+        (tester) async {
+      const path = '/@rustdesk/tree/grant/root';
+      final response = jsonEncode({
+        'path': path,
+        'empty_dirs': [jsonDecode(_directoryJson('$path/empty'))],
+      });
+      final fetcher = FileFetcher(() => _sessionId);
+      final first = expectLater(fetcher.registerReadEmptyDirsTask(false, path),
+          reconnect ? throwsA(isA<StateError>()) : completion(isNotEmpty));
+      try {
+        await tester.pump(const Duration(seconds: 3));
+        if (reconnect) {
+          fetcher.beginRemoteSession();
+        } else {
+          fetcher.tryCompleteEmptyDirsTask(response, 'false');
+        }
+        final retry = expectLater(
+            fetcher.registerReadEmptyDirsTask(false, path).then((directories) =>
+                directories.map((directory) => directory.path)),
+            completion(['$path/empty']));
+        await tester.pump(const Duration(seconds: 28));
+        fetcher.tryCompleteEmptyDirsTask(response, 'false');
+        await tester.pump(const Duration(seconds: 2));
+        await retry;
+      } finally {
+        await tester.pump(const Duration(seconds: 30));
+      }
+      await first;
+    });
+  }
 
   test('deletion confirms all five files despite refreshed selection',
       () async {

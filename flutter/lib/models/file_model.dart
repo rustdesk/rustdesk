@@ -1529,6 +1529,12 @@ class FileFetcher {
       if (!_removeRemoteReadTask(entry.key, task)) continue;
       task.completer.completeError(StateError(_kRemoteSessionChangedError));
     }
+    for (final path in remoteEmptyDirsTasks.keys.toList()) {
+      if (!AndroidDocuments.isPath(path)) continue;
+      remoteEmptyDirsTasks
+          .remove(path)
+          ?.completeError(StateError(_kRemoteSessionChangedError));
+    }
   }
 
   _RemoteReadTask _registerRemoteReadTask(String path, bool includeHidden) {
@@ -1573,8 +1579,8 @@ class FileFetcher {
         ? _kRemoteReadDirTimeout
         : const Duration(seconds: 2);
     Timer(timeout, () {
+      if (!identical(tasks[path], c)) return;
       tasks.remove(path);
-      if (c.isCompleted) return;
       c.completeError("Failed to read empty dirs, timeout");
     });
     return c.future;
