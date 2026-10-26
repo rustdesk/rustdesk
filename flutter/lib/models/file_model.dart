@@ -1586,7 +1586,7 @@ class FileFetcher {
     return c.future;
   }
 
-  Future<FileDirectory> registerReadRecursiveTask(int actID) {
+  Future<FileDirectory> registerReadRecursiveTask(int actID, String path) {
     final tasks = readRecursiveTasks;
     if (tasks.containsKey(actID)) {
       throw "Failed to registerRemoveTask, already have same ReadRecursive job";
@@ -1594,7 +1594,10 @@ class FileFetcher {
     final c = Completer<FileDirectory>();
     tasks[actID] = c;
 
-    Timer(Duration(seconds: 2), () {
+    final timeout = AndroidDocuments.isPath(path)
+        ? _kRemoteReadDirTimeout
+        : const Duration(seconds: 2);
+    Timer(timeout, () {
       tasks.remove(actID);
       if (c.isCompleted) return;
       c.completeError("Failed to read dir, timeout");
@@ -1740,7 +1743,7 @@ class FileFetcher {
           path: path,
           isRemote: !isLocal,
           showHidden: showHidden);
-      return registerReadRecursiveTask(actID);
+      return registerReadRecursiveTask(actID, path);
     } catch (e) {
       return Future.error(e);
     }
