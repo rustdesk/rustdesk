@@ -352,11 +352,11 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
     Ok(())
 }
 
-// A device at its login screen reports no username (or the GDM greeter's "gdm"
-// on Linux), which `is_same_peer` treats as a different peer, so the same id
-// would be listed twice.
+// A device at its login screen reports no username (or the GDM greeter's user,
+// e.g. "gdm" or "Debian-gdm", on Linux), which `is_same_peer` treats as a
+// different peer, so the same id would be listed twice.
 fn is_login_screen_username(username: &str) -> bool {
-    username.is_empty() || username == "gdm"
+    username.is_empty() || username.contains("gdm")
 }
 
 fn merge_hostname_only_peer(
@@ -411,7 +411,7 @@ mod tests {
 
     #[test]
     fn test_gdm_entry_merged_with_named_peer() {
-        let mut peers = vec![discovery_peer("1", "gdm")];
+        let mut peers = vec![discovery_peer("1", "Debian-gdm")];
         let mut peer = discovery_peer("1", "alice");
         merge_hostname_only_peer(&mut peers, &mut peer);
         assert!(peers.is_empty());
