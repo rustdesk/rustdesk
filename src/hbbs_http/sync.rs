@@ -323,6 +323,18 @@ const BLOCKED_CONFIG_OPTIONS: &[&str] = &[
 ];
 
 fn filter_config_options(options: &mut HashMap<String, String>) {
+    let rejected: Vec<_> = BLOCKED_CONFIG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|key| options.contains_key(*key))
+        .collect();
+    if !rejected.is_empty() {
+        hbb_common::throttled_log!(
+            crate::common::API_LOG_INTERVAL,
+            warn,
+            "Rejected heartbeat strategy options: {rejected:?}"
+        );
+    }
     options.retain(|key, _| !BLOCKED_CONFIG_OPTIONS.contains(&key.as_str()));
 }
 
@@ -486,27 +498,41 @@ mod tests {
 
 #[cfg(test)]
 mod strategy_tests {
-    use super::{filter_config_options, HashMap, BLOCKED_CONFIG_OPTIONS};
+    use super::{filter_config_options, HashMap};
 
     #[test]
     fn strategy_cannot_replace_or_clear_server_trust_and_credentials() {
         for value in ["attacker", ""] {
-            // Keep the reported attack keys independent of the blocklist.
-            let mut options = BLOCKED_CONFIG_OPTIONS
-                .iter()
-                .copied()
-                .chain([
-                    "custom-rendezvous-server",
-                    "api-server",
-                    "key",
-                    "reg_recovery",
-                    "enable-trusted-devices",
-                    "allow-only-conn-window-open",
-                    "allow-scope-violation-close",
-                    "allow-scope-violation-alarm",
-                ])
-                .map(|key| (key.to_owned(), value.to_owned()))
-                .collect::<HashMap<_, _>>();
+            let mut options = [
+                "custom-rendezvous-server",
+                "rendezvous-servers",
+                "api-server",
+                "relay-server",
+                "key",
+                "ice-servers",
+                "allow-insecure-tls-fallback",
+                "allow-websocket",
+                "2fa",
+                "bot",
+                "preset-address-book-password",
+                "enable-trusted-devices",
+                "allow-only-conn-window-open",
+                "allow-scope-violation-close",
+                "allow-scope-violation-alarm",
+                "preset-address-book-name",
+                "preset-address-book-tag",
+                "preset-address-book-alias",
+                "preset-address-book-note",
+                "preset-device-name",
+                "preset-device-username",
+                "preset-note",
+                "windows-service-video-save-directory",
+                "stop-service",
+                "reg_recovery",
+            ]
+            .into_iter()
+            .map(|key| (key.to_owned(), value.to_owned()))
+            .collect::<HashMap<_, _>>();
             options.insert("enable-clipboard".to_owned(), "N".to_owned());
             options.insert("allow-auto-disconnect".to_owned(), String::new());
             filter_config_options(&mut options);
