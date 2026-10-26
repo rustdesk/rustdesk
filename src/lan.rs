@@ -315,6 +315,7 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
     peers.iter_mut().for_each(|peer| {
         peer.online = false;
     });
+    remove_hostname_only_duplicates(&mut peers);
 
     let mut response_set = HashSet::new();
     let mut last_write_time: Option<Instant> = None;
@@ -376,6 +377,17 @@ fn merge_hostname_only_peer(
     }
 }
 
+// Entries saved before a device stopped answering are never merged by
+// `merge_hostname_only_peer`, so clean the stored list as well.
+fn remove_hostname_only_duplicates(peers: &mut Vec<config::DiscoveryPeer>) {
+    let named: HashSet<String> = peers
+        .iter()
+        .filter(|x| !is_login_screen_username(&x.username))
+        .map(|x| x.id.clone())
+        .collect();
+    peers.retain(|x| !is_login_screen_username(&x.username) || !named.contains(&x.id));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -407,6 +419,19 @@ mod tests {
         assert_eq!(peer.username, "alice");
         assert_eq!(peers.len(), 1);
         assert_eq!(peers[0].username, "alice");
+    }
+
+    #[test]
+    fn test_stored_gdm_duplicate_removed() {
+        let mut peers = vec![
+            discovery_peer("1", "gdm-greeter"),
+            discovery_peer("1", "chuyenlh"),
+            discovery_peer("2", "gdm-greeter"),
+        ];
+        remove_hostname_only_duplicates(&mut peers);
+        assert_eq!(peers.len(), 2);
+        assert_eq!(peers[0].username, "chuyenlh");
+        assert_eq!(peers[1].id, "2");
     }
 
     #[test]
