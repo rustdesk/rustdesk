@@ -55,7 +55,7 @@ class AndroidDocuments {
       }
       return selected;
     } catch (error) {
-      debugPrint('Log directory setup failed: $error');
+      debugPrint('Log directory setup failed');
       await gFFI.dialogManager.show<void>(
         (_, close, __) => CustomAlertDialog(
           title: Text(translate('Error')),

@@ -405,8 +405,8 @@ class ServerModel with ChangeNotifier {
         try {
           await AndroidDocuments.requireLogFolder();
           await showAndroidFileTransferSetup(gFFI);
-        } catch (error) {
-          debugPrint('Folder setup failed; continuing service startup: $error');
+        } catch (_) {
+          debugPrint('Folder setup failed; continuing service startup');
         }
       }
       await checkRequestNotificationPermission();
