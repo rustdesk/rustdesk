@@ -197,8 +197,12 @@ internal class DocumentLogs(private val context: Context) {
         val logs = files(grant).sortedBy { it.second }
         for ((uri, _) in logs.filter { it.first != document }
             .take((logs.size - MAX_LOG_FILES).coerceAtLeast(0))) {
-            if (!DocumentsContract.deleteDocument(resolver, uri)) {
-                throw IOException("Unable to remove an expired log file")
+            try {
+                if (!DocumentsContract.deleteDocument(resolver, uri)) {
+                    throw IOException("Unable to remove an expired log file")
+                }
+            } catch (error: Exception) {
+                Log.w("DocumentLogs", "Unable to remove an expired log file", error)
             }
         }
     }
