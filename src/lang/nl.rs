@@ -813,7 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "Sneltoets wordt niet ondersteund"),
         ("On", "Aan"),
         ("Off", "Uit"),
-        ("api_server_connection_tip", ""),
-        ("api_server_empty_tip", ""),
+        ("api_server_connection_tip", "De door jou gebruikte aangepaste server maakt gebruik van onversleuteld HTTP. Neem contact op met de beheerder om HTTPS in te schakelen."),
+        ("api_server_empty_tip", "Als de API-server leeg is, wordt de aangepaste server standaard ingesteld op HTTP. Neem contact op met de beheerder om HTTPS in te schakelen."),
     ].iter().cloned().collect();
 }
