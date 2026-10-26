@@ -5301,6 +5301,8 @@ pub mod peer_online {
     /// knew about before peers could carry one of their own.
     type OnlineEndpoint = Option<String>;
 
+    const QUERY_ONLINE_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+
     /// Reads a peer id the way `LoginConfigHandler::initialize` does, so the status query
     /// asks the same server a connection to that peer would.
     fn plan_online_query(ids: &[String]) -> Vec<(OnlineEndpoint, Vec<PlannedPeer>)> {
@@ -5384,7 +5386,18 @@ pub mod peer_online {
         let mut onlines = Vec::new();
         let mut offlines = Vec::new();
         let mut any_answered = false;
-        for ((_, peers), result) in plan.iter().zip(results) {
+        for ((endpoint, peers), result) in plan.iter().zip(results) {
+            if let Err(e) = &result {
+                // Throttled: these run on the peer list's refresh timer, so a server that stays
+                // unreachable would otherwise write a line per round.
+                hbb_common::throttled_log!(
+                    QUERY_ONLINE_LOG_INTERVAL,
+                    debug,
+                    "query onlines via {}, {}",
+                    endpoint.as_deref().unwrap_or("the configured server"),
+                    e
+                );
+            }
             any_answered |= remap_group_result(peers, result, &mut onlines, &mut offlines);
         }
         any_answered.then_some((onlines, offlines))
@@ -5453,6 +5466,12 @@ pub mod peer_online {
             Ok(s) => s,
             Err(e) => {
                 log::debug!("Failed to create peers online stream, {e}");
+                // A server we never reached has not told us anything about its peers, so the
+                // grouped path reports nothing for them instead of a false offline. The
+                // single-server path keeps the fallback it has always had.
+                if let Some(endpoint) = endpoint {
+                    bail!("the online service at {endpoint} could not be reached: {e}");
+                }
                 return Ok((vec![], ids.clone()));
             }
         };
@@ -5462,6 +5481,9 @@ pub mod peer_online {
         // An established connection was aborted by the software in your host machine. (os error 10053)
         if let Err(e) = socket.send(&msg_out).await {
             log::debug!("Failed to send peers online states query, {e}");
+            if let Some(endpoint) = endpoint {
+                bail!("the online query to {endpoint} could not be sent: {e}");
+            }
             return Ok((vec![], ids.clone()));
         }
         // Retry for 2 times to get the online response
