@@ -52,6 +52,15 @@ class _SentRead {
 
 class _FileBinding extends Fake implements RustdeskImpl {
   int _jobId = 0;
+  final emptyDirsDispatch = Completer<void>();
+
+  @override
+  Future<void> sessionReadRemoteEmptyDirsRecursiveSync(
+          {required UuidValue sessionId,
+          required String path,
+          required bool includeHidden,
+          dynamic hint}) =>
+      emptyDirsDispatch.future;
 
   @override
   String translate(
@@ -99,28 +108,38 @@ class _DeletingController extends FileController {
 }
 
 void main() {
-  for (final reconnect in [false, true]) {
-    testWidgets('SAF retry after ${reconnect ? 'reconnect' : 'completion'}',
-        (tester) async {
+  for (final scenario in ['completion', 'reconnect', 'dispatch reconnect']) {
+    testWidgets('SAF retry after $scenario', (tester) async {
       const path = '/@rustdesk/tree/grant/root';
       final response = jsonEncode({
         'path': path,
         'empty_dirs': [jsonDecode(_directoryJson('$path/empty'))],
       });
+      final binding = _FileBinding();
+      platformFFI.setBindingForTesting(binding);
       final fetcher = FileFetcher(() => _sessionId);
-      final first = expectLater(fetcher.registerReadEmptyDirsTask(false, path),
-          reconnect ? throwsA(isA<StateError>()) : completion(isNotEmpty));
+      final first = expectLater(
+          fetcher.readEmptyDirs(path, false, false),
+          scenario == 'completion'
+              ? completion(isNotEmpty)
+              : throwsA(isA<StateError>()));
       try {
+        if (scenario != 'dispatch reconnect')
+          binding.emptyDirsDispatch.complete();
         await tester.pump(const Duration(seconds: 3));
-        if (reconnect) {
+        if (scenario != 'completion') {
           fetcher.beginRemoteSession();
         } else {
           fetcher.tryCompleteEmptyDirsTask(response, 'false');
         }
+        if (scenario == 'dispatch reconnect')
+          binding.emptyDirsDispatch.complete();
+        await tester.pump();
         final retry = expectLater(
-            fetcher.registerReadEmptyDirsTask(false, path).then((directories) =>
+            fetcher.readEmptyDirs(path, false, false).then((directories) =>
                 directories.map((directory) => directory.path)),
             completion(['$path/empty']));
+        await tester.pump();
         await tester.pump(const Duration(seconds: 28));
         fetcher.tryCompleteEmptyDirsTask(response, 'false');
         await tester.pump(const Duration(seconds: 2));

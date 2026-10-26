@@ -404,10 +404,10 @@ class ServerModel with ChangeNotifier {
       if (isAndroid) {
         try {
           await AndroidDocuments.requireLogFolder();
-        } catch (_) {
-          return;
+          await showAndroidFileTransferSetup(gFFI);
+        } catch (error) {
+          debugPrint('Folder setup failed; continuing service startup: $error');
         }
-        await showAndroidFileTransferSetup(gFFI);
       }
       await checkRequestNotificationPermission();
       if (bind.mainGetLocalOption(key: kOptionDisableFloatingWindow) != 'Y') {

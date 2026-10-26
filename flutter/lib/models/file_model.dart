@@ -1676,8 +1676,13 @@ class FileFetcher {
             fdJsons.map((fdJson) => FileDirectory.fromJson(fdJson)).toList();
         return fds;
       } else {
+        final generation = _remoteSessionGeneration;
         await bind.sessionReadRemoteEmptyDirsRecursiveSync(
             sessionId: sessionId, path: path, includeHidden: showHidden);
+        if (AndroidDocuments.isPath(path) &&
+            generation != _remoteSessionGeneration) {
+          throw StateError(_kRemoteSessionChangedError);
+        }
         return registerReadEmptyDirsTask(isLocal, path);
       }
     } catch (e) {
