@@ -443,6 +443,7 @@ class _PeerCardState extends State<_PeerCard>
               child: checkbox)
           : checkbox;
     } else {
+      if (isWebDesktop) return _actionMoreWeb(peer);
       return InkWell(
           child: const Padding(
               padding: EdgeInsets.all(12), child: Icon(Icons.more_vert)),
