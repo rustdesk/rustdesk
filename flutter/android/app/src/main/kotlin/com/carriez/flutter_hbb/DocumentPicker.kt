@@ -33,15 +33,8 @@ internal class DocumentPicker(private val activity: Activity) {
             result.error("picker_in_progress", "Another document picker is already open", null)
             return
         }
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
-            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,
-                    DocumentsContract.buildDocumentUri(
-                        "com.android.externalstorage.documents", "primary:Documents"))
-            }
+            val intent = treePickerIntent("primary:Documents")
             pending = result to share
             activity.startActivityForResult(intent, REQUEST_DOCUMENT)
         } catch (error: Exception) {
@@ -124,17 +117,19 @@ internal class DocumentPicker(private val activity: Activity) {
         })
     }
 
-    private fun pickLogFolder(result: MethodChannel.Result) {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+    private fun treePickerIntent(initialId: String): Intent =
+        Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 putExtra(DocumentsContract.EXTRA_INITIAL_URI,
-                    DocumentsContract.buildDocumentUri(DocumentLogs.AUTHORITY, DocumentLogs.PARENT_ID))
+                    DocumentsContract.buildDocumentUri(DocumentLogs.AUTHORITY, initialId))
             }
         }
+
+    private fun pickLogFolder(result: MethodChannel.Result) {
         try {
-            activity.startActivityForResult(intent, REQUEST_LOG_FOLDER)
+            activity.startActivityForResult(treePickerIntent(DocumentLogs.PARENT_ID), REQUEST_LOG_FOLDER)
         } catch (error: Exception) {
             pendingLogFolder = null
             result.error("picker_unavailable", error.message, null)

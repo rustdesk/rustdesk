@@ -61,12 +61,8 @@ internal class DocumentLogs(private val context: Context) {
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(grant, parentId)
         val columns = arrayOf(Document.COLUMN_DOCUMENT_ID, Document.COLUMN_MIME_TYPE)
         return resolver.query(children, columns, null, null, null)?.use { cursor ->
-            cursor.extras.getString(DocumentsContract.EXTRA_ERROR)?.let {
-                throw IOException("Unable to list ${parentId.substringAfter(':')}: $it")
-            }
-            if (cursor.extras.getBoolean(DocumentsContract.EXTRA_LOADING)) {
-                throw IOException("${parentId.substringAfter(':')} is still loading")
-            }
+            checkDocumentListing(cursor, "Unable to list ${parentId.substringAfter(':')}",
+                "${parentId.substringAfter(':')} is still loading")
             while (cursor.moveToNext()) {
                 if (cursor.getString(cursor.getColumnIndexOrThrow(Document.COLUMN_DOCUMENT_ID)) != id) continue
                 check(cursor.getString(cursor.getColumnIndexOrThrow(Document.COLUMN_MIME_TYPE)) ==
@@ -212,12 +208,7 @@ internal class DocumentLogs(private val context: Context) {
         val columns = arrayOf(Document.COLUMN_DOCUMENT_ID, Document.COLUMN_DISPLAY_NAME,
             Document.COLUMN_MIME_TYPE)
         return resolver.query(children, columns, null, null, null)?.use { cursor ->
-            cursor.extras.getString(DocumentsContract.EXTRA_ERROR)?.let {
-                throw IOException("Unable to list logs: $it")
-            }
-            if (cursor.extras.getBoolean(DocumentsContract.EXTRA_LOADING)) {
-                throw IOException("The log directory is still loading")
-            }
+            checkDocumentListing(cursor, "Unable to list logs", "The log directory is still loading")
             val entries = mutableListOf<Pair<Uri, String>>()
             while (cursor.moveToNext()) {
                 if (cursor.getString(cursor.getColumnIndexOrThrow(Document.COLUMN_MIME_TYPE)) ==

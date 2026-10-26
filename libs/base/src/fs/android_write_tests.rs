@@ -46,11 +46,7 @@ pub(super) async fn failed_block_cleans_pending_receive(path: &str, output: &Pat
     for name in ["write-error.txt", "write-error-broken.txt"] {
         let mut job = receiving(&format!("{path}/{name}"));
         job.is_remote = false;
-        let block = FileTransferBlock {
-            id: job.id(),
-            data: b"more data".to_vec().into(),
-            ..Default::default()
-        };
+        let block = block(0, b"more data");
         // Tokio queues the first write and reports its I/O failure on the next block.
         job.write(block.clone()).await.unwrap();
         assert_eq!(std::fs::read(output).unwrap(), b"partial");
@@ -68,13 +64,7 @@ pub(super) async fn failed_finalization_discards_partial_data(path: &str, output
     for name in ["write-error.txt", "broken.txt", "discard-error-broken.txt"] {
         let mut job = receiving(&format!("{path}/{name}"));
         confirm_overwrite(&mut job, 0).await;
-        job.write(FileTransferBlock {
-            id: job.id(),
-            data: b"partial data".to_vec().into(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
+        job.write(block(0, b"partial data")).await.unwrap();
         let error = job.finish_document().await.unwrap_err();
         assert_eq!(job.job_error(), Some(error.to_string()));
         if name.ends_with("broken.txt") {

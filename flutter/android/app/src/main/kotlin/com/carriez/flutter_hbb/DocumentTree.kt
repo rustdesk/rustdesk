@@ -38,13 +38,8 @@ internal class DocumentTree(
         val query = DocumentsContract.buildChildDocumentsUriUsingTree(
             grant, DocumentsContract.getDocumentId(uri))
         return resolver.query(query, projection, null, null, null)?.use { cursor ->
-            val extras = cursor.extras
-            extras.getString(DocumentsContract.EXTRA_ERROR)?.let {
-                throw IOException("Unable to list the selected folder: $it")
-            }
-            if (extras.getBoolean(DocumentsContract.EXTRA_LOADING)) {
-                throw IOException("The selected folder is still loading. Try again.")
-            }
+            checkDocumentListing(cursor, "Unable to list the selected folder",
+                "The selected folder is still loading. Try again.")
             val entries = mutableListOf<Pair<Uri, JSONObject>>()
             while (cursor.moveToNext()) {
                 val child = DocumentsContract.buildDocumentUriUsingTree(grant, cursor.getString(ID_COLUMN))

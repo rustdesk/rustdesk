@@ -75,6 +75,16 @@ fn receiving(path: &str) -> TransferJob {
 }
 
 #[cfg(unix)]
+fn block(file_num: i32, data: &[u8]) -> FileTransferBlock {
+    FileTransferBlock {
+        id: 1,
+        file_num,
+        data: data.to_vec().into(),
+        ..Default::default()
+    }
+}
+
+#[cfg(unix)]
 fn sending(path: &str, overwrite_detection: bool) -> TransferJob {
     TransferJob::new_read(
         2,
@@ -93,19 +103,8 @@ fn sending(path: &str, overwrite_detection: bool) -> TransferJob {
 async fn receive(path: &str, succeeds: bool, output: &Path) {
     let mut job = receiving(path);
     confirm_overwrite(&mut job, 0).await;
-    job.write(FileTransferBlock {
-        id: 1,
-        data: b"hello, world".to_vec().into(),
-        ..Default::default()
-    })
-    .await
-    .unwrap();
-    let eof = job
-        .write(FileTransferBlock {
-            id: 1,
-            ..Default::default()
-        })
-        .await;
+    job.write(block(0, b"hello, world")).await.unwrap();
+    let eof = job.write(block(0, b"")).await;
     assert_eq!(eof.is_ok(), succeeds);
     assert_eq!(job.finish_document().await.is_ok(), succeeds);
     assert_eq!(job.job_error().is_some(), !succeeds);
@@ -126,14 +125,9 @@ async fn confirm_overwrite(job: &mut TransferJob, file_num: i32) {
 
 #[cfg(unix)]
 async fn overwrite_requires_matching_confirmation(path: &str, output: &Path) {
-    let empty = |file_num| FileTransferBlock {
-        id: 1,
-        file_num,
-        ..Default::default()
-    };
     std::fs::write(output, b"original").unwrap();
     let mut job = receiving(&format!("{path}/notes.txt"));
-    assert!(job.write(empty(0)).await.is_err());
+    assert!(job.write(block(0, b"")).await.is_err());
     assert_eq!(std::fs::read(output).unwrap(), b"original");
 
     let files = ["first.txt", "second.txt"]
@@ -144,14 +138,14 @@ async fn overwrite_requires_matching_confirmation(path: &str, output: &Path) {
         .to_vec();
     let mut job = receiving(path).with_files(files.clone()).unwrap();
     confirm_overwrite(&mut job, 0).await;
-    job.write(empty(0)).await.unwrap();
+    job.write(block(0, b"")).await.unwrap();
     std::fs::write(output, b"second original").unwrap();
-    assert!(job.write(empty(1)).await.is_err());
+    assert!(job.write(block(1, b"")).await.is_err());
     assert_eq!(std::fs::read(output).unwrap(), b"second original");
 
     let mut job = receiving(path).with_files(files).unwrap();
     confirm_overwrite(&mut job, 1).await;
-    job.write(empty(1)).await.unwrap();
+    job.write(block(1, b"")).await.unwrap();
     assert!(std::fs::read(output).unwrap().is_empty());
 }
 
@@ -173,13 +167,7 @@ async fn host_upload_respects_overwrite_support(path: &str, output: &Path) {
         )
         .with_files(vec![FileEntry::default()])
         .unwrap();
-        let result = job
-            .write(FileTransferBlock {
-                id: 1,
-                data: b"replacement".to_vec().into(),
-                ..Default::default()
-            })
-            .await;
+        let result = job.write(block(0, b"replacement")).await;
         if exists && !overwrite_detection {
             assert_eq!(
                 result.unwrap_err().to_string(),
@@ -232,13 +220,7 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
     write_tests::replacement_preserves_opened_digest(path, &output).await;
     write_tests::changed_source_without_timestamp_rejects_resume(path, &output).await;
     let mut empty = receiving(&format!("{path}/empty.txt"));
-    empty
-        .write(FileTransferBlock {
-            id: 1,
-            ..Default::default()
-        })
-        .await
-        .unwrap();
+    empty.write(block(0, b"")).await.unwrap();
     assert_eq!(std::fs::metadata(&output).unwrap().len(), 0);
     std::fs::remove_file(output).unwrap();
 }
@@ -254,14 +236,7 @@ async fn send_and_cancel(path: &str, output: &Path) {
     assert!(sender.read().await.unwrap().unwrap().data.is_empty());
     let mut canceled = receiving(&format!("{path}/canceled.txt"));
     confirm_overwrite(&mut canceled, 0).await;
-    canceled
-        .write(FileTransferBlock {
-            id: 1,
-            data: b"partial".to_vec().into(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
+    canceled.write(block(0, b"partial")).await.unwrap();
     canceled.cancel_document().await.unwrap();
     assert!(!output.exists());
 }
@@ -270,12 +245,7 @@ async fn send_and_cancel(path: &str, output: &Path) {
 async fn provider_error_at_eof(path: &str) {
     let mut sender = sending(&format!("{path}/broken.txt"), true);
     assert!(sender.init_data_stream_for_cm().await.unwrap().is_some());
-    let mut confirmation = FileTransferSendConfirmRequest {
-        id: 2,
-        ..Default::default()
-    };
-    confirmation.set_offset_blk(0);
-    sender.confirm(&confirmation).await;
+    confirm_overwrite(&mut sender, 0).await;
     assert!(sender.read().await.unwrap().is_some());
     assert!(sender.read().await.is_err());
     assert!(sender.init_data_stream_for_cm().await.is_err());

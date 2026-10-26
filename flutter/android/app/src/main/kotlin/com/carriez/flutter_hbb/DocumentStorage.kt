@@ -2,7 +2,9 @@ package com.carriez.flutter_hbb
 
 import android.content.Context
 import android.content.Intent
+import android.database.Cursor
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.util.Base64
 import org.json.JSONObject
 import java.io.IOException
@@ -22,6 +24,16 @@ internal fun checkDocumentName(name: String): String {
         "Invalid document name"
     }
     return name
+}
+
+internal fun checkDocumentListing(cursor: Cursor, errorMessage: String, loadingMessage: String) {
+    val extras = cursor.extras
+    extras.getString(DocumentsContract.EXTRA_ERROR)?.let {
+        throw IOException("$errorMessage: $it")
+    }
+    if (extras.getBoolean(DocumentsContract.EXTRA_LOADING)) {
+        throw IOException(loadingMessage)
+    }
 }
 
 internal fun documentEntry(name: String, directory: Boolean, size: Long = 0): JSONObject =

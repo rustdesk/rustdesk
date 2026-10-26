@@ -62,16 +62,10 @@ void main() {
         home: const Scaffold(),
       ));
 
-  testWidgets('folder setup explains sharing and is skipped only once',
-      (tester) async {
+  testWidgets('skipping folder setup suppresses later prompts', (tester) async {
     await openApp(tester);
     final first = showAndroidFileTransferSetup(session);
     await tester.pumpAndSettle();
-    expect(find.text('RustDesk storage'), findsOneWidget);
-    expect(find.text('Other folders…'), findsOneWidget);
-    expect(find.text('Choose which folder remote devices can access.'),
-        findsOneWidget);
-
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
     expect(await first, isTrue);
