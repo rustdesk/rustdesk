@@ -289,7 +289,57 @@ fn heartbeat_url() -> String {
     format!("{}/api/heartbeat", url)
 }
 
-fn handle_config_options(config_options: HashMap<String, String>) {
+const BLOCKED_CONFIG_OPTIONS: &[&str] = &[
+    // Server endpoints and trust.
+    keys::OPTION_CUSTOM_RENDEZVOUS_SERVER,
+    "rendezvous-servers",
+    keys::OPTION_API_SERVER,
+    keys::OPTION_RELAY_SERVER,
+    keys::OPTION_KEY,
+    keys::OPTION_ICE_SERVERS,
+    // Transport security.
+    keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK,
+    keys::OPTION_ALLOW_WEBSOCKET,
+    // Authentication and credentials.
+    "2fa",
+    "bot",
+    keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD,
+    keys::OPTION_ENABLE_TRUSTED_DEVICES,
+    keys::OPTION_ALLOW_ONLY_CONN_WINDOW_OPEN,
+    keys::OPTION_ALLOW_SCOPE_VIOLATION_CLOSE,
+    keys::OPTION_ALLOW_SCOPE_VIOLATION_ALARM,
+    // Deployment and address book metadata.
+    keys::OPTION_PRESET_ADDRESS_BOOK_NAME,
+    keys::OPTION_PRESET_ADDRESS_BOOK_TAG,
+    keys::OPTION_PRESET_ADDRESS_BOOK_ALIAS,
+    keys::OPTION_PRESET_ADDRESS_BOOK_NOTE,
+    keys::OPTION_PRESET_DEVICE_NAME,
+    keys::OPTION_PRESET_DEVICE_USERNAME,
+    keys::OPTION_PRESET_NOTE,
+    // Recording location and service state.
+    keys::OPTION_WINDOWS_SERVICE_VIDEO_SAVE_DIRECTORY,
+    "stop-service",
+    "reg_recovery",
+];
+
+fn filter_config_options(options: &mut HashMap<String, String>) {
+    let rejected: Vec<_> = BLOCKED_CONFIG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|key| options.contains_key(*key))
+        .collect();
+    if !rejected.is_empty() {
+        hbb_common::throttled_log!(
+            crate::common::API_LOG_INTERVAL,
+            warn,
+            "Rejected heartbeat strategy options: {rejected:?}"
+        );
+    }
+    options.retain(|key, _| !BLOCKED_CONFIG_OPTIONS.contains(&key.as_str()));
+}
+
+fn handle_config_options(mut config_options: HashMap<String, String>) {
+    filter_config_options(&mut config_options);
     let mut options = Config::get_options();
     let default_settings = config::DEFAULT_SETTINGS.read().unwrap().clone();
     config_options
@@ -443,5 +493,101 @@ mod tests {
         ]
         .concat();
         assert_eq!(switch_grant_signed_msg("id1", "c1", "1700000000"), expected);
+    }
+}
+
+#[cfg(test)]
+mod strategy_tests {
+    use super::{filter_config_options, HashMap};
+
+    #[test]
+    fn strategy_cannot_replace_or_clear_server_trust_and_credentials() {
+        for value in ["attacker", ""] {
+            let mut options = [
+                "custom-rendezvous-server",
+                "rendezvous-servers",
+                "api-server",
+                "relay-server",
+                "key",
+                "ice-servers",
+                "allow-insecure-tls-fallback",
+                "allow-websocket",
+                "2fa",
+                "bot",
+                "preset-address-book-password",
+                "enable-trusted-devices",
+                "allow-only-conn-window-open",
+                "allow-scope-violation-close",
+                "allow-scope-violation-alarm",
+                "preset-address-book-name",
+                "preset-address-book-tag",
+                "preset-address-book-alias",
+                "preset-address-book-note",
+                "preset-device-name",
+                "preset-device-username",
+                "preset-note",
+                "windows-service-video-save-directory",
+                "stop-service",
+                "reg_recovery",
+            ]
+            .into_iter()
+            .map(|key| (key.to_owned(), value.to_owned()))
+            .collect::<HashMap<_, _>>();
+            options.insert("enable-clipboard".to_owned(), "N".to_owned());
+            options.insert("allow-auto-disconnect".to_owned(), String::new());
+            filter_config_options(&mut options);
+            assert_eq!(
+                options,
+                HashMap::from([
+                    ("enable-clipboard".to_owned(), "N".to_owned()),
+                    ("allow-auto-disconnect".to_owned(), String::new()),
+                ])
+            );
+        }
+    }
+
+    #[test]
+    fn existing_and_unknown_policy_options_are_preserved() {
+        let policy_keys = [
+            // Existing server strategy options.
+            "access-mode",
+            "enable-keyboard",
+            "enable-remote-printer",
+            "enable-clipboard",
+            "enable-file-transfer",
+            "enable-audio",
+            "enable-terminal",
+            "enable-tunnel",
+            "enable-remote-restart",
+            "enable-record-session",
+            "enable-block-input",
+            "enable-privacy-mode",
+            "enable-camera",
+            "allow-remote-config-modification",
+            "approve-mode",
+            "verification-method",
+            "temporary-password-length",
+            "allow-numeric-one-time-password",
+            "allow-hide-cm",
+            "enable-lan-discovery",
+            "direct-server",
+            "direct-access-port",
+            "whitelist",
+            "id-whitelist",
+            "allow-auto-disconnect",
+            "auto-disconnect-timeout",
+            "allow-remove-wallpaper",
+            // Future strategy option.
+            "future-stategy-option",
+        ];
+        for value in ["Y", ""] {
+            let mut options: HashMap<_, _> = policy_keys
+                .into_iter()
+                .map(|key| (key.to_owned(), value.to_owned()))
+                .collect();
+            let expected = options.clone();
+            filter_config_options(&mut options);
+            assert_eq!(options, expected);
+        }
     }
 }
