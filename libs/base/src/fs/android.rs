@@ -260,7 +260,7 @@ pub(super) async fn open(
 }
 
 #[cfg(test)]
-#[path = "android_tests.rs"]
+#[path = "tests/android_tests.rs"]
 mod tests;
 
 #[cfg(test)]
