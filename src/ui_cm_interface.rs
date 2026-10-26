@@ -1019,7 +1019,7 @@ async fn handle_fs(
             _ => None,
         };
         if let Some((path, id, file_num, allow_empty)) = checked {
-            if !crate::common::is_peer_path_allowed(path, allow_empty) {
+            if !crate::common::is_peer_path_allowed_async(path, allow_empty).await {
                 log::warn!("Reject file operation outside the app workspace: {}", path);
                 if id >= 0 {
                     send_raw(fs::new_error(id, "Permission denied", file_num), tx);
@@ -1031,12 +1031,10 @@ async fn handle_fs(
             let destination = std::path::Path::new(path)
                 .parent()
                 .map(|parent| parent.join(new_name));
-            let allowed = destination
-                .as_deref()
-                .and_then(std::path::Path::to_str)
-                .map_or(false, |path| {
-                    crate::common::is_peer_path_allowed(path, false)
-                });
+            let allowed = match destination.as_deref().and_then(std::path::Path::to_str) {
+                Some(path) => crate::common::is_peer_path_allowed_async(path, false).await,
+                None => false,
+            };
             if !allowed {
                 log::warn!(
                     "Reject rename destination outside the app workspace: {:?}",

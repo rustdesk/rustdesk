@@ -2184,6 +2184,10 @@ impl Connection {
             let is_existing_dir = !dir.is_empty() && std::path::Path::new(&dir).is_dir();
             #[cfg(target_os = "android")]
             let is_existing_dir = is_existing_dir || fs::android::is_path(std::path::Path::new(&dir));
+            #[cfg(target_os = "android")]
+            let is_allowed_dir =
+                is_existing_dir && crate::common::is_peer_path_allowed_async(&dir, false).await;
+            #[cfg(not(target_os = "android"))]
             let is_allowed_dir =
                 is_existing_dir && crate::common::is_peer_path_allowed(&dir, false);
             #[cfg(target_os = "android")]
@@ -3599,7 +3603,9 @@ impl Connection {
                                 _ => None,
                             };
                             if let Some((path, job_id, allow_empty)) = checked {
-                                if !crate::common::is_peer_path_allowed(path, allow_empty) {
+                                if !crate::common::is_peer_path_allowed_async(path, allow_empty)
+                                    .await
+                                {
                                     log::warn!(
                                         "Reject file action outside the app workspace: {}",
                                         path
@@ -3615,12 +3621,15 @@ impl Connection {
                                 let destination = std::path::Path::new(&r.path)
                                     .parent()
                                     .map(|parent| parent.join(&r.new_name));
-                                let allowed = destination
+                                let allowed = match destination
                                     .as_deref()
                                     .and_then(std::path::Path::to_str)
-                                    .map_or(false, |path| {
-                                        crate::common::is_peer_path_allowed(path, false)
-                                    });
+                                {
+                                    Some(path) => {
+                                        crate::common::is_peer_path_allowed_async(path, false).await
+                                    }
+                                    None => false,
+                                };
                                 if !allowed {
                                     log::warn!(
                                         "Reject rename destination outside the app workspace: {:?}",

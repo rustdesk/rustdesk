@@ -213,6 +213,17 @@ async fn selected_folder_transfers_directly_and_preserves_data_on_publish_failur
     for (name, succeeds) in [("notes.txt", true), ("failed.txt", false)] {
         receive(&format!("{path}/{name}"), succeeds, &output).await;
     }
+    let destination = format!("{path}/notes.txt");
+    let entry = stat(&destination).unwrap().unwrap();
+    let digest = super::super::FileTransferDigest {
+        file_size: entry.size,
+        last_modified: entry.modified_time,
+        ..Default::default()
+    };
+    assert!(matches!(
+        super::super::is_write_need_confirmation(false, &destination, &digest).unwrap(),
+        super::super::DigestCheckResult::NeedConfirm(digest) if digest.is_identical
+    ));
     provider_error_at_eof(path).await;
     send_and_cancel(path, &output).await;
     write_tests::failed_block_cleans_pending_receive(path, &output).await;

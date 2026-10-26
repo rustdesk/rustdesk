@@ -303,6 +303,18 @@ pub fn is_peer_path_allowed(_path: &str, _allow_empty: bool) -> bool {
     true
 }
 
+#[cfg(target_os = "android")]
+pub async fn is_peer_path_allowed_async(path: &str, allow_empty: bool) -> bool {
+    let path = path.to_owned();
+    match tokio::task::spawn_blocking(move || is_peer_path_allowed(&path, allow_empty)).await {
+        Ok(allowed) => allowed,
+        Err(error) => {
+            log::trace!("File-transfer access check failed: {}", error);
+            false
+        }
+    }
+}
+
 #[inline]
 pub fn is_main() -> bool {
     *IS_MAIN

@@ -1610,6 +1610,9 @@ pub fn is_write_need_confirmation(
                 file_num: digest.file_num,
                 last_modified: entry.modified_time,
                 file_size: entry.size,
+                is_identical: entry.modified_time != 0
+                    && entry.modified_time == digest.last_modified
+                    && entry.size == digest.file_size,
                 ..Default::default()
             })),
             None => Ok(DigestCheckResult::NoSuchFile),
