@@ -492,16 +492,27 @@ impl VideoRenderer {
         }
 
         if info.size.0 != rgba.w || info.size.1 != rgba.h {
-            log::error!(
-                "width/height mismatch: ({},{}) != ({},{})",
-                info.size.0,
-                info.size.1,
-                rgba.w,
-                rgba.h
-            );
-            // Peer info's handling is async and may be late than video frame's handling
-            // Allow peer info not set, but not allow wrong width/height for correct local cursor position
-            if info.size != (0, 0) {
+            // Peer info's handling is async and may be later than video frames';
+            // a reconnected session may never receive a size at all, because the
+            // Flutter side only pushes it when the canvas rect changes. Adopt the
+            // frame size in that case instead of rendering forever with (0,0) and
+            // mis-mapping the local cursor position.
+            if info.size == (0, 0) {
+                log::info!(
+                    "display #{display}: adopting frame size ({},{}) as the session size",
+                    rgba.w,
+                    rgba.h
+                );
+                info.size = (rgba.w, rgba.h);
+            } else {
+                log::error!(
+                    "width/height mismatch: ({},{}) != ({},{})",
+                    info.size.0,
+                    info.size.1,
+                    rgba.w,
+                    rgba.h
+                );
+                // Allow peer info not set, but not allow wrong width/height for correct local cursor position
                 return false;
             }
         }
