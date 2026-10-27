@@ -4,7 +4,7 @@ version = "1.5.1"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
+description = "ArkaDesk Remote Desktop"
 default-run = "rustdesk"
 rust-version = "1.75"
 
@@ -257,7 +257,7 @@ webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
-ProductName = "RustDesk"
+ProductName = "ArkaDesk"
 FileDescription = "RustDesk Remote Desktop"
 OriginalFilename = "rustdesk.exe"
 
@@ -276,7 +276,7 @@ docopt = "1.1"
 tokio = "1.44"
 
 [package.metadata.bundle]
-name = "RustDesk"
+name = "ArkaDesk"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
