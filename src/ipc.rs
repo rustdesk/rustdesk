@@ -1907,16 +1907,41 @@ pub async fn trusted_devices(request: authority::Request) -> ResultType<String> 
     connection
         .send(&Data::TrustedDeviceManagement(Box::new(request)))
         .await?;
-    match connection.next_timeout(TIMEOUT_MS).await? {
+    let response = match connection.next_timeout(TIMEOUT_MS).await? {
         Some(Data::TrustedDeviceResponse(result)) => {
             match result.map_err(|error| hbb_common::anyhow::anyhow!(error))? {
-                authority::Response::Devices(devices) if list => Ok(devices),
-                authority::Response::Done if !list => Ok(String::new()),
+                authority::Response::Devices(devices) if list => devices,
+                authority::Response::Done if !list => String::new(),
                 _ => bail!("Invalid trusted-device management response"),
             }
         }
         _ => bail!("The host did not confirm the trusted-device operation"),
+    };
+    #[cfg(target_os = "windows")]
+    if !list {
+        use hbb_common::anyhow::Context;
+
+        // MSI removal can reactivate this user copy without running our uninstall hooks.
+        async {
+            connection.send(&Data::SyncConfig(None)).await?;
+            match connection.next_timeout(TIMEOUT_MS).await? {
+                Some(Data::SyncConfig(Some(configs))) => {
+                    let (config, config2) = *configs;
+                    crate::trusted_devices::config::update(move || {
+                        crate::trusted_devices::config::sync_config(config, config2)
+                    })
+                    .await
+                }
+                Some(Data::SecurityConfigError(error)) => bail!(error),
+                _ => bail!("The host did not provide its current configuration"),
+            }
+        }
+        .await
+        .context(
+            "Trusted-device operation succeeded, but updating the local configuration failed",
+        )?;
     }
+    Ok(response)
 }
 
 pub fn get_id() -> String {
