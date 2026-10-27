@@ -727,11 +727,23 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                         match data {
                             Data::SyncConfig(Some(configs)) => {
                                 let (config, config2) = *configs;
-                                if Config::set(config) {
-                                    log::info!("config synced");
-                                }
-                                if Config2::set(config2) {
-                                    log::info!("config2 synced");
+                                #[cfg(target_os = "windows")]
+                                allow_err!(
+                                    crate::trusted_devices::config::update(move || {
+                                        crate::trusted_devices::config::sync_from_server(
+                                            config, config2,
+                                        )
+                                    })
+                                    .await
+                                );
+                                #[cfg(not(target_os = "windows"))]
+                                {
+                                    if Config::set(config) {
+                                        log::info!("config synced");
+                                    }
+                                    if Config2::set(config2) {
+                                        log::info!("config2 synced");
+                                    }
                                 }
                             }
                             _ => {}

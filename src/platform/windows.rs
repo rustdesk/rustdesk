@@ -3338,6 +3338,20 @@ pub fn try_lock_tray_single_instance() -> bool {
 /// Successful removal exits this process instead of returning.
 pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     log::info!("Uninstalling service...");
+    if is_self_service_running() {
+        // UI/tray/CLI callers are synchronous. Refresh the file before killing its source.
+        let result = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(hbb_common::anyhow::Error::from)
+            .and_then(|runtime| {
+                runtime.block_on(crate::trusted_devices::config::refresh_from_server())
+            });
+        if let Err(error) = result {
+            log::error!("Cannot stop service before synchronizing its configuration: {error}");
+            return true;
+        }
+    }
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     let (_, _, _, exe) = get_install_info();
     let remove_service = match service_control_command("remove", &exe, false) {

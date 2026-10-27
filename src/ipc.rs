@@ -1122,7 +1122,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             allow_err!(stream.send(&Data::SyncConfig(None)).await);
         }
         Data::SyncConfig(None) => {
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
             let config2 = match crate::trusted_devices::config::update(Config2::get_for_sync).await
             {
                 Ok(config2) => config2,
@@ -1135,7 +1135,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                     return;
                 }
             };
-            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+            #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
             let config2 = Config2::get();
             allow_err!(
                 stream

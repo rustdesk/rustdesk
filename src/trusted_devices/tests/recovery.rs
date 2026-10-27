@@ -48,13 +48,19 @@ pub(super) async fn service_sync_preserves_grants_and_revocations() {
 
     // Explicit service sync replaces the older copy, including removals and enrollment.
     previous.sync_trusted_devices().unwrap();
-    config::sync_config(settings.clone(), current.clone()).unwrap();
+    config::sync_from_server(settings.clone(), current.clone()).unwrap();
     assert!(!is_trusted(&removed).await);
     assert!(is_trusted(&retained).await);
     assert!(is_trusted(&added).await);
+    // Installation imports this file, including the original grant deadlines.
+    let imported: Config2 = hbb_common::config::load_path(Config2::file());
+    assert_eq!(
+        imported, current,
+        "The service importer must receive current grants"
+    );
 
     Config2::set_trusted_devices_v2(String::new()).unwrap();
-    config::sync_config(settings.clone(), current).unwrap();
+    config::sync_from_server(settings.clone(), current).unwrap();
     super::super::initialize().unwrap();
     assert!(is_trusted(&retained).await);
     assert!(is_trusted(&added).await);
@@ -62,7 +68,7 @@ pub(super) async fn service_sync_preserves_grants_and_revocations() {
     authority::manage(true).await.unwrap();
     let cleared = Config2::get_for_sync().unwrap();
     previous.sync_trusted_devices().unwrap();
-    config::sync_config(settings, cleared).unwrap();
+    config::sync_from_server(settings, cleared).unwrap();
     assert!(configuration::devices().await.is_empty());
     stopped_service_password_changes().await;
 }
