@@ -114,6 +114,7 @@ internal class DocumentTree(
                     "Unable to remove the receiving file"
                 }
             } catch (cleanup: Exception) {
+                error.addSuppressed(cleanup)
                 throw IOException("${error.message ?: error.javaClass.simpleName}; " +
                     "temporary file cleanup failed: ${cleanup.message}", error)
             }
@@ -135,6 +136,7 @@ internal class DocumentTree(
         } catch (error: Exception) {
             if (backup != null) {
                 try { renameChecked(backup, name) } catch (restore: Exception) {
+                    error.addSuppressed(restore)
                     throw IOException("Publishing failed and the original remains in $backup: ${restore.message}", error)
                 }
             }
