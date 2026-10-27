@@ -360,7 +360,14 @@ impl HwRamDecoder {
             thread_count: codec_thread_num(16) as _,
         };
         match Decoder::new(ctx) {
-            Ok(decoder) => Ok(HwRamDecoder { decoder, info }),
+            Ok(mut decoder) => {
+                // Share the app's "can the renderer present GPU frames" flag, so
+                // a render path that cannot present them keeps receiving
+                // software frames instead of losing frames it never displays.
+                #[cfg(target_os = "macos")]
+                decoder.set_pixelbuffer_wanted(crate::gpu_frames_wanted_flag());
+                Ok(HwRamDecoder { decoder, info })
+            }
             Err(_) => {
                 HwCodecConfig::clear(false, false);
                 Err(anyhow!(format!("Failed to create decoder")))

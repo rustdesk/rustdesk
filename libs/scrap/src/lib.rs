@@ -38,6 +38,23 @@ pub type PixelBufferOutput = Option<::hwcodec::ffmpeg_ram::pixelbuffer::PixelBuf
 #[cfg(not(target_os = "macos"))]
 pub type PixelBufferOutput = Option<std::convert::Infallible>;
 
+/// The flag a decoder consults before it hands out decoded GPU frames.
+///
+/// Shared by reference with every decoder (see
+/// `hwcodec::ffmpeg_ram::decode::Decoder::set_pixelbuffer_wanted`), so the answer
+/// can change between frames.  Flipping it needs no decoder restart.
+///
+/// It starts `false`: the direct path is opt-in, because a decoder that hands out
+/// a GPU frame skips the software transfer for it. Anything that has not asked
+/// for these surfaces -- a non-Flutter UI, a build without the plugin entry
+/// point, another process linking this crate -- keeps receiving software frames.
+#[cfg(target_os = "macos")]
+pub fn gpu_frames_wanted_flag() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+    use std::sync::{atomic::AtomicBool, Arc, OnceLock};
+    static FLAG: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+    FLAG.get_or_init(|| Arc::new(AtomicBool::new(false))).clone()
+}
+
 /// Tell the decoder whether the renderer can take decoded GPU frames.
 ///
 /// When it cannot, the decoder keeps producing software frames exactly like the
@@ -46,5 +63,5 @@ pub type PixelBufferOutput = Option<std::convert::Infallible>;
 /// that rejects one afterwards has nothing left to present.
 #[cfg(target_os = "macos")]
 pub fn set_gpu_frames_wanted(wanted: bool) {
-    ::hwcodec::ffmpeg_ram::set_pixelbuffer_wanted(wanted);
+    gpu_frames_wanted_flag().store(wanted, std::sync::atomic::Ordering::Relaxed);
 }
