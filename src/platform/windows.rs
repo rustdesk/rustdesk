@@ -1912,6 +1912,13 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> ResultType<String>
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
+    if is_self_service_running() {
+        // This CLI entry is synchronous. Portable builds reuse the retained user configuration.
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(crate::trusted_devices::config::refresh_from_server())?;
+    }
     run_cmds(get_uninstall(kill_self, true)?, true, "uninstall")
 }
 
