@@ -23,7 +23,7 @@ use serde_derive::{Deserialize, Serialize};
 use storage::GrantsStorage;
 
 pub const TOKEN_BYTES: usize = 32;
-pub const MAX_RECORDS: usize = 32;
+pub const MAX_RECORDS: usize = 128;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct DeviceInfo {

@@ -92,18 +92,21 @@ impl Grants {
         credentials: ([u8; TOKEN_BYTES], [u8; TOKEN_BYTES]),
     ) -> ResultType<()> {
         let (legacy, verifier) = credentials;
-        let info = self
+        let mut info = self
             .migration_source(ticket, &legacy)?
             .ok_or_else(|| anyhow!("Legacy trusted device expired or was revoked"))?
             .info
             .clone();
+        let now = get_time();
+        // Eviction follows V2 issuance time without extending the legacy expiry.
+        info.time = now;
         self.records.push(Record {
             verifier,
             info,
             legacy: false,
             origin: Some(legacy),
         });
-        self.cleanup(get_time());
+        self.cleanup(now);
         Ok(())
     }
 
