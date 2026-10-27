@@ -1,7 +1,5 @@
 use super::policy;
 pub use super::policy::{changes_authentication, update_options};
-#[cfg(any(target_os = "linux", target_os = "macos", test))]
-pub use super::service::sync_config;
 use base::config::keys;
 use hbb_common::{
     anyhow::{anyhow, Context},
@@ -36,55 +34,23 @@ pub async fn update_auth<T: Send + 'static>(
     affected: bool,
     apply: impl FnOnce() -> ResultType<T> + Send + 'static,
 ) -> ResultType<T> {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if affected && update(super::service::is_stopped).await? {
-        return update(move || super::service::update_stopped_auth(apply)).await;
-    }
-    if affected {
-        super::authority::manage(true).await?;
-    }
-    let result = update(move || {
-        // Clearing grants can succeed without a valid authentication snapshot.
+    update(move || {
         if affected && super::storage()?.exists()? {
             snapshot()?;
         }
         apply()
     })
-    .await?;
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if affected && super::authority::uses_service()? {
-        sync_auth_to_service().await?;
-    }
-    Ok(result)
+    .await
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-pub(super) async fn sync_auth_to_service() -> ResultType<()> {
-    use crate::ipc::{connect_trusted_device_service, Data};
-    const TIMEOUT_MS: u64 = 1000;
-    let _sync_permit = {
-        use hbb_common::tokio::sync::Semaphore;
-        const MAX_CONCURRENT_SYNCS: usize = 1;
-        static AUTH_SYNC: Semaphore = Semaphore::const_new(MAX_CONCURRENT_SYNCS);
-        // Serialize revoke/sync/ack so queued callers re-read the pending marker.
-        AUTH_SYNC.acquire().await?
-    };
-    let pending = super::service::revoke_pending_auth().await?;
-    let mut connection = connect_trusted_device_service(TIMEOUT_MS).await?;
-    let config2 = update(Config2::get_for_sync).await?;
-    connection
-        .send(&Data::SyncConfig(Some((Config::get(), config2).into())))
-        .await?;
-    match connection.next_timeout(TIMEOUT_MS).await? {
-        Some(Data::SyncConfig(None)) => {
-            if let Some(pending) = pending {
-                update(move || super::service::acknowledge_revocation(&pending)).await?;
-            }
-            Ok(())
-        }
-        Some(Data::SecurityConfigError(error)) => bail!(error),
-        _ => bail!("The system service did not confirm the authentication configuration update"),
-    }
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+pub fn sync_config(value: Config, options: Config2) -> ResultType<()> {
+    let _storage = super::storage()?;
+    Config::set(value);
+    Config2::set(options.clone());
+    snapshot()?;
+    // Explicit configuration sync carries the source's grants and removals.
+    options.sync_trusted_devices()
 }
 
 #[derive(Default, PartialEq, Serialize, Deserialize)]

@@ -43,12 +43,7 @@ pub async fn update_options(options: HashMap<String, String>) -> ResultType<()> 
     let old = Config::get_options();
     let new = config::effective_options(options.clone());
     let revoke = authentication_changed(&old, &new);
-    config::update_auth(revoke, move || config::set_options(options)).await?;
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if !revoke && days(&old) != days(&new) && super::authority::uses_service()? {
-        config::sync_auth_to_service().await?;
-    }
-    Ok(())
+    config::update_auth(revoke, move || config::set_options(options)).await
 }
 
 pub(super) fn change_options<T>(

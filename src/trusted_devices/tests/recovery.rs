@@ -24,52 +24,6 @@ pub(super) fn corrupt_controller_credentials_allow_reenrollment(
 }
 
 pub(super) async fn service_sync_preserves_grants_and_revocations() {
-    let token = begin_enrollment()
-        .await
-        .finish(DeviceInfo::default())
-        .await
-        .unwrap();
-    let other = begin_enrollment()
-        .await
-        .finish(DeviceInfo::default())
-        .await
-        .unwrap();
-    let settings = Config::get();
-    // Two retained user sessions downloaded this state before either revocation.
-    let user_a = Config2::get_for_sync().unwrap();
-    let user_b = user_a.clone();
-    let user_path = Config2::file().with_extension("user.toml");
-    hbb_common::config::store_path(user_path.clone(), user_a.clone()).unwrap();
-    let install_path = Config2::file().with_extension("install.toml");
-    super::super::service::copy_config(&user_path, &install_path).unwrap();
-    let installed: Config2 = hbb_common::config::load_path(install_path.clone());
-    assert!(installed == user_a);
-    let devices = configuration::devices().await;
-    let id = serde_json::from_value(devices[0]["record_id"].clone()).unwrap();
-    authority::request(Request::Remove(vec![id])).await.unwrap();
-    config::sync_config(settings.clone(), user_a).unwrap();
-    super::super::service::copy_config(&user_path, &Config2::file()).unwrap();
-    assert!(!is_trusted(&token).await);
-    assert!(is_trusted(&other).await);
-    assert!(authority::request(Request::Renew(vec![id])).await.is_err());
-
-    authority::manage(true).await.unwrap();
-    config::sync_config(settings, user_b).unwrap();
-    super::super::service::copy_config(&user_path, &Config2::file()).unwrap();
-    super::super::initialize().unwrap();
-    assert!(!is_trusted(&token).await);
-    assert!(!is_trusted(&other).await);
-    assert!(configuration::devices().await.is_empty());
-    fs::remove_file(user_path).unwrap();
-    fs::remove_file(install_path).unwrap();
-    stopped_service_password_changes().await;
-    #[cfg(target_os = "macos")]
-    handed_off_grants_preserve_local_changes().await;
-}
-
-#[cfg(target_os = "macos")]
-async fn handed_off_grants_preserve_local_changes() {
-    use super::super::service;
     let removed = begin_enrollment()
         .await
         .finish(DeviceInfo::default())
@@ -81,8 +35,7 @@ async fn handed_off_grants_preserve_local_changes() {
         .await
         .unwrap();
     let settings = Config::get();
-    let root = Config2::get_for_sync().unwrap();
-    service::sync_from_service(settings.clone(), root.clone()).unwrap();
+    let previous = Config2::get_for_sync().unwrap();
     let id =
         serde_json::from_value(configuration::devices().await[0]["record_id"].clone()).unwrap();
     authority::request(Request::Remove(vec![id])).await.unwrap();
@@ -91,62 +44,61 @@ async fn handed_off_grants_preserve_local_changes() {
         .finish(DeviceInfo::default())
         .await
         .unwrap();
-    let user = Config2::get_for_sync().unwrap();
-    root.sync_trusted_devices().unwrap();
-    service::sync_from_service(settings, user).unwrap();
+    let current = Config2::get_for_sync().unwrap();
+
+    // Explicit service sync replaces the older copy, including removals and enrollment.
+    previous.sync_trusted_devices().unwrap();
+    config::sync_config(settings.clone(), current.clone()).unwrap();
     assert!(!is_trusted(&removed).await);
     assert!(is_trusted(&retained).await);
     assert!(is_trusted(&added).await);
+
+    Config2::set_trusted_devices_v2(String::new()).unwrap();
+    config::sync_config(settings.clone(), current).unwrap();
+    super::super::initialize().unwrap();
+    assert!(is_trusted(&retained).await);
+    assert!(is_trusted(&added).await);
+
     authority::manage(true).await.unwrap();
+    let cleared = Config2::get_for_sync().unwrap();
+    previous.sync_trusted_devices().unwrap();
+    config::sync_config(settings, cleared).unwrap();
+    assert!(configuration::devices().await.is_empty());
+    stopped_service_password_changes().await;
 }
 
 async fn stopped_service_password_changes() {
-    use super::super::service;
     let token = begin_enrollment()
         .await
         .finish(DeviceInfo::default())
         .await
         .unwrap();
-    let install_path = Config2::file().with_extension("stopped-service-root.toml");
-    hbb_common::config::store_path(install_path.clone(), Config2::get_for_sync().unwrap()).unwrap();
+    let previous = Config2::get_for_sync().unwrap();
     let options = Config::get_options();
-    let mut without_2fa = options.clone();
-    without_2fa.remove("2fa");
-    config::set_options(without_2fa).unwrap();
-    Config2::set_trusted_devices_v2(String::new()).unwrap();
-    #[cfg(target_os = "macos")]
-    for stopped in ["Y", ""] {
-        Config::set_option("stop-service".into(), stopped.into());
-        assert!(
-            !service::is_stopped().unwrap(),
-            "The incoming-connections setting must not make a standalone profile service-owned"
-        );
-    }
+    Config::set_option("stop-service".into(), "Y".into());
     assert!(
-        service::update_stopped_auth(|| config::set_password("stopped-service-password")).unwrap()
+        config::update_auth(true, || config::set_password("stopped-service-password"))
+            .await
+            .unwrap()
     );
     config::snapshot()
         .unwrap()
         .verify_password(&proof("stopped-service-password", &[]))
         .unwrap();
-    let earlier = service::pending_revocation()
-        .unwrap()
-        .expect("Offline authentication edits must queue root-grant revocation");
-    assert!(service::update_stopped_auth(|| config::set_password(PASSWORD)).unwrap());
-    #[cfg(target_os = "macos")]
+    assert!(config::update_auth(true, || config::set_password(PASSWORD))
+        .await
+        .unwrap());
+    let mut without_2fa = options.clone();
+    without_2fa.remove("2fa");
+    config::update_options(without_2fa).await.unwrap();
     config::update_options(options).await.unwrap();
-    #[cfg(not(target_os = "macos"))]
-    service::update_stopped_auth(|| config::set_options(options)).unwrap();
-    service::acknowledge_revocation(&earlier).unwrap();
-    service::copy_config(&Config2::file(), &install_path).unwrap();
-    let installed: Config2 = hbb_common::config::load_path(install_path.clone());
-    installed.sync_trusted_devices().unwrap();
+    let current = Config2::get_for_sync().unwrap();
+    previous.sync_trusted_devices().unwrap();
+    config::sync_config(Config::get(), current).unwrap();
     assert!(
         !is_trusted(&token).await,
-        "Offline password changes must revoke root grants even when the original password is restored"
+        "Synced offline edits must revoke trust even when the original password is restored"
     );
-    service::acknowledge_revocation(&service::pending_revocation().unwrap().unwrap()).unwrap();
-    fs::remove_file(install_path).unwrap();
 }
 
 pub(super) async fn unknown_expiration_preserves_login_and_settings() {

@@ -41,7 +41,6 @@ pub enum Response {
     Begun(Ticket, Option<Credential>),
     Done,
     Devices(String),
-    Unavailable(String),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -147,49 +146,11 @@ impl std::fmt::Debug for Response {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-pub(super) fn uses_service() -> ResultType<bool> {
-    #[cfg(target_os = "macos")]
-    {
-        return super::handoff::uses_service();
-    }
-    #[cfg(target_os = "linux")]
-    Ok(crate::platform::is_installed() && (!crate::platform::is_root() || crate::is_server()))
-}
-
-#[cfg(any(target_os = "macos", test))]
-pub(super) fn service_selected(registered: bool, owner: Option<Option<u32>>, uid: u32) -> bool {
-    // Missing file: standalone; empty file: service; UID: handed-off user.
-    registered || owner.is_some_and(|owner| owner != Some(uid))
-}
-
-#[cfg(target_os = "macos")]
-pub fn register_service_authority() -> ResultType<()> {
-    super::handoff::claim_service().map(|_| ())
-}
-
-#[cfg(target_os = "macos")]
-pub fn restore_service_authority() -> ResultType<bool> {
-    super::handoff::claim_service()
-}
-
-#[cfg(target_os = "macos")]
-pub fn handoff(args: &[String]) -> ResultType<()> {
-    super::handoff::command(args)
-}
-
 pub async fn request(request: Request) -> ResultType<Response> {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if uses_service()? {
-        super::service::sync_pending_auth().await?;
-        return super::service::request(request).await;
-    }
     super::config::update(move || handle(request)).await
 }
 
 pub fn handle(request: Request) -> ResultType<Response> {
-    #[cfg(target_os = "macos")]
-    let _authority = super::handoff::lock_authority()?;
     match request {
         Request::Clear => {
             super::clear()?;
@@ -226,20 +187,5 @@ pub async fn manage(clear: bool) -> ResultType<String> {
         Response::Done if clear => Ok(String::new()),
         Response::Devices(devices) if !clear => Ok(devices),
         _ => bail!("Invalid trusted-device management response"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::service_selected;
-
-    #[test]
-    fn handed_off_user_can_trust_devices_without_the_service() {
-        let uid = 501;
-        assert!(!service_selected(false, Some(Some(uid)), uid));
-        assert!(service_selected(false, Some(Some(uid)), uid + 1));
-        assert!(service_selected(true, Some(Some(uid)), uid));
-        assert!(service_selected(false, Some(None), uid));
-        assert!(!service_selected(false, None, uid));
     }
 }

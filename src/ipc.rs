@@ -497,8 +497,6 @@ pub enum Data {
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
     TrustedDeviceManagement(Box<authority::Request>),
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    TrustedDeviceRequest(Box<authority::Request>),
     TrustedDeviceResponse(Result<crate::trusted_devices::authority::Response, String>),
     SecurityConfigError(String),
     #[cfg(all(target_os = "windows", feature = "flutter"))]
@@ -614,17 +612,6 @@ fn legacy_hot_measured() -> bool {
 #[tokio::main(flavor = "current_thread")]
 pub async fn start(postfix: &str) -> ResultType<()> {
     let mut incoming = new_listener(postfix).await?;
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if postfix == crate::POSTFIX_SERVICE {
-        #[cfg(target_os = "macos")]
-        crate::trusted_devices::config::update(
-            crate::trusted_devices::authority::register_service_authority,
-        )
-        .await?;
-        allow_err!(
-            crate::trusted_devices::config::update(crate::trusted_devices::initialize).await
-        );
-    }
     loop {
         if let Some(result) = incoming.next().await {
             match result {
@@ -655,34 +642,24 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     break;
                                 }
                                 Ok(Some(data)) => {
-                                    // The protected `_service` channel syncs settings and owns grants.
+                                    // On Linux/macOS, the protected `_service` channel is used only for
+                                    // syncing config between root service and the active user process.
                                     //
                                     // NOTE: `is_service_ipc_postfix()` also includes `_uinput_*`, but those
                                     // channels are handled by the dedicated uinput listener/protocol in
                                     // `src/server/uinput.rs` and therefore do not share this Data enum
-                                    // allowlist. The configuration/grant allowlist is scoped to the
+                                    // allowlist. The SyncConfig allowlist here is intentionally scoped to the
                                     // `_service` channel only.
                                     //
                                     // Keep this explicit branch to avoid policy drift between `_service` and
                                     // uinput IPC paths while still minimizing exposed message surface here.
                                     #[cfg(any(target_os = "linux", target_os = "macos"))]
                                     if postfix == crate::POSTFIX_SERVICE {
-                                        if let Data::TrustedDeviceRequest(request) = data {
-                                            let result =
-                                                crate::trusted_devices::service::handle_request(
-                                                    *request,
-                                                )
-                                                .await;
-                                            allow_err!(
-                                                stream
-                                                    .send(&Data::TrustedDeviceResponse(result))
-                                                    .await
-                                            );
-                                        } else if matches!(&data, Data::SyncConfig(_)) {
+                                        if matches!(&data, Data::SyncConfig(_)) {
                                             handle(data, &mut stream).await;
                                         } else {
                                             log::warn!(
-                                                "Rejected data on protected _service IPC channel: postfix={}, data_kind={:?}, peer_uid={:?}",
+                                                "Rejected non-sync data on protected _service IPC channel: postfix={}, data_kind={:?}, peer_uid={:?}",
                                                 postfix,
                                                 std::mem::discriminant(&data),
                                                 stream.peer_uid()
