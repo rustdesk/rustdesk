@@ -2735,6 +2735,12 @@ impl VideoHandler {
         }
     }
 
+    /// Take the GPU frame produced by the last handled video frame, if any.
+    #[inline]
+    pub fn take_pixelbuffer(&mut self) -> scrap::PixelBufferOutput {
+        self.decoder.take_pixelbuffer()
+    }
+
     /// Reset the decoder, change format if it is Some
     pub fn reset(&mut self, format: Option<CodecFormat>) {
         log::info!(
@@ -3987,7 +3993,8 @@ pub fn start_video_thread<F, T>(
     discard_queue: Arc<RwLock<bool>>,
     video_callback: F,
 ) where
-    F: 'static + FnMut(usize, &mut scrap::ImageRgb, *mut c_void, bool) + Send,
+    F: 'static + FnMut(usize, &mut scrap::ImageRgb, *mut c_void, bool, scrap::PixelBufferOutput)
+        + Send,
     T: InvokeUiSession,
 {
     let mut video_callback = video_callback;
@@ -4045,11 +4052,15 @@ pub fn start_video_thread<F, T>(
                             let format_changed = handler.decoder.format() != format;
                             match handler.handle_frame(vf, &mut pixelbuffer, &mut tmp_chroma) {
                                 Ok(true) => {
+                                    // Take it before borrowing rgb: one GPU
+                                    // frame is delivered at most once.
+                                    let pixelbuffer_output = handler.take_pixelbuffer();
                                     video_callback(
                                         display,
                                         &mut handler.rgb,
                                         handler.texture.texture,
                                         pixelbuffer,
+                                        pixelbuffer_output,
                                     );
 
                                     // chroma

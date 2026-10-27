@@ -296,6 +296,27 @@ pub type FlutterGpuTextureRendererPluginCApiSetTexture =
 #[cfg(feature = "vram")]
 pub type FlutterGpuTextureRendererPluginCApiGetAdapterLuid = unsafe extern "C" fn() -> i64;
 
+/// Zero-copy GPU frame entry point exported by the macOS texture plugin.
+///
+/// `texture_rgba_ptr` is the plugin object, `pixel_buffer` a borrowed
+/// CVPixelBufferRef valid only for the call. Returns non-zero when the frame
+/// was taken over and will be presented.
+#[cfg(target_os = "macos")]
+pub type FlutterRgbaRendererPluginOnPixelBuffer =
+    unsafe extern "C" fn(*mut c_void, *mut c_void, i32, i32, u32) -> i32;
+
+#[cfg(target_os = "macos")]
+lazy_static::lazy_static! {
+    /// Zero-copy GPU frame delivery, off unless explicitly enabled.
+    ///
+    /// The PoC verifies correctness before performance, so this stays opt-in
+    /// (`RUSTDESK_VT_ZEROCOPY=1`); when it is off, or when the loaded plugin
+    /// does not export the symbol, frames take the unchanged RGBA path.
+    static ref VT_ZEROCOPY_ENABLED: bool = std::env::var("RUSTDESK_VT_ZEROCOPY")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+}
+
 pub(super) type TextureRgbaPtr = usize;
 
 struct DisplaySessionInfo {
@@ -314,6 +335,8 @@ struct VideoRenderer {
     map_display_sessions: Arc<RwLock<HashMap<usize, DisplaySessionInfo>>>,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
+    #[cfg(target_os = "macos")]
+    on_pixelbuffer_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnPixelBuffer>>,
     #[cfg(feature = "vram")]
     on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
 }
@@ -361,11 +384,33 @@ impl Default for VideoRenderer {
             }
         };
 
+        #[cfg(target_os = "macos")]
+        let on_pixelbuffer_func = match &*TEXTURE_RGBA_RENDERER_PLUGIN {
+            Ok(lib) => {
+                // Optional: an older plugin has no zero-copy entry point, and
+                // then the GPU frame path simply stays disabled.
+                match unsafe {
+                    lib.symbol::<FlutterRgbaRendererPluginOnPixelBuffer>(
+                        "FlutterRgbaRendererPluginOnPixelBuffer",
+                    )
+                } {
+                    Ok(sym) => Some(sym),
+                    Err(e) => {
+                        log::info!("texture rgba plugin has no zero-copy entry point, {e}");
+                        None
+                    }
+                }
+            }
+            Err(_) => None,
+        };
+
         Self {
             map_display_sessions: Default::default(),
             is_support_multi_ui_session: false,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             on_rgba_func,
+            #[cfg(target_os = "macos")]
+            on_pixelbuffer_func,
             #[cfg(feature = "vram")]
             on_texture_func,
         }
@@ -548,6 +593,43 @@ impl VideoRenderer {
         } else {
             false
         }
+    }
+
+    /// Hand one decoded GPU frame to the plugin.
+    ///
+    /// Returns true when the plugin accepted it (it will present the frame).
+    /// A false return means the caller must deliver the same decoded frame
+    /// through the RGBA path.
+    #[cfg(target_os = "macos")]
+    pub fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> bool {
+        let Some(func) = &self.on_pixelbuffer_func else {
+            return false;
+        };
+        let mut write_lock = self.map_display_sessions.write().unwrap();
+        let opt_info = if !self.is_support_multi_ui_session {
+            write_lock.values_mut().next()
+        } else {
+            write_lock.get_mut(&display)
+        };
+        let Some(info) = opt_info else {
+            return false;
+        };
+        if info.texture_rgba_ptr == usize::default() {
+            return false;
+        }
+        let accepted = unsafe {
+            func(
+                info.texture_rgba_ptr as *mut c_void,
+                pixelbuffer.as_ptr(),
+                pixelbuffer.width(),
+                pixelbuffer.height(),
+                pixelbuffer.pixfmt(),
+            )
+        } != 0;
+        if accepted && info.notify_render_type != Some(RenderType::PixelBuffer) {
+            info.notify_render_type = Some(RenderType::PixelBuffer);
+        }
+        accepted
     }
 
     pub fn reset_all_display_render_type(&self) {
@@ -895,6 +977,32 @@ impl InvokeUiSession for FlutterHandler {
                 }
             }
         }
+    }
+
+    /// Deliver a GPU frame to every UI session that renders this display.
+    ///
+    /// Returns true when at least one session took the frame; the caller then
+    /// skips pushing the RGBA pixels for this frame.
+    #[cfg(target_os = "macos")]
+    pub fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> bool {
+        if !*VT_ZEROCOPY_ENABLED {
+            return false;
+        }
+        // The direct path only makes sense when the app renders through the
+        // texture; the software-render path needs the RGBA pixels.
+        if !self.use_texture_render.load(Ordering::Relaxed) {
+            return false;
+        }
+        let mut delivered = false;
+        for (_, session) in self.session_handlers.read().unwrap().iter() {
+            if session.renderer.on_pixelbuffer(display, pixelbuffer) {
+                if let Some(stream) = &session.event_stream {
+                    stream.add(EventToUI::Texture(display, true));
+                }
+                delivered = true;
+            }
+        }
+        delivered
     }
 
     fn set_peer_info(&self, pi: &PeerInfo) {

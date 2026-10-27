@@ -2912,8 +2912,18 @@ impl<T: InvokeUiSession> Remote<T> {
             move |display: usize,
                   data: &mut scrap::ImageRgb,
                   _texture: *mut c_void,
-                  pixelbuffer: bool| {
+                  pixelbuffer: bool,
+                  pixelbuffer_output: scrap::PixelBufferOutput| {
                 *frame_count.write().unwrap() += 1;
+                // A GPU frame is presented as-is; only when nobody took it do
+                // the software pixels get pushed (same decoded frame).
+                #[cfg(all(target_os = "macos", feature = "flutter"))]
+                if let Some(gpu_frame) = &pixelbuffer_output {
+                    if handler.on_pixelbuffer(display, gpu_frame) {
+                        return;
+                    }
+                }
+                let _ = &pixelbuffer_output;
                 if pixelbuffer {
                     handler.on_rgba(display, data);
                 } else {

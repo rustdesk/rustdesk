@@ -24,3 +24,16 @@ pub mod dxgi;
 pub mod android;
 
 mod common;
+
+/// Output of a decode call's GPU path.
+///
+/// `Some(frame)` means the decoded frame was delivered as a GPU frame and the
+/// caller must present that instead of the software pixels. On platforms
+/// without a GPU-frame path the option is always `None`, so callers need no
+/// cfg of their own.
+#[cfg(target_os = "macos")]
+pub use ::hwcodec::ffmpeg_ram::pixelbuffer::PixelBufferFrame;
+#[cfg(target_os = "macos")]
+pub type PixelBufferOutput = Option<::hwcodec::ffmpeg_ram::pixelbuffer::PixelBufferFrame>;
+#[cfg(not(target_os = "macos"))]
+pub type PixelBufferOutput = Option<std::convert::Infallible>;

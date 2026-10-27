@@ -373,6 +373,24 @@ impl HwRamDecoder {
             Err(e) => Err(anyhow!(e)),
         }
     }
+
+    /// Take the GPU frame produced by the last `decode` call, if any.
+    ///
+    /// `decode` hands out a mutable borrow, so callers read the GPU frame first
+    /// and then the software frames through [`Self::last_frame_images`].
+    #[cfg(target_os = "macos")]
+    pub fn take_pixelbuffer(&mut self) -> crate::PixelBufferOutput {
+        self.decoder.take_pixelbuffer()
+    }
+
+    /// Software frames of the last `decode` call, behind a shared borrow.
+    pub fn last_frame_images(&self) -> Vec<HwRamDecoderImage<'_>> {
+        self.decoder
+            .last_frames()
+            .iter()
+            .map(|f| HwRamDecoderImage { frame: f })
+            .collect()
+    }
 }
 
 pub struct HwRamDecoderImage<'a> {

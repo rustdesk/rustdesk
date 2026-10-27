@@ -120,6 +120,10 @@ pub struct Decoder {
     valid: bool,
     #[cfg(feature = "hwcodec")]
     i420: Vec<u8>,
+    /// GPU frame produced by the last handle_video_frame call, if any.
+    /// Cross-platform slot: on targets without a GPU-frame path the type is
+    /// `Option<Infallible>`, so it is always `None` and costs nothing.
+    pixelbuffer: crate::PixelBufferOutput,
 }
 
 #[derive(Debug, Clone)]
@@ -616,7 +620,21 @@ impl Decoder {
             valid,
             #[cfg(feature = "hwcodec")]
             i420: vec![],
+            pixelbuffer: None,
         }
+    }
+
+    /// Take the GPU frame produced by the last `handle_video_frame` call.
+    ///
+    /// Taking clears the slot, so one frame is delivered at most once.
+    #[cfg(target_os = "macos")]
+    pub fn take_pixelbuffer(&mut self) -> crate::PixelBufferOutput {
+        self.pixelbuffer.take()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn take_pixelbuffer(&mut self) -> crate::PixelBufferOutput {
+        None
     }
 
     pub fn format(&self) -> CodecFormat {
@@ -668,7 +686,13 @@ impl Decoder {
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h264_ram {
-                    return Decoder::handle_hwram_video_frame(decoder, h264s, rgb, &mut self.i420);
+                    return Decoder::handle_hwram_video_frame(
+                        decoder,
+                        h264s,
+                        rgb,
+                        &mut self.i420,
+                        &mut self.pixelbuffer,
+                    );
                 }
                 Err(anyhow!("don't support h264!"))
             }
@@ -682,7 +706,13 @@ impl Decoder {
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h265_ram {
-                    return Decoder::handle_hwram_video_frame(decoder, h265s, rgb, &mut self.i420);
+                    return Decoder::handle_hwram_video_frame(
+                        decoder,
+                        h265s,
+                        rgb,
+                        &mut self.i420,
+                        &mut self.pixelbuffer,
+                    );
                 }
                 Err(anyhow!("don't support h265!"))
             }
@@ -769,10 +799,22 @@ impl Decoder {
         frames: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
         i420: &mut Vec<u8>,
+        pixelbuffer: &mut crate::PixelBufferOutput,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h264 in frames.frames.iter() {
-            for image in decoder.decode(&h264.data)? {
+            decoder.decode(&h264.data)?;
+            // The GPU frame of this decode call, if the decoder delivered one.
+            // A GPU frame and software frames never both come out of the same
+            // call: the decoder skips the software transfer when the renderer
+            // accepted the GPU frame, and a software frame clears the GPU slot.
+            #[cfg(target_os = "macos")]
+            if let Some(frame) = decoder.take_pixelbuffer() {
+                *pixelbuffer = Some(frame);
+                ret = true;
+                continue;
+            }
+            for image in decoder.last_frame_images() {
                 // TODO: just process the last frame
                 if image.to_fmt(rgb, i420).is_ok() {
                     ret = true;
