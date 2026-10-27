@@ -71,6 +71,28 @@ pub(super) async fn service_sync_preserves_grants_and_revocations() {
     config::sync_config(settings, cleared).unwrap();
     assert!(configuration::devices().await.is_empty());
     stopped_service_password_changes().await;
+    #[cfg(windows)]
+    unavailable_host_clears_local_trust_before_removal().await;
+}
+
+#[cfg(windows)]
+async fn unavailable_host_clears_local_trust_before_removal() {
+    let token = begin_enrollment()
+        .await
+        .finish(DeviceInfo::default())
+        .await
+        .unwrap();
+    let previous = Config2::get_for_sync().unwrap();
+    let settings = Config::get();
+    let options = Config::get_options();
+    config::refresh_from_server().await.unwrap();
+    let imported: Config2 = hbb_common::config::load_path(Config2::file());
+    assert_eq!(Config::get(), settings);
+    assert_eq!(imported.options, options);
+    assert!(configuration::devices().await.is_empty());
+    previous.sync_trusted_devices().unwrap();
+    config::sync_config(settings, imported).unwrap();
+    assert!(!is_trusted(&token).await);
 }
 
 async fn stopped_service_password_changes() {

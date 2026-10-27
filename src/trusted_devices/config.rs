@@ -58,15 +58,26 @@ pub async fn refresh_from_server() -> ResultType<()> {
     use crate::ipc::{connect, Data};
 
     const TIMEOUT_MS: u64 = 1000;
-    let mut connection = connect(TIMEOUT_MS, "").await?;
-    connection.send(&Data::SyncConfig(None)).await?;
-    match connection.next_timeout(TIMEOUT_MS).await? {
-        Some(Data::SyncConfig(Some(configs))) => {
+    let response = async {
+        let mut connection = connect(TIMEOUT_MS, "").await?;
+        connection.send(&Data::SyncConfig(None)).await?;
+        connection.next_timeout(TIMEOUT_MS).await
+    }
+    .await;
+    match response {
+        Ok(Some(Data::SyncConfig(Some(configs)))) => {
             let (config, config2) = *configs;
             update(move || sync_config(config, config2)).await
         }
-        Some(Data::SecurityConfigError(error)) => bail!(error),
-        _ => bail!("The host did not provide its current configuration"),
+        Ok(Some(Data::SecurityConfigError(error))) => bail!(error),
+        Ok(_) => bail!("The host did not provide its current configuration"),
+        Err(error) => {
+            hbb_common::log::warn!(
+                "Host unavailable during service removal; revoking local trusted devices (re-enrollment required): {error:#}"
+            );
+            // The next service import must not restore an inactive, stale grant copy.
+            update(super::clear).await
+        }
     }
 }
 
