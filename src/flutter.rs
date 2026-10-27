@@ -256,7 +256,7 @@ enum RenderType {
 /// the UI still has to be told about the render type: telling it per frame
 /// would flood the event stream, telling it never leaves the "waiting for
 /// image" dialog on screen forever.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum FrameTaken {
     /// Not presented, the caller must fall back to the RGBA path.
@@ -373,7 +373,7 @@ struct VideoRenderer {
     map_display_sessions: Arc<RwLock<HashMap<usize, DisplaySessionInfo>>>,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     on_pixelbuffer_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnPixelBuffer>>,
     #[cfg(feature = "vram")]
     on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
@@ -422,7 +422,7 @@ impl Default for VideoRenderer {
             }
         };
 
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", feature = "hwcodec"))]
         let on_pixelbuffer_func = match &*TEXTURE_RGBA_RENDERER_PLUGIN {
             Ok(lib) => {
                 // Optional: an older plugin has no zero-copy entry point, and
@@ -447,7 +447,7 @@ impl Default for VideoRenderer {
             is_support_multi_ui_session: false,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             on_rgba_func,
-            #[cfg(target_os = "macos")]
+            #[cfg(all(target_os = "macos", feature = "hwcodec"))]
             on_pixelbuffer_func,
             #[cfg(feature = "vram")]
             on_texture_func,
@@ -639,7 +639,7 @@ impl VideoRenderer {
     /// RGBA path. `Yes` means it was presented; `YesNewRenderType` additionally
     /// means the UI still has to be told, which happens once per render type
     /// change instead of once per frame.
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     pub fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> FrameTaken {
         let Some(func) = &self.on_pixelbuffer_func else {
             return FrameTaken::No;
@@ -694,7 +694,7 @@ impl VideoRenderer {
     }
 
     /// Whether the loaded plugin exports the direct GPU frame entry point.
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     pub fn pixelbuffer_supported(&self) -> bool {
         self.on_pixelbuffer_func.is_some()
     }
@@ -816,7 +816,7 @@ impl FlutterHandler {
         self.use_texture_render
             .store(crate::ui_interface::use_texture_render(), Ordering::Relaxed);
         self.display_rgbas.write().unwrap().clear();
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", feature = "hwcodec"))]
         self.sync_gpu_frames_wanted();
     }
 
@@ -826,7 +826,7 @@ impl FlutterHandler {
     /// render layer: the decoder stops producing software pixels for a frame as
     /// soon as it hands out the GPU one, so rejecting that frame afterwards
     /// would freeze the picture.
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     pub fn sync_gpu_frames_wanted(&self) {
         let supported = self
             .session_handlers
@@ -1072,7 +1072,7 @@ impl InvokeUiSession for FlutterHandler {
     ///
     /// Returns true when at least one session took the frame; the caller then
     /// skips pushing the RGBA pixels for this frame.
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> bool {
         if !*VT_ZEROCOPY_ENABLED {
             return false;
@@ -1632,7 +1632,7 @@ pub fn session_start_(
             // The decoder must agree with this renderer before the first frame,
             // otherwise it hands out GPU frames nobody presents and the picture
             // stalls without software pixels to fall back to.
-            #[cfg(target_os = "macos")]
+            #[cfg(all(target_os = "macos", feature = "hwcodec"))]
             session.ui_handler.sync_gpu_frames_wanted();
             log::info!(
                 "Session {} start, use texture render: {}, vt zero-copy: {}",

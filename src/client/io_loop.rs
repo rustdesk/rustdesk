@@ -2917,7 +2917,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 *frame_count.write().unwrap() += 1;
                 // A GPU frame is presented as-is; only when nobody took it do
                 // the software pixels get pushed (same decoded frame).
-                #[cfg(all(target_os = "macos", feature = "flutter"))]
+                #[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
                 if let Some(gpu_frame) = &pixelbuffer_output {
                     if handler.on_pixelbuffer(display, gpu_frame) {
                         return;
@@ -3350,7 +3350,7 @@ mod kept_cursor_tests {
 /// exists so a measurement can show the refusals are zero in normal operation,
 /// and the log stays quiet because it only prints on the first one and then every
 /// 100th.
-#[cfg(all(target_os = "macos", feature = "flutter"))]
+#[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
 fn count_gpu_frame_refused(display: usize) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static REFUSED: AtomicU64 = AtomicU64::new(0);

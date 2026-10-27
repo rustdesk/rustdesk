@@ -1764,7 +1764,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     /// caller must NOT push the software pixels for that same frame. Backends
     /// that cannot present GPU frames keep the default `false`, so the video
     /// thread falls back to the RGBA path unchanged.
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     fn on_pixelbuffer(&self, _display: usize, _pixelbuffer: &scrap::PixelBufferFrame) -> bool {
         false
     }

@@ -31,11 +31,11 @@ mod common;
 /// caller must present that instead of the software pixels. On platforms
 /// without a GPU-frame path the option is always `None`, so callers need no
 /// cfg of their own.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
 pub use ::hwcodec::ffmpeg_ram::pixelbuffer::PixelBufferFrame;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
 pub type PixelBufferOutput = Option<::hwcodec::ffmpeg_ram::pixelbuffer::PixelBufferFrame>;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(all(target_os = "macos", feature = "hwcodec")))]
 pub type PixelBufferOutput = Option<std::convert::Infallible>;
 
 /// The flag a decoder consults before it hands out decoded GPU frames.
@@ -48,7 +48,7 @@ pub type PixelBufferOutput = Option<std::convert::Infallible>;
 /// a GPU frame skips the software transfer for it. Anything that has not asked
 /// for these surfaces -- a non-Flutter UI, a build without the plugin entry
 /// point, another process linking this crate -- keeps receiving software frames.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
 pub fn gpu_frames_wanted_flag() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
     use std::sync::{atomic::AtomicBool, Arc, OnceLock};
     static FLAG: OnceLock<Arc<AtomicBool>> = OnceLock::new();
@@ -61,7 +61,7 @@ pub fn gpu_frames_wanted_flag() -> std::sync::Arc<std::sync::atomic::AtomicBool>
 /// RGBA path always did.  This has to be a decoder-side decision: the decoder
 /// skips its software transfer as soon as it hands out a GPU frame, so a caller
 /// that rejects one afterwards has nothing left to present.
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
 pub fn set_gpu_frames_wanted(wanted: bool) {
     gpu_frames_wanted_flag().store(wanted, std::sync::atomic::Ordering::Relaxed);
 }
