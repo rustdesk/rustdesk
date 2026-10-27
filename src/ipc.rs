@@ -750,7 +750,8 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
                 // NOTE: On Linux/macOS, some IPC sockets are intentionally world-connectable
                 // (0666) so the active (non-root) user process can connect. Authorization is
                 // enforced at accept-time for these channels, and the protected `_service`
-                // channel is further restricted to configuration and grant requests.
+                // channel is further restricted by an explicit message allowlist (SyncConfig
+                // only).
                 let socket_mode = if config::is_service_ipc_postfix(postfix) {
                     0o0666
                 } else {
@@ -1291,16 +1292,9 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
         }
         Data::TrustedDeviceManagement(request) => {
-            let result = match *request {
-                request @ (authority::Request::List
-                | authority::Request::Clear
-                | authority::Request::Remove(_)
-                | authority::Request::Renew(_)) => authority::request(request).await,
-                _ => Err(hbb_common::anyhow::anyhow!(
-                    "Invalid trusted-device management request"
-                )),
-            }
-            .map_err(|error| error.to_string());
+            let result = authority::request(*request)
+                .await
+                .map_err(|error| error.to_string());
             allow_err!(stream.send(&Data::TrustedDeviceResponse(result)).await);
         }
         Data::InstallOption(opt) => match opt {

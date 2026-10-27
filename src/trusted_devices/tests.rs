@@ -186,7 +186,7 @@ async fn service_operations_share_and_revoke_persisted_grants() {
     remaining.check().await.unwrap();
     let stale_config: Config2 = hbb_common::config::load_path(Config2::file());
     assert_eq!(configuration::devices().await.len(), 1);
-    authority::manage(true).await.unwrap();
+    authority::request(Request::Clear).await.unwrap();
     // Ordinary settings saves must not restore grants from a stale snapshot.
     config::set_config2(stale_config).unwrap();
     Config::set_option("trusted-device-test-option".into(), "Y".into());

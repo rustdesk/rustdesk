@@ -69,7 +69,7 @@ pub struct Grants {
     records: Vec<Record>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Ticket {
     scope: [u8; TOKEN_BYTES],
     generation: [u8; TOKEN_BYTES],

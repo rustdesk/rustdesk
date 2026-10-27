@@ -48,7 +48,7 @@ pub(super) async fn service_sync_preserves_grants_and_revocations() {
 
     // Explicit service sync replaces the older copy, including removals and enrollment.
     previous.sync_trusted_devices().unwrap();
-    config::sync_from_server(settings.clone(), current.clone()).unwrap();
+    config::sync_config(settings.clone(), current.clone()).unwrap();
     assert!(!is_trusted(&removed).await);
     assert!(is_trusted(&retained).await);
     assert!(is_trusted(&added).await);
@@ -60,15 +60,15 @@ pub(super) async fn service_sync_preserves_grants_and_revocations() {
     );
 
     Config2::set_trusted_devices_v2(String::new()).unwrap();
-    config::sync_from_server(settings.clone(), current).unwrap();
+    config::sync_config(settings.clone(), current).unwrap();
     super::super::initialize().unwrap();
     assert!(is_trusted(&retained).await);
     assert!(is_trusted(&added).await);
 
-    authority::manage(true).await.unwrap();
+    authority::request(Request::Clear).await.unwrap();
     let cleared = Config2::get_for_sync().unwrap();
     previous.sync_trusted_devices().unwrap();
-    config::sync_from_server(settings, cleared).unwrap();
+    config::sync_config(settings, cleared).unwrap();
     assert!(configuration::devices().await.is_empty());
     stopped_service_password_changes().await;
 }
@@ -163,13 +163,7 @@ pub(super) async fn unusable_grant_scope_keeps_current_password_totp_available()
 
     let mut wrong_scope = config::snapshot().unwrap().scope;
     wrong_scope[0] ^= 1;
-    let error = authority::handle(authority::Request::Begin {
-        scope: wrong_scope,
-        verifier: None,
-        legacy: None,
-    })
-    .err()
-    .unwrap();
+    let error = authority::begin(wrong_scope, None, None).err().unwrap();
     assert!(!error.is::<authority::Unavailable>());
 
     let path = Config2::file();
@@ -182,7 +176,7 @@ pub(super) async fn unusable_grant_scope_keeps_current_password_totp_available()
     let login = host::begin(proof(PASSWORD, &token)).await;
     fs::write(&path, saved).unwrap();
     assert!(login.is_err());
-    authority::manage(true).await.unwrap();
+    authority::request(Request::Clear).await.unwrap();
 }
 
 pub(super) async fn legacy_migration_preserves_revocation(hwid: &[u8], info: &DeviceInfo) {

@@ -47,7 +47,7 @@ pub(super) async fn legacy_settings_survive_saving() {
         .all(|device| device["expires_at"] == 0));
     recovery::legacy_migration_preserves_revocation(hwid, &info).await;
     assert!(is_trusted(&existing).await);
-    authority::manage(true).await.unwrap();
+    authority::request(Request::Clear).await.unwrap();
     config::set_options(original).unwrap();
 }
 
@@ -62,8 +62,10 @@ fn legacy_fixture(hwid: &[u8], info: &DeviceInfo) -> String {
 }
 
 pub(super) async fn devices() -> Vec<serde_json::Value> {
-    let result: serde_json::Value =
-        serde_json::from_str(&authority::manage(false).await.unwrap()).unwrap();
+    let Response::Devices(devices) = authority::request(Request::List).await.unwrap() else {
+        panic!("Expected a trusted-device list");
+    };
+    let result: serde_json::Value = serde_json::from_str(&devices).unwrap();
     serde_json::from_value(result["devices"].clone()).unwrap()
 }
 
@@ -140,9 +142,9 @@ pub(super) async fn expiration_changes_preserve_grants() {
             assert!(expiry <= expires_at(hbb_common::get_time(), days.parse().unwrap()));
         }
         pending.finish(DeviceInfo::default()).await.unwrap();
-        authority::manage(true).await.unwrap();
+        authority::request(Request::Clear).await.unwrap();
         assert_issued_expiry(days).await;
-        authority::manage(true).await.unwrap();
+        authority::request(Request::Clear).await.unwrap();
     }
     config::set_options(original).unwrap();
 }
@@ -179,7 +181,7 @@ pub(super) async fn renewal_preserves_authorization(token: &[u8]) {
     for token in [token, other_token.as_slice()] {
         assert!(is_trusted(token).await);
     }
-    authority::manage(true).await.unwrap();
+    authority::request(Request::Clear).await.unwrap();
     assert!(authority::request(Request::Renew(vec![ids[1]]))
         .await
         .is_err());

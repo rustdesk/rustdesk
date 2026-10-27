@@ -730,9 +730,7 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                                 #[cfg(target_os = "windows")]
                                 allow_err!(
                                     crate::trusted_devices::config::update(move || {
-                                        crate::trusted_devices::config::sync_from_server(
-                                            config, config2,
-                                        )
+                                        crate::trusted_devices::config::sync_config(config, config2)
                                     })
                                     .await
                                 );

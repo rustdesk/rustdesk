@@ -310,7 +310,6 @@ async fn handle_config_options(
             }
         })
         .count();
-    // Authentication and trust-policy updates must reach the system service when used.
     if crate::trusted_devices::config::changes_authentication(&options) {
         let current = Config::get_options();
         let mut non_auth_options = options.clone();
@@ -328,7 +327,7 @@ async fn handle_config_options(
                 }
             }
         }
-        // Service update failures must not block unrelated strategy options.
+        // Authentication update failures must not block unrelated strategy options.
         Config::set_options(non_auth_options);
         return crate::trusted_devices::config::update_options(options).await;
     }

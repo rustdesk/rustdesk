@@ -53,11 +53,6 @@ pub fn sync_config(value: Config, options: Config2) -> ResultType<()> {
     options.sync_trusted_devices()
 }
 
-#[cfg(any(target_os = "windows", test))]
-pub fn sync_from_server(value: Config, options: Config2) -> ResultType<()> {
-    sync_config(value, options)
-}
-
 #[cfg(target_os = "windows")]
 pub async fn refresh_from_server() -> ResultType<()> {
     use crate::ipc::{connect, Data};
@@ -68,7 +63,7 @@ pub async fn refresh_from_server() -> ResultType<()> {
     match connection.next_timeout(TIMEOUT_MS).await? {
         Some(Data::SyncConfig(Some(configs))) => {
             let (config, config2) = *configs;
-            update(move || sync_from_server(config, config2)).await
+            update(move || sync_config(config, config2)).await
         }
         Some(Data::SecurityConfigError(error)) => bail!(error),
         _ => bail!("The host did not provide its current configuration"),

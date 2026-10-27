@@ -2826,7 +2826,7 @@ Future<void> renewTrustedDevice(
     await bind.mainRenewTrustedDevices(json: json);
     final result = await TrustedDevice.get();
     selectedDevices.clear();
-    trustedDevices.assignAll(result.devices);
+    trustedDevices.assignAll(result);
   } catch (error) {
     showToast(error.toString());
   }
@@ -2835,8 +2835,7 @@ Future<void> renewTrustedDevice(
 void manageTrustedDeviceDialog() async {
   late final RxList<TrustedDevice> trustedDevices;
   try {
-    final result = await TrustedDevice.get();
-    trustedDevices = result.devices.obs;
+    trustedDevices = (await TrustedDevice.get()).obs;
   } catch (error) {
     showToast(error.toString());
     return;
@@ -2906,11 +2905,6 @@ Widget trustedDeviceExpiration({
   );
 }
 
-class TrustedDevices {
-  final List<TrustedDevice> devices;
-  TrustedDevices(this.devices);
-}
-
 class TrustedDevice {
   late final Uint8List recordId;
   late final int time;
@@ -2938,7 +2932,7 @@ class TrustedDevice {
     return (remaining / (24 * 60 * 60 * 1000)).toStringAsFixed(0);
   }
 
-  static Future<TrustedDevices> get() async {
+  static Future<List<TrustedDevice>> get() async {
     final List<TrustedDevice> devices = List.empty(growable: true);
     final devicesJson = await bind.mainGetTrustedDevices();
     final result = json.decode(devicesJson) as Map<String, dynamic>;
@@ -2947,7 +2941,7 @@ class TrustedDevice {
       devices.add(TrustedDevice.fromJson(device));
     }
     devices.sort((a, b) => b.time.compareTo(a.time));
-    return TrustedDevices(devices);
+    return devices;
   }
 }
 

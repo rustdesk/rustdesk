@@ -38,8 +38,6 @@ impl GrantsStorage {
         };
         if !legacy.is_empty() {
             super::legacy::import(&mut grants, &legacy, value.is_empty())?;
-        }
-        if !legacy.is_empty() {
             self.write(&grants)?;
         }
         Ok(grants)

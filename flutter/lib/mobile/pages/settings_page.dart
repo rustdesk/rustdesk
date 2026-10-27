@@ -1398,8 +1398,8 @@ class __ManageTrustedDevicesState extends State<_ManageTrustedDevices> {
             if (snapshot.hasError) {
               return Center(child: Text('Error: ${snapshot.error}'));
             }
-            final result = snapshot.data as TrustedDevices;
-            trustedDevices = result.devices.obs;
+            final devices = snapshot.data as List<TrustedDevice>;
+            trustedDevices = devices.obs;
             return trustedDevicesTable(trustedDevices, selectedDevices);
           }),
     );
