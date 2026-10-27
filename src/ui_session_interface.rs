@@ -1758,6 +1758,16 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn next_rgba(&self, display: usize);
     #[cfg(all(feature = "vram", feature = "flutter"))]
     fn on_texture(&self, display: usize, texture: *mut c_void);
+    /// Deliver a decoded GPU frame (a macOS `CVPixelBuffer`) to the UI.
+    ///
+    /// Returns true when a UI session took the frame over, in which case the
+    /// caller must NOT push the software pixels for that same frame. Backends
+    /// that cannot present GPU frames keep the default `false`, so the video
+    /// thread falls back to the RGBA path unchanged.
+    #[cfg(target_os = "macos")]
+    fn on_pixelbuffer(&self, _display: usize, _pixelbuffer: &scrap::PixelBufferFrame) -> bool {
+        false
+    }
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>);
     fn set_current_display(&self, disp_idx: i32);
     #[cfg(feature = "flutter")]

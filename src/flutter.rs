@@ -307,17 +307,38 @@ pub type FlutterRgbaRendererPluginOnPixelBuffer =
 
 #[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
-    /// Zero-copy GPU frame delivery, off unless explicitly enabled.
+    /// Zero-copy GPU frame delivery, on unless explicitly disabled.
     ///
-    /// The PoC verifies correctness before performance, so this stays opt-in
-    /// (`RUSTDESK_VT_ZEROCOPY=1`); when it is off, or when the loaded plugin
-    /// does not export the symbol, frames take the unchanged RGBA path.
+    /// The Flutter UI always renders through the texture_rgba_renderer texture
+    /// on macOS, so the RGBA ("on_rgba") path cannot paint into it: with this
+    /// switched off the window just freezes on the last frame. That makes the
+    /// direct path the only usable default; `RUSTDESK_VT_ZEROCOPY=0` is kept as
+    /// an escape hatch for debugging a plugin that misbehaves.
     static ref VT_ZEROCOPY_ENABLED: bool = std::env::var("RUSTDESK_VT_ZEROCOPY")
-        .map(|v| v == "1")
-        .unwrap_or(false);
+        .map(|v| v != "0")
+        .unwrap_or(true);
 }
 
 pub(super) type TextureRgbaPtr = usize;
+
+/// Human readable state of the direct GPU-frame path, for the session log.
+///
+/// Printing it next to `use texture render` saves a round of guessing: a frozen
+/// window is exactly what "texture render: true, zero-copy: off" looks like.
+pub(super) fn vt_zero_copy_state() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        if *VT_ZEROCOPY_ENABLED {
+            "on"
+        } else {
+            "off (RUSTDESK_VT_ZEROCOPY=0) - the texture render path will not paint"
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "n/a (macOS only)"
+    }
+}
 
 struct DisplaySessionInfo {
     // TextureRgba pointer in flutter native.
@@ -626,8 +647,28 @@ impl VideoRenderer {
                 pixelbuffer.pixfmt(),
             )
         } != 0;
-        if accepted && info.notify_render_type != Some(RenderType::PixelBuffer) {
-            info.notify_render_type = Some(RenderType::PixelBuffer);
+        if accepted {
+            // This path never touches `size`, so a session that missed the
+            // asynchronous `session_set_size` would keep mapping the local
+            // cursor against (0,0). Adopt the frame size the same way on_rgba
+            // does.
+            if info.size == (0, 0) {
+                log::info!(
+                    "display #{display}: adopting frame size ({},{}) as the session size (direct path)",
+                    pixelbuffer.width(),
+                    pixelbuffer.height()
+                );
+                info.size = (pixelbuffer.width() as usize, pixelbuffer.height() as usize);
+            }
+            if info.notify_render_type != Some(RenderType::PixelBuffer) {
+                log::info!(
+                    "display #{display}: plugin accepted the decoded GPU frame directly ({},{}, pixfmt {})",
+                    pixelbuffer.width(),
+                    pixelbuffer.height(),
+                    pixelbuffer.pixfmt()
+                );
+                info.notify_render_type = Some(RenderType::PixelBuffer);
+            }
         }
         accepted
     }
@@ -984,7 +1025,7 @@ impl InvokeUiSession for FlutterHandler {
     /// Returns true when at least one session took the frame; the caller then
     /// skips pushing the RGBA pixels for this frame.
     #[cfg(target_os = "macos")]
-    pub fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> bool {
+    fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> bool {
         if !*VT_ZEROCOPY_ENABLED {
             return false;
         }
@@ -1529,9 +1570,10 @@ pub fn session_start_(
         let is_first_ui_session = session.session_handlers.read().unwrap().len() == 1;
         if !is_connected && is_first_ui_session {
             log::info!(
-                "Session {} start, use texture render: {}",
+                "Session {} start, use texture render: {}, vt zero-copy: {}",
                 id,
-                session.use_texture_render.load(Ordering::Relaxed)
+                session.use_texture_render.load(Ordering::Relaxed),
+                vt_zero_copy_state()
             );
             let session = (*session).clone();
             std::thread::spawn(move || {
