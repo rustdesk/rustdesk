@@ -9,6 +9,16 @@ fn main() {
     crate::common::load_custom_client();
     if args
         .get(1)
+        .is_some_and(|arg| arg == "--trusted-device-handoff")
+    {
+        if let Err(error) = crate::core_main::handoff_trusted_devices(&args[2..]) {
+            eprintln!("Failed to hand off trusted devices: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    if args
+        .get(1)
         .is_some_and(|arg| arg == "--copy-service-config")
     {
         if let Err(error) = crate::core_main::copy_service_config(&args[1..]) {

@@ -49,7 +49,9 @@ pub fn copy_service_config(args: &[String]) -> hbb_common::ResultType<()> {
         if std::path::Path::new(destination) != config::Config2::file() {
             hbb_common::bail!("Expected the system service configuration destination");
         }
-        crate::trusted_devices::authority::register_service_authority()?;
+        if crate::trusted_devices::authority::restore_service_authority()? {
+            return Ok(());
+        }
         if !std::path::Path::new(source).try_exists()? {
             return Ok(());
         }
@@ -58,6 +60,11 @@ pub fn copy_service_config(args: &[String]) -> hbb_common::ResultType<()> {
         std::path::Path::new(source),
         std::path::Path::new(destination),
     )
+}
+
+#[cfg(target_os = "macos")]
+pub fn handoff_trusted_devices(args: &[String]) -> hbb_common::ResultType<()> {
+    crate::trusted_devices::authority::handoff(args)
 }
 
 /// shared by flutter and sciter main function
@@ -241,6 +248,13 @@ pub fn core_main() -> Option<CoreMainAction> {
         }
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
+        #[cfg(target_os = "macos")]
+        if args[0] == "--trusted-device-handoff" {
+            if let Err(error) = handoff_trusted_devices(&args[1..]) {
+                return Some(CoreMainAction::ExitFailure(error));
+            }
+            return None;
+        }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         if args[0] == "--copy-service-config" {
             if let Err(error) = copy_service_config(&args) {

@@ -441,10 +441,18 @@ pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
         match std::process::Command::new("osascript")
             .arg("-e")
             .arg(script_body)
+            .arg(if is_root() {
+                get_active_username()
+            } else {
+                crate::username()
+            })
             .status()
         {
             Err(e) => {
                 log::error!("run osascript failed: {}", e);
+            }
+            Ok(status) if !status.success() => {
+                log::error!("Service removal and trusted-device handoff failed: {status}");
             }
             _ => {
                 let agent = format!("{}_server.plist", crate::get_full_name());
@@ -461,7 +469,6 @@ pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
                         // leave ipc a little time
                         std::thread::sleep(std::time::Duration::from_millis(300));
                     }
-                    crate::ipc::set_option("stop-service", "Y");
                     std::process::Command::new("launchctl")
                         .args(&["remove", &format!("{}_server", crate::get_full_name())])
                         .status()

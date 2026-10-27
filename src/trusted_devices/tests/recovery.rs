@@ -63,6 +63,41 @@ pub(super) async fn service_sync_preserves_grants_and_revocations() {
     fs::remove_file(user_path).unwrap();
     fs::remove_file(install_path).unwrap();
     stopped_service_password_changes().await;
+    #[cfg(target_os = "macos")]
+    handed_off_grants_preserve_local_changes().await;
+}
+
+#[cfg(target_os = "macos")]
+async fn handed_off_grants_preserve_local_changes() {
+    use super::super::service;
+    let removed = begin_enrollment()
+        .await
+        .finish(DeviceInfo::default())
+        .await
+        .unwrap();
+    let retained = begin_enrollment()
+        .await
+        .finish(DeviceInfo::default())
+        .await
+        .unwrap();
+    let settings = Config::get();
+    let root = Config2::get_for_sync().unwrap();
+    service::sync_from_service(settings.clone(), root.clone()).unwrap();
+    let id =
+        serde_json::from_value(configuration::devices().await[0]["record_id"].clone()).unwrap();
+    authority::request(Request::Remove(vec![id])).await.unwrap();
+    let added = begin_enrollment()
+        .await
+        .finish(DeviceInfo::default())
+        .await
+        .unwrap();
+    let user = Config2::get_for_sync().unwrap();
+    root.sync_trusted_devices().unwrap();
+    service::sync_from_service(settings, user).unwrap();
+    assert!(!is_trusted(&removed).await);
+    assert!(is_trusted(&retained).await);
+    assert!(is_trusted(&added).await);
+    authority::manage(true).await.unwrap();
 }
 
 async fn stopped_service_password_changes() {

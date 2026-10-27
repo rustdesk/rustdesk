@@ -151,44 +151,31 @@ impl std::fmt::Debug for Response {
 pub(super) fn uses_service() -> ResultType<bool> {
     #[cfg(target_os = "macos")]
     {
-        use hbb_common::anyhow::Context;
-        let registered = std::path::Path::new(&format!(
-            "/Library/LaunchDaemons/{}_service.plist",
-            crate::get_full_name()
-        ))
-        .try_exists()
-        .context("Inspect trusted-device system service registration")?;
-        // Uninstalling the service must not reactivate a stale per-user grant store.
-        return Ok(registered
-            || service_authority_path()
-                .try_exists()
-                .context("Inspect trusted-device service ownership")?);
+        return super::handoff::uses_service();
     }
     #[cfg(target_os = "linux")]
     Ok(crate::platform::is_installed() && (!crate::platform::is_root() || crate::is_server()))
 }
 
-#[cfg(target_os = "macos")]
-fn service_authority_path() -> std::path::PathBuf {
-    std::path::Path::new("/Library/Preferences").join(format!(
-        "{}_trusted_devices_service",
-        crate::get_full_name()
-    ))
+#[cfg(any(target_os = "macos", test))]
+pub(super) fn service_selected(registered: bool, owner: Option<Option<u32>>, uid: u32) -> bool {
+    // Missing file: standalone; empty file: service; UID: handed-off user.
+    registered || owner.is_some_and(|owner| owner != Some(uid))
 }
 
 #[cfg(target_os = "macos")]
 pub fn register_service_authority() -> ResultType<()> {
-    use hbb_common::anyhow::Context;
-    if !crate::platform::is_root() {
-        bail!("Registering trusted-device service ownership requires root privileges");
-    }
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(service_authority_path())
-        .context("Register trusted-device service ownership")?;
-    file.sync_all()
-        .context("Persist trusted-device service ownership")
+    super::handoff::claim_service().map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+pub fn restore_service_authority() -> ResultType<bool> {
+    super::handoff::claim_service()
+}
+
+#[cfg(target_os = "macos")]
+pub fn handoff(args: &[String]) -> ResultType<()> {
+    super::handoff::command(args)
 }
 
 pub async fn request(request: Request) -> ResultType<Response> {
@@ -202,12 +189,7 @@ pub async fn request(request: Request) -> ResultType<Response> {
 
 pub fn handle(request: Request) -> ResultType<Response> {
     #[cfg(target_os = "macos")]
-    if (!crate::platform::is_root() || crate::is_server()) && uses_service()? {
-        return Err(Unavailable(hbb_common::anyhow::anyhow!(
-            "Trusted-device authority changed; retry the operation"
-        ))
-        .into());
-    }
+    let _authority = super::handoff::lock_authority()?;
     match request {
         Request::Clear => {
             super::clear()?;
@@ -244,5 +226,20 @@ pub async fn manage(clear: bool) -> ResultType<String> {
         Response::Done if clear => Ok(String::new()),
         Response::Devices(devices) if !clear => Ok(devices),
         _ => bail!("Invalid trusted-device management response"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::service_selected;
+
+    #[test]
+    fn handed_off_user_can_trust_devices_without_the_service() {
+        let uid = 501;
+        assert!(!service_selected(false, Some(Some(uid)), uid));
+        assert!(service_selected(false, Some(Some(uid)), uid + 1));
+        assert!(service_selected(true, Some(Some(uid)), uid));
+        assert!(service_selected(false, Some(None), uid));
+        assert!(!service_selected(false, None, uid));
     }
 }

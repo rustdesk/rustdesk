@@ -1,6 +1,8 @@
 pub mod authority;
 pub mod client;
 pub mod config;
+#[cfg(target_os = "macos")]
+mod handoff;
 pub mod host;
 mod legacy;
 mod management;
@@ -228,6 +230,8 @@ pub fn initialize() -> ResultType<()> {
     if (!crate::platform::is_root() || crate::is_server()) && authority::uses_service()? {
         return Ok(());
     }
+    #[cfg(target_os = "macos")]
+    let _authority = handoff::lock_authority()?;
     if !Config2::file().try_exists()? {
         return Ok(());
     }
