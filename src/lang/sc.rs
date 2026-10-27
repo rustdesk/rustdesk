@@ -639,7 +639,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use D3D rendering", "Imprea sa renderizatzione D3D"),
         ("Printer", "Imprentadora"),
         ("printer-os-requirement-tip", "Pro pòdere impreare s'imprentadora in seddida bisòngiat a installare {} in custu dispositivu."),
-        ("printer-requires-installed-{}-client-tip", "Pro sa funtzionalidade de imprenta in essida b'at bisòngiu de Window 10 o prus nou."),
+        ("printer-requires-installed-{}-client-tip", ""),
         ("printer-{}-not-installed-tip", "S'imprentadora {} no est installada"),
         ("printer-{}-ready-tip", "S'imprentadora {} est installada e pronta pro s'impreu."),
         ("Install {} Printer", "Installa s'imprentadora {}"),
