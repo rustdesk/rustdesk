@@ -702,6 +702,14 @@ impl TransferJob {
         if self.is_download() && !self.files.is_empty() {
             bail!("cannot replace an accepted download file list");
         }
+        #[cfg(any(target_os = "android", all(test, unix)))]
+        if self.is_remote
+            && self.r#type == JobType::Generic
+            && self.is_document()
+            && !self.files.is_empty()
+        {
+            bail!("cannot replace an accepted download file list");
+        }
         validate_transfer_file_names(&files)?;
         if let DataSource::FilePath(base) = &self.data_source {
             for file in &files {

@@ -60,6 +60,11 @@ fn provider(output: &Path, request: &str) -> ResultType<String> {
 
 #[cfg(unix)]
 fn receiving(path: &str) -> TransferJob {
+    receiving_files(path, vec![FileEntry::default()])
+}
+
+#[cfg(unix)]
+fn receiving_files(path: &str, files: Vec<FileEntry>) -> TransferJob {
     TransferJob::new_write(
         1,
         JobType::Generic,
@@ -70,7 +75,7 @@ fn receiving(path: &str) -> TransferJob {
         true,
         false,
     )
-    .with_files(vec![FileEntry::default()])
+    .with_files(files)
     .unwrap()
 }
 
@@ -136,14 +141,16 @@ async fn overwrite_requires_matching_confirmation(path: &str, output: &Path) {
             ..Default::default()
         })
         .to_vec();
-    let mut job = receiving(path).with_files(files.clone()).unwrap();
+    let mut job = receiving_files(path, files.clone());
     confirm_overwrite(&mut job, 0).await;
+    assert!(job.set_files(vec![files[1].clone()]).is_err());
+    assert_eq!(job.files(), &files);
     job.write(block(0, b"")).await.unwrap();
     std::fs::write(output, b"second original").unwrap();
     assert!(job.write(block(1, b"")).await.is_err());
     assert_eq!(std::fs::read(output).unwrap(), b"second original");
 
-    let mut job = receiving(path).with_files(files).unwrap();
+    let mut job = receiving_files(path, files);
     confirm_overwrite(&mut job, 1).await;
     job.write(block(1, b"")).await.unwrap();
     assert!(std::fs::read(output).unwrap().is_empty());
