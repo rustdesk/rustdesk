@@ -2922,6 +2922,14 @@ impl<T: InvokeUiSession> Remote<T> {
                     if handler.on_pixelbuffer(display, gpu_frame) {
                         return;
                     }
+                    // Nobody can present it (texture not registered yet, display
+                    // not in the map, plugin refused). The decoder already
+                    // skipped the software transfer for this frame, so the pixels
+                    // in `data` belong to an earlier frame -- pushing them would
+                    // flash the previous picture backwards. Drop this one and
+                    // make the refusal countable instead.
+                    count_gpu_frame_refused(display);
+                    return;
                 }
                 let _ = &pixelbuffer_output;
                 if pixelbuffer {
@@ -3331,5 +3339,25 @@ mod kept_cursor_tests {
         let mut bomb = compressed(4, 4);
         bomb.colors = hbb_common::compress::compress(&vec![0u8; 1 << 20]).into();
         assert!(kept_cursor_rgba(bomb).is_err(), "more pixels than its size");
+    }
+}
+
+/// Count a decoded GPU frame that no UI session could present.
+///
+/// The decoder skips the software transfer for a frame it hands out, so when the
+/// render layer refuses one the pixels in the handler belong to an earlier frame:
+/// the frame is dropped instead of being replaced by stale pixels. The counter
+/// exists so a measurement can show the refusals are zero in normal operation,
+/// and the log stays quiet because it only prints on the first one and then every
+/// 100th.
+#[cfg(all(target_os = "macos", feature = "flutter"))]
+fn count_gpu_frame_refused(display: usize) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static REFUSED: AtomicU64 = AtomicU64::new(0);
+    let total = REFUSED.fetch_add(1, Ordering::Relaxed) + 1;
+    if total == 1 || total % 100 == 0 {
+        log::warn!(
+            "display #{display}: decoded GPU frame refused by the render path ({total} so far), dropping it instead of pushing stale pixels"
+        );
     }
 }
