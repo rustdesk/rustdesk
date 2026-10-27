@@ -802,12 +802,17 @@ impl Decoder {
         pixelbuffer: &mut crate::PixelBufferOutput,
     ) -> ResultType<bool> {
         let mut ret = false;
+        // Transaction boundary: the slot belongs to this batch of packets only,
+        // so a GPU frame from an earlier call can never be presented over a
+        // newer software frame (the `?` below can return in the middle of a
+        // batch, which used to leave the slot populated).
+        #[cfg(target_os = "macos")]
+        {
+            *pixelbuffer = None;
+        }
         for h264 in frames.frames.iter() {
             decoder.decode(&h264.data)?;
             // The GPU frame of this decode call, if the decoder delivered one.
-            // A GPU frame and software frames never both come out of the same
-            // call: the decoder skips the software transfer when the renderer
-            // accepted the GPU frame, and a software frame clears the GPU slot.
             #[cfg(target_os = "macos")]
             if let Some(frame) = decoder.take_pixelbuffer() {
                 *pixelbuffer = Some(frame);
@@ -817,6 +822,13 @@ impl Decoder {
             for image in decoder.last_frame_images() {
                 // TODO: just process the last frame
                 if image.to_fmt(rgb, i420).is_ok() {
+                    // A software frame produced later in the same batch wins:
+                    // the rule is "the last decoded frame is the one presented",
+                    // and the caller must not paint an older GPU frame over it.
+                    #[cfg(target_os = "macos")]
+                    {
+                        *pixelbuffer = None;
+                    }
                     ret = true;
                 }
             }
