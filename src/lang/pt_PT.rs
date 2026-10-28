@@ -817,7 +817,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("api_server_empty_tip", "Com o servidor da API vazio, o seu servidor personalizado utiliza HTTP por predefinição. Contacte o seu administrador para ativar o HTTPS."),
         ("RustDesk storage", "Armazenamento do RustDesk"),
         ("Other folders", "Outras pastas"),
-        ("Choose which folder remote devices can access.", "Escolha qual a pasta que os dispostivos remotos podem aceder"),
+        ("Choose which folder remote devices can access.", "Escolha a pasta a que os dispositivos remotos podem aceder."),
         ("android-logs-folder-tip", "Escolha Android → media para guardar os ficheiros de registo."),
         ("Choose folder", "Escolher pasta"),
         ("Please select Android → media.", "Por favor selecione Android → media."),
