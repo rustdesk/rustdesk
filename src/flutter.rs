@@ -276,6 +276,15 @@ pub struct FlutterHandler {
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
     peer_info: Arc<RwLock<PeerInfo>>,
     use_texture_render: Arc<AtomicBool>,
+    /// This session's "the decoder may hand out decoded GPU frames" switch.
+    ///
+    /// Owned per UI session, never shared: the network session's video handlers
+    /// read exactly this flag, so two sessions rendering differently (one
+    /// through the plugin texture, one through RGBA) cannot turn the direct path
+    /// on or off for each other. Starts `false` -- a session that has not
+    /// established renderer support keeps getting software frames.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    gpu_frames_wanted: Arc<AtomicBool>,
 }
 
 impl Default for FlutterHandler {
@@ -287,6 +296,8 @@ impl Default for FlutterHandler {
             use_texture_render: Arc::new(
                 AtomicBool::new(crate::ui_interface::use_texture_render()),
             ),
+            #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+            gpu_frames_wanted: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -327,12 +338,6 @@ pub type FlutterRgbaRendererPluginOnPixelBuffer =
 #[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
     /// Zero-copy GPU frame delivery, on unless explicitly disabled.
-    ///
-    /// The Flutter UI always renders through the texture_rgba_renderer texture
-    /// on macOS, so the RGBA ("on_rgba") path cannot paint into it: with this
-    /// switched off the window just freezes on the last frame. That makes the
-    /// direct path the only usable default; `RUSTDESK_VT_ZEROCOPY=0` is kept as
-    /// an escape hatch for debugging a plugin that misbehaves.
     static ref VT_ZEROCOPY_ENABLED: bool = std::env::var("RUSTDESK_VT_ZEROCOPY")
         .map(|v| v != "0")
         .unwrap_or(true);
@@ -695,10 +700,22 @@ impl VideoRenderer {
         FrameTaken::YesNewRenderType
     }
 
-    /// Whether the loaded plugin exports the direct GPU frame entry point.
+    /// Whether this renderer can present a decoded GPU frame *right now*.
+    ///
+    /// Both halves matter: the loaded plugin must export the entry point, and at
+    /// least one display must have a live RGBA texture registered. Asking only
+    /// the first question is what let the decoder start handing out surfaces
+    /// before Flutter had registered a texture, i.e. frames no renderer could
+    /// consume.
     #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     pub fn pixelbuffer_supported(&self) -> bool {
         self.on_pixelbuffer_func.is_some()
+            && self
+                .map_display_sessions
+                .read()
+                .unwrap()
+                .values()
+                .any(|info| info.texture_rgba_ptr != usize::default())
     }
 
     pub fn reset_all_display_render_type(&self) {
@@ -839,11 +856,33 @@ impl FlutterHandler {
         let wanted = *VT_ZEROCOPY_ENABLED
             && self.use_texture_render.load(Ordering::Relaxed)
             && supported;
-        scrap::set_gpu_frames_wanted(wanted);
+        // Only this session's decoder reads it; the switch is ours alone.
+        self.gpu_frames_wanted.store(wanted, Ordering::Relaxed);
+        log::info!("display: gpu frames wanted = {wanted}");
     }
 }
 
 impl InvokeUiSession for FlutterHandler {
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    fn gpu_frames_wanted(&self) -> Option<std::sync::Arc<AtomicBool>> {
+        Some(self.gpu_frames_wanted.clone())
+    }
+
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    fn disable_gpu_frames(&self) {
+        // The render path refused too many GPU frames in a row, and the decoder
+        // already skipped the software transfer for each of them: switch this
+        // session back to software frames instead of leaving a frozen picture.
+        if self
+            .gpu_frames_wanted
+            .swap(false, Ordering::Relaxed)
+        {
+            log::warn!(
+                "display: render path kept refusing decoded GPU frames, switching this session back to software frames"
+            );
+        }
+    }
+
     // On the event stream, so that it keeps its order with the cursor_id events around it.
     fn set_cursor_data(&self, cd: CursorData) {
         let colors = cd.colors.to_vec();
@@ -1993,14 +2032,26 @@ pub fn session_set_size(session_id: SessionID, display: usize, width: usize, hei
 #[inline]
 pub fn session_register_pixelbuffer_texture(session_id: SessionID, display: usize, ptr: usize) {
     for s in sessions::get_sessions() {
-        if let Some(h) = s
-            .ui_handler
-            .session_handlers
-            .read()
-            .unwrap()
-            .get(&session_id)
-        {
-            h.renderer.register_pixelbuffer_texture(display, ptr);
+        let registered = {
+            let handlers = s.ui_handler.session_handlers.read().unwrap();
+            match handlers.get(&session_id) {
+                Some(h) => {
+                    h.renderer.register_pixelbuffer_texture(display, ptr);
+                    true
+                }
+                None => false,
+            }
+        };
+        if registered {
+            // Texture lifetime is part of the answer: registering the plugin
+            // texture is what makes GPU frames presentable, and destroying it
+            // (ptr == 0) makes every further one unpresentable. Re-derive the
+            // session flag here, not only at session start, so a reconnect or a
+            // re-created texture cannot leave the decoder handing out frames
+            // nothing can paint. The handler lock is released above because
+            // syncing takes it again.
+            #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+            s.ui_handler.sync_gpu_frames_wanted();
             break;
         }
     }

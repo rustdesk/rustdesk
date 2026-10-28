@@ -1716,6 +1716,27 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn close_success(&self);
     fn update_quality_status(&self, qs: QualityStatus);
     fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str);
+
+    /// The switch this session's video decoder consults before handing out a
+    /// decoded GPU frame.
+    ///
+    /// It belongs to the session: two sessions can render differently (one
+    /// through the plugin texture, one through RGBA), so a process-wide flag
+    /// makes them fight over one switch. `None` means this UI never asked for
+    /// GPU frames, and the decoder keeps producing software frames.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    fn gpu_frames_wanted(&self) -> Option<std::sync::Arc<std::sync::atomic::AtomicBool>> {
+        None
+    }
+
+    /// Called when the render path kept refusing decoded GPU frames.
+    ///
+    /// The decoder skips its software transfer for every frame it hands out, so a
+    /// refusal streak means the picture is frozen rather than merely degraded.
+    /// Implementations switch this session back to software frames instead of
+    /// waiting for a restart.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    fn disable_gpu_frames(&self) {}
     fn set_fingerprint(&self, fingerprint: String);
     fn job_error(&self, id: i32, err: String, file_num: i32);
     fn job_done(&self, id: i32, file_num: i32);

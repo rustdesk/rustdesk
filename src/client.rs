@@ -2639,6 +2639,12 @@ mod audio_format_tests {
 /// Video handler for the [`Client`].
 pub struct VideoHandler {
     decoder: Decoder,
+    /// This display's hand-off switch for decoded GPU frames, installed by
+    /// [`Self::set_gpu_frames_wanted`]. Per video handler, so two sessions with
+    /// different render paths do not share one switch. Re-applied on
+    /// [`Self::reset`], which rebuilds the decoder.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    gpu_frames_wanted: Option<scrap::GpuFramesWanted>,
     pub rgb: ImageRgb,
     pub texture: ImageTexture,
     recorder: Arc<Mutex<Option<Recorder>>>,
@@ -2671,6 +2677,8 @@ impl VideoHandler {
             };
         VideoHandler {
             decoder: Decoder::new(format, luid),
+            #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+            gpu_frames_wanted: None,
             rgb: ImageRgb::new(rgba_format, crate::get_dst_align_rgba()),
             texture: Default::default(),
             recorder: Default::default(),
@@ -2742,6 +2750,17 @@ impl VideoHandler {
     }
 
     /// Reset the decoder, change format if it is Some
+    /// Install this display's hand-off switch for decoded GPU frames.
+    ///
+    /// The switch comes from the UI session that renders this display, so the
+    /// decision "can this renderer present GPU frames" travels with the session
+    /// instead of living in a process-wide flag two sessions would fight over.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    pub fn set_gpu_frames_wanted(&mut self, wanted: scrap::GpuFramesWanted) {
+        self.decoder.set_gpu_frames_wanted(wanted.clone());
+        self.gpu_frames_wanted = Some(wanted);
+    }
+
     pub fn reset(&mut self, format: Option<CodecFormat>) {
         log::info!(
             "reset video handler for display #{}, format: {format:?}",
@@ -2752,6 +2771,13 @@ impl VideoHandler {
         let luid = Self::get_adapter_luid();
         let format = format.unwrap_or(self.decoder.format());
         self.decoder = Decoder::new(format, luid);
+        // A rebuilt decoder starts out rejecting GPU frames; give it back this
+        // display's switch so a format change cannot silently turn the direct
+        // path off for a session that still wants it.
+        #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+        if let Some(wanted) = self.gpu_frames_wanted.clone() {
+            self.decoder.set_gpu_frames_wanted(wanted);
+        }
         self.fail_counter = 0;
         self.first_frame = true;
     }
@@ -4038,6 +4064,13 @@ pub fn start_video_thread<F, T>(
                         let format = CodecFormat::from(&vf);
                         if video_handler.is_none() {
                             let mut handler = VideoHandler::new(format, display);
+                            // The session's own renderer decides whether GPU
+                            // frames can be presented; the video handler consults
+                            // that switch before every hand-off.
+                            #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+                            if let Some(wanted) = session.ui_handler.gpu_frames_wanted() {
+                                handler.set_gpu_frames_wanted(wanted);
+                            }
                             let record_state = session.lc.read().unwrap().record_state;
                             let record_permission = session.lc.read().unwrap().record_permission;
                             let id = session.lc.read().unwrap().id.clone();
