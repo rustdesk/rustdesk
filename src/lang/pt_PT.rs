@@ -818,7 +818,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk storage", "Armazenamento do RustDesk"),
         ("Other folders", "Outras pastas"),
         ("Choose which folder remote devices can access.", "Escolha qual a pasta que os dispostivos remotos podem aceder"),
-        ("android-logs-folder-tip", "android-históricos-pasta-dica"),
+        ("android-logs-folder-tip", "Escolha Android → media para guardar os ficheiros de registo."),
         ("Choose folder", "Escolher pasta"),
         ("Please select Android → media.", "Por favor selecione Android → media."),
         ("Trust duration (days)", "Duração da confiança (dias)"),
