@@ -1210,12 +1210,10 @@ class ImagePaint extends StatelessWidget {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
     var s = c.scale;
-    var frameWidth = c.getDisplayWidth().toDouble();
     if (ffiModel.isPeerLinux) {
       final displays = ffiModel.pi.getCurDisplays();
       if (displays.isNotEmpty) {
         s = s / displays[0].scale;
-        frameWidth *= displays[0].scale;
       }
     }
     // The FSRCNNX upscaler doubles the decoded frame while the peer still
@@ -1223,12 +1221,7 @@ class ImagePaint extends StatelessWidget {
     // paint the larger image at half scale: the drawing position is unchanged
     // (x and y are divided by the same scale) and the image fills the native
     // rectangle instead of twice the screen.
-    final image = m.image;
-    if (image != null &&
-        frameWidth > 0 &&
-        (image.width / frameWidth - 2).abs() < 0.01) {
-      s /= 2;
-    }
+    s /= m.upscaleFactor;
     final adjust = c.getAdjustY();
     return CustomPaint(
       painter: ImagePainter(

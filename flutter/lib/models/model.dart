@@ -2029,12 +2029,30 @@ class ImageModel with ChangeNotifier {
     return true;
   }
 
+  // 2 when the current image came from the 2x upscaler, else 1. Painters
+  // divide their scale by this, so CanvasModel.scale stays in native units.
+  int get upscaleFactor {
+    final image = _image;
+    final target = parent.target;
+    if (image == null || target == null) return 1;
+    var frameWidth = target.canvasModel.getDisplayWidth().toDouble();
+    if (target.ffiModel.isPeerLinux) {
+      final displays = target.ffiModel.pi.getCurDisplays();
+      if (displays.isNotEmpty) frameWidth *= displays[0].scale;
+    }
+    if (frameWidth > 0 && (image.width / frameWidth - 2).abs() < 0.01) {
+      return 2;
+    }
+    return 1;
+  }
+
   // mobile only
   double get maxScale {
     if (_image == null) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / _image!.width;
-    final yscale = size.height / _image!.height;
+    final factor = upscaleFactor;
+    final xscale = size.width * factor / _image!.width;
+    final yscale = size.height * factor / _image!.height;
     return max(1.5, max(xscale, yscale));
   }
 
@@ -2042,8 +2060,9 @@ class ImageModel with ChangeNotifier {
   double get minScale {
     if (_image == null) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / _image!.width;
-    final yscale = size.height / _image!.height;
+    final factor = upscaleFactor;
+    final xscale = size.width * factor / _image!.width;
+    final yscale = size.height * factor / _image!.height;
     return min(xscale, yscale) / 1.5;
   }
 
