@@ -150,7 +150,7 @@ class HomePageState extends State<HomePage> {
         ],
       );
     }
-    return Text(bind.mainGetAppNameSync());
+    return Text("远程协助");
   }
 }
 
