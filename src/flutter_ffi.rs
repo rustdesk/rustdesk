@@ -60,7 +60,7 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
                 .with_tag("ffi"), // logs will show under mytag tag
         );
         #[cfg(not(debug_assertions))]
-        hbb_common::init_log(false, "");
+        crate::platform::android_log::initialize();
         #[cfg(feature = "mediacodec")]
         scrap::mediacodec::check_mediacodec();
         crate::common::test_rendezvous_server();
@@ -854,6 +854,13 @@ pub fn session_read_local_dir_sync(
     path: String,
     show_hidden: bool,
 ) -> String {
+    #[cfg(target_os = "android")]
+    if fs::android::is_path(&fs::get_path(&path)) {
+        return match fs::read_dir(&fs::get_path(&path), show_hidden) {
+            Ok(fd) => make_fd_to_json(fd.id, path, &fd.entries),
+            Err(error) => serde_json::json!({"error": error.to_string()}).to_string(),
+        };
+    }
     if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
         return make_fd_to_json(fd.id, path, &fd.entries);
     }
@@ -3034,6 +3041,8 @@ pub mod server_side {
         if let Ok(home_dir) = env.get_string(&home_dir) {
             *config::APP_HOME_DIR.write().unwrap() = home_dir.into();
         }
+        #[cfg(not(debug_assertions))]
+        crate::platform::android_log::initialize();
         if let Ok(custom_client_config) = env.get_string(&custom_client_config) {
             if !custom_client_config.is_empty() {
                 let custom_client_config: String = custom_client_config.into();

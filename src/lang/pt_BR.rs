@@ -815,5 +815,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "Desativado"),
         ("api_server_connection_tip", "Seu servidor personalizado está usando HTTP sem criptografia. Entre em contato com o administrador para habilitar o HTTPS."),
         ("api_server_empty_tip", "Quando o campo Servidor de API está vazio, seu servidor personalizado utiliza HTTP por padrão. Entre em contato com o administrador para habilitar o HTTPS."),
+        ("RustDesk storage", ""),
+        ("Other folders", ""),
+        ("Choose which folder remote devices can access.", ""),
+        ("android-logs-folder-tip", ""),
+        ("Choose folder", ""),
+        ("Please select Android → media.", ""),
     ].iter().cloned().collect();
 }

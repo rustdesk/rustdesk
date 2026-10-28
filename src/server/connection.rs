@@ -2182,12 +2182,18 @@ impl Connection {
         if let Some((dir, show_hidden)) = self.file_transfer.clone() {
             self.keyboard = false;
             let is_existing_dir = !dir.is_empty() && std::path::Path::new(&dir).is_dir();
+            #[cfg(target_os = "android")]
+            let is_existing_dir = is_existing_dir || fs::android::is_path(std::path::Path::new(&dir));
+            #[cfg(target_os = "android")]
+            let is_allowed_dir =
+                is_existing_dir && crate::common::is_peer_path_allowed_async(&dir, false).await;
+            #[cfg(not(target_os = "android"))]
             let is_allowed_dir =
                 is_existing_dir && crate::common::is_peer_path_allowed(&dir, false);
             #[cfg(target_os = "android")]
             if is_existing_dir && !is_allowed_dir {
                 log::warn!(
-                    "Use the app workspace because the initial file-transfer directory is outside it: {}",
+                    "Use the default file-transfer location because access to the initial directory was denied: {}",
                     dir
                 );
             }
@@ -3597,7 +3603,9 @@ impl Connection {
                                 _ => None,
                             };
                             if let Some((path, job_id, allow_empty)) = checked {
-                                if !crate::common::is_peer_path_allowed(path, allow_empty) {
+                                if !crate::common::is_peer_path_allowed_async(path, allow_empty)
+                                    .await
+                                {
                                     log::warn!(
                                         "Reject file action outside the app workspace: {}",
                                         path
@@ -3613,12 +3621,15 @@ impl Connection {
                                 let destination = std::path::Path::new(&r.path)
                                     .parent()
                                     .map(|parent| parent.join(&r.new_name));
-                                let allowed = destination
+                                let allowed = match destination
                                     .as_deref()
                                     .and_then(std::path::Path::to_str)
-                                    .map_or(false, |path| {
-                                        crate::common::is_peer_path_allowed(path, false)
-                                    });
+                                {
+                                    Some(path) => {
+                                        crate::common::is_peer_path_allowed_async(path, false).await
+                                    }
+                                    None => false,
+                                };
                                 if !allowed {
                                     log::warn!(
                                         "Reject rename destination outside the app workspace: {:?}",
@@ -3638,6 +3649,16 @@ impl Connection {
                                 self.read_dir(&rd.path, rd.include_hidden);
                             }
                             Some(file_action::Union::AllFiles(f)) => {
+                                #[cfg(target_os = "android")]
+                                if fs::android::is_path(std::path::Path::new(&f.path)) {
+                                    self.send_fs(ipc::FS::ReadAllFiles {
+                                        path: f.path,
+                                        id: f.id,
+                                        include_hidden: f.include_hidden,
+                                        conn_id: self.inner.id(),
+                                    });
+                                    return true;
+                                }
                                 if crate::common::need_fs_cm_send_files() {
                                     self.send_fs(ipc::FS::ReadAllFiles {
                                         path: f.path,
@@ -5592,7 +5613,32 @@ impl Connection {
         path: String,
         check_file_limit: bool,
     ) {
-        match fs::TransferJob::new_read(
+        #[cfg(target_os = "android")]
+        let result = {
+            let is_document = matches!(&data_source, fs::DataSource::FilePath(path) if fs::android::is_path(path));
+            let read = move || {
+                fs::TransferJob::new_read(
+                    id,
+                    job_type,
+                    "".to_string(),
+                    data_source,
+                    file_num,
+                    include_hidden,
+                    false,
+                    overwrite_detection,
+                )
+            };
+            if is_document {
+                tokio::task::spawn_blocking(read)
+                    .await
+                    .map_err(hbb_common::anyhow::Error::from)
+                    .and_then(|result| result)
+            } else {
+                read()
+            }
+        };
+        #[cfg(not(target_os = "android"))]
+        let result = fs::TransferJob::new_read(
             id,
             job_type,
             "".to_string(),
@@ -5601,7 +5647,8 @@ impl Connection {
             include_hidden,
             false,
             overwrite_detection,
-        ) {
+        );
+        match result {
             Err(err) => {
                 self.send(fs::new_error(id, err, 0)).await;
             }
