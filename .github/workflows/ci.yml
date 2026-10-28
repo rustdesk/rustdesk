@@ -248,3 +248,49 @@ jobs:
         use-cross: ${{ matrix.job.use-cross }}
         command: test
         args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
+
+  # `hwcodec` is an optional feature of `libs/scrap`, and no other job builds the
+  # configuration where it is off -- every other lane enables `flutter,hwcodec`. A
+  # `#[cfg(all(target_os = "macos", feature = "hwcodec"))]` gate that is wrong only in
+  # that combination therefore passes every other job. `scrap`'s build script still
+  # needs libyuv from vcpkg for a plain `check`, hence the vcpkg steps. Only the crate
+  # is checked: the app crate in this configuration also needs the generated flutter
+  # bridge, which is a separate artifact.
+  check-macos-without-hwcodec:
+    name: cargo check (macOS x86_64, hwcodec off)
+    runs-on: macos-13
+    steps:
+    - name: Export GitHub Actions cache environment variables
+      uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+    - name: Checkout source code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        submodules: recursive
+
+    - name: Setup vcpkg with Github Actions binary cache
+      uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+      with:
+        vcpkgDirectory: ${{ runner.temp }}/vcpkg
+        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+    - name: Install vcpkg dependencies
+      shell: bash
+      run: |
+        $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+      with:
+        toolchain: stable
+        components: ''
+
+    - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+    - name: cargo check with the hwcodec feature off
+      shell: bash
+      run: cargo check -p scrap --no-default-features
