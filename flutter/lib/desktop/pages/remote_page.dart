@@ -1265,6 +1265,7 @@ class _ImagePaintState extends State<ImagePaint> {
         sizeScale = s / displays[0].scale;
       }
     }
+    sizeScale = _imagePathScale(m, sizeScale);
     return CustomPaint(
       size: imageSize,
       painter: ImagePainter(image: m.image, x: 0, y: 0, scale: sizeScale),
@@ -1280,6 +1281,7 @@ class _ImagePaintState extends State<ImagePaint> {
         sizeScale = s / displays[0].scale;
       }
     }
+    sizeScale = _imagePathScale(m, sizeScale);
     return CustomPaint(
       size: Size(c.size.width, c.size.height),
       painter: ImagePainter(
@@ -1288,6 +1290,14 @@ class _ImagePaintState extends State<ImagePaint> {
           y: c.y / sizeScale,
           scale: sizeScale),
     );
+  }
+
+  // ImagePainter draws at the frame's own size; an upscaled frame is 2x and
+  // must be drawn at half scale to stay in the native rectangle. Frames the
+  // upscaler did not produce keep the existing scale.
+  double _imagePathScale(ImageModel m, double scale) {
+    if (m.image == null) return scale;
+    return scale / m.upscaleFactor;
   }
 
   Widget _BuildPaintTextureRender(

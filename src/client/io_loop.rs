@@ -2912,10 +2912,11 @@ impl<T: InvokeUiSession> Remote<T> {
             move |display: usize,
                   data: &mut scrap::ImageRgb,
                   _texture: *mut c_void,
-                  pixelbuffer: bool| {
+                  pixelbuffer: bool,
+                  upscaled: bool| {
                 *frame_count.write().unwrap() += 1;
                 if pixelbuffer {
-                    handler.on_rgba(display, data);
+                    handler.on_rgba(display, data, upscaled);
                 } else {
                     #[cfg(all(feature = "vram", feature = "flutter"))]
                     handler.on_texture(display, _texture);

@@ -566,6 +566,9 @@ class ImagePaint extends StatelessWidget {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
     var s = c.scale;
+    // The upscaler doubles the frame while the canvas reports the native size;
+    // see ImageModel.upscaleFactor.
+    s /= m.upscaleFactor;
     final adjust = c.getAdjustY();
     return CustomPaint(
       painter: ImagePainter(

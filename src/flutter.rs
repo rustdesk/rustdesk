@@ -302,6 +302,8 @@ struct DisplaySessionInfo {
     // TextureRgba pointer in flutter native.
     texture_rgba_ptr: TextureRgbaPtr,
     size: (usize, usize),
+    // `size` is 2x the peer's native display size because of the upscaler.
+    upscaled: bool,
     #[cfg(feature = "vram")]
     gpu_output_ptr: usize,
     notify_render_type: Option<RenderType>,
@@ -378,6 +380,7 @@ impl VideoRenderer {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if let Some(info) = sessions_lock.get_mut(&display) {
             info.size = (width, height);
+            info.upscaled = false;
             info.notify_render_type = None;
         } else {
             sessions_lock.insert(
@@ -385,6 +388,7 @@ impl VideoRenderer {
                 DisplaySessionInfo {
                     texture_rgba_ptr: usize::default(),
                     size: (width, height),
+                    upscaled: false,
                     #[cfg(feature = "vram")]
                     gpu_output_ptr: usize::default(),
                     notify_render_type: None,
@@ -426,6 +430,7 @@ impl VideoRenderer {
                         DisplaySessionInfo {
                             texture_rgba_ptr: ptr as _,
                             size: (0, 0),
+                            upscaled: false,
                             #[cfg(feature = "vram")]
                             gpu_output_ptr: usize::default(),
                             notify_render_type: None,
@@ -467,6 +472,7 @@ impl VideoRenderer {
                         DisplaySessionInfo {
                             texture_rgba_ptr: usize::default(),
                             size: (0, 0),
+                            upscaled: false,
                             gpu_output_ptr: ptr,
                             notify_render_type: None,
                         },
@@ -477,7 +483,7 @@ impl VideoRenderer {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb) -> bool {
+    pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb, upscaled: bool) -> bool {
         let mut write_lock = self.map_display_sessions.write().unwrap();
         let opt_info = if !self.is_support_multi_ui_session {
             write_lock.values_mut().next()
@@ -492,17 +498,45 @@ impl VideoRenderer {
         }
 
         if info.size.0 != rgba.w || info.size.1 != rgba.h {
-            log::error!(
-                "width/height mismatch: ({},{}) != ({},{})",
-                info.size.0,
-                info.size.1,
-                rgba.w,
-                rgba.h
-            );
-            // Peer info's handling is async and may be late than video frame's handling
-            // Allow peer info not set, but not allow wrong width/height for correct local cursor position
-            if info.size != (0, 0) {
-                return false;
+            // Client-side upscalers (e.g. FSRCNNX) change frame dimensions
+            // after decode while peer info still reports native size. A frame
+            // at exactly 2x or 1/2 the tracked size in both axes is the toggle
+            // flipping, not stale peer info: follow it. Anything else keeps
+            // the guard below so a late peer info cannot misplace the cursor.
+            // `size` has no other readers (`set_size` resets it on every peer
+            // update), so tracking the actual frame cannot leak anywhere.
+            fn doubled(a: usize, b: usize) -> bool {
+                a.checked_mul(2) == Some(b) || b.checked_mul(2) == Some(a)
+            }
+            fn halved(a: usize, b: usize) -> bool {
+                b.checked_mul(2) == Some(a)
+            }
+            // Follow a 2x frame only when the upscaler produced it. When it is
+            // switched off, the first native frame after a 2x one restores the
+            // peer size.
+            let follows_upscaler = if upscaled {
+                doubled(info.size.0, rgba.w) && doubled(info.size.1, rgba.h)
+            } else {
+                info.upscaled
+                    && halved(info.size.0, rgba.w)
+                    && halved(info.size.1, rgba.h)
+            };
+            if follows_upscaler {
+                info.size = (rgba.w, rgba.h);
+                info.upscaled = upscaled;
+            } else {
+                log::error!(
+                    "width/height mismatch: ({},{}) != ({},{})",
+                    info.size.0,
+                    info.size.1,
+                    rgba.w,
+                    rgba.h
+                );
+                // Peer info's handling is async and may be late than video frame's handling
+                // Allow peer info not set, but not allow wrong width/height for correct local cursor position
+                if info.size != (0, 0) {
+                    return false;
+                }
             }
         }
         if let Some(func) = &self.on_rgba_func {
@@ -868,9 +902,9 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
+    fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb, upscaled: bool) {
         let use_texture_render = self.use_texture_render.load(Ordering::Relaxed);
-        self.on_rgba_flutter_texture_render(use_texture_render, display, rgba);
+        self.on_rgba_flutter_texture_render(use_texture_render, display, rgba, upscaled);
         if !use_texture_render {
             self.on_rgba_soft_render(display, rgba);
         }
@@ -878,7 +912,7 @@ impl InvokeUiSession for FlutterHandler {
 
     #[inline]
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
+    fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb, _upscaled: bool) {
         self.on_rgba_soft_render(display, rgba);
     }
 
@@ -1266,10 +1300,11 @@ impl FlutterHandler {
         use_texture_render: bool,
         display: usize,
         rgba: &mut scrap::ImageRgb,
+        upscaled: bool,
     ) {
         for (_, session) in self.session_handlers.read().unwrap().iter() {
             if use_texture_render || session.displays.len() > 1 {
-                if session.renderer.on_rgba(display, rgba) {
+                if session.renderer.on_rgba(display, rgba, upscaled) {
                     if let Some(stream) = &session.event_stream {
                         stream.add(EventToUI::Texture(display, false));
                     }

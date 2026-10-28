@@ -1216,6 +1216,12 @@ class ImagePaint extends StatelessWidget {
         s = s / displays[0].scale;
       }
     }
+    // The FSRCNNX upscaler doubles the decoded frame while the peer still
+    // reports the native size. Cursor and touch coordinates stay native, so
+    // paint the larger image at half scale: the drawing position is unchanged
+    // (x and y are divided by the same scale) and the image fills the native
+    // rectangle instead of twice the screen.
+    s /= m.upscaleFactor;
     final adjust = c.getAdjustY();
     return CustomPaint(
       painter: ImagePainter(

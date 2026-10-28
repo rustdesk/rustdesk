@@ -562,18 +562,31 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollbarNonTextureRender(
       ImageModel m, Size imageSize, double s) {
+    final sizeScale = _imagePathScale(m, s);
     return CustomPaint(
       size: imageSize,
-      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: sizeScale),
     );
   }
 
   Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
+    final sizeScale = _imagePathScale(m, s);
     return CustomPaint(
       size: Size(c.size.width, c.size.height),
-      painter: ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+      painter: ImagePainter(
+          image: m.image,
+          x: c.x / sizeScale,
+          y: c.y / sizeScale,
+          scale: sizeScale),
     );
+  }
+
+  // ImagePainter draws at the frame's own size; an upscaled frame is 2x and
+  // must be drawn at half scale to stay in the native rectangle.
+  double _imagePathScale(ImageModel m, double scale) {
+    if (m.image == null) return scale;
+    return scale / m.upscaleFactor;
   }
 
   Widget _BuildPaintTextureRender(

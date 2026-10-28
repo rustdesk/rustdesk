@@ -1916,6 +1916,8 @@ class VirtualMouseMode with ChangeNotifier {
 
 class ImageModel with ChangeNotifier {
   ui.Image? _image;
+  // Whether _image was produced by the 2x upscaler.
+  bool _upscaled = false;
 
   ui.Image? get image => _image;
 
@@ -1978,10 +1980,22 @@ class ImageModel with ChangeNotifier {
   decodeAndUpdate(int display, Uint8List rgba) async {
     final pid = parent.target?.id;
     final rect = parent.target?.ffiModel.pi.getDisplayRect(display);
+    var width = rect?.width.toInt() ?? 0;
+    var height = rect?.height.toInt() ?? 0;
+    // The FSRCNNX upscaler doubles frame dimensions after decode while peer
+    // info still reports native size. Only the upscaler can produce a buffer
+    // of exactly 2w * 2h * 4 bytes, so the length identifies such a frame even
+    // when it was queued before the toggle was switched off.
+    var upscaled = false;
+    if (width > 0 && height > 0 && rgba.length == width * height * 16) {
+      width *= 2;
+      height *= 2;
+      upscaled = true;
+    }
     final image = await img.decodeImageFromPixels(
       rgba,
-      rect?.width.toInt() ?? 0,
-      rect?.height.toInt() ?? 0,
+      width,
+      height,
       isWeb | isWindows | isLinux
           ? ui.PixelFormat.rgba8888
           : ui.PixelFormat.bgra8888,
@@ -1990,11 +2004,11 @@ class ImageModel with ChangeNotifier {
       image?.dispose();
       return;
     }
-    await update(image);
+    await update(image, upscaled: upscaled);
   }
 
   Future<void> update(ui.Image? image,
-      {bool Function()? isCurrentSession}) async {
+      {bool Function()? isCurrentSession, bool upscaled = false}) async {
     if (_disposeIfStale(image, isCurrentSession)) return;
     if (_image == null && image != null) {
       if (isDesktop || isWebDesktop) {
@@ -2009,6 +2023,7 @@ class ImageModel with ChangeNotifier {
     if (_disposeIfStale(image, isCurrentSession)) return;
     _image?.dispose();
     _image = image;
+    _upscaled = image != null && upscaled;
     if (image != null) notifyListeners();
   }
 
@@ -2019,12 +2034,17 @@ class ImageModel with ChangeNotifier {
     return true;
   }
 
+  // 2 when the current image came from the 2x upscaler, else 1. Painters
+  // divide their scale by this, so CanvasModel.scale stays in native units.
+  int get upscaleFactor => _upscaled ? 2 : 1;
+
   // mobile only
   double get maxScale {
     if (_image == null) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / _image!.width;
-    final yscale = size.height / _image!.height;
+    final factor = upscaleFactor;
+    final xscale = size.width * factor / _image!.width;
+    final yscale = size.height * factor / _image!.height;
     return max(1.5, max(xscale, yscale));
   }
 
@@ -2032,8 +2052,9 @@ class ImageModel with ChangeNotifier {
   double get minScale {
     if (_image == null) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / _image!.width;
-    final yscale = size.height / _image!.height;
+    final factor = upscaleFactor;
+    final xscale = size.width * factor / _image!.width;
+    final yscale = size.height * factor / _image!.height;
     return min(xscale, yscale) / 1.5;
   }
 

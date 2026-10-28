@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::{atomic::AtomicUsize, Arc, Mutex, RwLock},
+    time::{Duration, Instant},
 };
 
 use sciter::{
@@ -30,6 +31,16 @@ type Video = AssetPtr<video_destination>;
 
 lazy_static::lazy_static! {
     static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
+    // Dimensions the video stream was initialized with. The FSRCNNX upscaler
+    // changes frame dimensions after decode, so `on_rgba` restarts the stream
+    // when a frame no longer matches. The two mutexes are never held at the
+    // same time, so this cannot deadlock.
+    static ref VIDEO_SIZE: Mutex<(i32, i32)> = Mutex::new((0, 0));
+    // Whether VIDEO_SIZE currently holds an upscaled (2x) frame size.
+    static ref VIDEO_UPSCALED: Mutex<bool> = Mutex::new(false);
+    // Last stream-restart attempt: a failing `start_streaming` must not be
+    // retried on every frame.
+    static ref VIDEO_RETRY_AT: Mutex<Option<Instant>> = Mutex::new(None);
 }
 
 /// SciterHandler
@@ -151,11 +162,19 @@ impl InvokeUiSession for SciterHandler {
         // Nothing spectacular in decoder – done on CPU side.
         // So if you can do BGRA translation on your side – the better.
         // BGRA is used as internal image format so it will not require additional transformations.
-        VIDEO.lock().unwrap().as_mut().map(|v| {
+        *VIDEO_SIZE.lock().unwrap() = (w, h);
+        *VIDEO_UPSCALED.lock().unwrap() = false;
+        let restarted = VIDEO.lock().unwrap().as_mut().map(|v| {
             v.stop_streaming().ok();
             let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
             log::info!("[video] reinitialized: {:?}", ok);
+            ok.is_ok()
         });
+        // A successful re-init here supersedes any pending retry, otherwise the
+        // timestamp left by an earlier failed attempt can defer the next one.
+        if restarted == Some(true) {
+            *VIDEO_RETRY_AT.lock().unwrap() = None;
+        }
     }
 
     fn update_privacy_mode(&self) {
@@ -292,7 +311,44 @@ impl InvokeUiSession for SciterHandler {
         self.call("adaptSize", &make_args!());
     }
 
-    fn on_rgba(&self, _display: usize, rgba: &mut scrap::ImageRgb) {
+    fn on_rgba(&self, _display: usize, rgba: &mut scrap::ImageRgb, upscaled: bool) {
+        // Frames may be 2x native when the FSRCNNX upscaler is on (or back to
+        // native when it is off); re-init the fixed-size stream to match, with
+        // a throttled retry while starting keeps failing. A mismatch the
+        // upscaler did not produce keeps the old stream lifecycle so a normal
+        // resolution change still waits for peer display info.
+        let (w, h) = (rgba.w as i32, rgba.h as i32);
+        let known = *VIDEO_SIZE.lock().unwrap();
+        if known != (0, 0) && known != (w, h) {
+            let was_upscaled = *VIDEO_UPSCALED.lock().unwrap();
+            let back_to_native = was_upscaled
+                && w.checked_mul(2) == Some(known.0)
+                && h.checked_mul(2) == Some(known.1);
+            let due = match *VIDEO_RETRY_AT.lock().unwrap() {
+                Some(t) => t.elapsed() >= Duration::from_secs(2),
+                None => true,
+            };
+            if (upscaled || back_to_native) && due {
+                // The `VIDEO` guard is dropped before touching the size and
+                // retry state below, so the locks are never nested.
+                let restarted = VIDEO.lock().unwrap().as_mut().map(|v| {
+                    v.stop_streaming().ok();
+                    v.start_streaming((w, h), COLOR_SPACE::Rgb32, None).is_ok()
+                });
+                match restarted {
+                    Some(true) => {
+                        *VIDEO_SIZE.lock().unwrap() = (w, h);
+                        *VIDEO_UPSCALED.lock().unwrap() = upscaled;
+                        *VIDEO_RETRY_AT.lock().unwrap() = None;
+                        log::trace!("[video] stream size followed frame to {w}x{h}");
+                    }
+                    Some(false) => {
+                        *VIDEO_RETRY_AT.lock().unwrap() = Some(Instant::now());
+                    }
+                    None => {}
+                }
+            }
+        }
         VIDEO
             .lock()
             .unwrap()
