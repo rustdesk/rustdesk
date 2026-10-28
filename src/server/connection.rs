@@ -1,7 +1,8 @@
 #[cfg(target_os = "windows")]
 use super::login_failure_check::try_acquire_os_credential_login_gate;
 use super::login_failure_check::{
-    evaluate_os_credential_policy, record_os_credential_failure, FailureScope,
+    evaluate_os_credential_policy, record_os_credential_failure,
+    validate_password_with_failure_limit, FailureScope,
 };
 use super::{input_service::*, *};
 #[cfg(feature = "unix-file-copy-paste")]
@@ -3075,7 +3076,28 @@ impl Connection {
                 if !res {
                     return true;
                 }
-                if !self.validate_password(allow_logon_screen_password) {
+                let valid = match validate_password_with_failure_limit(|| {
+                    self.validate_password(allow_logon_screen_password)
+                }) {
+                    Ok(valid) => valid,
+                    Err(limited) => {
+                        if limited.report_audit {
+                            // This peer may be legitimate; the failures are shared across peers.
+                            self.post_alarm_audit(
+                                AlarmAuditType::SixAttemptsWithinOneMinute,
+                                json!({
+                                    "scope": "global",
+                                    "blocked_ip": &self.ip,
+                                    "blocked_id": &self.lr.my_id,
+                                    "blocked_name": &self.lr.my_name,
+                                }),
+                            );
+                        }
+                        self.send_login_error("Please try 1 minute later").await;
+                        return true;
+                    }
+                };
+                if !valid {
                     self.update_failure_with_scope(failure, false, 0, FailureScope::Default);
                     self.check_update_temporary_password(false);
                     self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)

@@ -39,6 +39,17 @@ use crate::{
 
 type Message = RendezvousMessage;
 
+fn parse_udp_response(
+    bytes: &[u8],
+    source: &TargetAddr<'_>,
+    expected: &TargetAddr<'_>,
+) -> ResultType<Message> {
+    if source != expected {
+        bail!("Unexpected rendezvous UDP source {source:?}, expected {expected:?}");
+    }
+    Ok(Message::parse_from_bytes(bytes)?)
+}
+
 fn connection_meta(
     control_permissions: Option<ControlPermissions>,
     controlled_context: Option<ControlledContext>,
@@ -419,11 +430,10 @@ impl RendezvousMediator {
             select! {
                 n = socket.next() => {
                     match n {
-                        Some(Ok((bytes, _))) => {
-                            if let Ok(msg) = Message::parse_from_bytes(&bytes) {
-                                rz.handle_resp(msg.union, Sink::Framed(&mut socket, &addr), &server, &mut update_latency).await?;
-                            } else {
-                                log::debug!("Non-protobuf message bytes received: {:?}", bytes);
+                        Some(Ok((bytes, source))) => {
+                            match parse_udp_response(&bytes, &source, &addr) {
+                                Ok(msg) => rz.handle_resp(msg.union, Sink::Framed(&mut socket, &addr), &server, &mut update_latency).await?,
+                                Err(err) => log::trace!("Rejected rendezvous UDP response: {err}"),
                             }
                         },
                         Some(Err(e)) => bail!("Failed to receive next: {}", e),  // maybe socks5 tcp disconnected

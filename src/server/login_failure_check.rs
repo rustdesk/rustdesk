@@ -2,13 +2,70 @@ use crate::AlarmAuditType;
 use hbb_common::get_time;
 #[cfg(target_os = "windows")]
 use hbb_common::tokio::sync::{Mutex as TokioMutex, OwnedMutexGuard};
-use std::sync::Mutex;
 #[cfg(target_os = "windows")]
 use std::sync::Arc;
+use std::{
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 const OS_CREDENTIAL_LOGIN_TOTAL_IDLE_RESET_MS: i64 = 120 * 60 * 1_000;
 const OS_CREDENTIAL_LOGIN_BACKOFF_BASE_SECONDS: i64 = 15;
 const OS_CREDENTIAL_LOGIN_BACKOFF_MAX_SECONDS: i64 = 30 * 60;
+const MAX_PASSWORD_LOGIN_FAILURES: u32 = 6;
+const PASSWORD_LOGIN_FAILURE_WINDOW: Duration = Duration::from_secs(60);
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct PasswordLoginLimited {
+    pub(crate) report_audit: bool,
+}
+
+#[derive(Default)]
+struct PasswordFailureWindow {
+    expires_at: Option<Instant>,
+    failures: u32,
+    audit_requested: bool,
+}
+
+#[derive(Default)]
+struct PasswordLoginLimiter {
+    state: Mutex<PasswordFailureWindow>,
+}
+
+impl PasswordLoginLimiter {
+    fn validate(
+        &self,
+        now: Instant,
+        validate: impl FnOnce() -> bool,
+    ) -> Result<bool, PasswordLoginLimited> {
+        // Keep verification and failure accounting atomic across connections.
+        let mut state = self.state.lock().unwrap();
+        if state.expires_at.is_some_and(|expires_at| now >= expires_at) {
+            *state = PasswordFailureWindow::default();
+        }
+        if state.failures > MAX_PASSWORD_LOGIN_FAILURES {
+            let report_audit = !state.audit_requested;
+            state.audit_requested = true;
+            return Err(PasswordLoginLimited { report_audit });
+        }
+        let valid = validate();
+        if valid {
+            *state = PasswordFailureWindow::default();
+        } else {
+            state.failures += 1;
+            state
+                .expires_at
+                .get_or_insert(now + PASSWORD_LOGIN_FAILURE_WINDOW);
+        }
+        Ok(valid)
+    }
+}
+
+pub(crate) fn validate_password_with_failure_limit(
+    validate: impl FnOnce() -> bool,
+) -> Result<bool, PasswordLoginLimited> {
+    PASSWORD_LOGIN_LIMITER.validate(Instant::now(), validate)
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) enum FailureScope {
@@ -30,6 +87,7 @@ struct OsCredentialFailureState {
 }
 
 lazy_static::lazy_static! {
+    static ref PASSWORD_LOGIN_LIMITER: PasswordLoginLimiter = PasswordLoginLimiter::default();
     static ref OS_CREDENTIAL_LOGIN_FAILURE_STATE: Mutex<OsCredentialFailureState> =
         Mutex::new(OsCredentialFailureState::default());
 }
