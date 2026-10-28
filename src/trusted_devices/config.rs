@@ -10,7 +10,9 @@ use hbb_common::{
     ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, io::ErrorKind, path::Path};
+use std::{collections::HashMap, io::ErrorKind, path::Path, sync::Mutex};
+
+static OPTION_UPDATE_LOCK: Mutex<()> = Mutex::new(());
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const SYNC_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
@@ -44,18 +46,38 @@ pub async fn update_auth<T: Send + 'static>(
 }
 
 pub async fn update_option(key: String, value: String) -> ResultType<()> {
-    let old = Config::get_options();
-    let mut options = old.clone();
-    if value.is_empty() {
-        options.remove(&key);
-    } else {
-        options.insert(key.clone(), value.clone());
-    }
-    let options = effective_options(options);
-    let authentication_changed = policy::authentication_changed(&old, &options);
-    update_auth(authentication_changed, move || {
+    update(move || {
+        let _update = OPTION_UPDATE_LOCK.lock().unwrap();
+        let old = Config::get_options();
+        let mut options = old.clone();
+        if value.is_empty() {
+            options.remove(&key);
+        } else {
+            options.insert(key.clone(), value.clone());
+        }
+        let options = effective_options(options);
+        let authentication_changed = policy::authentication_changed(&old, &options);
+        if authentication_changed && super::storage()?.exists()? {
+            snapshot()?;
+        }
         policy::change_options(options, || {
-            Config::set_option(key, value);
+            let previous = Config::get_option(&key);
+            Config::set_option(key.clone(), value);
+            let stored: Options = match read(&Config2::file()) {
+                Ok(stored) => stored,
+                Err(error) => {
+                    Config::set_option(key, previous);
+                    return Err(error);
+                }
+            };
+            let persisted = effective_options(stored.options)
+                .get(&key)
+                .cloned()
+                .unwrap_or_default();
+            if persisted != Config::get_option(&key) {
+                Config::set_option(key, previous);
+                bail!("The option update was not persisted");
+            }
             Ok(())
         })
     })

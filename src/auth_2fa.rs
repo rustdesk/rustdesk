@@ -133,7 +133,7 @@ impl TelegramBot {
     fn save(&self) -> ResultType<()> {
         let s = self.into_string()?;
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        crate::ipc::set_option("bot", &s);
+        crate::ipc::set_option("bot", &s)?;
         #[cfg(any(target_os = "android", target_os = "ios"))]
         Config::set_option("bot".to_owned(), s);
         Ok(())

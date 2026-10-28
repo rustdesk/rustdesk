@@ -2039,7 +2039,6 @@ pub async fn get_option_async(key: &str) -> String {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
 pub async fn set_option_on_host(key: &str, value: &str) -> ResultType<()> {
     let mut connection = connect(1000, "").await?;
     connection
@@ -2052,16 +2051,38 @@ pub async fn set_option_on_host(key: &str, value: &str) -> ResultType<()> {
     }
 }
 
-pub fn set_option(key: &str, value: &str) {
-    if set_option_on_host(key, value).is_err() {
-        let mut options = Config::get_options();
-        if value.is_empty() {
-            options.remove(key);
-        } else {
-            options.insert(key.to_owned(), value.to_owned());
-        }
-        if !crate::trusted_devices::config::changes_authentication(&options) {
+pub fn set_option(key: &str, value: &str) -> ResultType<()> {
+    let host_result = match tokio::runtime::Handle::try_current() {
+        Ok(handle) => match std::thread::scope(|scope| {
+            scope
+                .spawn(move || handle.block_on(set_option_on_host(key, value)))
+                .join()
+        }) {
+            Ok(result) => result,
+            Err(_) => Err(hbb_common::anyhow::anyhow!(
+                "The option update worker panicked"
+            )),
+        },
+        Err(error) => Err(error.into()),
+    };
+    match host_result {
+        Ok(()) => {
             Config::set_option(key.to_owned(), value.to_owned());
+            Ok(())
+        }
+        Err(error) => {
+            let mut options = Config::get_options();
+            if value.is_empty() {
+                options.remove(key);
+            } else {
+                options.insert(key.to_owned(), value.to_owned());
+            }
+            if crate::trusted_devices::config::changes_authentication(&options) {
+                return Err(error);
+            }
+            log::warn!("Host option update failed; applying the local per-key fallback: {error:#}");
+            Config::set_option(key.to_owned(), value.to_owned());
+            Ok(())
         }
     }
 }

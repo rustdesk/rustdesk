@@ -458,7 +458,7 @@ pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
                         // leave ipc a little time
                         std::thread::sleep(std::time::Duration::from_millis(300));
                     }
-                    crate::ipc::set_option("stop-service", "Y");
+                    hbb_common::allow_err!(crate::ipc::set_option("stop-service", "Y"));
                     std::process::Command::new("launchctl")
                         .args(&["remove", &format!("{}_server", crate::get_full_name())])
                         .status()

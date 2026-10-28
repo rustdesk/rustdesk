@@ -520,7 +520,14 @@ pub fn core_main() -> Option<CoreMainAction> {
                     let options = crate::ipc::get_options();
                     println!("{}", options.get(&args[1]).unwrap_or(&"".to_owned()));
                 } else if args.len() == 3 {
-                    if let Err(error) = crate::ipc::set_option_on_host(&args[1], &args[2]) {
+                    let result = hbb_common::tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(hbb_common::anyhow::Error::from)
+                        .and_then(|runtime| {
+                            runtime.block_on(crate::ipc::set_option_on_host(&args[1], &args[2]))
+                        });
+                    if let Err(error) = result {
                         return Some(CoreMainAction::ExitFailure(error));
                     }
                 }
