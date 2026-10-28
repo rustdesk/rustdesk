@@ -2901,6 +2901,12 @@ impl<T: InvokeUiSession> Remote<T> {
             discard_queue: discard_queue.clone(),
         };
         let handler = self.handler.ui_handler.clone();
+        // How many decoded GPU frames the render path refused back to back. A few
+        // at session start are normal (the texture is registered after the first
+        // frame arrives); a streak means nobody will ever present them, and every
+        // one of those frames already lost its software pixels.
+        #[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
+        let mut gpu_refused_streak = 0usize;
         crate::client::start_video_thread(
             self.handler.clone(),
             display,
@@ -2921,6 +2927,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 #[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
                 if let Some(gpu_frame) = &pixelbuffer_output {
                     if handler.on_pixelbuffer(display, gpu_frame) {
+                        gpu_refused_streak = 0;
                         return;
                     }
                     // Nobody can present it (texture not registered yet, display
@@ -2930,6 +2937,14 @@ impl<T: InvokeUiSession> Remote<T> {
                     // flash the previous picture backwards. Drop this one and
                     // make the refusal countable instead.
                     count_gpu_frame_refused(display);
+                    gpu_refused_streak += 1;
+                    if gpu_refused_streak >= GPU_FRAME_REFUSE_LIMIT {
+                        // Self-heal instead of freezing: stop asking this
+                        // session's decoder for GPU frames, which puts it back on
+                        // the software path for the next frame with no restart.
+                        handler.disable_gpu_frames();
+                        gpu_refused_streak = 0;
+                    }
                     return;
                 }
                 let _ = &pixelbuffer_output;
@@ -3342,6 +3357,16 @@ mod kept_cursor_tests {
         assert!(kept_cursor_rgba(bomb).is_err(), "more pixels than its size");
     }
 }
+
+/// How many decoded GPU frames the render path may refuse in a row before this
+/// session gives up on the direct path.
+///
+/// At 30-60 fps this is roughly one to two seconds. Long enough that the first
+/// frames of a session (the texture is registered after the first one arrives) do
+/// not trip it, short enough that a renderer that genuinely cannot present them
+/// is repaired inside the same second the picture would otherwise freeze.
+#[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
+const GPU_FRAME_REFUSE_LIMIT: usize = 60;
 
 /// Count a decoded GPU frame that no UI session could present.
 ///
