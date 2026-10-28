@@ -258,7 +258,7 @@ jobs:
   # bridge, which is a separate artifact.
   check-macos-without-hwcodec:
     name: cargo check (macOS x86_64, hwcodec off)
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
     - name: Export GitHub Actions cache environment variables
       uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
