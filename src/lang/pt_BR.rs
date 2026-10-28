@@ -813,7 +813,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "Não é possível usar \"{}\" como atalho."),
         ("On", "Ativado"),
         ("Off", "Desativado"),
-        ("api_server_connection_tip", ""),
-        ("api_server_empty_tip", ""),
+        ("api_server_connection_tip", "Seu servidor personalizado está usando HTTP sem criptografia. Entre em contato com o administrador para habilitar o HTTPS."),
+        ("api_server_empty_tip", "Quando o campo Servidor de API está vazio, seu servidor personalizado utiliza HTTP por padrão. Entre em contato com o administrador para habilitar o HTTPS."),
     ].iter().cloned().collect();
 }
