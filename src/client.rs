@@ -3987,7 +3987,7 @@ pub fn start_video_thread<F, T>(
     discard_queue: Arc<RwLock<bool>>,
     video_callback: F,
 ) where
-    F: 'static + FnMut(usize, &mut scrap::ImageRgb, *mut c_void, bool) + Send,
+    F: 'static + FnMut(usize, &mut scrap::ImageRgb, *mut c_void, bool, bool) + Send,
     T: InvokeUiSession,
 {
     let mut video_callback = video_callback;
@@ -4060,16 +4060,18 @@ pub fn start_video_thread<F, T>(
                                         &handler.rgb,
                                         pixelbuffer,
                                     ) {
-                                        crate::upscaler_hook::maybe_upscale_session_frame(
-                                            &session,
-                                            &mut handler.rgb,
-                                            pixelbuffer,
-                                        );
+                                        let upscaled =
+                                            crate::upscaler_hook::maybe_upscale_session_frame(
+                                                &session,
+                                                &mut handler.rgb,
+                                                pixelbuffer,
+                                            );
                                         video_callback(
                                             display,
                                             &mut handler.rgb,
                                             handler.texture.texture,
                                             pixelbuffer,
+                                            upscaled,
                                         );
                                     }
 

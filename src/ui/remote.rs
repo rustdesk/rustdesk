@@ -36,6 +36,8 @@ lazy_static::lazy_static! {
     // when a frame no longer matches. The two mutexes are never held at the
     // same time, so this cannot deadlock.
     static ref VIDEO_SIZE: Mutex<(i32, i32)> = Mutex::new((0, 0));
+    // Whether VIDEO_SIZE currently holds an upscaled (2x) frame size.
+    static ref VIDEO_UPSCALED: Mutex<bool> = Mutex::new(false);
     // Last stream-restart attempt: a failing `start_streaming` must not be
     // retried on every frame.
     static ref VIDEO_RETRY_AT: Mutex<Option<Instant>> = Mutex::new(None);
@@ -161,6 +163,7 @@ impl InvokeUiSession for SciterHandler {
         // So if you can do BGRA translation on your side – the better.
         // BGRA is used as internal image format so it will not require additional transformations.
         *VIDEO_SIZE.lock().unwrap() = (w, h);
+        *VIDEO_UPSCALED.lock().unwrap() = false;
         let restarted = VIDEO.lock().unwrap().as_mut().map(|v| {
             v.stop_streaming().ok();
             let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
@@ -308,18 +311,24 @@ impl InvokeUiSession for SciterHandler {
         self.call("adaptSize", &make_args!());
     }
 
-    fn on_rgba(&self, _display: usize, rgba: &mut scrap::ImageRgb) {
+    fn on_rgba(&self, _display: usize, rgba: &mut scrap::ImageRgb, upscaled: bool) {
         // Frames may be 2x native when the FSRCNNX upscaler is on (or back to
         // native when it is off); re-init the fixed-size stream to match, with
-        // a throttled retry while starting keeps failing.
+        // a throttled retry while starting keeps failing. A mismatch the
+        // upscaler did not produce keeps the old stream lifecycle so a normal
+        // resolution change still waits for peer display info.
         let (w, h) = (rgba.w as i32, rgba.h as i32);
         let known = *VIDEO_SIZE.lock().unwrap();
         if known != (0, 0) && known != (w, h) {
+            let was_upscaled = *VIDEO_UPSCALED.lock().unwrap();
+            let back_to_native = was_upscaled
+                && w.checked_mul(2) == Some(known.0)
+                && h.checked_mul(2) == Some(known.1);
             let due = match *VIDEO_RETRY_AT.lock().unwrap() {
                 Some(t) => t.elapsed() >= Duration::from_secs(2),
                 None => true,
             };
-            if due {
+            if (upscaled || back_to_native) && due {
                 // The `VIDEO` guard is dropped before touching the size and
                 // retry state below, so the locks are never nested.
                 let restarted = VIDEO.lock().unwrap().as_mut().map(|v| {
@@ -329,6 +338,7 @@ impl InvokeUiSession for SciterHandler {
                 match restarted {
                     Some(true) => {
                         *VIDEO_SIZE.lock().unwrap() = (w, h);
+                        *VIDEO_UPSCALED.lock().unwrap() = upscaled;
                         *VIDEO_RETRY_AT.lock().unwrap() = None;
                         log::trace!("[video] stream size followed frame to {w}x{h}");
                     }

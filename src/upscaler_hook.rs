@@ -86,19 +86,19 @@ pub fn maybe_upscale_session_frame<T: InvokeUiSession>(
     session: &Session<T>,
     rgb: &mut ImageRgb,
     pixelbuffer: bool,
-) {
+) -> bool {
     if !session
         .lc
         .read()
         .map(|lc| lc.get_toggle_option(keys::OPTION_UPSCALER))
         .unwrap_or(false)
     {
-        return;
+        return false;
     }
     let (w, h) = (rgb.w, rgb.h);
     let (fmt, dims) = match upscale_target(rgb, pixelbuffer) {
         Some(target) => target,
-        None => return,
+        None => return false,
     };
     // Decoder buffers can carry per-row stride padding (the macOS texture
     // path aligns rows to 64 bytes); the upscaler needs densely packed RGBA,
@@ -112,7 +112,7 @@ pub fn maybe_upscale_session_frame<T: InvokeUiSession>(
             Some(packed) => Some(packed),
             None => {
                 log::trace!("FSRCNNX skipped {w}x{h} frame with unexpected stride");
-                return;
+                return false;
             }
         }
     };
@@ -134,9 +134,11 @@ pub fn maybe_upscale_session_frame<T: InvokeUiSession>(
                     start.elapsed(),
                 );
             }
+            true
         }
         None => {
             log::trace!("FSRCNNX skipped {w}x{h} frame outside the pixel budget");
+            false
         }
     }
 }

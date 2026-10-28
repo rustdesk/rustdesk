@@ -582,23 +582,11 @@ class _ImagePaintState extends State<ImagePaint> {
     );
   }
 
-  // The FSRCNNX upscaler doubles the frame after decode while the canvas still
-  // reports native size. This view has no display-scale handling of its own, so
-  // match only an exact 2x frame; every other size is left untouched.
+  // ImagePainter draws at the frame's own size; an upscaled frame is 2x and
+  // must be drawn at half scale to stay in the native rectangle.
   double _imagePathScale(ImageModel m, double scale) {
-    final image = m.image;
-    var nativeWidth =
-        (m.parent.target?.canvasModel.getDisplayWidth() ?? 0).toDouble();
-    if (widget.ffi.ffiModel.isPeerLinux) {
-      final displays = widget.ffi.ffiModel.pi.getCurDisplays();
-      if (displays.isNotEmpty) {
-        nativeWidth *= displays[0].scale;
-      }
-    }
-    if (image == null || nativeWidth <= 0 || image.width != nativeWidth * 2) {
-      return scale;
-    }
-    return scale / 2;
+    if (m.image == null) return scale;
+    return scale / m.upscaleFactor;
   }
 
   Widget _BuildPaintTextureRender(
