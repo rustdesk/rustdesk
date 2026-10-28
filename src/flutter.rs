@@ -259,7 +259,9 @@ enum RenderType {
 #[cfg(all(target_os = "macos", feature = "hwcodec"))]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum FrameTaken {
-    /// Not presented, the caller must fall back to the RGBA path.
+    /// Not presented. The caller must drop this frame: the decoder already
+    /// skipped its software transfer when it handed the surface out, so there
+    /// are no pixels to fall back to.
     No,
     /// Presented.
     Yes,
@@ -635,10 +637,10 @@ impl VideoRenderer {
 
     /// Hand one decoded GPU frame to the plugin.
     ///
-    /// `No` means the caller must deliver the same decoded frame through the
-    /// RGBA path. `Yes` means it was presented; `YesNewRenderType` additionally
-    /// means the UI still has to be told, which happens once per render type
-    /// change instead of once per frame.
+    /// `No` means it could not be presented and the caller must drop the frame --
+    /// there are no software pixels for it. `Yes` means it was presented;
+    /// `YesNewRenderType` additionally means the UI still has to be told, which
+    /// happens once per render type change instead of once per frame.
     #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     pub fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> FrameTaken {
         let Some(func) = &self.on_pixelbuffer_func else {
@@ -1071,7 +1073,9 @@ impl InvokeUiSession for FlutterHandler {
     /// Deliver a GPU frame to every UI session that renders this display.
     ///
     /// Returns true when at least one session took the frame; the caller then
-    /// skips pushing the RGBA pixels for this frame.
+    /// pushes no pixels for this frame at all. `false` means nobody could present
+    /// it and the frame is dropped -- the decoder already skipped its software
+    /// transfer, so there are no RGBA pixels to fall back to.
     #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     fn on_pixelbuffer(&self, display: usize, pixelbuffer: &scrap::PixelBufferFrame) -> bool {
         if !*VT_ZEROCOPY_ENABLED {

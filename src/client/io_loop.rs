@@ -2915,8 +2915,9 @@ impl<T: InvokeUiSession> Remote<T> {
                   pixelbuffer: bool,
                   pixelbuffer_output: scrap::PixelBufferOutput| {
                 *frame_count.write().unwrap() += 1;
-                // A GPU frame is presented as-is; only when nobody took it do
-                // the software pixels get pushed (same decoded frame).
+                // A GPU frame is presented as-is; when nobody can take it the
+                // frame is dropped, because the decoder already skipped its
+                // software transfer for it.
                 #[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
                 if let Some(gpu_frame) = &pixelbuffer_output {
                     if handler.on_pixelbuffer(display, gpu_frame) {

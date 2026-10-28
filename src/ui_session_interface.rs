@@ -1760,10 +1760,12 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn on_texture(&self, display: usize, texture: *mut c_void);
     /// Deliver a decoded GPU frame (a macOS `CVPixelBuffer`) to the UI.
     ///
-    /// Returns true when a UI session took the frame over, in which case the
-    /// caller must NOT push the software pixels for that same frame. Backends
-    /// that cannot present GPU frames keep the default `false`, so the video
-    /// thread falls back to the RGBA path unchanged.
+    /// Returns true when a UI session took the frame over; the caller then pushes
+    /// no pixels for that same frame. `false` means the frame is dropped rather
+    /// than shown as bytes, because the decoder already skipped its software
+    /// transfer when it handed the surface out. A backend that cannot present GPU
+    /// frames never receives one: the app derives the decoder's own flag from
+    /// those gates, so it keeps getting software frames.
     #[cfg(all(target_os = "macos", feature = "hwcodec"))]
     fn on_pixelbuffer(&self, _display: usize, _pixelbuffer: &scrap::PixelBufferFrame) -> bool {
         false
