@@ -361,11 +361,12 @@ impl HwRamDecoder {
         };
         match Decoder::new(ctx) {
             Ok(mut decoder) => {
-                // Share the app's "can the renderer present GPU frames" flag, so
-                // a render path that cannot present them keeps receiving
-                // software frames instead of losing frames it never displays.
+                // Reject by default: a decoder nobody configured must keep
+                // producing software frames. The owner installs its own switch
+                // with `set_pixelbuffer_wanted` when its renderer can present
+                // GPU frames.
                 #[cfg(target_os = "macos")]
-                decoder.set_pixelbuffer_wanted(crate::gpu_frames_wanted_flag());
+                decoder.set_pixelbuffer_wanted(crate::gpu_frames_wanted_flag(false));
                 Ok(HwRamDecoder { decoder, info })
             }
             Err(_) => {
@@ -379,6 +380,15 @@ impl HwRamDecoder {
             Ok(v) => Ok(v.iter().map(|f| HwRamDecoderImage { frame: f }).collect()),
             Err(e) => Err(anyhow!(e)),
         }
+    }
+
+    /// Install the owner's "can the renderer present GPU frames" handle.
+    ///
+    /// Called once per decoder owner (session / display video handler), so two
+    /// sessions with different render paths do not share one switch.
+    #[cfg(target_os = "macos")]
+    pub fn set_pixelbuffer_wanted(&mut self, wanted: crate::GpuFramesWanted) {
+        self.decoder.set_pixelbuffer_wanted(wanted);
     }
 
     /// Take the GPU frame produced by the last `decode` call, if any.

@@ -38,30 +38,28 @@ pub type PixelBufferOutput = Option<::hwcodec::ffmpeg_ram::pixelbuffer::PixelBuf
 #[cfg(not(all(target_os = "macos", feature = "hwcodec")))]
 pub type PixelBufferOutput = Option<std::convert::Infallible>;
 
-/// The flag a decoder consults before it hands out decoded GPU frames.
+/// A decoder-side hand-off switch: "can the renderer take decoded GPU frames?".
 ///
-/// Shared by reference with every decoder (see
-/// `hwcodec::ffmpeg_ram::decode::Decoder::set_pixelbuffer_wanted`), so the answer
-/// can change between frames.  Flipping it needs no decoder restart.
+/// One of these belongs to **one** decoder owner -- a session, or a display's
+/// video handler -- never to the process. Two sessions can render differently
+/// (one through the plugin texture, one through RGBA), and a shared switch makes
+/// them fight: turning the direct path on for the texture session would make the
+/// software session's decoder skip its software transfer and stall, while turning
+/// it off for the software session would disable the optimisation everywhere.
 ///
-/// It starts `false`: the direct path is opt-in, because a decoder that hands out
-/// a GPU frame skips the software transfer for it. Anything that has not asked
-/// for these surfaces -- a non-Flutter UI, a build without the plugin entry
-/// point, another process linking this crate -- keeps receiving software frames.
+/// The handle is shared by reference with the decoder
+/// (`hwcodec::ffmpeg_ram::decode::Decoder::set_pixelbuffer_wanted`), so the answer
+/// can change between frames without restarting the decoder.
+///
+/// It starts `false`. Every owner that has not asked for GPU surfaces -- a build
+/// without the plugin entry point, texture rendering off, a UI that never opts in
+/// -- keeps receiving software frames, which is the behaviour this crate had
+/// before the direct path existed.
 #[cfg(all(target_os = "macos", feature = "hwcodec"))]
-pub fn gpu_frames_wanted_flag() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
-    use std::sync::{atomic::AtomicBool, Arc, OnceLock};
-    static FLAG: OnceLock<Arc<AtomicBool>> = OnceLock::new();
-    FLAG.get_or_init(|| Arc::new(AtomicBool::new(false))).clone()
-}
+pub type GpuFramesWanted = std::sync::Arc<std::sync::atomic::AtomicBool>;
 
-/// Tell the decoder whether the renderer can take decoded GPU frames.
-///
-/// When it cannot, the decoder keeps producing software frames exactly like the
-/// RGBA path always did.  This has to be a decoder-side decision: the decoder
-/// skips its software transfer as soon as it hands out a GPU frame, so a caller
-/// that rejects one afterwards has nothing left to present.
+/// Create a fresh hand-off switch. Each decoder owner gets its own.
 #[cfg(all(target_os = "macos", feature = "hwcodec"))]
-pub fn set_gpu_frames_wanted(wanted: bool) {
-    gpu_frames_wanted_flag().store(wanted, std::sync::atomic::Ordering::Relaxed);
+pub fn gpu_frames_wanted_flag(wanted: bool) -> GpuFramesWanted {
+    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(wanted))
 }

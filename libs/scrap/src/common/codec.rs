@@ -101,6 +101,10 @@ impl DerefMut for Encoder {
 }
 
 pub struct Decoder {
+    /// Per-session hand-off switch for decoded GPU frames; see
+    /// [`Self::set_gpu_frames_wanted`].
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    gpu_frames_wanted: Option<crate::GpuFramesWanted>,
     vp8: Option<VpxDecoder>,
     vp9: Option<VpxDecoder>,
     av1: Option<AomDecoder>,
@@ -502,6 +506,30 @@ impl Decoder {
         decoding
     }
 
+    /// Install the caller's "can the renderer present GPU frames" handle on every
+    /// hardware decoder this `Decoder` owns.
+    ///
+    /// The handle is per session, not per process: two sessions can render
+    /// differently, and a shared switch would make the software session's
+    /// decoder skip its software transfer. Decoders rebuilt later (a format
+    /// change) inherit it through the field it is stored in.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    pub fn set_gpu_frames_wanted(&mut self, wanted: crate::GpuFramesWanted) {
+        if let Some(d) = self.h264_ram.as_mut() {
+            d.set_pixelbuffer_wanted(wanted.clone());
+        }
+        if let Some(d) = self.h265_ram.as_mut() {
+            d.set_pixelbuffer_wanted(wanted.clone());
+        }
+        self.gpu_frames_wanted = Some(wanted);
+    }
+
+    /// The handle installed by [`Self::set_gpu_frames_wanted`], if any.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    pub fn gpu_frames_wanted_handle(&self) -> Option<crate::GpuFramesWanted> {
+        self.gpu_frames_wanted.clone()
+    }
+
     pub fn new(format: CodecFormat, _luid: Option<i64>) -> Decoder {
         log::info!("try create new decoder, format: {format:?}, _luid: {_luid:?}");
         let (mut vp8, mut vp9, mut av1) = (None, None, None);
@@ -601,6 +629,8 @@ impl Decoder {
             log::info!("create {format:?} decoder success");
         }
         Decoder {
+            #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+            gpu_frames_wanted: None,
             vp8,
             vp9,
             av1,
