@@ -664,7 +664,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Import Folder", "Импортировать папку"),
         ("Copy to clipboard", "Копировать в буфер обмена"),
         ("Enable remote printer", "Использовать удалённый принтер"),
-        ("Downloading {}", "Скачивание"),
+        ("Downloading {}", "Скачивание {}"),
         ("{} Update", "Обновить {}"),
         ("{}-to-update-tip", "{} закроется и установит новую версию."),
         ("download-new-version-failed-tip", "Ошибка загрузки. Можно повторить попытку или нажать кнопку \"Скачать\", чтобы скачать приложение с официального сайта и обновить вручную."),
