@@ -43,6 +43,25 @@ pub async fn update_auth<T: Send + 'static>(
     .await
 }
 
+pub async fn update_option(key: String, value: String) -> ResultType<()> {
+    let old = Config::get_options();
+    let mut options = old.clone();
+    if value.is_empty() {
+        options.remove(&key);
+    } else {
+        options.insert(key.clone(), value.clone());
+    }
+    let options = effective_options(options);
+    let authentication_changed = policy::authentication_changed(&old, &options);
+    update_auth(authentication_changed, move || {
+        policy::change_options(options, || {
+            Config::set_option(key, value);
+            Ok(())
+        })
+    })
+    .await
+}
+
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos", test))]
 pub fn sync_config(value: Config, options: Config2) -> ResultType<()> {
     let _storage = super::storage()?;

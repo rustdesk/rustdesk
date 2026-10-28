@@ -51,6 +51,53 @@ pub(super) async fn legacy_settings_survive_saving() {
     config::set_options(original).unwrap();
 }
 
+pub(super) async fn single_option_update_preserves_unrelated_options() {
+    let preserved = "single-option-preserved";
+    let changed = "single-option-changed";
+    Config::set_option(preserved.into(), "before".into());
+    Config::set_option(changed.into(), "before".into());
+
+    config::update_option(changed.into(), "after".into())
+        .await
+        .unwrap();
+
+    assert_eq!(Config::get_option(preserved), "before");
+    assert_eq!(Config::get_option(changed), "after");
+
+    config::update_option(changed.into(), String::new())
+        .await
+        .unwrap();
+    assert_eq!(Config::get_option(preserved), "before");
+    assert!(Config::get_option(changed).is_empty());
+    Config::set_option(preserved.into(), String::new());
+}
+
+pub(super) async fn failed_single_option_update_preserves_all_options() {
+    let preserved = "failed-single-option-preserved";
+    Config::set_option(preserved.into(), "before".into());
+    let trusted_devices = Config::get_option(keys::OPTION_ENABLE_TRUSTED_DEVICES);
+    let replacement = if trusted_devices == "Y" { "N" } else { "Y" };
+    let path = Config2::file();
+    fs::rename(&path, path.with_extension("backup")).unwrap();
+    fs::create_dir(&path).unwrap();
+
+    let result = config::update_option(
+        keys::OPTION_ENABLE_TRUSTED_DEVICES.into(),
+        replacement.into(),
+    )
+    .await;
+
+    fs::remove_dir(&path).unwrap();
+    fs::rename(path.with_extension("backup"), &path).unwrap();
+    assert!(result.is_err());
+    assert_eq!(Config::get_option(preserved), "before");
+    assert_eq!(
+        Config::get_option(keys::OPTION_ENABLE_TRUSTED_DEVICES),
+        trusted_devices
+    );
+    Config::set_option(preserved.into(), String::new());
+}
+
 fn legacy_fixture(hwid: &[u8], info: &DeviceInfo) -> String {
     let mut legacy = serde_json::to_value(info).unwrap();
     legacy["hwid"] = serde_json::json!(hwid);

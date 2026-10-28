@@ -377,6 +377,7 @@ pub enum Data {
     OnlineStatus(Option<(i64, bool)>),
     Config((String, Option<String>)),
     Options(Option<HashMap<String, String>>),
+    SetOption(Option<(String, String)>),
     NatType(Option<i32>),
     ConfirmedKey(Option<(Vec<u8>, Vec<u8>)>),
     RawMessage(Vec<u8>),
@@ -1093,6 +1094,27 @@ async fn handle(data: Data, stream: &mut Connection) {
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
         },
+        Data::SetOption(value) => {
+            let Some((key, value)) = value else {
+                return;
+            };
+            let _chk = CheckIfRestart::new();
+            let _nat = CheckTestNatType::new();
+            let privacy_impl =
+                (key == "privacy-mode-impl-key" && !value.is_empty()).then(|| value.clone());
+            if let Err(error) = crate::trusted_devices::config::update_option(key, value).await {
+                allow_err!(
+                    stream
+                        .send(&Data::SecurityConfigError(error.to_string()))
+                        .await
+                );
+                return;
+            }
+            if let Some(value) = privacy_impl {
+                crate::privacy_mode::switch(&value);
+            }
+            allow_err!(stream.send(&Data::SetOption(None)).await);
+        }
         Data::NatType(_) => {
             let t = Config::get_nat_type();
             allow_err!(stream.send(&Data::NatType(Some(t))).await);
@@ -2017,14 +2039,31 @@ pub async fn get_option_async(key: &str) -> String {
     }
 }
 
-pub fn set_option(key: &str, value: &str) {
-    let mut options = get_options();
-    if value.is_empty() {
-        options.remove(key);
-    } else {
-        options.insert(key.to_owned(), value.to_owned());
+#[tokio::main(flavor = "current_thread")]
+pub async fn set_option_on_host(key: &str, value: &str) -> ResultType<()> {
+    let mut connection = connect(1000, "").await?;
+    connection
+        .send(&Data::SetOption(Some((key.to_owned(), value.to_owned()))))
+        .await?;
+    match connection.next_timeout(1000).await? {
+        Some(Data::SetOption(None)) => Ok(()),
+        Some(Data::SecurityConfigError(error)) => bail!(error),
+        _ => bail!("The host did not confirm the option update"),
     }
-    allow_err!(set_options(options));
+}
+
+pub fn set_option(key: &str, value: &str) {
+    if set_option_on_host(key, value).is_err() {
+        let mut options = Config::get_options();
+        if value.is_empty() {
+            options.remove(key);
+        } else {
+            options.insert(key.to_owned(), value.to_owned());
+        }
+        if !crate::trusted_devices::config::changes_authentication(&options) {
+            Config::set_option(key.to_owned(), value.to_owned());
+        }
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]

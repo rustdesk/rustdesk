@@ -27,7 +27,10 @@ pub fn days(options: &HashMap<String, String>) -> u32 {
     }
 }
 
-fn authentication_changed(old: &HashMap<String, String>, new: &HashMap<String, String>) -> bool {
+pub(super) fn authentication_changed(
+    old: &HashMap<String, String>,
+    new: &HashMap<String, String>,
+) -> bool {
     AUTH_OPTIONS
         .iter()
         .any(|key| old.get(*key) != new.get(*key))

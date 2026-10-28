@@ -83,6 +83,8 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     configuration::expiration_changes_preserve_grants().await;
     recovery::unknown_expiration_preserves_login_and_settings().await;
     recovery::unusable_grant_scope_keeps_current_password_totp_available().await;
+    configuration::single_option_update_preserves_unrelated_options().await;
+    configuration::failed_single_option_update_preserves_all_options().await;
     assert!(configuration::devices().await.is_empty());
     assert!(host::begin(proof("wrong-password", &[])).await.is_err());
     let enrollment = begin_enrollment().await;
