@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android-logs-folder-tip", "请选择 Android → media，用于保存日志。"),
         ("Choose folder", "选择文件夹"),
         ("Please select Android → media.", "请选择 Android → media。"),
+        ("Trust duration (days)", "信任有效期（天）"),
+        ("Renew trust", "延长信任有效期"),
     ].iter().cloned().collect();
 }

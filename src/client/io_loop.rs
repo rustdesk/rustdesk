@@ -103,6 +103,7 @@ pub struct Remote<T: InvokeUiSession> {
     last_record_state: bool,
     sent_close_reason: bool,
     cursor_dedupe: CursorDedupe,
+    trusted_device: crate::trusted_devices::client::Session,
 }
 
 #[derive(Default)]
@@ -156,6 +157,7 @@ impl<T: InvokeUiSession> Remote<T> {
             last_record_state: false,
             sent_close_reason: false,
             cursor_dedupe: Default::default(),
+            trusted_device: Default::default(),
         }
     }
 
@@ -209,6 +211,22 @@ impl<T: InvokeUiSession> Remote<T> {
                     .unwrap()
                     .set_connected();
                 let is_secured = peer.is_secured();
+                let trust = crate::trusted_devices::client::Session::new(
+                    &self.handler.lc.read().unwrap(),
+                    is_secured,
+                    pk.as_deref(),
+                );
+                match trust {
+                    Ok(trust) => {
+                        self.trusted_device = trust;
+                        self.handler.lc.write().unwrap().enable_trusted_devices = false;
+                    }
+                    Err(error) => {
+                        self.handler.on_error(&error.to_string());
+                        self.handle_disconnected(round);
+                        return;
+                    }
+                }
                 // Only WebRTC needs refining: its label names the transport that won the race,
                 // not the family ICE ended up nominating, and it is the one path where the two
                 // can disagree with the address the rendezvous observed.
@@ -744,7 +762,14 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             Data::Login((os_username, os_password, password, remember)) => {
                 self.handler
-                    .handle_login_from_ui(os_username, os_password, password, remember, peer)
+                    .handle_login_from_ui(
+                        os_username,
+                        os_password,
+                        password,
+                        remember,
+                        &mut self.trusted_device,
+                        peer,
+                    )
                     .await;
             }
             #[cfg(all(target_os = "windows", not(feature = "flutter")))]
@@ -773,6 +798,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
             }
             Data::Message(msg) => {
+                let msg = self.trusted_device.outgoing(msg);
                 // The Flutter clipboard broadcast is process-wide, so a clipboard can reach this
                 // round's queue before the round has logged in; it is dropped here, on the round
                 // itself.
@@ -1705,18 +1731,24 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Hash(hash)) => {
                     if !self
                         .handler
-                        .handle_hash(&self.handler.password.clone(), hash, peer)
+                        .handle_hash(
+                            &self.handler.password.clone(),
+                            hash,
+                            &mut self.trusted_device,
+                            peer,
+                        )
                         .await
                     {
                         return false;
                     }
                 }
-                Some(message::Union::LoginResponse(lr)) => match lr.union {
+                Some(message::Union::LoginResponse(lr)) => match self
+                    .trusted_device
+                    .respond(lr, &self.handler)
+                    .await
+                    .union
+                {
                     Some(login_response::Union::Error(err)) => {
-                        if err == client::REQUIRE_2FA {
-                            self.handler.lc.write().unwrap().enable_trusted_devices =
-                                lr.enable_trusted_devices;
-                        }
                         if !self.handler.handle_login_error(&err) {
                             return false;
                         }
