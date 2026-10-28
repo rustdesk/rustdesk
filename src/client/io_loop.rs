@@ -71,6 +71,9 @@ use std::{
     },
 };
 
+#[cfg(any(target_os = "android", test))]
+mod document_read;
+
 pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
     audio_sender: MediaSender,
@@ -80,6 +83,8 @@ pub struct Remote<T: InvokeUiSession> {
     stop_voice_call_sender: Option<std::sync::mpsc::Sender<()>>,
     voice_call_request_timestamp: Option<NonZeroI64>,
     read_jobs: Vec<fs::TransferJob>,
+    #[cfg(any(target_os = "android", test))]
+    document_reads: document_read::PendingReads,
     write_jobs: Vec<fs::TransferJob>,
     remove_jobs: HashMap<i32, RemoveJob>,
     timer: crate::RustDeskInterval,
@@ -135,6 +140,8 @@ impl<T: InvokeUiSession> Remote<T> {
             receiver,
             sender,
             read_jobs: Vec::new(),
+            #[cfg(any(target_os = "android", test))]
+            document_reads: Default::default(),
             write_jobs: Vec::new(),
             remove_jobs: Default::default(),
             timer: crate::rustdesk_interval(time::interval(SEC30)),
@@ -329,6 +336,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                 }
                             }
                         }
+                        _prepared = async {
+                            #[cfg(any(target_os = "android", test))]
+                            return self.document_reads.next().await;
+                            #[cfg(not(any(target_os = "android", test)))]
+                            std::future::pending::<()>().await
+                        } => {
+                            #[cfg(any(target_os = "android", test))]
+                            self.finish_document_read(_prepared, &mut peer).await;
+                        }
                         _msg = rx_clip_client.recv() => {
                             #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
                             self.handle_local_clipboard_msg(&mut peer, _msg).await;
@@ -447,6 +463,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.handler.on_establish_connection_error(err.to_string());
             }
         }
+        #[cfg(any(target_os = "android", test))]
+        self.document_reads.stop_scans();
         self.handle_disconnected(round);
         #[cfg(target_os = "android")]
         for job in &mut self.write_jobs {
@@ -901,10 +919,19 @@ impl<T: InvokeUiSession> Remote<T> {
                             )
                         };
                         if fs::android::is_path(path.as_ref()) {
-                            tokio::task::spawn_blocking(read)
-                                .await
-                                .map_err(hbb_common::anyhow::Error::from)
-                                .and_then(|result| result)
+                            self.document_reads.start(
+                                fs::TransferJobMeta {
+                                    id,
+                                    remote: to,
+                                    to: path,
+                                    file_num,
+                                    show_hidden: include_hidden,
+                                    is_remote,
+                                },
+                                false,
+                                read,
+                            );
+                            return true;
                         } else {
                             read()
                         }
@@ -998,10 +1025,19 @@ impl<T: InvokeUiSession> Remote<T> {
                             )
                         };
                         if fs::android::is_path(path.as_ref()) {
-                            tokio::task::spawn_blocking(read)
-                                .await
-                                .map_err(hbb_common::anyhow::Error::from)
-                                .and_then(|result| result)
+                            self.document_reads.start(
+                                fs::TransferJobMeta {
+                                    id,
+                                    remote: to,
+                                    to: path,
+                                    file_num,
+                                    show_hidden: include_hidden,
+                                    is_remote,
+                                },
+                                true,
+                                read,
+                            );
+                            return true;
                         } else {
                             read()
                         }
@@ -1044,6 +1080,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
             }
             Data::ResumeJob((id, is_remote)) => {
+                #[cfg(target_os = "android")]
+                if !is_remote && self.document_reads.resume(id) {
+                    return true;
+                }
                 if is_remote {
                     if let Some(job) = get_job(id, &mut self.write_jobs) {
                         job.is_last_job = false;
@@ -1433,6 +1473,8 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     async fn cancel_transfer_job(&mut self, id: i32, peer: &mut Stream) {
+        #[cfg(any(target_os = "android", test))]
+        self.document_reads.cancel(id);
         let mut msg_out = Message::new();
         let mut file_action = FileAction::new();
         file_action.set_cancel(FileTransferCancel {
@@ -1460,6 +1502,14 @@ impl<T: InvokeUiSession> Remote<T> {
         }
         let mut config: PeerConfig = self.handler.load_config();
         let mut transfer_metas = TransferSerde::default();
+        #[cfg(any(target_os = "android", test))]
+        match self.document_reads.metadata() {
+            Ok(pending) => transfer_metas.read_jobs.extend(pending),
+            Err(error) => {
+                log::error!("Failed to save pending document transfers: {}", error);
+                return false;
+            }
+        }
         for job in self.read_jobs.iter() {
             let json_str = serde_json::to_string(&job.gen_meta()).unwrap_or_default();
             transfer_metas.read_jobs.push(json_str);
