@@ -818,9 +818,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk storage", "RustDesk 저장소"),
         ("Other folders", "기타 폴더"),
         ("Choose which folder remote devices can access.", "원격 장치가 접근할 수 있는 폴더를 선택하세요."),
-        ("android-logs-folder-tip", "로그 파일을 저장할 폴더로 Android → 미디어를 선택하세요"),
+        ("android-logs-folder-tip", "로그 파일을 저장할 폴더로 Android → media를 선택하세요"),
         ("Choose folder", "폴더 선택"),
-        ("Please select Android → media.", "Android → 미디어를 선택해 주시기 바랍니다."),
+        ("Please select Android → media.", "Android → media를 선택해 주시기 바랍니다."),
         ("Trust duration (days)", "신뢰 유지 기간 (일)"),
         ("Renew trust", "신뢰 갱신"),
     ].iter().cloned().collect();
