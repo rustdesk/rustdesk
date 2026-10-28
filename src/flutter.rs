@@ -337,10 +337,24 @@ pub type FlutterRgbaRendererPluginOnPixelBuffer =
 
 #[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
-    /// Zero-copy GPU frame delivery, on unless explicitly disabled.
+    /// Zero-copy GPU frame delivery, **off unless explicitly enabled**.
+    ///
+    /// `RUSTDESK_VT_ZEROCOPY=1` (or `true`/`on`/`yes`) turns the direct path on;
+    /// anything else, including the variable being absent, leaves the client on
+    /// the RGBA path it has always used. Opt-in is deliberate while the feature
+    /// is new: it is only correct when the plugin texture is registered and the
+    /// render path can present the surface, and a wrong answer freezes the
+    /// picture rather than degrading it. Making it the default needs Apple
+    /// Silicon, recent macOS versions, multi-session behaviour and
+    /// fallback-recovery evidence first.
     static ref VT_ZEROCOPY_ENABLED: bool = std::env::var("RUSTDESK_VT_ZEROCOPY")
-        .map(|v| v != "0")
-        .unwrap_or(true);
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "on" | "yes"
+            )
+        })
+        .unwrap_or(false);
 }
 
 pub(super) type TextureRgbaPtr = usize;
@@ -353,9 +367,9 @@ pub(super) fn vt_zero_copy_state() -> &'static str {
     #[cfg(target_os = "macos")]
     {
         if *VT_ZEROCOPY_ENABLED {
-            "on"
+            "on (opt-in)"
         } else {
-            "off (RUSTDESK_VT_ZEROCOPY=0)"
+            "off (opt-in: set RUSTDESK_VT_ZEROCOPY=1)"
         }
     }
     #[cfg(not(target_os = "macos"))]
