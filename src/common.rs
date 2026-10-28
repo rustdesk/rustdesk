@@ -256,7 +256,13 @@ pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
         return match base::fs::android::allowed(path) {
             Ok(allowed) => allowed,
             Err(error) => {
-                log::trace!("Document access denied: {}", error);
+                const ERROR_LOG_INTERVAL: Duration = Duration::from_secs(60);
+                hbb_common::throttled_log!(
+                    ERROR_LOG_INTERVAL,
+                    warn,
+                    "Document access denied: {}",
+                    error
+                );
                 false
             }
         };
@@ -309,7 +315,13 @@ pub async fn is_peer_path_allowed_async(path: &str, allow_empty: bool) -> bool {
     match tokio::task::spawn_blocking(move || is_peer_path_allowed(&path, allow_empty)).await {
         Ok(allowed) => allowed,
         Err(error) => {
-            log::trace!("File-transfer access check failed: {}", error);
+            const ERROR_LOG_INTERVAL: Duration = Duration::from_secs(60);
+            hbb_common::throttled_log!(
+                ERROR_LOG_INTERVAL,
+                error,
+                "File-transfer access check failed: {}",
+                error
+            );
             false
         }
     }
