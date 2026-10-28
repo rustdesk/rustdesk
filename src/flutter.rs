@@ -491,19 +491,20 @@ impl VideoRenderer {
             return false;
         }
 
-        if info.size.0 != rgba.w || info.size.1 != rgba.h {
+        // Peer info's handling is async and may be late than video frame's handling.
+        // An unset size therefore says nothing about the frame: it is not a mismatch,
+        // and logging it on every frame buries the mismatches that do matter. The
+        // acceptance rule is unchanged -- a known size that disagrees with the frame
+        // is still refused, an unknown size still lets the frame through.
+        if info.size != (0, 0) && info.size != (rgba.w, rgba.h) {
             log::error!(
-                "width/height mismatch: ({},{}) != ({},{})",
+                "width/height mismatch: info ({},{}) != frame ({},{})",
                 info.size.0,
                 info.size.1,
                 rgba.w,
                 rgba.h
             );
-            // Peer info's handling is async and may be late than video frame's handling
-            // Allow peer info not set, but not allow wrong width/height for correct local cursor position
-            if info.size != (0, 0) {
-                return false;
-            }
+            return false;
         }
         if let Some(func) = &self.on_rgba_func {
             unsafe {
