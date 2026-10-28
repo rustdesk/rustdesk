@@ -1,5 +1,8 @@
 #[path = "ipc/auth.rs"]
 mod ipc_auth;
+#[cfg(windows)]
+#[path = "ipc/windows.rs"]
+mod ipc_windows;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "ipc/fs.rs"]
 mod ipc_fs;
@@ -716,7 +719,7 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
             if postfix == "_portable_service" {
                 portable_service_listener_security_attributes()
             } else if should_allow_everyone_create_on_windows(postfix) {
-                SecurityAttributes::allow_everyone_create()
+                ipc_windows::listener_security_attributes()
             } else {
                 Ok(SecurityAttributes::empty())
             }
@@ -731,9 +734,8 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
         Err(err) => {
             log::error!("Failed to set ipc{} security: {}", postfix, err);
             #[cfg(windows)]
-            if postfix == "_portable_service" {
-                // Fail closed for `_portable_service` when SDDL construction fails.
-                // This endpoint is security-critical and must not start with default ACLs.
+            if postfix == "_portable_service" || should_allow_everyone_create_on_windows(postfix) {
+                // Protected endpoints must not start with default ACLs.
                 return Err(err.into());
             }
         }
@@ -1535,6 +1537,16 @@ fn user_main_ipc_server_uid() -> ResultType<u32> {
 }
 
 pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmpl<ConnClient>> {
+    #[cfg(windows)]
+    if should_allow_everyone_create_on_windows(postfix) {
+        return Ok(ConnectionTmpl::new(
+            timeout(
+                ms_timeout,
+                ipc_windows::connect(&Config::ipc_path(postfix), postfix),
+            )
+            .await??,
+        ));
+    }
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         let use_user_main_ipc = USE_USER_MAIN_IPC.with(|use_user_main| use_user_main.get());
