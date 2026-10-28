@@ -149,6 +149,7 @@ class RustdeskImpl {
       required String password,
       required bool isSharedPassword,
       String? connToken,
+      required String loginMethod,
       dynamic hint}) {
     return js.context.callMethod('setByName', [
       'session_add_sync',
@@ -156,6 +157,7 @@ class RustdeskImpl {
         'id': id,
         'password': password,
         'is_shared_password': isSharedPassword,
+        'login_method': loginMethod,
         'isFileTransfer': isFileTransfer,
         'isViewCamera': isViewCamera,
         'isTerminal': isTerminal

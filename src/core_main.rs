@@ -73,6 +73,7 @@ pub fn core_main() -> Option<CoreMainAction> {
                 "--view-camera",
                 "--port-forward",
                 "--terminal",
+                "--terminal-admin",
                 "--rdp",
             ]
             .contains(&arg.as_str())
@@ -763,7 +764,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward"
-            | "--terminal" | "--rdp" => {
+            | "--terminal" | "--terminal-admin" | "--rdp" => {
                 authority = Some((&arg.to_string()[2..]).to_owned());
                 id = args.next();
             }
@@ -774,6 +775,9 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             }
             "--relay" => {
                 param_array.push(format!("relay=true"));
+            }
+            "--without-password" => {
+                param_array.push("without-password=true".to_owned());
             }
             // inner
             "--switch_uuid" => {

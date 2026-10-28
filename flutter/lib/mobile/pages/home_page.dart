@@ -208,6 +208,7 @@ class WebHomePage extends StatelessWidget {
     bool isTerminal = false;
     String? id;
     String? password;
+    var loginMethod = '';
     for (int i = 0; i < args.length; i++) {
       switch (args[i]) {
         case '--connect':
@@ -240,6 +241,9 @@ class WebHomePage extends StatelessWidget {
           password = args[i + 1];
           i++;
           break;
+        case '--without-password':
+          loginMethod = 'consent';
+          break;
         default:
           break;
       }
@@ -249,6 +253,7 @@ class WebHomePage extends StatelessWidget {
         isFileTransfer: isFileTransfer, 
         isViewCamera: isViewCamera, 
         isTerminal: isTerminal,
+        loginMethod: loginMethod,
         password: password);
     }
   }

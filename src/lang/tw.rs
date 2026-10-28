@@ -823,5 +823,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please select Android → media.", "請選擇 Android → media。"),
         ("Trust duration (days)", "信任有效期（天）"),
         ("Renew trust", "延長信任期限"),
+        ("Without password", "不使用密碼"),
+        ("Connect without password", "免密連線"),
+        ("Skip saved passwords and ask the remote user to accept the connection.", "不使用已儲存的密碼，請求對方接受連線。"),
     ].iter().cloned().collect();
 }
