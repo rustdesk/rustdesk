@@ -827,6 +827,19 @@ pub fn is_locked() -> bool {
     }
 }
 
+pub fn wait_locked(timeout: std::time::Duration) -> bool {
+    let start = std::time::Instant::now();
+    loop {
+        if is_locked() {
+            return true;
+        }
+        if start.elapsed() >= timeout {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 pub fn is_logon_screen() -> bool {
     is_prelogin() || is_locked()
 }

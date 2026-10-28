@@ -1565,22 +1565,20 @@ pub async fn lock_screen() {
             key_event.modifiers.push(ControlKey::Control.into());
             key_event.mode = KeyboardMode::Legacy.into();
 
-            // The shortcut is only a request and can be lost, so check that the screen
-            // is locked, and press it once more if it is not.
-            for _ in 0..2 {
+            key_event.down = true;
+            handle_key(&key_event);
+            key_event.down = false;
+            handle_key(&key_event);
+            // The shortcut is only a request and can be lost.
+            if !crate::platform::wait_locked(Duration::from_secs(2)) {
                 key_event.down = true;
                 handle_key(&key_event);
                 key_event.down = false;
                 handle_key(&key_event);
-                let start = Instant::now();
-                while start.elapsed() < Duration::from_secs(2) {
-                    if crate::platform::is_locked() {
-                        return;
-                    }
-                    std::thread::sleep(Duration::from_millis(100));
+                if !crate::platform::wait_locked(Duration::from_secs(2)) {
+                    log::error!("Failed to lock the screen");
                 }
             }
-            log::error!("Failed to lock the screen");
         });
     } else {
     crate::platform::lock_screen();
