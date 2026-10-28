@@ -520,7 +520,10 @@ pub fn core_main() -> Option<CoreMainAction> {
                     let options = crate::ipc::get_options();
                     println!("{}", options.get(&args[1]).unwrap_or(&"".to_owned()));
                 } else if args.len() == 3 {
-                    crate::ipc::set_option(&args[1], &args[2]);
+                    if let Err(error) = crate::ipc::set_option_from_cli(&args[1], &args[2]) {
+                        eprintln!("Failed to change option: {error}");
+                        std::process::exit(1);
+                    }
                 }
             } else {
                 println!("Installation and administrative privileges required!");
