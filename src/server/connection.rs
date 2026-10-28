@@ -5307,14 +5307,8 @@ impl Connection {
             && self.keyboard
             && !raii::AuthedConnID::session_reconnected(self.inner.id(), &self.session_key())
         {
-            // Most closes come here from inside the connection loop, before the loop turns
-            // privacy mode off. On macOS turn it off first: a lock shortcut injected while
-            // its input tap and display blackout are torn down can be lost.
-            // https://github.com/rustdesk/rustdesk/issues/15875
             #[cfg(target_os = "macos")]
-            if privacy_mode::get_privacy_mode_conn_id() == Some(self.inner.id()) {
-                let _ = Self::turn_off_privacy_to_msg(self.inner.id(), String::new());
-            }
+            privacy_mode::macos::turn_off_before_lock(self.inner.id());
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             lock_screen().await;
         }
