@@ -1199,8 +1199,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('True color (4:4:4)'))));
   }
 
-  // FSRCNNX upscaling (client-side, after decode; off by default: it costs
-  // roughly 0.3s per 960x540 frame on a desktop CPU).
+  // FSRCNNX upscaling (client-side, after decode; off by default: roughly
+  // 0.1s per 960x540 frame in a release build, CPU-dependent).
   // Native only: on Web Rust never runs (JS client owns decode/render),
   // so the toggle would be a dead switch there.
   if (!isWeb) {
