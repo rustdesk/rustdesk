@@ -29,7 +29,7 @@
     <application
         android:name=".MainApplication"
         android:icon="@mipmap/ic_launcher"
-        android:label="RustDesk"
+        android:label="远程协助"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true">
 
