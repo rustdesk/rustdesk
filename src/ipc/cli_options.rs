@@ -1,25 +1,22 @@
 use super::{connect, ConnectionTmpl, Data};
+#[cfg(not(target_os = "windows"))]
+use hbb_common::config::Config;
 use hbb_common::{
     bail,
-    config::Config,
-    tokio::{
-        self,
-        io::{AsyncRead, AsyncWrite},
-    },
+    tokio::io::{AsyncRead, AsyncWrite},
     ResultType,
 };
 use std::collections::HashMap;
 
-#[tokio::main(flavor = "current_thread")]
 pub async fn set_option_from_cli(key: &str, value: &str) -> ResultType<()> {
     let _nat = crate::common::CheckTestNatType::new();
     let mut connection = connect(1_000, "").await?;
-    let options = write_option(&mut connection, key, value).await?;
+    let _options = write_option(&mut connection, key, value).await?;
+    // Local options can already match the requested value while service grants change.
     #[cfg(target_os = "windows")]
-    if crate::trusted_devices::config::changes_authentication(&options) {
-        super::sync_security_config_from_server(&mut connection).await?;
-    }
-    Config::set_options(options);
+    super::sync_security_config_from_server(&mut connection).await?;
+    #[cfg(not(target_os = "windows"))]
+    Config::set_options(_options);
     Ok(())
 }
 
@@ -54,6 +51,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hbb_common::tokio;
 
     #[tokio::test]
     async fn failed_read_sends_no_settings_update() {
