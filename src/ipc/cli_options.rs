@@ -160,23 +160,24 @@ mod tests {
         });
         assert_eq!(result.unwrap_err().to_string(), "write denied");
     }
-}
-#[tokio::test]
-async fn failed_security_sync_reports_that_the_service_already_acknowledged_the_update() {
-    for response in [
-        Data::SyncConfig(None),
-        Data::SecurityConfigError("denied".into()),
-    ] {
-        let (client, service) = tokio::io::duplex(4_096);
-        let mut client = ConnectionTmpl::new(client);
-        let mut service = ConnectionTmpl::new(service);
-        let (result, ()) = tokio::join!(sync_security_config(&mut client), async {
-            assert!(matches!(
-                service.next().await.unwrap(),
-                Some(Data::SyncConfig(None))
-            ));
-            service.send(&response).await.unwrap();
-        });
-        assert!(result.unwrap_err().to_string().contains("was acknowledged"));
+
+    #[tokio::test]
+    async fn failed_security_sync_reports_that_the_service_already_acknowledged_the_update() {
+        for response in [
+            Data::SyncConfig(None),
+            Data::SecurityConfigError("denied".into()),
+        ] {
+            let (client, service) = tokio::io::duplex(4_096);
+            let mut client = ConnectionTmpl::new(client);
+            let mut service = ConnectionTmpl::new(service);
+            let (result, ()) = tokio::join!(sync_security_config(&mut client), async {
+                assert!(matches!(
+                    service.next().await.unwrap(),
+                    Some(Data::SyncConfig(None))
+                ));
+                service.send(&response).await.unwrap();
+            });
+            assert!(result.unwrap_err().to_string().contains("was acknowledged"));
+        }
     }
 }
