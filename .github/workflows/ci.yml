@@ -278,6 +278,12 @@ jobs:
         vcpkgDirectory: ${{ runner.temp }}/vcpkg
         vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
+    - name: Install nasm (aom builds with it on macOS)
+      shell: bash
+      run: |
+        if ! command -v nasm &>/dev/null; then brew install nasm; fi
+        nasm --version
+
     - name: Install vcpkg dependencies
       shell: bash
       run: |
