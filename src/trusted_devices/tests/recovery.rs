@@ -1,5 +1,49 @@
 use super::*;
 
+pub(super) async fn cli_security_sync_preserves_unrelated_local_settings() {
+    let original = Config::get();
+    let original_options = Config2::get_for_sync().unwrap();
+    let token = begin_enrollment()
+        .await
+        .finish(DeviceInfo::default())
+        .await
+        .unwrap();
+    let previous = Config2::get_for_sync().unwrap();
+    let mut options = Config::get_options();
+    options.remove("2fa");
+    config::update_options(options).await.unwrap();
+    let service = Config::get();
+    let service_options = Config2::get_for_sync().unwrap();
+
+    let mut local = original.clone();
+    local.id = "local-device-id".into();
+    Config::set(local.clone());
+    let mut local_options = serde_json::to_value(&previous).unwrap();
+    local_options["socks"] = serde_json::json!({
+        "proxy": "local-proxy:1080", "username": "", "password": ""
+    });
+    local_options["unlock_pin"] = serde_json::json!("local-pin");
+    local_options["rendezvous_server"] = serde_json::json!("local-rendezvous");
+    local_options["options"]["local-only"] = serde_json::json!("preserve-me");
+    Config2::set(serde_json::from_value(local_options.clone()).unwrap());
+    previous.sync_trusted_devices().unwrap();
+    assert!(is_trusted(&token).await);
+    let stored_before: Config2 = hbb_common::config::load_path(Config2::file());
+    let stored_before = serde_json::to_value(stored_before).unwrap();
+
+    config::sync_cli_security_config(service, service_options).unwrap();
+    assert_eq!(Config::get(), local);
+    let stored: Config2 = hbb_common::config::load_path(Config2::file());
+    let stored = serde_json::to_value(stored).unwrap();
+    for field in ["socks", "unlock_pin", "rendezvous_server"] {
+        assert_eq!(stored[field], stored_before[field], "Changed {field}");
+    }
+    assert_eq!(Config::get_option("local-only"), "preserve-me");
+    assert!(config::snapshot().unwrap().totp.is_empty());
+    assert!(configuration::devices().await.is_empty());
+    config::sync_config(original, original_options).unwrap();
+}
+
 pub(super) fn corrupt_controller_credentials_allow_reenrollment(
     credentials: &Credentials,
     peer_id: &str,

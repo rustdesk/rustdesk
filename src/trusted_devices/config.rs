@@ -15,6 +15,30 @@ use std::{collections::HashMap, io::ErrorKind, path::Path};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const SYNC_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
+pub(crate) const SECURITY_OPTION_KEYS: [&str; 3] = [
+    "2fa",
+    keys::OPTION_ENABLE_TRUSTED_DEVICES,
+    keys::OPTION_TRUSTED_DEVICE_EXPIRATION,
+];
+
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn sync_cli_security_config(value: Config, options: Config2) -> ResultType<()> {
+    let _storage = super::storage()?;
+    let password = password(&value)?;
+    Config::set_permanent_password_storage_for_sync(&password.password, &password.salt)?;
+    let mut local = Config::get_options();
+    for key in SECURITY_OPTION_KEYS {
+        if let Some(value) = options.options.get(key) {
+            local.insert(key.to_owned(), value.clone());
+        } else {
+            local.remove(key);
+        }
+    }
+    Config::set_options(local);
+    snapshot()?;
+    options.sync_trusted_devices()
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub fn log_sync_error(error: impl std::fmt::Display) {
     hbb_common::throttled_log!(
