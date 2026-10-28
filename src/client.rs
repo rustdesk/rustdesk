@@ -2749,7 +2749,6 @@ impl VideoHandler {
         self.decoder.take_pixelbuffer()
     }
 
-    /// Reset the decoder, change format if it is Some
     /// Install this display's hand-off switch for decoded GPU frames.
     ///
     /// The switch comes from the UI session that renders this display, so the
@@ -2761,6 +2760,7 @@ impl VideoHandler {
         self.gpu_frames_wanted = Some(wanted);
     }
 
+    /// Reset the decoder, change format if it is Some
     pub fn reset(&mut self, format: Option<CodecFormat>) {
         log::info!(
             "reset video handler for display #{}, format: {format:?}",

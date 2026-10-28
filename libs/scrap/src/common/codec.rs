@@ -841,6 +841,27 @@ impl Decoder {
             *pixelbuffer = None;
         }
         for h264 in frames.frames.iter() {
+            // Two forms, picked by whether this decoder may hand out a surface:
+            //
+            // * not requested (every non-macOS build, and any session that did
+            //   not opt in) -- decode straight into the images it returned, one
+            //   allocation, exactly the path that existed before.
+            // * requested -- the surface has to be taken while no borrow of the
+            //   decoder is alive, so decode first and then read the images back
+            //   through `last_frame_images`; the extra Vec buys the hand-off.
+            #[cfg(target_os = "macos")]
+            let gpu_wanted = decoder.pixelbuffer_wanted();
+            #[cfg(not(target_os = "macos"))]
+            let gpu_wanted = false;
+            if !gpu_wanted {
+                for image in decoder.decode(&h264.data)? {
+                    if image.to_fmt(rgb, i420).is_ok() {
+                        ret = true;
+                    }
+                }
+                continue;
+            }
+            #[cfg(target_os = "macos")]
             decoder.decode(&h264.data)?;
             // The GPU frame of this decode call, if the decoder delivered one.
             #[cfg(target_os = "macos")]

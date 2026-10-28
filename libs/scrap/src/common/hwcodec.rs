@@ -310,6 +310,10 @@ impl HwRamEncoder {
 pub struct HwRamDecoder {
     decoder: Decoder,
     pub info: CodecInfo,
+    /// The same switch the inner decoder consults, kept here so the decode loop
+    /// can read it without a second handle.
+    #[cfg(target_os = "macos")]
+    pixelbuffer_wanted: crate::GpuFramesWanted,
 }
 
 impl HwRamDecoder {
@@ -366,8 +370,15 @@ impl HwRamDecoder {
                 // with `set_pixelbuffer_wanted` when its renderer can present
                 // GPU frames.
                 #[cfg(target_os = "macos")]
-                decoder.set_pixelbuffer_wanted(crate::gpu_frames_wanted_flag(false));
-                Ok(HwRamDecoder { decoder, info })
+                let pixelbuffer_wanted = crate::gpu_frames_wanted_flag(false);
+                #[cfg(target_os = "macos")]
+                decoder.set_pixelbuffer_wanted(pixelbuffer_wanted.clone());
+                Ok(HwRamDecoder {
+                    decoder,
+                    info,
+                    #[cfg(target_os = "macos")]
+                    pixelbuffer_wanted,
+                })
             }
             Err(_) => {
                 HwCodecConfig::clear(false, false);
@@ -382,12 +393,24 @@ impl HwRamDecoder {
         }
     }
 
+    /// Whether this decoder may hand out a GPU frame right now.
+    ///
+    /// Read by the decode loop to decide between the two-step form (needed to
+    /// take the surface before the software images are borrowed) and the single
+    /// allocation that the software-only path has always used.
+    #[cfg(target_os = "macos")]
+    pub fn pixelbuffer_wanted(&self) -> bool {
+        self.pixelbuffer_wanted
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// Install the owner's "can the renderer present GPU frames" handle.
     ///
     /// Called once per decoder owner (session / display video handler), so two
     /// sessions with different render paths do not share one switch.
     #[cfg(target_os = "macos")]
     pub fn set_pixelbuffer_wanted(&mut self, wanted: crate::GpuFramesWanted) {
+        self.pixelbuffer_wanted = wanted.clone();
         self.decoder.set_pixelbuffer_wanted(wanted);
     }
 
