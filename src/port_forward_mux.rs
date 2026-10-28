@@ -1167,7 +1167,7 @@ mod tests {
             }
             fn handle_peer_info(&self, _pi: PeerInfo) {}
             fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
-            async fn handle_hash(&self, _pass: &str, _hash: Hash, _peer: &mut Stream) -> bool {
+            async fn handle_hash(&self, _pass: &str, _hash: Hash, _trust: &mut crate::trusted_devices::client::Session, _peer: &mut Stream) -> bool {
                 false
             }
             async fn handle_login_from_ui(
@@ -1176,6 +1176,7 @@ mod tests {
                 _os_password: String,
                 _password: String,
                 _remember: bool,
+                _trust: &mut crate::trusted_devices::client::Session,
                 _peer: &mut Stream,
             ) {
             }

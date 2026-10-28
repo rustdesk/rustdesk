@@ -31,7 +31,7 @@ use hbb_common::{
     config::{
         self, decode_permanent_password_h1_from_storage, decode_preset_password_h1_from_storage,
         local_permanent_password_storage_is_usable_for_auth,
-        preset_permanent_password_storage_is_usable_for_auth, Config, TrustedDevice,
+        preset_permanent_password_storage_is_usable_for_auth, Config,
     },
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
@@ -74,6 +74,8 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 #[cfg(windows)]
 use crate::virtual_display_manager;
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
+
+mod trusted_devices;
 
 const FAILURE_IDX_ID_WHITELIST: usize = 2;
 // How long a rejection counts, so also how long a blocked address stays blocked. Longer
@@ -374,6 +376,7 @@ pub struct Connection {
     unauthorized_id: Option<UnauthorizedID>,
     require_2fa: Option<totp_rs::TOTP>,
     awaiting_2fa: bool,
+    trusted_device: Option<crate::trusted_devices::host::Attempt>,
     keyboard: bool,
     clipboard: bool,
     audio: bool,
@@ -569,6 +572,7 @@ impl Connection {
             },
             require_2fa: crate::auth_2fa::get_2fa(None),
             awaiting_2fa: false,
+            trusted_device: None,
             // Defer display enumeration until login succeeds. Monitor login replaces this
             // with the primary index returned with the refreshed display snapshot.
             display_idx: 0,
@@ -750,6 +754,7 @@ impl Connection {
                     match data {
                         ipc::Data::Authorize => {
                             conn.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::Click);
+                            conn.trusted_device = None;
                             conn.require_2fa.take();
                             if !conn.send_logon_response_and_keep_alive().await {
                                 break;
@@ -1886,6 +1891,10 @@ impl Connection {
             return true;
         }
         self.awaiting_2fa = false;
+        // The later check also covers revocation while connection setup awaits.
+        if !self.check_trusted_device().await {
+            return false;
+        }
         if let Some(keep_alive) = self.prepare_terminal_login_for_authorization().await {
             return keep_alive;
         }
@@ -1896,6 +1905,10 @@ impl Connection {
         if !self.connect_port_forward_if_needed().await {
             return false;
         }
+        if !self.check_trusted_device().await {
+            return false;
+        }
+        self.lr.trusted_device_v2_token.clear();
         self.authorized = true;
         self.unauthorized_id = None;
         // One-time means gone once it has let a peer in, not once that peer
@@ -2028,6 +2041,9 @@ impl Connection {
             .into();
             let mut msg_out = Message::new();
             res.set_peer_info(pi);
+            if !self.enroll_trusted_device(&mut res).await {
+                return false;
+            }
             msg_out.set_login_response(res);
             self.send(msg_out).await;
             return true;
@@ -2174,6 +2190,9 @@ impl Connection {
                 }
             }
             self.on_remote_authorized();
+        }
+        if !self.enroll_trusted_device(&mut res).await {
+            return false;
         }
         let mut msg_out = Message::new();
         msg_out.set_login_response(res);
@@ -2405,9 +2424,8 @@ impl Connection {
         let mut msg_out = Message::new();
         let mut res = LoginResponse::new();
         res.set_error(err.to_string());
-        if err.to_string() == crate::client::REQUIRE_2FA {
-            res.enable_trusted_devices = Self::enable_trusted_devices();
-        }
+        res.trusted_device_v2_supported =
+            self.lr.trusted_device_v2_supported && self.trusted_device.is_some();
         msg_out.set_login_response(res);
         self.send(msg_out).await;
     }
@@ -2741,14 +2759,6 @@ impl Connection {
         }
     }
 
-    #[inline]
-    fn enable_trusted_devices() -> bool {
-        config::option2bool(
-            keys::OPTION_ENABLE_TRUSTED_DEVICES,
-            &Config::get_option(keys::OPTION_ENABLE_TRUSTED_DEVICES),
-        )
-    }
-
     fn reset_session_scope_for_login(&mut self) {
         self.file_transfer = None;
         self.view_camera = false;
@@ -2849,20 +2859,6 @@ impl Connection {
         if let Some(o) = lr.option.as_ref() {
             self.options_in_login = Some(o.clone());
         }
-        if self.require_2fa.is_some() && !lr.hwid.is_empty() && Self::enable_trusted_devices() {
-            let devices = Config::get_trusted_devices();
-            if let Some(device) = devices.iter().find(|d| d.hwid == lr.hwid) {
-                if !device.outdate()
-                    && device.id == lr.my_id
-                    && device.name == lr.my_name
-                    && device.platform == lr.my_platform
-                {
-                    log::info!("2FA bypassed by trusted devices");
-                    self.set_conn_audit_two_factor(ConnAuditTwoFactor::TrustedDevice);
-                    self.require_2fa = None;
-                }
-            }
-        }
         self.video_ack_required = lr.video_ack_required;
     }
 
@@ -2917,6 +2913,10 @@ impl Connection {
                 return false;
             }
             self.awaiting_2fa = false;
+            self.trusted_device = None;
+            if !self.authorized {
+                self.require_2fa = crate::auth_2fa::get_2fa(None);
+            }
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
                 return true;
@@ -3089,6 +3089,9 @@ impl Connection {
                     self.try_start_cm(lr.my_id, lr.my_name, false);
                 } else {
                     self.update_failure_with_scope(failure, true, 0, FailureScope::Default);
+                    if !self.begin_trusted_device().await {
+                        return false;
+                    }
                     if !self.send_logon_response_and_keep_alive().await {
                         return false;
                     }
@@ -3111,6 +3114,9 @@ impl Connection {
                         self.update_failure(failure, true, 1);
                         self.require_2fa.take();
                         self.set_conn_audit_two_factor(ConnAuditTwoFactor::Totp);
+                        if let Some(attempt) = self.trusted_device.as_mut() {
+                            attempt.enroll = tfa.trust_this_device;
+                        }
                         raii::AuthedConnID::set_session_2fa(self.session_key());
                         if !self.send_logon_response_and_keep_alive().await {
                             return false;
@@ -3120,15 +3126,6 @@ impl Connection {
                             self.lr.my_name.to_owned(),
                             self.authorized,
                         );
-                        if !tfa.hwid.is_empty() && Self::enable_trusted_devices() {
-                            Config::add_trusted_device(TrustedDevice {
-                                hwid: tfa.hwid,
-                                time: hbb_common::get_time(),
-                                id: self.lr.my_id.clone(),
-                                name: self.lr.my_name.clone(),
-                                platform: self.lr.my_platform.clone(),
-                            });
-                        }
                     } else {
                         self.update_failure(failure, false, 1);
                         self.send_login_error(crate::client::LOGIN_MSG_2FA_WRONG)
@@ -3179,6 +3176,7 @@ impl Connection {
                                 return false;
                             }
                             self.from_switch = true;
+                            self.trusted_device = None;
                             self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::SwitchSides);
                             if !self.send_logon_response_and_keep_alive().await {
                                 return false;
