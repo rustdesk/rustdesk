@@ -89,7 +89,105 @@ void showServerSettingsWithValue(
     apiServerMsg,
   ];
 
+  final profiles = _loadServerProfiles();
+  // -1: Default (empty config), null: unsaved custom config
+  int? selectedProfile = _matchServerProfile(profiles, serverConfig);
+
   dialogManager.show((setState, close, context) {
+    void selectProfile(int? i) {
+      if (i == null) return;
+      final sc = i < 0 ? ServerConfig() : profiles[i].$2;
+      idCtrl.text = sc.idServer;
+      // relay field is hidden there, same as importConfig
+      relayCtrl.text = isWeb || isIOS ? '' : sc.relayServer;
+      apiCtrl.text = sc.apiServer;
+      keyCtrl.text = sc.key;
+      for (final msg in errMsgs) {
+        msg.value = '';
+      }
+      setState(() => selectedProfile = i);
+    }
+
+    Future<void> saveProfile() async {
+      final name = await _inputServerProfileName(dialogManager,
+          selectedProfile != null && selectedProfile! >= 0
+              ? profiles[selectedProfile!].$1
+              : '');
+      if (name == null || name.isEmpty) return;
+      final sc = ServerConfig(
+          idServer: idCtrl.text,
+          relayServer: relayCtrl.text,
+          apiServer: apiCtrl.text,
+          key: keyCtrl.text);
+      var i = profiles.indexWhere((p) => p.$1 == name);
+      if (i < 0) {
+        profiles.add((name, sc));
+        i = profiles.length - 1;
+      } else {
+        profiles[i] = (name, sc);
+      }
+      await _saveServerProfiles(profiles);
+      setState(() => selectedProfile = i);
+      _showSuccess();
+    }
+
+    Future<void> deleteProfile() async {
+      final i = selectedProfile;
+      if (i == null || i < 0) return;
+      profiles.removeAt(i);
+      await _saveServerProfiles(profiles);
+      setState(() => selectedProfile = null);
+    }
+
+    Widget buildProfileRow() {
+      final row = Row(
+        children: [
+          Expanded(
+            child: DropdownButton<int>(
+              isExpanded: true,
+              value: selectedProfile,
+              hint: Text('-'),
+              items: [
+                DropdownMenuItem(
+                    value: -1, child: Text(translate('Default'))),
+                for (var i = 0; i < profiles.length; i++)
+                  DropdownMenuItem(
+                      value: i,
+                      child: Text(profiles[i].$1,
+                          overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: selectProfile,
+            ),
+          ),
+          Tooltip(
+            message: translate('Save'),
+            child: IconButton(
+                icon: Icon(Icons.bookmark_add_outlined, color: Colors.grey),
+                onPressed: saveProfile),
+          ),
+          Tooltip(
+            message: translate('Delete'),
+            child: IconButton(
+                color: Colors.grey,
+                icon: Icon(Icons.delete_outline),
+                onPressed: selectedProfile != null && selectedProfile! >= 0
+                    ? deleteProfile
+                    : null),
+          ),
+        ],
+      );
+      if (isDesktop || isWeb) {
+        return Row(
+          children: [
+            SizedBox(width: labelWidth, child: Text(translate('Alias'))),
+            SizedBox(width: labelSpacing),
+            Expanded(child: row),
+          ],
+        );
+      }
+      return row;
+    }
+
     Future<bool> submit() async {
       setState(() {
         isInProgress = true;
@@ -156,6 +254,8 @@ void showServerSettingsWithValue(
           child: Obx(() => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  buildProfileRow(),
+                  SizedBox(height: 8),
                   buildField(translate('ID Server'), idCtrl, idServerMsg.value,
                       autofocus: true),
                   SizedBox(height: 8),
@@ -217,6 +317,68 @@ void showServerSettingsWithValue(
           },
         ),
       ],
+    );
+  });
+}
+
+const _kServerProfilesKey = 'server-profiles';
+
+List<(String, ServerConfig)> _loadServerProfiles() {
+  final raw = bind.mainGetLocalOption(key: _kServerProfilesKey);
+  if (raw.isEmpty) return [];
+  try {
+    return (jsonDecode(raw) as List)
+        .map((e) => (e['name'] as String, ServerConfig.decode(jsonEncode(e))))
+        .toList();
+  } catch (e) {
+    debugPrint("Invalid server profiles: $e");
+    return [];
+  }
+}
+
+Future<void> _saveServerProfiles(List<(String, ServerConfig)> profiles) {
+  final list = profiles
+      .map((p) => {
+            'name': p.$1,
+            'host': p.$2.idServer,
+            'relay': p.$2.relayServer,
+            'api': p.$2.apiServer,
+            'key': p.$2.key,
+          })
+      .toList();
+  return bind.mainSetLocalOption(
+      key: _kServerProfilesKey, value: jsonEncode(list));
+}
+
+int? _matchServerProfile(
+    List<(String, ServerConfig)> profiles, ServerConfig sc) {
+  bool eq(ServerConfig a) =>
+      a.idServer == sc.idServer &&
+      a.relayServer == sc.relayServer &&
+      a.apiServer == sc.apiServer &&
+      a.key == sc.key;
+  if (eq(ServerConfig())) return -1;
+  final i = profiles.indexWhere((p) => eq(p.$2));
+  return i < 0 ? null : i;
+}
+
+Future<String?> _inputServerProfileName(
+    OverlayDialogManager dialogManager, String initial) {
+  final ctrl = TextEditingController(text: initial);
+  return dialogManager.show<String?>((setState, close, context) {
+    submit() => close(ctrl.text.trim());
+    return CustomAlertDialog(
+      title: Text(translate('Alias')),
+      content: TextField(
+        controller: ctrl,
+        autofocus: true,
+      ),
+      actions: [
+        dialogButton('Cancel', onPressed: () => close(null), isOutline: true),
+        dialogButton('OK', onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: () => close(null),
     );
   });
 }
