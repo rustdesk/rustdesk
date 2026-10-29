@@ -11,7 +11,6 @@ use std::{
     },
     time::Duration,
 };
-use winapi::um::winnt::ACCESS_ALLOWED_ACE_TYPE;
 use windows::{
     core::PWSTR,
     Win32::{
@@ -24,11 +23,15 @@ use windows::{
         Storage::FileSystem::{
             FILE_FLAG_OVERLAPPED, FILE_GENERIC_READ, FILE_WRITE_DATA, SECURITY_IDENTIFICATION,
         },
-        System::Pipes::{GetNamedPipeServerProcessId, GetNamedPipeServerSessionId},
+        System::{
+            Pipes::{GetNamedPipeServerProcessId, GetNamedPipeServerSessionId},
+            SystemServices::ACCESS_ALLOWED_ACE_TYPE,
+        },
     },
 };
 
 // FILE_GENERIC_WRITE includes FILE_CREATE_PIPE_INSTANCE, so clients request only data writes.
+// https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights
 const CLIENT_ACCESS: u32 = FILE_GENERIC_READ.0 | FILE_WRITE_DATA.0;
 const PIPE_BUSY_RETRY: Duration = Duration::from_millis(50);
 const AUTH_LOG_INTERVAL: Duration = Duration::from_secs(5);
@@ -42,9 +45,28 @@ impl Drop for LocalAllocation {
     }
 }
 
+/// Restricts creation of main/service pipe instances to SYSTEM and the owner.
+///
+/// Windows checks the existing pipe's DACL when CreateNamedPipe opens another
+/// server instance of the same name. It requires FILE_CREATE_PIPE_INSTANCE,
+/// even if the caller supplies a different security descriptor.
+///
+/// The ACL checks identities, so another process running as the owner may still
+/// create instances. It also cannot stop an attacker from creating the name first.
+/// Clients must still authenticate the server in connect(); name squatting can
+/// still deny service.
 pub(super) fn listener_security_attributes() -> io::Result<SecurityAttributes> {
     let owner = platform::current_process_user_sid_string()
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    // SDDL: each (A;;rights;;;sid) is an allow rule.
+    // O:{owner}: use the current process user as owner for client authentication.
+    // D:P: protect the DACL from inherited access rules.
+    // GA grants full access to SY (LocalSystem) and {owner}.
+    // WD (Everyone) gets CLIENT_ACCESS: data read/write and READ_CONTROL to inspect
+    // the owner/DACL, without FILE_CREATE_PIPE_INSTANCE or WRITE_DAC.
+    // https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
+    // https://learn.microsoft.com/en-us/windows/win32/secauthz/ace-strings
+    // https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-strings
     let sddl = format!("O:{owner}D:P(A;;GA;;;SY)(A;;GA;;;{owner})(A;;0x{CLIENT_ACCESS:x};;;WD)");
     SecurityAttributes::from_sddl(&sddl)
 }
@@ -60,6 +82,11 @@ fn open_pipe(path: &str) -> io::Result<ConnectionClient> {
     unsafe { ConnectionClient::from_raw_handle(file.into_raw_handle()) }
 }
 
+/// Authenticates a main/service pipe before exposing it for application data.
+/// All accepted pipes need a restricted DACL. Service pipes require SYSTEM
+/// ownership; main IPC also accepts same-user servers with a matching session
+/// and executable, and no lower elevation than the client.
+/// The caller must enforce the timeout, including retries while all instances are busy.
 pub(super) async fn connect(path: &str, postfix: &str) -> ResultType<ConnectionClient> {
     let client = loop {
         match open_pipe(path) {
@@ -147,7 +174,7 @@ fn ensure_restricted_dacl(dacl: *const ACL, owner: PSID) -> ResultType<()> {
         unsafe { GetAce(dacl, index.into(), &mut ace) }
             .context("Failed to read IPC server access rule")?;
         let header = unsafe { &*(ace as *const ACE_HEADER) };
-        if header.AceType != ACCESS_ALLOWED_ACE_TYPE
+        if header.AceType != (ACCESS_ALLOWED_ACE_TYPE as u8)
             || usize::from(header.AceSize) < std::mem::size_of::<ACCESS_ALLOWED_ACE>()
         {
             bail!("Unsupported IPC server access rule");
