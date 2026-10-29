@@ -272,6 +272,20 @@ fn main() {
         println!("cargo:rustc-link-search=native={}", lib.display());
         println!("cargo:rustc-link-lib=static=vpx");
         println!("cargo:rustc-link-lib=static=yuv");
+        // Hardware H264/H265 decoding via the NDK AVCodec C API; core carries
+        // the exported mime/key string constants.
+        println!("cargo:rustc-link-lib=dylib=native_media_vdec");
+        println!("cargo:rustc-link-lib=dylib=native_media_core");
+        // OH_AVCODEC_MIMETYPE_* / OH_MD_KEY_* string constants live here on
+        // device (libnative_media_core.so does not export them).
+        println!("cargo:rustc-link-lib=dylib=native_media_codecbase");
+        // Hardware H264/H265 encoding for the controlled side (see
+        // src/ohos/ohcodec.rs).
+        println!("cargo:rustc-link-lib=dylib=native_media_venc");
+        // Controlled-side screen capture (see src/ohos/screencap.rs); the
+        // pump maps OH_NativeBuffer frames from AcquireVideoBuffer.
+        println!("cargo:rustc-link-lib=dylib=native_avscreen_capture");
+        println!("cargo:rustc-link-lib=dylib=native_buffer");
         // No libaom on OpenHarmony for M1: link a stub that fails AV1 calls at
         // runtime (see src/ohos/aom_stub.c).
         cc::Build::new()

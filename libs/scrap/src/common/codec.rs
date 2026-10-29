@@ -57,6 +57,9 @@ pub enum EncoderCfg {
     HWRAM(HwRamEncoderConfig),
     #[cfg(feature = "vram")]
     VRAM(VRamEncoderConfig),
+    #[cfg(target_env = "ohos")]
+    #[allow(non_camel_case_types)]
+    OHOS_HW(crate::ohos::ohcodec::OhEncoderConfig),
 }
 
 pub trait EncoderApi {
@@ -107,6 +110,10 @@ pub struct Decoder {
     vp9: Option<VpxDecoder>,
     #[cfg(not(target_env = "ohos"))]
     av1: Option<AomDecoder>,
+    #[cfg(target_env = "ohos")]
+    h264_ohcodec: Option<crate::ohos::ohcodec::OhCodecDecoder>,
+    #[cfg(target_env = "ohos")]
+    h265_ohcodec: Option<crate::ohos::ohcodec::OhCodecDecoder>,
     #[cfg(feature = "hwcodec")]
     h264_ram: Option<HwRamDecoder>,
     #[cfg(feature = "hwcodec")]
@@ -165,6 +172,18 @@ impl Encoder {
                 Err(e) => {
                     log::error!("new vram encoder failed: {e:?}, clear config");
                     HwCodecConfig::clear(true, true);
+                    *ENCODE_CODEC_FORMAT.lock().unwrap() = CodecFormat::VP9;
+                    Err(e)
+                }
+            },
+            #[cfg(target_env = "ohos")]
+            EncoderCfg::OHOS_HW(_) => match crate::ohos::ohcodec::OhCodecEncoder::new(config, i444) {
+                Ok(hw) => Ok(Encoder {
+                    codec: Box::new(hw),
+                }),
+                Err(e) => {
+                    log::error!("new ohos hw encoder failed: {e:?}, clear config");
+                    crate::ohos::ohcodec::OhCodecEncoder::clear_support_cache();
                     *ENCODE_CODEC_FORMAT.lock().unwrap() = CodecFormat::VP9;
                     Err(e)
                 }
@@ -232,6 +251,15 @@ impl Encoder {
             if _all_support_h265_decoding {
                 h265hw_encoding =
                     HwRamEncoder::try_get(CodecFormat::H265).map_or(None, |c| Some(c.name));
+            }
+        }
+        #[cfg(target_env = "ohos")]
+        {
+            if _all_support_h264_decoding {
+                h264hw_encoding = crate::ohos::ohcodec::OhCodecEncoder::try_get(CodecFormat::H264);
+            }
+            if _all_support_h265_decoding {
+                h265hw_encoding = crate::ohos::ohcodec::OhCodecEncoder::try_get(CodecFormat::H265);
             }
         }
         let h264_useable =
@@ -350,6 +378,11 @@ impl Encoder {
             encoding.h264 |= HwRamEncoder::try_get(CodecFormat::H264).is_some();
             encoding.h265 |= HwRamEncoder::try_get(CodecFormat::H265).is_some();
         }
+        #[cfg(target_env = "ohos")]
+        {
+            encoding.h264 |= crate::ohos::ohcodec::OhCodecEncoder::try_get(CodecFormat::H264).is_some();
+            encoding.h265 |= crate::ohos::ohcodec::OhCodecEncoder::try_get(CodecFormat::H265).is_some();
+        }
         #[cfg(feature = "vram")]
         if enable_vram_option(true) {
             encoding.h264 |= VRamEncoder::available(CodecFormat::H264).len() > 0;
@@ -397,6 +430,8 @@ impl Encoder {
                     return;
                 }
             },
+            #[cfg(target_env = "ohos")]
+            EncoderCfg::OHOS_HW(hw) => hw.format,
         };
         let current = ENCODE_CODEC_FORMAT.lock().unwrap().clone();
         if current != format {
@@ -421,6 +456,8 @@ impl Encoder {
             EncoderCfg::HWRAM(_) => false,
             #[cfg(feature = "vram")]
             EncoderCfg::VRAM(_) => false,
+            #[cfg(target_env = "ohos")]
+            EncoderCfg::OHOS_HW(_) => false,
         };
         prefer_i444 && i444_useable && !decodings.is_empty()
     }
@@ -492,6 +529,19 @@ impl Decoder {
                     0
                 };
         }
+        #[cfg(target_env = "ohos")]
+        {
+            // Probe the OH_VideoDecoder hardware capability once per process;
+            // creating a decoder for the probe is cheap and immediately
+            // dropped.
+            let (h264, h265) = ohcodec_support();
+            if h264 {
+                decoding.ability_h264 = 1;
+            }
+            if h265 {
+                decoding.ability_h265 = 1;
+            }
+        }
         for unsupported in mark_unsupported {
             match unsupported {
                 CodecFormat::VP8 => decoding.ability_vp8 = 0,
@@ -511,6 +561,8 @@ impl Decoder {
         let (mut vp8, mut vp9, mut av1) = (None, None, None);
         #[cfg(target_env = "ohos")]
         let (mut vp8, mut vp9) = (None, None);
+        #[cfg(target_env = "ohos")]
+        let (mut h264_ohcodec, mut h265_ohcodec) = (None, None);
         #[cfg(feature = "hwcodec")]
         let (mut h264_ram, mut h265_ram) = (None, None);
         #[cfg(feature = "vram")]
@@ -551,55 +603,71 @@ impl Decoder {
                 log::error!("AV1 decoder is not available on this platform");
             }
             CodecFormat::H264 => {
-                #[cfg(feature = "vram")]
-                if !valid && enable_vram_option(false) && _luid.clone().unwrap_or_default() != 0 {
-                    match VRamDecoder::new(format, _luid) {
-                        Ok(v) => h264_vram = Some(v),
-                        Err(e) => log::error!("create H264 vram decoder failed: {}", e),
-                    }
-                    valid = h264_vram.is_some();
+                #[cfg(target_env = "ohos")]
+                {
+                    h264_ohcodec = crate::ohos::ohcodec::OhCodecDecoder::new(format);
+                    valid = h264_ohcodec.is_some();
                 }
-                #[cfg(feature = "hwcodec")]
-                if !valid {
-                    match HwRamDecoder::new(format) {
-                        Ok(v) => h264_ram = Some(v),
-                        Err(e) => log::error!("create H264 ram decoder failed: {}", e),
+                #[cfg(not(target_env = "ohos"))]
+                {
+                    #[cfg(feature = "vram")]
+                    if !valid && enable_vram_option(false) && _luid.clone().unwrap_or_default() != 0 {
+                        match VRamDecoder::new(format, _luid) {
+                            Ok(v) => h264_vram = Some(v),
+                            Err(e) => log::error!("create H264 vram decoder failed: {}", e),
+                        }
+                        valid = h264_vram.is_some();
                     }
-                    valid = h264_ram.is_some();
-                }
-                #[cfg(feature = "mediacodec")]
-                if !valid && enable_hwcodec_option() {
-                    h264_media_codec = MediaCodecDecoder::new(format);
-                    if h264_media_codec.is_none() {
-                        log::error!("create H264 media codec decoder failed");
+                    #[cfg(feature = "hwcodec")]
+                    if !valid {
+                        match HwRamDecoder::new(format) {
+                            Ok(v) => h264_ram = Some(v),
+                            Err(e) => log::error!("create H264 ram decoder failed: {}", e),
+                        }
+                        valid = h264_ram.is_some();
                     }
-                    valid = h264_media_codec.is_some();
+                    #[cfg(feature = "mediacodec")]
+                    if !valid && enable_hwcodec_option() {
+                        h264_media_codec = MediaCodecDecoder::new(format);
+                        if h264_media_codec.is_none() {
+                            log::error!("create H264 media codec decoder failed");
+                        }
+                        valid = h264_media_codec.is_some();
+                    }
                 }
             }
             CodecFormat::H265 => {
-                #[cfg(feature = "vram")]
-                if !valid && enable_vram_option(false) && _luid.clone().unwrap_or_default() != 0 {
-                    match VRamDecoder::new(format, _luid) {
-                        Ok(v) => h265_vram = Some(v),
-                        Err(e) => log::error!("create H265 vram decoder failed: {}", e),
-                    }
-                    valid = h265_vram.is_some();
+                #[cfg(target_env = "ohos")]
+                {
+                    h265_ohcodec = crate::ohos::ohcodec::OhCodecDecoder::new(format);
+                    valid = h265_ohcodec.is_some();
                 }
-                #[cfg(feature = "hwcodec")]
-                if !valid {
-                    match HwRamDecoder::new(format) {
-                        Ok(v) => h265_ram = Some(v),
-                        Err(e) => log::error!("create H265 ram decoder failed: {}", e),
+                #[cfg(not(target_env = "ohos"))]
+                {
+                    #[cfg(feature = "vram")]
+                    if !valid && enable_vram_option(false) && _luid.clone().unwrap_or_default() != 0 {
+                        match VRamDecoder::new(format, _luid) {
+                            Ok(v) => h265_vram = Some(v),
+                            Err(e) => log::error!("create H265 vram decoder failed: {}", e),
+                        }
+                        valid = h265_vram.is_some();
                     }
-                    valid = h265_ram.is_some();
-                }
-                #[cfg(feature = "mediacodec")]
-                if !valid && enable_hwcodec_option() {
-                    h265_media_codec = MediaCodecDecoder::new(format);
-                    if h265_media_codec.is_none() {
-                        log::error!("create H265 media codec decoder failed");
+                    #[cfg(feature = "hwcodec")]
+                    if !valid {
+                        match HwRamDecoder::new(format) {
+                            Ok(v) => h265_ram = Some(v),
+                            Err(e) => log::error!("create H265 ram decoder failed: {}", e),
+                        }
+                        valid = h265_ram.is_some();
                     }
-                    valid = h265_media_codec.is_some();
+                    #[cfg(feature = "mediacodec")]
+                    if !valid && enable_hwcodec_option() {
+                        h265_media_codec = MediaCodecDecoder::new(format);
+                        if h265_media_codec.is_none() {
+                            log::error!("create H265 media codec decoder failed");
+                        }
+                        valid = h265_media_codec.is_some();
+                    }
                 }
             }
             CodecFormat::Unknown => {
@@ -616,6 +684,10 @@ impl Decoder {
             vp9,
             #[cfg(not(target_env = "ohos"))]
             av1,
+            #[cfg(target_env = "ohos")]
+            h264_ohcodec,
+            #[cfg(target_env = "ohos")]
+            h265_ohcodec,
             #[cfg(feature = "hwcodec")]
             h264_ram,
             #[cfg(feature = "hwcodec")]
@@ -678,6 +750,24 @@ impl Decoder {
             #[cfg(target_env = "ohos")]
             video_frame::Union::Av1s(_) => {
                 bail!("av1 decoder not available");
+            }
+            #[cfg(target_env = "ohos")]
+            video_frame::Union::H264s(h264s) => {
+                *chroma = Some(Chroma::I420);
+                if let Some(decoder) = &mut self.h264_ohcodec {
+                    Decoder::handle_ohcodec_video_frame(decoder, h264s, rgb)
+                } else {
+                    Err(anyhow!("don't support h264!"))
+                }
+            }
+            #[cfg(target_env = "ohos")]
+            video_frame::Union::H265s(h265s) => {
+                *chroma = Some(Chroma::I420);
+                if let Some(decoder) = &mut self.h265_ohcodec {
+                    Decoder::handle_ohcodec_video_frame(decoder, h265s, rgb)
+                } else {
+                    Err(anyhow!("don't support h265!"))
+                }
             }
             #[cfg(any(feature = "hwcodec", feature = "vram"))]
             video_frame::Union::H264s(h264s) => {
@@ -782,6 +872,22 @@ impl Decoder {
             last_frame.to(rgb);
             Ok(true)
         }
+    }
+
+    // rgb [in/out] fmt and stride must be set in ImageRgb
+    #[cfg(target_env = "ohos")]
+    fn handle_ohcodec_video_frame(
+        decoder: &mut crate::ohos::ohcodec::OhCodecDecoder,
+        frames: &EncodedVideoFrames,
+        rgb: &mut ImageRgb,
+    ) -> ResultType<bool> {
+        let mut ret = false;
+        for frame in frames.frames.iter() {
+            if decoder.decode(&frame.data, frame.key, rgb)? {
+                ret = true;
+            }
+        }
+        Ok(ret)
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb
@@ -1053,9 +1159,10 @@ pub fn codec_thread_num(limit: usize) -> usize {
 }
 
 fn disable_av1() -> bool {
+    // No libaom on ohos: AV1 can neither be encoded nor decoded there.
     // aom is very slow for x86 sciter version on windows x64
     // disable it for all 32 bit platforms
-    std::mem::size_of::<usize>() == 4
+    cfg!(target_env = "ohos") || std::mem::size_of::<usize>() == 4
 }
 
 #[cfg(not(target_os = "ios"))]
@@ -1177,4 +1284,28 @@ pub fn test_av1() {
             );
         });
     });
+}
+
+#[cfg(target_env = "ohos")]
+fn ohcodec_support() -> (bool, bool) {
+    use crate::ohos::ohcodec::OhCodecDecoder;
+    use std::sync::atomic::{AtomicU8, Ordering};
+    // 0 = unprobed, 1 = probing/failed, 2..4 bit flags: bit0 h264, bit1 h265.
+    static SUPPORT: AtomicU8 = AtomicU8::new(0);
+    loop {
+        let v = SUPPORT.load(Ordering::SeqCst);
+        if v != 0 {
+            return (v & 0b10 != 0, v & 0b100 != 0);
+        }
+        // First caller probes synchronously; creation is quick and this only
+        // happens once per process.
+        let mut bits = 0u8;
+        if OhCodecDecoder::new(CodecFormat::H264).is_some() {
+            bits |= 0b10;
+        }
+        if OhCodecDecoder::new(CodecFormat::H265).is_some() {
+            bits |= 0b100;
+        }
+        SUPPORT.store(bits.max(1), Ordering::SeqCst);
+    }
 }
