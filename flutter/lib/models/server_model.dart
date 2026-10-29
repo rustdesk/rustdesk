@@ -15,6 +15,8 @@ import '../common/formatter/id_formatter.dart';
 import '../desktop/pages/server_page.dart' as desktop;
 import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
+import '../mobile/widgets/android_file_transfer_setup.dart';
+import '../utils/android_documents.dart';
 import 'model.dart';
 
 const kLoginDialogTag = "LOGIN";
@@ -399,6 +401,14 @@ class ServerModel with ChangeNotifier {
         stopService();
       }
     } else {
+      if (isAndroid) {
+        try {
+          await AndroidDocuments.requireLogFolder();
+          await showAndroidFileTransferSetup(gFFI);
+        } catch (_) {
+          debugPrint('Folder setup failed; continuing service startup');
+        }
+      }
       await checkRequestNotificationPermission();
       if (bind.mainGetLocalOption(key: kOptionDisableFloatingWindow) != 'Y') {
         await checkFloatingWindowPermission();

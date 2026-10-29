@@ -815,6 +815,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", ""),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
+        ("RustDesk storage", ""),
+        ("Other folders", ""),
+        ("Choose which folder remote devices can access.", ""),
+        ("android-logs-folder-tip", ""),
+        ("Choose folder", ""),
+        ("Please select Android → media.", ""),
+        ("Trust duration (days)", ""),
+        ("Renew trust", ""),
     ].iter().cloned().collect();
 }
 

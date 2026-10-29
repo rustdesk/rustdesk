@@ -813,7 +813,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "Não é possível usar \"{}\" como atalho."),
         ("On", "Ativado"),
         ("Off", "Desativado"),
-        ("api_server_connection_tip", ""),
-        ("api_server_empty_tip", ""),
+        ("api_server_connection_tip", "Seu servidor personalizado está usando HTTP sem criptografia. Entre em contato com o administrador para habilitar HTTPS."),
+        ("api_server_empty_tip", "Campo Servidor de API vazio: o servidor personalizado usa HTTP por padrão. Entre em contato com o administrador para habilitar HTTPS."),
+        ("RustDesk storage", "Armazenamento do RustDesk"),
+        ("Other folders", "Outras pastas"),
+        ("Choose which folder remote devices can access.", "Escolha a pasta que os dispositivos remotos poderão acessar."),
+        ("android-logs-folder-tip", "Selecione Android → media para armazenar os arquivos de log."),
+        ("Choose folder", "Escolher pasta"),
+        ("Please select Android → media.", "Selecione Android → media."),
+        ("Trust duration (days)", "Duração da confiança (dias)"),
+        ("Renew trust", "Renovar confiança"),
     ].iter().cloned().collect();
 }

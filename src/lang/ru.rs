@@ -664,7 +664,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Import Folder", "Импортировать папку"),
         ("Copy to clipboard", "Копировать в буфер обмена"),
         ("Enable remote printer", "Использовать удалённый принтер"),
-        ("Downloading {}", "Скачивание"),
+        ("Downloading {}", "Скачивание {}"),
         ("{} Update", "Обновить {}"),
         ("{}-to-update-tip", "{} закроется и установит новую версию."),
         ("download-new-version-failed-tip", "Ошибка загрузки. Можно повторить попытку или нажать кнопку \"Скачать\", чтобы скачать приложение с официального сайта и обновить вручную."),
@@ -815,5 +815,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "откл"),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
+        ("RustDesk storage", ""),
+        ("Other folders", ""),
+        ("Choose which folder remote devices can access.", ""),
+        ("android-logs-folder-tip", ""),
+        ("Choose folder", ""),
+        ("Please select Android → media.", ""),
+        ("Trust duration (days)", ""),
+        ("Renew trust", ""),
     ].iter().cloned().collect();
 }

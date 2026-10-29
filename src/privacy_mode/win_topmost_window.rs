@@ -226,7 +226,14 @@ impl PrivacyModeImpl {
             .to_string();
 
         unsafe {
-            let cmd_utf16: Vec<u16> = cmdline.encode_utf16().chain(Some(0).into_iter()).collect();
+            // The path goes in as `lpApplicationName` too: given only a command line, Windows
+            // treats every whitespace-delimited prefix as a candidate image, and the default
+            // install path contains a space.
+            let app_utf16: Vec<u16> = cmdline.encode_utf16().chain(Some(0).into_iter()).collect();
+            let mut cmd_utf16: Vec<u16> = format!("\"{cmdline}\"")
+                .encode_utf16()
+                .chain(Some(0).into_iter())
+                .collect();
 
             let mut start_info = STARTUPINFOW {
                 cb: 0,
@@ -263,8 +270,8 @@ impl PrivacyModeImpl {
 
             let create_res = CreateProcessAsUserW(
                 token,
-                NULL as _,
-                cmd_utf16.as_ptr() as _,
+                app_utf16.as_ptr() as _,
+                cmd_utf16.as_mut_ptr() as _,
                 NULL as _,
                 NULL as _,
                 FALSE,
