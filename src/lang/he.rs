@@ -815,5 +815,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "כבוי"),
         ("api_server_connection_tip", "השרת המותאם אישית שלך משתמש ב-HTTP לא מוצפן. פנה למנהל המערכת שלך כדי להפעיל HTTPS."),
         ("api_server_empty_tip", "כשהשדה \"שרת API\" ריק, השרת המותאם אישית שלך משתמש ב-HTTP כברירת מחדל. פנה למנהל המערכת שלך כדי להפעיל HTTPS."),
+        ("RustDesk storage", "אחסון RustDesk"),
+        ("Other folders", "תיקיות אחרות"),
+        ("Choose which folder remote devices can access.", "בחר לאיזו תיקייה יוכלו מכשירים מרוחקים לגשת."),
+        ("android-logs-folder-tip", "בחר Android → media כדי לשמור קובצי יומן."),
+        ("Choose folder", "בחר תיקייה"),
+        ("Please select Android → media.", "אנא בחר Android → media."),
+        ("Trust duration (days)", "משך האמון (ימים)"),
+        ("Renew trust", "חידוש אמון"),
     ].iter().cloned().collect();
 }
