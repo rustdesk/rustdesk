@@ -37,3 +37,21 @@ impl UnicodePacket {
         Ok(Some(event))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unicode_packets_preserve_bmp_and_surrogate_pairs() {
+        let expected = "a8*6 café Ω Ж 日本語 😀🦀END";
+        let mut decoder = UnicodePacket::default();
+        let mut received = String::new();
+        for unit in expected.encode_utf16() {
+            if let Some(event) = decoder.decode(u32::from(unit)).unwrap() {
+                received.push_str(event.seq());
+            }
+        }
+        assert_eq!(received, expected);
+    }
+}
