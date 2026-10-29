@@ -282,7 +282,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "开启录屏权限将自动开启服务，允许其他设备向此设备请求建立连接。"),
         ("android_stop_service_tip", "关闭服务将自动关闭所有已建立的连接。"),
         ("android_version_audio_tip", "当前安卓版本不支持音频录制，请升级至安卓 10 或更高。"),
-        ("android_start_service_tip", "点击开始服务或启用屏幕捕获权限，即可启动屏幕共享服务"),
+        ("android_start_service_tip", "请点击启动服务，开启远程协助连接"),
         ("android_permission_may_not_change_tip", "对于已建立的连接，权限可能不会立即发生改变，除非重新建立连接。"),
         ("Account", "账户"),
         ("Overwrite", "覆盖"),
