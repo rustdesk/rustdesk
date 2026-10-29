@@ -39,6 +39,15 @@ class MainFlutterWindow: NSWindow {
     private static var didSetupWindowNotifications = false
     static var mainWindowOpened = false
 
+    static func markMainWindowOpened() {
+        guard !CommandLine.arguments.contains("--cm") else { return }
+        guard (NSApp.delegate as? AppDelegate)?.launched == true else { return }
+        if !mainWindowOpened {
+            mainWindowOpened = true
+            rustdesk_check_start_tray()
+        }
+    }
+
     static func setupWindowLifecycle() {
         guard !CommandLine.arguments.contains("--cm") else { return }
         guard !didSetupWindowNotifications else { return }
@@ -48,9 +57,12 @@ class MainFlutterWindow: NSWindow {
             forName: NSWindow.didBecomeKeyNotification,
             object: nil,
             queue: .main
-        ) { _ in
+        ) { notification in
             if NSApp.activationPolicy() != .regular {
                 NSApp.setActivationPolicy(.regular)
+            }
+            if notification.object is MainFlutterWindow {
+                MainFlutterWindow.markMainWindowOpened()
             }
         }
 
@@ -58,9 +70,12 @@ class MainFlutterWindow: NSWindow {
             forName: NSWindow.didBecomeMainNotification,
             object: nil,
             queue: .main
-        ) { _ in
+        ) { notification in
             if NSApp.activationPolicy() != .regular {
                 NSApp.setActivationPolicy(.regular)
+            }
+            if notification.object is MainFlutterWindow {
+                MainFlutterWindow.markMainWindowOpened()
             }
         }
     }
@@ -131,9 +146,6 @@ class MainFlutterWindow: NSWindow {
 
     override func awakeFromNib() {
         rustdesk_core_main();
-        if CommandLine.arguments.count <= 1 {
-            MainFlutterWindow.mainWindowOpened = true
-        }
         _ = MainFlutterWindow.fullscreenObserver
         let flutterViewController = FlutterViewController.init()
         let windowFrame = self.frame
@@ -167,6 +179,28 @@ class MainFlutterWindow: NSWindow {
         }
 
         super.awakeFromNib()
+    }
+
+    override func setIsVisible(_ flag: Bool) {
+        super.setIsVisible(flag)
+        if flag {
+            MainFlutterWindow.markMainWindowOpened()
+        }
+    }
+
+    override func makeKeyAndOrderFront(_ sender: Any?) {
+        super.makeKeyAndOrderFront(sender)
+        MainFlutterWindow.markMainWindowOpened()
+    }
+
+    override func orderFrontRegardless() {
+        super.orderFrontRegardless()
+        MainFlutterWindow.markMainWindowOpened()
+    }
+
+    override func orderFront(_ sender: Any?) {
+        super.orderFront(sender)
+        MainFlutterWindow.markMainWindowOpened()
     }
 
     override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
