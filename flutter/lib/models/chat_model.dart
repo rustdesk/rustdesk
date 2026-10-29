@@ -169,8 +169,19 @@ class ChatModel with ChangeNotifier {
     if (overlayState == null) return;
 
     final overlay = OverlayEntry(builder: (context) {
+      final halfFold =
+          parent.target?.canvasModel.mobileControlsOutsideCanvas ?? false;
+      final windowMedia = MediaQueryData.fromView(View.of(context));
       return DraggableFloatWidget(
+        key: halfFold ? ValueKey(MediaQuery.sizeOf(context)) : null,
         config: DraggableFloatWidgetBaseConfig(
+          // The widget converts global drag positions using this top offset.
+          isFullScreen: !halfFold,
+          appBarHeight: halfFold
+              ? windowMedia.size.height -
+                  MediaQuery.sizeOf(context).height -
+                  windowMedia.padding.top
+              : kToolbarHeight,
           initPositionYInTop: false,
           initPositionYMarginBorder: 100,
           borderTopContainTopBar: true,
@@ -202,6 +213,8 @@ class ChatModel with ChangeNotifier {
   showChatWindowOverlay(
       {Offset? chatInitPos, bool requestSoftKeyboard = true}) {
     if (chatWindowOverlayEntry != null) return;
+    requestSoftKeyboard = requestSoftKeyboard &&
+        !(parent.target?.canvasModel.mobileControlsOutsideCanvas ?? false);
     isWindowFocus.value = true;
     _blockableOverlayState.setMiddleBlocked(true);
 

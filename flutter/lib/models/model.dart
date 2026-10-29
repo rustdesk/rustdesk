@@ -2335,7 +2335,28 @@ class CanvasModel with ChangeNotifier {
   static double get bottomToEdge =>
       isDesktop ? windowBorderWidth + kDragToResizeAreaPadding.bottom : 0;
 
+  bool mobileControlsOutsideCanvas = false;
+
+  EdgeInsets get mobileCanvasPadding {
+    final padding = MediaQueryData.fromView(
+            WidgetsBinding.instance.platformDispatcher.views.first)
+        .padding;
+    return isIOS && _mobileViewportSize != null ? EdgeInsets.zero : padding;
+  }
+
+  Size? _mobileViewportSize;
+
+  void setMobileViewportSize(Size size) {
+    _mobileViewportSize = size;
+    updateSize();
+    notifyListeners();
+  }
+
   Size getSize() {
+    final viewport = _mobileViewportSize;
+    if (isIOS && viewport != null) {
+      return Size(viewport.width, max(0.0, viewport.height - getAdjustY()));
+    }
     final mediaData = MediaQueryData.fromView(ui.window);
     final size = mediaData.size;
     // If minimized, w or h may be negative here.
@@ -2374,8 +2395,10 @@ class CanvasModel with ChangeNotifier {
 
   // mobile only
   double getAdjustY() {
+    if (isIOS && mobileControlsOutsideCanvas) return 0;
     final bottom =
         parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ?? 0;
+    if (isIOS && _mobileViewportSize != null) return bottom;
     return max(bottom - MediaQueryData.fromView(ui.window).padding.top, 0);
   }
 
@@ -2767,6 +2790,9 @@ class CanvasModel with ChangeNotifier {
   }
 
   clear() {
+    _mobileViewportSize = null;
+    mobileControlsOutsideCanvas = false;
+    if (isIOS) isMobileCanvasChanged = false;
     _x = 0;
     _y = 0;
     _scale = 1.0;
@@ -3162,11 +3188,15 @@ class CursorModel with ChangeNotifier {
       // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
       _lastIsBlocked = true;
     }
-    if (isMobile && _lastKeyboardIsVisible != keyboardIsVisible) {
+    if (isMobile &&
+        !(parent.target?.canvasModel.mobileControlsOutsideCanvas ?? false) &&
+        _lastKeyboardIsVisible != keyboardIsVisible) {
       if (keyboardIsVisible) {
         parent.target?.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
         parent.target?.canvasModel.mobileFocusCanvasCursor();
-        parent.target?.canvasModel.isMobileCanvasChanged = false;
+        if (!isIOS || parent.target?.canvasModel._mobileViewportSize == null) {
+          parent.target?.canvasModel.isMobileCanvasChanged = false;
+        }
       } else {
         parent.target?.canvasModel.restoreMobileOffsetAfterSoftKeyboard();
       }

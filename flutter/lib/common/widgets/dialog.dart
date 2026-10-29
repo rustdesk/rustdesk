@@ -1135,7 +1135,7 @@ _connectDialog(
       onSubmit: submit,
       onCancel: cancel,
     );
-  });
+  }, forceGlobal: isIOS);
 }
 
 void showWaitUacDialog(
