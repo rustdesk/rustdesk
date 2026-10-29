@@ -43,6 +43,10 @@ features = ["dxgi", "dxgi1_2", "dxgi1_5", "dxgi1_6", "d3d11", "winuser", "winerr
 [target.'cfg(target_os = "macos")'.dependencies]
 block = "0.1"
 
+[target.'cfg(target_env = "ohos")'.dependencies]
+lazy_static = "1.4"
+log = "0.4"
+
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 jni = "0.21"

@@ -33,6 +33,9 @@ cfg_if! {
     } else if #[cfg(target_os = "android")] {
         mod android;
         pub use self::android::*;
+    } else if #[cfg(target_env = "ohos")] {
+        mod ohos;
+        pub use self::ohos::*;
     }else {
         //TODO: Fallback implementation.
     }
@@ -133,7 +136,7 @@ pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> 
 
 pub trait TraitCapturer {
     // We doesn't support
-    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
+    #[cfg(not(target_os = "ios"))]
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>>;
 
     #[cfg(windows)]
@@ -177,13 +180,13 @@ pub trait TraitPixelBuffer {
     fn pixfmt(&self) -> Pixfmt;
 }
 
-#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
+#[cfg(not(target_os = "ios"))]
 pub enum Frame<'a> {
     PixelBuffer(PixelBuffer<'a>),
     Texture((*mut c_void, usize)),
 }
 
-#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
+#[cfg(not(target_os = "ios"))]
 impl Frame<'_> {
     pub fn valid<'a>(&'a self) -> bool {
         match self {
