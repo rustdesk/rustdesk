@@ -1631,6 +1631,12 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::CloseVoiceCall);
     }
 
+    // Answer a voice call the controlled side offered.
+    #[inline]
+    pub fn answer_voice_call(&self, accepted: bool) {
+        self.send(Data::AnswerVoiceCall(accepted));
+    }
+
     pub fn send_selected_session_id(&self, sid: String) {
         if let Ok(sid) = sid.parse::<u32>() {
             self.lc.write().unwrap().selected_windows_session_id = Some(sid);
@@ -1752,6 +1758,13 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     fn clipboard(&self, content: String);
+    // A remote PNG image clipboard payload, for UIs that can write it to the
+    // system pasteboard (OpenHarmony controller).
+    #[cfg(target_env = "ohos")]
+    fn clipboard_image_png(&self, content: Vec<u8>) {}
+    // A remote HTML clipboard payload (OpenHarmony controller).
+    #[cfg(target_env = "ohos")]
+    fn clipboard_html(&self, _html: String) {}
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
     fn portable_service_running(&self, running: bool);
