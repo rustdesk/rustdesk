@@ -114,10 +114,16 @@ void showServerSettingsWithValue(
               ? profiles[selectedProfile!].$1
               : '');
       if (name == null || name.isEmpty) return;
+      // same normalization as setServerConfig, so the profile matches once applied
+      String strip(String s) {
+        s = s.trim();
+        return s.endsWith('/') ? s.substring(0, s.length - 1) : s;
+      }
+
       final sc = ServerConfig(
-          idServer: idCtrl.text,
-          relayServer: relayCtrl.text,
-          apiServer: apiCtrl.text,
+          idServer: strip(idCtrl.text),
+          relayServer: strip(relayCtrl.text),
+          apiServer: strip(apiCtrl.text),
           key: keyCtrl.text);
       var i = profiles.indexWhere((p) => p.$1 == name);
       if (i < 0) {
@@ -135,8 +141,8 @@ void showServerSettingsWithValue(
       final i = selectedProfile;
       if (i == null || i < 0) return;
       profiles.removeAt(i);
-      await _saveServerProfiles(profiles);
       setState(() => selectedProfile = null);
+      await _saveServerProfiles(profiles);
     }
 
     Widget buildProfileRow() {
