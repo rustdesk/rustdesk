@@ -380,13 +380,17 @@ pub fn close(id: i32) {
 }
 
 // A voice call offered from the controlled side: the connection manager asks
-// the connection to offer it to the controlling peer.
+// the connection to offer it to the controlling peer. Returns false when the
+// connection id is unknown so the caller can report the failure.
 #[inline]
 #[cfg(not(target_os = "ios"))]
-pub fn request_voice_call(id: i32) {
+pub fn request_voice_call(id: i32) -> bool {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::NewVoiceCall));
-    };
+        true
+    } else {
+        false
+    }
 }
 
 /// Like `close`, but says the CM's WINDOW closed rather than a person disconnecting this peer.
