@@ -119,10 +119,10 @@ async fn windows_ipc_rejects_untrusted_server_before_sending() {
 
 #[tokio::test]
 async fn windows_ipc_allows_client_communication() {
-    let (path, mut incoming) = listener(super::listener_security_attributes().unwrap());
-    let mut client = as_untrusted_client(|| super::open_pipe(&path)).unwrap();
-    let mut server = incoming.next().await.unwrap().unwrap();
     timeout(TEST_TIMEOUT, async {
+        let (path, mut incoming) = listener(super::listener_security_attributes().unwrap());
+        let mut client = as_untrusted_client(|| super::open_pipe(&path)).unwrap();
+        let mut server = incoming.next().await.unwrap().unwrap();
         client.write_all(MESSAGE).await.unwrap();
         let mut received = vec![0u8; MESSAGE.len()];
         server.read_exact(&mut received).await.unwrap();
@@ -130,8 +130,8 @@ async fn windows_ipc_allows_client_communication() {
         let mut reply = vec![0u8; MESSAGE.len()];
         client.read_exact(&mut reply).await.unwrap();
         assert_eq!(reply, MESSAGE);
+        assert!(super::connect(&path, "").await.is_ok());
     })
     .await
-    .unwrap();
-    assert!(super::connect(&path, "").await.is_ok());
+    .expect("Windows IPC client communication test timed out");
 }
