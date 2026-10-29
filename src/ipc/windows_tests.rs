@@ -79,38 +79,42 @@ async fn windows_ipc_rejects_additional_untrusted_instances() {
 
 #[tokio::test]
 async fn windows_ipc_rejects_untrusted_server_before_sending() {
-    {
-        let (path, _incoming) = listener(super::listener_security_attributes().unwrap());
-        let result = super::connect(&path, crate::POSTFIX_SERVICE).await;
-        assert_eq!(
-            result.is_ok(),
-            crate::platform::windows::is_root(),
-            "restrictive permissions alone must not authenticate a non-SYSTEM owner"
-        );
-    }
-    for postfix in [crate::POSTFIX_SERVICE, ""] {
-        let owner = crate::platform::windows::current_process_user_sid_string().unwrap();
-        let attributes =
-            SecurityAttributes::from_sddl(&format!("O:{owner}D:P(A;;GA;;;WD)")).unwrap();
-        let (path, mut incoming) = listener(attributes);
-        let result = super::connect(&path, postfix).await;
-        let error = result.expect_err("a rogue server must not receive a usable client connection");
-        if postfix.is_empty() {
+    timeout(TEST_TIMEOUT, async {
+        {
+            let (path, _incoming) = listener(super::listener_security_attributes().unwrap());
+            let result = super::connect(&path, crate::POSTFIX_SERVICE).await;
             assert_eq!(
-                error.to_string(),
-                "IPC server grants untrusted users more than client access"
+                result.is_ok(),
+                crate::platform::windows::is_root(),
+                "restrictive permissions alone must not authenticate a non-SYSTEM owner"
             );
         }
-        let mut server = incoming.next().await.unwrap().unwrap();
-        let mut received = [0u8; 1];
-        match timeout(TEST_TIMEOUT, server.read(&mut received))
-            .await
-            .unwrap()
-        {
-            Ok(length) => assert_eq!(length, 0, "authentication must not send application data"),
-            Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe),
+        for postfix in [crate::POSTFIX_SERVICE, ""] {
+            let owner = crate::platform::windows::current_process_user_sid_string().unwrap();
+            let attributes =
+                SecurityAttributes::from_sddl(&format!("O:{owner}D:P(A;;GA;;;WD)")).unwrap();
+            let (path, mut incoming) = listener(attributes);
+            let result = super::connect(&path, postfix).await;
+            let error =
+                result.expect_err("a rogue server must not receive a usable client connection");
+            if postfix.is_empty() {
+                assert_eq!(
+                    error.to_string(),
+                    "IPC server grants untrusted users more than client access"
+                );
+            }
+            let mut server = incoming.next().await.unwrap().unwrap();
+            let mut received = [0u8; 1];
+            match server.read(&mut received).await {
+                Ok(length) => {
+                    assert_eq!(length, 0, "authentication must not send application data")
+                }
+                Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe),
+            }
         }
-    }
+    })
+    .await
+    .expect("Windows IPC server rejection test timed out");
 }
 
 #[tokio::test]
