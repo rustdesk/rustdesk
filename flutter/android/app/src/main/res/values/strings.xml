@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">远程协助</string>
-    <string name="accessibility_service_description">Allow other devices to control your phone using virtual touch, when RustDesk screen sharing is established</string>
-    <string name="foreground_service_special_use_subtype">Keeps the RustDesk remote desktop host available for authorized unattended connections and foreground notifications without starting screen capture before user approval.</string>
+   <string name="app_name">远程协助</string>
+    <string name="accessibility_service_description">远程协助屏幕共享建立后，允许其他设备通过虚拟触控操作您的手机。</string>
+    <string name="foreground_service_special_use_subtype">保持远程协助服务在后台可用，以便已授权设备连接并显示前台通知；在用户确认前不会开始屏幕录制。</string>
 </resources>
