@@ -47,7 +47,7 @@ typedef void (*fn_ohos_set_callbacks_t)(rd_event_cb_t event_cb, rd_rgba_cb_t rgb
 typedef void (*fn_ohos_free_string_t)(char* s);
 typedef const char* (*fn_ohos_version_t)(void);
 
-typedef char* (*fn_ohos_session_new_t)(const char* peer_id, int32_t is_file_transfer,
+typedef char* (*fn_ohos_session_new_t)(const char* peer_id, int32_t session_kind,
                                        const char* password, int32_t force_relay);
 typedef int32_t (*fn_ohos_session_start_t)(const char* uuid);
 typedef int32_t (*fn_ohos_session_login_t)(const char* uuid, const char* password,
@@ -81,6 +81,45 @@ typedef int32_t (*fn_ohos_read_dir_t)(const char* uuid, const char* path,
                                       int32_t include_hidden, int32_t is_remote);
 typedef char* (*fn_ohos_get_option_t)(const char* key);
 typedef int32_t (*fn_ohos_set_option_t)(const char* key, const char* value);
+typedef int32_t (*fn_ohos_record_screen_t)(const char* uuid, int32_t start);
+typedef int32_t (*fn_ohos_request_voice_call_t)(const char* uuid);
+typedef int32_t (*fn_ohos_close_voice_call_t)(const char* uuid);
+typedef int32_t (*fn_ohos_answer_voice_call_t)(const char* uuid, int32_t accept);
+typedef int32_t (*fn_ohos_send_clipboard_image_png_t)(const char* uuid, const char* png_base64);
+
+// Display options (quality / codec preference / view-only), contract v M2.
+typedef char* (*fn_ohos_session_get_option_t)(const char* uuid, const char* key);
+typedef int32_t (*fn_ohos_session_set_option_t)(const char* uuid, const char* key,
+                                                const char* value);
+typedef int32_t (*fn_ohos_save_image_quality_t)(const char* uuid, const char* value);
+typedef int32_t (*fn_ohos_save_custom_image_quality_t)(const char* uuid, int32_t quality);
+typedef int32_t (*fn_ohos_set_custom_fps_t)(const char* uuid, int32_t fps);
+typedef int32_t (*fn_ohos_toggle_option_t)(const char* uuid, const char* name);
+typedef int32_t (*fn_ohos_get_toggle_option_t)(const char* uuid, const char* name);
+typedef int32_t (*fn_ohos_update_supported_decodings_t)(const char* uuid);
+typedef char* (*fn_ohos_alternative_codecs_t)(const char* uuid);
+
+// Controlled side (controlled peer), contract v M3.
+typedef int32_t (*fn_ohos_server_start_t)(void);
+typedef int32_t (*fn_ohos_server_start_service_t)(void);
+typedef int32_t (*fn_ohos_server_stop_service_t)(void);
+typedef char* (*fn_ohos_get_server_id_t)(void);
+typedef char* (*fn_ohos_get_server_password_t)(void);
+typedef int32_t (*fn_ohos_update_server_password_t)(void);
+typedef int32_t (*fn_ohos_has_permanent_password_t)(void);
+typedef int32_t (*fn_ohos_server_authorize_t)(int32_t id, int32_t accept);
+typedef int32_t (*fn_ohos_server_close_connection_t)(int32_t id);
+typedef int32_t (*fn_ohos_cm_handle_incoming_voice_call_t)(int32_t id, int32_t accept);
+typedef int32_t (*fn_ohos_cm_close_voice_call_t)(int32_t id);
+typedef int32_t (*fn_ohos_cm_request_voice_call_t)(int32_t id);
+typedef int32_t (*fn_ohos_server_switch_permission_t)(int32_t id, const char* name,
+                                                      int32_t enabled);
+typedef int32_t (*fn_ohos_server_send_chat_t)(int32_t id, const char* text);
+typedef int32_t (*fn_ohos_server_push_clipboard_t)(const char* text, const char* html);
+typedef int32_t (*fn_ohos_capture_start_t)(int32_t width, int32_t height);
+typedef int32_t (*fn_ohos_capture_stop_t)(void);
+typedef int32_t (*fn_ohos_capture_mic_t)(int32_t enable);
+typedef int32_t (*fn_ohos_capture_running_t)(void);
 
 struct RustFns {
     fn_ohos_init_t init = nullptr;
@@ -106,6 +145,20 @@ struct RustFns {
     fn_ohos_read_dir_t read_dir = nullptr;
     fn_ohos_get_option_t get_option = nullptr;
     fn_ohos_set_option_t set_option = nullptr;
+    fn_ohos_record_screen_t record_screen = nullptr;
+    fn_ohos_request_voice_call_t request_voice_call = nullptr;
+    fn_ohos_close_voice_call_t close_voice_call = nullptr;
+    fn_ohos_answer_voice_call_t answer_voice_call = nullptr;
+    fn_ohos_send_clipboard_image_png_t send_clipboard_image_png = nullptr;
+    fn_ohos_session_get_option_t session_get_option = nullptr;
+    fn_ohos_session_set_option_t session_set_option = nullptr;
+    fn_ohos_save_image_quality_t save_image_quality = nullptr;
+    fn_ohos_save_custom_image_quality_t save_custom_image_quality = nullptr;
+    fn_ohos_set_custom_fps_t set_custom_fps = nullptr;
+    fn_ohos_toggle_option_t toggle_option = nullptr;
+    fn_ohos_get_toggle_option_t get_toggle_option = nullptr;
+    fn_ohos_update_supported_decodings_t update_supported_decodings = nullptr;
+    fn_ohos_alternative_codecs_t alternative_codecs = nullptr;
 };
 
 static RustFns g_fns;
@@ -159,6 +212,22 @@ static bool EnsureLib() {
         {"ohos_read_dir", reinterpret_cast<void**>(&g_fns.read_dir)},
         {"ohos_get_option", reinterpret_cast<void**>(&g_fns.get_option)},
         {"ohos_set_option", reinterpret_cast<void**>(&g_fns.set_option)},
+        {"ohos_record_screen", reinterpret_cast<void**>(&g_fns.record_screen)},
+        {"ohos_request_voice_call", reinterpret_cast<void**>(&g_fns.request_voice_call)},
+        {"ohos_close_voice_call", reinterpret_cast<void**>(&g_fns.close_voice_call)},
+        {"ohos_send_clipboard_image_png",
+         reinterpret_cast<void**>(&g_fns.send_clipboard_image_png)},
+        {"ohos_session_get_option", reinterpret_cast<void**>(&g_fns.session_get_option)},
+        {"ohos_session_set_option", reinterpret_cast<void**>(&g_fns.session_set_option)},
+        {"ohos_save_image_quality", reinterpret_cast<void**>(&g_fns.save_image_quality)},
+        {"ohos_save_custom_image_quality",
+         reinterpret_cast<void**>(&g_fns.save_custom_image_quality)},
+        {"ohos_set_custom_fps", reinterpret_cast<void**>(&g_fns.set_custom_fps)},
+        {"ohos_toggle_option", reinterpret_cast<void**>(&g_fns.toggle_option)},
+        {"ohos_get_toggle_option", reinterpret_cast<void**>(&g_fns.get_toggle_option)},
+        {"ohos_update_supported_decodings",
+         reinterpret_cast<void**>(&g_fns.update_supported_decodings)},
+        {"ohos_alternative_codecs", reinterpret_cast<void**>(&g_fns.alternative_codecs)},
     };
     bool ok = true;
     for (const Entry& e : table) {
@@ -550,9 +619,9 @@ static napi_value NapiSessionNew(napi_env env, napi_callback_info info) {
     }
     std::string peer_id;
     std::string password;
-    bool is_file_transfer = false;
+    int32_t session_kind = 0;
     bool force_relay = false;
-    if (!GetArgStr(env, args.argv[0], &peer_id) || !GetArgBool(env, args.argv[1], &is_file_transfer) ||
+    if (!GetArgStr(env, args.argv[0], &peer_id) || !GetArgInt32(env, args.argv[1], &session_kind) ||
         !GetArgStr(env, args.argv[2], &password) || !GetArgBool(env, args.argv[3], &force_relay)) {
         return ThrowErr(env, "sessionNew: invalid arguments");
     }
@@ -561,7 +630,7 @@ static napi_value NapiSessionNew(napi_env env, napi_callback_info info) {
         return nullptr;
     }
     char* uuid = reinterpret_cast<fn_ohos_session_new_t>(fn)(
-        peer_id.c_str(), is_file_transfer ? 1 : 0, password.c_str(), force_relay ? 1 : 0);
+        peer_id.c_str(), session_kind, password.c_str(), force_relay ? 1 : 0);
     std::string result = uuid != nullptr ? uuid : "";
     fn_ohos_free_string_t free_fn = g_fns.free_string;
     if (uuid != nullptr && free_fn != nullptr) {
@@ -969,6 +1038,532 @@ static napi_value NapiReadDir(napi_env env, napi_callback_info info) {
 // Module registration
 // ---------------------------------------------------------------------------
 
+static napi_value NapiRecordScreen(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    bool start = false;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgBool(env, args.argv[1], &start)) {
+        return ThrowErr(env, "recordScreen: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_record_screen",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_record_screen_t>(fn)(
+                                   uuid.c_str(), start ? 1 : 0);
+                           });
+}
+
+static napi_value NapiRequestVoiceCall(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 1, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    if (!GetArgStr(env, args.argv[0], &uuid)) {
+        return ThrowErr(env, "requestVoiceCall: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_request_voice_call",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_request_voice_call_t>(fn)(
+                                   uuid.c_str());
+                           });
+}
+
+static napi_value NapiCloseVoiceCall(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 1, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    if (!GetArgStr(env, args.argv[0], &uuid)) {
+        return ThrowErr(env, "closeVoiceCall: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_close_voice_call",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_close_voice_call_t>(fn)(
+                                   uuid.c_str());
+                           });
+}
+
+static napi_value NapiSendClipboardImagePng(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    std::string png_base64;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgStr(env, args.argv[1], &png_base64)) {
+        return ThrowErr(env, "sendClipboardImagePng: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_send_clipboard_image_png",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_send_clipboard_image_png_t>(fn)(
+                                   uuid.c_str(), png_base64.c_str());
+                           });
+}
+
+// Display options: quality / codec preference / view-only. String returns
+// follow the getOption pattern (caller frees via ohos_free_string).
+static napi_value NapiSessionGetOption(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    std::string key;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgStr(env, args.argv[1], &key)) {
+        return ThrowErr(env, "sessionGetOption: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_session_get_option");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    char* value = reinterpret_cast<fn_ohos_session_get_option_t>(fn)(uuid.c_str(), key.c_str());
+    std::string result = value != nullptr ? value : "";
+    fn_ohos_free_string_t free_fn = g_fns.free_string;
+    if (value != nullptr && free_fn != nullptr) {
+        free_fn(value);
+    }
+    napi_value out = nullptr;
+    if (napi_create_string_utf8(env, result.c_str(), result.size(), &out) != napi_ok) {
+        return ThrowErr(env, "sessionGetOption: failed to create result string");
+    }
+    return out;
+}
+
+static napi_value NapiSessionSetOption(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 3, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    std::string key;
+    std::string value;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgStr(env, args.argv[1], &key) ||
+        !GetArgStr(env, args.argv[2], &value)) {
+        return ThrowErr(env, "sessionSetOption: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_session_set_option",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_session_set_option_t>(fn)(
+                                   uuid.c_str(), key.c_str(), value.c_str());
+                           });
+}
+
+static napi_value NapiSaveImageQuality(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    std::string value;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgStr(env, args.argv[1], &value)) {
+        return ThrowErr(env, "saveImageQuality: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_save_image_quality",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_save_image_quality_t>(fn)(
+                                   uuid.c_str(), value.c_str());
+                           });
+}
+
+static napi_value NapiSaveCustomImageQuality(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    int32_t quality = 0;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgInt32(env, args.argv[1], &quality)) {
+        return ThrowErr(env, "saveCustomImageQuality: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_save_custom_image_quality",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_save_custom_image_quality_t>(fn)(
+                                   uuid.c_str(), quality);
+                           });
+}
+
+static napi_value NapiSetCustomFps(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    int32_t fps = 0;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgInt32(env, args.argv[1], &fps)) {
+        return ThrowErr(env, "setCustomFps: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_set_custom_fps",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_set_custom_fps_t>(fn)(uuid.c_str(),
+                                                                                     fps);
+                           });
+}
+
+static napi_value NapiToggleOption(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    std::string name;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgStr(env, args.argv[1], &name)) {
+        return ThrowErr(env, "toggleOption: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_toggle_option",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_toggle_option_t>(fn)(uuid.c_str(),
+                                                                                    name.c_str());
+                           });
+}
+
+static napi_value NapiGetToggleOption(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    std::string name;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgStr(env, args.argv[1], &name)) {
+        return ThrowErr(env, "getToggleOption: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_get_toggle_option",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_get_toggle_option_t>(fn)(
+                                   uuid.c_str(), name.c_str());
+                           });
+}
+
+static napi_value NapiUpdateSupportedDecodings(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 1, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    if (!GetArgStr(env, args.argv[0], &uuid)) {
+        return ThrowErr(env, "updateSupportedDecodings: invalid arguments");
+    }
+    return CallIntWithUuid(env, info, "ohos_update_supported_decodings",
+                           [&](void* fn) -> int32_t {
+                               return reinterpret_cast<fn_ohos_update_supported_decodings_t>(fn)(
+                                   uuid.c_str());
+                           });
+}
+
+static napi_value NapiAlternativeCodecs(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 1, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    if (!GetArgStr(env, args.argv[0], &uuid)) {
+        return ThrowErr(env, "alternativeCodecs: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_alternative_codecs");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    char* value = reinterpret_cast<fn_ohos_alternative_codecs_t>(fn)(uuid.c_str());
+    std::string result = value != nullptr ? value : "";
+    fn_ohos_free_string_t free_fn = g_fns.free_string;
+    if (value != nullptr && free_fn != nullptr) {
+        free_fn(value);
+    }
+    napi_value out = nullptr;
+    if (napi_create_string_utf8(env, result.c_str(), result.size(), &out) != napi_ok) {
+        return ThrowErr(env, "alternativeCodecs: failed to create result string");
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// Controlled side (controlled peer)
+// ---------------------------------------------------------------------------
+
+static napi_value NapiServerStart(napi_env env, napi_callback_info info) {
+    (void)info;
+    void* fn = RequireFn(env, "ohos_server_start");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_server_start_t>(fn)());
+}
+
+static napi_value NapiServerStartService(napi_env env, napi_callback_info info) {
+    (void)info;
+    void* fn = RequireFn(env, "ohos_server_start_service");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_server_start_service_t>(fn)());
+}
+
+static napi_value NapiServerStopService(napi_env env, napi_callback_info info) {
+    (void)info;
+    void* fn = RequireFn(env, "ohos_server_stop_service");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_server_stop_service_t>(fn)());
+}
+
+// Shared body for the zero-argument string getters (frees via ohos_free_string).
+static napi_value CallStringNoArgs(napi_env env, const char* symbol) {
+    void* fn = RequireFn(env, symbol);
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    char* value = reinterpret_cast<fn_ohos_get_server_id_t>(fn)();
+    std::string result = value != nullptr ? value : "";
+    fn_ohos_free_string_t free_fn = g_fns.free_string;
+    if (value != nullptr && free_fn != nullptr) {
+        free_fn(value);
+    }
+    napi_value out = nullptr;
+    if (napi_create_string_utf8(env, result.c_str(), result.size(), &out) != napi_ok) {
+        return ThrowErr(env, "string getter: failed to create result string");
+    }
+    return out;
+}
+
+static napi_value NapiGetServerId(napi_env env, napi_callback_info info) {
+    (void)info;
+    return CallStringNoArgs(env, "ohos_get_server_id");
+}
+
+static napi_value NapiGetServerPassword(napi_env env, napi_callback_info info) {
+    (void)info;
+    return CallStringNoArgs(env, "ohos_get_server_password");
+}
+
+static napi_value NapiUpdateServerPassword(napi_env env, napi_callback_info info) {
+    (void)info;
+    void* fn = RequireFn(env, "ohos_update_server_password");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_update_server_password_t>(fn)());
+}
+
+static napi_value NapiHasPermanentPassword(napi_env env, napi_callback_info info) {
+    (void)info;
+    void* fn = RequireFn(env, "ohos_has_permanent_password");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_has_permanent_password_t>(fn)());
+}
+
+static napi_value NapiServerAuthorize(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    int32_t id = 0;
+    bool accept = false;
+    if (!GetArgInt32(env, args.argv[0], &id) || !GetArgBool(env, args.argv[1], &accept)) {
+        return ThrowErr(env, "serverAuthorize: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_server_authorize");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_server_authorize_t>(fn)(id, accept ? 1 : 0));
+}
+
+static napi_value NapiServerCloseConnection(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 1, &args)) {
+        return nullptr;
+    }
+    int32_t id = 0;
+    if (!GetArgInt32(env, args.argv[0], &id)) {
+        return ThrowErr(env, "serverCloseConnection: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_server_close_connection");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_server_close_connection_t>(fn)(id));
+}
+
+static napi_value NapiAnswerVoiceCall(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    bool accept = false;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgBool(env, args.argv[1], &accept)) {
+        return ThrowErr(env, "answerVoiceCall: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_answer_voice_call");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(
+        env, reinterpret_cast<fn_ohos_answer_voice_call_t>(fn)(uuid.c_str(), accept ? 1 : 0));
+}
+
+static napi_value NapiCmHandleIncomingVoiceCall(napi_env env, napi_callback_info info) {    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    int32_t id = 0;
+    bool accept = false;
+    if (!GetArgInt32(env, args.argv[0], &id) || !GetArgBool(env, args.argv[1], &accept)) {
+        return ThrowErr(env, "cmHandleIncomingVoiceCall: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_cm_handle_incoming_voice_call");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(
+        env, reinterpret_cast<fn_ohos_cm_handle_incoming_voice_call_t>(fn)(id, accept ? 1 : 0));
+}
+
+static napi_value NapiCmCloseVoiceCall(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 1, &args)) {
+        return nullptr;
+    }
+    int32_t id = 0;
+    if (!GetArgInt32(env, args.argv[0], &id)) {
+        return ThrowErr(env, "cmCloseVoiceCall: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_cm_close_voice_call");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_cm_close_voice_call_t>(fn)(id));
+}
+
+static napi_value NapiCmRequestVoiceCall(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 1, &args)) {
+        return nullptr;
+    }
+    int32_t id = 0;
+    if (!GetArgInt32(env, args.argv[0], &id)) {
+        return ThrowErr(env, "cmRequestVoiceCall: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_cm_request_voice_call");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_cm_request_voice_call_t>(fn)(id));
+}
+
+static napi_value NapiServerSwitchPermission(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 3, &args)) {
+        return nullptr;
+    }
+    int32_t id = 0;
+    std::string name;
+    bool enabled = false;
+    if (!GetArgInt32(env, args.argv[0], &id) || !GetArgStr(env, args.argv[1], &name) ||
+        !GetArgBool(env, args.argv[2], &enabled)) {
+        return ThrowErr(env, "serverSwitchPermission: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_server_switch_permission");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_server_switch_permission_t>(fn)(
+                              id, name.c_str(), enabled ? 1 : 0));
+}
+
+static napi_value NapiServerSendChat(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    int32_t id = 0;
+    std::string text;
+    if (!GetArgInt32(env, args.argv[0], &id) || !GetArgStr(env, args.argv[1], &text)) {
+        return ThrowErr(env, "serverSendChat: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_server_send_chat");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(
+        env, reinterpret_cast<fn_ohos_server_send_chat_t>(fn)(id, text.c_str()));
+}
+
+static napi_value NapiServerPushClipboard(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    std::string text;
+    std::string html;
+    if (!GetArgStr(env, args.argv[0], &text) || !GetArgStr(env, args.argv[1], &html)) {
+        return ThrowErr(env, "serverPushClipboard: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_server_push_clipboard");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(
+        env, reinterpret_cast<fn_ohos_server_push_clipboard_t>(fn)(text.c_str(), html.c_str()));
+}
+
+static napi_value NapiCaptureStart(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 2, &args)) {
+        return nullptr;
+    }
+    int32_t width = 0;
+    int32_t height = 0;
+    if (!GetArgInt32(env, args.argv[0], &width) || !GetArgInt32(env, args.argv[1], &height)) {
+        return ThrowErr(env, "captureStart: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_capture_start");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_capture_start_t>(fn)(width, height));
+}
+
+static napi_value NapiCaptureStop(napi_env env, napi_callback_info info) {
+    (void)info;
+    void* fn = RequireFn(env, "ohos_capture_stop");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_capture_stop_t>(fn)());
+}
+
+static napi_value NapiCaptureMic(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 1, &args)) {
+        return nullptr;
+    }
+    bool enable = false;
+    if (!GetArgBool(env, args.argv[0], &enable)) {
+        return ThrowErr(env, "captureMic: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_capture_mic");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_capture_mic_t>(fn)(enable ? 1 : 0));
+}
+
+static napi_value NapiCaptureRunning(napi_env env, napi_callback_info info) {
+    (void)info;
+    void* fn = RequireFn(env, "ohos_capture_running");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    return MakeInt32(env, reinterpret_cast<fn_ohos_capture_running_t>(fn)());
+}
+
 EXTERN_C_START
 static napi_value EntryInit(napi_env env, napi_value exports) {
     struct Prop {
@@ -998,7 +1593,40 @@ static napi_value EntryInit(napi_env env, napi_value exports) {
         {"readDir", NapiReadDir},
         {"getOption", NapiGetOption},
         {"setOption", NapiSetOption},
+        {"recordScreen", NapiRecordScreen},
+        {"requestVoiceCall", NapiRequestVoiceCall},
+        {"closeVoiceCall", NapiCloseVoiceCall},
+        {"sendClipboardImagePng", NapiSendClipboardImagePng},
+        {"sessionGetOption", NapiSessionGetOption},
+        {"sessionSetOption", NapiSessionSetOption},
+        {"saveImageQuality", NapiSaveImageQuality},
+        {"saveCustomImageQuality", NapiSaveCustomImageQuality},
+        {"setCustomFps", NapiSetCustomFps},
+        {"toggleOption", NapiToggleOption},
+        {"getToggleOption", NapiGetToggleOption},
+        {"updateSupportedDecodings", NapiUpdateSupportedDecodings},
+        {"alternativeCodecs", NapiAlternativeCodecs},
         {"version", NapiVersion},
+        {"serverStart", NapiServerStart},
+        {"serverStartService", NapiServerStartService},
+        {"serverStopService", NapiServerStopService},
+        {"getServerId", NapiGetServerId},
+        {"getServerPassword", NapiGetServerPassword},
+        {"updateServerPassword", NapiUpdateServerPassword},
+        {"hasPermanentPassword", NapiHasPermanentPassword},
+        {"serverAuthorize", NapiServerAuthorize},
+        {"serverCloseConnection", NapiServerCloseConnection},
+        {"cmHandleIncomingVoiceCall", NapiCmHandleIncomingVoiceCall},
+        {"cmCloseVoiceCall", NapiCmCloseVoiceCall},
+        {"cmRequestVoiceCall", NapiCmRequestVoiceCall},
+        {"answerVoiceCall", NapiAnswerVoiceCall},
+        {"serverSwitchPermission", NapiServerSwitchPermission},
+        {"serverSendChat", NapiServerSendChat},
+        {"serverPushClipboard", NapiServerPushClipboard},
+        {"captureStart", NapiCaptureStart},
+        {"captureStop", NapiCaptureStop},
+        {"captureMic", NapiCaptureMic},
+        {"captureRunning", NapiCaptureRunning},
     };
     for (const Prop& p : props) {
         napi_value fn = nullptr;

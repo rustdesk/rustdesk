@@ -2,8 +2,9 @@ import { router, promptAction } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { preferences } from '@kit.ArkData';
-import { ffiSessionNew, ffiSessionStart, ffiGetOption, ffiSetOption } from '../ohos_ffi';
-import { evStr, evBool, parseJsonArray } from '../model/Utils';
+import { ffiSessionNew, ffiSessionStart, ffiGetOption, ffiSetOption,
+         SESSION_KIND_CONTROL, SESSION_KIND_FILE_TRANSFER, SESSION_KIND_VIEW_CAMERA } from '../ohos_ffi';
+import { evStr, evBool, evNum, parseJsonArray } from '../model/Utils';
 
 const LOG_DOMAIN = 0x5253;
 const TAG = 'RustDeskIndex';
@@ -21,7 +22,7 @@ const RECENT_MAX = 10;
 
 class RecentEntry {
   peerId: string = '';
-  isFileTransfer: boolean = false;
+  sessionKind: number = 0;
 }
 
 @Entry
@@ -54,7 +55,12 @@ struct Index {
         }
         const e = new RecentEntry();
         e.peerId = peerId;
-        e.isFileTransfer = evBool(it['isFileTransfer']);
+        // Legacy entries stored isFileTransfer.
+        e.sessionKind = evBool(it['isFileTransfer']) ? SESSION_KIND_FILE_TRANSFER
+                                                     : evNum(it['sessionKind']);
+        if (e.sessionKind < 0 || e.sessionKind > 2) {
+          e.sessionKind = SESSION_KIND_CONTROL;
+        }
         list.push(e);
       }
       this.recent = list.slice(0, RECENT_MAX);
@@ -88,19 +94,19 @@ struct Index {
     promptAction.showToast({ message: $r('app.string.settings_saved'), duration: 2000 });
   }
 
-  private addRecent(peerId: string, isFileTransfer: boolean): void {
+  private addRecent(peerId: string, sessionKind: number): void {
     const kept = this.recent.filter((r: RecentEntry): boolean => {
-      return !(r.peerId === peerId && r.isFileTransfer === isFileTransfer);
+      return !(r.peerId === peerId && r.sessionKind === sessionKind);
     });
     const e = new RecentEntry();
     e.peerId = peerId;
-    e.isFileTransfer = isFileTransfer;
+    e.sessionKind = sessionKind;
     kept.unshift(e);
     this.recent = kept.slice(0, RECENT_MAX);
     this.saveRecent();
   }
 
-  private connect(isFileTransfer: boolean): void {
+  private connect(sessionKind: number): void {
     // RustDesk IDs are numeric; strip the grouping spaces the IME/user may
     // insert ("26 299 697"), mirroring the desktop clients.
     const pid = this.peerIdInput.replace(/\s+/g, '');
@@ -113,7 +119,7 @@ struct Index {
     }
     this.connecting = true;
     this.connectingId = pid;
-    const uuid = ffiSessionNew(pid, isFileTransfer, '', false);
+    const uuid = ffiSessionNew(pid, sessionKind, '', false);
     if (uuid.length === 0) {
       this.connecting = false;
       promptAction.showToast({ message: $r('app.string.create_session_failed'), duration: 3000 });
@@ -121,12 +127,13 @@ struct Index {
     }
     const rc = ffiSessionStart(uuid);
     hilog.info(LOG_DOMAIN, TAG, 'session %{public}s start -> %{public}d', uuid, rc);
-    this.addRecent(pid, isFileTransfer);
-    const url = isFileTransfer ? 'pages/FileTransferPage' : 'pages/RemotePage';
+    this.addRecent(pid, sessionKind);
+    const url = sessionKind === SESSION_KIND_FILE_TRANSFER ? 'pages/FileTransferPage'
+                                                           : 'pages/RemotePage';
     const params = new SessionParams();
     params.uuid = uuid;
     params.peerId = pid;
-    params.isFileTransfer = isFileTransfer;
+    params.sessionKind = sessionKind;
     router.pushUrl({ url: url, params: params }).catch((e: BusinessError) => {
       hilog.error(LOG_DOMAIN, TAG, 'pushUrl failed: %{public}s', `${e.message}`);
       this.connecting = false;
@@ -159,7 +166,7 @@ struct Index {
           this.peerIdInput = v;
         })
         .onSubmit(() => {
-          this.connect(false);
+          this.connect(SESSION_KIND_CONTROL);
         })
 
       Row({ space: 12 }) {
@@ -167,18 +174,39 @@ struct Index {
           .layoutWeight(1)
           .height(44)
           .onClick(() => {
-            this.connect(false);
+            this.connect(SESSION_KIND_CONTROL);
           })
         Button($r('app.string.file_transfer'))
           .layoutWeight(1)
           .height(44)
           .backgroundColor('#3A7BD5')
           .onClick(() => {
-            this.connect(true);
+            this.connect(SESSION_KIND_FILE_TRANSFER);
           })
       }
       .width('86%')
       .margin({ top: 12 })
+
+      Button($r('app.string.view_camera'))
+        .width('86%')
+        .height(44)
+        .backgroundColor('#5A8F5A')
+        .margin({ top: 12 })
+        .onClick(() => {
+          this.connect(SESSION_KIND_VIEW_CAMERA);
+        })
+
+      Button($r('app.string.share_screen_entry'))
+        .width('86%')
+        .height(44)
+        .fontSize(17)
+        .backgroundColor('#1A6AF5')
+        .margin({ top: 12 })
+        .onClick(() => {
+          router.pushUrl({ url: 'pages/SharePage' }).catch((e: BusinessError) => {
+            hilog.error(LOG_DOMAIN, TAG, 'pushUrl SharePage failed: %{public}s', `${e.message}`);
+          });
+        })
 
       if (this.connecting) {
         Row({ space: 8 }) {
@@ -203,7 +231,10 @@ struct Index {
                 Text(r.peerId)
                   .fontSize(16)
                   .layoutWeight(1)
-                Text(r.isFileTransfer ? $r('app.string.file_transfer') : $r('app.string.remote_control'))
+                Text(r.sessionKind === SESSION_KIND_FILE_TRANSFER
+                     ? $r('app.string.file_transfer')
+                     : (r.sessionKind === SESSION_KIND_VIEW_CAMERA
+                        ? $r('app.string.view_camera') : $r('app.string.remote_control')))
                   .fontSize(12)
                   .fontColor('#3A7BD5')
               }
@@ -213,10 +244,10 @@ struct Index {
               .backgroundColor('#F2F3F5')
               .onClick(() => {
                 this.peerIdInput = r.peerId;
-                this.connect(r.isFileTransfer);
+                this.connect(r.sessionKind);
               })
             }
-          }, (r: RecentEntry) => `${r.peerId}_${r.isFileTransfer ? 1 : 0}`)
+          }, (r: RecentEntry) => `${r.peerId}_${r.sessionKind}`)
         }
         .width('86%')
         .layoutWeight(1)
@@ -353,5 +384,5 @@ struct Index {
 class SessionParams {
   uuid: string = '';
   peerId: string = '';
-  isFileTransfer: boolean = false;
+  sessionKind: number = 0;
 }

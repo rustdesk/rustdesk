@@ -33,12 +33,29 @@
 ### 会话生命周期
 | 函数 | 说明 |
 |------|------|
-| `ohos_session_new(peer_id, is_file_transfer: c_int, password, force_relay: c_int) -> *mut c_char` | 创建会话，返回 session uuid 字符串（失败返回空串） |
+| `ohos_session_new(peer_id, session_kind: c_int, password, force_relay: c_int) -> *mut c_char` | 创建会话，返回 session uuid 字符串（失败返回空串）。`session_kind`：`0`=远程控制，`1`=文件传输，`2`=摄像头查看（VIEW_CAMERA） |
 | `ohos_session_start(uuid) -> c_int` | 启动 io_loop（连接、握手） |
 | `ohos_session_login(uuid, password, remember: c_int) -> c_int` | 应答 `input-password` msgbox（OS 用户名/密码桌面流程，M1 传空） |
 | `ohos_session_send2fa(uuid, code, trust_this_device: c_int) -> c_int` | 应答 2FA 验证码 |
 | `ohos_session_reconnect(uuid, force_relay: c_int) -> c_int` | 重连 |
 | `ohos_session_close(uuid) -> c_int` | 关闭会话 |
+
+### 音频 / 语音通话 / 录制
+| 函数 | 说明 |
+|------|------|
+| `ohos_record_screen(uuid, start: c_int) -> c_int` | 开始/停止会话录制（对端须授予 recording 权限；文件落在 `<home>/<AppName>/ScreenRecord`，经 `record_status` 事件回报状态） |
+| `ohos_request_voice_call(uuid) -> c_int` | 发起语音通话请求（对端接受后开始麦克风采集 → opus → 发送；事件见 §3） |
+| `ohos_close_voice_call(uuid) -> c_int` | 挂断语音通话 |
+| `ohos_send_clipboard_image_png(uuid, png_base64) -> c_int` | 发送本机剪贴板图片（PNG 的 base64）到远端 |
+| `ohos_session_get_option(uuid, key) -> *mut c_char` | 读会话级 peer 选项（`image_quality` / `codec-preference` / `custom-fps` / `custom_image_quality` 等），返回串需 `ohos_free_string` 释放 |
+| `ohos_session_set_option(uuid, key, value) -> c_int` | 写会话级 peer 选项（`PeerConfig.options`，与 Flutter `sessionPeerOption` 同路径） |
+| `ohos_save_image_quality(uuid, value) -> c_int` | 切换画质：`low` / `balanced` / `best`（同时向对端发 OptionMessage） |
+| `ohos_save_custom_image_quality(uuid, quality) -> c_int` | 保存自定义码率（10..2000 百分比，画质随之置为 `custom`） |
+| `ohos_set_custom_fps(uuid, fps) -> c_int` | 保存自定义帧率上限（5..120） |
+| `ohos_toggle_option(uuid, name) -> c_int` | 切换会话开关选项（`view-only` / `show-remote-cursor` / `disable-clipboard` 等，含对端 OptionMessage） |
+| `ohos_get_toggle_option(uuid, name) -> c_int` | 查询开关选项状态：1 开 / 0 关 / -1 会话不存在 |
+| `ohos_update_supported_decodings(uuid) -> c_int` | 重新上报本端解码能力（修改 `codec-preference` 后必须调用，对端重协商编码器） |
+| `ohos_alternative_codecs(uuid) -> *mut c_char` | 双端可用编解码 JSON `{"vp8":bool,"av1":bool,"h264":bool,"h265":bool}`（编解码菜单使能），需 `ohos_free_string` |
 
 ### 输入
 | 函数 | 说明 |
@@ -87,6 +104,12 @@ ArkTS M1 需处理（其余事件忽略即可）：
 | `cursor_position` | `x, y`（远端像素坐标） | 远端光标位置更新（可与视频帧同频，注意 UI 侧状态更新开销） |
 | `load_last_job` | `value`（job JSON） | 恢复上次任务（可忽略） |
 | `sync_peer_info` | `displays` | 显示器同步 |
+| `voice_call_waiting` | — | 语音通话请求已发出，等待对端应答 |
+| `voice_call_started` | — | 对端已接受，麦克风采集已开始 |
+| `voice_call_closed` | — | 通话结束（任一方挂断/拒绝） |
+| `record_status` | `start`（"true"/"false"） | 会话录制状态变化（录制实际开始/停止时） |
+| `clipboard_image` | `png`（base64 的 PNG 字节） | 远端剪贴板图片（ImagePng 格式），写入系统剪贴板用 |
+| `clipboard_html` | `html`（HTML 文本） | 远端剪贴板 HTML（MultiClipboards 的 Html 格式），与同消息的 Text 变体一起写入系统剪贴板 |
 
 `update_folder_files.info` 中 `type`：`0`→按 `1` 处理（文件），其余为原始值（dir=2）。
 
@@ -103,11 +126,83 @@ ArkTS M1 需处理（其余事件忽略即可）：
     - 会话期间 `window.setWindowKeepScreenOn(true)` 保活亮屏。
   - 文件传输页：本地面板（`@ohos.file.fs` 列沙箱目录 + `@ohos.file.picker` 导入/导出沙箱外文件）+ 远端面板（`ohos_read_dir`/`update_folder_files`）+ 上传/下载（`ohos_send_files`）+ 进度条。
   - 弹窗：`msgbox` 事件 → 密码/2FA/错误对话框。
-- `module.json5` 权限：`ohos.permission.INTERNET`（+ 文件读取按需）。
+- `module.json5` 权限：`ohos.permission.INTERNET`、`ohos.permission.GET_NETWORK_INFO`、
+  `ohos.permission.MICROPHONE`（语音通话，user_grant，首次通话时请求）。
 
-## 5. Rust 侧已知限制（M1）
+## 5. Rust 侧能力说明（M2）
 
-- 音频播放未实现（`io_loop` 音频帧丢弃）；后续接 OHAudio。
-- 无硬件解码（hwcodec/mediacodec 关闭），VP8/VP9 软解（libvpx）；AV1/H264/H265 后续。
-- 剪贴板仅文本（`clipboard_cb` / `ohos_send_clipboard`）；本机→远端为手动同步（工具栏按钮 → 粘贴弹窗），
-  `pasteboard.getData()` 直读因 READ_PASTEBOARD 为 ACL 受限权限暂不可用（正式签名可申请后替换）。
+- 音频播放：OHAudio renderer（`libohaudio.so`，f32le / 48 kHz），opus 解码 → 重采样 →
+  ring buffer → 渲染回调（`src/client/ohos_audio_player.rs`）。
+- 硬件解码：OH_VideoDecoder 缓冲模式（`libnative_media_vdec.so`），H264/H265 →
+  NV12 → libyuv 转 RGB（`libs/scrap/src/ohos/ohcodec.rs`）；AV1 仍为存桩门控（不可用）。
+- 硬件编码（被控端）：OH_VideoEncoder 缓冲模式（`libnative_media_venc.so`），NV12 →
+  Annex-B H264/H265（`OhCodecEncoder`，CBR，能力探测进程内缓存）；被控
+  `supported_encoding` 据此上报 h264/h265，主控硬解随之自动启用。
+- 语音通话：OHAudio capturer（MIC）→ opus → AudioFrame（`src/ohos_voice_call.rs`）；
+  ArkTS 需先请求 `ohos.permission.MICROPHONE`。
+- 会话录制：Recorder 链路（VP8/VP9 → webm；H264/H265 → mp4，需 hwcodec feature，
+  ohos 当前仅 webm），保存到 `<home>/<AppName>/ScreenRecord`。
+- 剪贴板：文本双向 + 远端→本机图片（`clipboard_image` 事件）+
+  本机→远端图片（`ohos_send_clipboard_image_png`）。
+
+## 6. 被控端 C ABI（M3，`src/ohos_ffi.rs`）
+
+被控端 = RendezvousMediator + 连接服务器 + AVScreenCapture 采集，全部复用
+`src/server.rs` / `src/server/*`（gating 与 Android 同组）。采集在 Rust 内部闭环
+（`libs/scrap/src/ohos/screencap.rs`，OH_ORIGINAL_STREAM 模式，RGBA8888 视频 +
+s16le 48k 音频经 FrameRaw 通道喂给 video/audio service），ArkTS 不参与推帧。
+
+### 服务生命周期
+| 函数 | 说明 |
+|------|------|
+| `ohos_server_start() -> c_int` | 启动被控服务（`crate::start_server(true)`，仅首次生效） |
+| `ohos_server_start_service() -> c_int` | 清除 stop-service 标记并重启 mediator |
+| `ohos_server_stop_service() -> c_int` | 置 stop-service 标记并重启 mediator |
+
+### 凭据展示
+| 函数 | 说明 |
+|------|------|
+| `ohos_get_server_id() -> *mut c_char` | 本机 ID（`Config::get_id`），需 free |
+| `ohos_get_server_password() -> *mut c_char` | 临时密码，需 free |
+| `ohos_update_server_password() -> c_int` | 重新生成临时密码 |
+| `ohos_has_permanent_password() -> c_int` | 是否已设固定密码 |
+
+### 连接管理（CM 通道）
+Rust 侧 `ohos_ffi::connection_manager::start_channel` 与 Android 的
+`flutter.rs::connection_manager::start_channel` 同构（in-process mpsc），
+CM 事件经 event_cb 下发（见 §7）。
+
+| 函数 | 说明 |
+|------|------|
+| `ohos_server_authorize(id, accept) -> c_int` | 应答连接请求（接受 / 拒绝即关闭） |
+| `ohos_server_close_connection(id) -> c_int` | 断开已建立的入站连接 |
+| `ohos_cm_handle_incoming_voice_call(id, accept) -> c_int` | 应答对端发来的语音通话（接受 / 拒绝） |
+| `ohos_cm_close_voice_call(id) -> c_int` | 挂断进行中的语音通话 |
+| `ohos_server_switch_permission(id, name, enabled) -> c_int` | 按连接切换权限 |
+| `ohos_server_send_chat(id, text) -> c_int` | 被控端发消息给对端 |
+| `ohos_server_push_clipboard(text, html) -> c_int` | 本机剪贴板推入被控通道（host 侧） |
+
+### 采集控制
+| 函数 | 说明 |
+|------|------|
+| `ohos_capture_start(w, h) -> c_int` | 启动 AVScreenCapture（弹系统授权 picker），w/h 为 display 尺寸；采集为混合模型：SetDataCallback 收音频/视频 buffer，回调未见视频时泵线程回退轮询 AcquireVideoBuffer（模拟器视频不可用时退避等待） |
+| `ohos_capture_stop() -> c_int` | 停止并释放采集 |
+| `ohos_capture_mic(enable) -> c_int` | 语音通话时开/关麦克风流 |
+| `ohos_capture_running() -> c_int` | 采集是否运行 |
+
+## 7. 被控端事件 JSON（event_cb 复用，`cm_*` / `server_*` 前缀）
+
+| name | 字段 | 用途 |
+|------|------|------|
+| `cm_add_connection` | `client`（JSON 字符串：`{id, authorized, name, peer_id, is_file_transfer, keyboard, clipboard, audio, file, ...}`，snake_case） | 新入站连接（未授权时弹接受/拒绝） |
+| `cm_remove_connection` | `id, close` | 连接移除 |
+| `cm_chat` | `id, text` | 对端消息 |
+| `cm_voice_call_state` | `client`（同 cm_add_connection，含 `incoming_voice_call` / `in_voice_call`） | 语音通话状态（来电时 SharePage 卡片弹接受/拒绝，接听前先请求麦克风权限） |
+| `cm_file_transfer_log` | action, log | 传输日志 |
+| `cm_clipboard_write` | `text, html, png`（base64 PNG） | 远端剪贴板 → 本机 pasteboard |
+| `server_capture_state` | `state` | 采集状态：`pending` 请求已发出；`0` 已开始；`1` 用户取消；`2/3/4/10` 被系统/用户/来电/切换停止 |
+
+ArkTS 侧：`pages/SharePage.ets`（ID/密码展示、启停、授权弹窗、连接列表）+
+`EntryAbility.ets`（`cm_clipboard_write` → pasteboard，含 PixelMap 图片）。
+长时任务：`backgroundTaskManager.startBackgroundRunning(DATA_TRANSFER)`，
+module.json5 `backgroundModes: ["dataTransfer"]`。
