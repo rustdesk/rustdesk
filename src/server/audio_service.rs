@@ -35,7 +35,7 @@ pub fn new() -> GenericService {
     svc.sp
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_env = "ohos"))]
 pub fn new() -> GenericService {
     let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
     GenericService::run(&svc.clone(), pa_impl::run);
@@ -101,21 +101,21 @@ mod pa_impl {
         // screen, so connecting there fails and logs an error every second.
         // Wait here instead; audio starts once a user logs in. Poll slowly,
         // `is_prelogin` spawns a process on every call.
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         while crate::platform::is_prelogin() {
             if !sp.ok() {
                 return Ok(());
             }
             hbb_common::sleep(3.).await;
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let mut stream = crate::ipc::connect(1000, "_pa").await?;
         let mut encoder = AudioEncoder::new(Encoder::new(
             crate::platform::PA_SAMPLE_RATE,
             Stereo,
             LowDelay,
         )?);
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         allow_err!(
             stream
                 .send(&crate::ipc::Data::Config((
@@ -124,17 +124,27 @@ mod pa_impl {
                 )))
                 .await
         );
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let zero_audio_frame: Vec<f32> = vec![0.; AUDIO_DATA_SIZE_U8 / 4];
         #[cfg(target_os = "android")]
         let mut android_data = vec![];
+        // AVScreenCapture yields s16le PCM at the configured rate/channels; the
+        // audio service batches it into 20 ms stereo opus frames.
+        #[cfg(target_env = "ohos")]
+        let use_mic = super::get_audio_input().contains("mic");
+        #[cfg(target_env = "ohos")]
+        scrap::ohos::screencap::set_mic_enabled(use_mic);
+        #[cfg(target_env = "ohos")]
+        let mut ohos_data = vec![];
+        #[cfg(target_env = "ohos")]
+        let mut ohos_pending: Vec<f32> = vec![];
         while sp.ok() && !RESTARTING.load(Ordering::SeqCst) {
             sp.snapshot(|sps| {
                 sps.send(create_format_msg(crate::platform::PA_SAMPLE_RATE, 2));
                 Ok(())
             })?;
 
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             {
                 // The `_pa` peer closing surfaces as `Err` here. Dropping it left the loop polling
                 // a dead socket -- one 0-byte read per poll, ready at once and never `Pending` --
@@ -173,6 +183,25 @@ mod pa_impl {
                     std::slice::from_raw_parts::<f32>(bytes.as_ptr() as _, bytes.len() / 4)
                 };
                 send_f32(data, &mut encoder, &sp);
+            } else {
+                hbb_common::sleep(0.1).await;
+            }
+
+            #[cfg(target_env = "ohos")]
+            if scrap::ohos::ffi::get_audio_raw(&mut ohos_data, &mut vec![], use_mic).is_some() {
+                ohos_pending.reserve(ohos_data.len() / 2);
+                for chunk in ohos_data.chunks_exact(2) {
+                    ohos_pending
+                        .push(i16::from_le_bytes([chunk[0], chunk[1]]) as f32 / 32768.0);
+                }
+                ohos_data.clear();
+                // 960 interleaved stereo samples = one 10 ms opus frame; the android
+                // batching branch in `send_f32` wants multiples of it.
+                const OHOS_BATCH: usize = 960 * 2;
+                while ohos_pending.len() >= OHOS_BATCH {
+                    let batch: Vec<f32> = ohos_pending.drain(..OHOS_BATCH).collect();
+                    send_f32(&batch, &mut encoder, &sp);
+                }
             } else {
                 hbb_common::sleep(0.1).await;
             }
@@ -662,7 +691,7 @@ fn send_f32(data: &[f32], encoder: &mut AudioEncoder, sp: &GenericService) {
     if !encoder.should_encode(data) {
         return;
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     {
         // the permitted opus data size are 120, 240, 480, 960, 1920, and 2880
         // if data size is bigger than BATCH_SIZE, AND is an integer multiple of BATCH_SIZE
