@@ -258,17 +258,20 @@ async fn start_hbbs_sync_async() {
                                     SENDER.lock().unwrap().send(conns).ok();
                                 }
                         }
+                        if let Some(strategy) = rsp.remove("strategy") {
+                            if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
+                                if let Err(error) = handle_config_options(strategy.config_options).await {
+                                    hbb_common::throttled_log!(API_LOG_INTERVAL, error, "Strategy update rejected: {error}");
+                                    continue;
+                                }
+                                log::info!("strategy updated");
+                            }
+                        }
                         if let Some(rsp_modified_at) = rsp.remove("modified_at") {
                             if let Ok(rsp_modified_at) = serde_json::from_value::<i64>(rsp_modified_at) {
                                 if rsp_modified_at != modified_at {
                                     LocalConfig::set_option("strategy_timestamp".to_string(), rsp_modified_at.to_string());
                                 }
-                            }
-                        }
-                        if let Some(strategy) = rsp.remove("strategy") {
-                            if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
-                                log::info!("strategy updated");
-                                handle_config_options(strategy.config_options);
                             }
                         }
                     }
@@ -289,7 +292,9 @@ fn heartbeat_url() -> String {
     format!("{}/api/heartbeat", url)
 }
 
-fn handle_config_options(config_options: HashMap<String, String>) {
+async fn handle_config_options(
+    config_options: HashMap<String, String>,
+) -> hbb_common::ResultType<()> {
     let mut options = Config::get_options();
     let default_settings = config::DEFAULT_SETTINGS.read().unwrap().clone();
     config_options
@@ -305,7 +310,29 @@ fn handle_config_options(config_options: HashMap<String, String>) {
             }
         })
         .count();
+    if crate::trusted_devices::config::changes_authentication(&options) {
+        let current = Config::get_options();
+        let mut non_auth_options = options.clone();
+        for key in [
+            "2fa",
+            keys::OPTION_ENABLE_TRUSTED_DEVICES,
+            keys::OPTION_TRUSTED_DEVICE_EXPIRATION,
+        ] {
+            match current.get(key) {
+                Some(value) => {
+                    non_auth_options.insert(key.to_owned(), value.clone());
+                }
+                None => {
+                    non_auth_options.remove(key);
+                }
+            }
+        }
+        // Authentication update failures must not block unrelated strategy options.
+        Config::set_options(non_auth_options);
+        return crate::trusted_devices::config::update_options(options).await;
+    }
     Config::set_options(options);
+    Ok(())
 }
 
 #[allow(unused)]

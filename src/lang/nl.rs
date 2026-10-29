@@ -813,7 +813,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "Sneltoets wordt niet ondersteund"),
         ("On", "Aan"),
         ("Off", "Uit"),
-        ("api_server_connection_tip", ""),
-        ("api_server_empty_tip", ""),
+        ("api_server_connection_tip", "De door jou gebruikte aangepaste server maakt gebruik van onversleuteld HTTP. Neem contact op met de beheerder om HTTPS in te schakelen."),
+        ("api_server_empty_tip", "Als de API-server leeg is, wordt de aangepaste server standaard ingesteld op HTTP. Neem contact op met de beheerder om HTTPS in te schakelen."),
+        ("RustDesk storage", "RustDesk-gegevensopslag"),
+        ("Other folders", "Andere mappen"),
+        ("Choose which folder remote devices can access.", "Kies tot welke map externe apparaten toegang hebben."),
+        ("android-logs-folder-tip", ""),
+        ("Choose folder", "Kies een map"),
+        ("Please select Android → media.", "Selecteer Android → media."),
+        ("Trust duration (days)", "Vertrouwensperiode (dagen)"),
+        ("Renew trust", "Vertrouwen hernieuwen"),
     ].iter().cloned().collect();
 }

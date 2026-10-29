@@ -506,7 +506,43 @@ pub extern "system" fn Java_ffi_FFI_onAppStart(mut env: JNIEnv, _class: JClass, 
             let java_vm = jvm.get_java_vm_pointer() as *mut c_void;
             let context_jobject = context.as_obj().as_raw() as *mut c_void;
             *APPLICATION_CONTEXT.write().unwrap() = Some(context);
+            *JVM.write().unwrap() = Some(jvm);
+            if let Err(error) = base::fs::android::initialize(call_document_storage) {
+                log::error!("Unable to initialize document storage: {}", error);
+            }
             try_init_rustls_platform_verifier(&mut env, context_jobject);
         }
     }
+}
+
+fn call_document_storage(request: &str) -> hbb_common::ResultType<String> {
+    use hbb_common::anyhow::anyhow;
+
+    const LOCAL_REFS: i32 = 4;
+    let context = APPLICATION_CONTEXT
+        .read()
+        .unwrap()
+        .clone()
+        .ok_or(anyhow!("Android application context is unavailable"))?;
+    let jvm = JVM.read().unwrap();
+    let jvm = jvm.as_ref().ok_or(anyhow!("Android VM is unavailable"))?;
+    let mut env = jvm.attach_current_thread_as_daemon()?;
+    let result = env.with_local_frame(LOCAL_REFS, |env| -> JniResult<String> {
+        let request = env.new_string(request)?;
+        let value = env
+            .call_method(
+                &context,
+                "rustDocumentStorage",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&JObject::from(request))],
+            )?
+            .l()?;
+        let value = JString::from(value);
+        let value = env.get_string(&value)?;
+        Ok(value.into())
+    });
+    if result.is_err() && env.exception_check()? {
+        env.exception_clear()?;
+    }
+    Ok(result?)
 }
