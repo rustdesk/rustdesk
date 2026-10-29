@@ -54,6 +54,67 @@ class MainFlutterWindow: NSWindow {
             forKey: window
         )
     }
+    // Windows whose selected session enabled immersive mode.
+    private static let immersiveWindows = NSHashTable<NSWindow>.weakObjects()
+    // When a fullscreen window becomes key again, AppKit restores the options it
+    // got at fullscreen entry, so re-apply a toggle made since then.
+    private static let immersiveKeyObserver = NotificationCenter.default.addObserver(
+        forName: NSWindow.didBecomeKeyNotification,
+        object: nil,
+        queue: .main
+    ) { notification in
+        guard let window = notification.object as? NSWindow else { return }
+        updateImmersiveMode(window: window)
+    }
+
+    // AppKit applies a fullscreen window's presentation options itself after
+    // didEnterFullScreen, overriding any set directly at that point, and asks
+    // the window delegate for them. desktop_multi_window's delegate does not
+    // implement this, so add it; other windows get the proposal back unchanged.
+    private static func addFullScreenPresentationOptionsHook(to window: NSWindow) {
+        guard let delegate = window.delegate,
+              let delegateClass = object_getClass(delegate) else {
+            return
+        }
+        let selector = #selector(NSWindowDelegate.window(_:willUseFullScreenPresentationOptions:))
+        guard class_getInstanceMethod(delegateClass, selector) == nil else { return }
+        let hook: @convention(block) (AnyObject, NSWindow, UInt) -> UInt = { _, window, proposed in
+            guard immersiveWindows.contains(window) else { return proposed }
+            return immersiveOptions(from: NSApplication.PresentationOptions(rawValue: proposed)).rawValue
+        }
+        class_addMethod(delegateClass, selector, imp_implementationWithBlock(hook), "Q@:@Q")
+    }
+
+    private static func immersiveOptions(
+        from options: NSApplication.PresentationOptions
+    ) -> NSApplication.PresentationOptions {
+        var options = options
+        // autoHideToolbar is only valid together with autoHideMenuBar.
+        options.subtract([.autoHideDock, .autoHideMenuBar, .autoHideToolbar])
+        options.formUnion([.hideDock, .hideMenuBar])
+        return options
+    }
+
+    private static func updateImmersiveMode(window: NSWindow) {
+        let current = NSApp.presentationOptions
+        // AppKit raises on invalid combinations, so only adjust the presentation
+        // of the key window once it is fullscreen.
+        guard window.isKeyWindow,
+              window.styleMask.contains(.fullScreen),
+              current.contains(.fullScreen) else {
+            return
+        }
+        if immersiveWindows.contains(window) {
+            if !current.isSuperset(of: [.hideDock, .hideMenuBar]) {
+                NSApp.presentationOptions = immersiveOptions(from: current)
+            }
+        } else if current.contains(.hideMenuBar) {
+            var options = current
+            options.subtract([.hideDock, .hideMenuBar])
+            options.formUnion([.autoHideDock, .autoHideMenuBar])
+            NSApp.presentationOptions = options
+        }
+    }
 
     override func awakeFromNib() {
         rustdesk_core_main();
@@ -307,6 +368,22 @@ class MainFlutterWindow: NSWindow {
                         break
                     }
                     result([Double(size.width), Double(size.height)])
+
+                case "setImmersiveMode":
+                    guard let window = registrar.view?.window else {
+                        result(nil)
+                        break
+                    }
+                    let enabled = (call.arguments as? [String: Any])?["enabled"] as? Bool ?? false
+                    if enabled {
+                        _ = MainFlutterWindow.immersiveKeyObserver
+                        MainFlutterWindow.addFullScreenPresentationOptionsHook(to: window)
+                        MainFlutterWindow.immersiveWindows.add(window)
+                    } else {
+                        MainFlutterWindow.immersiveWindows.remove(window)
+                    }
+                    MainFlutterWindow.updateImmersiveMode(window: window)
+                    result(nil)
 
                 default:
                     result(FlutterMethodNotImplemented)
