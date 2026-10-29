@@ -1,6 +1,6 @@
 use super::*;
 use crate::common::SimpleCallOnReturn;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use crate::platform::linux::is_x11;
 #[cfg(windows)]
 use crate::virtual_display_manager;
@@ -28,16 +28,16 @@ lazy_static::lazy_static! {
     static ref SYNC_DISPLAYS: Arc<Mutex<SyncDisplaysInfo>> = Default::default();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 lazy_static::lazy_static! {
     static ref WAYLAND_UINPUT_RECT: Mutex<WaylandUinputRect> = Default::default();
     static ref WAYLAND_LAYOUT: Mutex<WaylandLayout> = Default::default();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 const WAYLAND_LAYOUT_CHECK_INTERVAL: Duration = Duration::from_millis(1500);
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[derive(Default)]
 struct WaylandUinputRect {
     rect: Option<(i32, i32, i32, i32)>,
@@ -48,7 +48,7 @@ struct WaylandUinputRect {
 // monitor mid-session. The client keeps sending coordinates offset by the layout it was
 // told at session init (`baseline`); we remap them onto the current layout (`live`).
 // https://github.com/rustdesk/rustdesk/issues/15601
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[derive(Default)]
 struct WaylandLayout {
     baseline: Vec<scrap::wayland::display::DisplayRect>,
@@ -68,7 +68,7 @@ struct WaylandLayout {
     unseen_build: Option<u64>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 impl WaylandLayout {
     // Replace the per-session input baseline. Before the first poll the outgoing baseline is
     // the only record of the layout the capturers were built against, so it seeds `seen`.
@@ -133,7 +133,7 @@ impl WaylandLayout {
 
 // Whether `live` differs from `baseline`. Read on every mouse move, so it is an atomic:
 // the common (no-drift) case never touches the layout mutex.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 static WAYLAND_LAYOUT_DRIFTED: AtomicBool = AtomicBool::new(false);
 
 /// True while the layout has drifted from the session-init baseline AND the matching uinput
@@ -146,12 +146,12 @@ static WAYLAND_LAYOUT_DRIFTED: AtomicBool = AtomicBool::new(false);
 /// change is seen up to one check interval late; inside that window the bitmap bound in the
 /// measurement is the only guard, and a value that passes it is replaced by the next confirmed
 /// pair. A failed range apply stores false, and then nothing is remapped either.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(crate) fn wayland_layout_drifted() -> bool {
     WAYLAND_LAYOUT_DRIFTED.load(Ordering::Relaxed)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
 }
@@ -160,51 +160,51 @@ pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
 /// starts and when the device acknowledges one. The DRM cursor calibration measures only under its
 /// own generation and against a sample injected under the current count: a stale range maps the
 /// point elsewhere, and two stops share that error, so agreement cannot reject it.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 static INPUT_MAP_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 static INPUT_MAP_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Read before `input_map_epoch`: seeing a generation means seeing the count its adoption raised.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(crate) fn input_map_gen() -> u64 {
     INPUT_MAP_GEN.load(Ordering::Acquire)
 }
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(crate) fn input_map_epoch() -> u64 {
     INPUT_MAP_EPOCH.load(Ordering::Relaxed)
 }
 /// The device acknowledged a range for generation `gen` (on the session-init path, the one read
 /// before the rect was computed, which can predate a move the poll has not seen yet). Samples
 /// injected before now were mapped by the previous range; the count moves first.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(super) fn note_input_map_adopted(gen: u64) {
     INPUT_MAP_EPOCH.fetch_add(1, Ordering::Relaxed);
     INPUT_MAP_GEN.store(gen, Ordering::Release);
 }
 /// The range the device already runs fits the layout of `gen`. Not an adoption: the samples
 /// injected under it stay valid.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(super) fn note_input_map_ready(gen: u64) {
     INPUT_MAP_GEN.store(gen, Ordering::Release);
 }
 /// An apply is starting: until the device acknowledges it no range is ready, samples from before
 /// now do not count, and the recorded rect is forgotten, so a failed or timed-out apply (the device
 /// may still take the range late) leaves nothing ready and the next check applies again.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(super) fn note_input_map_unknown() {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = None;
     note_input_map_adopted(u64::MAX);
 }
 /// The layout poll asks the apply thread for a job every check, so a thread that cannot start fails
 /// every one of them.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(super) const UINPUT_APPLY_LOG_INTERVAL: Duration = Duration::from_secs(600);
 /// Runs `job` on the one thread that checks, applies and records uinput ranges on the DRM paths,
 /// after every job asked for before it. Two applies must not overlap: the uinput service keeps the
 /// range of whichever request reached it last, and that must be the one recorded. The caller waits
 /// for the answer holding no lock; the job gets the runtime of that thread for its IPC.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(super) fn run_uinput_apply<R: Send + 'static>(
     job: impl FnOnce(&tokio::runtime::Runtime) -> R + Send + 'static,
 ) -> tokio::sync::oneshot::Receiver<R> {
@@ -268,7 +268,7 @@ pub(super) fn run_uinput_apply<R: Send + 'static>(
 }
 /// The generation a range is recorded under: none for the raw DRM union, which is not a compositor
 /// layout any stream was built from.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(super) fn input_map_label(gen: u64, from_compositor: bool) -> u64 {
     if from_compositor {
         gen
@@ -279,12 +279,12 @@ pub(super) fn input_map_label(gen: u64, from_compositor: bool) -> u64 {
 
 // The uinput ABS range currently programmed into the device, for the DRM path's "reapply only when
 // it changed" check. The PipeWire path compares it inline in refresh_wayland_uinput_rect_if_changed.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(super) fn wayland_uinput_rect() -> Option<(i32, i32, i32, i32)> {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display::DisplayRect>) {
     WAYLAND_LAYOUT_DRIFTED.store(false, Ordering::Relaxed);
     WAYLAND_LAYOUT.lock().unwrap().reset_baseline(baseline);
@@ -292,7 +292,7 @@ pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display:
 
 /// Record the layout a capturer was just built against, and the snapshot generation it read
 /// before taking that layout. See `WaylandLayout::note_capturer`.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(super) fn note_capturer_layout(
     displays: &[base::platform::linux::WaylandDisplayInfo],
     built_gen: u64,
@@ -309,7 +309,7 @@ pub(super) fn note_capturer_layout(
 
 // Remap an injected coordinate onto the live compositor layout when it has drifted from
 // what the client was told at session init. Lock-free no-op otherwise.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub(super) fn remap_wayland_uinput_coord(x: i32, y: i32) -> (i32, i32) {
     if !WAYLAND_LAYOUT_DRIFTED.load(Ordering::Relaxed) {
         return (x, y);
@@ -322,7 +322,7 @@ pub(super) fn remap_wayland_uinput_coord(x: i32, y: i32) -> (i32, i32) {
 // changes afterwards (monitor scale/position change, or a portal virtual output
 // appearing once the capture starts), injected coordinates get rescaled by the stale
 // range and land offset, https://github.com/rustdesk/rustdesk/issues/15601
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn refresh_wayland_uinput_rect_if_changed() {
     if is_x11() || !crate::input_service::wayland_use_uinput() {
         return;
@@ -548,7 +548,7 @@ pub(super) fn check_display_changed(
     idx: usize,
     (x, y, w, h): (i32, i32, usize, usize),
 ) -> Option<DisplayInfo> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         // wayland do not support changing display for now
         if !is_x11() {
@@ -587,7 +587,7 @@ pub fn set_last_changed_resolution(display_name: &str, original: (i32, i32), cha
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn restore_resolutions() {
     for (name, res) in CHANGED_RESOLUTIONS.read().unwrap().iter() {
         let (w, h) = res.original;
@@ -653,7 +653,7 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
 }
 
 fn check_get_displays_changed_msg() -> Option<Message> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         if !is_x11() {
             // On the DRM/KMS capture path the PipeWire enumeration (which is what feeds
@@ -687,7 +687,7 @@ fn check_get_displays_changed_msg() -> Option<Message> {
 }
 
 pub fn check_displays_changed() -> ResultType<()> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         // Currently, wayland need to call wayland::clear() before call Display::all(), otherwise it will cause
         // block, or even crash here, https://github.com/rustdesk/rustdesk/blob/0bb4d43e9ea9d9dfb9c46c8d27d1a97cd0ad6bea/libs/scrap/src/wayland/pipewire.rs#L235
@@ -721,7 +721,7 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
             log::info!("Displays changed");
         }
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if sp.has_subscribes() {
             refresh_wayland_uinput_rect_if_changed();
         }
@@ -794,7 +794,7 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
 //
 // When DRM capture is active the advertised list is enumerated from the DRM display list, so a DRM
 // list shorter than the synced list means at least one advertised display is served by PipeWire.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub fn has_non_drm_backed_display() -> bool {
     match super::drm_capturer::display_count_and_any_demoted() {
         // A display served by PipeWire is either ABSENT from the DRM list (a shorter count, e.g. a
@@ -822,7 +822,7 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
 /// its failure, so where there is none it re-probes every call for an answer that cannot
 /// change any caller's outcome. Last in the `&&` chain, so it never runs first on a poll.
 #[inline]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn wayland_has_compositor() -> bool {
     #[cfg(feature = "drm")]
     {
@@ -838,7 +838,7 @@ fn wayland_has_compositor() -> bool {
 pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
     // For compatibility: if only one display, scale remains 1.0 and we use the physical size for `uinput`.
     // If there are multiple displays, we use the logical size for `uinput` by setting scale to d.scale().
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let use_logical_scale = !is_x11()
         && crate::is_server()
         && wayland_has_compositor()
@@ -854,7 +854,7 @@ pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
             {
                 scale = d.scale();
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             {
                 if use_logical_scale {
                     scale = d.scale();
@@ -884,7 +884,7 @@ pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
 }
 
 pub fn is_inited_msg() -> Option<Message> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if !is_x11() {
         return super::wayland::is_inited();
     }
@@ -893,7 +893,7 @@ pub fn is_inited_msg() -> Option<Message> {
 
 // Return the primary index with the refreshed list so login cannot mix display snapshots.
 pub async fn update_get_sync_displays_on_login() -> ResultType<(Vec<DisplayInfo>, usize)> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         if !is_x11() {
             let (displays, primary_display_idx) =
