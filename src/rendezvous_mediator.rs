@@ -292,15 +292,16 @@ impl RendezvousMediator {
         tokio::spawn(async move {
             direct_server(server_cloned).await;
         });
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_env = "ohos"))]
         let start_lan_listening = true;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         let start_lan_listening = crate::platform::is_installed();
         if start_lan_listening {
             std::thread::spawn(move || {
                 allow_err!(super::lan::start_listening());
             });
         }
+        #[cfg(not(target_env = "ohos"))]
         scrap::codec::test_av1();
         *LAST_NOT_DEPLOYED_REGISTER.lock().await = None;
         loop {
@@ -381,7 +382,16 @@ impl RendezvousMediator {
         let mut reg_timeout = MIN_REG_TIMEOUT;
         const MAX_FAILS1: i64 = 2;
         const MAX_FAILS2: i64 = 4;
+        #[cfg(not(target_env = "ohos"))]
         const DNS_INTERVAL: i64 = 60_000;
+        // hbbs answers PunchHoleRequest with OFFLINE once our last RegisterPeer
+        // is 30 s old (REG_TIMEOUT in hbbs); 30 s of outbound silence (network
+        // blip, socket stale after a reconnect) flips it, so the ohos controlled
+        // side registers tighter and rebinds sooner.
+        #[cfg(target_env = "ohos")]
+        let (reg_interval, dns_check_interval) = (5_000, 10_000);
+        #[cfg(not(target_env = "ohos"))]
+        let (reg_interval, dns_check_interval) = (REG_INTERVAL, DNS_INTERVAL);
         let mut fails = 0;
         let mut last_register_resp: Option<Instant> = None;
         let mut last_register_sent: Option<Instant> = None;
@@ -445,10 +455,10 @@ impl RendezvousMediator {
                         continue;
                     }
                     let now = Some(Instant::now());
-                    let expired = last_register_resp.map(|x| x.elapsed().as_millis() as i64 >= REG_INTERVAL).unwrap_or(true);
+                    let expired = last_register_resp.map(|x| x.elapsed().as_millis() as i64 >= reg_interval).unwrap_or(true);
                     let timeout = last_register_sent.map(|x| x.elapsed().as_millis() as i64 >= reg_timeout).unwrap_or(false);
                     // temporarily disable exponential backoff for android before we add wakeup trigger to force connect in android
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                     if crate::using_public_server() { // only turn on this for public server, may help DDNS self-hosting user.
                         if timeout && reg_timeout < MAX_REG_TIMEOUT {
                             reg_timeout += MIN_REG_TIMEOUT;
@@ -460,13 +470,19 @@ impl RendezvousMediator {
                             if fails >= MAX_FAILS2 {
                                 Config::update_latency(&host, -1);
                                 old_latency = 0;
-                                if last_dns_check.elapsed().as_millis() as i64 > DNS_INTERVAL {
+                                if last_dns_check.elapsed().as_millis() as i64 > dns_check_interval {
                                     // in some case of network reconnect (dial IP network),
                                     // old UDP socket not work any more after network recover
-                                    if let Some((s, new_addr)) = socket_client::rebind_udp_for(&rz.host).await? {
-                                        socket = s;
-                                        rz.addr = new_addr.clone();
-                                        addr = new_addr;
+                                    // A failed speculative rebind must not tear down the
+                                    // registration loop; the next interval retries it.
+                                    match socket_client::rebind_udp_for(&rz.host).await {
+                                        Ok(Some((s, new_addr))) => {
+                                            socket = s;
+                                            rz.addr = new_addr.clone();
+                                            addr = new_addr;
+                                        }
+                                        Ok(None) => {}
+                                        Err(e) => log::debug!("Failed to rebind udp socket for {}: {}", rz.host, e),
                                     }
                                     last_dns_check = Instant::now();
                                 }

@@ -121,7 +121,7 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
     crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
@@ -248,7 +248,7 @@ pub fn need_fs_cm_send_files() -> bool {
 ///
 /// Only the `ReadDir` protocol action treats an empty path as the home directory.
 /// Callers must opt in to that protocol-specific behavior with `allow_empty`.
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
     use std::path::{Component, Path, PathBuf};
 
@@ -304,7 +304,7 @@ pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
 }
 
 #[inline]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 pub fn is_peer_path_allowed(_path: &str, _allow_empty: bool) -> bool {
     true
 }
@@ -385,7 +385,7 @@ pub fn get_default_sound_input() -> Option<String> {
             None
         };
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         let input = crate::platform::linux::get_default_pa_source();
         return if let Some(input) = input {
@@ -400,6 +400,13 @@ pub fn get_default_sound_input() -> Option<String> {
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub fn get_default_sound_input() -> Option<String> {
     None
+}
+
+#[inline]
+#[cfg(target_env = "ohos")]
+pub fn get_default_sound_input() -> Option<String> {
+    // The audio service maps this onto the AVScreenCapture microphone stream.
+    Some("mic".to_owned())
 }
 
 #[cfg(feature = "use_rubato")]
@@ -885,7 +892,7 @@ pub fn refresh_rendezvous_server() {
 }
 
 pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::process::Child> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if let Ok(appdir) = std::env::var("APPDIR") {
         let appimage_cmd = std::path::Path::new(&appdir).join("AppRun");
         if appimage_cmd.exists() {
@@ -934,7 +941,7 @@ pub fn username() -> String {
 // Exactly the implementation of "whoami::hostname()".
 // This wrapper is to suppress warnings.
 #[inline(always)]
-#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
+#[cfg(not(target_os = "ios"))]
 pub fn whoami_hostname() -> String {
     let mut hostname = whoami::fallible::hostname().unwrap_or_else(|_| "localhost".to_string());
     hostname.make_ascii_lowercase();
@@ -985,9 +992,9 @@ pub fn get_sysinfo() -> serde_json::Value {
         os = format!("{os} - {}", system.os_version().unwrap_or_default());
     }
     let hostname = hostname(); // sys.hostname() return localhost on android in my test
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let out;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let mut out;
     out = json!({
         "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
@@ -995,7 +1002,7 @@ pub fn get_sysinfo() -> serde_json::Value {
         "os": os,
         "hostname": hostname,
     });
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let username = crate::platform::get_active_username();
         if !username.is_empty() && (!cfg!(windows) || username != "SYSTEM") {
@@ -2229,7 +2236,7 @@ pub fn check_process(arg: &str, same_session_id: bool) -> bool {
 
 #[allow(unused_mut)]
 #[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     #[cfg(target_os = "macos")]
     if !crate::platform::is_root() && !same_uid {

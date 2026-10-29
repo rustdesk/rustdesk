@@ -88,12 +88,12 @@ lazy_static::lazy_static! {
 
 const INIT_ASYNC_JOB_STATUS: &str = " ";
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter"))]
 #[inline]
 pub fn get_id() -> String {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return Config::get_id();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     return ipc::get_id();
 }
 
@@ -1031,6 +1031,20 @@ pub fn video_save_directory(root: bool) -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Ok(home) = config::APP_HOME_DIR.read() {
         let mut path = home.to_owned();
+        path.push_str(format!("/{appname}/ScreenRecord").as_str());
+        let dir = try_create(&std::path::Path::new(&path));
+        if !dir.is_empty() {
+            return dir;
+        }
+    }
+    // ohos reads $HOME (set by the ArkTS sandbox home); there is no
+    // XDG video dir, so recordings land under <home>/<appname>/ScreenRecord.
+    #[cfg(target_env = "ohos")]
+    {
+        let mut path = match std::env::var("HOME") {
+            Ok(home) => home,
+            Err(_) => std::env::temp_dir().to_string_lossy().to_string(),
+        };
         path.push_str(format!("/{appname}/ScreenRecord").as_str());
         let dir = try_create(&std::path::Path::new(&path));
         if !dir.is_empty() {
