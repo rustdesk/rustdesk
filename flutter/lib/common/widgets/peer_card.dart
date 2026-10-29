@@ -1,4 +1,5 @@
 import 'package:bot_toast/bot_toast.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
@@ -488,7 +489,7 @@ class _PeerCardState extends State<_PeerCard>
         return checkbox.marginOnly(right: right);
       }
     } else {
-      return isWeb ? _actionMoreWeb(peer) : _actionMore(peer);
+      return isWebDesktop ? _actionMoreWeb(peer) : _actionMore(peer);
     }
   }
 
@@ -1510,10 +1511,9 @@ Widget getOnline(double rightPadding, bool online) {
 Widget build_more(BuildContext context,
     {bool invert = false, VoidCallback? onTap}) {
   final RxBool hover = false.obs;
-  return InkWell(
+  final button = InkWell(
       borderRadius: BorderRadius.circular(14),
       onTap: onTap ?? () {},
-      onDoubleTap: onTap,
       onHover: (value) => hover.value = value,
       child: Obx(() => CircleAvatar(
           radius: 14,
@@ -1533,6 +1533,19 @@ Widget build_more(BuildContext context,
                       .titleLarge
                       ?.color
                       ?.withOpacity(0.5)))));
+  if (onTap == null) return button;
+  // Serial taps preserve cancellation without waiting for the card's double tap.
+  return RawGestureDetector(
+      excludeFromSemantics: true,
+      gestures: {
+        SerialTapGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<SerialTapGestureRecognizer>(
+                () => SerialTapGestureRecognizer(
+                    allowedButtonsFilter: (buttons) =>
+                        buttons == kPrimaryButton),
+                (recognizer) => recognizer.onSerialTapUp = (_) => onTap()),
+      },
+      child: button);
 }
 
 class TagPainter extends CustomPainter {
