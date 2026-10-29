@@ -17,7 +17,7 @@ import {
   ffiGetServerId, ffiGetServerPassword, ffiUpdateServerPassword,
   ffiHasPermanentPassword, ffiServerAuthorize, ffiServerCloseConnection,
   ffiCaptureStart, ffiCaptureStop, ffiCaptureRunning,
-  ffiCmHandleIncomingVoiceCall, ffiCmCloseVoiceCall, ffiCmRequestVoiceCall,
+  ffiCmHandleIncomingVoiceCall, ffiCmCloseVoiceCall,
 } from '../ohos_ffi';
 import { globalEvents, parseEvent, RdeskEvent } from '../model/RdeskEvents';
 import { evBool, evNum, evStr } from '../model/Utils';
@@ -42,9 +42,6 @@ class ClientInfo {
   disconnected: boolean = false;
   incomingVoiceCall: boolean = false;
   inVoiceCall: boolean = false;
-  // This side offered a voice call and the peer has not answered yet; local
-  // only, cleared by the cm_voice_call_state outcome or a manual cancel.
-  outgoingVoiceCall: boolean = false;
   // Unread peer messages: bumped by cm_chat while this page is visible,
   // cleared when the chat page for the connection is opened.
   unreadChat: number = 0;
@@ -175,13 +172,6 @@ struct SharePage {
   }
 
   private upsertClient(c: ClientInfo): void {
-    // outgoingVoiceCall is local-only state; carry it across event-driven
-    // rebuilds until the call connects, is declined or is cancelled.
-    const prev = this.clients.find((p: ClientInfo): boolean => p.id === c.id);
-    if (prev) {
-      c.outgoingVoiceCall =
-        prev.outgoingVoiceCall && !c.inVoiceCall && !c.incomingVoiceCall && !c.disconnected;
-    }
     this.pending = this.pending.filter((p: ClientInfo): boolean => p.id !== c.id);
     this.clients = this.clients.filter((p: ClientInfo): boolean => p.id !== c.id);
     if (c.disconnected) {
@@ -226,51 +216,6 @@ struct SharePage {
       });
   }
 
-  // Offer a voice call to the controlling peer: the mic is needed the moment
-  // the peer accepts, so the permission dialog comes first. A denial keeps
-  // the call idle instead of ringing a one-way call.
-  private requestMicThenCall(id: number): void {
-    const perms: Array<Permissions> = ['ohos.permission.MICROPHONE'];
-    abilityAccessCtrl.createAtManager().requestPermissionsFromUser(getContext(this), perms)
-      .then((result: PermissionRequestResult) => {
-        const granted = result.authResults.every((r: number): boolean => r === 0);
-        if (!granted) {
-          promptAction.showToast({ message: $r('app.string.mic_denied'), duration: 2500 });
-          return;
-        }
-        if (ffiCmRequestVoiceCall(id) === 0) {
-          this.setOutgoingCall(id);
-        } else {
-          promptAction.showToast({ message: $r('app.string.voice_call_failed'), duration: 2000 });
-        }
-      })
-      .catch((e: BusinessError) => {
-        hilog.warn(LOG_DOMAIN, TAG, 'request mic permission failed: %{public}s', `${e}`);
-      });
-  }
-
-  private setOutgoingCall(id: number): void {
-    this.clients = this.clients.map((p: ClientInfo): ClientInfo => {
-      if (p.id !== id) {
-        return p;
-      }
-      const c = this.copyClient(p);
-      c.outgoingVoiceCall = true;
-      return c;
-    });
-  }
-
-  private clearOutgoingCall(id: number): void {
-    this.clients = this.clients.map((p: ClientInfo): ClientInfo => {
-      if (p.id !== id) {
-        return p;
-      }
-      const c = this.copyClient(p);
-      c.outgoingVoiceCall = false;
-      return c;
-    });
-  }
-
   private copyClient(p: ClientInfo): ClientInfo {
     const c = new ClientInfo();
     c.id = p.id;
@@ -281,7 +226,6 @@ struct SharePage {
     c.disconnected = p.disconnected;
     c.incomingVoiceCall = p.incomingVoiceCall;
     c.inVoiceCall = p.inVoiceCall;
-    c.outgoingVoiceCall = p.outgoingVoiceCall;
     c.unreadChat = p.unreadChat;
     return c;
   }
@@ -616,32 +560,28 @@ struct SharePage {
                       });
                     this.clearUnread(c.id);
                   })
-                  Button() {
-                    SymbolGlyph(c.inVoiceCall ? $r('sys.symbol.phone_down_fill')
-                      : $r('sys.symbol.phone'))
-                      .fontSize(22)
-                      .fontColor([c.inVoiceCall ? '#E5484D' : '#34C759'])
-                  }
-                  .type(ButtonType.Circle)
-                  .width(38)
-                  .height(38)
-                  .backgroundColor(c.inVoiceCall ? '#FDECEC' : '#E9F9EF')
-                  .margin({ left: 8 })
-                  .accessibilityText(c.inVoiceCall ? $r('app.string.voice_call_end')
-                    : $r('app.string.voice_call_start'))
-                  .onClick(() => {
-                    if (c.inVoiceCall) {
-                      ffiCmCloseVoiceCall(c.id);
-                    } else if (c.outgoingVoiceCall) {
-                      // Withdraw our pending offer.
-                      ffiCmCloseVoiceCall(c.id);
-                      this.clearOutgoingCall(c.id);
-                    } else if (c.incomingVoiceCall) {
-                      ffiCmHandleIncomingVoiceCall(c.id, false);
-                    } else {
-                      this.requestMicThenCall(c.id);
+                  if (c.inVoiceCall || c.incomingVoiceCall) {
+                    Button() {
+                      SymbolGlyph(c.inVoiceCall ? $r('sys.symbol.phone_down_fill')
+                        : $r('sys.symbol.phone'))
+                        .fontSize(22)
+                        .fontColor([c.inVoiceCall ? '#E5484D' : '#34C759'])
                     }
-                  })
+                    .type(ButtonType.Circle)
+                    .width(38)
+                    .height(38)
+                    .backgroundColor(c.inVoiceCall ? '#FDECEC' : '#E9F9EF')
+                    .margin({ left: 8 })
+                    .accessibilityText(c.inVoiceCall ? $r('app.string.voice_call_end')
+                      : $r('app.string.share_voice_call_incoming'))
+                    .onClick(() => {
+                      if (c.inVoiceCall) {
+                        ffiCmCloseVoiceCall(c.id);
+                      } else {
+                        ffiCmHandleIncomingVoiceCall(c.id, false);
+                      }
+                    })
+                  }
                   Button() {
                     SymbolGlyph($r('sys.symbol.xmark'))
                       .fontSize(20)
@@ -722,41 +662,15 @@ struct SharePage {
                   }
                   .width('100%')
                   .margin({ top: 10 })
-                } else if (c.outgoingVoiceCall) {
-                  // Our offer is ringing on the controlling side.
-                  Row({ space: 8 }) {
-                    Circle({ width: 8, height: 8 })
-                      .fill('#B25E00')
-                    Text($r('app.string.voice_call_waiting'))
-                      .fontSize(13)
-                      .fontColor('#444444')
-                      .layoutWeight(1)
-                    Button() {
-                      SymbolGlyph($r('sys.symbol.xmark'))
-                        .fontSize(18)
-                        .fontColor(['#E5484D'])
-                    }
-                    .type(ButtonType.Circle)
-                    .width(34)
-                    .height(34)
-                    .backgroundColor('#FDECEC')
-                    .accessibilityText($r('app.string.share_reject'))
-                    .onClick(() => {
-                      ffiCmCloseVoiceCall(c.id);
-                      this.clearOutgoingCall(c.id);
-                    })
-                  }
-                  .width('100%')
-                  .margin({ top: 10 })
                 }
               }
               .width('100%')
               .padding(12)
               .borderRadius(10)
-              .backgroundColor(c.incomingVoiceCall || c.outgoingVoiceCall ? '#FFF7E6' : '#F2F4F8')
+              .backgroundColor(c.incomingVoiceCall ? '#FFF7E6' : '#F2F4F8')
               .margin({ bottom: 8 })
             }, (c: ClientInfo) =>
-              `${c.id}-${c.incomingVoiceCall}-${c.inVoiceCall}-${c.outgoingVoiceCall}`)
+              `${c.id}-${c.incomingVoiceCall}-${c.inVoiceCall}`)
           }
 
           Blank().height(24)

@@ -1335,11 +1335,15 @@ pub extern "C" fn ohos_cm_close_voice_call(id: c_int) -> c_int {
     0
 }
 
-/// Offer a voice call to the controlling peer from the CM UI.
+/// Offer a voice call to the controlling peer from the CM UI. Nonzero when
+/// the connection id is unknown.
 #[no_mangle]
 pub extern "C" fn ohos_cm_request_voice_call(id: c_int) -> c_int {
-    crate::ui_cm_interface::request_voice_call(id);
-    0
+    if crate::ui_cm_interface::request_voice_call(id) {
+        0
+    } else {
+        -1
+    }
 }
 
 /// Toggle a permission for one client from the CM UI.

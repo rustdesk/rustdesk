@@ -8,6 +8,8 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { image } from '@kit.ImageKit';
 import { promptAction } from '@kit.ArkUI';
 import { util } from '@kit.ArkTS';
+import { notificationManager } from '@kit.NotificationKit';
+import { wantAgent, WantAgent } from '@kit.AbilityKit';
 import { ffiInit, ffiSetCallbacks, ffiServerStart,
   ffiCmHandleIncomingVoiceCall } from '../ohos_ffi';
 import { globalEvents, parseEvent, RdeskEvent } from '../model/RdeskEvents';
@@ -15,6 +17,10 @@ import { evStr, evNum, evBool } from '../model/Utils';
 
 const LOG_DOMAIN = 0x5253;
 const TAG = 'RustDeskAbility';
+
+// Fixed notification id for the incoming-voice-call banner: posting replaces
+// the previous banner instead of stacking one per call.
+const VOICE_CALL_NOTIFICATION_ID = 0x5253;
 
 class ClientParams {
   client: string = '';
@@ -33,6 +39,19 @@ export default class EntryAbility extends UIAbility {
   private peerNames: Map<number, string> = new Map();
   // Router stack already holds the auto-opened chat page for this connection.
   private autoChatConnId: number = -1;
+  // Whether the window stage is in the foreground. promptAction dialogs only
+  // render in the foreground, so an incoming call while backgrounded falls
+  // back to a notification; returning to the foreground replays the offer.
+  private foreground: boolean = false;
+  // Voice call waiting for an answer while backgrounded: id and peer name.
+  private pendingCallId: number = -1;
+  private pendingCallName: string = '';
+  // Cancellation token so a stale onForeground replay cannot reopen the
+  // dialog after the call was answered or withdrawn elsewhere.
+  private pendingCallSeq: number = 0;
+  // Id of the currently posted incoming-call notification; cancelled when the
+  // call is answered, withdrawn or the dialog takes over.
+  private voiceCallNotificationId: number = -1;
 
   onDestroy(): void {
     hilog.info(LOG_DOMAIN, TAG, 'onDestroy');
@@ -155,12 +174,13 @@ export default class EntryAbility extends UIAbility {
         return;
       }
       if (incoming) {
-        this.showVoiceCallDialog(id, name);
+        this.offerVoiceCall(id, name);
       } else {
         // Call started or ended elsewhere (SharePage card, peer hang-up): the
         // modal offer above no longer matches reality; drop it so the next
         // incoming call re-opens a fresh one.
         this.voiceCallDialogConnId = -1;
+        this.cancelVoiceCallOffer();
       }
     });
 
@@ -194,6 +214,21 @@ export default class EntryAbility extends UIAbility {
       // visible area.
       const win = windowStage.getMainWindowSync();
       win.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE);
+      // Track foreground state: promptAction dialogs only render while the
+      // window stage is shown, so the incoming-call offer needs a
+      // notification fallback while backgrounded and a replay on return.
+      windowStage.on('windowStageEvent', (stage: window.WindowStageEventType) => {
+        const nowForeground = stage === window.WindowStageEventType.SHOWN
+          || stage === window.WindowStageEventType.ACTIVE
+          || stage === window.WindowStageEventType.RESUMED;
+        if (nowForeground === this.foreground) {
+          return;
+        }
+        this.foreground = nowForeground;
+        if (nowForeground) {
+          this.replayPendingVoiceCall();
+        }
+      });
       win.on('windowSizeChange', (size: window.Size) => {
         this.updateSystemBars(win, size.width, size.height);
       });
@@ -227,14 +262,43 @@ export default class EntryAbility extends UIAbility {
       });
   }
 
-  // Global incoming-voice-call dialog. Answers with the same mic-permission
-  // flow as the SharePage card; a denial declines so the peer is not left
-  // waiting on a one-way call.
+  // Global incoming-voice-call offer. In the foreground this is the modal
+  // dialog; while backgrounded the dialog would never render, so the offer
+  // goes out as a notification and is replayed as a dialog once the user
+  // returns (tapping the notification brings the app back).
+  private offerVoiceCall(id: number, name: string): void {
+    if (this.foreground) {
+      this.showVoiceCallDialog(id, name);
+    } else {
+      this.postVoiceCallNotification(id, name);
+    }
+  }
+
+  // Re-present a call that arrived while backgrounded. A new incoming event
+  // or the stale-dialog reset (voiceCallDialogConnId = -1) must not resurrect
+  // an offer the user already dealt with, hence the sequence check.
+  private replayPendingVoiceCall(): void {
+    if (this.pendingCallId < 0) {
+      return;
+    }
+    const seq = ++this.pendingCallSeq;
+    const id = this.pendingCallId;
+    const name = this.pendingCallName;
+    this.pendingCallId = -1;
+    hilog.info(LOG_DOMAIN, TAG, 'replaying pending voice call %{public}d', id);
+    this.showVoiceCallDialogWithSeq(id, name, seq);
+  }
+
   private showVoiceCallDialog(id: number, name: string): void {
+    this.showVoiceCallDialogWithSeq(id, name, 0);
+  }
+
+  private showVoiceCallDialogWithSeq(id: number, name: string, seq: number): void {
     if (this.voiceCallDialogConnId === id) {
       return;
     }
     this.voiceCallDialogConnId = id;
+    this.cancelVoiceCallNotification();
     promptAction.showDialog({
       title: $r('app.string.share_voice_call_incoming'),
       message: name.length > 0 ? name : `#${id}`,
@@ -244,6 +308,9 @@ export default class EntryAbility extends UIAbility {
       ],
     })
       .then((r: promptAction.ShowDialogSuccessResponse) => {
+        if (this.pendingCallSeq !== seq) {
+          return;
+        }
         this.voiceCallDialogConnId = -1;
         if (r.index === 1) {
           this.acceptVoiceCall(id);
@@ -252,9 +319,80 @@ export default class EntryAbility extends UIAbility {
         }
       })
       .catch((e: BusinessError) => {
+        if (this.pendingCallSeq !== seq) {
+          return;
+        }
         hilog.warn(LOG_DOMAIN, TAG, 'voice call dialog failed: %{public}s', `${e}`);
         this.voiceCallDialogConnId = -1;
       });
+  }
+
+  private postVoiceCallNotification(id: number, name: string): void {
+    // Remember the offer so returning to the foreground can still surface the
+    // answer dialog; the notification itself only brings the app back.
+    this.pendingCallId = id;
+    this.pendingCallName = name;
+    // Notification content fields take plain strings, so resolve the title
+    // resource here.
+    let title = '';
+    try {
+      title = this.context.resourceManager.getStringSync(
+        $r('app.string.share_voice_call_incoming'));
+    } catch (e) {
+      hilog.warn(LOG_DOMAIN, TAG, 'resolve notification title failed: %{public}s', `${e}`);
+    }
+    const request: notificationManager.NotificationRequest = {
+      id: VOICE_CALL_NOTIFICATION_ID,
+      notificationSlotType: notificationManager.SlotType.SOCIAL_COMMUNICATION,
+      content: {
+        contentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT as number,
+        normal: {
+          title: title,
+          text: name.length > 0 ? name : `#${id}`,
+        },
+      },
+      tapDismissed: true,
+    };
+    wantAgent.getWantAgent({
+      wants: [{ bundleName: 'com.rustdesk.ohos', abilityName: 'EntryAbility' }],
+      operationType: wantAgent.OperationType.START_ABILITY,
+      requestCode: 0,
+    })
+      .then((agent: WantAgent) => {
+        request.wantAgent = agent;
+        // The slot carries the banner switch: create it before publishing so a
+        // fresh install does not silently fall back to a lower alert level.
+        return notificationManager.addSlot(notificationManager.SlotType.SOCIAL_COMMUNICATION)
+          .then(() => notificationManager.publish(request));
+      })
+      .then(() => {
+        this.voiceCallNotificationId = VOICE_CALL_NOTIFICATION_ID;
+        hilog.info(LOG_DOMAIN, TAG, 'voice call notification posted for %{public}d', id);
+      })
+      .catch((e: BusinessError) => {
+        hilog.warn(LOG_DOMAIN, TAG, 'voice call notification failed: %{public}d %{public}s',
+          e.code, e.message);
+      });
+  }
+
+  private cancelVoiceCallNotification(): void {
+    if (this.voiceCallNotificationId < 0) {
+      return;
+    }
+    const nid = this.voiceCallNotificationId;
+    this.voiceCallNotificationId = -1;
+    notificationManager.cancel(nid).catch((e: BusinessError) => {
+      hilog.warn(LOG_DOMAIN, TAG, 'cancel voice call notification failed: %{public}d', e.code);
+    });
+  }
+
+  // The call was answered, withdrawn or superseded: forget any background
+  // offer and drop the notification.
+  private cancelVoiceCallOffer(): void {
+    this.pendingCallSeq++;
+    this.pendingCallId = -1;
+    this.pendingCallName = '';
+    this.cancelVoiceCallNotification();
   }
 
   private acceptVoiceCall(id: number): void {
