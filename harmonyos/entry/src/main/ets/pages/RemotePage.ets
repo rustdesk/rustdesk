@@ -1,11 +1,16 @@
 import { router, promptAction, window } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { abilityAccessCtrl, PermissionRequestResult, Permissions } from '@kit.AbilityKit';
 import { image } from '@kit.ImageKit';
+import { pasteboard } from '@kit.BasicServicesKit';
 import { util } from '@kit.ArkTS';
 import { ffiSendMouse, ffiInputKey, ffiInputString, ffiInitVideo, ffiRefreshVideo,
          ffiSwitchDisplay, ffiSessionLogin, ffiSessionSend2fa, ffiSessionReconnect,
-         ffiSessionClose, ffiSendClipboard } from '../ohos_ffi';
+         ffiSessionClose, ffiSendClipboard, ffiRecordScreen, ffiRequestVoiceCall,
+         ffiCloseVoiceCall, ffiAnswerVoiceCall, ffiSessionGetOption, ffiSessionSetOption,
+         ffiSaveImageQuality, ffiSaveCustomImageQuality, ffiSetCustomFps, ffiToggleOption,
+         ffiGetToggleOption, ffiUpdateSupportedDecodings, ffiAlternativeCodecs } from '../ohos_ffi';
 import { globalEvents, RdeskEvent } from '../model/RdeskEvents';
 import { evStr, evNum, evBool, parseJsonArray, routerParams } from '../model/Utils';
 
@@ -36,6 +41,30 @@ const MAX_ZOOM = 8;
 const TAP_SLOP = 15;
 // Pointer (trackpad) mode: finger travel -> cursor travel ratio.
 const POINTER_SPEED = 1.4;
+
+// Image quality / fps slider bounds (flutter/lib/consts.dart).
+const MIN_QUALITY = 10;
+const MAX_QUALITY = 100;
+const DEFAULT_QUALITY = 50;
+const MIN_FPS = 5;
+const MAX_FPS = 120;
+const DEFAULT_FPS = 30;
+
+// Display-settings radio entries: value understood by the peer option and the
+// label resource. A class because ArkTS requires concrete types for literals.
+class RadioItem {
+  value: string = '';
+  label: ResourceStr = '';
+  enabled: boolean = true;
+}
+
+// Codec-preference alternative-codec flags, from ffiAlternativeCodecs.
+class AlternativeCodecs {
+  vp8: boolean = false;
+  av1: boolean = false;
+  h264: boolean = false;
+  h265: boolean = false;
+}
 
 class DisplayItem {
   x: number = 0;
@@ -102,25 +131,63 @@ struct ScrollbarIndicator {
   }
 }
 
-// Toolbar toggle chip: a custom component rather than a @Builder because a
-// by-value @Builder param never re-renders when the state variable changes,
-// so the selected state would never light up. @Prop syncs from the parent.
+// Toolbar icon item (sunlogin style): symbol glyph over a caption, active
+// state tinted with the sunlogin blue. danger renders the caption red.
+// A custom component, not a @Builder: by-value @Builder params never
+// re-render when the backing @State changes, so the mode toggle's icon and
+// the voice-call/record states would go stale while the panel stays open.
+// @Prop syncs from the parent.
 @Component
-struct ToggleChip {
+struct ToolbarItem {
+  @Prop icon: Resource = $r('sys.symbol.keyboard');
   @Prop label: ResourceStr = '';
   @Prop on: boolean = false;
+  @Prop danger: boolean = false;
   onTap: () => void = (): void => {};
 
   build() {
-    Text(this.label)
-      .fontSize(12)
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .borderRadius(6)
-      .backgroundColor(this.on ? '#3A7BD5' : '#EEEEEE')
-      .fontColor(this.on ? '#FFFFFF' : '#333333')
-      .onClick(() => {
-        this.onTap();
-      })
+    Column({ space: 5 }) {
+      SymbolGlyph(this.icon)
+        .fontSize(24)
+        .fontColor([this.danger ? '#FF6B6B' : (this.on ? '#4D8DFF' : '#E7EBF2')])
+      Text(this.label)
+        .fontSize(11)
+        .fontColor(this.danger ? '#FF6B6B' : (this.on ? '#4D8DFF' : '#C3CAD6'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .layoutWeight(1)
+    .padding({ top: 8, bottom: 8 })
+    .borderRadius(12)
+    .backgroundColor(this.on ? 'rgba(26,106,245,0.18)' : Color.Transparent)
+    .onClick(() => {
+      this.onTap();
+    })
+  }
+}
+
+// One stat cell of the expanded status card: value over caption, green when
+// the metric is healthy. A component for the same @Prop reason as above:
+// speed/fps/delay update while the card is open.
+@Component
+struct StatCell {
+  @Prop caption: ResourceStr = '';
+  @Prop value: string = '';
+  @Prop good: boolean = false;
+
+  build() {
+    Column({ space: 2 }) {
+      Text(this.value.length > 0 ? this.value : '-')
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.good ? '#34C759' : '#FFB74D')
+        .maxLines(1)
+      Text(this.caption)
+        .fontSize(10)
+        .fontColor('#8A93A0')
+    }
+    .layoutWeight(1)
+    .alignItems(HorizontalAlign.Start)
   }
 }
 
@@ -207,8 +274,42 @@ struct RemotePage {
   // measured against it.
   private lastPtrX: number = 0;
   private lastPtrY: number = 0;
-  // Quick-actions panel (three-finger tap / toolbar button).
+  // Quick-actions panel (three-finger tap / menu entry).
   @State showQuickActions: boolean = false;
+  // Virtual-mouse pad (pointer mode): left/right click, double click, wheel.
+  @State showVirtualMouse: boolean = false;
+  // Sunlogin-style bottom toolbar: a corner chip toggles an icon panel that
+  // holds every toolbar function (replaces the floating ball + menu drawer).
+  @State showToolbar: boolean = false;
+  // Display settings panel: image quality / codec preference / view-only.
+  @State showDisplaySettings: boolean = false;
+  // Toolbar chip position: right-edge/bottom coordinates (markAnchor 100%).
+  // Negative = not seeded yet; the root onAreaChange initializes it.
+  @State ballX: number = -1;
+  @State ballY: number = -1;
+  @State rootW: number = 0;
+  @State rootH: number = 0;
+  private ballDragFromX: number = 0;
+  private ballDragFromY: number = 0;
+  // "low" | "balanced" | "best" | "custom"; the slider shows for "custom".
+  @State imageQuality: string = 'balanced';
+  @State customQuality: number = DEFAULT_QUALITY;
+  @State customFps: number = DEFAULT_FPS;
+  // Selected codec-preference value ("auto"/"vp8"/"vp9"/"h264"/"h265").
+  @State codecPreference: string = 'auto';
+  @State altCodecs: AlternativeCodecs = new AlternativeCodecs();
+  @State viewOnly: boolean = false;
+  // Voice call state machine: idle -> waiting (peer deciding) -> active.
+  @State voiceCallState: string = 'idle';
+  // The controlled side is offering a voice call and awaits our answer.
+  @State showVoiceCallIncomingDialog: boolean = false;
+  // Screen recording toggle (follows the peer's recording permission).
+  @State recording: boolean = false;
+  // Recording allowed by the peer (permission event "recording").
+  @State recordingAllowed: boolean = false;
+  // Audio permission from the peer ("audio" permission event); when false the
+  // audio chip shows disabled state.
+  @State audioAllowed: boolean = false;
   // Scrollbar indicators while zoomed and panning.
   @State showScrollbars: boolean = false;
   private scrollbarTimer: number = -1;
@@ -305,11 +406,20 @@ struct RemotePage {
         this.showPasswordDialog = false;
         this.showTwofaDialog = false;
         this.showErrorDialog = false;
+        this.showVoiceCallIncomingDialog = false;
         break;
       case 'permission': {
         const parts: string[] = [];
         for (const k of ev.keys) {
           parts.push(`${k}: ${ev.get(k) === 'true' ? 'Y' : 'N'}`);
+          if (k === 'recording') {
+            this.recordingAllowed = ev.get(k) === 'true';
+            if (!this.recordingAllowed) {
+              this.recording = false;
+            }
+          } else if (k === 'audio') {
+            this.audioAllowed = ev.get(k) === 'true';
+          }
         }
         this.permissionText = parts.join('  ');
         break;
@@ -318,6 +428,30 @@ struct RemotePage {
         this.speed = ev.get('speed');
         this.fps = ev.get('fps');
         this.delay = ev.get('delay');
+        break;
+      case 'voice_call_waiting':
+        this.voiceCallState = 'waiting';
+        break;
+      case 'voice_call_started':
+        this.voiceCallState = 'active';
+        this.showVoiceCallIncomingDialog = false;
+        break;
+      case 'voice_call_closed':
+        this.voiceCallState = 'idle';
+        this.showVoiceCallIncomingDialog = false;
+        break;
+      case 'voice_call_incoming':
+        // The controlled side offers a voice call; the dialog answers it.
+        this.showVoiceCallIncomingDialog = true;
+        break;
+      case 'record_status':
+        this.recording = ev.get('start') === 'true';
+        break;
+      case 'clipboard_image':
+        this.onClipboardImage(ev.get('png'));
+        break;
+      case 'clipboard_html':
+        this.onClipboardHtml(ev.get('html'));
         break;
       default:
         break;
@@ -745,6 +879,7 @@ struct RemotePage {
     // remote-cursor overlay while it is active.
     this.showRemoteCursor = false;
     this.pointerMode = true;
+    this.showVirtualMouse = true;
   }
 
   private leavePointerMode(): void {
@@ -764,6 +899,7 @@ struct RemotePage {
     }
     // Back to cursor mode: restore the remote-cursor overlay.
     this.showRemoteCursor = true;
+    this.showVirtualMouse = false;
   }
 
   // Send a mouse event at a finger position (component-local vp). The
@@ -803,6 +939,109 @@ struct RemotePage {
     router.back();
   }
 
+  // ------------------------------------------------------------------
+  // Sunlogin-style bottom toolbar: corner chip + icon panel
+  // ------------------------------------------------------------------
+
+  // Seed the toolbar chip position once the root size is known: right edge
+  // with a 10vp gap, 42% height (markAnchor 100% makes x the chip's right
+  // edge). Kept draggable like the old floating ball.
+  private seedBallPos(): void {
+    if (this.ballX < 0 && this.rootW > 0 && this.rootH > 0) {
+      this.ballX = this.rootW - 10;
+      this.ballY = this.rootH * 0.42;
+    }
+  }
+
+  private onBallDragStart(): void {
+    this.ballDragFromX = this.ballX;
+    this.ballDragFromY = this.ballY;
+    this.showToolbar = false;
+  }
+
+  private onBallDragUpdate(dx: number, dy: number): void {
+    if (this.rootW <= 0 || this.rootH <= 0) {
+      return;
+    }
+    // markAnchor(100%,100%) means x/y track the ball's bottom-right corner;
+    // clamp so a slice of the ball always stays grabbable on every edge.
+    const x = Math.min(Math.max(dx, 30), this.rootW - 4);
+    const y = Math.min(Math.max(dy, 40), this.rootH - 4);
+    this.ballX = x;
+    this.ballY = y;
+  }
+
+  // Ball quick action: cycle to the next display (single tap). With one
+  // display it does nothing.
+  private quickSwitchDisplay(): void {
+    if (this.displays.length < 2) {
+      promptAction.showToast({ message: $r('app.string.display'), duration: 1500 });
+      return;
+    }
+    const next = (this.currentDisplay + 1) % this.displays.length;
+    this.switchToDisplay(next);
+  }
+
+  private switchToDisplay(idx: number): void {
+    if (idx < 0 || idx >= this.displays.length || idx === this.currentDisplay) {
+      return;
+    }
+    ffiSwitchDisplay(this.uuid, idx);
+  }
+
+  private quickToggleMode(): void {
+    if (this.pointerMode) {
+      this.leavePointerMode();
+      promptAction.showToast({ message: $r('app.string.mode_switched_touch'), duration: 1500 });
+    } else {
+      this.enterPointerMode();
+      promptAction.showToast({ message: $r('app.string.mode_switched_pointer'), duration: 1500 });
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Virtual mouse pad (pointer mode): clickable buttons that act on the
+  // virtual cursor position; wheel buttons scroll the remote content.
+  // ------------------------------------------------------------------
+
+  private vmLeftClick(): void {
+    this.vptrMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_DOWN);
+    this.vptrMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP);
+  }
+
+  private vmDoubleClick(): void {
+    this.vmLeftClick();
+    this.vmLeftClick();
+  }
+
+  private vmRightClick(): void {
+    this.vptrMouse((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_DOWN);
+    this.vptrMouse((MOUSE_BUTTON_RIGHT << 3) | MOUSE_TYPE_UP);
+  }
+
+  private vmMiddleClick(): void {
+    this.vptrMouse((MOUSE_BUTTON_WHEEL << 3) | MOUSE_TYPE_DOWN);
+    this.vptrMouse((MOUSE_BUTTON_WHEEL << 3) | MOUSE_TYPE_UP);
+  }
+
+  // Wheel: y > 0 scrolls up on Windows peers (the desktop server multiplies
+  // non-trackpad wheel deltas by WHEEL_DELTA), matching the two-finger
+  // drag path that already sends raw positive/negative amounts.
+  private vmWheel(up: boolean): void {
+    const amount = 3;
+    this.mouse((MOUSE_BUTTON_WHEEL << 3) | MOUSE_TYPE_WHEEL, 0, up ? amount : -amount);
+  }
+
+  private toggleVirtualMouse(): void {
+    if (this.pointerMode) {
+      this.showVirtualMouse = !this.showVirtualMouse;
+    } else {
+      // First tap enters pointer mode and opens the pad; the mode toast is
+      // skipped here because the pad itself is the visible feedback.
+      this.enterPointerMode();
+    }
+  }
+
   // Local -> remote clipboard. pasteboard.getData() needs the ACL-restricted
   // ohos.permission.READ_PASTEBOARD (not in the current debug profile), so the
   // content rides the system's own paste affordance instead: the user
@@ -828,6 +1067,245 @@ struct RemotePage {
       promptAction.showToast({ message: $r('app.string.clipboard_sent'), duration: 2000 });
     } else {
       promptAction.showToast({ message: $r('app.string.clipboard_send_failed'), duration: 2000 });
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Voice call / session recording
+  // ------------------------------------------------------------------
+
+  private toggleVoiceCall(): void {
+    if (this.voiceCallState === 'idle') {
+      this.requestMicThenCall();
+    } else {
+      ffiCloseVoiceCall(this.uuid);
+      this.voiceCallState = 'idle';
+    }
+  }
+
+  // ohos.permission.MICROPHONE is user_grant: the first voice call triggers
+  // the system dialog; a denial keeps the call idle.
+  private requestMicThenCall(): void {
+    const perms: Array<Permissions> = ['ohos.permission.MICROPHONE'];
+    abilityAccessCtrl.createAtManager().requestPermissionsFromUser(getContext(this), perms)
+      .then((result: PermissionRequestResult) => {
+        const granted = result.authResults.every((r: number): boolean => r === 0);
+        if (!granted) {
+          promptAction.showToast({ message: $r('app.string.mic_denied'), duration: 2500 });
+          return;
+        }
+        this.voiceCallState = 'waiting';
+        if (ffiRequestVoiceCall(this.uuid) !== 0) {
+          this.voiceCallState = 'idle';
+          promptAction.showToast({ message: $r('app.string.voice_call_failed'), duration: 2000 });
+        }
+      })
+      .catch((e: BusinessError) => {
+        hilog.warn(LOG_DOMAIN, TAG, 'request mic permission failed: %{public}s', `${e}`);
+      });
+  }
+
+  // Answer a voice call the controlled side offered. Accepting requests the
+  // mic permission first; a denial declines so the peer is not left waiting
+  // on a one-way call.
+  private answerVoiceCall(accept: boolean): void {
+    this.showVoiceCallIncomingDialog = false;
+    if (!accept) {
+      ffiAnswerVoiceCall(this.uuid, false);
+      return;
+    }
+    const perms: Array<Permissions> = ['ohos.permission.MICROPHONE'];
+    abilityAccessCtrl.createAtManager().requestPermissionsFromUser(getContext(this), perms)
+      .then((result: PermissionRequestResult) => {
+        const granted = result.authResults.every((r: number): boolean => r === 0);
+        if (!granted) {
+          promptAction.showToast({ message: $r('app.string.mic_denied'), duration: 2500 });
+          ffiAnswerVoiceCall(this.uuid, false);
+          return;
+        }
+        ffiAnswerVoiceCall(this.uuid, true);
+      })
+      .catch((e: BusinessError) => {
+        hilog.warn(LOG_DOMAIN, TAG, 'request mic permission failed: %{public}s', `${e}`);
+        ffiAnswerVoiceCall(this.uuid, false);
+      });
+  }
+
+  private toggleRecording(): void {
+    if (!this.recordingAllowed) {
+      promptAction.showToast({ message: $r('app.string.record_not_allowed'), duration: 2000 });
+      return;
+    }
+    const start = !this.recording;
+    if (ffiRecordScreen(this.uuid, start) === 0) {
+      this.recording = start;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Display settings: image quality / codec preference / view-only
+  // ------------------------------------------------------------------
+
+  // Load the current settings from the peer config when the panel opens; the
+  // same keys the Flutter toolbar reads.
+  private openDisplaySettings(): void {
+    const q = ffiSessionGetOption(this.uuid, 'image_quality');
+    if (q.length > 0) {
+      this.imageQuality = q;
+    } else {
+      this.imageQuality = 'balanced';
+    }
+    const cq = ffiSessionGetOption(this.uuid, 'custom_image_quality');
+    const cqNum = Number(cq);
+    this.customQuality =
+      cq.length > 0 && cqNum >= MIN_QUALITY && cqNum <= MAX_QUALITY * 20 ? cqNum : DEFAULT_QUALITY;
+    const fps = ffiSessionGetOption(this.uuid, 'custom-fps');
+    const fpsNum = Number(fps);
+    this.customFps = fps.length > 0 && fpsNum >= MIN_FPS && fpsNum <= MAX_FPS ? fpsNum : DEFAULT_FPS;
+    const cp = ffiSessionGetOption(this.uuid, 'codec-preference');
+    this.codecPreference = cp.length > 0 ? cp : 'auto';
+    this.viewOnly = ffiGetToggleOption(this.uuid, 'view-only') === 1;
+    try {
+      const codecs: Object = JSON.parse(ffiAlternativeCodecs(this.uuid)) as Object;
+      const rec: Record<string, Object> = codecs as Record<string, Object>;
+      const alt = new AlternativeCodecs();
+      alt.vp8 = rec['vp8'] === true;
+      alt.av1 = rec['av1'] === true;
+      alt.h264 = rec['h264'] === true;
+      alt.h265 = rec['h265'] === true;
+      this.altCodecs = alt;
+    } catch (e) {
+      this.altCodecs = new AlternativeCodecs();
+    }
+    this.showDisplaySettings = true;
+  }
+
+  private pickImageQuality(value: string): void {
+    this.imageQuality = value;
+    ffiSaveImageQuality(this.uuid, value);
+  }
+
+  // Slider moved (debounce-free: the FFI round-trip is in-process; the peer
+  // applies OptionMessage throttling itself).
+  private applyCustomQuality(quality: number): void {
+    this.customQuality = quality;
+    this.imageQuality = 'custom';
+    ffiSaveCustomImageQuality(this.uuid, Math.round(quality));
+  }
+
+  private applyCustomFps(fps: number): void {
+    this.customFps = fps;
+    ffiSetCustomFps(this.uuid, Math.round(fps));
+  }
+
+  // Codec preference is stored as a peer option; the peer re-negotiates the
+  // encoder from the refreshed supported-decodings message.
+  private pickCodecPreference(value: string): void {
+    this.codecPreference = value;
+    ffiSessionSetOption(this.uuid, 'codec-preference', value);
+    ffiUpdateSupportedDecodings(this.uuid);
+  }
+
+  private toggleViewOnly(): void {
+    ffiToggleOption(this.uuid, 'view-only');
+    this.viewOnly = ffiGetToggleOption(this.uuid, 'view-only') === 1;
+  }
+
+  private qualityItems(): RadioItem[] {
+    const list: RadioItem[] = [];
+    const add = (value: string, label: ResourceStr): void => {
+      const it = new RadioItem();
+      it.value = value;
+      it.label = label;
+      it.enabled = true;
+      list.push(it);
+    };
+    add('best', $r('app.string.quality_best'));
+    add('balanced', $r('app.string.quality_balanced'));
+    add('low', $r('app.string.quality_low'));
+    add('custom', $r('app.string.quality_custom'));
+    return list;
+  }
+
+  private codecItems(): RadioItem[] {
+    const list: RadioItem[] = [];
+    const add = (value: string, label: ResourceStr, enabled: boolean): void => {
+      const it = new RadioItem();
+      it.value = value;
+      it.label = label;
+      it.enabled = enabled;
+      list.push(it);
+    };
+    add('auto', $r('app.string.codec_auto'), true);
+    add('vp8', 'VP8', this.altCodecs.vp8);
+    add('vp9', 'VP9', true);
+    add('h264', 'H264', this.altCodecs.h264);
+    add('h265', 'H265', this.altCodecs.h265);
+    return list;
+  }
+
+  // A remote image clipboard payload: decode the base64 PNG and write it to
+  // the system pasteboard as a pixel map so any app can paste it.
+  private onClipboardImage(pngBase64: string): void {
+    if (pngBase64.length === 0) {
+      return;
+    }
+    try {
+      const bytes = new util.Base64Helper().decodeSync(pngBase64);
+      const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      const src: image.ImageSource = image.createImageSource(buf);
+      src.createPixelMap().then((pm: image.PixelMap) => {
+        try {
+          const data = pasteboard.createData(pasteboard.MIMETYPE_PIXELMAP, pm);
+          pasteboard.getSystemPasteboard().setData(data).then(() => {
+            promptAction.showToast({ message: $r('app.string.clipboard_image_received'),
+                                     duration: 2000 });
+          }).catch((e: BusinessError) => {
+            hilog.warn(LOG_DOMAIN, TAG, 'paste image failed: %{public}s', `${e}`);
+          });
+        } catch (e) {
+          hilog.warn(LOG_DOMAIN, TAG, 'pasteboard create image failed: %{public}s', `${e}`);
+        }
+      }).catch((e: BusinessError) => {
+        hilog.warn(LOG_DOMAIN, TAG, 'createPixelMap failed: %{public}s', `${e}`);
+      });
+    } catch (e) {
+      hilog.warn(LOG_DOMAIN, TAG, 'clipboard image decode failed: %{public}s', `${e}`);
+    }
+  }
+
+  // A remote HTML clipboard payload: keep the HTML and its plain-text fallback
+  // on the system pasteboard so rich content survives a round-trip. The peer
+  // usually sends the text and HTML variants in one MultiClipboards message;
+  // the plain variant already went through the clipboard callback, so re-set
+  // the record with both records together.
+  private onClipboardHtml(html: string): void {
+    if (html.length === 0) {
+      return;
+    }
+    try {
+      const pb = pasteboard.getSystemPasteboard();
+      pb.getData((err: BusinessError, srcData: pasteboard.PasteData) => {
+        if (err) {
+          hilog.warn(LOG_DOMAIN, TAG, 'pasteboard read failed: %{public}s', `${err}`);
+          return;
+        }
+        try {
+          const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_HTML, html);
+          const record = srcData.getRecord(0);
+          if (record !== undefined && record !== null &&
+              record.mimeType === pasteboard.MIMETYPE_TEXT_PLAIN) {
+            data.addRecord(record);
+          }
+          pb.setData(data).catch((e: BusinessError) => {
+            hilog.warn(LOG_DOMAIN, TAG, 'paste html failed: %{public}s', `${e}`);
+          });
+        } catch (e) {
+          hilog.warn(LOG_DOMAIN, TAG, 'pasteboard create html failed: %{public}s', `${e}`);
+        }
+      });
+    } catch (e) {
+      hilog.warn(LOG_DOMAIN, TAG, 'clipboard html failed: %{public}s', `${e}`);
     }
   }
 
@@ -919,64 +1397,21 @@ struct RemotePage {
     }
   }
 
-  private stateColor(): string {
-    if (this.connState === 'ready') {
-      return '#4CAF50';
+  // Signal-bars / shield color in the collapsed status icons: green when the
+  // link is good, orange otherwise. Shield green additionally requires an
+  // encrypted connection.
+  private delayGood(): boolean {
+    if (this.connState !== 'ready') {
+      return false;
     }
-    if (this.connState === 'closed' || this.connState === 'failed') {
-      return '#F44336';
-    }
-    return '#FF9800';
+    const ms = parseInt(this.delay, 10);
+    return !Number.isNaN(ms) && ms < 100;
   }
 
   build() {
     Stack() {
+      // ---- video area (fullscreen letterbox) ----
       Column() {
-        // ---- status bar ----
-        Column() {
-          Row({ space: 8 }) {
-            Text('●').fontSize(12).fontColor(this.stateColor())
-            Text(this.peerName.length > 0 ? this.peerName : this.peerId)
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .layoutWeight(1)
-            Text(this.connState === 'ready' ? $r('app.string.connected') : $r('app.string.connecting'))
-              .fontSize(12)
-              .fontColor('#666666')
-            Text(this.showStatusDetail ? '▾' : '▸').fontSize(12)
-          }
-          .width('100%')
-          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-          .onClick(() => {
-            this.showStatusDetail = !this.showStatusDetail;
-          })
-          if (this.showStatusDetail) {
-            Column({ space: 2 }) {
-              Row({ space: 6 }) {
-                Text($r('app.string.conn_detail')).fontSize(12).fontColor('#666666')
-                Text(this.connDetail).fontSize(12).fontColor('#666666')
-              }
-              Row({ space: 10 }) {
-                Text($r('app.string.speed')).fontSize(12).fontColor('#666666')
-                Text(this.speed.length > 0 ? this.speed : '-').fontSize(12).fontColor('#666666')
-                Text($r('app.string.fps')).fontSize(12).fontColor('#666666')
-                Text(this.fps.length > 0 ? this.fps : '-').fontSize(12).fontColor('#666666')
-                Text($r('app.string.delay')).fontSize(12).fontColor('#666666')
-                Text(this.delay.length > 0 ? this.delay : '-').fontSize(12).fontColor('#666666')
-              }
-              if (this.permissionText.length > 0) {
-                Text(this.permissionText).fontSize(11).fontColor('#999999')
-              }
-            }
-            .width('100%')
-            .alignItems(HorizontalAlign.Start)
-            .padding({ left: 30, right: 12, bottom: 8 })
-          }
-        }
-        .width('100%')
-        .backgroundColor('#F2F3F5')
-
-        // ---- video area (letterbox) ----
         Stack() {
           // Video + remote cursor overlay share one transform (zoom/pan), so
           // the cursor stays glued to the remote pixels it belongs to.
@@ -1295,10 +1730,9 @@ struct RemotePage {
             }
           }
           if (this.isLandscape) {
-            Text('☰')
+            SymbolGlyph($r('sys.symbol.line_3_horizontal'))
               .fontSize(16)
-              .fontColor(this.landscapeToolbar ? '#333333' : '#FFFFFF')
-              .textAlign(TextAlign.Center)
+              .fontColor([this.landscapeToolbar ? '#333333' : '#FFFFFF'])
               .width(30)
               .height(30)
               .borderRadius(15)
@@ -1318,135 +1752,361 @@ struct RemotePage {
           this.containerH = newArea.height as number;
           this.fitVideo();
         })
-
-        // ---- toolbar (auto-hidden in landscape; the corner chip brings it
-        // back) ----
-        if (!this.isLandscape || this.landscapeToolbar) {
-          Column({ space: 6 }) {
-          if (this.showKeyboard) {
-            TextInput({ placeholder: $r('app.string.keyboard_hint'), text: this.keyboardInput })
-              .width('100%')
-              .height(40)
-              .fontSize(15)
-              .onChange((v: string) => {
-                this.onKeyboardChange(v);
-              })
-              .onSubmit(() => {
-                this.pressKey('VK_RETURN');
-                this.keyboardInput = '';
-                this.sentKeyboardText = '';
-              })
-          }
-          Row({ space: 8 }) {
-            ToggleChip({
-              label: 'Ctrl',
-              on: this.ctrlOn,
-              onTap: (): void => {
-                this.ctrlOn = !this.ctrlOn;
-              }
-            })
-            ToggleChip({
-              label: 'Alt',
-              on: this.altOn,
-              onTap: (): void => {
-                this.altOn = !this.altOn;
-              }
-            })
-            ToggleChip({
-              label: 'Shift',
-              on: this.shiftOn,
-              onTap: (): void => {
-                this.shiftOn = !this.shiftOn;
-              }
-            })
-            Blank()
-            this.ToolButton($r('app.string.keyboard'), (): void => {
-              this.showKeyboard = !this.showKeyboard;
-            })
-          }
-          .width('100%')
-          Row({ space: 8 }) {
-            ToggleChip({
-              label: $r('app.string.remote_cursor'),
-              on: this.showRemoteCursor,
-              onTap: (): void => {
-                // Mutually exclusive with pointer mode: tapping this chip
-                // while it is on leaves pointer mode (which re-enables it).
-                if (this.showRemoteCursor) {
-                  this.leavePointerMode();
-                  this.showRemoteCursor = false;
-                  return;
-                }
-                this.showRemoteCursor = true;
-              }
-            })
-            ToggleChip({
-              label: $r('app.string.pointer_mode'),
-              on: this.pointerMode,
-              onTap: (): void => {
-                if (this.pointerMode) {
-                  this.leavePointerMode();
-                } else {
-                  this.enterPointerMode();
-                }
-              }
-            })
-            this.ToolButton($r('app.string.quick_actions'), (): void => {
-              this.showQuickActions = true;
-            })
-            this.ToolButton($r('app.string.sync_clipboard'), (): void => {
-              this.syncClipboard();
-            })
-            Blank()
-          }
-          .width('100%')
-          Row({ space: 8 }) {
-            this.ToolButton('Esc', (): void => {
-              this.pressKey('VK_ESCAPE');
-            })
-            this.ToolButton('Tab', (): void => {
-              this.pressKey('VK_TAB');
-            })
-            this.ToolButton($r('app.string.key_enter'), (): void => {
-              this.pressKey('VK_RETURN');
-            })
-            this.ToolButton($r('app.string.key_backspace'), (): void => {
-              this.pressKey('VK_BACK');
-            })
-            Blank()
-            this.ToolButton($r('app.string.refresh'), (): void => {
-              ffiRefreshVideo(this.uuid);
-            })
-            this.ToolButton($r('app.string.disconnect'), (): void => {
-              this.disconnect();
-            })
-          }
-          .width('100%')
-          if (this.displays.length > 1) {
-            Row({ space: 8 }) {
-              Text($r('app.string.display')).fontSize(12).fontColor('#666666')
-              ForEach(this.displays, (_d: DisplayItem, idx: number) => {
-                Text(`${idx + 1}`)
-                  .fontSize(12)
-                  .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-                  .borderRadius(6)
-                  .backgroundColor(idx === this.currentDisplay ? '#3A7BD5' : '#F2F3F5')
-                  .fontColor(idx === this.currentDisplay ? '#FFFFFF' : '#333333')
-                  .onClick(() => {
-                    ffiSwitchDisplay(this.uuid, idx);
-                  })
-              }, (_d: DisplayItem, idx: number) => `display_${idx}`)
-            }
-            .width('100%')
-          }
-        }
-          .width('100%')
-          .padding({ left: 12, right: 12, top: 6, bottom: 10 })
-          .backgroundColor('#FAFAFA')
-        }
       }
       .width('100%')
       .height('100%')
+
+      // ---- connection status pill (top-left, sunlogin-style): green dot +
+      // ---- peer id + connected chevron. Tap to expand the detail card
+      // ---- (FPS / speed / delay / permissions).
+      if (this.connState === 'ready') {
+        Row({ space: 7 }) {
+          Circle({ width: 8, height: 8 })
+            .fill(this.delayGood() ? '#34C759' : '#FF9800')
+          Text(this.peerId)
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#FFFFFF')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .constraintSize({ maxWidth: 150 })
+          Text($r('app.string.connected'))
+            .fontSize(12)
+            .fontColor('#B8C0CC')
+          Text('›')
+            .fontSize(15)
+            .fontColor('#B8C0CC')
+        }
+        .padding({ left: 12, right: 10, top: 7, bottom: 7 })
+        .borderRadius(20)
+        .backgroundColor('rgba(15,18,24,0.62)')
+        .position({ x: 10, y: 10 })
+        .onClick(() => {
+          this.showStatusDetail = !this.showStatusDetail;
+        })
+      }
+
+      // ---- peer info detail (expanded from the pill, sunlogin style) ----
+      if (this.showStatusDetail) {
+        Column({ space: 6 }) {
+          Row() {
+            Text(this.peerName.length > 0 ? this.peerName : this.peerId)
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#FFFFFF')
+            Blank()
+            Text(this.connDetail).fontSize(11).fontColor('#9AA3B0')
+          }
+          .width('100%')
+          Divider().color('rgba(255,255,255,0.14)')
+          Row() {
+            StatCell({
+              caption: $r('app.string.delay'),
+              value: this.delay,
+              good: this.delayGood()
+            })
+            StatCell({
+              caption: $r('app.string.speed'),
+              value: this.speed,
+              good: true
+            })
+            StatCell({
+              caption: $r('app.string.fps'),
+              value: this.fps,
+              good: true
+            })
+          }
+          .width('100%')
+          if (this.permissionText.length > 0) {
+            Text(this.permissionText).fontSize(10).fontColor('#8A93A0')
+              .width('100%')
+          }
+        }
+        .width('86%')
+        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .borderRadius(14)
+        .backgroundColor('rgba(15,18,24,0.78)')
+        .position({ x: 10, y: 48 })
+        .onClick(() => {
+          this.showStatusDetail = false;
+        })
+      }
+
+      // ---- status badges (top-right: recording / voice call / view-only)
+      // ---- plus the virtual-mouse entry. Badges are informational (pass-
+      // ---- through hit test); the mouse button below them is clickable.
+      Column({ space: 6 }) {
+        if (this.recording) {
+          Text($r('app.string.record_stop'))
+            .fontSize(11)
+            .fontColor('#FF8484')
+            .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+            .borderRadius(12)
+            .backgroundColor('rgba(15,18,24,0.6)')
+            .hitTestBehavior(HitTestMode.None)
+        }
+        if (this.voiceCallState !== 'idle') {
+          Text(this.voiceCallState === 'active' ? $r('app.string.voice_call_end')
+                                                : $r('app.string.voice_call_waiting'))
+            .fontSize(11)
+            .fontColor('#8FD3A7')
+            .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+            .borderRadius(12)
+            .backgroundColor('rgba(15,18,24,0.6)')
+            .hitTestBehavior(HitTestMode.None)
+        }
+        if (this.viewOnly) {
+          Text($r('app.string.view_only'))
+            .fontSize(11)
+            .fontColor('#FFFFFF')
+            .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+            .borderRadius(12)
+            .backgroundColor('rgba(15,18,24,0.6)')
+            .hitTestBehavior(HitTestMode.None)
+        }
+        // Virtual-mouse entry: tap enters pointer mode / toggles the pad.
+        Column() {
+          Row()
+            .width(2)
+            .height(5)
+            .borderRadius(1)
+            .backgroundColor(this.pointerMode ? '#1A6AF5' : '#FFFFFF')
+            .margin({ top: 3 })
+          Row()
+            .width(14)
+            .height(20)
+            .borderRadius(7)
+            .border({ width: 1.5, color: this.pointerMode ? '#1A6AF5' : '#FFFFFF' })
+        }
+        .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+        .borderRadius(12)
+        .backgroundColor('rgba(15,18,24,0.6)')
+        .onClick(() => {
+          this.toggleVirtualMouse();
+        })
+      }
+      .alignItems(HorizontalAlign.End)
+      .position({ x: '100%', y: 10 })
+      .markAnchor({ x: '100%', y: 0 })
+
+      // ---- landscape corner chip (unchanged behavior, now re-opens the ball)
+      // ----
+      if (this.isLandscape) {
+        SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+          .fontSize(16)
+          .fontColor([this.landscapeToolbar ? '#333333' : '#FFFFFF'])
+          .width(30)
+          .height(30)
+          .borderRadius(15)
+          .backgroundColor(this.landscapeToolbar ? '#E8E8E8' : 'rgba(0,0,0,0.35)')
+          .position({ x: '96%', y: '96%' })
+          .markAnchor({ x: '50%', y: '50%' })
+          .onClick(() => {
+            this.landscapeToolbar = !this.landscapeToolbar;
+          })
+      }
+
+      // ---- sunlogin-style toolbar: a draggable corner chip ("<>") toggles
+      // ---- the bottom icon panel that holds every toolbar function.
+      if (!this.isLandscape || this.landscapeToolbar) {
+        SymbolGlyph(this.showToolbar ? $r('sys.symbol.xmark') : $r('sys.symbol.ellipsis_bubble'))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor([this.showToolbar ? '#FFFFFF' : '#1A6AF5'])
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .backgroundColor(this.showToolbar ? 'rgba(26,106,245,0.9)' : 'rgba(255,255,255,0.92)')
+          .shadow({ radius: 8, color: 'rgba(0,0,0,0.25)', offsetY: 2 })
+          .position({ x: this.ballX < 0 ? '100%' : this.ballX,
+                      y: this.ballY < 0 ? '42%' : this.ballY })
+          .markAnchor({ x: '100%', y: '50%' })
+          .onClick(() => {
+            this.showToolbar = !this.showToolbar;
+          })
+          .gesture(PanGesture({ fingers: 1, direction: PanDirection.All, distance: 5 })
+            .onActionStart((_e: GestureEvent) => {
+              this.onBallDragStart();
+            })
+            .onActionUpdate((e: GestureEvent) => {
+              this.onBallDragUpdate(this.ballDragFromX + e.offsetX,
+                                    this.ballDragFromY + e.offsetY);
+            }))
+      }
+
+      // ---- bottom icon panel (the toolbar itself) ----
+      if (this.showToolbar) {
+        Column() {
+          Column({ space: 14 }) {
+            Row({ space: 10 }) {
+              ToolbarItem({
+                icon: $r('sys.symbol.keyboard'),
+                label: $r('app.string.keyboard'),
+                on: this.showKeyboard,
+                onTap: (): void => {
+                  this.showToolbar = false;
+                  this.showKeyboard = !this.showKeyboard;
+                }
+              })
+              ToolbarItem({
+                icon: this.pointerMode ? $r('sys.symbol.hand_tap') : $r('sys.symbol.mouse'),
+                label: $r('app.string.quick_mode'),
+                on: this.pointerMode,
+                onTap: (): void => {
+                  this.quickToggleMode();
+                }
+              })
+              ToolbarItem({
+                icon: $r('sys.symbol.display'),
+                label: $r('app.string.quick_switch_display'),
+                onTap: (): void => {
+                  this.showToolbar = false;
+                  this.quickSwitchDisplay();
+                }
+              })
+              ToolbarItem({
+                icon: $r('sys.symbol.slider_horizontal_2_1'),
+                label: $r('app.string.display_settings'),
+                onTap: (): void => {
+                  this.showToolbar = false;
+                  this.openDisplaySettings();
+                }
+              })
+            }
+            .width('100%')
+            Row({ space: 10 }) {
+              ToolbarItem({
+                icon: $r('sys.symbol.text_clipboard'),
+                label: $r('app.string.sync_clipboard'),
+                onTap: (): void => {
+                  this.showToolbar = false;
+                  this.syncClipboard();
+                }
+              })
+              ToolbarItem({
+                icon: $r('sys.symbol.phone_down_fill'),
+                label: $r('app.string.voice_call_start'),
+                on: this.voiceCallState !== 'idle',
+                onTap: (): void => {
+                  this.showToolbar = false;
+                  this.toggleVoiceCall();
+                }
+              })
+              ToolbarItem({
+                icon: $r('sys.symbol.record_circle'),
+                label: this.recording ? $r('app.string.record_stop')
+                                       : $r('app.string.record_start'),
+                on: this.recording,
+                onTap: (): void => {
+                  this.showToolbar = false;
+                  this.toggleRecording();
+                }
+              })
+              ToolbarItem({
+                icon: $r('sys.symbol.square_grid_2x2'),
+                label: $r('app.string.quick_actions'),
+                onTap: (): void => {
+                  this.showToolbar = false;
+                  this.showQuickActions = true;
+                }
+              })
+            }
+            .width('100%')
+            Divider().color('rgba(255,255,255,0.12)')
+            Row({ space: 10 }) {
+              ToolbarItem({
+                icon: $r('sys.symbol.arrow_counterclockwise'),
+                label: $r('app.string.refresh'),
+                onTap: (): void => {
+                  this.showToolbar = false;
+                  ffiRefreshVideo(this.uuid);
+                }
+              })
+              ToolbarItem({
+                icon: $r('sys.symbol.lock'),
+                label: $r('app.string.view_only'),
+                on: this.viewOnly,
+                onTap: (): void => {
+                  this.toggleViewOnly();
+                }
+              })
+              Blank()
+              ToolbarItem({
+                icon: $r('sys.symbol.power'),
+                label: $r('app.string.disconnect'),
+                danger: true,
+                onTap: (): void => {
+                  this.showToolbar = false;
+                  this.disconnect();
+                }
+              })
+            }
+            .width('100%')
+          }
+          .padding({ left: 16, right: 16, top: 16, bottom: 14 })
+        }
+        .width('100%')
+        .borderRadius({ topLeft: 20, topRight: 20 })
+        .backgroundColor('rgba(28,32,40,0.96)')
+        .position({ x: 0, y: '100%' })
+        .markAnchor({ y: '100%' })
+        .onClick(() => {
+        })
+      }
+      // Tap the dim area above the panel to close it.
+      if (this.showToolbar) {
+        Column()
+          .width('100%')
+          .layoutWeight(1)
+          .onClick(() => {
+            this.showToolbar = false;
+          })
+      }
+
+      // ---- remote text input bar (bottom, dark to match the toolbar) ----
+      if (this.showKeyboard) {
+        Row({ space: 8 }) {
+          TextInput({ placeholder: $r('app.string.keyboard_hint'), text: this.keyboardInput })
+            .width('72%')
+            .height(38)
+            .fontSize(14)
+            .fontColor('#FFFFFF')
+            .placeholderColor('#8A93A0')
+            .backgroundColor('rgba(255,255,255,0.12)')
+            .onChange((v: string) => {
+              this.onKeyboardChange(v);
+            })
+            .onSubmit(() => {
+              this.pressKey('VK_RETURN');
+              this.keyboardInput = '';
+              this.sentKeyboardText = '';
+            })
+          Text($r('app.string.key_enter'))
+            .fontSize(13)
+            .fontColor('#FFFFFF')
+            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            .borderRadius(9)
+            .backgroundColor('#1A6AF5')
+            .onClick(() => {
+              this.pressKey('VK_RETURN');
+            })
+          SymbolGlyph($r('sys.symbol.chevron_down'))
+            .fontSize(15)
+            .fontColor(['#FFFFFF'])
+            .width(36)
+            .height(38)
+            .borderRadius(9)
+            .backgroundColor('rgba(255,255,255,0.12)')
+            .onClick(() => {
+              this.showKeyboard = false;
+            })
+        }
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+        .backgroundColor('rgba(28,32,40,0.96)')
+        .position({ x: 0, y: '100%' })
+        .markAnchor({ y: '100%' })
+      }
 
       // ---- password dialog ----
       if (this.showPasswordDialog) {
@@ -1597,6 +2257,40 @@ struct RemotePage {
         .justifyContent(FlexAlign.Center)
       }
 
+      // ---- incoming voice call dialog (offered by the controlled side) ----
+      if (this.showVoiceCallIncomingDialog) {
+        Column() {
+          Column() {
+            Text($r('app.string.share_voice_call_incoming'))
+              .fontSize(18).fontWeight(FontWeight.Medium).margin({ bottom: 8 })
+            Text(this.peerName.length > 0 ? this.peerName : this.peerId)
+              .fontSize(14).fontColor('#555555')
+            Row({ space: 12 }) {
+              Button($r('app.string.share_reject'), { buttonStyle: ButtonStyleMode.NORMAL })
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.answerVoiceCall(false);
+                })
+              Button($r('app.string.share_accept'))
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.answerVoiceCall(true);
+                })
+            }
+            .width('100%')
+            .margin({ top: 14 })
+          }
+          .width('82%')
+          .padding(16)
+          .borderRadius(12)
+          .backgroundColor('#FFFFFF')
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.45)')
+        .justifyContent(FlexAlign.Center)
+      }
+
       // ---- clipboard sync dialog (paste, then send) ----
       if (this.showClipboardDialog) {
         Column() {
@@ -1639,6 +2333,59 @@ struct RemotePage {
         .backgroundColor('rgba(0,0,0,0.45)')
         .justifyContent(FlexAlign.Center)
       }
+      // ---- virtual mouse pad (pointer mode): buttons act on the virtual
+      // ---- cursor; drag on the pad body steers the cursor like the video
+      // ---- surface does. Bottom-center, above the keyboard bar.
+      if (this.showVirtualMouse && this.pointerMode) {
+        Column({ space: 10 }) {
+          Row({ space: 8 }) {
+            Text($r('app.string.virtual_mouse'))
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#333333')
+              .layoutWeight(1)
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(14)
+              .fontColor(['#666666'])
+              .onClick(() => {
+                this.showVirtualMouse = false;
+              })
+          }
+          .width('100%')
+          Row({ space: 8 }) {
+            this.VmButton($r('app.string.vm_left'), (): void => {
+              this.vmLeftClick();
+            })
+            this.VmButton($r('app.string.vm_double'), (): void => {
+              this.vmDoubleClick();
+            })
+            this.VmButton($r('app.string.vm_right'), (): void => {
+              this.vmRightClick();
+            })
+          }
+          .width('100%')
+          Row({ space: 8 }) {
+            this.VmButton($r('app.string.vm_middle'), (): void => {
+              this.vmMiddleClick();
+            })
+            this.VmButton($r('app.string.vm_scroll_up'), (): void => {
+              this.vmWheel(true);
+            })
+            this.VmButton($r('app.string.vm_scroll_down'), (): void => {
+              this.vmWheel(false);
+            })
+          }
+          .width('100%')
+        }
+        .width('72%')
+        .padding(12)
+        .borderRadius(14)
+        .backgroundColor('rgba(255,255,255,0.96)')
+        .position({ x: '50%', y: '100%' })
+        .markAnchor({ x: '50%', y: '100%' })
+        .margin({ bottom: 76 })
+      }
+
       // ---- quick actions panel (three-finger tap / toolbar) ----
       if (this.showQuickActions) {
         Column() {
@@ -1680,23 +2427,189 @@ struct RemotePage {
           this.showQuickActions = false;
         })
       }
+      // ---- display settings drawer (quality / codec preference) ----
+      if (this.showDisplaySettings) {
+        Column() {
+          Column() {
+            Row({ space: 8 }) {
+              Text($r('app.string.display_settings'))
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#333333')
+                .layoutWeight(1)
+              Text($r('app.string.close'))
+                .fontSize(13)
+                .fontColor('#666666')
+                .onClick(() => {
+                  this.showDisplaySettings = false;
+                })
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, top: 14, bottom: 6 })
+            Scroll() {
+              Column({ space: 4 }) {
+              Text($r('app.string.image_quality'))
+                .fontSize(13).fontColor('#666666')
+              ForEach(this.qualityItems(), (q: RadioItem) => {
+                Row({ space: 8 }) {
+                  Radio({ value: q.value, group: 'quality' })
+                    .radioStyle({ checkedBackgroundColor: '#1A6AF5' })
+                    .onChange((on: boolean) => {
+                      if (on) {
+                        this.pickImageQuality(q.value);
+                      }
+                    })
+                  Text(q.label).fontSize(14).fontColor('#333333')
+                  Blank()
+                }
+                .width('100%')
+                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              }, (q: RadioItem) => `quality_${q.value}`)
+              if (this.imageQuality === 'custom') {
+                Column({ space: 2 }) {
+                  Row() {
+                    Text($r('app.string.bitrate')).fontSize(12).fontColor('#666666')
+                    Blank()
+                    Text(`${Math.round(this.customQuality)}%`)
+                      .fontSize(12).fontColor('#333333')
+                  }
+                  .width('100%')
+                  Slider({ value: this.customQuality, min: MIN_QUALITY, max: MAX_QUALITY,
+                           step: 5, style: SliderStyle.OutSet })
+                    .width('100%')
+                    .onChange((v: number) => {
+                      this.applyCustomQuality(v);
+                    })
+                  Row() {
+                    Text($r('app.string.fps_limit')).fontSize(12).fontColor('#666666')
+                    Blank()
+                    Text(`${Math.round(this.customFps)}`)
+                      .fontSize(12).fontColor('#333333')
+                  }
+                  .width('100%')
+                  Slider({ value: this.customFps, min: MIN_FPS, max: MAX_FPS,
+                           step: 5, style: SliderStyle.OutSet })
+                    .width('100%')
+                    .onChange((v: number) => {
+                      this.applyCustomFps(v);
+                    })
+                }
+                .width('100%')
+                .padding({ left: 6, right: 6 })
+              }
+              Divider().margin({ top: 4, bottom: 4 })
+              Text($r('app.string.codec_preference'))
+                .fontSize(13).fontColor('#666666')
+              ForEach(this.codecItems(), (c: RadioItem) => {
+                Row({ space: 8 }) {
+                  Radio({ value: c.value, group: 'codec' })
+                    .radioStyle({ checkedBackgroundColor: '#1A6AF5' })
+                    .enabled(c.enabled)
+                    .onChange((on: boolean) => {
+                      if (on) {
+                        this.pickCodecPreference(c.value);
+                      }
+                    })
+                  Text(c.label)
+                    .fontSize(14)
+                    .fontColor(c.enabled ? '#333333' : '#BBBBBB')
+                  Blank()
+                }
+                .width('100%')
+                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              }, (c: RadioItem) => `codec_${c.value}`)
+              Divider().margin({ top: 4, bottom: 4 })
+              Row({ space: 8 }) {
+                Text($r('app.string.remote_cursor')).fontSize(14).fontColor('#333333')
+                Blank()
+                Toggle({ type: ToggleType.Switch, isOn: this.showRemoteCursor })
+                  .selectedColor('#1A6AF5')
+                  .onChange((on: boolean) => {
+                    if (on !== this.showRemoteCursor) {
+                      if (on) {
+                        this.showRemoteCursor = true;
+                      } else {
+                        // Mutually exclusive with pointer mode: switching the
+                        // overlay off also leaves pointer mode first.
+                        if (this.pointerMode) {
+                          this.leavePointerMode();
+                        }
+                        this.showRemoteCursor = false;
+                      }
+                    }
+                  })
+              }
+              .width('100%')
+              .padding({ left: 6, right: 6 })
+              Divider().margin({ top: 4, bottom: 4 })
+              Row({ space: 8 }) {
+                Text($r('app.string.view_only')).fontSize(14).fontColor('#333333')
+                Blank()
+                Toggle({ type: ToggleType.Switch, isOn: this.viewOnly })
+                  .selectedColor('#1A6AF5')
+                  .onChange((on: boolean) => {
+                    if (on !== this.viewOnly) {
+                      this.toggleViewOnly();
+                    }
+                  })
+              }
+              .width('100%')
+              .padding({ left: 6, right: 6 })
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, bottom: 18 })
+          }
+          .constraintSize({ maxHeight: 480 })
+          .align(Alignment.Top)
+        }
+        .width('100%')
+        .padding({ top: 4 })
+        .borderRadius({ topLeft: 18, topRight: 18 })
+        .backgroundColor('#FFFFFF')
+        }
+      }
     }
     .width('100%')
     .height('100%')
     .backgroundColor('#000000')
     .onAreaChange((_oldArea: Area, newArea: Area) => {
-      this.isLandscape = (newArea.width as number) > (newArea.height as number);
+      const w = newArea.width as number;
+      const h = newArea.height as number;
+      // Orientation flip: the dragged ball position was measured against the
+      // old screen size, so the ball may sit off-screen afterwards - reset it
+      // back to the default spot for the new orientation.
+      const landscape = w > h;
+      if (landscape !== this.isLandscape) {
+        this.ballX = -1;
+        this.ballY = -1;
+      }
+      this.rootW = w;
+      this.rootH = h;
+      this.seedBallPos();
+      if (this.ballX >= 0) {
+        this.onBallDragUpdate(this.ballX, this.ballY);
+      }
+      this.isLandscape = landscape;
     })
   }
 
+  // Toolbar icon item (sunlogin style): symbol glyph over a caption. A
+  // custom component, not a @Builder: by-value @Builder params never
+  // re-render when the backing @State changes, so the mode toggle's icon
+  // would go stale while the panel stays open. @Prop syncs from the parent.
+
+  // Virtual-mouse pad button: compact filled chip.
   @Builder
-  ToolButton(label: ResourceStr, onTap: () => void) {
+  VmButton(label: ResourceStr, onTap: () => void) {
     Text(label)
-      .fontSize(12)
-      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-      .borderRadius(6)
-      .backgroundColor('#EEEEEE')
+      .fontSize(13)
       .fontColor('#333333')
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .maxLines(1)
+      .padding({ top: 10, bottom: 10 })
+      .borderRadius(9)
+      .backgroundColor('#F2F3F5')
       .onClick(() => {
         onTap();
       })

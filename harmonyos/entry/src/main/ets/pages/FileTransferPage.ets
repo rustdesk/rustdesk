@@ -1,9 +1,9 @@
-import { promptAction, window } from '@kit.ArkUI';
+import { promptAction, router, window } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
 import { BusinessError, zlib } from '@kit.BasicServicesKit';
 import { ffiReadDir, ffiSendFiles, ffiSetConfirmOverrideFile, ffiCancelJob,
-         ffiSessionClose } from '../ohos_ffi';
+         ffiSessionClose, ffiSessionLogin, ffiSessionSend2fa } from '../ohos_ffi';
 import { globalEvents, RdeskEvent } from '../model/RdeskEvents';
 import { evStr, evNum, parseJsonObject, arrayOfRecords, routerParams, joinPath,
          parentPath, fileNameOf, formatBytes } from '../model/Utils';
@@ -20,9 +20,14 @@ class FileEntry {
 
 class JobItem {
   id: number = 0;
+  name: string = '';
+  // Bytes of the source entry recorded at submit time; 0 = folder / unknown,
+  // in which case no percentage can be shown (folder jobs show file_num).
+  total: number = 0;
+  isUpload: boolean = false;
   fileNum: number = 0;
-  speed: string = '';
-  finishedSize: string = '';
+  speed: number = 0;
+  finished: number = 0;
   err: string = '';
   done: boolean = false;
 }
@@ -59,6 +64,14 @@ struct FileTransferPage {
   @State jobs: JobItem[] = [];
   @State showOverrideDialog: boolean = false;
   @State overrideText: string = '';
+  // msgbox dialogs (same flow as RemotePage)
+  @State showPasswordDialog: boolean = false;
+  @State showTwofaDialog: boolean = false;
+  @State msgboxText: string = '';
+  @State passwordInput: string = '';
+  @State rememberPassword: boolean = false;
+  @State twofaInput: string = '';
+  @State trustDevice: boolean = false;
   private localRoot: string = '';
   private actId: number = 1;
   private overrideActId: number = 0;
@@ -78,7 +91,8 @@ struct FileTransferPage {
     };
     globalEvents.subscribe(this.eventHandler);
     this.refreshLocal();
-    this.refreshRemote();
+    // The peer drops file requests until the login is accepted; the remote
+    // listing is fetched on the peer_info event instead of here.
     this.setKeepScreenOn(true);
   }
 
@@ -135,52 +149,75 @@ struct FileTransferPage {
         break;
       }
       case 'job_progress':
-        this.upsertJob(ev.num('id'), ev.num('file_num'), ev.get('speed'),
-                       ev.get('finished_size'), '', false);
+        this.upsertJob(ev.num('id'), ev.num('file_num'), ev.num('speed'), ev.num('finished_size'),
+                       '', false);
         break;
       case 'job_done':
-        this.upsertJob(ev.num('id'), ev.num('file_num'), '', '', '', true);
+        this.upsertJob(ev.num('id'), ev.num('file_num'), 0, 0, '', true);
         break;
       case 'job_error':
-        this.upsertJob(ev.num('id'), ev.num('file_num'), '', '', ev.get('err'), true);
+        this.upsertJob(ev.num('id'), ev.num('file_num'), 0, 0, ev.get('err'), true);
         break;
       case 'override_file_confirm':
         this.overrideActId = ev.num('id');
         this.overrideFileNum = ev.num('file_num');
         this.overrideIsUpload = ev.bool('is_upload');
-        this.overrideText = ev.get('to');
+        this.overrideText = ev.get('read_path');
         this.showOverrideDialog = true;
         break;
       case 'msgbox': {
         const type = ev.get('type');
-        if (type !== 'input-password' && type !== '2fa') {
-          promptAction.showToast({ message: ev.get('text'), duration: 3000 });
+        this.msgboxText = ev.get('text');
+        if (type === 'input-password' || type === 're-input-password') {
+          this.showPasswordDialog = true;
+        } else if (type === 'input-2fa') {
+          this.showTwofaDialog = true;
+        } else {
+          promptAction.showToast({ message: this.msgboxText, duration: 3000 });
         }
         break;
       }
+      case 'cancel_msgbox':
+        this.showPasswordDialog = false;
+        this.showTwofaDialog = false;
+        break;
+      case 'peer_info':
+        // PeerInfo only arrives after the peer accepted the login request, so
+        // any pending credential prompt is stale (mirrors RemotePage). The
+        // initial ReadDir sent before authorization was dropped by the peer,
+        // so fetch the remote listing now.
+        this.showPasswordDialog = false;
+        this.showTwofaDialog = false;
+        this.refreshRemote();
+        break;
       default:
         break;
     }
   }
 
-  private upsertJob(id: number, fileNum: number, speed: string, finishedSize: string,
+  // Terminal rows are frozen: the cancel path marks jobs done locally (no
+  // callback arrives from the peer), so late job_error/job_done events for a
+  // cancelled id must not resurrect the row.
+  private upsertJob(id: number, fileNum: number, speed: number, finished: number,
                     err: string, done: boolean): void {
     const next: JobItem[] = [];
     let found = false;
     for (const j of this.jobs) {
       if (j.id === id) {
         found = true;
-        if (speed.length > 0) {
-          j.speed = speed;
+        if (!j.done) {
+          j.fileNum = fileNum;
+          if (speed > 0) {
+            j.speed = speed;
+          }
+          if (finished > 0) {
+            j.finished = finished;
+          }
+          if (err.length > 0) {
+            j.err = err;
+          }
+          j.done = done;
         }
-        if (finishedSize.length > 0) {
-          j.finishedSize = finishedSize;
-        }
-        if (err.length > 0) {
-          j.err = err;
-        }
-        j.fileNum = fileNum;
-        j.done = done;
       }
       next.push(j);
     }
@@ -189,12 +226,146 @@ struct FileTransferPage {
       j.id = id;
       j.fileNum = fileNum;
       j.speed = speed;
-      j.finishedSize = finishedSize;
+      j.finished = finished;
       j.err = err;
       j.done = done;
       next.push(j);
     }
     this.jobs = next;
+  }
+
+  // The peer sends no completion callback for cancelled jobs, so the row is
+  // closed here immediately (same approach as the Flutter JobController).
+  private cancelJob(job: JobItem): void {
+    ffiCancelJob(this.uuid, job.id);
+    const next: JobItem[] = [];
+    for (const j of this.jobs) {
+      if (j.id === job.id && !j.done) {
+        j.done = true;
+        j.err = 'cancel';
+        j.speed = 0;
+      }
+      next.push(j);
+    }
+    this.jobs = next;
+    promptAction.showToast({ message: $r('app.string.job_cancelled_toast'), duration: 1500 });
+  }
+
+  private clearFinishedJobs(): void {
+    const next: JobItem[] = [];
+    for (const j of this.jobs) {
+      if (!j.done) {
+        next.push(j);
+      }
+    }
+    this.jobs = next;
+  }
+
+  private jobStateText(j: JobItem): ResourceStr {
+    if (j.err === 'cancel') {
+      return $r('app.string.transfer_state_cancelled');
+    }
+    if (j.err === 'skipped') {
+      return $r('app.string.transfer_state_skipped');
+    }
+    if (j.err.length > 0) {
+      return $r('app.string.transfer_state_failed');
+    }
+    return $r('app.string.transfer_state_finished');
+  }
+
+  private jobStateColor(j: JobItem): ResourceColor {
+    if (j.err === 'cancel') {
+      return '#999999';
+    }
+    if (j.err === 'skipped') {
+      return '#FF9800';
+    }
+    return '#F44336';
+  }
+
+  private jobPercent(j: JobItem): number {
+    if (j.total <= 0) {
+      return 0;
+    }
+    const pct = Math.floor(j.finished / j.total * 100);
+    return Math.max(0, Math.min(100, pct));
+  }
+
+  @Builder
+  JobRow(j: JobItem) {
+    Column({ space: 4 }) {
+      Row({ space: 6 }) {
+        Text(j.isUpload ? '↑' : '↓')
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(j.isUpload ? '#3A7BD5' : '#4CAF50')
+          .width(18)
+          .textAlign(TextAlign.Center)
+        Text(j.name)
+          .fontSize(13)
+          .fontColor('#333333')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+        if (!j.done) {
+          Text($r('app.string.cancel_job'))
+            .fontSize(12)
+            .fontColor('#F44336')
+            .padding({ left: 8, right: 2, top: 4, bottom: 4 })
+            .onClick(() => {
+              this.cancelJob(j);
+            })
+        }
+      }
+      .width('100%')
+      if (j.total > 0) {
+        Row({ space: 6 }) {
+          Progress({ value: this.jobPercent(j), total: 100, type: ProgressType.Linear })
+            .color(j.isUpload ? '#3A7BD5' : '#4CAF50')
+            .style({ strokeWidth: 4 })
+            .layoutWeight(1)
+          Text(`${this.jobPercent(j)}%`)
+            .fontSize(11)
+            .fontColor('#666666')
+            .width(36)
+            .textAlign(TextAlign.End)
+        }
+        .width('100%')
+      }
+      Row({ space: 6 }) {
+        if (j.done) {
+          if (j.err.length > 0) {
+            Text(this.jobStateText(j)).fontSize(11).fontColor(this.jobStateColor(j))
+          } else {
+            Text($r('app.string.transfer_state_finished')).fontSize(11).fontColor('#4CAF50')
+          }
+        } else {
+          if (j.speed > 0) {
+            Text($r('app.string.transfer_state_transferring')).fontSize(11).fontColor('#3A7BD5')
+          } else {
+            Text($r('app.string.transfer_state_waiting')).fontSize(11).fontColor('#999999')
+          }
+        }
+        if (j.total === 0) {
+          Text($r('app.string.file_num')).fontSize(11).fontColor('#666666')
+          Text(`${j.fileNum}`).fontSize(11).fontColor('#666666')
+        }
+        Blank()
+        if (!j.done && j.speed > 0) {
+          Text(`${formatBytes(j.speed)}/s`).fontSize(11).fontColor('#666666')
+        }
+        Text(j.total > 0 ? `${formatBytes(j.finished)} / ${formatBytes(j.total)}`
+                         : formatBytes(j.finished))
+          .fontSize(11)
+          .fontColor('#999999')
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(8)
+    .borderRadius(8)
+    .backgroundColor('#FFFFFF')
   }
 
   // ------------------------------------------------------------------
@@ -365,6 +536,12 @@ struct FileTransferPage {
     }
     const to = joinPath(this.remoteDir, this.localSel.name);
     const id = this.actId++;
+    const job = new JobItem();
+    job.id = id;
+    job.name = this.localSel.name;
+    job.total = this.localSel.isDir ? 0 : this.localSel.size;
+    job.isUpload = true;
+    this.jobs = this.jobs.concat([job]);
     hilog.info(LOG_DOMAIN, TAG, 'upload job %{public}d: %{public}s -> %{public}s', id,
                this.localSel.path, to);
     ffiSendFiles(this.uuid, id, this.localSel.path, to, 0, false, false);
@@ -378,6 +555,11 @@ struct FileTransferPage {
     const from = joinPath(this.remoteDir, this.remoteSel.name);
     const to = joinPath(this.localDir, this.remoteSel.name);
     const id = this.actId++;
+    const job = new JobItem();
+    job.id = id;
+    job.name = this.remoteSel.name;
+    job.total = this.remoteSel.isDir ? 0 : this.remoteSel.size;
+    this.jobs = this.jobs.concat([job]);
     hilog.info(LOG_DOMAIN, TAG, 'download job %{public}d: %{public}s -> %{public}s', id, from, to);
     ffiSendFiles(this.uuid, id, from, to, 0, false, true);
   }
@@ -386,6 +568,18 @@ struct FileTransferPage {
     this.showOverrideDialog = false;
     ffiSetConfirmOverrideFile(this.uuid, this.overrideActId, this.overrideFileNum, needOverride,
                               false, this.overrideIsUpload);
+  }
+
+  private answerPassword(): void {
+    this.showPasswordDialog = false;
+    ffiSessionLogin(this.uuid, this.passwordInput, this.rememberPassword);
+    this.passwordInput = '';
+  }
+
+  private answer2fa(): void {
+    this.showTwofaDialog = false;
+    ffiSessionSend2fa(this.uuid, this.twofaInput, this.trustDevice);
+    this.twofaInput = '';
   }
 
   @Builder
@@ -421,9 +615,9 @@ struct FileTransferPage {
   @Builder
   FileRow(e: FileEntry, selected: boolean, onSelect: () => void, onOpen: () => void) {
     Row({ space: 6 }) {
-      Text(e.isDir ? '[D]' : '[F]')
-        .fontSize(12)
-        .fontColor(e.isDir ? '#3A7BD5' : '#888888')
+      SymbolGlyph(e.isDir ? $r('sys.symbol.folder') : $r('sys.symbol.doc'))
+        .fontSize(14)
+        .fontColor(['#3A7BD5'])
       Text(e.name)
         .fontSize(13)
         .maxLines(1)
@@ -508,6 +702,41 @@ struct FileTransferPage {
           .borderRadius(8)
           .padding(4)
 
+          // ---- transfer actions (Sunlogin-style middle column) ----
+          Column({ space: 16 }) {
+            Column({ space: 2 }) {
+              Button('↑', { buttonStyle: ButtonStyleMode.NORMAL })
+                .type(ButtonType.Circle)
+                .width(44)
+                .height(44)
+                .fontSize(20)
+                .fontColor(Color.White)
+                .backgroundColor('#3A7BD5')
+                .onClick(() => {
+                  this.upload();
+                })
+              Text($r('app.string.upload_to_remote')).fontSize(10).fontColor('#666666')
+            }
+            .opacity(this.localHasSel ? 1 : 0.4)
+            Column({ space: 2 }) {
+              Button('↓', { buttonStyle: ButtonStyleMode.NORMAL })
+                .type(ButtonType.Circle)
+                .width(44)
+                .height(44)
+                .fontSize(20)
+                .fontColor(Color.White)
+                .backgroundColor('#4CAF50')
+                .onClick(() => {
+                  this.download();
+                })
+              Text($r('app.string.download_to_local')).fontSize(10).fontColor('#666666')
+            }
+            .opacity(this.remoteHasSel ? 1 : 0.4)
+          }
+          .width(52)
+          .height('100%')
+          .justifyContent(FlexAlign.Center)
+
           // ---- remote panel ----
           Column() {
             this.PanelHeader($r('app.string.remote'), this.remoteDir, (): void => {
@@ -544,66 +773,41 @@ struct FileTransferPage {
         .layoutWeight(1)
         .padding(6)
 
-        // ---- transfer buttons ----
-        Row({ space: 10 }) {
-          Button($r('app.string.upload_to_remote'), { buttonStyle: ButtonStyleMode.NORMAL })
-            .layoutWeight(1)
-            .backgroundColor('#3A7BD5')
-            .onClick(() => {
-              this.upload();
-            })
-          Button($r('app.string.download_to_local'), { buttonStyle: ButtonStyleMode.NORMAL })
-            .layoutWeight(1)
-            .backgroundColor('#3A7BD5')
-            .onClick(() => {
-              this.download();
-            })
-        }
-        .width('100%')
-        .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-
-        // ---- job list ----
-        Column() {
-          Text($r('app.string.jobs')).fontSize(12).fontColor('#666666').width('100%')
-            .padding({ left: 10, top: 4 })
-          List({ space: 2 }) {
-            ForEach(this.jobs, (j: JobItem) => {
-              ListItem() {
-                Row({ space: 8 }) {
-                  Text(`#${j.id}`).fontSize(12).fontColor('#3A7BD5')
-                  Row({ space: 4 }) {
-                    Text($r('app.string.file_num')).fontSize(12)
-                    Text(`${j.fileNum}`).fontSize(12)
-                  }
-                  Text(j.speed).fontSize(12).fontColor('#666666')
-                  Text(j.finishedSize).fontSize(12).fontColor('#666666')
-                  if (j.err.length > 0) {
-                    Text(j.err).fontSize(11).fontColor('#F44336')
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
-                      .layoutWeight(1)
-                  } else if (j.done) {
-                    Text($r('app.string.job_done')).fontSize(11).fontColor('#4CAF50')
-                  } else {
-                    Blank()
-                    Text($r('app.string.cancel_job'))
-                      .fontSize(11)
-                      .fontColor('#F44336')
-                      .onClick(() => {
-                        ffiCancelJob(this.uuid, j.id);
-                      })
-                  }
+        // ---- transfer job list ----
+        if (this.jobs.length > 0) {
+          Column() {
+            Row() {
+              Text($r('app.string.transfer_list'))
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#666666')
+              Blank()
+              Text($r('app.string.transfer_clear'))
+                .fontSize(12)
+                .fontColor('#3A7BD5')
+                .padding({ left: 8, right: 4, top: 4, bottom: 4 })
+                .onClick(() => {
+                  this.clearFinishedJobs();
+                })
+            }
+            .width('100%')
+            .padding({ left: 10, right: 6, top: 4 })
+            List({ space: 4 }) {
+              ForEach(this.jobs, (j: JobItem) => {
+                ListItem() {
+                  this.JobRow(j)
                 }
-                .width('100%')
-                .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-              }
-            }, (j: JobItem) => `job_${j.id}_${j.done ? 1 : 0}_${j.err.length}`)
+              }, (j: JobItem) =>
+                `job_${j.id}_${j.done ? 1 : 0}_${j.err}_${Math.floor(j.finished)}_${Math.floor(j.speed)}`)
+            }
+            .width('100%')
+            .layoutWeight(1)
+            .scrollBar(BarState.Auto)
           }
           .width('100%')
-          .height(110)
+          .height(170)
+          .backgroundColor('#F5F5F5')
         }
-        .width('100%')
-        .backgroundColor('#F5F5F5')
       }
       .width('100%')
       .height('100%')
@@ -634,6 +838,112 @@ struct FileTransferPage {
             }
             .width('100%')
             .margin({ top: 12 })
+          }
+          .width('82%')
+          .padding(16)
+          .borderRadius(12)
+          .backgroundColor('#FFFFFF')
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.45)')
+        .justifyContent(FlexAlign.Center)
+      }
+
+      // ---- password dialog ----
+      if (this.showPasswordDialog) {
+        Column() {
+          Column() {
+            Text($r('app.string.password_required'))
+              .fontSize(18).fontWeight(FontWeight.Medium).margin({ bottom: 8 })
+            if (this.msgboxText.length > 0) {
+              Text(this.msgboxText).fontSize(13).fontColor('#F44336').margin({ bottom: 8 })
+            }
+            TextInput({ placeholder: $r('app.string.password_hint'), text: this.passwordInput })
+              .type(InputType.Password)
+              .width('100%')
+              .height(42)
+              .onChange((v: string) => {
+                this.passwordInput = v;
+              })
+            Row({ space: 8 }) {
+              Toggle({ type: ToggleType.Checkbox, isOn: this.rememberPassword })
+                .onChange((v: boolean) => {
+                  this.rememberPassword = v;
+                })
+              Text($r('app.string.remember_password')).fontSize(13)
+              Blank()
+            }
+            .width('100%')
+            .margin({ top: 10 })
+            Row({ space: 12 }) {
+              Button($r('app.string.cancel'), { buttonStyle: ButtonStyleMode.NORMAL })
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.showPasswordDialog = false;
+                  router.back();
+                })
+              Button($r('app.string.ok'))
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.answerPassword();
+                })
+            }
+            .width('100%')
+            .margin({ top: 14 })
+          }
+          .width('82%')
+          .padding(16)
+          .borderRadius(12)
+          .backgroundColor('#FFFFFF')
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.45)')
+        .justifyContent(FlexAlign.Center)
+      }
+
+      // ---- 2FA dialog ----
+      if (this.showTwofaDialog) {
+        Column() {
+          Column() {
+            Text($r('app.string.twofa_required'))
+              .fontSize(18).fontWeight(FontWeight.Medium).margin({ bottom: 8 })
+            if (this.msgboxText.length > 0) {
+              Text(this.msgboxText).fontSize(13).fontColor('#555555').margin({ bottom: 8 })
+            }
+            TextInput({ placeholder: $r('app.string.twofa_hint'), text: this.twofaInput })
+              .type(InputType.Number)
+              .width('100%')
+              .height(42)
+              .onChange((v: string) => {
+                this.twofaInput = v;
+              })
+            Row({ space: 8 }) {
+              Toggle({ type: ToggleType.Checkbox, isOn: this.trustDevice })
+                .onChange((v: boolean) => {
+                  this.trustDevice = v;
+                })
+              Text($r('app.string.trust_device')).fontSize(13)
+              Blank()
+            }
+            .width('100%')
+            .margin({ top: 10 })
+            Row({ space: 12 }) {
+              Button($r('app.string.cancel'), { buttonStyle: ButtonStyleMode.NORMAL })
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.showTwofaDialog = false;
+                  router.back();
+                })
+              Button($r('app.string.ok'))
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.answer2fa();
+                })
+            }
+            .width('100%')
+            .margin({ top: 14 })
           }
           .width('82%')
           .padding(16)
