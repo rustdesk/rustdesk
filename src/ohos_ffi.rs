@@ -368,6 +368,16 @@ impl InvokeUiSession for OhosHandler {
         }
     }
 
+    fn clipboard_html(&self, html: String) {
+        push_event("clipboard_html", &[("html", &html)]);
+    }
+
+    fn clipboard_image_png(&self, content: Vec<u8>) {
+        use hbb_common::base64::Engine;
+        let encoded = hbb_common::base64::engine::general_purpose::STANDARD.encode(&content);
+        push_event("clipboard_image", &[("png", &encoded)]);
+    }
+
     fn cancel_msgbox(&self, tag: &str) {
         push_event("cancel_msgbox", &[("tag", tag)]);
     }
@@ -376,10 +386,18 @@ impl InvokeUiSession for OhosHandler {
 
     fn portable_service_running(&self, _running: bool) {}
 
-    fn on_voice_call_started(&self) {}
-    fn on_voice_call_closed(&self, _reason: &str) {}
-    fn on_voice_call_waiting(&self) {}
-    fn on_voice_call_incoming(&self) {}
+    fn on_voice_call_started(&self) {
+        push_event::<&str>("voice_call_started", &[]);
+    }
+    fn on_voice_call_closed(&self, _reason: &str) {
+        push_event::<&str>("voice_call_closed", &[]);
+    }
+    fn on_voice_call_waiting(&self) {
+        push_event::<&str>("voice_call_waiting", &[]);
+    }
+    fn on_voice_call_incoming(&self) {
+        push_event::<&str>("voice_call_incoming", &[]);
+    }
 
     fn get_rgba(&self, _display: usize) -> *const u8 {
         std::ptr::null()
@@ -391,7 +409,9 @@ impl InvokeUiSession for OhosHandler {
 
     fn set_current_display(&self, _disp_idx: i32) {}
 
-    fn update_record_status(&self, _start: bool) {}
+    fn update_record_status(&self, start: bool) {
+        push_event("record_status", &[("start", &start.to_string())]);
+    }
 
     fn printer_request(&self, _id: i32, _path: String) {}
 
@@ -582,7 +602,8 @@ pub extern "C" fn ohos_set_callbacks(
 #[no_mangle]
 pub extern "C" fn ohos_session_new(
     peer_id: *const c_char,
-    is_file_transfer: c_int,
+    // 0 = remote control, 1 = file transfer, 2 = view camera.
+    session_kind: c_int,
     password: *const c_char,
     force_relay: c_int,
 ) -> *mut c_char {
@@ -591,10 +612,10 @@ pub extern "C" fn ohos_session_new(
         return new_cstring("".to_owned());
     }
     let session_id = Uuid::new_v4();
-    let conn_type = if is_file_transfer != 0 {
-        ConnType::FILE_TRANSFER
-    } else {
-        ConnType::DEFAULT_CONN
+    let conn_type = match session_kind {
+        1 => ConnType::FILE_TRANSFER,
+        2 => ConnType::VIEW_CAMERA,
+        _ => ConnType::DEFAULT_CONN,
     };
     let mut session: Session<OhosHandler> = Session {
         password: cstr(password).to_owned(),
@@ -897,4 +918,519 @@ pub extern "C" fn ohos_remove_file(
         return 0;
     }
     -1
+}
+
+#[no_mangle]
+pub extern "C" fn ohos_record_screen(session_id: *const c_char, start: c_int) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.record_screen(start != 0);
+        return 0;
+    }
+    -1
+}
+
+#[no_mangle]
+pub extern "C" fn ohos_request_voice_call(session_id: *const c_char) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.request_voice_call();
+        return 0;
+    }
+    -1
+}
+
+#[no_mangle]
+pub extern "C" fn ohos_close_voice_call(session_id: *const c_char) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.close_voice_call();
+        return 0;
+    }
+    -1
+}
+
+/// Answer a voice call the controlled side offered (`accept != 0` accepts).
+#[no_mangle]
+pub extern "C" fn ohos_answer_voice_call(session_id: *const c_char, accept: c_int) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.answer_voice_call(accept != 0);
+        return 0;
+    }
+    -1
+}
+
+#[no_mangle]
+pub extern "C" fn ohos_send_clipboard_image_png(
+    session_id: *const c_char,
+    // Base64 of the PNG bytes (the ArkTS pasteboard round-trips bytes as strings).
+    png_base64: *const c_char,
+) -> c_int {
+    use hbb_common::base64::Engine;
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    let Ok(data) = hbb_common::base64::engine::general_purpose::STANDARD.decode(cstr(png_base64))
+    else {
+        return -2;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        let mut msg = Message::new();
+        let mut cb = Clipboard {
+            content: data.into(),
+            compress: false,
+            format: ClipboardFormat::ImagePng.into(),
+            ..Default::default()
+        };
+        cb.compress = false;
+        msg.set_clipboard(cb);
+        session.send(Data::Message(msg));
+        return 0;
+    }
+    -1
+}
+
+// ---------------------------------------------------------------------------
+// Display options: image quality, codec preference, view-only (contract §2).
+// The read/write pair stores into the peer config like Flutter's
+// sessionGetOption/sessionPeerOption; the save functions also push the
+// matching OptionMessage to the peer.
+// ---------------------------------------------------------------------------
+
+/// Read a session (peer config) option, e.g. "image_quality",
+/// "codec-preference", "custom-fps", "zoom-style". The caller owns the
+/// returned string and must free it with `ohos_free_string`.
+#[no_mangle]
+pub extern "C" fn ohos_session_get_option(session_id: *const c_char, key: *const c_char) -> *mut c_char {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return new_cstring("".to_owned());
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        return new_cstring(session.get_option(cstr(key).to_owned()));
+    }
+    new_cstring("".to_owned())
+}
+
+/// Write a session (peer config) option. Takes effect on the next video
+/// negotiation; codec-preference also needs `ohos_update_supported_decodings`.
+#[no_mangle]
+pub extern "C" fn ohos_session_set_option(
+    session_id: *const c_char,
+    key: *const c_char,
+    value: *const c_char,
+) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.set_option(cstr(key).to_owned(), cstr(value).to_owned());
+        return 0;
+    }
+    -1
+}
+
+/// Switch image quality ("low" / "balanced" / "best"); "custom" is stored and
+/// reported by the following two functions.
+#[no_mangle]
+pub extern "C" fn ohos_save_image_quality(session_id: *const c_char, value: *const c_char) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.save_image_quality(cstr(value).to_owned());
+        return 0;
+    }
+    -1
+}
+
+/// Save a custom bitrate (percent 10..2000, implies image quality "custom").
+#[no_mangle]
+pub extern "C" fn ohos_save_custom_image_quality(
+    session_id: *const c_char,
+    quality: c_int,
+) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.save_custom_image_quality(quality);
+        return 0;
+    }
+    -1
+}
+
+/// Save a custom fps limit (5..120).
+#[no_mangle]
+pub extern "C" fn ohos_set_custom_fps(session_id: *const c_char, fps: c_int) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.set_custom_fps(fps);
+        return 0;
+    }
+    -1
+}
+
+/// Toggle a session option ("view-only", "show-remote-cursor", ...) and push
+/// the matching OptionMessage to the peer.
+#[no_mangle]
+pub extern "C" fn ohos_toggle_option(session_id: *const c_char, name: *const c_char) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.toggle_option(cstr(name).to_owned());
+        return 0;
+    }
+    -1
+}
+
+/// Query a toggle option's current state. Returns 1/0, -1 on session missing.
+#[no_mangle]
+pub extern "C" fn ohos_get_toggle_option(session_id: *const c_char, name: *const c_char) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        return if session.get_toggle_option(cstr(name).to_owned()) {
+            1
+        } else {
+            0
+        };
+    }
+    -1
+}
+
+/// Re-send our decoding abilities after a codec-preference change (the peer
+/// re-negotiates the encoder from it).
+#[no_mangle]
+pub extern "C" fn ohos_update_supported_decodings(session_id: *const c_char) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.update_supported_decodings();
+        return 0;
+    }
+    -1
+}
+
+/// Alternative (usable both ways) codecs, JSON `{"vp8":bool,"av1":bool,
+/// "h264":bool,"h265":bool}` for the codec-preference menu enablement.
+/// The caller owns the returned string and must free it with `ohos_free_string`.
+#[no_mangle]
+pub extern "C" fn ohos_alternative_codecs(session_id: *const c_char) -> *mut c_char {
+    let fallback = json!({"vp8": false, "av1": false, "h264": false, "h265": false}).to_string();
+    let Some(session_id) = parse_session_id(session_id) else {
+        return new_cstring(fallback);
+    };
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        let (vp8, av1, h264, h265) = session.alternative_codecs();
+        let s = json!({"vp8": vp8, "av1": av1, "h264": h264, "h265": h265}).to_string();
+        return new_cstring(s);
+    }
+    new_cstring(fallback)
+}
+
+// ---------------------------------------------------------------------------
+// Controlled side (被控端): server lifecycle, the connection-manager bridge
+// and capture control. Mirrors the Android JNI entries in flutter_ffi.rs and
+// the CM channel start in flutter.rs::connection_manager.
+// ---------------------------------------------------------------------------
+
+pub mod connection_manager {
+    use crate::ui_cm_interface::{start_listen, Client, ConnectionManager, InvokeUiCM};
+    use hbb_common::log;
+    use hbb_common::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+
+    // In-process counterpart of flutter.rs::connection_manager::start_channel:
+    // every Connection hands us one half of its channel pair and we run the CM
+    // loop for it on a dedicated thread.
+    pub fn start_channel(
+        rx: UnboundedReceiver<crate::ipc::Data>,
+        tx: UnboundedSender<crate::ipc::Data>,
+    ) {
+        let cm = ConnectionManager {
+            ui_handler: OhosCMHandler {},
+        };
+        // `start_listen` is `#[tokio::main(current_thread)]`: it builds its own
+        // runtime and blocks this thread until the CM loop ends.
+        std::thread::spawn(move || start_listen(cm, rx, tx));
+    }
+
+    #[derive(Clone)]
+    struct OhosCMHandler {}
+
+    impl InvokeUiCM for OhosCMHandler {
+        fn add_connection(&self, client: &Client) {
+            let client_json = serde_json::to_string(&client).unwrap_or("".into());
+            super::push_event("cm_add_connection", &[("client", &client_json)]);
+        }
+
+        fn remove_connection(&self, id: i32, close: bool) {
+            super::push_event(
+                "cm_remove_connection",
+                &[("id", &id.to_string()), ("close", &close.to_string())],
+            );
+        }
+
+        fn new_message(&self, id: i32, text: String) {
+            super::push_event("cm_chat", &[("id", &id.to_string()), ("text", &text)]);
+        }
+
+        fn change_theme(&self, _dark: String) {}
+
+        fn change_language(&self) {}
+
+        fn show_elevation(&self, _show: bool) {}
+
+        fn update_voice_call_state(&self, client: &Client) {
+            let client_json = serde_json::to_string(&client).unwrap_or("".into());
+            super::push_event("cm_voice_call_state", &[("client", &client_json)]);
+        }
+
+        fn file_transfer_log(&self, action: &str, log: &str) {
+            super::push_event("cm_file_transfer_log", &[(action, log)]);
+        }
+    }
+}
+
+/// Forward a clipboard snapshot coming from a remote peer to the ArkTS
+/// pasteboard. Called by `crate::clipboard::handle_msg_*` on the controlled
+/// side; the same event schema as the controller-side clipboard events.
+pub fn cm_write_clipboard(clipboards: &MultiClipboards) {
+    use hbb_common::base64::Engine;
+    let mut text = "";
+    let mut html = "";
+    let mut png = String::new();
+    for cb in clipboards.clipboards.iter() {
+        let Ok(format) = cb.format.enum_value() else {
+            continue;
+        };
+        match format {
+            ClipboardFormat::Html => html = std::str::from_utf8(&cb.content).unwrap_or(""),
+            ClipboardFormat::ImagePng => {
+                png = hbb_common::base64::engine::general_purpose::STANDARD.encode(&cb.content);
+            }
+            _ => text = std::str::from_utf8(&cb.content).unwrap_or(""),
+        }
+    }
+    push_event(
+        "cm_clipboard_write",
+        &[("text", text), ("html", html), ("png", &png)],
+    );
+}
+
+fn register_capture_state_hook() {
+    scrap::ohos::screencap::set_on_state_change(Some(Box::new(|state| {
+        push_event("server_capture_state", &[("state", &state.to_string())]);
+    })));
+}
+
+/// Start the controlled-side server (rendezvous registration + direct/relay
+/// listeners). Same semantics as Android `FFI.startServer`.
+#[no_mangle]
+pub extern "C" fn ohos_server_start() -> c_int {
+    // Only the first call spawns the mediator loop; later ones are no-ops
+    // (configuration changes go through start_service / stop_service).
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return 0;
+    }
+    // `start_server` is `#[tokio::main]` and blocks; same call shape as Android.
+    std::thread::spawn(|| crate::start_server(true));
+    0
+}
+
+/// Clear the stop-service flag and restart the mediator. Same as Android
+/// `FFI.startService`.
+#[no_mangle]
+pub extern "C" fn ohos_server_start_service() -> c_int {
+    Config::set_option("stop-service".into(), "".into());
+    crate::RendezvousMediator::restart();
+    0
+}
+
+/// Set the stop-service flag and restart the mediator; capture keeps running
+/// until stopped separately.
+#[no_mangle]
+pub extern "C" fn ohos_server_stop_service() -> c_int {
+    Config::set_option("stop-service".into(), "Y".into());
+    crate::RendezvousMediator::restart();
+    0
+}
+
+/// The ID this device registers with. The caller owns the returned string.
+#[no_mangle]
+pub extern "C" fn ohos_get_server_id() -> *mut c_char {
+    new_cstring(Config::get_id())
+}
+
+/// The one-time password shown in the share UI. The caller owns the string.
+#[no_mangle]
+pub extern "C" fn ohos_get_server_password() -> *mut c_char {
+    new_cstring(crate::ui_interface::temporary_password())
+}
+
+/// Regenerate the one-time password.
+#[no_mangle]
+pub extern "C" fn ohos_update_server_password() -> c_int {
+    crate::ui_interface::update_temporary_password();
+    0
+}
+
+/// Whether a permanent password is set (drives the password type shown in UI).
+#[no_mangle]
+pub extern "C" fn ohos_has_permanent_password() -> c_int {
+    if Config::has_permanent_password() {
+        1
+    } else {
+        0
+    }
+}
+
+/// Answer a connection request. `accept != 0` authorizes the client, anything
+/// else closes it.
+#[no_mangle]
+pub extern "C" fn ohos_server_authorize(id: c_int, accept: c_int) -> c_int {
+    if accept != 0 {
+        crate::ui_cm_interface::authorize(id);
+    } else {
+        crate::ui_cm_interface::close(id);
+    }
+    0
+}
+
+/// Close an established incoming connection (and its sessions).
+#[no_mangle]
+pub extern "C" fn ohos_server_close_connection(id: c_int) -> c_int {
+    crate::ui_cm_interface::close(id);
+    crate::ui_cm_interface::remove(id);
+    0
+}
+
+/// Answer an incoming voice call from the CM UI (`accept` accepts, anything
+/// else declines). Mirrors flutter_ffi::cm_handle_incoming_voice_call.
+#[no_mangle]
+pub extern "C" fn ohos_cm_handle_incoming_voice_call(id: c_int, accept: c_int) -> c_int {
+    crate::ui_cm_interface::handle_incoming_voice_call(id, accept != 0);
+    0
+}
+
+/// Hang up an active voice call from the CM UI. Mirrors
+/// flutter_ffi::cm_close_voice_call.
+#[no_mangle]
+pub extern "C" fn ohos_cm_close_voice_call(id: c_int) -> c_int {
+    crate::ui_cm_interface::close_voice_call(id);
+    0
+}
+
+/// Offer a voice call to the controlling peer from the CM UI.
+#[no_mangle]
+pub extern "C" fn ohos_cm_request_voice_call(id: c_int) -> c_int {
+    crate::ui_cm_interface::request_voice_call(id);
+    0
+}
+
+/// Toggle a permission for one client from the CM UI.
+#[no_mangle]
+pub extern "C" fn ohos_server_switch_permission(
+    id: c_int,
+    name: *const c_char,
+    enabled: c_int,
+) -> c_int {
+    crate::ui_cm_interface::switch_permission(id, cstr(name).to_owned(), enabled != 0);
+    0
+}
+
+/// Server-mode chat to one client.
+#[no_mangle]
+pub extern "C" fn ohos_server_send_chat(id: c_int, text: *const c_char) -> c_int {
+    crate::ui_cm_interface::send_chat(id, cstr(text).to_owned());
+    0
+}
+
+/// Push the local pasteboard content into the server clipboard channel
+/// (host side). Call on manual sync / foreground resume, like Android.
+#[no_mangle]
+pub extern "C" fn ohos_server_push_clipboard(text: *const c_char, html: *const c_char) -> c_int {
+    let text = cstr(text);
+    let html = cstr(html);
+    if text.is_empty() && html.is_empty() {
+        return -2;
+    }
+    let mut clips = MultiClipboards::default();
+    if !text.is_empty() {
+        clips.clipboards.push(Clipboard {
+            content: text.as_bytes().to_vec().into(),
+            format: ClipboardFormat::Text.into(),
+            compress: false,
+            ..Default::default()
+        });
+    }
+    if !html.is_empty() {
+        clips.clipboards.push(Clipboard {
+            content: html.as_bytes().to_vec().into(),
+            format: ClipboardFormat::Html.into(),
+            compress: false,
+            ..Default::default()
+        });
+    }
+    scrap::ohos::ffi::set_clipboards(clips, false);
+    0
+}
+
+/// Start screen capture at the given display size. Pops the system consent
+/// picker; the `server_capture_state` event reports the
+/// outcome (0 = started,
+/// 1 = canceled by user, 2/3/4/10 = stopped by user/call/switch...).
+#[no_mangle]
+pub extern "C" fn ohos_capture_start(width: c_int, height: c_int) -> c_int {
+    register_capture_state_hook();
+    match scrap::ohos::screencap::start(width, height) {
+        Ok(()) => {
+            push_event::<&str>("server_capture_state", &[("state", "pending")]);
+            0
+        }
+        Err(err) => {
+            log::error!("failed to start capture: {err}");
+            -1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ohos_capture_stop() -> c_int {
+    scrap::ohos::screencap::stop();
+    push_event("server_capture_state", &[("state", "2")]);
+    0
+}
+
+/// Toggle microphone collection on the running capture (voice call in/out).
+#[no_mangle]
+pub extern "C" fn ohos_capture_mic(enable: c_int) -> c_int {
+    if scrap::ohos::screencap::set_mic_enabled(enable != 0) {
+        0
+    } else {
+        -1
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ohos_capture_running() -> c_int {
+    if scrap::ohos::screencap::is_running() {
+        1
+    } else {
+        0
+    }
 }
