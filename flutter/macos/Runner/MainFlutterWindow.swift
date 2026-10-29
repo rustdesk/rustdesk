@@ -37,6 +37,7 @@ class RelativeMouseState {
 
 class MainFlutterWindow: NSWindow {
     private static var didSetupWindowNotifications = false
+    static var mainWindowOpened = false
 
     static func setupWindowLifecycle() {
         guard !CommandLine.arguments.contains("--cm") else { return }
@@ -65,6 +66,8 @@ class MainFlutterWindow: NSWindow {
     }
 
     @objc static func openMainWindow() {
+        mainWindowOpened = true
+        rustdesk_check_start_tray()
         DispatchQueue.main.async {
             guard !CommandLine.arguments.contains("--cm") else { return }
             if NSApp.activationPolicy() != .regular {
@@ -77,6 +80,7 @@ class MainFlutterWindow: NSWindow {
                 if window.isMiniaturized {
                     window.deminiaturize(nil)
                 }
+                window.setIsVisible(true)
                 window.makeKeyAndOrderFront(nil)
                 window.orderFrontRegardless()
             }
@@ -91,6 +95,11 @@ class MainFlutterWindow: NSWindow {
                 window.canBecomeMain && (window.isVisible || window.isMiniaturized)
             }
             if hasVisibleWindows {
+                return
+            }
+
+            if !mainWindowOpened {
+                NSApp.terminate(nil)
                 return
             }
 
@@ -122,6 +131,9 @@ class MainFlutterWindow: NSWindow {
 
     override func awakeFromNib() {
         rustdesk_core_main();
+        if CommandLine.arguments.count <= 1 {
+            MainFlutterWindow.mainWindowOpened = true
+        }
         _ = MainFlutterWindow.fullscreenObserver
         let flutterViewController = FlutterViewController.init()
         let windowFrame = self.frame
@@ -287,8 +299,7 @@ class MainFlutterWindow: NSWindow {
                     result(nil)
                     break;
                 case "terminate":
-                    NSApplication.shared.terminate(self)
-                    result(nil)
+                    exit(0)
                 case "canRecordAudio":
                     switch AVCaptureDevice.authorizationStatus(for: .audio) {
                     case .authorized:

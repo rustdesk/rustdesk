@@ -378,6 +378,10 @@ class _DesktopTabState extends State<DesktopTab>
   @override
   void onWindowFocus() {
     stateGlobal.isFocused.value = true;
+    if (isMainWindow &&
+        !rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
+      rustDeskWinManager.registerActiveWindow(kMainWindowId);
+    }
   }
 
   @override
@@ -390,6 +394,16 @@ class _DesktopTabState extends State<DesktopTab>
     stateGlobal.setMinimized(true);
     stateGlobal.setMaximized(false);
     super.onWindowMinimize();
+  }
+
+  @override
+  void onWindowRestore() {
+    stateGlobal.setMinimized(false);
+    if (isMainWindow &&
+        !rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
+      rustDeskWinManager.registerActiveWindow(kMainWindowId);
+    }
+    super.onWindowRestore();
   }
 
   @override
@@ -479,7 +493,7 @@ class _DesktopTabState extends State<DesktopTab>
 
     // hide window on close
     if (isMainWindow) {
-      if (!isMacOS && rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
+      if (rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
         await rustDeskWinManager.unregisterActiveWindow(kMainWindowId);
       }
       if (await _isLinuxWindowClosed()) return;

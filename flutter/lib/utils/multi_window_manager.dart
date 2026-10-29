@@ -59,6 +59,7 @@ class RustDeskMultiWindowManager {
 
   final Set<int> _inactiveWindows = {};
   final Set<int> _activeWindows = {};
+  bool mainWindowEverShown = false;
   final List<AsyncCallback> _windowActiveCallbacks = List.empty(growable: true);
   final List<int> _remoteDesktopWindows = List.empty(growable: true);
   final List<int> _fileTransferWindows = List.empty(growable: true);
@@ -517,6 +518,9 @@ class RustDeskMultiWindowManager {
   }
 
   Future<void> registerActiveWindow(int windowId) async {
+    if (windowId == kMainWindowId) {
+      mainWindowEverShown = true;
+    }
     _activeWindows.add(windowId);
     _inactiveWindows.remove(windowId);
     await _notifyActiveWindow();

@@ -19,9 +19,12 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     override func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if launched && !flag {
-            MainFlutterWindow.openMainWindow()
-            return false
+        if launched {
+            let hasVisibleMain = NSApp.windows.contains { $0 is MainFlutterWindow && $0.isVisible && !$0.isMiniaturized }
+            if !hasVisibleMain {
+                MainFlutterWindow.openMainWindow()
+                return false
+            }
         }
         return true
     }
@@ -29,5 +32,9 @@ class AppDelegate: FlutterAppDelegate {
     override func applicationDidFinishLaunching(_ aNotification: Notification) {
         launched = true;
         NSApplication.shared.activate(ignoringOtherApps: true);
+    }
+
+    override func applicationWillTerminate(_ aNotification: Notification) {
+        rustdesk_kill_tray();
     }
 }

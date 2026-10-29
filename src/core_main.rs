@@ -93,7 +93,7 @@ pub fn core_main() -> Option<CoreMainAction> {
         }
         i += 1;
     }
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
     if args.is_empty() {
         #[cfg(target_os = "linux")]
         let should_check_start_tray = crate::check_process("--server", false);
@@ -103,6 +103,9 @@ pub fn core_main() -> Option<CoreMainAction> {
         #[cfg(target_os = "windows")]
         let should_check_start_tray = crate::platform::is_self_service_running()
             && crate::platform::is_cur_exe_the_installed();
+        #[cfg(target_os = "macos")]
+        crate::platform::macos::check_start_tray();
+        #[cfg(not(target_os = "macos"))]
         if should_check_start_tray && !crate::check_process("--tray", true) {
             #[cfg(target_os = "linux")]
             hbb_common::allow_err!(crate::platform::check_autostart_config());
