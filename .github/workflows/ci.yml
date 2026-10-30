@@ -259,6 +259,11 @@ jobs:
   check-macos-without-hwcodec:
     name: cargo check (macOS x86_64, hwcodec off)
     runs-on: macos-15-intel
+    # This job runs dependency build scripts (vcpkg, `cargo check`), so the checkout
+    # token must not be lying around in the git config: same pattern as
+    # flutter-build.yml. Nothing here needs more than reading the repository.
+    permissions:
+      contents: read
     steps:
     - name: Export GitHub Actions cache environment variables
       uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
@@ -271,6 +276,7 @@ jobs:
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
         submodules: recursive
+        persist-credentials: false
 
     - name: Setup vcpkg with Github Actions binary cache
       uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11

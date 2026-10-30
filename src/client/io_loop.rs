@@ -3373,17 +3373,20 @@ const GPU_FRAME_REFUSE_LIMIT: usize = 60;
 /// The decoder skips the software transfer for a frame it hands out, so when the
 /// render layer refuses one the pixels in the handler belong to an earlier frame:
 /// the frame is dropped instead of being replaced by stale pixels. The counter
-/// exists so a measurement can show the refusals are zero in normal operation,
-/// and the log stays quiet because it only prints on the first one and then every
-/// 100th.
+/// exists so a measurement can show the refusals are zero in normal operation.
+///
+/// The warning is time-throttled rather than count-throttled: this site is driven
+/// by the incoming frame rate, and `AGENTS.md` requires a frame-driven log call to
+/// go through `throttled_log!` (a "every Nth frame" rule still grows with load).
+/// The running total stays in the line.
 #[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
 fn count_gpu_frame_refused(display: usize) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static REFUSED: AtomicU64 = AtomicU64::new(0);
     let total = REFUSED.fetch_add(1, Ordering::Relaxed) + 1;
-    if total == 1 || total % 100 == 0 {
-        log::warn!(
-            "display #{display}: decoded GPU frame refused by the render path ({total} so far), dropping it instead of pushing stale pixels"
-        );
-    }
+    hbb_common::throttled_log!(
+        std::time::Duration::from_secs(5),
+        warn,
+        "display #{display}: decoded GPU frame refused by the render path ({total} so far), dropping it instead of pushing stale pixels"
+    );
 }
