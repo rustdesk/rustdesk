@@ -485,6 +485,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         gFFI.ffiModel.waitForFirstImage.isTrue ||
         gFFI.ffiModel.viewOnly ||
         !gFFI.ffiModel.keyboard ||
+        !inputModel.keyboardInputAllowed ||
         _showEdit ||
         _iosGeometry?.keyboard != null ||
         _iosGeometry?.horizontalDivision(MediaQuery.sizeOf(context)) == null) {

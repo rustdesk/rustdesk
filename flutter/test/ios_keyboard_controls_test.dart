@@ -54,6 +54,8 @@ void main() {
     var remoteTaps = 0;
     await tester.pumpWidget(app(remoteTap: () => remoteTaps++));
     expect(find.text('Tools'), findsNothing);
+    await tester.tapAt(const Offset(100, 100));
+    expect(remoteTaps, 1);
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pump();
     expect(find.text('Tools'), findsOneWidget);
@@ -63,6 +65,7 @@ void main() {
     await tester.tap(find.byTooltip('Auxiliary keys'));
     await tester.pump();
     expect(find.text('Ctrl'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Ctrl')).dy, 0);
     await tester.tap(find.byTooltip('Auxiliary keys'));
     await tester.pump();
     expect(find.text('Ctrl'), findsNothing);
@@ -70,7 +73,7 @@ void main() {
     await tester.pump();
     expect(find.text('Tools'), findsNothing);
     expect(find.byType(FloatingActionButton), findsOneWidget);
-    expect(remoteTaps, 0);
+    expect(remoteTaps, 1);
   });
 
   testWidgets('a new half-fold starts with only the floating button', (
