@@ -33,8 +33,13 @@ class IDTextInputFormatter extends TextInputFormatter {
   }
 }
 
+// Pasted IDs can carry a trailing newline or tab (e.g. copied from a
+// spreadsheet cell) or non-breaking spaces, so strip all whitespace, not only
+// plain spaces.
+final _whitespace = RegExp(r'\s');
+
 String formatID(String id) {
-  String id2 = id.replaceAll(' ', '');
+  String id2 = id.replaceAll(_whitespace, '');
   String suffix = '';
   if (id2.endsWith(r'\r') || id2.endsWith(r'/r')) {
     suffix = id2.substring(id2.length - 2, id2.length);
@@ -56,5 +61,5 @@ String formatID(String id) {
 }
 
 String trimID(String id) {
-  return id.replaceAll(' ', '');
+  return id.replaceAll(_whitespace, '');
 }
