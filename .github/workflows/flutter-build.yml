@@ -730,6 +730,8 @@ jobs:
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     strategy:
       fail-fast: false
       matrix:
@@ -737,7 +739,7 @@ jobs:
           - {
               arch: aarch64,
               target: aarch64-apple-ios,
-              os: macos-latest,
+              os: xcode-27,
               vcpkg-triplet: arm64-ios,
             }
     steps:

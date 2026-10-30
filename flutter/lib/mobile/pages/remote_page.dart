@@ -637,6 +637,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         ? null
         : (keyboardTop != null && keyboardTop < splitY ? keyboardTop : splitY);
     final keyboardVisible = keyboardVisibilityController.isVisible && _showEdit;
+    final controlsMedia = half == null
+        ? media
+        : media.copyWith(
+            size: Size(media.size.width, media.size.height - half.bottom),
+            viewInsets: EdgeInsets.zero,
+            padding: EdgeInsets.only(bottom: media.padding.bottom),
+          );
     final showActionButton =
         half == null && (!_showBar || keyboardVisible || _showGestureHelp);
     return WillPopScope(
@@ -696,29 +703,37 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               ],
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: half?.bottom ?? 0,
-            bottom: 0,
-            child: MediaQuery(
-              data: half == null
-                  ? media
-                  : media.copyWith(
-                      size: Size(
-                        media.size.width,
-                        media.size.height - half.bottom,
+          ListenableBuilder(
+            listenable: gFFI.chatModel.inputNode,
+            builder: (context, _) => Obx(() {
+              final chatKeyboardRequested =
+                  gFFI.chatModel.softKeyboardRequested.value;
+              final chatTyping = half != null &&
+                  _iosGeometry?.keyboard != null &&
+                  chatKeyboardRequested &&
+                  gFFI.chatModel.inputNode.hasFocus;
+              return Positioned(
+                left: 0,
+                right: 0,
+                top: chatTyping ? 0 : half?.bottom ?? 0,
+                bottom: 0,
+                child: MediaQuery(
+                  data: chatTyping ? media : controlsMedia,
+                  child: IosControlOverlay(
+                    state: _blockableOverlayState,
+                    child: Padding(
+                      padding: EdgeInsets.only(top: chatTyping ? half.bottom : 0),
+                      child: MediaQuery(
+                        data: controlsMedia,
+                        child: half == null
+                            ? const SizedBox.shrink()
+                            : _halfFoldControls(_iosGeometry?.keyboard != null),
                       ),
-                      viewInsets: EdgeInsets.zero,
-                      padding: EdgeInsets.only(bottom: media.padding.bottom),
                     ),
-              child: IosControlOverlay(
-                state: _blockableOverlayState,
-                child: half == null
-                    ? const SizedBox.shrink()
-                    : _halfFoldControls(_iosGeometry?.keyboard != null),
-              ),
-            ),
+                  ),
+                ),
+              );
+            }),
           ),
         ],
       ),
