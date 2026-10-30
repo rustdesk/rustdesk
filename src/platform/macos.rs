@@ -1015,6 +1015,9 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
             }
             Ok(output) => log_update_cleanup_warning(&output),
         }
+        if crate::common::is_server_running() {
+            return relaunch_after_update_exit(&app_name);
+        }
     }
     match Command::new("open")
         .arg("-n")
@@ -1031,6 +1034,30 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
     }
     // leave open a little time
     std::thread::sleep(std::time::Duration::from_millis(300));
+    Ok(())
+}
+
+fn relaunch_after_update_exit(app_name: &str) -> ResultType<()> {
+    // The new GUI must not attach to the main IPC owned by this departing process.
+    const RELAUNCH: &str = r#"
+poll_interval=0.1
+while /bin/kill -0 "$1" 2>/dev/null; do
+    /bin/sleep "$poll_interval"
+done
+if ! output=$(/usr/bin/open -n "$2" 2>&1); then
+    /usr/bin/logger -t "$0" "Failed to relaunch updated app: $output"
+    exit 1
+fi
+"#;
+    Command::new("/bin/sh")
+        .args(["-c", RELAUNCH, app_name])
+        .arg(std::process::id().to_string())
+        .arg(format!("/Applications/{}.app", app_name))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|err| anyhow!("Failed to schedule updated app relaunch: {}", err))?;
     Ok(())
 }
 

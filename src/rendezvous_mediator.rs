@@ -23,7 +23,7 @@ use hbb_common::{
     socket_client::{self, connect_tcp, is_ipv4, new_direct_udp_for, new_udp_for},
     tokio::{
         self, select,
-        sync::{mpsc, Mutex},
+        sync::{mpsc, Mutex, Notify},
         time::interval,
     },
     udp::FramedSocket,
@@ -208,6 +208,7 @@ impl IceRoute {
 
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
+static MANUAL_RESTART_NOTIFY: Notify = Notify::const_new();
 static SENT_REGISTER_PK: AtomicBool = AtomicBool::new(false);
 pub(crate) static NEEDS_DEPLOY: AtomicBool = AtomicBool::new(false);
 #[cfg(target_os = "android")]
@@ -268,6 +269,7 @@ impl RendezvousMediator {
     pub fn restart() {
         SHOULD_EXIT.store(true, Ordering::SeqCst);
         MANUAL_RESTARTED.store(true, Ordering::SeqCst);
+        MANUAL_RESTART_NOTIFY.notify_waiters();
         log::info!("server restart");
     }
 
@@ -339,10 +341,15 @@ impl RendezvousMediator {
             }
             Config::reset_online();
             let timeout = *timeout.read().unwrap();
+            // Subscribe before checking the flag so a restart cannot miss the wait.
+            let restarted = MANUAL_RESTART_NOTIFY.notified();
             if !MANUAL_RESTARTED.load(Ordering::SeqCst) {
                 let elapsed = conn_start_time.elapsed().as_millis() as u64;
                 if elapsed < timeout {
-                    sleep(((timeout - elapsed) / 1000) as _).await;
+                    select! {
+                        _ = sleep(((timeout - elapsed) / 1000) as _) => {}
+                        _ = restarted => {}
+                    }
                 }
             } else {
                 // https://github.com/rustdesk/rustdesk/issues/12233
