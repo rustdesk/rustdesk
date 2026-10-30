@@ -739,7 +739,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         backgroundColor: MyTheme.canvasColor,
         resizeToAvoidBottomInset: false,
         bottomNavigationBar: keyboardVisible ? null : getBottomAppBar(),
-        body: Stack(children: [
+        body: SizedBox.expand(child: Stack(children: [
           Visibility(
             visible: !keyboardVisible,
             maintainState: true,
@@ -782,7 +782,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               top: keyboardSpace - kMinInteractiveDimension,
               child: _halfFoldKeyboardControls(),
             ),
-        ]),
+        ])),
       );
 
   void _finishHalfFoldInput(String _) {

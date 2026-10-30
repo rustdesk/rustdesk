@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../common.dart' show MyTheme;
 
 class IosKeyboardControls extends StatefulWidget {
   const IosKeyboardControls({super.key, required this.toolbarBuilder});
@@ -27,7 +28,7 @@ class _IosKeyboardControlsState extends State<IosKeyboardControls> {
                     child: FloatingActionButton(
                       heroTag: null,
                       mini: true,
-                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      backgroundColor: MyTheme.accent,
                       onPressed: () => setState(() => _expanded = true),
                       child: const Icon(Icons.expand_less, color: Colors.white),
                     ),
