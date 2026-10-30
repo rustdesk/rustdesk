@@ -444,7 +444,8 @@ void showWaylandKeyboardInputWarningDialog(
   unawaited(dialogFuture.whenComplete(() => dialogClosed = true));
 }
 
-List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
+List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi,
+    {VoidCallback? closeMenu}) {
   final ffiModel = ffi.ffiModel;
   final pi = ffiModel.pi;
   final perms = ffiModel.permissions;
@@ -486,7 +487,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
           scale: (isDesktop || isWebDesktop) ? 0.8 : 1,
           child: IconButton(
             onPressed: () {
-              if (isMobile && Navigator.canPop(context)) {
+              if (closeMenu != null) {
+                closeMenu();
+              } else if (isMobile && Navigator.canPop(context)) {
                 Navigator.pop(context);
               }
               handleOsPasswordEditIcon(sessionId, ffi.dialogManager);

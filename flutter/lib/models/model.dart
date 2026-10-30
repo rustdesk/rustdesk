@@ -3298,6 +3298,10 @@ class CursorModel with ChangeNotifier {
     if (_blockEvents) {
       return true;
     }
+    if (isIOS &&
+        (parent.target?.canvasModel.mobileControlsOutsideCanvas ?? false)) {
+      return false;
+    }
     final offset = Offset(x, y);
     for (final rect in _blockedRects) {
       if (isPointInRect(offset, rect)) {

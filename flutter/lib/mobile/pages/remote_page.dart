@@ -725,13 +725,21 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   outsideCanvas: true,
                 ),
                 SizedBox(
-                  height: 160,
-                  child: Stack(
-                    children: [
-                      gFFI.ffiModel.touchMode
-                          ? FloatingMouse(ffi: gFFI)
-                          : FloatingMouseWidgets(ffi: gFFI),
-                    ],
+                  height: 250,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => MediaQuery(
+                      data: MediaQuery.of(context).copyWith(
+                        size: constraints.biggest,
+                      ),
+                      child: Stack(
+                        children: [
+                          gFFI.ffiModel.touchMode
+                              ? FloatingMouse(ffi: gFFI)
+                              : FloatingMouseWidgets(
+                                  ffi: gFFI, persistPosition: false),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 if (_showGestureHelp) getGestureHelp(),
@@ -749,6 +757,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     setState(() => _showEdit = false);
     _physicalFocusNode.requestFocus();
   }
+
+  String get _halfFoldMenuTag => '${gFFI.sessionId}-half-fold-menu';
 
   void _showHalfFoldMenu(List<TTextMenu> menus) {
     gFFI.dialogManager.show(
@@ -773,6 +783,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           TextButton(onPressed: close, child: Text(translate('Close'))),
         ],
       ),
+      tag: _halfFoldMenuTag,
     );
   }
 
@@ -1045,7 +1056,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final x = 120.0;
     final y = size.height;
     final mobileActionMenus = _getMobileActionMenus();
-    final menus = toolbarControls(context, id, gFFI);
+    final menus = toolbarControls(context, id, gFFI,
+        closeMenu: _halfDivision == null
+            ? null
+            : () => gFFI.dialogManager.dismissByTag(_halfFoldMenuTag));
     if (_halfDivision != null) {
       _showHalfFoldMenu([...mobileActionMenus, ...menus]);
       return;
