@@ -6,74 +6,90 @@ class IosKeyboardControls extends StatefulWidget {
     super.key,
     required this.toolbarBuilder,
     required this.auxiliaryBuilder,
-    this.onHideKeyboard,
+    required this.keyboardVisible,
+    this.child,
   });
 
   final Widget Function(VoidCallback collapse, VoidCallback toggleAuxiliary)
-  toolbarBuilder;
+      toolbarBuilder;
   final Widget Function(bool requested) auxiliaryBuilder;
-  final VoidCallback? onHideKeyboard;
+  final bool keyboardVisible;
+  final Widget? child;
 
   @override
   State<IosKeyboardControls> createState() => _IosKeyboardControlsState();
 }
 
 class _IosKeyboardControlsState extends State<IosKeyboardControls> {
-  bool _expanded = false;
+  late bool _expanded = !widget.keyboardVisible;
   bool _showAuxiliary = false;
 
   @override
+  void didUpdateWidget(IosKeyboardControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.keyboardVisible != widget.keyboardVisible) {
+      _expanded = !widget.keyboardVisible;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => MediaQuery.removePadding(
-    context: context,
-    removeBottom: true,
-    child: Column(
-      children: [
-        Expanded(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: SafeArea(
-              bottom: false,
-              child: SingleChildScrollView(
-                child: widget.auxiliaryBuilder(_expanded && _showAuxiliary),
+        context: context,
+        removeBottom: widget.keyboardVisible,
+        child: Material(
+          type: MaterialType.transparency,
+          child: Column(
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (widget.child != null) widget.child!,
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: SafeArea(
+                        bottom: false,
+                        child: SingleChildScrollView(
+                          child: widget
+                              .auxiliaryBuilder(_expanded && _showAuxiliary),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              SafeArea(
+                top: false,
+                child: SizedBox(
+                  height: kMinInteractiveDimension,
+                  child: _expanded
+                      ? Scaffold(
+                          backgroundColor: Colors.transparent,
+                          resizeToAvoidBottomInset: false,
+                          body: widget.toolbarBuilder(
+                            () => setState(() => _expanded = false),
+                            () => setState(
+                                () => _showAuxiliary = !_showAuxiliary),
+                          ),
+                        )
+                      : Align(
+                          alignment: Alignment.centerRight,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 16),
+                            child: FloatingActionButton(
+                              heroTag: null,
+                              mini: true,
+                              backgroundColor: MyTheme.accent,
+                              onPressed: () => setState(() => _expanded = true),
+                              child: const Icon(Icons.expand_less,
+                                  color: Colors.white),
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+            ],
           ),
         ),
-        SizedBox(
-          height: kMinInteractiveDimension,
-          child: _expanded
-              ? widget.toolbarBuilder(
-                  () => setState(() => _expanded = false),
-                  () => setState(() => _showAuxiliary = !_showAuxiliary),
-                )
-              : Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (widget.onHideKeyboard != null)
-                          IconButton(
-                            tooltip: MaterialLocalizations.of(context)
-                                .closeButtonTooltip,
-                            color: MyTheme.accent,
-                            onPressed: widget.onHideKeyboard,
-                            icon: const Icon(Icons.keyboard_hide),
-                          ),
-                        FloatingActionButton(
-                          heroTag: null,
-                          mini: true,
-                          backgroundColor: MyTheme.accent,
-                          onPressed: () => setState(() => _expanded = true),
-                          child: const Icon(Icons.expand_less, color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-        ),
-      ],
-    ),
-  );
+      );
 }

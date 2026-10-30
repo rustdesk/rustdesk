@@ -34,26 +34,46 @@ void main() {
     final state = BlockableOverlayState();
     var taps = 0;
     await tester.pumpWidget(MaterialApp(
-        home: SizedBox(
-      height: 455.5,
-      child: ValueListenableBuilder<String>(
+        home: Stack(children: [
+      ValueListenableBuilder<String>(
           valueListenable: label,
-          builder: (_, value, __) => IosControlOverlay(
-              state: state,
-              child: Scaffold(
-                  bottomNavigationBar: BottomAppBar(
-                      child: TextButton(
-                          onPressed: () => taps++, child: Text(value)))))),
-    )));
+          builder: (_, value, __) => Positioned(
+              top: value == 'Controls' ? 300 : 0,
+              left: 0,
+              right: 0,
+              height: 250,
+              child: IosControlOverlay(
+                  state: state,
+                  child: Scaffold(
+                      bottomNavigationBar: BottomAppBar(
+                          child: TextButton(
+                              onPressed: () => taps++, child: Text(value))))))),
+    ])));
     expect(find.text('Controls'), findsOneWidget);
     state.setMiddleBlocked(true);
     await tester.pump();
     await tester.tap(find.text('Controls'));
     expect(taps, 1);
+    final entry = OverlayEntry(
+        builder: (_) => const Positioned(
+              top: 80,
+              left: 20,
+              width: 250,
+              height: 50,
+              child: Material(child: TextField()),
+            ));
+    state.state!.insert(entry);
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'draft');
+    expect(tester.getTopLeft(find.byType(TextField)).dy, 380);
     label.value = 'Keyboard';
     await tester.pump();
     expect(find.text('Keyboard'), findsOneWidget);
     expect(find.text('Controls'), findsNothing);
+    expect(find.text('draft'), findsOneWidget);
+    expect(tester.getTopLeft(find.byType(TextField)).dy, 80);
+    entry.remove();
+    entry.dispose();
     await tester.pumpWidget(const SizedBox());
     expect(tester.takeException(), isNull);
   });

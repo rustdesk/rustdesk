@@ -172,16 +172,23 @@ class ChatModel with ChangeNotifier {
       final halfFold =
           parent.target?.canvasModel.mobileControlsOutsideCanvas ?? false;
       final windowMedia = MediaQueryData.fromView(View.of(context));
+      final halfKeyboardVisible = halfFold && windowMedia.viewInsets.bottom > 0;
+      final controlsTop = halfKeyboardVisible
+          ? 0.0
+          : windowMedia.size.height - MediaQuery.sizeOf(context).height;
       return DraggableFloatWidget(
-        key: halfFold ? ValueKey(MediaQuery.sizeOf(context)) : null,
+        key: halfFold
+            ? ValueKey((MediaQuery.sizeOf(context), halfKeyboardVisible))
+            : null,
         config: DraggableFloatWidgetBaseConfig(
           // The widget converts global drag positions using this top offset.
           isFullScreen: !halfFold,
           appBarHeight: halfFold
-              ? windowMedia.size.height -
-                  MediaQuery.sizeOf(context).height -
-                  windowMedia.padding.top
+              ? controlsTop - windowMedia.padding.top
               : kToolbarHeight,
+          borderBottom: halfKeyboardVisible
+              ? windowMedia.size.height - MediaQuery.sizeOf(context).height + 3
+              : 3,
           initPositionYInTop: false,
           initPositionYMarginBorder: 100,
           borderTopContainTopBar: true,

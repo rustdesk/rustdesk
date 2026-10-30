@@ -637,12 +637,20 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         ? null
         : (keyboardTop != null && keyboardTop < splitY ? keyboardTop : splitY);
     final keyboardVisible = keyboardVisibilityController.isVisible && _showEdit;
+    final halfKeyboardVisible = half != null && _iosGeometry?.keyboard != null;
     final controlsMedia = half == null
         ? media
         : media.copyWith(
-            size: Size(media.size.width, media.size.height - half.bottom),
+            size: Size(
+              media.size.width,
+              halfKeyboardVisible
+                  ? upperHeight!
+                  : media.size.height - half.bottom,
+            ),
             viewInsets: EdgeInsets.zero,
-            padding: EdgeInsets.only(bottom: media.padding.bottom),
+            padding: halfKeyboardVisible
+                ? EdgeInsets.only(top: media.padding.top)
+                : EdgeInsets.only(bottom: media.padding.bottom),
           );
     final showActionButton =
         half == null && (!_showBar || keyboardVisible || _showGestureHelp);
@@ -688,52 +696,25 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               children: [
                 half == null
                     ? Expanded(child: _iosRemoteBody())
-                    : SizedBox(
-                        height: upperHeight,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            _iosRemoteBody(),
-                            Positioned.fill(
-                              child: _halfFoldKeyboardControls(),
-                            ),
-                          ],
-                        ),
-                      ),
+                    : SizedBox(height: upperHeight, child: _iosRemoteBody()),
               ],
             ),
           ),
-          ListenableBuilder(
-            listenable: gFFI.chatModel.inputNode,
-            builder: (context, _) => Obx(() {
-              final chatKeyboardRequested =
-                  gFFI.chatModel.softKeyboardRequested.value;
-              final chatTyping = half != null &&
-                  _iosGeometry?.keyboard != null &&
-                  chatKeyboardRequested &&
-                  gFFI.chatModel.inputNode.hasFocus;
-              return Positioned(
-                left: 0,
-                right: 0,
-                top: chatTyping ? 0 : half?.bottom ?? 0,
-                bottom: 0,
-                child: MediaQuery(
-                  data: chatTyping ? media : controlsMedia,
-                  child: IosControlOverlay(
-                    state: _blockableOverlayState,
-                    child: Padding(
-                      padding: EdgeInsets.only(top: chatTyping ? half.bottom : 0),
-                      child: MediaQuery(
-                        data: controlsMedia,
-                        child: half == null
-                            ? const SizedBox.shrink()
-                            : _halfFoldControls(_iosGeometry?.keyboard != null),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: halfKeyboardVisible ? 0 : half?.bottom ?? 0,
+            bottom: halfKeyboardVisible ? null : 0,
+            height: halfKeyboardVisible ? upperHeight : null,
+            child: MediaQuery(
+              data: controlsMedia,
+              child: IosControlOverlay(
+                state: _blockableOverlayState,
+                child: half == null
+                    ? const SizedBox.shrink()
+                    : _halfFoldKeyboardControls(halfKeyboardVisible),
+              ),
+            ),
           ),
         ],
       ),
@@ -755,74 +736,69 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         ),
       );
 
-  Widget _halfFoldKeyboardControls() => IosKeyboardControls(
-        onHideKeyboard: _iosGeometry?.keyboard == null
-            ? null
-            : () => setState(() {
+  Widget _halfFoldKeyboardControls(bool keyboardVisible) => IosKeyboardControls(
+    keyboardVisible: keyboardVisible,
+    toolbarBuilder: (collapse, toggleAuxiliary) => getBottomAppBar(
+      onCollapse: collapse,
+      onKeyboard: toggleAuxiliary,
+      onToggleSoftKeyboard: gFFI.ffiModel.viewOnly || !gFFI.ffiModel.keyboard
+          ? null
+          : () {
+              if (keyboardVisible) {
+                setState(() {
                   _showEdit = false;
                   gFFI.invokeMethod('enable_soft_keyboard', false);
                   _mobileFocusNode.unfocus();
+                  gFFI.chatModel.inputNode.unfocus();
                   _physicalFocusNode.requestFocus();
-                }),
-        toolbarBuilder: (collapse, toggleAuxiliary) => getBottomAppBar(
-          onCollapse: collapse,
-          onKeyboard: toggleAuxiliary,
-        ),
-        auxiliaryBuilder: (requested) => KeyHelpTools(
-          keyboardIsVisible: requested,
-          showGestureHelp: false,
-          outsideCanvas: true,
-        ),
-      );
+                });
+              } else {
+                openKeyboard();
+              }
+            },
+    ),
+    auxiliaryBuilder: (requested) => KeyHelpTools(
+      keyboardIsVisible: requested,
+      showGestureHelp: false,
+      outsideCanvas: true,
+    ),
+    child: _halfFoldControls(),
+  );
 
-  Widget _halfFoldControls(bool keyboardVisible) => Scaffold(
-        backgroundColor: MyTheme.canvasColor,
-        resizeToAvoidBottomInset: false,
-        bottomNavigationBar: keyboardVisible ||
-                gFFI.ffiModel.viewOnly ||
-                !gFFI.ffiModel.keyboard
-            ? null
-            : SafeArea(
-                top: false,
-                child: SizedBox(
-                  height: kMinInteractiveDimension,
-                  child: TextButton.icon(
-                    onPressed: openKeyboard,
-                    icon: const Icon(Icons.keyboard),
-                    label: Text(translate('Keyboard')),
-                  ),
-                ),
-              ),
-        body: Visibility(
-          visible: !keyboardVisible,
-          maintainState: true,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                QualityMonitor(gFFI.qualityMonitorModel),
-                SizedBox(
-                  height: 250,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => MediaQuery(
-                      data: MediaQuery.of(context).copyWith(
-                        size: constraints.biggest,
-                      ),
-                      child: Stack(
-                        children: [
-                          gFFI.ffiModel.touchMode
-                              ? FloatingMouse(ffi: gFFI)
-                              : FloatingMouseWidgets(
-                                  ffi: gFFI, persistPosition: false),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (_showGestureHelp) getGestureHelp(),
-              ],
-            ),
+  Widget _halfFoldControls() => Stack(
+        children: [
+          Positioned(
+            top: 10,
+            right: 10,
+            child: QualityMonitor(gFFI.qualityMonitorModel),
           ),
-        ),
+          ListenableBuilder(
+            listenable: gFFI.ffiModel.virtualMouseMode,
+            builder: (context, _) =>
+                !gFFI.ffiModel.virtualMouseMode.showVirtualMouse
+                    ? const SizedBox.shrink()
+                    : LayoutBuilder(
+                        builder: (context, constraints) => MediaQuery(
+                          data: MediaQuery.of(context).copyWith(
+                            size: constraints.biggest,
+                          ),
+                          child: Stack(
+                            children: [
+                              gFFI.ffiModel.touchMode
+                                  ? FloatingMouse(ffi: gFFI)
+                                  : FloatingMouseWidgets(
+                                      ffi: gFFI, persistPosition: false),
+                            ],
+                          ),
+                        ),
+                      ),
+          ),
+          if (_showGestureHelp)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Material(child: getGestureHelp().child),
+            ),
+        ],
       );
 
   String get _halfFoldMenuTag => '${gFFI.sessionId}-half-fold-menu';
@@ -887,7 +863,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget getBottomAppBar({VoidCallback? onCollapse, VoidCallback? onKeyboard}) {
+  Widget getBottomAppBar({
+    VoidCallback? onCollapse,
+    VoidCallback? onKeyboard,
+    VoidCallback? onToggleSoftKeyboard,
+  }) {
     final ffiModel = Provider.of<FfiModel>(context);
     return BottomAppBar(
       elevation: 10,
@@ -920,7 +900,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                           ? [
                               IconButton(
                                   color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
+                                  icon: Icon(onKeyboard == null
+                                      ? Icons.keyboard
+                                      : Icons.keyboard_command_key),
+                                  tooltip: onKeyboard == null
+                                      ? null
+                                      : translate('Keyboard shortcuts'),
                                   onPressed: onKeyboard ?? openKeyboard),
                               IconButton(
                                 color: Colors.white,
@@ -932,7 +917,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                           : [
                               IconButton(
                                   color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
+                                  icon: Icon(onKeyboard == null
+                                      ? Icons.keyboard
+                                      : Icons.keyboard_command_key),
+                                  tooltip: onKeyboard == null
+                                      ? null
+                                      : translate('Keyboard shortcuts'),
                                   onPressed: onKeyboard ?? openKeyboard),
                               IconButton(
                                 color: Colors.white,
@@ -972,6 +962,27 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       },
                     ),
                   ]),
+          if (onToggleSoftKeyboard != null) ...[
+            const Spacer(),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white12,
+                border: Border.all(color: Colors.white70),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: IconButton(
+                color: Colors.white,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+                tooltip: translate('Keyboard'),
+                icon: Icon(_iosGeometry?.keyboard == null
+                    ? Icons.keyboard
+                    : Icons.keyboard_hide),
+                onPressed: onToggleSoftKeyboard,
+              ),
+            ),
+          ],
           Obx(() => IconButton(
                 color: Colors.white,
                 icon: Icon(Icons.expand_more),
