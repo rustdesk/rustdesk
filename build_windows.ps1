@@ -173,6 +173,41 @@ function Get-VsInstall {
     & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 }
 
+# Adds the C++ workload to an existing VS 2019+ instance, or installs VS 2022 Build Tools.
+# The VS installer is run directly (not via winget) so its own exit code is reported.
+function Install-VsCppTools {
+    $vsInstallerDir = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer"
+    $vswhere = Join-Path $vsInstallerDir "vswhere.exe"
+    $instance = $null
+    if (Test-Path $vswhere) {
+        # Parenthesized: Windows PowerShell's ConvertFrom-Json emits a JSON array as a single object.
+        $instance = ((& $vswhere -all -products * -version 16 -format json) -join "`n" | ConvertFrom-Json) |
+            Sort-Object { [version]$_.installationVersion } -Descending | Select-Object -First 1
+    }
+    if ($instance) {
+        $workload = if ($instance.productId -like "*BuildTools") { "Microsoft.VisualStudio.Workload.VCTools" } else { "Microsoft.VisualStudio.Workload.NativeDesktop" }
+        Write-Host "Adding the C++ workload to $($instance.displayName) at $($instance.installationPath)"
+        $exe = Join-Path $vsInstallerDir "setup.exe"
+        $vsArgs = "modify --installPath `"$($instance.installationPath)`" --add $workload --includeRecommended --passive --norestart"
+    } else {
+        Write-Host "Installing Visual Studio 2022 Build Tools with the C++ workload"
+        $exe = Join-Path $DownloadDir "vs_buildtools.exe"
+        Get-Download "https://aka.ms/vs/17/release/vs_buildtools.exe" $exe
+        $vsArgs = "--wait --passive --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+    }
+    $startArgs = @{ FilePath = $exe; ArgumentList = $vsArgs; Wait = $true; PassThru = $true }
+    if (-not (Test-Admin)) { $startArgs.Verb = "RunAs" }
+    $proc = Start-Process @startArgs
+    switch ($proc.ExitCode) {
+        0 { }
+        3010 { Write-Warning "Visual Studio needs a reboot to finish; the build may still work, reboot if it fails." }
+        1602 { throw "The Visual Studio installer was canceled (1602): UAC prompt declined or timed out, the installer window closed, or the Visual Studio Installer was already open. Close it and re-run, ideally from an elevated PowerShell." }
+        1618 { throw "Another installation is in progress (1618). Wait for it to finish (or reboot) and re-run." }
+        5007 { throw "This computer does not meet Visual Studio's requirements (5007)." }
+        default { throw "The Visual Studio installer failed with exit code $($proc.ExitCode). Logs: $env:TEMP\dd_*.log" }
+    }
+}
+
 function Install-WingetPackage([string]$Id, [string[]]$Extra = @()) {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         throw "winget is not available. Install '$Id' manually (or install App Installer from the Microsoft Store) and re-run."
@@ -205,9 +240,8 @@ if (-not $Python) {
 }
 
 if (-not (Get-VsInstall)) {
-    Install-WingetPackage "Microsoft.VisualStudio.2022.BuildTools" @(
-        "--override", "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended")
-    if (-not (Get-VsInstall)) { throw "Visual Studio 2022 C++ build tools are missing. Install the 'Desktop development with C++' workload." }
+    Install-VsCppTools
+    if (-not (Get-VsInstall)) { throw "Visual Studio C++ build tools are still missing. Install the 'Desktop development with C++' workload. Logs: $env:TEMP\dd_*.log" }
 }
 
 # Flutter needs symlinks for plugins, which on Windows requires Developer Mode.
