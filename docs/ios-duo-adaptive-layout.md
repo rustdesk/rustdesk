@@ -19,7 +19,7 @@ The render surface extends to the window edges. Foreground controls apply their 
 
 Rejected alternatives:
 
-- An input accessory above the system keyboard occupies the upper area and conflicts with the display/input split.
+- An input accessory stays directly above the system keyboard and does not reduce its reserved frame; use independent top-aligned auxiliary keys instead.
 - Default stretching, cropping or changing the remote host's physical resolution changes visible content rather than fixing the local window.
 - A new fixed keyboard scale floor or additional scale/offset caches duplicates existing canvas state and changes ordinary input behavior.
 
