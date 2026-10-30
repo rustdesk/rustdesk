@@ -18,7 +18,7 @@ import ffi.FFI
 
 class RdClipboardManager(private val clipboardManager: ClipboardManager) {
     companion object {
-        private const val MAX_CLIPBOARD_TEXT_CODE_UNITS = 256 * 1024
+        private const val MAX_CLIPBOARD_TEXT_CODE_UNITS = 1024 * 1024
     }
 
     private val logTag = "RdClipboardManager"
