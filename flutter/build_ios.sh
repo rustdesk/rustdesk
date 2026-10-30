@@ -5,7 +5,8 @@ flutter --version --machine | python3 -c 'import json,sys; v=json.load(sys.stdin
 xcrun --sdk iphoneos --show-sdk-version | python3 -c 'import sys; v=sys.stdin.read().strip(); assert tuple(map(int,v.split(".")[:2])) >= (27,1), "iOS builds require SDK27.1 or later, got " + v'
 ios_build_root="$PWD"
 ios_build_backup="$(mktemp)"
-if ! tar -cf "$ios_build_backup" flutter/lib/common.dart flutter/pubspec.yaml flutter/pubspec.lock flutter/ios/Podfile.lock; then
+if ! tar -cf "$ios_build_backup" flutter/lib/common.dart flutter/pubspec.yaml flutter/pubspec.lock flutter/ios/Podfile.lock \
+    flutter/ios/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme; then
     rm -f "$ios_build_backup"
     exit 1
 fi
