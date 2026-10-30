@@ -1027,11 +1027,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
             if (_halfDivision == null) Obx(() {
               final chatKeyboardRequested =
                   gFFI.chatModel.softKeyboardRequested.value;
-              final tools = KeyHelpTools(
+              return KeyHelpTools(
                   keyboardIsVisible: keyboardVisibilityController.isVisible &&
                       (_showEdit || chatKeyboardRequested),
                   showGestureHelp: _showGestureHelp);
-              return isIOS ? SafeArea(bottom: false, child: tools) : tools;
             }),
             SizedBox(
               width: 0,
@@ -1513,7 +1512,10 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         key: _key,
         color: Color(0xAA000000),
         padding: EdgeInsets.only(
-            top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
+                top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8)
+            .add(isIOS
+                ? MediaQuery.of(context).padding.copyWith(bottom: 0)
+                : EdgeInsets.zero),
         child: Wrap(
           spacing: space,
           runSpacing: space,

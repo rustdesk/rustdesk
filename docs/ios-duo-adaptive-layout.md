@@ -17,6 +17,8 @@ Use the official Flutter scene/implicit-engine entry point and current-view nati
 
 The render surface extends to the window edges. Foreground controls apply their own safe-area handling; the physical outer camera remains an occlusion. A division's interaction margins are not a permanently undisplayable band. Read the division frame/margins and keyboard intersection rather than assuming a fixed hinge or keyboard size.
 
+On outer portrait, wrapping the entire auxiliary-key panel in SafeArea also inset its translucent background, leaving an unpainted strip beside the camera. Apply the iOS safe insets inside the panel's existing padding instead: the background reaches the window edge while the keys retain their positions. Half-fold's enclosing SafeArea already consumes these insets; non-iOS padding is unchanged.
+
 Rejected alternatives:
 
 - An input accessory stays directly above the system keyboard and does not reduce its reserved frame; use independent top-aligned auxiliary keys instead.
