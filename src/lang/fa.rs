@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "اعتبارنامه نادرست است"),
         ("The verification code is incorrect or has expired", "کد تأیید نادرست است یا منقضی شده است"),
         ("Edit Tag", "ویرایش برچسب"),
-        ("Forget Password", "رمز عبور ذخیره نشود"),
+        ("Clear Saved Password", "پاک کردن رمز عبور ذخیره‌شده"),
         ("Favorites", "اتصالات دلخواه"),
         ("Add to Favorites", "افزودن به علاقه مندی ها"),
         ("Remove from Favorites", "از علاقه مندی ها حذف شود"),

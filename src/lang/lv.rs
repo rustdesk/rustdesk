@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Nepareizs lietotājvārds vai parole"),
         ("The verification code is incorrect or has expired", "Verifikācijas kods ir nepareizs vai tam ir beidzies derīguma termiņš"),
         ("Edit Tag", "Rediģēt tagu"),
-        ("Forget Password", "Neatcerēties paroli"),
+        ("Clear Saved Password", "Dzēst saglabāto paroli"),
         ("Favorites", "Izlase"),
         ("Add to Favorites", "Pievienot pie izlases"),
         ("Remove from Favorites", "Noņemt no izlases"),

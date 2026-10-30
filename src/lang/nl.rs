@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Verkeerde inloggegevens"),
         ("The verification code is incorrect or has expired", "De verificatiecode is onjuist of verlopen"),
         ("Edit Tag", "Label bewerken"),
-        ("Forget Password", "Wachtwoord vergeten"),
+        ("Clear Saved Password", "Opgeslagen wachtwoord wissen"),
         ("Favorites", "Favorieten"),
         ("Add to Favorites", "Toevoegen aan Favorieten"),
         ("Remove from Favorites", "Verwijderen uit Favorieten"),

@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Credencials errònies"),
         ("The verification code is incorrect or has expired", "El codi de verificació no és vàlid o ha caducat"),
         ("Edit Tag", "Edita l'etiqueta"),
-        ("Forget Password", "Contrasenya oblidada"),
+        ("Clear Saved Password", "Esborra la contrasenya desada"),
         ("Favorites", "Preferits"),
         ("Add to Favorites", "Afegeix als preferits"),
         ("Remove from Favorites", "Suprimeix dels preferits"),

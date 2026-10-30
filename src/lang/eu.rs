@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Kredentzial baliogabeak"),
         ("The verification code is incorrect or has expired", "Egiaztapen-kodea baliogabe edo iraungitua da"),
         ("Edit Tag", "Editatu etiketa"),
-        ("Forget Password", "Ahaztu pasahitza"),
+        ("Clear Saved Password", "Ezabatu gordetako pasahitza"),
         ("Favorites", "Gogokoenak"),
         ("Add to Favorites", "Gehitu gogokoenetara"),
         ("Remove from Favorites", "Kendu gpgokoenetatik"),

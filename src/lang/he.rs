@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "פרטי התחברות שגויים"),
         ("The verification code is incorrect or has expired", "קוד האימות שגוי או שפג תוקפו"),
         ("Edit Tag", "ערוך תג"),
-        ("Forget Password", "שכחת סיסמה"),
+        ("Clear Saved Password", "מחיקת הסיסמה השמורה"),
         ("Favorites", "מועדפים"),
         ("Add to Favorites", "הוסף למועדפים"),
         ("Remove from Favorites", "הסר מהמועדפים"),

@@ -56,7 +56,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add Tag", "Add tag"),
         ("Wrong credentials", "Wrong username or password"),
         ("Edit Tag", "Edit tag"),
-        ("Forget Password", "Forget password"),
+        ("Clear Saved Password", "Clear saved password"),
         ("Add to Favorites", "Add to favorites"),
         ("Remove from Favorites", "Remove from favorites"),
         ("Socks5 Proxy", "Socks5 proxy"),

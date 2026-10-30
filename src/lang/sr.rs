@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Pogrešno korisničko ime ili lozinka"),
         ("The verification code is incorrect or has expired", "Verifikacioni kod je netačan ili je istekao"),
         ("Edit Tag", "Izmeni oznaku"),
-        ("Forget Password", "Zaboravi lozinku"),
+        ("Clear Saved Password", "Izbriši sačuvanu lozinku"),
         ("Favorites", "Favoriti"),
         ("Add to Favorites", "Dodaj u favorite"),
         ("Remove from Favorites", "Izbaci iz favorita"),

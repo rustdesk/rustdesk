@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Klaidingi kredencialai"),
         ("The verification code is incorrect or has expired", "Patvirtinimo kodas neteisingas arba nebegalioja"),
         ("Edit Tag", "Redaguoti žymą"),
-        ("Forget Password", "Nebeprisiminti slaptažodžio"),
+        ("Clear Saved Password", "Ištrinti išsaugotą slaptažodį"),
         ("Favorites", "Parankiniai"),
         ("Add to Favorites", "Įtraukti į parankinius"),
         ("Remove from Favorites", "Pašalinti iš parankinių"),

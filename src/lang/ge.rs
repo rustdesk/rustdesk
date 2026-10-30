@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "არასწორი მონაცემები"),
         ("The verification code is incorrect or has expired", "შემოწმების კოდი არასწორია ან ვადაგასულია"),
         ("Edit Tag", "ჭდის შეცვლა"),
-        ("Forget Password", "პაროლის დავიწყება"),
+        ("Clear Saved Password", "შენახული პაროლის წაშლა"),
         ("Favorites", "რჩეულები"),
         ("Add to Favorites", "რჩეულებში დამატება"),
         ("Remove from Favorites", "რჩეულებიდან წაშლა"),

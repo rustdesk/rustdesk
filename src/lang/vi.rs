@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Thông tin đăng nhập sai"),
         ("The verification code is incorrect or has expired", "Mã xác thực không đúng hoặc đã hết hạn"),
         ("Edit Tag", "Sửa thẻ"),
-        ("Forget Password", "Quên mật khẩu"),
+        ("Clear Saved Password", "Xóa mật khẩu đã lưu"),
         ("Favorites", "Yêu thích"),
         ("Add to Favorites", "Thêm vào yêu thích"),
         ("Remove from Favorites", "Xóa khỏi yêu thích"),

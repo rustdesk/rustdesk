@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Памылковае імя або пароль"),
         ("The verification code is incorrect or has expired", "Памылковы або пратэрмінаваны праверачны код"),
         ("Edit Tag", "Рэдагаваць цэтлік"),
-        ("Forget Password", "Не захоўваць пароль"),
+        ("Clear Saved Password", "Выдаліць захаваны пароль"),
         ("Favorites", "Абранае"),
         ("Add to Favorites", "Дадаць у абранае"),
         ("Remove from Favorites", "Выдаліць з абранага"),

@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "잘못된 자격 증명"),
         ("The verification code is incorrect or has expired", "인증 코드가 올바르지 않거나 만료되었습니다."),
         ("Edit Tag", "태그 편집"),
-        ("Forget Password", "비밀번호 분실"),
+        ("Clear Saved Password", "저장된 비밀번호 삭제"),
         ("Favorites", "즐겨찾기"),
         ("Add to Favorites", "즐겨찾기에 추가"),
         ("Remove from Favorites", "즐겨찾기에서 삭제"),

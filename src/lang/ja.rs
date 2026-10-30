@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "資格情報が間違っています"),
         ("The verification code is incorrect or has expired", "認証コードが間違っているか、有効期限が切れています"),
         ("Edit Tag", "タグを編集"),
-        ("Forget Password", "パスワードを忘れた"),
+        ("Clear Saved Password", "保存済みのパスワードを削除"),
         ("Favorites", "お気に入り"),
         ("Add to Favorites", "お気に入りに追加"),
         ("Remove from Favorites", "お気に入りから削除"),
