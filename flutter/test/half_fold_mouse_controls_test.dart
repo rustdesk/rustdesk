@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/generated_bridge.dart';
+import 'package:flutter_hbb/common/widgets/remote_input.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
+import 'package:flutter_hbb/mobile/widgets/ios_keyboard_controls.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 
 class _Binding extends Fake implements RustdeskImpl {
   final options = {'ll-mouse-btn-pos': '{"x":100.0,"y":800.0}'};
@@ -34,9 +37,63 @@ class _Cursor extends Fake implements CursorModel {
   void removeBlockedRect(Rect rect) {}
 }
 
-class _Input extends Fake implements InputModel {}
+class _Input extends Fake implements InputModel {
+  @override
+  final isPhysicalMouse = false.obs;
+}
+
+class _Model extends Fake implements FfiModel {
+  @override
+  bool touchMode = false;
+  @override
+  bool get isPeerAndroid => false;
+}
+
+class _FFI extends Fake implements FFI {
+  @override
+  final _Model ffiModel = _Model();
+  @override
+  final inputModel = _Input();
+}
 
 void main() {
+  testWidgets('lower trackpad only accepts mouse mode with keyboard hidden',
+      (tester) async {
+    final ffi = _FFI();
+    Future<void> show(bool keyboardVisible) => tester.pumpWidget(MaterialApp(
+          home: IosHalfFoldTrackpad(
+              ffi: ffi, keyboardVisible: keyboardVisible),
+        ));
+    await show(false);
+    expect(find.byType(RawTouchGestureDetectorRegion), findsOneWidget);
+    await show(true);
+    expect(find.byType(RawTouchGestureDetectorRegion), findsNothing);
+    ffi.ffiModel.touchMode = true;
+    await show(false);
+    expect(find.byType(RawTouchGestureDetectorRegion), findsNothing);
+    ffi.ffiModel.touchMode = false;
+    ffi.inputModel.isPhysicalMouse.value = true;
+    await show(false);
+    expect(find.byType(RawTouchGestureDetectorRegion), findsNothing);
+  });
+
+  testWidgets('floating controls receive taps before the lower trackpad',
+      (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Stack(children: [
+        IosHalfFoldTrackpad(ffi: _FFI(), keyboardVisible: false),
+        Center(
+            child: TextButton(
+                onPressed: () => taps++, child: const Text('Control'))),
+      ]),
+    ));
+    await tester.tap(find.text('Control'));
+    await tester.pumpAndSettle();
+    expect(taps, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final persist in [false, true]) {
     testWidgets(
         persist

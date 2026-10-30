@@ -762,11 +762,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       showGestureHelp: false,
       outsideCanvas: true,
     ),
-    child: _halfFoldControls(),
+    child: _halfFoldControls(keyboardVisible),
   );
 
-  Widget _halfFoldControls() => Stack(
+  Widget _halfFoldControls(bool keyboardVisible) => Stack(
         children: [
+          Positioned.fill(
+            child: IosHalfFoldTrackpad(
+                ffi: gFFI, keyboardVisible: keyboardVisible),
+          ),
           Positioned(
             top: 10,
             right: 10,

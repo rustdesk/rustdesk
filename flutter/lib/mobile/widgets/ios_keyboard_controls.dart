@@ -1,5 +1,27 @@
 import 'package:flutter/material.dart';
 import '../../common.dart' show MyTheme;
+import '../../common/widgets/remote_input.dart';
+import '../../models/model.dart';
+
+class IosHalfFoldTrackpad extends StatelessWidget {
+  const IosHalfFoldTrackpad(
+      {super.key, required this.ffi, required this.keyboardVisible});
+
+  final FFI ffi;
+  final bool keyboardVisible;
+
+  @override
+  Widget build(BuildContext context) => keyboardVisible ||
+          ffi.ffiModel.touchMode ||
+          ffi.inputModel.isPhysicalMouse.value
+      ? const SizedBox.shrink()
+      : RawTouchGestureDetectorRegion(
+          ffi: ffi,
+          child: const SizedBox.expand(
+            child: ColoredBox(color: Colors.transparent),
+          ),
+        );
+}
 
 class IosKeyboardControls extends StatefulWidget {
   const IosKeyboardControls({
