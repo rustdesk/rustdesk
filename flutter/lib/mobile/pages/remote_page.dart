@@ -111,6 +111,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
+  bool _lastComposingValid = false;
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -121,6 +122,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _textController.addListener(_onTextControllerChanged);
     gFFI.ffiModel.updateEventListener(sessionId, widget.id);
     gFFI.start(
       widget.id,
@@ -184,6 +186,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   Future<void> dispose() async {
+    _textController.removeListener(_onTextControllerChanged);
     HardwareKeyboard.instance.removeHandler(_handleLocalKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
@@ -318,6 +321,20 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     setState(() {});
   }
 
+  void _onTextControllerChanged() {
+    final isComposing = _textController.value.isComposingRangeValid;
+    if (_lastComposingValid && !isComposing) {
+      if (!inputModel.keyboardInputAllowed) {
+        _lastComposingValid = isComposing;
+        return;
+      }
+      if (_textController.text != _value) {
+        _handleMobileSoftKeyboardInput(_textController.text);
+      }
+    }
+    _lastComposingValid = isComposing;
+  }
+
   void _handleMobileSoftKeyboardInput(String newValue) {
     final diff = resolveMobileSoftKeyboardDiff(
       oldValue: _value,
@@ -390,6 +407,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
+    _lastComposingValid = false;
     _textController.text = _value;
     setState(() => _showEdit = false);
     _timer?.cancel();

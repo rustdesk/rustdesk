@@ -1,3 +1,5 @@
+import 'package:characters/characters.dart';
+
 class SoftKeyboardDiff {
   final int backspaceCount;
   final String newStr;
@@ -24,6 +26,16 @@ SoftKeyboardDiff? resolveMobileSoftKeyboardDiff({
     return null;
   }
 
+  // If oldValue has sentinel padding and newValue was completely replaced
+  // (e.g. paste from clipboard or select all), reset oldValue to prevent
+  // emitting backspaces for the sentinel padding.
+  if (oldValue.isNotEmpty &&
+      oldValue[0] == '1' &&
+      newValue.isNotEmpty &&
+      newValue[0] != '1') {
+    oldValue = '';
+  }
+
   var i = newValue.length - 1;
   for (; i >= 0 && newValue[i] != '1'; --i) {}
   var j = oldValue.length - 1;
@@ -44,7 +56,7 @@ SoftKeyboardDiff? resolveMobileSoftKeyboardDiff({
     newStr = subNewValue.substring(common);
   }
 
-  final backspaceCount = subOldValue.length - common;
+  final backspaceCount = subOldValue.substring(common).characters.length;
   final isNonAscii = newStr.codeUnits.any((c) => c > 127);
   final isStringInput = newStr.length > 1 || isNonAscii;
 
