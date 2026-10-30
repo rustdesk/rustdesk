@@ -1875,6 +1875,18 @@ fn process_chr(en: &mut Enigo, chr: u32, down: bool, _hotkey: bool) {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    if crate::platform::linux::is_x11() && !_hotkey {
+        if let Ok(c) = char::try_from(chr) {
+            if !is_ascii_printable(c) {
+                if down {
+                    en.key_sequence(&c.to_string());
+                }
+                return;
+            }
+        }
+    }
+
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     if !_hotkey {
         if down {
@@ -2340,17 +2352,23 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
                         }
                     }
                 }
+                #[cfg(target_os = "linux")]
+                if !seq.chars().all(is_ascii_printable) {
+                    en.key_sequence(seq);
+                } else {
+                    for chr in seq.chars() {
+                        en.key_click(Key::Layout(chr));
+                    }
+                }
+                #[cfg(target_os = "windows")]
                 for chr in seq.chars() {
                     // char in rust is 4 bytes.
                     // But for this case, char comes from keyboard. We only need 2 bytes.
-                    #[cfg(target_os = "windows")]
                     if simulate_win_hot_key {
                         rdev::simulate_char(chr, true).ok();
                     } else {
                         rdev::simulate_unicode(chr as _).ok();
                     }
-                    #[cfg(target_os = "linux")]
-                    en.key_click(Key::Layout(chr));
                 }
             }
         }

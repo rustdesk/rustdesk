@@ -25,6 +25,7 @@ import '../../models/shortcut_model.dart';
 import '../../utils/image.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
+import '../mobile_keyboard_utils.dart';
 
 final initText = '1' * 1024;
 
@@ -317,98 +318,28 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     setState(() {});
   }
 
-  void _handleIOSSoftKeyboardInput(String newValue) {
-    var oldValue = _value;
+  void _handleMobileSoftKeyboardInput(String newValue) {
+    final diff = resolveMobileSoftKeyboardDiff(
+      oldValue: _value,
+      newValue: newValue,
+      isComposing: _textController.value.isComposingRangeValid,
+    );
+    if (diff == null) {
+      return;
+    }
     _value = newValue;
-    var i = newValue.length - 1;
-    for (; i >= 0 && newValue[i] != '1'; --i) {}
-    var j = oldValue.length - 1;
-    for (; j >= 0 && oldValue[j] != '1'; --j) {}
-    if (i < j) j = i;
-    var subNewValue = newValue.substring(j + 1);
-    var subOldValue = oldValue.substring(j + 1);
 
-    // get common prefix of subNewValue and subOldValue
-    var common = 0;
-    for (;
-        common < subOldValue.length &&
-            common < subNewValue.length &&
-            subNewValue[common] == subOldValue[common];
-        ++common) {}
-
-    // get newStr from subNewValue
-    var newStr = "";
-    if (subNewValue.length > common) {
-      newStr = subNewValue.substring(common);
-    }
-
-    // Set the value to the old value and early return if is still composing. (1 && 2)
-    // 1. The composing range is valid
-    // 2. The new string is shorter than the composing range.
-    if (_textController.value.isComposingRangeValid) {
-      final composingLength = _textController.value.composing.end -
-          _textController.value.composing.start;
-      if (composingLength > newStr.length) {
-        _value = oldValue;
-        return;
-      }
-    }
-
-    // Delete the different part in the old value.
-    for (i = 0; i < subOldValue.length - common; ++i) {
+    for (var i = 0; i < diff.backspaceCount; ++i) {
       inputModel.inputKey('VK_BACK');
     }
 
-    // Input the new string.
-    if (newStr.length > 1) {
-      bind.sessionInputString(sessionId: sessionId, value: newStr);
-    } else {
-      inputChar(newStr);
-    }
-  }
-
-  void _handleNonIOSSoftKeyboardInput(String newValue) {
-    var oldValue = _value;
-    _value = newValue;
-    if (oldValue.isNotEmpty &&
-        newValue.isNotEmpty &&
-        oldValue[0] == '1' &&
-        newValue[0] != '1') {
-      // clipboard
-      oldValue = '';
-    }
-    // This length-only diff assumes the IME appends at the end. If an IME
-    // leaves the caret inside paired punctuation, later insertions can replay
-    // the closing symbol: "()" -> "(a)" sends ")" instead of "a". This is a
-    // client text-diff issue, independent of the host keyboard layout.
-    if (newValue.length == oldValue.length) {
-      // ?
-    } else if (newValue.length < oldValue.length) {
-      final char = 'VK_BACK';
-      inputModel.inputKey(char);
-    } else {
-      final content = newValue.substring(oldValue.length);
-      if (content.length > 1) {
-        if (oldValue != '' &&
-            content.length == 2 &&
-            (content == '""' ||
-                content == '()' ||
-                content == '[]' ||
-                content == '<>' ||
-                content == "{}" ||
-                content == '”“' ||
-                content == '《》' ||
-                content == '（）' ||
-                content == '【】')) {
-          // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          bind.sessionInputString(sessionId: sessionId, value: content);
-          _openKeyboardUnlocked();
-          return;
-        }
-        bind.sessionInputString(sessionId: sessionId, value: content);
-      } else {
-        inputChar(content);
+    if (diff.isStringInput) {
+      bind.sessionInputString(sessionId: sessionId, value: diff.newStr);
+      if (diff.shouldReset) {
+        _openKeyboardUnlocked();
       }
+    } else if (diff.newStr.isNotEmpty) {
+      inputChar(diff.newStr);
     }
   }
 
@@ -417,11 +348,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (!inputModel.keyboardInputAllowed) {
       return;
     }
-    if (isIOS) {
-      _handleIOSSoftKeyboardInput(newValue);
-    } else {
-      _handleNonIOSSoftKeyboardInput(newValue);
-    }
+    _handleMobileSoftKeyboardInput(newValue);
   }
 
   void inputChar(String char) {
