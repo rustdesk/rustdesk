@@ -3,7 +3,8 @@ import 'package:flutter_hbb/mobile/widgets/ios_keyboard_controls.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  Widget app({bool halfFold = true, VoidCallback? remoteTap}) => MaterialApp(
+  Widget app({bool halfFold = true, VoidCallback? remoteTap,
+    VoidCallback? hideKeyboard}) => MaterialApp(
     theme: ThemeData(useMaterial3: false),
     home: MediaQuery(
       data: const MediaQueryData(
@@ -19,6 +20,7 @@ void main() {
               if (halfFold)
                 Positioned.fill(
                   child: IosKeyboardControls(
+                    onHideKeyboard: hideKeyboard,
                     auxiliaryBuilder: (requested) => requested
                         ? const SizedBox(height: 132, child: Text('Ctrl'))
                         : const SizedBox.shrink(),
@@ -87,5 +89,33 @@ void main() {
     await tester.pumpWidget(app());
     expect(find.text('Tools'), findsNothing);
     expect(find.byType(FloatingActionButton), findsOneWidget);
+  });
+
+  testWidgets('keyboard dismissal is independent of auxiliary controls', (
+    tester,
+  ) async {
+    var hidden = 0;
+    var remoteTaps = 0;
+    await tester.pumpWidget(app(
+      hideKeyboard: () => hidden++, remoteTap: () => remoteTaps++));
+    await tester.tap(find.byIcon(Icons.keyboard_hide));
+    expect(hidden, 1);
+    expect(remoteTaps, 0);
+    expect(find.text('Tools'), findsNothing);
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Auxiliary keys'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Collapse'));
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.keyboard_hide));
+    expect(hidden, 2);
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pump();
+    expect(find.text('Ctrl'), findsOneWidget);
+    await tester.tap(find.byTooltip('Collapse'));
+    await tester.pumpWidget(app());
+    expect(find.byIcon(Icons.keyboard_hide), findsNothing);
+    expect(remoteTaps, 0);
   });
 }

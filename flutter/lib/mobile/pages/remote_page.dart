@@ -756,6 +756,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       );
 
   Widget _halfFoldKeyboardControls() => IosKeyboardControls(
+        onHideKeyboard: _iosGeometry?.keyboard == null
+            ? null
+            : () => setState(() {
+                  _showEdit = false;
+                  gFFI.invokeMethod('enable_soft_keyboard', false);
+                  _mobileFocusNode.unfocus();
+                  _physicalFocusNode.requestFocus();
+                }),
         toolbarBuilder: (collapse, toggleAuxiliary) => getBottomAppBar(
           onCollapse: collapse,
           onKeyboard: toggleAuxiliary,
@@ -816,15 +824,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           ),
         ),
       );
-
-  void _finishHalfFoldInput(String _) {
-    final composing = _textController.value.composing;
-    if (composing.isValid && !composing.isCollapsed) return;
-    _mobileFocusNode.unfocus();
-    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-    setState(() => _showEdit = false);
-    _physicalFocusNode.requestFocus();
-  }
 
   String get _halfFoldMenuTag => '${gFFI.sessionId}-half-fold-menu';
 
@@ -1025,10 +1024,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               child: !_showEdit
                   ? Container()
                   : TextFormField(
-                      textInputAction: _halfDivision != null
-                          ? TextInputAction.done : TextInputAction.newline,
-                      onFieldSubmitted: _halfDivision != null
-                          ? _finishHalfFoldInput : null,
+                      textInputAction: TextInputAction.newline,
                       autocorrect: false,
                       // Flutter 3.16.9 Android.
                       // `enableSuggestions` causes secure keyboard to be shown.

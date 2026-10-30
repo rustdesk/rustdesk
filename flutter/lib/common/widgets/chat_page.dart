@@ -106,12 +106,6 @@ class ChatPage extends StatelessWidget implements PageShape {
                     inputOptions: InputOptions(
                       focusNode: chatModel.inputNode,
                       textController: chatModel.textController,
-                      textInputAction: isIOS &&
-                              (chatModel.parent.target?.canvasModel
-                                      .mobileControlsOutsideCanvas ??
-                                  false)
-                          ? TextInputAction.done
-                          : null,
                       inputTextStyle: TextStyle(
                           fontSize: 14,
                           color: Theme.of(context).textTheme.titleLarge?.color),
