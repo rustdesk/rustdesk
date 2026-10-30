@@ -54,6 +54,7 @@ Confirmed regressions and fix rationale:
 - The OS Password edit icon assumed its menu was a Navigator route and popped the remote page from the half-fold overlay. Give only that menu an explicit tagged dismissal callback; ordinary popup menus retain their existing dismissal path.
 - Virtual mouse widgets inherited lower-pane dimensions inside a shorter fixed box, clipping the wheel/buttons and confusing lower-local blocking rectangles with upper-canvas coordinates. Match the control box dimensions and isolate half-fold positions from ordinary saved positions.
 - Hiding all half-fold controls behind the system keyboard removed their reachable entry point. Add the explicitly requested floating-button fallback and expand the existing toolbar only on demand. The native keyboard owns its size; changing custom input views would replace the native IME.
+- When hidden controls leave only positioned children, a loose lower-body Stack can collapse to zero size. Bound its parent to the Scaffold body so a keyboard-adjacent control row remains visible and interactive when lower space is available.
 
 ## Delivery and validation contract
 
