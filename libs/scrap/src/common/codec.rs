@@ -863,13 +863,7 @@ impl Decoder {
                 // The slot belongs to the last presented frame, not to the last
                 // surface: a surface an earlier packet of this batch left here
                 // must not outlive the software picture that supersedes it.
-                if presented(false, software_ok).evicts_surface() {
-                    #[cfg(target_os = "macos")]
-                    {
-                        *pixelbuffer = None;
-                    }
-                }
-                ret = ret || software_ok;
+                ret = present_software(pixelbuffer, software_ok) || ret;
                 continue;
             }
             #[cfg(target_os = "macos")]
@@ -897,13 +891,7 @@ impl Decoder {
             // A software frame produced later in the same batch wins: the rule is
             // "the last decoded frame is the one presented", and the caller must
             // not paint an older GPU frame over it.
-            if presented(false, software_ok).evicts_surface() {
-                #[cfg(target_os = "macos")]
-                {
-                    *pixelbuffer = None;
-                }
-            }
-            ret = ret || software_ok;
+            ret = present_software(pixelbuffer, software_ok) || ret;
         }
         return Ok(ret);
     }
@@ -1011,6 +999,21 @@ fn presented(surface: bool, software_ok: bool) -> Presented {
     } else {
         Presented::Nothing
     }
+}
+
+/// Present a software picture, and make it the only thing the caller can present.
+///
+/// Both software branches of `handle_hwram_video_frame` end here, so the decision
+/// and the clearing live in one place: a surface that an earlier packet of the same
+/// batch put in the slot must not be presented over the software picture decoded
+/// after it. Generic over the slot's contents so the transition itself is testable
+/// without a hardware decoder.
+#[cfg(feature = "hwcodec")]
+fn present_software<T>(pixelbuffer: &mut Option<T>, software_ok: bool) -> bool {
+    if presented(false, software_ok).evicts_surface() {
+        *pixelbuffer = None;
+    }
+    software_ok
 }
 
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
@@ -1348,6 +1351,30 @@ mod presentation_tests {
         assert!(
             p.evicts_surface(),
             "the slot must not keep the older surface"
+        );
+    }
+
+    // The rule above says *what* should happen; these two drive the production
+    // helper that actually clears the slot, starting from a populated one, so a
+    // regression that drops the clearing cannot pass on classification alone.
+    #[test]
+    fn a_software_picture_clears_the_surface_in_the_slot() {
+        let mut slot = Some(7u8);
+        assert!(present_software(&mut slot, true));
+        assert!(
+            slot.is_none(),
+            "the surface an earlier packet left here must not survive the newer software picture"
+        );
+    }
+
+    #[test]
+    fn nothing_to_present_leaves_the_surface_in_the_slot() {
+        let mut slot = Some(7u8);
+        assert!(!present_software(&mut slot, false));
+        assert_eq!(
+            slot,
+            Some(7),
+            "a packet that presents nothing must not discard the surface"
         );
     }
 
