@@ -287,7 +287,13 @@ jobs:
     - name: Install nasm (aom builds with it on macOS)
       shell: bash
       run: |
-        if ! command -v nasm &>/dev/null; then brew install nasm; fi
+        # Do NOT use `brew install nasm`, which installs NASM 3.x: its changed
+        # options break the aom build. Same pin as flutter-build.yml.
+        if ! command -v nasm &>/dev/null; then
+          wget --no-verbose https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip
+          unzip -q nasm-2.16.03-macosx.zip
+          sudo cp nasm-2.16.03/nasm /usr/local/bin/nasm
+        fi
         nasm --version
 
     - name: Install vcpkg dependencies
