@@ -212,7 +212,8 @@ function Install-WingetPackage([string]$Id, [string[]]$Extra = @()) {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         throw "winget is not available. Install '$Id' manually (or install App Installer from the Microsoft Store) and re-run."
     }
-    $wingetArgs = @("install", "--id", $Id, "-e", "--accept-source-agreements", "--accept-package-agreements") + $Extra
+    $wingetArgs = @("install", "--id", $Id, "-e", "--silent", "--disable-interactivity",
+        "--accept-source-agreements", "--accept-package-agreements") + $Extra
     Write-Host "> winget $($wingetArgs -join ' ')" -ForegroundColor DarkGray
     & winget @wingetArgs
     # winget returns non-zero for benign cases (e.g. already installed); callers re-check instead.
@@ -222,6 +223,33 @@ function Install-WingetPackage([string]$Id, [string[]]$Extra = @()) {
 if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
     throw "This script builds the x64 client only (host is $env:PROCESSOR_ARCHITECTURE)."
 }
+
+# Installers ask for elevation through a UAC dialog, which times out when nobody is at the machine.
+# If any of them is going to run, elevate once now, while the user is still here.
+if (-not (Test-Admin)) {
+    $devModeOn = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" `
+        -Name AllowDevelopmentWithoutDevLicense -ErrorAction SilentlyContinue).AllowDevelopmentWithoutDevLicense -eq 1
+    $needsAdmin = -not (Get-Command git -ErrorAction SilentlyContinue) -or
+        -not (Get-Python 6>$null) -or
+        -not (Get-VsInstall) -or
+        -not (Find-Llvm) -or
+        -not $devModeOn
+    if ($needsAdmin) {
+        Write-Host "Some prerequisites need an administrator to install; asking for elevation once now." -ForegroundColor Yellow
+        $relaunch = @("-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+        foreach ($p in $PSBoundParameters.GetEnumerator()) {
+            if ($p.Value -is [System.Management.Automation.SwitchParameter]) {
+                if ($p.Value.IsPresent) { $relaunch += "-$($p.Key)" }
+            } else {
+                $relaunch += "-$($p.Key)", "`"$($p.Value)`""
+            }
+        }
+        Start-Process powershell.exe -Verb RunAs -ArgumentList $relaunch
+        Write-Host "The build continues in the new administrator window."
+        return
+    }
+}
+
 New-Item -ItemType Directory -Force $ToolsDir, $DownloadDir | Out-Null
 
 # ---------------------------------------------------------------------------
