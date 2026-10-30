@@ -2,7 +2,7 @@
 
 ## Requirements and references
 
-Remote sessions should use the complete iPhone Duo window in outer portrait, outer landscape, unfolded portrait and unfolded landscape. A horizontal half-fold should reserve the upper area for the remote image and place every session control and input surface below the division. Fit must preserve the remote aspect ratio; its letterboxing is separate from an app compatibility window or unused safe-area bands.
+Remote sessions should use the complete iPhone Duo window in outer portrait, outer landscape, unfolded portrait and unfolded landscape. A horizontal half-fold should reserve the upper area for the remote image and place session controls and input surfaces below the division. When the native keyboard leaves less than one control row below the division, a floating button may appear over the upper image; only an explicit tap expands the toolbar there. Fit must preserve the remote aspect ratio; its letterboxing is separate from an app compatibility window or unused safe-area bands.
 
 Ordinary layouts retain the existing toolbar placement, user scaling/panning and keyboard offset restoration. Opening a half-fold chat window should leave the lower controls visible until the user requests text input. Done dismisses input and preserves the draft; remote Enter remains a separate action.
 
@@ -37,6 +37,8 @@ Half-fold virtual mouse controls use a 250-point container with matching inherit
 
 **Chat.** The existing chat-window entry point suppresses automatic keyboard requests whenever controls are outside the canvas. This covers the toolbar, floating chat icon and incoming-message paths. Ordinary chat keeps its multiline configuration. Half-fold Done only dismisses the keyboard; sending remains explicit.
 
+**Half-fold keyboard controls.** Use the actual keyboard frame to find a full-width row below the division. If at least 48 points remain, keep the floating button and its requested toolbar there; otherwise use the bottom of the upper area. This explicit toolbar overlay does not resize or refit the image. Its keyboard-adjacent row removes bottom safe-area padding, while ordinary screen-bottom toolbars retain it. A local widget owns the expansion toggle and disappears with the keyboard, so the next keyboard starts collapsed without changing the ordinary toolbar preference. Ordinary keyboard FAB behavior still dismisses the keyboard; this half-fold fallback explicitly expands controls while retaining the keyboard.
+
 The floating chat widget reads full-view dimensions internally. In half-fold mode, configure its existing non-fullscreen offset with the lower overlay's origin, and recreate only that icon when its bounded size changes. This keeps its initial position and global drag conversion inside the lower controls without changing ordinary chat or its text controller.
 
 **Builds.** iOS uses Flutter 3.44.8, an SDK providing iOS 27.1 APIs, and the existing Flutter 3.44 bridge-artifact path. The shared source-patch script supports BSD sed on macOS while retaining GNU sed behavior for Windows arm64. Other platform Flutter versions remain unchanged. No remote protocol, generated bridge interface, audio or file-transfer behavior is changed.
@@ -51,6 +53,7 @@ Confirmed regressions and fix rationale:
 - The floating chat widget's full-view origin placed its icon outside the lower overlay. Use its existing non-fullscreen offset for half-fold coordinates rather than adding position state.
 - The OS Password edit icon assumed its menu was a Navigator route and popped the remote page from the half-fold overlay. Give only that menu an explicit tagged dismissal callback; ordinary popup menus retain their existing dismissal path.
 - Virtual mouse widgets inherited lower-pane dimensions inside a shorter fixed box, clipping the wheel/buttons and confusing lower-local blocking rectangles with upper-canvas coordinates. Match the control box dimensions and isolate half-fold positions from ordinary saved positions.
+- Hiding all half-fold controls behind the system keyboard removed their reachable entry point. Add the explicitly requested floating-button fallback and expand the existing toolbar only on demand. The native keyboard owns its size; changing custom input views would replace the native IME.
 
 ## Delivery and validation contract
 
@@ -62,7 +65,7 @@ Simulator verification is the current acceptance boundary. Physical Duo/15 Pro t
 
 Known limits:
 
-- The docked system keyboard can cover the entire half-fold lower area, hiding the chat editor and Send button. The OS Password editor has the same visibility limitation; fixing its menu dismissal preserves the session but does not make that editor visible behind the keyboard. Done dismisses the keyboard, and chat retains its draft. Keeping the upper area display-only, retaining the native IME and showing the editor while typing are not jointly achievable in that geometry: an input accessory also occupies the upper area, and iPhone ignores custom input-assistant items. A chat-only compact editor above the keyboard requires an explicit exception to the display-only requirement; this interaction decision remains open.
+- The docked system keyboard can cover the entire half-fold lower area, hiding the chat editor and Send button. The OS Password editor has the same visibility limitation; fixing its menu dismissal preserves the session but does not make that editor visible behind the keyboard. Done dismisses the keyboard, and chat retains its draft. The floating-button/toolbar fallback restores control access; it does not relocate chat or password editors. A default chat composer in the upper area is not part of the selected interaction.
 - After switching from half-fold to the closed outer display, the ordinary floating chat icon can be outside the visible window. Its legacy widget reads implicit inner-view dimensions; the half-fold offset fix deliberately leaves the ordinary configuration intact. Toolbar chat remains accessible. Returning to half-fold restores the icon without losing the draft. A general floating-widget geometry replacement is outside this change.
 - Half-fold size changes recreate only the floating icon, resetting its dragged position. Its lower drag boundary can overlap the toolbar, as in the existing fullscreen behavior.
 - The incoming-message chat path is source-reviewed but not runtime-accepted: the dedicated Linux peer's connection-manager process exited before registering a connection. Toolbar and floating-icon entry, native Chinese composition and three Done cycles were exercised separately; those checks do not establish incoming-message delivery.

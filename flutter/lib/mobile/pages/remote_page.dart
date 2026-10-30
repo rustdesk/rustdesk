@@ -27,6 +27,7 @@ import '../../utils/image.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
 import '../widgets/ios_window_geometry.dart';
+import '../widgets/ios_keyboard_controls.dart';
 
 final initText = '1' * 1024;
 
@@ -615,6 +616,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final upperHeight = splitY == null
         ? null
         : (keyboardTop != null && keyboardTop < splitY ? keyboardTop : splitY);
+    final keyboardSpace = half == null || keyboardTop == null
+        ? 0.0
+        : (keyboardTop - half.bottom)
+            .clamp(0.0, media.size.height - half.bottom)
+            .toDouble();
     final keyboardVisible = keyboardVisibilityController.isVisible && _showEdit;
     final showActionButton =
         half == null && (!_showBar || keyboardVisible || _showGestureHelp);
@@ -660,7 +666,23 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               children: [
                 half == null
                     ? Expanded(child: _iosRemoteBody())
-                    : SizedBox(height: upperHeight, child: _iosRemoteBody()),
+                    : SizedBox(
+                        height: upperHeight,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _iosRemoteBody(),
+                            if (_iosGeometry?.keyboard != null &&
+                                keyboardSpace < kMinInteractiveDimension)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: _halfFoldKeyboardControls(),
+                              ),
+                          ],
+                        ),
+                      ),
               ],
             ),
           ),
@@ -684,7 +706,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 state: _blockableOverlayState,
                 child: half == null
                     ? const SizedBox.shrink()
-                    : _halfFoldControls(_iosGeometry?.keyboard != null),
+                    : _halfFoldControls(
+                        _iosGeometry?.keyboard != null, keyboardSpace),
               ),
             ),
           ),
@@ -708,45 +731,58 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         ),
       );
 
-  Widget _halfFoldControls(bool keyboardVisible) => Scaffold(
+  Widget _halfFoldKeyboardControls() => IosKeyboardControls(
+        toolbarBuilder: (collapse) => getBottomAppBar(onCollapse: collapse),
+      );
+
+  Widget _halfFoldControls(bool keyboardVisible, double keyboardSpace) => Scaffold(
         backgroundColor: MyTheme.canvasColor,
         resizeToAvoidBottomInset: false,
         bottomNavigationBar: keyboardVisible ? null : getBottomAppBar(),
-        body: Visibility(
-          visible: !keyboardVisible,
-          maintainState: true,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                QualityMonitor(gFFI.qualityMonitorModel),
-                KeyHelpTools(
-                  keyboardIsVisible: false,
-                  showGestureHelp: true,
-                  outsideCanvas: true,
-                ),
-                SizedBox(
-                  height: 250,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => MediaQuery(
-                      data: MediaQuery.of(context).copyWith(
-                        size: constraints.biggest,
-                      ),
-                      child: Stack(
-                        children: [
-                          gFFI.ffiModel.touchMode
-                              ? FloatingMouse(ffi: gFFI)
-                              : FloatingMouseWidgets(
-                                  ffi: gFFI, persistPosition: false),
-                        ],
+        body: Stack(children: [
+          Visibility(
+            visible: !keyboardVisible,
+            maintainState: true,
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  QualityMonitor(gFFI.qualityMonitorModel),
+                  KeyHelpTools(
+                    keyboardIsVisible: false,
+                    showGestureHelp: true,
+                    outsideCanvas: true,
+                  ),
+                  SizedBox(
+                    height: 250,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                          size: constraints.biggest,
+                        ),
+                        child: Stack(
+                          children: [
+                            gFFI.ffiModel.touchMode
+                                ? FloatingMouse(ffi: gFFI)
+                                : FloatingMouseWidgets(
+                                    ffi: gFFI, persistPosition: false),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                if (_showGestureHelp) getGestureHelp(),
-              ],
+                  if (_showGestureHelp) getGestureHelp(),
+                ],
+              ),
             ),
           ),
-        ),
+          if (keyboardVisible && keyboardSpace >= kMinInteractiveDimension)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: keyboardSpace - kMinInteractiveDimension,
+              child: _halfFoldKeyboardControls(),
+            ),
+        ]),
       );
 
   void _finishHalfFoldInput(String _) {
@@ -820,7 +856,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget getBottomAppBar() {
+  Widget getBottomAppBar({VoidCallback? onCollapse}) {
     final ffiModel = Provider.of<FfiModel>(context);
     return BottomAppBar(
       elevation: 10,
@@ -910,7 +946,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 icon: Icon(Icons.expand_more),
                 onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
                     ? null
-                    : () {
+                    : onCollapse ?? () {
                         setState(() => _showBar = !_showBar);
                       },
               )),
