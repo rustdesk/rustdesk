@@ -1569,6 +1569,16 @@ pub async fn lock_screen() {
             handle_key(&key_event);
             key_event.down = false;
             handle_key(&key_event);
+            // The shortcut is only a request and can be lost.
+            if !crate::platform::wait_locked(Duration::from_secs(2)) {
+                key_event.down = true;
+                handle_key(&key_event);
+                key_event.down = false;
+                handle_key(&key_event);
+                if !crate::platform::wait_locked(Duration::from_secs(2)) {
+                    log::error!("Failed to lock the screen");
+                }
+            }
         });
     } else {
     crate::platform::lock_screen();
