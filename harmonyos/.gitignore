@@ -1,0 +1,31 @@
+/node_modules
+/oh_modules
+**/oh_modules
+/local.properties
+/.idea
+**/build
+**/.cxx
+/.hvigor
+**/*.hap
+**/*.hsp
+**/*.har
+/.clangd
+/.clang-format
+/.clang-tidy
+**/.test
+/.appanalyzer
+
+# rust cross-build artifacts
+client/deps/
+client/deps-x86_64/
+client/out/
+client/.deps-work/
+client/.deps-work-x86_64/
+
+# local debugging leftovers
+*.dmp
+/*.jpeg
+/l4.json
+
+# built native libs are copied here from harmonyos/client/out (README step 4)
+entry/libs/

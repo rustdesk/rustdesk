@@ -43,6 +43,10 @@ features = ["dxgi", "dxgi1_2", "dxgi1_5", "dxgi1_6", "d3d11", "winuser", "winerr
 [target.'cfg(target_os = "macos")'.dependencies]
 block = "0.1"
 
+[target.'cfg(target_env = "ohos")'.dependencies]
+lazy_static = "1.4"
+log = "0.4"
+
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 jni = "0.21"
@@ -58,11 +62,12 @@ docopt = "1.1"
 quest = "0.3"
 
 [build-dependencies]
+cc = "1.0"
 target_build_utils = "0.3"
 bindgen = "0.72.1"
 pkg-config = { version = "0.3.27", optional = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(all(target_os = "linux", not(target_env = "ohos")))'.dependencies]
 dbus = { version = "0.9", optional = true }
 tracing = { version = "0.1", optional = true }
 gstreamer = { version = "0.16", optional = true }
@@ -74,6 +79,6 @@ zbus = { version = "3.15", optional = true }
 git = "https://github.com/rustdesk-org/hwcodec"
 optional = true
 
-[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+[target.'cfg(all(any(target_os = "windows", target_os = "linux"), not(target_env = "ohos")))'.dependencies]
 nokhwa = { git = "https://github.com/rustdesk-org/nokhwa.git", branch = "fix_from_raw_parts", features = ["input-native"] }
 

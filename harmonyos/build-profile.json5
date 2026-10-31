@@ -1,0 +1,38 @@
+{
+  app: {
+    // Configure signing locally in DevEco Studio (File > Project Structure >
+    // Signing Configs); keep credentials out of version control.
+    signingConfigs: [],
+    products: [
+      {
+        name: 'default',
+        compileSdkVersion: '26.0.0',
+        compatibleSdkVersion: '5.0.5(17)',
+        runtimeOS: 'HarmonyOS',
+        "targetSdkVersion": "26.0.0"
+      },
+    ],
+    buildModeSet: [
+      {
+        name: 'debug',
+      },
+      {
+        name: 'release',
+      },
+    ],
+  },
+  modules: [
+    {
+      name: 'entry',
+      srcPath: './entry',
+      targets: [
+        {
+          name: 'default',
+          applyToProducts: [
+            'default',
+          ],
+        },
+      ],
+    },
+  ],
+}

@@ -185,10 +185,15 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn translate(name: String) -> String {
     let locale = sys_locale::get_locale().unwrap_or_default();
     translate_locale(name, &locale)
+}
+
+#[cfg(target_env = "ohos")]
+pub fn translate(name: String) -> String {
+    translate_locale(name, "")
 }
 
 pub fn translate_locale(name: String, locale: &str) -> String {

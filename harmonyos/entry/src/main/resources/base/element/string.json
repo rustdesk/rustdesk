@@ -1,0 +1,549 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "RustDesk controller UI module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "RustDesk remote desktop controller"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "RustDesk"
+    },
+    {
+      "name": "controller_subtitle",
+      "value": "Remote desktop controller"
+    },
+    {
+      "name": "peer_id_hint",
+      "value": "Enter peer ID"
+    },
+    {
+      "name": "remote_control",
+      "value": "Remote Control"
+    },
+    {
+      "name": "file_transfer",
+      "value": "File Transfer"
+    },
+    {
+      "name": "connecting",
+      "value": "Connecting..."
+    },
+    {
+      "name": "connected",
+      "value": "Connected"
+    },
+    {
+      "name": "create_session_failed",
+      "value": "Failed to create session. Is librustdesk.so loaded?"
+    },
+    {
+      "name": "recent_connections",
+      "value": "Recent connections"
+    },
+    {
+      "name": "input_peer_id",
+      "value": "Please enter the peer ID"
+    },
+    {
+      "name": "conn_detail",
+      "value": "Connection"
+    },
+    {
+      "name": "speed",
+      "value": "Speed"
+    },
+    {
+      "name": "fps",
+      "value": "FPS"
+    },
+    {
+      "name": "delay",
+      "value": "Delay"
+    },
+    {
+      "name": "password_required",
+      "value": "Password required"
+    },
+    {
+      "name": "password_hint",
+      "value": "Enter password"
+    },
+    {
+      "name": "remember_password",
+      "value": "Remember password"
+    },
+    {
+      "name": "twofa_required",
+      "value": "Two-factor authentication"
+    },
+    {
+      "name": "twofa_hint",
+      "value": "Enter 6-digit code"
+    },
+    {
+      "name": "trust_device",
+      "value": "Trust this device"
+    },
+    {
+      "name": "ok",
+      "value": "OK"
+    },
+    {
+      "name": "cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "retry",
+      "value": "Retry"
+    },
+    {
+      "name": "back_home",
+      "value": "Back"
+    },
+    {
+      "name": "error",
+      "value": "Error"
+    },
+    {
+      "name": "keyboard",
+      "value": "Keyboard"
+    },
+    {
+      "name": "keyboard_hint",
+      "value": "Text to send to the remote"
+    },
+    {
+      "name": "key_enter",
+      "value": "Enter"
+    },
+    {
+      "name": "key_backspace",
+      "value": "Bksp"
+    },
+    {
+      "name": "refresh",
+      "value": "Refresh"
+    },
+    {
+      "name": "disconnect",
+      "value": "Disconnect"
+    },
+    {
+      "name": "display",
+      "value": "Display"
+    },
+    {
+      "name": "local",
+      "value": "Local"
+    },
+    {
+      "name": "remote",
+      "value": "Remote"
+    },
+    {
+      "name": "parent_dir",
+      "value": "Up"
+    },
+    {
+      "name": "open",
+      "value": "Open"
+    },
+    {
+      "name": "empty_dir",
+      "value": "(empty directory)"
+    },
+    {
+      "name": "upload_to_remote",
+      "value": "Upload to remote"
+    },
+    {
+      "name": "download_to_local",
+      "value": "Download to local"
+    },
+    {
+      "name": "select_local_file",
+      "value": "Select a local item first"
+    },
+    {
+      "name": "select_remote_file",
+      "value": "Select a remote item first"
+    },
+    {
+      "name": "local_root_reached",
+      "value": "Already at the root"
+    },
+    {
+      "name": "remote_root_reached",
+      "value": "Already at the root"
+    },
+    {
+      "name": "file_num",
+      "value": "File #"
+    },
+    {
+      "name": "cancel_job",
+      "value": "Cancel"
+    },
+    {
+      "name": "override_confirm_title",
+      "value": "File exists, overwrite?"
+    },
+    {
+      "name": "override",
+      "value": "Overwrite"
+    },
+    {
+      "name": "skip",
+      "value": "Skip"
+    },
+    {
+      "name": "settings",
+      "value": "Settings"
+    },
+    {
+      "name": "network_settings",
+      "value": "Network settings"
+    },
+    {
+      "name": "network_settings_hint",
+      "value": "Configure your own rustdesk-server. Fields left empty use the public servers."
+    },
+    {
+      "name": "id_server",
+      "value": "ID server"
+    },
+    {
+      "name": "id_server_hint",
+      "value": "host or host:port"
+    },
+    {
+      "name": "relay_server",
+      "value": "Relay server"
+    },
+    {
+      "name": "relay_server_hint",
+      "value": "Empty = assigned by ID server"
+    },
+    {
+      "name": "api_server",
+      "value": "API server"
+    },
+    {
+      "name": "api_server_hint",
+      "value": "Empty = derived from ID server"
+    },
+    {
+      "name": "server_key",
+      "value": "Key"
+    },
+    {
+      "name": "server_key_hint",
+      "value": "Public key of your hbbs, empty if unset"
+    },
+    {
+      "name": "save",
+      "value": "Save"
+    },
+    {
+      "name": "settings_saved",
+      "value": "Settings saved"
+    },
+    {
+      "name": "remote_cursor",
+      "value": "Remote cursor"
+    },
+    {
+      "name": "sync_clipboard",
+      "value": "Sync clipboard"
+    },
+    {
+      "name": "clipboard_paste_hint",
+      "value": "Long-press the box to paste the local clipboard"
+    },
+    {
+      "name": "send",
+      "value": "Send"
+    },
+    {
+      "name": "clipboard_sent",
+      "value": "Clipboard sent to remote"
+    },
+    {
+      "name": "clipboard_send_failed",
+      "value": "Failed to send clipboard"
+    },
+    {
+      "name": "clipboard_empty",
+      "value": "Nothing to send"
+    },
+    {
+      "name": "import_from_system",
+      "value": "Import"
+    },
+    {
+      "name": "export_to_system",
+      "value": "Export"
+    },
+    {
+      "name": "import_done",
+      "value": "Import completed"
+    },
+    {
+      "name": "export_done",
+      "value": "Export completed"
+    },
+    {
+      "name": "import_export_failed",
+      "value": "Operation failed"
+    },
+    {
+      "name": "pointer_mode",
+      "value": "Pointer"
+    },
+    {
+      "name": "quick_actions",
+      "value": "Quick actions"
+    },
+    {
+      "name": "qa_task_manager",
+      "value": "Task manager (Ctrl+Shift+Esc)"
+    },
+    {
+      "name": "qa_ctrl_alt_del",
+      "value": "Ctrl+Alt+Del"
+    },
+    {
+      "name": "qa_alt_f4",
+      "value": "Close app (Alt+F4)"
+    },
+    {
+      "name": "qa_win",
+      "value": "Start menu (Win)"
+    },
+    {
+      "name": "qa_win_r",
+      "value": "Run (Win+R)"
+    },
+    {
+      "name": "qa_win_d",
+      "value": "Show desktop (Win+D)"
+    },
+    {
+      "name": "qa_win_l",
+      "value": "Lock (Win+L)"
+    },
+    {
+      "name": "qa_lock_screen",
+      "value": "Lock screen"
+    },
+    {
+      "name": "view_camera",
+      "value": "View Camera"
+    },
+    {
+      "name": "voice_call_start",
+      "value": "Voice Call"
+    },
+    {
+      "name": "voice_call_end",
+      "value": "End Call"
+    },
+    {
+      "name": "voice_call_waiting",
+      "value": "Calling..."
+    },
+    {
+      "name": "voice_call_failed",
+      "value": "Voice call request failed"
+    },
+    {
+      "name": "record_start",
+      "value": "Record"
+    },
+    {
+      "name": "record_stop",
+      "value": "Stop Rec"
+    },
+    {
+      "name": "record_not_allowed",
+      "value": "Recording not allowed by peer"
+    },
+    {
+      "name": "clipboard_image_received",
+      "value": "Image copied to pasteboard"
+    },
+    {
+      "name": "mic_permission_reason",
+      "value": "Used for voice calls with the remote peer"
+    },
+    {
+      "name": "mic_denied",
+      "value": "Microphone permission denied"
+    },
+    {
+      "name": "display_settings",
+      "value": "Display Settings"
+    },
+    {
+      "name": "image_quality",
+      "value": "Image quality"
+    },
+    {
+      "name": "quality_best",
+      "value": "Best"
+    },
+    {
+      "name": "quality_balanced",
+      "value": "Balanced"
+    },
+    {
+      "name": "quality_low",
+      "value": "Low"
+    },
+    {
+      "name": "quality_custom",
+      "value": "Custom"
+    },
+    {
+      "name": "bitrate",
+      "value": "Bitrate"
+    },
+    {
+      "name": "fps_limit",
+      "value": "FPS limit"
+    },
+    {
+      "name": "codec_preference",
+      "value": "Codec preference"
+    },
+    {
+      "name": "codec_auto",
+      "value": "Auto"
+    },
+    {
+      "name": "view_only",
+      "value": "View only"
+    },
+    {
+      "name": "close",
+      "value": "Close"
+    },
+    {
+      "name": "quick_switch_display",
+      "value": "Displays"
+    },
+    {
+      "name": "quick_mode",
+      "value": "Mode"
+    },
+    {
+      "name": "mode_switched_touch",
+      "value": "Touch mode"
+    },
+    {
+      "name": "mode_switched_pointer",
+      "value": "Pointer mode"
+    },
+    {
+      "name": "virtual_mouse",
+      "value": "Virtual mouse"
+    },
+    {
+      "name": "vm_left",
+      "value": "Left click"
+    },
+    {
+      "name": "vm_double",
+      "value": "Double click"
+    },
+    {
+      "name": "vm_right",
+      "value": "Right click"
+    },
+    {
+      "name": "vm_middle",
+      "value": "Middle click"
+    },
+    {
+      "name": "vm_scroll_up",
+      "value": "Scroll up"
+    },
+    {
+      "name": "vm_scroll_down",
+      "value": "Scroll down"
+    },
+    {
+      "name": "transfer_list",
+      "value": "Transfer list"
+    },
+    {
+      "name": "transfer_clear",
+      "value": "Clear"
+    },
+    {
+      "name": "transfer_state_waiting",
+      "value": "Waiting"
+    },
+    {
+      "name": "transfer_state_transferring",
+      "value": "Transferring"
+    },
+    {
+      "name": "transfer_state_finished",
+      "value": "Finished"
+    },
+    {
+      "name": "transfer_state_cancelled",
+      "value": "Cancelled"
+    },
+    {
+      "name": "transfer_state_skipped",
+      "value": "Skipped"
+    },
+    {
+      "name": "transfer_state_failed",
+      "value": "Failed"
+    },
+    {
+      "name": "job_cancelled_toast",
+      "value": "Job cancelled"
+    },
+    {"name": "share_screen_entry", "value": "Share my screen"},
+    {"name": "share_title", "value": "Controlled (Share)"},
+    {"name": "share_id_label", "value": "This device ID"},
+    {"name": "share_password_label", "value": "Temporary password"},
+    {"name": "share_permanent_password_badge", "value": "Permanent password set"},
+    {"name": "share_password_refresh", "value": "Refresh"},
+    {"name": "share_start", "value": "Start sharing"},
+    {"name": "share_stop", "value": "Stop sharing"},
+    {"name": "share_start_hint", "value": "The system consent dialog appears when sharing starts."},
+    {"name": "share_service_running", "value": "Sharing your screen"},
+    {"name": "share_service_stopped", "value": "Sharing stopped"},
+    {"name": "share_waiting_consent", "value": "Waiting for system consent..."},
+    {"name": "share_capture_started", "value": "Screen sharing started"},
+    {"name": "share_capture_stopped", "value": "Screen sharing stopped"},
+    {"name": "share_capture_canceled", "value": "Screen sharing was canceled"},
+    {"name": "share_capture_interrupted", "value": "Screen sharing was interrupted"},
+    {"name": "share_capture_start_failed", "value": "Failed to start screen capture"},
+    {"name": "share_background_failed", "value": "Notification permission is off: sharing will drop in background"},
+    {"name": "share_requests", "value": "Connection requests"},
+    {"name": "share_connected", "value": "Connected peers"},
+    {"name": "share_accept", "value": "Accept"},
+    {"name": "share_reject", "value": "Reject"},
+    {"name": "share_disconnect", "value": "Disconnect"},
+    {"name": "share_voice_call_incoming", "value": "Incoming voice call"},
+    {"name": "share_voice_call_in_progress", "value": "In voice call"},
+    {"name": "chat_title", "value": "Chat"},
+    {"name": "chat_placeholder", "value": "Type a message"},
+    {"name": "chat_send", "value": "Send"},
+    {"name": "chat_no_connection", "value": "Connection closed"},
+    {"name": "back", "value": "Back"},
+    {"name": "copied", "value": "Copied"},
+    {"name": "share_id_reachable_hint", "value": "The ID is reachable while the app is open; tap Start sharing to stream the screen."},
+    {"name": "chat_send_failed", "value": "Failed to send the message"}
+  ]
+}

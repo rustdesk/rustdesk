@@ -1,0 +1,9 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/RemotePage",
+    "pages/FileTransferPage",
+    "pages/SharePage",
+    "pages/ChatPage"
+  ]
+}

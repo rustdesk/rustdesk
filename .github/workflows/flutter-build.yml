@@ -318,10 +318,9 @@ jobs:
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
-      - name: Set SODIUM_LIB_DIR (arm64)
-        # libsodium-sys ships no arm64 Windows prebuilt lib; point it at the vcpkg-built one
-        # (only for arm64 — leaving it unset lets x64 use the crate's bundled lib).
-        if: ${{ matrix.job.arch == 'aarch64' }}
+      - name: Set SODIUM_LIB_DIR
+        # The vendored libsodium-sys copy ships no bundled prebuilt libs, so
+        # every Windows build points at the vcpkg-built sodium.
         shell: bash
         run: echo "SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib" >> "$GITHUB_ENV"
 
@@ -658,6 +657,12 @@ jobs:
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
+      - name: Set SODIUM_LIB_DIR
+        # The vendored libsodium-sys copy ships no bundled prebuilt libs, so
+        # the sciter build also points at the vcpkg-built sodium.
+        shell: bash
+        run: echo "SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib" >> "$GITHUB_ENV"
+
       - name: Build rustdesk
         id: build
         shell: bash
@@ -811,7 +816,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install nasm yasm
+          brew install nasm yasm libsodium
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -853,6 +858,12 @@ jobs:
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
+
+      - name: Set SODIUM_LIB_DIR
+        # The vendored libsodium-sys copy ships no bundled source fallback, so
+        # the ios build points at the vcpkg-built arm64-ios sodium.
+        shell: bash
+        run: echo "SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib" >> "$GITHUB_ENV"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -981,7 +992,7 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg
+          brew install llvm create-dmg libsodium
           # pkg-config is handled in a separate step, because it may be already installed by `macos-latest`(14.7.1) runner
           if command -v pkg-config &>/dev/null; then
               echo "pkg-config is already installed"
@@ -1462,6 +1473,7 @@ jobs:
                libasound2-dev \
                libc6-dev \
                libclang-dev \
+               libsodium-dev \
                libunwind-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
@@ -1735,6 +1747,7 @@ jobs:
                libasound2-dev \
                libc6-dev \
                libclang-dev \
+               libsodium-dev \
                libunwind-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
@@ -2034,6 +2047,7 @@ jobs:
                libayatana-appindicator3-dev \
                libasound2-dev \
                libclang-10-dev \
+               libsodium-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -2355,6 +2369,7 @@ jobs:
                libayatana-appindicator3-dev \
                libasound2-dev \
                libclang-10-dev \
+               libsodium-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
@@ -2644,6 +2659,7 @@ jobs:
                libasound2-dev \
                libclang-dev \
                libdbus-1-dev \
+               libsodium-dev \
                libglib2.0-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \

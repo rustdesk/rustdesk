@@ -1,12 +1,12 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::ipc::Connection;
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 use crate::ipc::{self, Data};
 #[cfg(target_os = "windows")]
 use crate::{clipboard::ClipboardSide, ipc::ClipboardNonFile};
 #[cfg(target_os = "windows")]
 use base::config::keys::*;
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 use base::fs::serialize_transfer_job;
 use base::{
     config::keys::{OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW, OPTION_FILE_TRANSFER_MAX_FILES},
@@ -15,7 +15,7 @@ use base::{
 };
 #[cfg(target_os = "windows")]
 use clipboard::ContextSend;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 #[cfg(target_os = "windows")]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
@@ -34,7 +34,7 @@ use hbb_common::{
 use serde_derive::Serialize;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use std::iter::FromIterator;
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 use std::path::PathBuf;
 #[cfg(target_os = "windows")]
 use std::sync::Arc;
@@ -49,7 +49,7 @@ use std::{
 
 /// Default maximum number of files allowed per transfer request.
 /// Unit: number of files (not bytes).
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 const DEFAULT_MAX_VALIDATED_FILES: usize = 10_000;
 
 /// Maximum number of files allowed in a single file transfer request.
@@ -63,7 +63,7 @@ const DEFAULT_MAX_VALIDATED_FILES: usize = 10_000;
 /// Unit: number of files (not bytes).
 /// Default: 10,000 files.
 /// Configured via: `OPTION_FILE_TRANSFER_MAX_FILES` ("file-transfer-max-files")
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 static MAX_VALIDATED_FILES: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
 
 /// Get the maximum number of files allowed per transfer request.
@@ -77,7 +77,7 @@ static MAX_VALIDATED_FILES: std::sync::OnceLock<usize> = std::sync::OnceLock::ne
 ///   (Note: negative values are not valid for `usize` and will cause parsing to fail.)
 ///
 /// Unit: number of files.
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 #[inline]
 pub fn get_max_validated_files() -> usize {
     // If `OPTION_FILE_TRANSFER_MAX_FILES` unset, negative, or non-integer, use
@@ -110,7 +110,7 @@ pub fn get_max_validated_files() -> usize {
 /// # Returns
 /// * `Ok(())` if within limit
 /// * `Err(String)` with error message if limit exceeded
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub fn check_file_count_limit(file_count: usize) -> Result<(), String> {
     let max_files = get_max_validated_files();
     if file_count > max_files {
@@ -150,11 +150,11 @@ pub struct Client {
     pub in_voice_call: bool,
     pub incoming_voice_call: bool,
     #[serde(skip)]
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     tx: UnboundedSender<Data>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 struct IpcTaskRunner<T: InvokeUiCM> {
     stream: Connection,
     cm: ConnectionManager<T>,
@@ -235,7 +235,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         block_input: bool,
         privacy_mode: bool,
         from_switch: bool,
-        #[cfg(not(any(target_os = "ios")))] tx: mpsc::UnboundedSender<Data>,
+        #[cfg(not(target_os = "ios"))] tx: mpsc::UnboundedSender<Data>,
     ) {
         let client = Client {
             id,
@@ -257,7 +257,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             block_input,
             privacy_mode,
             from_switch,
-            #[cfg(not(any(target_os = "ios")))]
+            #[cfg(not(target_os = "ios"))]
             tx,
             in_voice_call: false,
             incoming_voice_call: false,
@@ -316,7 +316,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         self.ui_handler.remove_connection(id, close);
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn show_elevation(&self, show: bool) {
         self.ui_handler.show_elevation(show);
     }
@@ -350,7 +350,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub fn check_click_time(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::ClickTime(0)));
@@ -363,7 +363,7 @@ pub fn get_click_time() -> i64 {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub fn authorize(id: i32) {
     if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
         client.authorized = true;
@@ -372,16 +372,30 @@ pub fn authorize(id: i32) {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub fn close(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::Close));
     };
 }
 
+// A voice call offered from the controlled side: the connection manager asks
+// the connection to offer it to the controlling peer. Returns false when the
+// connection id is unknown so the caller can report the failure.
+#[inline]
+#[cfg(not(target_os = "ios"))]
+pub fn request_voice_call(id: i32) -> bool {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        allow_err!(client.tx.send(Data::NewVoiceCall));
+        true
+    } else {
+        false
+    }
+}
+
 /// Like `close`, but says the CM's WINDOW closed rather than a person disconnecting this peer.
 /// See `ipc::Data::CmWindowClosed`.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn close_window(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::CmWindowClosed));
@@ -395,7 +409,7 @@ pub fn remove(id: i32) {
 
 // server mode send chat to peer
 #[inline]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub fn send_chat(id: i32, text: String) {
     let clients = CLIENTS.read().unwrap();
     if let Some(client) = clients.get(&id) {
@@ -404,11 +418,11 @@ pub fn send_chat(id: i32, text: String) {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub fn switch_permission(id: i32, name: String, enabled: bool) {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     let is_keyboard_permission = name == "keyboard";
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     let is_keyboard_permission = false;
     if !option2bool(
         OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
@@ -429,7 +443,7 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
 }
 
 #[inline]
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub fn switch_permission_all(name: String, enabled: bool) {
     if name != "keyboard"
         && !option2bool(
@@ -452,7 +466,12 @@ pub fn switch_permission_all(name: String, enabled: bool) {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+))]
 #[inline]
 pub fn get_clients_state() -> String {
     let clients = CLIENTS.read().unwrap();
@@ -475,14 +494,14 @@ pub fn has_active_clients() -> bool {
 
 #[inline]
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn switch_back(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchSidesBack));
     };
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 impl<T: InvokeUiCM> IpcTaskRunner<T> {
     async fn run(&mut self) {
         use hbb_common::config::LocalConfig;
@@ -842,7 +861,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     #[cfg(target_os = "windows")]
@@ -878,7 +897,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     quit_cm();
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_listen<T: InvokeUiCM>(
     cm: ConnectionManager<T>,
@@ -968,6 +987,8 @@ pub async fn start_listen<T: InvokeUiCM>(
         }
     }
     cm.remove_connection(current_id, true);
+    // TransferJob::cancel_document only exists where SAF document transfers do.
+    #[cfg(target_os = "android")]
     for job in &mut write_jobs {
         if let Err(error) = job.cancel_document().await {
             const CLEANUP_ERROR_LOG_INTERVAL: std::time::Duration =
@@ -983,7 +1004,7 @@ pub async fn start_listen<T: InvokeUiCM>(
     }
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn handle_fs(
     fs: ipc::FS,
     write_jobs: &mut Vec<fs::TransferJob>,
@@ -992,10 +1013,11 @@ async fn handle_fs(
     tx_log: Option<&UnboundedSender<String>>,
     _conn_id: i32,
 ) {
-    // Android is scoped-storage only, so every peer supplied path has to stay inside the
-    // app workspace. This is the filesystem boundary, keep it enforced here even though
-    // `Connection` rejects out-of-workspace requests earlier as well.
-    #[cfg(target_os = "android")]
+    // Android is scoped-storage only and ohos shares the same workspace model, so
+    // every peer supplied path has to stay inside the app workspace. This is the
+    // filesystem boundary, keep it enforced here even though `Connection` rejects
+    // out-of-workspace requests earlier as well.
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     {
         // (path, job id, file num, allow empty) of the peer supplied path this message
         // acts on.
@@ -1343,7 +1365,7 @@ async fn handle_fs(
 /// `src/server/connection.rs`. On non-Windows platforms, Connection handles
 /// read jobs directly. Both use `TransferJob::new_read()` with similar logic.
 /// When modifying job creation or validation, ensure both paths stay in sync.
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn start_read_job(
     path: String,
     file_num: i32,
@@ -1456,7 +1478,7 @@ async fn start_read_job(
 /// `libs/base/src/fs.rs`. The logic mirrors that implementation
 /// but communicates via IPC instead of direct network stream.
 /// When modifying job processing logic, ensure both implementations stay in sync.
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn handle_read_jobs_tick(
     jobs: &mut Vec<fs::TransferJob>,
     tx: &UnboundedSender<Data>,
@@ -1555,7 +1577,7 @@ async fn handle_read_jobs_tick(
 /// `libs/base/src/fs.rs`. It calls `init_data_stream_for_cm()` and sends
 /// digest via IPC instead of direct network stream.
 /// When modifying initialization or digest logic, ensure both paths stay in sync.
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn init_read_job_for_cm(
     job: &mut fs::TransferJob,
     tx: &UnboundedSender<Data>,
@@ -1583,7 +1605,7 @@ async fn init_read_job_for_cm(
     Ok(())
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn read_all_files(
     path: String,
     include_hidden: bool,
@@ -1625,7 +1647,7 @@ async fn read_all_files(
     }
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn read_empty_dirs(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
     let path = dir.to_owned();
     let path_clone = dir.to_owned();
@@ -1645,7 +1667,7 @@ async fn read_empty_dirs(dir: &str, include_hidden: bool, tx: &UnboundedSender<D
     }
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
     let path = {
         if dir.is_empty() {
@@ -1673,7 +1695,7 @@ async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
     send_raw(msg_out, tx);
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn handle_result<F: std::fmt::Display, S: std::fmt::Display>(
     res: std::result::Result<std::result::Result<(), F>, S>,
     id: i32,
@@ -1693,7 +1715,7 @@ async fn handle_result<F: std::fmt::Display, S: std::fmt::Display>(
     }
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn remove_file(path: String, id: i32, file_num: i32, tx: &UnboundedSender<Data>) {
     handle_result(
         spawn_blocking(move || fs::remove_file(&path)).await,
@@ -1704,7 +1726,7 @@ async fn remove_file(path: String, id: i32, file_num: i32, tx: &UnboundedSender<
     .await;
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
     handle_result(
         spawn_blocking(move || fs::create_dir(&path)).await,
@@ -1715,7 +1737,7 @@ async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
     .await;
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn rename_file(path: String, new_name: String, id: i32, tx: &UnboundedSender<Data>) {
     handle_result(
         spawn_blocking(move || fs::rename_file(&path, &new_name)).await,
@@ -1726,7 +1748,7 @@ async fn rename_file(path: String, new_name: String, id: i32, tx: &UnboundedSend
     .await;
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn remove_dir(path: String, id: i32, recursive: bool, tx: &UnboundedSender<Data>) {
     let path = fs::get_path(&path);
     handle_result(
@@ -1753,7 +1775,7 @@ async fn remove_dir(path: String, id: i32, recursive: bool, tx: &UnboundedSender
     .await;
 }
 
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 fn send_raw(msg: Message, tx: &UnboundedSender<Data>) {
     match msg.write_to_bytes() {
         Ok(bytes) => {
@@ -1796,7 +1818,12 @@ pub fn elevate_portable(_id: i32) {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+))]
 #[inline]
 pub fn handle_incoming_voice_call(id: i32, accept: bool) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
@@ -1806,7 +1833,12 @@ pub fn handle_incoming_voice_call(id: i32, accept: bool) {
     };
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+))]
 #[inline]
 pub fn close_voice_call(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
@@ -1816,7 +1848,7 @@ pub fn close_voice_call(id: i32) {
     };
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn quit_cm() {
     // in case of std::process::exit not work
     log::info!("quit cm");

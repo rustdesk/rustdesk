@@ -226,12 +226,75 @@ fn ffmpeg() {
 }
 */
 
+/// Generate the vpx / aom / yuv FFI bindings against the prebuilt OpenHarmony
+/// library headers. Mirrors `gen_vcpkg_package` but reads OHOS_DEPS_DIR.
+fn gen_ohos_bindings(include_paths: &[PathBuf]) {
+    let manifest_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    let src_dir = Path::new(&manifest_dir);
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
+    let packages = [
+        ("vpx_ffi.h", "vpx_ffi.rs", "^[vV].*"),
+        // aom is not shipped on ohos: aom.rs is cfg'd out there.
+        ("yuv_ffi.h", "yuv_ffi.rs", ".*"),
+    ];
+    for (header, generated, regex) in packages {
+        generate_bindings(
+            &src_dir.join("src").join("bindings").join(header),
+            include_paths,
+            &out_dir.join(generated),
+            &src_dir.join("generated").join(generated),
+            regex,
+        );
+    }
+}
+
 fn main() {
     // in this crate, these are also valid configurations
     println!("cargo:rustc-check-cfg=cfg(dxgi,quartz,x11)");
 
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+
+    // OpenHarmony controller build: libvpx / libyuv / libaom are prebuilt by
+    // `harmonyos/client/build-ohos-deps.sh` and pointed at via OHOS_DEPS_DIR.
+    // No capture backend is compiled (same as iOS); decoding still needs the
+    // three libraries above.
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("ohos") {
+        let deps_dir = std::env::var("OHOS_DEPS_DIR").unwrap_or_else(|_| {
+            panic!(
+                "OHOS_DEPS_DIR must point to the directory with prebuilt libvpx/libyuv/libaom \
+                 for OpenHarmony (see harmonyos/client/build-ohos-deps.sh)"
+            )
+        });
+        let deps_dir = PathBuf::from(deps_dir);
+        let lib = deps_dir.join("lib");
+        let include = vec![deps_dir.join("include")];
+        println!("cargo:rustc-link-search=native={}", lib.display());
+        println!("cargo:rustc-link-lib=static=vpx");
+        println!("cargo:rustc-link-lib=static=yuv");
+        // Hardware H264/H265 decoding via the NDK AVCodec C API; core carries
+        // the exported mime/key string constants.
+        println!("cargo:rustc-link-lib=dylib=native_media_vdec");
+        println!("cargo:rustc-link-lib=dylib=native_media_core");
+        // OH_AVCODEC_MIMETYPE_* / OH_MD_KEY_* string constants live here on
+        // device (libnative_media_core.so does not export them).
+        println!("cargo:rustc-link-lib=dylib=native_media_codecbase");
+        // Hardware H264/H265 encoding for the controlled side (see
+        // src/ohos/ohcodec.rs).
+        println!("cargo:rustc-link-lib=dylib=native_media_venc");
+        // Controlled-side screen capture (see src/ohos/screencap.rs); the
+        // pump maps OH_NativeBuffer frames from AcquireVideoBuffer.
+        println!("cargo:rustc-link-lib=dylib=native_avscreen_capture");
+        println!("cargo:rustc-link-lib=dylib=native_buffer");
+        // No libaom on OpenHarmony for M1: link a stub that fails AV1 calls at
+        // runtime (see src/ohos/aom_stub.c).
+        cc::Build::new()
+            .file("src/ohos/aom_stub.c")
+            .compile("aom_stub");
+        println!("cargo:rustc-link-lib=c++");
+        gen_ohos_bindings(&include);
+        return;
+    }
 
     // note: all link symbol names in x86 (32-bit) are prefixed wth "_".
     // run "rustup show" to show current default toolchain, if it is stable-x86-pc-windows-msvc,

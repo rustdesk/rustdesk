@@ -121,9 +121,9 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
     crate::platform::linux::dispatch_wayland_display_probe();
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         if !crate::platform::linux::is_x11() {
             crate::server::wayland::init();
@@ -303,13 +303,54 @@ pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
     resolve(path).map_or(false, |target| target.starts_with(&home))
 }
 
+// Same policy as the android impl above, without base::fs::android's SAF
+// document roots: ohos builds the peer workspace check from the home prefix.
+#[cfg(target_env = "ohos")]
+pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
+    use std::path::{Component, Path, PathBuf};
+
+    // Canonicalize the deepest existing ancestor and re-append the missing tail.
+    fn resolve(path: &Path) -> Option<PathBuf> {
+        let mut tail: Vec<std::ffi::OsString> = Vec::new();
+        let mut base = path.to_path_buf();
+        loop {
+            if let Ok(mut resolved) = base.canonicalize() {
+                while let Some(component) = tail.pop() {
+                    resolved.push(component);
+                }
+                return Some(resolved);
+            }
+            tail.push(base.file_name()?.to_os_string());
+            if !base.pop() {
+                return None;
+            }
+        }
+    }
+
+    if path.is_empty() {
+        return allow_empty;
+    }
+    let path = Path::new(path);
+    // `..` is never needed by the protocol and would defeat the prefix check below.
+    if !path.is_absolute() || path.components().any(|c| c == Component::ParentDir) {
+        return false;
+    }
+    let home = base::fs::get_path(&base::fs::get_home_as_string());
+    let home = home.canonicalize().unwrap_or(home);
+    if home.as_os_str().is_empty() {
+        return false;
+    }
+    // `Path::starts_with` compares whole components, and is true for equal paths.
+    resolve(path).map_or(false, |target| target.starts_with(&home))
+}
+
 #[inline]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 pub fn is_peer_path_allowed(_path: &str, _allow_empty: bool) -> bool {
     true
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub async fn is_peer_path_allowed_async(path: &str, allow_empty: bool) -> bool {
     let path = path.to_owned();
     match tokio::task::spawn_blocking(move || is_peer_path_allowed(&path, allow_empty)).await {
@@ -369,7 +410,7 @@ pub fn set_sound_input(device: String) {
 
 /// Get system's default sound input device name.
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_default_sound_input() -> Option<String> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -385,7 +426,7 @@ pub fn get_default_sound_input() -> Option<String> {
             None
         };
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         let input = crate::platform::linux::get_default_pa_source();
         return if let Some(input) = input {
@@ -400,6 +441,13 @@ pub fn get_default_sound_input() -> Option<String> {
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub fn get_default_sound_input() -> Option<String> {
     None
+}
+
+#[inline]
+#[cfg(target_env = "ohos")]
+pub fn get_default_sound_input() -> Option<String> {
+    // The audio service maps this onto the AVScreenCapture microphone stream.
+    Some("mic".to_owned())
 }
 
 #[cfg(feature = "use_rubato")]
@@ -702,7 +750,7 @@ pub fn test_nat_type() {
         }
         IS_RUNNING.store(true, Ordering::SeqCst);
 
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         crate::ipc::get_socks_ws();
         let is_direct = Config::get_socks().is_none() && !config::use_ws();
         if !is_direct {
@@ -789,9 +837,9 @@ async fn test_nat_type_() -> ResultType<bool> {
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, bool) {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::get_license_from_exe_name() {
@@ -814,7 +862,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
 }
 
 #[inline]
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 fn get_rendezvous_server_(_ms_timeout: u64) -> (String, Vec<String>) {
     (
         Config::get_rendezvous_server(),
@@ -823,19 +871,19 @@ fn get_rendezvous_server_(_ms_timeout: u64) -> (String, Vec<String>) {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 async fn get_rendezvous_server_(ms_timeout: u64) -> (String, Vec<String>) {
     crate::ipc::get_rendezvous_server(ms_timeout).await
 }
 
 #[inline]
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 pub async fn get_nat_type(_ms_timeout: u64) -> i32 {
     Config::get_nat_type()
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     crate::ipc::get_nat_type(ms_timeout).await
 }
@@ -874,9 +922,9 @@ pub fn test_rendezvous_server() {
 }
 
 pub fn refresh_rendezvous_server() {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     test_rendezvous_server();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     std::thread::spawn(|| {
         if crate::ipc::test_rendezvous_server().is_err() {
             test_rendezvous_server();
@@ -885,7 +933,7 @@ pub fn refresh_rendezvous_server() {
 }
 
 pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::process::Child> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if let Ok(appdir) = std::env::var("APPDIR") {
         let appimage_cmd = std::path::Path::new(&appdir).join("AppRun");
         if appimage_cmd.exists() {
@@ -925,9 +973,9 @@ pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::p
 #[inline]
 pub fn username() -> String {
     // fix bug of whoami
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     return whoami::username().trim_end_matches('\0').to_owned();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
@@ -943,7 +991,7 @@ pub fn whoami_hostname() -> String {
 
 #[inline]
 pub fn hostname() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         #[allow(unused_mut)]
         let mut name = whoami_hostname();
@@ -954,7 +1002,7 @@ pub fn hostname() -> String {
         }
         name
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
@@ -985,9 +1033,9 @@ pub fn get_sysinfo() -> serde_json::Value {
         os = format!("{os} - {}", system.os_version().unwrap_or_default());
     }
     let hostname = hostname(); // sys.hostname() return localhost on android in my test
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let out;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let mut out;
     out = json!({
         "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
@@ -995,7 +1043,7 @@ pub fn get_sysinfo() -> serde_json::Value {
         "os": os,
         "hostname": hostname,
     });
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let username = crate::platform::get_active_username();
         if !username.is_empty() && (!cfg!(windows) || username != "SYSTEM") {
@@ -2122,7 +2170,7 @@ pub fn make_empty_dirs_response_to_json(res: &ReadEmptyDirsResponse) -> String {
 /// 1. Try to send the url scheme from ipc.
 /// 2. If failed to send the url scheme, we open a new main window to handle this url scheme.
 pub fn handle_url_scheme(url: String) {
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     if let Err(err) = crate::ipc::send_url_scheme(url.clone()) {
         log::debug!("Send the url to the existing flutter process failed, {}. Let's open a new program to handle this.", err);
         let _ = crate::run_me(vec![url]);
@@ -2148,9 +2196,9 @@ pub async fn get_key(sync: bool) -> String {
             return lic.key;
         }
     }
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_env = "ohos"))]
     let mut key = Config::get_option("key");
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     let mut key = if sync {
         Config::get_option("key")
     } else {
@@ -2229,7 +2277,7 @@ pub fn check_process(arg: &str, same_session_id: bool) -> bool {
 
 #[allow(unused_mut)]
 #[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     #[cfg(target_os = "macos")]
     if !crate::platform::is_root() && !same_uid {

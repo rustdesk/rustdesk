@@ -1,0 +1,549 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "RustDesk 主控端 UI 模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "RustDesk 远程桌面主控端"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "RustDesk"
+    },
+    {
+      "name": "controller_subtitle",
+      "value": "远程桌面主控端"
+    },
+    {
+      "name": "peer_id_hint",
+      "value": "输入对方 ID"
+    },
+    {
+      "name": "remote_control",
+      "value": "远程控制"
+    },
+    {
+      "name": "file_transfer",
+      "value": "文件传输"
+    },
+    {
+      "name": "connecting",
+      "value": "连接中..."
+    },
+    {
+      "name": "connected",
+      "value": "已连接"
+    },
+    {
+      "name": "create_session_failed",
+      "value": "创建会话失败，请确认 librustdesk.so 已就绪"
+    },
+    {
+      "name": "recent_connections",
+      "value": "最近连接"
+    },
+    {
+      "name": "input_peer_id",
+      "value": "请输入对方 ID"
+    },
+    {
+      "name": "conn_detail",
+      "value": "连接"
+    },
+    {
+      "name": "speed",
+      "value": "速度"
+    },
+    {
+      "name": "fps",
+      "value": "帧率"
+    },
+    {
+      "name": "delay",
+      "value": "延迟"
+    },
+    {
+      "name": "password_required",
+      "value": "请输入密码"
+    },
+    {
+      "name": "password_hint",
+      "value": "密码"
+    },
+    {
+      "name": "remember_password",
+      "value": "记住密码"
+    },
+    {
+      "name": "twofa_required",
+      "value": "请输入双重验证码"
+    },
+    {
+      "name": "twofa_hint",
+      "value": "6 位验证码"
+    },
+    {
+      "name": "trust_device",
+      "value": "信任此设备"
+    },
+    {
+      "name": "ok",
+      "value": "确定"
+    },
+    {
+      "name": "cancel",
+      "value": "取消"
+    },
+    {
+      "name": "retry",
+      "value": "重试"
+    },
+    {
+      "name": "back_home",
+      "value": "返回首页"
+    },
+    {
+      "name": "error",
+      "value": "错误"
+    },
+    {
+      "name": "keyboard",
+      "value": "键盘"
+    },
+    {
+      "name": "keyboard_hint",
+      "value": "输入要发送到远端的文本"
+    },
+    {
+      "name": "key_enter",
+      "value": "回车"
+    },
+    {
+      "name": "key_backspace",
+      "value": "退格"
+    },
+    {
+      "name": "refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "disconnect",
+      "value": "断开"
+    },
+    {
+      "name": "display",
+      "value": "显示器"
+    },
+    {
+      "name": "local",
+      "value": "本机"
+    },
+    {
+      "name": "remote",
+      "value": "远端"
+    },
+    {
+      "name": "parent_dir",
+      "value": "上级"
+    },
+    {
+      "name": "open",
+      "value": "打开"
+    },
+    {
+      "name": "empty_dir",
+      "value": "目录为空"
+    },
+    {
+      "name": "upload_to_remote",
+      "value": "上传到远端"
+    },
+    {
+      "name": "download_to_local",
+      "value": "下载到本机"
+    },
+    {
+      "name": "select_local_file",
+      "value": "请先在左侧选择条目"
+    },
+    {
+      "name": "select_remote_file",
+      "value": "请先在右侧选择条目"
+    },
+    {
+      "name": "local_root_reached",
+      "value": "已在根目录"
+    },
+    {
+      "name": "remote_root_reached",
+      "value": "已在根目录"
+    },
+    {
+      "name": "file_num",
+      "value": "文件 #"
+    },
+    {
+      "name": "cancel_job",
+      "value": "取消"
+    },
+    {
+      "name": "override_confirm_title",
+      "value": "文件已存在，是否覆盖？"
+    },
+    {
+      "name": "override",
+      "value": "覆盖"
+    },
+    {
+      "name": "skip",
+      "value": "跳过"
+    },
+    {
+      "name": "settings",
+      "value": "设置"
+    },
+    {
+      "name": "network_settings",
+      "value": "网络设置"
+    },
+    {
+      "name": "network_settings_hint",
+      "value": "配置私有部署的 rustdesk-server，留空使用公共服务器"
+    },
+    {
+      "name": "id_server",
+      "value": "ID 服务器"
+    },
+    {
+      "name": "id_server_hint",
+      "value": "域名或 IP，可带端口"
+    },
+    {
+      "name": "relay_server",
+      "value": "中继服务器"
+    },
+    {
+      "name": "relay_server_hint",
+      "value": "留空由 ID 服务器分配"
+    },
+    {
+      "name": "api_server",
+      "value": "API 服务器"
+    },
+    {
+      "name": "api_server_hint",
+      "value": "留空按 ID 服务器推导"
+    },
+    {
+      "name": "server_key",
+      "value": "Key"
+    },
+    {
+      "name": "server_key_hint",
+      "value": "hbbs 的公钥，未设置则留空"
+    },
+    {
+      "name": "save",
+      "value": "保存"
+    },
+    {
+      "name": "settings_saved",
+      "value": "已保存"
+    },
+    {
+      "name": "remote_cursor",
+      "value": "远端光标"
+    },
+    {
+      "name": "sync_clipboard",
+      "value": "同步剪贴板"
+    },
+    {
+      "name": "clipboard_paste_hint",
+      "value": "长按输入框粘贴本机剪贴板内容"
+    },
+    {
+      "name": "send",
+      "value": "发送"
+    },
+    {
+      "name": "clipboard_sent",
+      "value": "剪贴板已发送到远端"
+    },
+    {
+      "name": "clipboard_send_failed",
+      "value": "剪贴板发送失败"
+    },
+    {
+      "name": "clipboard_empty",
+      "value": "没有可发送的内容"
+    },
+    {
+      "name": "import_from_system",
+      "value": "导入"
+    },
+    {
+      "name": "export_to_system",
+      "value": "导出"
+    },
+    {
+      "name": "import_done",
+      "value": "导入完成"
+    },
+    {
+      "name": "export_done",
+      "value": "导出完成"
+    },
+    {
+      "name": "import_export_failed",
+      "value": "操作失败"
+    },
+    {
+      "name": "pointer_mode",
+      "value": "指针模式"
+    },
+    {
+      "name": "quick_actions",
+      "value": "快捷操作"
+    },
+    {
+      "name": "qa_task_manager",
+      "value": "任务管理器 (Ctrl+Shift+Esc)"
+    },
+    {
+      "name": "qa_ctrl_alt_del",
+      "value": "Ctrl+Alt+Del"
+    },
+    {
+      "name": "qa_alt_f4",
+      "value": "关闭程序 (Alt+F4)"
+    },
+    {
+      "name": "qa_win",
+      "value": "开始菜单 (Win)"
+    },
+    {
+      "name": "qa_win_r",
+      "value": "运行 (Win+R)"
+    },
+    {
+      "name": "qa_win_d",
+      "value": "显示桌面 (Win+D)"
+    },
+    {
+      "name": "qa_win_l",
+      "value": "锁定 (Win+L)"
+    },
+    {
+      "name": "qa_lock_screen",
+      "value": "锁定屏幕"
+    },
+    {
+      "name": "view_camera",
+      "value": "查看摄像头"
+    },
+    {
+      "name": "voice_call_start",
+      "value": "语音通话"
+    },
+    {
+      "name": "voice_call_end",
+      "value": "结束通话"
+    },
+    {
+      "name": "voice_call_waiting",
+      "value": "呼叫中..."
+    },
+    {
+      "name": "voice_call_failed",
+      "value": "语音通话请求失败"
+    },
+    {
+      "name": "record_start",
+      "value": "录制"
+    },
+    {
+      "name": "record_stop",
+      "value": "停止录制"
+    },
+    {
+      "name": "record_not_allowed",
+      "value": "对端未授权录制"
+    },
+    {
+      "name": "clipboard_image_received",
+      "value": "图片已复制到剪贴板"
+    },
+    {
+      "name": "mic_permission_reason",
+      "value": "用于与远程对端进行语音通话"
+    },
+    {
+      "name": "mic_denied",
+      "value": "麦克风权限被拒绝"
+    },
+    {
+      "name": "display_settings",
+      "value": "显示设置"
+    },
+    {
+      "name": "image_quality",
+      "value": "画质"
+    },
+    {
+      "name": "quality_best",
+      "value": "最佳"
+    },
+    {
+      "name": "quality_balanced",
+      "value": "均衡"
+    },
+    {
+      "name": "quality_low",
+      "value": "低"
+    },
+    {
+      "name": "quality_custom",
+      "value": "自定义"
+    },
+    {
+      "name": "bitrate",
+      "value": "码率"
+    },
+    {
+      "name": "fps_limit",
+      "value": "帧率上限"
+    },
+    {
+      "name": "codec_preference",
+      "value": "编解码偏好"
+    },
+    {
+      "name": "codec_auto",
+      "value": "自动"
+    },
+    {
+      "name": "view_only",
+      "value": "只读模式"
+    },
+    {
+      "name": "close",
+      "value": "关闭"
+    },
+    {
+      "name": "quick_switch_display",
+      "value": "切屏"
+    },
+    {
+      "name": "quick_mode",
+      "value": "模式"
+    },
+    {
+      "name": "mode_switched_touch",
+      "value": "触控模式"
+    },
+    {
+      "name": "mode_switched_pointer",
+      "value": "指针模式"
+    },
+    {
+      "name": "virtual_mouse",
+      "value": "虚拟鼠标"
+    },
+    {
+      "name": "vm_left",
+      "value": "左键"
+    },
+    {
+      "name": "vm_double",
+      "value": "双击"
+    },
+    {
+      "name": "vm_right",
+      "value": "右键"
+    },
+    {
+      "name": "vm_middle",
+      "value": "中键"
+    },
+    {
+      "name": "vm_scroll_up",
+      "value": "滚轮上"
+    },
+    {
+      "name": "vm_scroll_down",
+      "value": "滚轮下"
+    },
+    {
+      "name": "transfer_list",
+      "value": "传输列表"
+    },
+    {
+      "name": "transfer_clear",
+      "value": "清空记录"
+    },
+    {
+      "name": "transfer_state_waiting",
+      "value": "等待中"
+    },
+    {
+      "name": "transfer_state_transferring",
+      "value": "传输中"
+    },
+    {
+      "name": "transfer_state_finished",
+      "value": "已完成"
+    },
+    {
+      "name": "transfer_state_cancelled",
+      "value": "已取消"
+    },
+    {
+      "name": "transfer_state_skipped",
+      "value": "已跳过"
+    },
+    {
+      "name": "transfer_state_failed",
+      "value": "失败"
+    },
+    {
+      "name": "job_cancelled_toast",
+      "value": "已取消该任务"
+    },
+    {"name": "share_screen_entry", "value": "被控（共享屏幕）"},
+    {"name": "share_title", "value": "被控（共享屏幕）"},
+    {"name": "share_id_label", "value": "本机 ID"},
+    {"name": "share_password_label", "value": "临时密码"},
+    {"name": "share_permanent_password_badge", "value": "已设固定密码"},
+    {"name": "share_password_refresh", "value": "刷新"},
+    {"name": "share_start", "value": "开始共享"},
+    {"name": "share_stop", "value": "停止共享"},
+    {"name": "share_start_hint", "value": "开始共享时会弹出系统授权弹窗。"},
+    {"name": "share_service_running", "value": "正在共享屏幕"},
+    {"name": "share_service_stopped", "value": "共享已停止"},
+    {"name": "share_waiting_consent", "value": "等待系统授权…"},
+    {"name": "share_capture_started", "value": "屏幕共享已开始"},
+    {"name": "share_capture_stopped", "value": "屏幕共享已停止"},
+    {"name": "share_capture_canceled", "value": "屏幕共享被取消"},
+    {"name": "share_capture_interrupted", "value": "屏幕共享被中断"},
+    {"name": "share_capture_start_failed", "value": "屏幕采集启动失败"},
+    {"name": "share_background_failed", "value": "通知权限未开启，退后台后共享将断开"},
+    {"name": "share_requests", "value": "连接请求"},
+    {"name": "share_connected", "value": "已连接的对端"},
+    {"name": "share_accept", "value": "接受"},
+    {"name": "share_reject", "value": "拒绝"},
+    {"name": "share_disconnect", "value": "断开"},
+    {"name": "share_voice_call_incoming", "value": "语音通话请求"},
+    {"name": "share_voice_call_in_progress", "value": "语音通话中"},
+    {"name": "chat_title", "value": "聊天"},
+    {"name": "chat_placeholder", "value": "输入消息"},
+    {"name": "chat_send", "value": "发送"},
+    {"name": "chat_no_connection", "value": "连接已断开"},
+    {"name": "back", "value": "返回"},
+    {"name": "copied", "value": "已复制"},
+    {"name": "share_id_reachable_hint", "value": "应用打开期间 ID 即可被连接；点「开始共享」后才会传输屏幕画面。"},
+    {"name": "chat_send_failed", "value": "消息发送失败"}
+  ]
+}

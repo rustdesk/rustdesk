@@ -1,4 +1,4 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::clipboard_listener::{self, ClipboardEvent};
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -9,7 +9,7 @@ use cpal::{
 };
 use crossbeam_queue::ArrayQueue;
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_env = "ohos", not(target_os = "linux")))]
 use ringbuf::{ring_buffer::RbBase, Rb};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -83,9 +83,9 @@ use scrap::{
     CodecFormat, ImageFormat, ImageRgb, ImageTexture,
 };
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::CLIPBOARD_INTERVAL;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::{check_clipboard, ClipboardSide};
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -97,6 +97,8 @@ pub use super::lang::*;
 mod audio_playback;
 #[cfg(target_os = "windows")]
 mod audio_playback_recovery;
+#[cfg(target_env = "ohos")]
+mod ohos_audio_player;
 #[cfg(all(test, not(target_os = "linux")))]
 #[path = "client/tests/audio_state_tests.rs"]
 mod audio_state_tests;
@@ -130,7 +132,7 @@ pub const SCRAP_XDP_PORTAL_UNAVAILABLE: &str =
 pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
 pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#x11-required";
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_env = "ohos", not(target_os = "linux")))]
 pub const AUDIO_BUFFER_MS: usize = 3000;
 
 #[cfg(feature = "flutter")]
@@ -138,7 +140,7 @@ pub const AUDIO_BUFFER_MS: usize = 3000;
 pub(crate) struct ClientClipboardContext;
 
 #[cfg(not(feature = "flutter"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub(crate) struct ClientClipboardContext {
     pub cfg: SessionPermissionConfig,
     pub tx: UnboundedSender<Data>,
@@ -163,7 +165,7 @@ lazy_static::lazy_static! {
     static ref AUDIO_HOST: Host = cpal::default_host();
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
 }
@@ -175,7 +177,7 @@ lazy_static::lazy_static! {
 
 const PUBLIC_SERVER: &str = "public";
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_key_state(key: enigo::Key) -> bool {
     use enigo::KeyboardControllable;
     #[cfg(target_os = "macos")]
@@ -1900,7 +1902,7 @@ impl Client {
         if crate::flutter::sessions::has_connected_sessions_running(ConnType::DEFAULT_CONN) {
             return;
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_env = "ohos")))]
         clipboard_listener::unsubscribe(Self::CLIENT_CLIPBOARD_NAME);
         CLIPBOARD_STATE.lock().unwrap().running = false;
         #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
@@ -1919,7 +1921,7 @@ impl Client {
     // After all sessions are end, the loop exists.
     //
     // If clipboard update is detected, the text will be sent to all sessions by `send_clipboard_msg`.
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn try_start_clipboard(
         _client_clip_ctx: Option<ClientClipboardContext>,
     ) -> Option<UnboundedReceiver<()>> {
@@ -2029,14 +2031,14 @@ impl ClipboardState {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 struct ClientClipboardHandler {
     ctx: Option<crate::clipboard::ClipboardContext>,
     #[cfg(not(feature = "flutter"))]
     client_clip_ctx: Option<ClientClipboardContext>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 impl ClientClipboardHandler {
     fn is_text_required(&self) -> bool {
         #[cfg(feature = "flutter")]
@@ -2140,17 +2142,19 @@ impl ClientClipboardHandler {
 #[derive(Default)]
 pub struct AudioHandler {
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     simple: Option<psimple::Simple>,
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(target_env = "ohos", not(target_os = "linux")))]
     audio_buffer: AudioBuffer,
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(target_env = "ohos", not(target_os = "linux")))]
     audio_resampler: Option<crate::audio_resampler::AudioResampler>,
     sample_rate: (u32, u32),
     #[cfg(not(target_os = "linux"))]
     audio_stream: Option<Box<dyn StreamTrait>>,
+    #[cfg(target_env = "ohos")]
+    player: Option<ohos_audio_player::OhosAudioPlayer>,
     channels: u16,
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(target_env = "ohos", not(target_os = "linux")))]
     device_channel: u16,
     #[cfg(not(target_os = "linux"))]
     playback_status: Arc<audio_playback::AudioPlaybackStatus>,
@@ -2158,7 +2162,7 @@ pub struct AudioHandler {
     playback_recovery: audio_playback_recovery::PlaybackRecovery,
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_env = "ohos", not(target_os = "linux")))]
 #[derive(Clone, Copy)]
 struct DecodedAudioConfig {
     sample_rate: u32,
@@ -2166,7 +2170,7 @@ struct DecodedAudioConfig {
     output_channels: u16,
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_env = "ohos", not(target_os = "linux")))]
 fn create_audio_resampler(
     input_rate: u32,
     output_rate: u32,
@@ -2184,7 +2188,7 @@ fn create_audio_resampler(
     )?))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_env = "ohos", not(target_os = "linux")))]
 fn prepare_decoded_audio(
     input: &[f32],
     resampler: Option<&mut crate::audio_resampler::AudioResampler>,
@@ -2206,7 +2210,7 @@ fn prepare_decoded_audio(
     Ok(output)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_env = "ohos", not(target_os = "linux")))]
 struct AudioBuffer(
     pub Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
     usize,
@@ -2214,7 +2218,7 @@ struct AudioBuffer(
     Arc<std::sync::atomic::AtomicUsize>,
 );
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_env = "ohos", not(target_os = "linux")))]
 impl Default for AudioBuffer {
     fn default() -> Self {
         Self(
@@ -2228,8 +2232,15 @@ impl Default for AudioBuffer {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_env = "ohos", not(target_os = "linux")))]
 impl AudioBuffer {
+    // A handle sharing the same ring and discontinuity generation; used by
+    // the ohos renderer callback, which drains the PCM the handler pushes.
+    #[cfg(target_env = "ohos")]
+    pub fn clone_shared(&self) -> Self {
+        Self(self.0.clone(), self.1, self.2, self.3.clone())
+    }
+
     pub fn resize(&mut self, sample_rate: usize, channels: usize) {
         let capacity = sample_rate * channels * AUDIO_BUFFER_MS / 1000;
         let old_capacity = self.0.lock().unwrap().capacity();
@@ -2240,7 +2251,7 @@ impl AudioBuffer {
         }
     }
 
-    fn try_shrink(&mut self, having: usize) {
+    pub fn try_shrink(&mut self, having: usize) {
         extern crate chrono;
         use chrono::prelude::*;
 
@@ -2314,7 +2325,8 @@ impl AudioBuffer {
     /// append pcm to audio buffer, if buffered data
     /// exceeds AUDIO_BUFFER_MS,  only AUDIO_BUFFER_MS
     /// will be kept.
-    fn append_pcm2(&self, buffer: &[f32]) -> usize {
+    #[cfg(any(target_env = "ohos", not(target_os = "linux")))]
+    pub fn append_pcm2(&self, buffer: &[f32]) -> usize {
         let mut lock = self.0.lock().unwrap();
         let cap = lock.capacity();
         let having = lock.occupied_len() + buffer.len();
@@ -2323,8 +2335,15 @@ impl AudioBuffer {
         let occupied = lock.occupied_len();
         drop(lock);
         if let Some((discarded, generation)) = discard {
+            #[cfg(not(target_os = "linux"))]
             hbb_common::throttled_log!(
                 audio_playback::AUDIO_PLAYBACK_LOG_INTERVAL,
+                debug,
+                "Audio buffer capacity discard: samples={discarded}, generation={generation}"
+            );
+            #[cfg(target_env = "ohos")]
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(5),
                 debug,
                 "Audio buffer capacity discard: samples={discarded}, generation={generation}"
             );
@@ -2342,7 +2361,7 @@ impl AudioBuffer {
 }
 
 impl AudioHandler {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         use psimple::Simple;
         use pulse::sample::{Format, Spec};
@@ -2372,7 +2391,23 @@ impl AudioHandler {
     }
 
     /// Start the audio playback.
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_env = "ohos")]
+    fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
+        // The OHAudio renderer drains an internal ring at the device rate
+        // (48 kHz); the decoded stream is resampled/renchanneled into it in
+        // handle_frame.
+        let player = ohos_audio_player::OhosAudioPlayer::new(&format0)?;
+        self.audio_resampler = create_audio_resampler(
+            format0.sample_rate, player.sample_rate(), format0.channels as _,
+        )?;
+        self.sample_rate = (format0.sample_rate, player.sample_rate());
+        self.device_channel = player.channels();
+        self.player = Some(player);
+        Ok(())
+    }
+
+    /// Start the audio playback.
+    #[cfg(not(any(target_os = "linux", target_env = "ohos")))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         let device = AUDIO_HOST
             .default_output_device()
@@ -2444,10 +2479,12 @@ impl AudioHandler {
             Ok(d) => {
                 #[cfg(target_os = "windows")]
                 let playback_failed = self.cancel_pending_playback();
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 let keep_existing_stream = self.simple.is_some()
                     && self.sample_rate.0 == f.sample_rate
                     && u32::from(self.channels) == f.channels;
+                #[cfg(target_env = "ohos")]
+                let keep_existing_stream = false;
                 #[cfg(not(target_os = "linux"))]
                 let keep_existing_stream = self.audio_stream.is_some()
                     && self.sample_rate.0 == f.sample_rate
@@ -2499,9 +2536,15 @@ impl AudioHandler {
     /// Handle audio frame and play it.
     #[inline]
     pub fn handle_frame(&mut self, frame: AudioFrame) {
+        #[cfg(target_env = "ohos")]
+        {
+            if self.player.is_none() {
+                return;
+            }
+        }
         #[cfg(not(target_os = "linux"))]
         self.playback_status.report_errors();
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_env = "ohos")))]
         if self.audio_stream.is_none()
             || !self
                 .playback_status
@@ -2510,7 +2553,7 @@ impl AudioHandler {
         {
             return;
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if self.simple.is_none() {
             log::trace!("PulseAudio simple binding does not exists");
             return;
@@ -2525,7 +2568,32 @@ impl AudioHandler {
             };
             let channels = self.channels;
             let n = decoded_frames * channels as usize;
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(target_env = "ohos")]
+            {
+                // Resample to the device rate (48 kHz) the renderer ring was
+                // sized for, then hand the PCM to the OHAudio callback ring.
+                let config = DecodedAudioConfig {
+                    sample_rate: self.sample_rate.1,
+                    input_channels: self.channels,
+                    output_channels: self.device_channel,
+                };
+                let buffer = match prepare_decoded_audio(
+                    &buffer[0..n],
+                    self.audio_resampler.as_mut(),
+                    config,
+                ) {
+                    Ok(output) => output,
+                    Err(error) => {
+                        hbb_common::throttled_log!(std::time::Duration::from_secs(1), error, "Failed to resample decoded audio: {error:#}");
+                        return;
+                    }
+                };
+                if let Some(player) = self.player.as_mut() {
+                    let appended = player.buffer_mut().append_pcm2(&buffer);
+                    player.buffer_mut().try_shrink(appended);
+                }
+            }
+            #[cfg(not(any(target_os = "linux", target_env = "ohos")))]
             {
                 let config = DecodedAudioConfig {
                     sample_rate: self.sample_rate.1,
@@ -2539,17 +2607,22 @@ impl AudioHandler {
                 ) {
                     Ok(output) => output,
                     Err(error) => {
-                        log::error!("Failed to resample decoded audio: {error:#}");
+                        hbb_common::throttled_log!(std::time::Duration::from_secs(1), error, "Failed to resample decoded audio: {error:#}");
                         return;
                     }
                 };
                 self.audio_buffer.append_pcm(&buffer);
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             {
                 let data_u8 =
                     unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
                 self.simple.as_mut().map(|x| x.write(data_u8));
+            }
+            #[cfg(target_env = "ohos")]
+            {
+                // No audio playback on OpenHarmony yet; drop the decoded frames.
+                let _ = (buffer, n);
             }
         });
     }
@@ -2664,7 +2737,11 @@ impl VideoHandler {
         let luid = Self::get_adapter_luid();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
         let rgba_format =
-            if cfg!(feature = "flutter") && (cfg!(windows) || cfg!(target_os = "linux")) {
+            // ohos blits the ImageRgb straight into the XComponent surface,
+            // whose default format is RGBA8888 (bytes R,G,B,A = libyuv ABGR).
+            if (cfg!(feature = "flutter") && (cfg!(windows) || cfg!(target_os = "linux")))
+                || cfg!(target_env = "ohos")
+            {
                 ImageFormat::ABGR
             } else {
                 ImageFormat::ARGB
@@ -5033,6 +5110,8 @@ pub enum Data {
     ElevateWithLogon(String, String),
     NewVoiceCall,
     CloseVoiceCall,
+    // Answer to a voice call the controlled side offered.
+    AnswerVoiceCall(bool),
     ContinueInsecureConnection,
     ResetDecoder(Option<usize>),
     RenameFile((i32, String, String, bool)),

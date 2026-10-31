@@ -1,15 +1,16 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::{clipboard_listener, update_clipboard, ClipboardSide};
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 use crate::{audio_service, clipboard::CLIPBOARD_INTERVAL, ConnInner, CLIENT_SERVER};
 use crate::{
     client::{
-        self, new_voice_call_request, Client, Data, Interface, MediaData, MediaSender,
-        QualityStatus, MILLI1, SEC30,
+        self, new_voice_call_request, new_voice_call_response, Client, Data, Interface, MediaData,
+        MediaSender, QualityStatus, MILLI1, SEC30,
     },
-    common::get_default_sound_input,
     ui_session_interface::{InvokeUiSession, Session},
 };
+#[cfg(not(target_env = "ohos"))]
+use crate::common::get_default_sound_input;
 
 // Empirical no-data window before exposing the restart reconnect state to the UI.
 // Restart msgbox text is kept as a legacy UI fallback; Flutter handles the type as a control event.
@@ -41,7 +42,7 @@ use base::{
 ))]
 use clipboard::ContextSend;
 use crossbeam_queue::ArrayQueue;
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 use hbb_common::{
     allow_err,
@@ -79,6 +80,9 @@ pub struct Remote<T: InvokeUiSession> {
     // Stop sending local audio to remote client.
     stop_voice_call_sender: Option<std::sync::mpsc::Sender<()>>,
     voice_call_request_timestamp: Option<NonZeroI64>,
+    // Timestamp of the voice call the controlled side offered, kept until the
+    // user answers it so the reply echoes the right request.
+    incoming_voice_call_timestamp: Option<NonZeroI64>,
     read_jobs: Vec<fs::TransferJob>,
     write_jobs: Vec<fs::TransferJob>,
     remove_jobs: HashMap<i32, RemoveJob>,
@@ -149,6 +153,7 @@ impl<T: InvokeUiSession> Remote<T> {
             video_format: CodecFormat::Unknown,
             stop_voice_call_sender: None,
             voice_call_request_timestamp: None,
+            incoming_voice_call_timestamp: None,
             elevation_requested: false,
             peer_info: Default::default(),
             video_threads: Default::default(),
@@ -430,6 +435,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 if let Some(s) = self.stop_voice_call_sender.take() {
                     s.send(()).ok();
                 }
+                // A pending incoming-call offer does not survive the session round.
+                self.incoming_voice_call_timestamp = None;
                 if kcp.is_some() {
                     // Attempted rather than skipped even here: if the loss was one-way the peer
                     // does get it, and drops its side instead of waiting out its own timeout.
@@ -591,78 +598,135 @@ impl<T: InvokeUiSession> Remote<T> {
         {
             return None;
         }
-        // iOS does not have this server.
-        #[cfg(not(any(target_os = "ios")))]
+        #[cfg(target_env = "ohos")]
         {
-            // NOTE:
-            // The client server and --server both use the same sound input device.
-            // It's better to distinguish the server side and client side.
-            // But it' not necessary for now, because it's not a common case.
-            // And it is immediately known when the input device is changed.
-            crate::audio_service::set_voice_call_input_device(get_default_sound_input(), false);
-            // Create a channel to receive error or closed message
-            let (tx, rx) = std::sync::mpsc::channel();
-            let (tx_audio_data, mut rx_audio_data) =
-                hbb_common::tokio::sync::mpsc::unbounded_channel();
-            // Create a stand-alone inner, add subscribe to audio service
-            let conn_id = CLIENT_SERVER.write().unwrap().get_new_id();
-            let client_conn_inner = ConnInner::new(conn_id.clone(), Some(tx_audio_data), None);
-            // now we subscribe
-            CLIENT_SERVER.write().unwrap().subscribe(
-                audio_service::NAME,
-                client_conn_inner.clone(),
-                true,
-            );
+            // The controller captures the microphone itself: OHAudio capturer
+            // -> opus -> AudioFrame over the session channel. There is no
+            // local audio service to subscribe to on the ohos build.
             let tx_audio = self.sender.clone();
-            std::thread::spawn(move || {
-                loop {
-                    // check if client is closed
-                    match rx.try_recv() {
-                        Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                            log::debug!("Exit voice call audio service of client");
-                            // unsubscribe
-                            CLIENT_SERVER.write().unwrap().subscribe(
-                                audio_service::NAME,
-                                client_conn_inner,
-                                false,
-                            );
-                            crate::audio_service::set_voice_call_input_device(None, true);
-                            break;
-                        }
-                        _ => {}
+            let (tx, rx) = std::sync::mpsc::channel();
+            let (tx_captured, rx_captured) = std::sync::mpsc::channel();
+            let mut capturer =
+                match crate::ohos_voice_call::OhosVoiceCallCapturer::new(tx_captured) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        log::error!("Failed to start voice call capturer: {e:#}");
+                        return None;
                     }
-                    match rx_audio_data.try_recv() {
-                        Ok((_instant, msg)) => match &msg.union {
-                            Some(message::Union::AudioFrame(frame)) => {
-                                let mut msg = Message::new();
-                                msg.set_audio_frame(frame.clone());
-                                tx_audio.send(Data::Message(msg)).ok();
-                            }
-                            Some(message::Union::Misc(misc)) => {
-                                let mut msg = Message::new();
-                                msg.set_misc(misc.clone());
-                                tx_audio.send(Data::Message(msg)).ok();
-                            }
-                            _ => {}
-                        },
-                        Err(err) => {
-                            if err == TryRecvError::Empty {
-                                // ignore
-                            } else {
-                                log::debug!("Failed to record local audio channel: {}", err);
-                            }
-                            // Both arms fall through with nothing else in this loop blocking, so
-                            // without a pause the thread spun a core for the whole voice call.
-                            std::thread::sleep(std::time::Duration::from_millis(1));
-                        }
+                };
+            // The peer starts its voice-call playback thread only upon an
+            // AudioFormat message (the desktop flow forwards one from its
+            // local audio service). Sent before the forwarder spawns, so the
+            // peer sees it ahead of any captured frame.
+            let mut format_msg = Message::new();
+            let mut misc = Misc::new();
+            misc.set_audio_format(AudioFormat {
+                sample_rate: crate::ohos_voice_call::VOICE_CALL_SAMPLE_RATE,
+                channels: 1,
+                ..Default::default()
+            });
+            format_msg.set_misc(misc);
+            tx_audio.send(Data::Message(format_msg)).ok();
+            std::thread::spawn(move || loop {
+                match rx.try_recv() {
+                    Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        capturer.stop();
+                        break;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+                match rx_captured.try_recv() {
+                    Ok(msg) => {
+                        tx_audio.send(Data::Message(msg)).ok();
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {
+                        // Both arms above are non-blocking; yield so the loop
+                        // does not spin a core for the whole call.
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                    Err(_) => {
+                        capturer.stop();
+                        break;
                     }
                 }
             });
             return Some(tx);
         }
-        #[cfg(target_os = "ios")]
+        #[cfg(not(target_env = "ohos"))]
         {
-            None
+            // iOS does not have this server.
+            #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
+            {
+                // NOTE:
+                // The client server and --server both use the same sound input device.
+                // It's better to distinguish the server side and client side.
+                // But it' not necessary for now, because it's not a common case.
+                // And it is immediately known when the input device is changed.
+                crate::audio_service::set_voice_call_input_device(get_default_sound_input(), false);
+                // Create a channel to receive error or closed message
+                let (tx, rx) = std::sync::mpsc::channel();
+                let (tx_audio_data, mut rx_audio_data) =
+                    hbb_common::tokio::sync::mpsc::unbounded_channel();
+                // Create a stand-alone inner, add subscribe to audio service
+                let conn_id = CLIENT_SERVER.write().unwrap().get_new_id();
+                let client_conn_inner = ConnInner::new(conn_id.clone(), Some(tx_audio_data), None);
+                // now we subscribe
+                CLIENT_SERVER.write().unwrap().subscribe(
+                    audio_service::NAME,
+                    client_conn_inner.clone(),
+                    true,
+                );
+                let tx_audio = self.sender.clone();
+                std::thread::spawn(move || {
+                    loop {
+                        // check if client is closed
+                        match rx.try_recv() {
+                            Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                                log::debug!("Exit voice call audio service of client");
+                                // unsubscribe
+                                CLIENT_SERVER.write().unwrap().subscribe(
+                                    audio_service::NAME,
+                                    client_conn_inner,
+                                    false,
+                                );
+                                crate::audio_service::set_voice_call_input_device(None, true);
+                                break;
+                            }
+                            _ => {}
+                        }
+                        match rx_audio_data.try_recv() {
+                            Ok((_instant, msg)) => match &msg.union {
+                                Some(message::Union::AudioFrame(frame)) => {
+                                    let mut msg = Message::new();
+                                    msg.set_audio_frame(frame.clone());
+                                    tx_audio.send(Data::Message(msg)).ok();
+                                }
+                                Some(message::Union::Misc(misc)) => {
+                                    let mut msg = Message::new();
+                                    msg.set_misc(misc.clone());
+                                    tx_audio.send(Data::Message(msg)).ok();
+                                }
+                                _ => {}
+                            },
+                            Err(err) => {
+                                if err == TryRecvError::Empty {
+                                    // ignore
+                                } else {
+                                    log::debug!("Failed to record local audio channel: {}", err);
+                                }
+                                // Both arms fall through with nothing else in this loop blocking, so
+                                // without a pause the thread spun a core for the whole voice call.
+                                std::thread::sleep(std::time::Duration::from_millis(1));
+                            }
+                        }
+                    }
+                });
+                return Some(tx);
+            }
+            #[cfg(any(target_os = "ios"))]
+            {
+                None
+            }
         }
     }
 
@@ -678,7 +742,7 @@ impl<T: InvokeUiSession> Remote<T> {
         self.sent_close_reason = true;
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn start_initial_clipboard_sync(&mut self) {
         let peer_info = {
             let lc = self.handler.lc.read().unwrap();
@@ -722,7 +786,7 @@ impl<T: InvokeUiSession> Remote<T> {
     // Linux listener creation returns before X11/Wayland has subscribed to changes.
     // Capture after readiness so changes during the read can invalidate the snapshot.
     // A separate task keeps a stalled backend from blocking the connection loop.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn spawn_initial_clipboard_read_after_ready(&self, read_clipboard: impl FnOnce() + Send + 'static) {
         // Initial-sync wait budget, not a protocol-defined startup deadline.
         const CLIPBOARD_READY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -776,7 +840,7 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::ToggleClipboardFile => {
                 self.check_clipboard_file_context();
             }
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
             Data::InitialClipboard(generation, msg) => {
                 // A live update supersedes any initial snapshot still being prepared.
                 if !self.initial_clipboard_pending {
@@ -1345,10 +1409,9 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::NewVoiceCall => {
                 let msg = new_voice_call_request(true);
                 // Save the voice call request timestamp for the further validation.
-                self.voice_call_request_timestamp = Some(
-                    NonZeroI64::new(msg.voice_call_request().req_timestamp)
-                        .unwrap_or(NonZeroI64::new(get_time()).unwrap()),
-                );
+                let ts = msg.voice_call_request().req_timestamp;
+                self.voice_call_request_timestamp =
+                    NonZeroI64::new(if ts != 0 { ts } else { get_time() });
                 allow_err!(peer.send(&msg).await);
                 self.handler.on_voice_call_waiting();
             }
@@ -1358,6 +1421,16 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.handler
                     .on_voice_call_closed("Closed manually by the peer");
                 allow_err!(peer.send(&msg).await);
+            }
+            Data::AnswerVoiceCall(accepted) => {
+                let ts = self.incoming_voice_call_timestamp.take();
+                if let Some(ts) = ts {
+                    let resp = new_voice_call_response(ts.get(), accepted);
+                    allow_err!(peer.send(&resp).await);
+                    if accepted {
+                        self.stop_voice_call_sender = self.start_voice_call();
+                    }
+                }
             }
             Data::ResetDecoder(display) => match display {
                 Some(display) => {
@@ -1785,7 +1858,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             #[cfg(not(target_os = "ios"))]
                             let rx = Client::try_start_clipboard(None);
                             #[cfg(not(feature = "flutter"))]
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                             let rx = Client::try_start_clipboard(Some(
                                 crate::client::ClientClipboardContext {
                                     cfg: self.handler.get_permission_config(),
@@ -1797,7 +1870,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 },
                             ));
                             // To make sure current text clipboard data is updated.
-                            #[cfg(not(target_os = "ios"))]
+                            #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
                             if let Some(mut rx) = rx {
                                 timeout(CLIPBOARD_INTERVAL, rx.recv()).await.ok();
                             }
@@ -1805,7 +1878,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             // `is_connected`` becomes true after the first PeerInfo.
                             // Reconnects create a new Remote. Refreshes after a generation change
                             // use a separate entry point and are not blocked by this guard.
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                             if !self.is_connected
                                 && self.handler.is_text_clipboard_required()
                                 && self.handler.lc.read().unwrap().sync_init_clipboard.v
@@ -1873,12 +1946,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             let session_id = self.handler.lc.read().unwrap().session_id;
                             crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
                         }
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                         {
                             self.initial_clipboard_pending = false;
                             update_clipboard(vec![cb], ClipboardSide::Client);
                         }
-                        #[cfg(target_os = "ios")]
+                        #[cfg(any(target_os = "ios", target_env = "ohos"))]
                         {
                             let content = if cb.compress {
                                 hbb_common::compress::decompress(&cb.content)
@@ -1911,12 +1984,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             let session_id = self.handler.lc.read().unwrap().session_id;
                             crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
                         }
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                         {
                             self.initial_clipboard_pending = false;
                             update_clipboard(_mcb.clipboards, ClipboardSide::Client);
                         }
-                        #[cfg(target_os = "ios")]
+                        #[cfg(any(target_os = "ios", target_env = "ohos"))]
                         {
                             if let Some(cb) = _mcb
                                 .clipboards
@@ -1930,6 +2003,34 @@ impl<T: InvokeUiSession> Remote<T> {
                                 };
                                 if let Ok(content) = String::from_utf8(content) {
                                     self.handler.clipboard(content);
+                                }
+                            }
+                            #[cfg(target_env = "ohos")]
+                            if let Some(cb) = _mcb
+                                .clipboards
+                                .iter()
+                                .find(|c| c.format.enum_value() == Ok(ClipboardFormat::ImagePng))
+                            {
+                                let content = if cb.compress {
+                                    hbb_common::compress::decompress(&cb.content)
+                                } else {
+                                    cb.content.to_vec()
+                                };
+                                self.handler.clipboard_image_png(content);
+                            }
+                            #[cfg(target_env = "ohos")]
+                            if let Some(cb) = _mcb
+                                .clipboards
+                                .iter()
+                                .find(|c| c.format.enum_value() == Ok(ClipboardFormat::Html))
+                            {
+                                let content = if cb.compress {
+                                    hbb_common::compress::decompress(&cb.content)
+                                } else {
+                                    cb.content.to_vec()
+                                };
+                                if let Ok(content) = String::from_utf8(content) {
+                                    self.handler.clipboard_html(content);
                                 }
                             }
                         }
@@ -2539,7 +2640,12 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::VoiceCallRequest(request)) => {
                     if request.is_connect {
-                        // TODO: maybe we will do a voice call from the peer in the future.
+                        // A voice call offered by the controlled side: surface it
+                        // to the user, who answers through Data::AnswerVoiceCall.
+                        let ts = request.req_timestamp;
+                        self.incoming_voice_call_timestamp =
+                            NonZeroI64::new(if ts != 0 { ts } else { get_time() });
+                        self.handler.on_voice_call_incoming();
                     } else {
                         log::debug!("The remote has requested to close the voice call");
                         if let Some(sender) = self.stop_voice_call_sender.take() {

@@ -1,0 +1,6 @@
+{
+  "name": "libentry.so",
+  "types": "./index.d.ts",
+  "version": "1.0.0",
+  "description": "RustDesk OHOS FFI native module."
+}
