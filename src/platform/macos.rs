@@ -1060,7 +1060,12 @@ fi
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        // Survive cleanup of the old app's process group after it exits.
+        // Children normally inherit their parent's process group, allowing a
+        // supervisor to signal the whole group. If launchd cleans up the old
+        // app's group on exit, it could kill this helper before it runs `open`.
+        // Passing 0 creates a new group whose ID is the child's own PID, so
+        // cleanup of the old group does not affect the helper or its children.
+        // It remains our child; ordinary parent exit alone does not kill it.
         .process_group(0)
         .spawn()
         .map_err(|err| anyhow!("Failed to schedule updated app relaunch: {}", err))?;
