@@ -17,6 +17,10 @@ import hbb.MessageOuterClass.MultiClipboards
 import ffi.FFI
 
 class RdClipboardManager(private val clipboardManager: ClipboardManager) {
+    companion object {
+        private const val MAX_CLIPBOARD_TEXT_CODE_UNITS = 1024 * 1024
+    }
+
     private val logTag = "RdClipboardManager"
     private val supportedMimeTypes = arrayOf(
         ClipDescription.MIMETYPE_TEXT_PLAIN,
@@ -188,6 +192,12 @@ class RdClipboardManager(private val clipboardManager: ClipboardManager) {
         }
         if (item == null) {
             Log.e(logTag, "No item in clipboard")
+            return
+        }
+        val textLength = text?.length ?: 0
+        val htmlLength = html?.length ?: 0
+        if (textLength > MAX_CLIPBOARD_TEXT_CODE_UNITS || htmlLength > MAX_CLIPBOARD_TEXT_CODE_UNITS - textLength) {
+            Log.w(logTag, "Remote clipboard text is too large for Android clipboard")
             return
         }
         val clipData = ClipData(clipDescription, item)
