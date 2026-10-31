@@ -1015,6 +1015,11 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
             }
             Ok(output) => log_update_cleanup_warning(&output),
         }
+        if crate::common::is_server_running() {
+            // This process hosts the backend. A new GUI could reuse our IPC and
+            // skip starting its own backend, leaving it "Not ready" when we exit.
+            return relaunch_after_update_exit(&app_name);
+        }
     }
     match Command::new("open")
         .arg("-n")
@@ -1031,6 +1036,44 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
     }
     // leave open a little time
     std::thread::sleep(std::time::Duration::from_millis(300));
+    Ok(())
+}
+
+fn relaunch_after_update_exit(app_name: &str) -> ResultType<()> {
+    // The update caller cleans up and quits this GUI after we return. Waiting
+    // in a separate process lets that caller finish instead of blocking its exit.
+    // The shell's kill -0 only checks whether our PID exists; it does not kill us.
+    const RELAUNCH: &str = r#"
+poll_interval=0.1
+while /bin/kill -0 "$1" 2>/dev/null; do
+    /bin/sleep "$poll_interval"
+done
+if ! output=$(/usr/bin/open -n "$2" 2>&1); then
+    /usr/bin/logger -t "$0" "Failed to relaunch updated app: $output"
+    exit 1
+fi
+"#;
+    Command::new("/bin/sh")
+        .args(["-c", RELAUNCH, app_name])
+        .arg(std::process::id().to_string())
+        .arg(format!("/Applications/{}.app", app_name))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        // Children normally inherit their parent's process group, allowing a
+        // supervisor to signal the whole group. If launchd cleans up the old
+        // app's group on exit, it could kill this helper before it runs `open`.
+        // Passing 0 creates a new group whose ID is the child's own PID, so
+        // cleanup of the old group does not affect the helper or its children.
+        // It remains our child; ordinary parent exit alone does not kill it.
+        .process_group(0)
+        .spawn()
+        .map_err(|err| {
+            anyhow!(
+                "The new version is installed, but automatic restart failed. Please quit and reopen the application. Error: {}",
+                err
+            )
+        })?;
     Ok(())
 }
 
