@@ -385,6 +385,8 @@ pub struct Connection {
     recording: bool,
     block_input: bool,
     privacy_mode: bool,
+    #[cfg(windows)]
+    privacy_mode_waiting: Option<crate::privacy_mode::win_wait_unlock::WaitingTurnOn>,
     control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
@@ -600,6 +602,8 @@ impl Connection {
             recording: Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &control_permissions),
             block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &control_permissions),
             privacy_mode: Self::permission(keys::OPTION_ENABLE_PRIVACY_MODE, &control_permissions),
+            #[cfg(windows)]
+            privacy_mode_waiting: None,
             control_permissions,
             last_test_delay: None,
             network_delay: 0,
@@ -870,6 +874,10 @@ impl Connection {
                                 conn.block_input = enabled;
                                 conn.send_permission(Permission::BlockInput, enabled).await;
                             } else if &name == "privacy_mode" {
+                                #[cfg(windows)]
+                                if !enabled {
+                                    conn.privacy_mode_waiting = None;
+                                }
                                 // Keep permission state and runtime state consistent:
                                 // when revoking the permission, try to leave privacy mode first.
                                 // Otherwise we could end up in an inconsistent state where
@@ -1172,6 +1180,13 @@ impl Connection {
                 _ = second_timer.tick() => {
                     #[cfg(windows)]
                     conn.portable_check();
+                    #[cfg(windows)]
+                    if let Some(reply) = conn.privacy_mode_waiting.as_ref().and_then(|w| w.reply()) {
+                        conn.privacy_mode_waiting = None;
+                        if let Some(msg) = reply {
+                            conn.send(msg).await;
+                        }
+                    }
                     raii::AuthedConnID::check_wake_lock_on_setting_changed();
                     if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
                         if instant.elapsed().as_secs() > minute * 60 {
@@ -1226,6 +1241,10 @@ impl Connection {
             conn.try_empty_file_clipboard();
         }
 
+        #[cfg(windows)]
+        {
+            conn.privacy_mode_waiting = None;
+        }
         if let Some(video_privacy_conn_id) = privacy_mode::get_privacy_mode_conn_id() {
             if video_privacy_conn_id == id {
                 let _ = Self::turn_off_privacy_to_msg(id, String::new());
@@ -4824,6 +4843,20 @@ impl Connection {
 
     async fn toggle_privacy_mode(&mut self, t: TogglePrivacyMode) {
         if t.on {
+            // Only a remembered request waits: the client's toggle shows it as on, so turning
+            // it off cancels it. A manual one gets its answer now, as before.
+            #[cfg(windows)]
+            if t.remembered
+                && self.is_authed_remote_conn()
+                && self.privacy_mode
+                && privacy_mode::win_wait_unlock::wait_for_unlock(
+                    &t.impl_key,
+                    self.inner.id,
+                    &mut self.privacy_mode_waiting,
+                )
+            {
+                return;
+            }
             self.turn_on_privacy(t.impl_key).await;
         } else {
             self.turn_off_privacy(t.impl_key).await;
@@ -5179,6 +5212,12 @@ impl Connection {
             return;
         }
 
+        // A request that goes ahead now replaces a waiting one.
+        #[cfg(windows)]
+        {
+            self.privacy_mode_waiting = None;
+        }
+
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
                 back_notification::PrivacyModeState::PrvNotSupported,
@@ -5260,6 +5299,10 @@ impl Connection {
     }
 
     async fn turn_off_privacy(&mut self, impl_key: String) {
+        #[cfg(windows)]
+        {
+            self.privacy_mode_waiting = None;
+        }
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
                 back_notification::PrivacyModeState::PrvNotSupported,
