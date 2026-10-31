@@ -424,6 +424,12 @@ pub fn write_plists() -> ResultType<()> {
 pub fn uninstall_service(show_new_window: bool, sync: bool) -> bool {
     // to-do: do together with win/linux about refactory start/stop service
     if !is_installed_daemon(false) {
+        if !show_new_window {
+            if let Err(err) = crate::ipc::close_all_instances() {
+                log::error!("Failed to close all instances: {err}");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
         return false;
     }
 
@@ -1921,6 +1927,36 @@ pub fn handle_application_should_open_untitled_file() {
     let x = std::env::args().nth(1).unwrap_or_default();
     if x == "--server" || x == "--cm" || x == "--tray" {
         std::thread::spawn(move || crate::handle_url_scheme("".to_lowercase()));
+    }
+}
+
+pub fn check_start_tray() {
+    if !is_installed_daemon(false)
+        && !crate::check_process("--server", false)
+        && !crate::check_process("--tray", true)
+    {
+        hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
+    }
+}
+
+pub fn kill_tray() {
+    if !is_installed_daemon(false) && !crate::check_process("--server", false) {
+        let app_name = crate::get_app_name();
+        match std::process::Command::new("pkill")
+            .arg("-i")
+            .arg("-f")
+            .arg(&format!("{} --tray", app_name))
+            .status()
+        {
+            Ok(status) => {
+                if !status.success() && status.code() != Some(1) {
+                    log::debug!("pkill -i -f '{app_name} --tray' exited with status: {status}");
+                }
+            }
+            Err(err) => {
+                log::error!("Failed to execute pkill for tray: {err}");
+            }
+        }
     }
 }
 

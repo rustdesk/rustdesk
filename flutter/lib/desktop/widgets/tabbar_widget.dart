@@ -20,6 +20,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../utils/multi_window_manager.dart';
+import '../../utils/platform_channel.dart';
 
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kIconSize = 18;
@@ -377,6 +378,10 @@ class _DesktopTabState extends State<DesktopTab>
   @override
   void onWindowFocus() {
     stateGlobal.isFocused.value = true;
+    if (isMainWindow &&
+        !rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
+      rustDeskWinManager.registerActiveWindow(kMainWindowId);
+    }
   }
 
   @override
@@ -389,6 +394,16 @@ class _DesktopTabState extends State<DesktopTab>
     stateGlobal.setMinimized(true);
     stateGlobal.setMaximized(false);
     super.onWindowMinimize();
+  }
+
+  @override
+  void onWindowRestore() {
+    stateGlobal.setMinimized(false);
+    if (isMainWindow &&
+        !rustDeskWinManager.getActiveWindows().contains(kMainWindowId)) {
+      rustDeskWinManager.registerActiveWindow(kMainWindowId);
+    }
+    super.onWindowRestore();
   }
 
   @override
@@ -487,10 +502,16 @@ class _DesktopTabState extends State<DesktopTab>
         await windowManager.setFullScreen(false);
         await macOSWindowClose(
           () async => await windowManager.isFullScreen(),
-          mainWindowClose,
+          () async {
+            await mainWindowClose();
+            await RdPlatformChannel.instance.onWindowClose();
+          },
         );
       } else {
         await mainWindowClose();
+        if (isMacOS) {
+          await RdPlatformChannel.instance.onWindowClose();
+        }
       }
     } else {
       // it's safe to hide the subwindow
@@ -505,10 +526,14 @@ class _DesktopTabState extends State<DesktopTab>
             stateGlobal.setFullscreen(false, procWnd: false);
             await macOSWindowClose(
               () async => await controller.isFullScreen(),
-              () async => await notMainWindowClose(controller),
+              () async {
+                await notMainWindowClose(controller);
+                await RdPlatformChannel.instance.onWindowClose();
+              },
             );
           } else {
             await notMainWindowClose(controller);
+            await RdPlatformChannel.instance.onWindowClose();
           }
         }
       } else {
