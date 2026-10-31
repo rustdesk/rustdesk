@@ -1334,6 +1334,11 @@ static napi_value NapiGetServerId(napi_env env, napi_callback_info info) {
     return CallStringNoArgs(env, "ohos_get_server_id");
 }
 
+static napi_value NapiGetClients(napi_env env, napi_callback_info info) {
+    (void)info;
+    return CallStringNoArgs(env, "ohos_get_clients");
+}
+
 static napi_value NapiGetServerPassword(napi_env env, napi_callback_info info) {
     (void)info;
     return CallStringNoArgs(env, "ohos_get_server_password");
@@ -1611,6 +1616,7 @@ static napi_value EntryInit(napi_env env, napi_value exports) {
         {"serverStartService", NapiServerStartService},
         {"serverStopService", NapiServerStopService},
         {"getServerId", NapiGetServerId},
+        {"getClients", NapiGetClients},
         {"getServerPassword", NapiGetServerPassword},
         {"updateServerPassword", NapiUpdateServerPassword},
         {"hasPermanentPassword", NapiHasPermanentPassword},

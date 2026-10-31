@@ -15,8 +15,7 @@
 use crate::ohos_audio::*;
 use hbb_common::{anyhow::anyhow, bail, log, ResultType};
 use magnum_opus::{Application, Channels, Encoder as OpusEncoder};
-use std::ptr;
-use std::sync::mpsc::Sender;
+use std::{ptr, sync::mpsc::Sender};
 
 pub const VOICE_CALL_SAMPLE_RATE: u32 = 48000;
 
@@ -108,7 +107,7 @@ unsafe extern "C" fn on_read_data(
             }
             Ok(_) => {}
             Err(error) => {
-                log::warn!("Failed to encode voice call audio frame: {error:?}");
+                hbb_common::throttled_log!(std::time::Duration::from_secs(1), warn, "Failed to encode voice call audio frame: {error:?}");
             }
         }
     }

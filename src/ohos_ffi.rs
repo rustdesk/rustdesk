@@ -9,8 +9,7 @@
 // This module exists only for the `aarch64-unknown-linux-ohos` controller
 // build; it never compiles on the existing desktop / mobile targets.
 
-use crate::client::file_trait::FileManager;
-use crate::client::{Data, Interface, QualityStatus};
+use crate::client::{file_trait::FileManager, Data, Interface, QualityStatus};
 use crate::ui_session_interface::{io_loop, InvokeUiSession, Session};
 use base::message_proto::*;
 use hbb_common::{config::Config, lazy_static, log, rendezvous_proto::ConnType, SessionID};
@@ -1276,6 +1275,13 @@ pub extern "C" fn ohos_get_server_id() -> *mut c_char {
     new_cstring(Config::get_id())
 }
 
+/// Current CM connection records, for a (re)opening page to catch requests
+/// that arrived while it was away. The caller owns the returned string.
+#[no_mangle]
+pub extern "C" fn ohos_get_clients() -> *mut c_char {
+    new_cstring(crate::ui_cm_interface::get_clients_state())
+}
+
 /// The one-time password shown in the share UI. The caller owns the string.
 #[no_mangle]
 pub extern "C" fn ohos_get_server_password() -> *mut c_char {
@@ -1396,14 +1402,14 @@ pub extern "C" fn ohos_server_push_clipboard(text: *const c_char, html: *const c
 
 /// Start screen capture at the given display size. Pops the system consent
 /// picker; the `server_capture_state` event reports the
-/// outcome (0 = started,
+/// outcome (-1 = waiting for consent, 0 = started,
 /// 1 = canceled by user, 2/3/4/10 = stopped by user/call/switch...).
 #[no_mangle]
 pub extern "C" fn ohos_capture_start(width: c_int, height: c_int) -> c_int {
     register_capture_state_hook();
     match scrap::ohos::screencap::start(width, height) {
         Ok(()) => {
-            push_event::<&str>("server_capture_state", &[("state", "pending")]);
+            push_event::<&str>("server_capture_state", &[("state", "-1")]);
             0
         }
         Err(err) => {

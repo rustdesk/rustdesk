@@ -51,10 +51,10 @@ DEPS="$SCRIPTDIR/deps"
 rm -rf "$DEPS"
 mkdir -p "$DEPS/include" "$DEPS/lib"
 
-# --- libyuv + opus (vcpkg, cmake) --------------------------------------------
+# --- libyuv + opus + libsodium (vcpkg, cmake) --------------------------------
 cd "$VCPKG_ROOT"
-if [ ! -f "installed/arm64-ohos/lib/libyuv.a" ] || [ ! -f "installed/arm64-ohos/lib/libopus.a" ]; then
-  ./vcpkg install libyuv opus --triplet arm64-ohos
+if [ ! -f "installed/arm64-ohos/lib/libyuv.a" ] || [ ! -f "installed/arm64-ohos/lib/libopus.a" ] || [ ! -f "installed/arm64-ohos/lib/libsodium.a" ]; then
+  ./vcpkg install libyuv opus libsodium --triplet arm64-ohos
 fi
 # magnum-opus's build script looks for vcpkg's linux layout (arm64-linux).
 if [ ! -e "installed/arm64-linux" ]; then

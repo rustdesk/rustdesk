@@ -60,6 +60,9 @@ pub struct OhosAudioPlayer {
     sample_rate: u32,
     channels: u16,
     started: bool,
+    // Native callback context; reclaimed in Drop once the renderer (and
+    // with it the native callbacks) is gone.
+    ctx: *mut PlayerCtx,
 }
 
 // The raw renderer handle is only passed back into the OHAudio C API from
@@ -142,6 +145,7 @@ impl OhosAudioPlayer {
             sample_rate: DEVICE_RATE,
             channels: channels as u16,
             started: true,
+            ctx,
         })
     }
 
@@ -169,6 +173,11 @@ impl Drop for OhosAudioPlayer {
                 let _ = OH_AudioRenderer_Stop(self._renderer);
                 let _ = OH_AudioRenderer_Release(self._renderer);
                 self._renderer = ptr::null_mut();
+            }
+            // Release has returned, so no native callback can touch ctx.
+            if !self.ctx.is_null() {
+                drop(Box::from_raw(self.ctx));
+                self.ctx = ptr::null_mut();
             }
         }
     }

@@ -76,7 +76,7 @@
 | `libs/webrtc-util/`（vendored patch） | rustdesk fork 的 util crate 副本；nix 收窄为 `default-features=false, features=["net","socket"]`（ohos libc 无 mqueue/aio/personality 绑定，而 webrtc-util 只用 ifaddrs/socket） |
 | `libs/rdev/`（vendored patch） | rdev 副本；ohos 不编译 linux(X11) 后端，与 android 一样只用核心类型 + 键码表 |
 | `libs/machine-uid/`（vendored patch） | machine-uid 副本；① build.rs 按 TARGET 而非 HOST 门控 win.cpp；② IsWow64Process 改纯 Rust extern（新 cargo 不把 build-dep 的静态库传播进 build 脚本链接，win.cpp 方案在 Windows 宿主交叉编译时必挂） |
-| `libs/libsodium-sys/`（vendored patch） | 增加 target 作用域的 `SODIUM_LIB_DIR_<target>` 查找（Windows 宿主交叉编译时 aarch64 libsodium 不得泄漏进宿主 build 脚本链接） |
+| `libs/libsodium-sys/`（vendored patch） | 增加 target 作用域的 `SODIUM_LIB_DIR_<target>` 查找（Windows 宿主交叉编译时 aarch64 libsodium 不得泄漏进宿主 build 脚本链接）。副本**不带** libsodium/ 源码与 msvc/mingw 预编译库：非 ohos 宿主经 vcpkg（windows）/pkg-config（unix）取 sodium，见 CI 增加的安装步骤 |
 
 修改（全部为 `target_env = "ohos"` 门控，不改变既有平台行为）：
 
@@ -103,7 +103,7 @@
 | `CARGO_TARGET_<triple>_LINKER` 必须全大写，小写被忽略 | `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER` |
 | 链接报 `-latomic` 找不到（OHOS sysroot 无 libatomic） | 移除（aarch64 原生原子操作） |
 | 新版 cargo（1.96）不把 build-dep 的 `cargo:rustc-link-lib` 传播进 build 脚本链接 | machine-uid 改纯 Rust IsWow64Process（弃 win.cpp 静态库） |
-| libsodium-sys 的 `cfg!(target_env="msvc")` 在 build.rs 里判的是宿主 | vendored patch：`SODIUM_LIB_DIR_<target>` 目标作用域 + 双名库文件 |
+| libsodium-sys 的 `cfg!(target_env="msvc")` 在 build.rs 里判的是宿主 | vendored patch：`SODIUM_LIB_DIR_<target>` 目标作用域 + 双名库文件（普通 `SODIUM_LIB_DIR` 会同时命中宿主构建脚本，已实测不可行） |
 | vendored openssl Configure 需要完整 perl 核心模块 + POSIX 路径 perl + make/ranlib/ar | Git Bash perl + `PERL5LIB`（从 CPAN 补 Locale-Maketext/IPC-Cmd/ExtUtils-MakeMaker/podlators/Pod-Simple 等，注意 `MSYS2_ENV_CONV_EXCL=PERL5LIB` 防 `C:/` 冒号截断）+ msys2 make/sh 前置 PATH + NDK llvm-ranlib/ar shim；**不要用 Strawberry perl（MSWin32 路径风格被 Configure 拒绝）** |
 | vcpkg `configure_make` 对 ohos triplet 丢 `--target/--sysroot` | libvpx 用自带 configure 直构（`--target=arm64-linux-gcc`，NEON 启用）；libyuv/opus/libsodium 走 vcpkg cmake 路径正常 |
 | aomedia.googlesource 全量克隆 >1GB 且国内极慢 | M1 不编 libaom：aom.rs/AV1 按 ohos 门控 + 存根符号库；后续如需 AV1 再解决源获取 |
@@ -177,6 +177,26 @@ libvpx 1.16.0 直构（NEON）。Rust 侧 `build-rust.sh` 全自动检测并导�
 home/.local/share/logs/RustDesk/rustdesk-ohos/rs_rCURRENT.log`，`hdc file recv`
 拉取（路径要双斜杠）；桌面被控端验证格式消息到达 = `recved audio format` 一行
 （`%APPDATA%/RustDesk/log/RustDesk_rCURRENT.log`）。
+
+### 被控端通话麦克风采集速率自适应（2026-10-31）
+
+真机↔模拟器通话（手机主控）里手机端听到杂音：手机下行播放 ring 在通话开始 ~3.2s
+即填满 3s 容量（`Audio buffer capacity discard` 每 5s 数百次 + `skip 69600` 每 12s），
+即生产速率 ≈2 倍实时。模拟器日志确认新 `OhosMicSource` 在跑且 avscreen mic 已关，
+所以 2 倍来自 OHAudio capturer 本身：模拟器虚拟麦克风向 RAW capturer 交付宿主机
+混音格式（立体声），按 mono 读回数据量正好 2 倍、内容 L/R 交错错乱 = 乱码杂音。
+
+修复 = 不再假设采集器按请求参数交付：pa_impl 在通话开始时实测 500ms 交付速率
+（期间静音积压），偏离 48kHz 超过 ~5% 就按"mono 时间轴 @ 实测速率"重采样回 48k
+——立体声被按 2x mono 误读时，2:1 重采样恰好等价 (L+R)/2 下混，两种偏差
+（96k mono / 48k stereo）都恢复正确语速。同时在 `OhosMicSource` 启动后经
+`OH_AudioCapturer_GetSamplingRate/GetChannelCount` 查询并日志记录采集器上报参数
+（辅助区分速率/声道偏差）。真机（Pura 70）实测交付速率为请求值，走无重采样快路径，
+行为不变；通话开始有 ~0.5s 静音测量窗。
+
+已知限制：主控端 `OhosVoiceCallCapturer` 仍是固定 48k mono 假设——真机实测健康
+（模拟器播放其上行 ring 全程干净），未动；若将来用模拟器做主控端出现同类杂音，
+把同一"实测+重采样"模式搬过去即可。
 
 ## 六、M1 已有能力（保留记录）
 

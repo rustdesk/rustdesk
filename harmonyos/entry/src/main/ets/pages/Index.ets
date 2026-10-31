@@ -125,8 +125,6 @@ struct Index {
       promptAction.showToast({ message: $r('app.string.create_session_failed'), duration: 3000 });
       return;
     }
-    const rc = ffiSessionStart(uuid);
-    hilog.info(LOG_DOMAIN, TAG, 'session %{public}s start -> %{public}d', uuid, rc);
     this.addRecent(pid, sessionKind);
     const url = sessionKind === SESSION_KIND_FILE_TRANSFER ? 'pages/FileTransferPage'
                                                            : 'pages/RemotePage';
@@ -134,7 +132,12 @@ struct Index {
     params.uuid = uuid;
     params.peerId = pid;
     params.sessionKind = sessionKind;
-    router.pushUrl({ url: url, params: params }).catch((e: BusinessError) => {
+    // Start the session only after the destination page has subscribed, so
+    // events from a fast connection cannot fire into the void.
+    router.pushUrl({ url: url, params: params }).then(() => {
+      const rc = ffiSessionStart(uuid);
+      hilog.info(LOG_DOMAIN, TAG, 'session %{public}s start -> %{public}d', uuid, rc);
+    }).catch((e: BusinessError) => {
       hilog.error(LOG_DOMAIN, TAG, 'pushUrl failed: %{public}s', `${e.message}`);
       this.connecting = false;
     });

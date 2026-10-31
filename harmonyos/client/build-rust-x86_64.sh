@@ -100,6 +100,9 @@ cd "$REPO_ROOT"
 
 PROFILE=release
 [ "$MODE_DEBUG" -eq 1 ] && PROFILE=debug
+# cargo has no --debug alias; the dev profile writes to debug/ as well.
+PROFILE_FLAG=--release
+[ "$MODE_DEBUG" -eq 1 ] && PROFILE_FLAG=--profile dev
 
 OUT_DIR="$SCRIPTDIR/out/x86_64-ohos"
 mkdir -p "$OUT_DIR"
@@ -109,7 +112,7 @@ if [ "$MODE_CHECK" -eq 1 ]; then
   exit 0
 fi
 
-cargo build --target "$TARGET" --lib --no-default-features --features use_dasp --$PROFILE
+cargo build --target "$TARGET" --lib --no-default-features --features use_dasp $PROFILE_FLAG
 
 # the crate is named librustdesk, so the cdylib is liblibrustdesk.so; the
 # ArkTS side dlopens "librustdesk.so".

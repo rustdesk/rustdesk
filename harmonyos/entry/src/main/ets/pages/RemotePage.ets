@@ -606,6 +606,19 @@ struct RemotePage {
     ffiSendMouse(this.uuid, mask, x, y, this.altOn, this.ctrlOn, this.shiftOn, false);
   }
 
+  // The peer expects absolute coordinates in the virtual-desktop space, so
+  // the selected display's origin is added on top of the mapped in-display
+  // position (wheel events carry no position and skip this).
+  private displayOriginX(): number {
+    const d = this.displays[this.currentDisplay];
+    return d ? d.x : 0;
+  }
+
+  private displayOriginY(): number {
+    const d = this.displays[this.currentDisplay];
+    return d ? d.y : 0;
+  }
+
   private mapX(localX: number): number {
     if (this.videoW <= 0 || this.remoteW <= 0) {
       return 0;
@@ -849,7 +862,8 @@ struct RemotePage {
 
   // Send a mouse event at the virtual cursor position (pointer mode only).
   private vptrMouse(mask: number): void {
-    this.mouse(mask, this.mapX(this.vptrX), this.mapY(this.vptrY));
+    this.mouse(mask, this.mapX(this.vptrX) + this.displayOriginX(),
+      this.mapY(this.vptrY) + this.displayOriginY());
   }
 
   // Container-local draw position for the virtual cursor: vptrX/Y live in
@@ -905,7 +919,8 @@ struct RemotePage {
   // Send a mouse event at a finger position (component-local vp). The
   // finger itself steers the pointer; no local arrow overlay is drawn.
   private mouseAt(mask: number, fingerX: number, fingerY: number): void {
-    this.mouse(mask, this.mapX(fingerX), this.mapY(fingerY));
+    this.mouse(mask, this.mapX(fingerX) + this.displayOriginX(),
+      this.mapY(fingerY) + this.displayOriginY());
   }
 
   // Flash the scrollbars while zoomed; called on any pan/zoom change.
