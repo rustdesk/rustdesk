@@ -131,9 +131,31 @@ mod pa_impl {
         // AVScreenCapture yields s16le PCM at the configured rate/channels; the
         // audio service batches it into 20 ms stereo opus frames.
         #[cfg(target_env = "ohos")]
-        let use_mic = super::get_audio_input().contains("mic");
+        // During a voice call the mic comes from the dedicated OHAudio capturer
+        // below; AVScreenCapture's mic stream stays off so the mic is captured
+        // exactly once (and the call works without an active screen share).
+        let voice_call = super::get_voice_call_input_device().is_some();
+        #[cfg(target_env = "ohos")]
+        let mut use_mic = !voice_call && super::get_audio_input().contains("mic");
         #[cfg(target_env = "ohos")]
         scrap::ohos::screencap::set_mic_enabled(use_mic);
+        #[cfg(target_env = "ohos")]
+        let mut ohos_mic = if voice_call {
+            match crate::ohos_voice_call::OhosMicSource::new() {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    log::error!("Failed to start the ohos voice call mic capturer: {e:#}");
+                    // Fall back to the AVScreenCapture mic stream.
+                    use_mic = true;
+                    scrap::ohos::screencap::set_mic_enabled(true);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        #[cfg(target_env = "ohos")]
+        let mut ohos_mic_data: Vec<f32> = vec![];
         #[cfg(target_env = "ohos")]
         let mut ohos_data = vec![];
         #[cfg(target_env = "ohos")]
@@ -188,13 +210,36 @@ mod pa_impl {
             }
 
             #[cfg(target_env = "ohos")]
-            if scrap::ohos::ffi::get_audio_raw(&mut ohos_data, &mut vec![], use_mic).is_some() {
-                ohos_pending.reserve(ohos_data.len() / 2);
-                for chunk in ohos_data.chunks_exact(2) {
-                    ohos_pending
-                        .push(i16::from_le_bytes([chunk[0], chunk[1]]) as f32 / 32768.0);
+            {
+                let mut got = false;
+                // The dedicated capturer replaces both AVScreenCapture streams
+                // during a call: reading inner audio then would feed the
+                // remote voice right back to the peer.
+                if ohos_mic.is_none()
+                    && scrap::ohos::ffi::get_audio_raw(&mut ohos_data, &mut vec![], use_mic)
+                        .is_some()
+                {
+                    got = true;
+                    ohos_pending.reserve(ohos_data.len() / 2);
+                    for chunk in ohos_data.chunks_exact(2) {
+                        ohos_pending
+                            .push(i16::from_le_bytes([chunk[0], chunk[1]]) as f32 / 32768.0);
+                    }
+                    ohos_data.clear();
                 }
-                ohos_data.clear();
+                if let Some(mic) = &ohos_mic {
+                    mic.take_pending(&mut ohos_mic_data);
+                    if !ohos_mic_data.is_empty() {
+                        got = true;
+                        ohos_pending.reserve(ohos_mic_data.len() * 2);
+                        for s in ohos_mic_data.drain(..) {
+                            // The call stream is mono; feed both channels so
+                            // the stereo opus encoder sees whole frames.
+                            ohos_pending.push(s);
+                            ohos_pending.push(s);
+                        }
+                    }
+                }
                 // 960 interleaved stereo samples = one 10 ms opus frame; the android
                 // batching branch in `send_f32` wants multiples of it.
                 const OHOS_BATCH: usize = 960 * 2;
@@ -202,8 +247,11 @@ mod pa_impl {
                     let batch: Vec<f32> = ohos_pending.drain(..OHOS_BATCH).collect();
                     send_f32(&batch, &mut encoder, &sp);
                 }
-            } else {
-                hbb_common::sleep(0.1).await;
+                if !got {
+                    // The capturer callback paces at 20 ms; poll close to it so
+                    // the call does not accumulate 100 ms batches.
+                    hbb_common::sleep(if ohos_mic.is_some() { 0.02 } else { 0.1 }).await;
+                }
             }
         }
         Ok(())

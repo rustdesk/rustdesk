@@ -1,9 +1,16 @@
-// OpenHarmony microphone capture for controller-side voice calls: an OHAudio
-// PCM capturer (AUDIOSTREAM_SOURCE_TYPE_MIC, f32 mono/stereo) feeding an opus
-// encoder; encoded AudioFrame messages are handed to the session sender.
+// OpenHarmony microphone capture for voice calls: an OHAudio PCM capturer
+// (AUDIOSTREAM_SOURCE_TYPE_VOICE_COMMUNICATION, f32) feeding either an opus
+// encoder (controller side, `OhosVoiceCallCapturer`) or a raw PCM pool the
+// audio service drains (controlled side, `OhosMicSource`); encoded/raw audio
+// reaches the peer as AudioFrame messages.
 //
 // The captured stream is 48 kHz f32. Opus accepts 48 kHz natively; the
 // controller sends the same AudioFrame messages a controlled peer produces.
+// The controlled side uses this capturer instead of AVScreenCapture's mic
+// stream because the latter requires an active screen share and delivers the
+// mic at the device's own rate (a Pura 70 gave 2x the configured 48 kHz),
+// which the audio service would encode as 48 kHz and the peer would play at
+// double speed.
 
 use crate::ohos_audio::*;
 use hbb_common::{anyhow::anyhow, bail, log, ResultType};
@@ -217,6 +224,168 @@ impl OhosVoiceCallCapturer {
 }
 
 impl Drop for OhosVoiceCallCapturer {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+// One second of mono f32; when the consumer stalls past this, drop the oldest
+// half so a resumed consumer gets fresh audio instead of a growing backlog.
+const MIC_PENDING_MAX: usize = VOICE_CALL_SAMPLE_RATE as usize;
+
+struct MicCtx {
+    pending: std::sync::Arc<std::sync::Mutex<Vec<f32>>>,
+    stopped: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+// The capturer callback touches only the Arc'd fields; the OHAudio raw
+// pointer is never dereferenced on the Rust side.
+unsafe impl Send for MicCtx {}
+unsafe impl Sync for MicCtx {}
+
+unsafe extern "C" fn on_mic_read_data(
+    _capturer: *mut OH_AudioCapturer,
+    userData: *mut std::os::raw::c_void,
+    buffer: *mut std::os::raw::c_void,
+    length: i32,
+) -> i32 {
+    let ctx = match (userData as *const MicCtx).as_ref() {
+        Some(ctx) => ctx,
+        None => return 0,
+    };
+    if ctx.stopped.load(std::sync::atomic::Ordering::Acquire) {
+        return 0;
+    }
+    if buffer.is_null() || length <= 0 {
+        return 0;
+    }
+    let src = std::slice::from_raw_parts(buffer as *const f32, length as usize / 4);
+    if let Ok(mut pending) = ctx.pending.lock() {
+        if pending.len() > MIC_PENDING_MAX {
+            let stale = pending.len() - MIC_PENDING_MAX / 2;
+            pending.drain(..stale);
+        }
+        pending.extend_from_slice(src);
+    }
+    0
+}
+
+/// Controlled-side voice call microphone: a 48 kHz mono f32 OHAudio capturer
+/// the audio service drains via [`take_pending`](Self::take_pending). Runs
+/// independently of AVScreenCapture, so the call mic works without an active
+/// screen share; the mix session keeps the app's own playback (the remote
+/// voice) audible while the capturer holds voice-communication focus.
+pub struct OhosMicSource {
+    capturer: *mut OH_AudioCapturer,
+    pending: std::sync::Arc<std::sync::Mutex<Vec<f32>>>,
+    stopped: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+// The raw capturer handle is only passed back into the OHAudio C API
+// (stop/release); the capture callback only touches the Sync MicCtx fields.
+unsafe impl Send for OhosMicSource {}
+
+impl OhosMicSource {
+    pub fn new() -> ResultType<Self> {
+        activate_mix_session();
+        unsafe {
+            let mut builder: *mut OH_AudioStreamBuilder = ptr::null_mut();
+            let rc = OH_AudioStreamBuilder_Create(&mut builder, AUDIOSTREAM_TYPE_CAPTURER);
+            if rc != AUDIOSTREAM_SUCCESS || builder.is_null() {
+                deactivate_mix_session();
+                bail!("OH_AudioStreamBuilder_Create(mic capturer) failed: {}", rc);
+            }
+            let result = Self::build(builder);
+            if result.is_err() {
+                let _ = OH_AudioStreamBuilder_Destroy(builder);
+                deactivate_mix_session();
+            }
+            result
+        }
+    }
+
+    unsafe fn build(builder: *mut OH_AudioStreamBuilder) -> ResultType<Self> {
+        if OH_AudioStreamBuilder_SetSamplingRate(builder, VOICE_CALL_SAMPLE_RATE as _)
+            != AUDIOSTREAM_SUCCESS
+            || OH_AudioStreamBuilder_SetChannelCount(builder, 1) != AUDIOSTREAM_SUCCESS
+            || OH_AudioStreamBuilder_SetSampleFormat(builder, AUDIOSTREAM_SAMPLE_F32LE)
+                != AUDIOSTREAM_SUCCESS
+            || OH_AudioStreamBuilder_SetEncodingType(builder, AUDIOSTREAM_ENCODING_TYPE_RAW)
+                != AUDIOSTREAM_SUCCESS
+            || OH_AudioStreamBuilder_SetCapturerInfo(
+                builder,
+                AUDIOSTREAM_SOURCE_TYPE_VOICE_COMMUNICATION,
+            ) != AUDIOSTREAM_SUCCESS
+        {
+            bail!("failed to configure OHAudio mic capturer");
+        }
+        let _ = OH_AudioStreamBuilder_SetFrameSizeInCallback(
+            builder,
+            (VOICE_CALL_SAMPLE_RATE / 50) as i32,
+        );
+        let pending = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let ctx = Box::into_raw(Box::new(MicCtx {
+            pending: pending.clone(),
+            stopped: stopped.clone(),
+        }));
+        let callbacks = OH_AudioCapturer_Callbacks {
+            OnReadData: Some(on_mic_read_data),
+            ..Default::default()
+        };
+        if OH_AudioStreamBuilder_SetCapturerCallback(builder, callbacks, ctx as *mut _)
+            != AUDIOSTREAM_SUCCESS
+        {
+            drop(Box::from_raw(ctx));
+            bail!("SetCapturerCallback failed");
+        }
+        let mut capturer: *mut OH_AudioCapturer = ptr::null_mut();
+        if OH_AudioStreamBuilder_GenerateCapturer(builder, &mut capturer) != AUDIOSTREAM_SUCCESS
+            || capturer.is_null()
+        {
+            drop(Box::from_raw(ctx));
+            bail!("GenerateCapturer failed");
+        }
+        if OH_AudioCapturer_Start(capturer) != AUDIOSTREAM_SUCCESS {
+            let _ = OH_AudioCapturer_Release(capturer);
+            drop(Box::from_raw(ctx));
+            bail!("OH_AudioCapturer_Start failed");
+        }
+        // The builder handle stays alive with the capturer after
+        // GenerateCapturer succeeds; it is not freed separately. The ctx stays
+        // leaked like the controller-side capturer's: the callback may still
+        // run while stop() releases the stream, so it cannot be freed on the
+        // Rust side.
+        log::info!("ohos voice call mic source started");
+        Ok(Self {
+            capturer,
+            pending,
+            stopped,
+        })
+    }
+
+    /// Move out the PCM accumulated since the last call (mono f32, 48 kHz).
+    pub fn take_pending(&self, dst: &mut Vec<f32>) {
+        if let Ok(mut pending) = self.pending.lock() {
+            dst.append(&mut *pending);
+        }
+    }
+
+    pub fn stop(&mut self) {
+        self.stopped
+            .store(true, std::sync::atomic::Ordering::Release);
+        unsafe {
+            if !self.capturer.is_null() {
+                let _ = OH_AudioCapturer_Stop(self.capturer);
+                let _ = OH_AudioCapturer_Release(self.capturer);
+                self.capturer = ptr::null_mut();
+            }
+        }
+        deactivate_mix_session();
+    }
+}
+
+impl Drop for OhosMicSource {
     fn drop(&mut self) {
         self.stop();
     }
