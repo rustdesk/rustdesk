@@ -982,6 +982,8 @@ pub async fn start_listen<T: InvokeUiCM>(
         }
     }
     cm.remove_connection(current_id, true);
+    // TransferJob::cancel_document only exists where SAF document transfers do.
+    #[cfg(target_os = "android")]
     for job in &mut write_jobs {
         if let Err(error) = job.cancel_document().await {
             const CLEANUP_ERROR_LOG_INTERVAL: std::time::Duration =
