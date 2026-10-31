@@ -1068,7 +1068,12 @@ fi
         // It remains our child; ordinary parent exit alone does not kill it.
         .process_group(0)
         .spawn()
-        .map_err(|err| anyhow!("Failed to schedule updated app relaunch: {}", err))?;
+        .map_err(|err| {
+            anyhow!(
+                "The new version is installed, but automatic restart failed. Please quit and reopen the application. Error: {}",
+                err
+            )
+        })?;
     Ok(())
 }
 
