@@ -802,6 +802,7 @@ pub async fn start_ipc_url_server() {
             }
         }
         Err(err) => {
+            crate::platform::macos::exit_if_url_server_is_taken(&err).await;
             log::error!("{}", err);
         }
     }

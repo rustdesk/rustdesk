@@ -432,6 +432,42 @@ pub(crate) fn get_pid_file(postfix: &str) -> String {
     format!("{}.pid", path)
 }
 
+// A main process that restarts itself with `open -n` still owns its sockets until it exits, so the
+// new copy would find them taken. Unlinking the socket lets the new copy bind the path while this
+// process keeps serving the unlinked one until it exits. Only the owner recorded in the pid file
+// may do this, or a process that is not the main one would cut the main one off.
+#[cfg(target_os = "macos")]
+pub(crate) fn release_own_ipc_socket(postfix: &str) {
+    // Under the listener lock, like every other unlink of an ipc socket, so a copy starting right
+    // now cannot bind the path between our check and our unlink. Callers are sync, some of them
+    // inside a runtime, so the async lock is taken on a thread of its own.
+    let owned = postfix.to_owned();
+    let lock = std::thread::spawn(move || {
+        hbb_common::tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .ok()?
+            .block_on(lock_ipc_listener(&owned))
+            .ok()
+    })
+    .join()
+    .ok()
+    .flatten();
+    // `Some(None)` means the lock file is unusable and listeners start without it, so the release
+    // goes on without it too; only a lock that could not be taken in time keeps the socket.
+    let Some(_lock) = lock else {
+        log::warn!("Failed to lock ipc{}, keeping its socket", postfix);
+        return;
+    };
+    let pid_file = std::path::PathBuf::from(get_pid_file(postfix));
+    if read_pid_file_secure(&pid_file) != Some(std::process::id() as usize) {
+        return;
+    }
+    if let Err(err) = remove_ipc_socket_via_secure_parent_fd(postfix) {
+        log::warn!("Failed to release ipc{} socket: {}", postfix, err);
+    }
+}
+
 // Purpose:
 // - Write current process pid to pid file without following attacker-controlled symlinks.
 // - Ensure the pid file is a regular file owned by the opened inode path.
@@ -666,6 +702,105 @@ async fn probe_existing_listener(postfix: &str) -> bool {
             Data::SyncConfig(Some(_)) | Data::SecurityConfigError(_)
         ))
     )
+}
+
+pub(crate) struct IpcListenerLock {
+    _fd: FdGuard,
+}
+
+// Two processes starting the same channel can both judge its socket stale, and the later unlink
+// then removes the earlier one's fresh socket, leaving it listening where nothing can reach it.
+// Holding this across check_pid, bind and write_pid serializes them. Like
+// `acquire_mac_update_lock`, it is an flock, so the kernel drops it when the process exits.
+pub(crate) async fn lock_ipc_listener(postfix: &str) -> ResultType<Option<IpcListenerLock>> {
+    lock_ipc_file(
+        &format!("{}.lock", config::Config::ipc_path(postfix)),
+        postfix,
+    )
+    .await
+}
+
+async fn lock_ipc_file(path: &str, postfix: &str) -> ResultType<Option<IpcListenerLock>> {
+    let fd = match open_ipc_lock_file(path, postfix) {
+        Ok(fd) => fd,
+        // A lock file we cannot open, e.g. a foreign one left in a service dir that
+        // `ensure_secure_ipc_parent_dir` adopted, must not keep the channel from starting: go on
+        // without the lock, as before it existed.
+        Err(err) => {
+            log::warn!("{}, starting ipc{} without it", err, postfix);
+            return Ok(None);
+        }
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while unsafe {
+        hbb_common::libc::flock(fd.0, hbb_common::libc::LOCK_EX | hbb_common::libc::LOCK_NB)
+    } != 0
+    {
+        let err = std::io::Error::last_os_error();
+        if !matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::Interrupted) {
+            // e.g. a file system without flock support: treat it like a file we cannot open.
+            log::warn!(
+                "failed to lock ipc{} lock file '{}': {}, starting without it",
+                postfix,
+                path,
+                err
+            );
+            return Ok(None);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(Error::new(
+                err.kind(),
+                format!(
+                    "failed to lock ipc{} lock file '{}': {}",
+                    postfix, path, err
+                ),
+            )
+            .into());
+        }
+        hbb_common::tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    Ok(Some(IpcListenerLock { _fd: fd }))
+}
+
+fn open_ipc_lock_file(path: &str, postfix: &str) -> ResultType<FdGuard> {
+    let path_c = CString::new(path.as_bytes().to_vec())?;
+    let flags = hbb_common::libc::O_RDWR
+        | hbb_common::libc::O_CREAT
+        | hbb_common::libc::O_CLOEXEC
+        | hbb_common::libc::O_NOFOLLOW
+        | hbb_common::libc::O_NONBLOCK;
+    let fd = unsafe { hbb_common::libc::open(path_c.as_ptr(), flags, 0o0600) };
+    if fd < 0 {
+        let os_err = std::io::Error::last_os_error();
+        return Err(Error::new(
+            os_err.kind(),
+            format!(
+                "failed to open ipc{} lock file '{}': {}",
+                postfix, path, os_err
+            ),
+        )
+        .into());
+    }
+    let fd = FdGuard(fd);
+    let mut stat: hbb_common::libc::stat = unsafe { std::mem::zeroed() };
+    if unsafe { hbb_common::libc::fstat(fd.0, &mut stat) } != 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let expected_uid = unsafe { hbb_common::libc::geteuid() as u32 };
+    if (stat.st_mode & (hbb_common::libc::S_IFMT as hbb_common::libc::mode_t))
+        != (hbb_common::libc::S_IFREG as hbb_common::libc::mode_t)
+        || stat.st_uid as u32 != expected_uid
+    {
+        return Err(Error::new(
+            ErrorKind::PermissionDenied,
+            format!(
+                "ipc{} lock file '{}' is not a regular file we own",
+                postfix, path
+            ),
+        )
+        .into());
+    }
+    Ok(fd)
 }
 
 pub(crate) async fn check_pid(postfix: &str) -> bool {
