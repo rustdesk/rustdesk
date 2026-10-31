@@ -60,7 +60,10 @@ void main() {
       await tester.pumpWidget(MaterialApp(
         home: Stack(children: [
           FloatingLeftRightButton(
-              isLeft: !cancel, inputModel: input, cursorModel: cursor),
+              isLeft: !cancel,
+              inputModel: input,
+              cursorModel: cursor,
+              viewportSize: const Size(800, 600)),
         ]),
       ));
       await tester.pump();
