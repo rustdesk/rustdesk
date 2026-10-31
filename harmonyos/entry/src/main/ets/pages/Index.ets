@@ -2,7 +2,7 @@ import { router, promptAction } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { preferences } from '@kit.ArkData';
-import { ffiSessionNew, ffiSessionStart, ffiGetOption, ffiSetOption,
+import { ffiSessionNew, ffiSessionClose, ffiSessionStart, ffiGetOption, ffiSetOption,
          SESSION_KIND_CONTROL, SESSION_KIND_FILE_TRANSFER, SESSION_KIND_VIEW_CAMERA } from '../ohos_ffi';
 import { evStr, evBool, evNum, parseJsonArray } from '../model/Utils';
 
@@ -139,6 +139,8 @@ struct Index {
       hilog.info(LOG_DOMAIN, TAG, 'session %{public}s start -> %{public}d', uuid, rc);
     }).catch((e: BusinessError) => {
       hilog.error(LOG_DOMAIN, TAG, 'pushUrl failed: %{public}s', `${e.message}`);
+      // The session was created before navigation; do not leak it.
+      ffiSessionClose(uuid);
       this.connecting = false;
     });
   }

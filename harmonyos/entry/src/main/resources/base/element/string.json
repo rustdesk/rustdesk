@@ -543,6 +543,7 @@
     {"name": "chat_no_connection", "value": "Connection closed"},
     {"name": "back", "value": "Back"},
     {"name": "copied", "value": "Copied"},
-    {"name": "share_id_reachable_hint", "value": "The ID is reachable while the app is open; tap Start sharing to stream the screen."}
+    {"name": "share_id_reachable_hint", "value": "The ID is reachable while the app is open; tap Start sharing to stream the screen."},
+    {"name": "chat_send_failed", "value": "Failed to send the message"}
   ]
 }

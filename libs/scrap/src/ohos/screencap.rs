@@ -410,9 +410,20 @@ pub fn start(width: i32, height: i32) -> Result<(), String> {
     VIDEO_SEEN.store(false, Ordering::SeqCst);
     ffi::set_video_raw_enable(true);
     ffi::set_audio_raw_enable(true);
-    let _ = std::thread::Builder::new()
+    if std::thread::Builder::new()
         .name("avsc-pump".into())
-        .spawn(pump_loop);
+        .spawn(pump_loop)
+        .is_err()
+    {
+        // The pump would never run: release the handle so a later start()
+        // can try again instead of finding a stuck capture.
+        if let Some(c) = CAPTURE.lock().unwrap().take() {
+            unsafe {
+                OH_AVScreenCapture_Release(c.capture);
+            }
+        }
+        return Err("failed to spawn the avsc-pump thread".to_string());
+    }
     // StartScreenCapture pops the consent picker; the state callback reports
     // the outcome. Errors surface through the state/error callbacks.
     let start_err = unsafe {

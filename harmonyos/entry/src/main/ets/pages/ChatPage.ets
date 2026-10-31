@@ -11,7 +11,7 @@ import { router, promptAction } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { ffiServerSendChat } from '../ohos_ffi';
 import { globalEvents, RdeskEvent } from '../model/RdeskEvents';
-import { routerParams } from '../model/Utils';
+import { routerParams, drainPendingChats } from '../model/Utils';
 
 const LOG_DOMAIN = 0x5253;
 const TAG = 'RustDeskChat';
@@ -47,6 +47,12 @@ struct ChatPage {
       msg.fromPeer = true;
       this.messages.push(msg);
     }
+    for (const text of drainPendingChats(this.connId)) {
+      const msg = new ChatMsg();
+      msg.text = text;
+      msg.fromPeer = true;
+      this.messages.push(msg);
+    }
     globalEvents.subscribe(this.handler);
   }
 
@@ -76,6 +82,9 @@ struct ChatPage {
     const rc = ffiServerSendChat(this.connId, text);
     if (rc !== 0) {
       hilog.warn(LOG_DOMAIN, TAG, 'send chat -> %{public}d', rc);
+      // Keep the draft so the user can retry; nothing is appended.
+      promptAction.showToast({ message: $r('app.string.chat_send_failed'), duration: 2000 });
+      return;
     }
     const msg = new ChatMsg();
     msg.text = text;

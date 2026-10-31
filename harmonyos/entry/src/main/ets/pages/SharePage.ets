@@ -18,6 +18,7 @@ import {
   ffiHasPermanentPassword, ffiServerAuthorize, ffiServerCloseConnection,
   ffiCaptureStart, ffiCaptureStop, ffiCaptureRunning,
   ffiCmHandleIncomingVoiceCall, ffiCmCloseVoiceCall,
+  ffiGetClients,
 } from '../ohos_ffi';
 import { globalEvents, parseEvent, RdeskEvent } from '../model/RdeskEvents';
 import { evBool, evNum, evStr, parseJsonArray } from '../model/Utils';
@@ -595,7 +596,8 @@ struct SharePage {
                       if (c.inVoiceCall) {
                         ffiCmCloseVoiceCall(c.id);
                       } else {
-                        ffiCmHandleIncomingVoiceCall(c.id, false);
+                        // Green phone while ringing: answer, matching the glyph.
+                        ffiCmHandleIncomingVoiceCall(c.id, true);
                       }
                     })
                   }
@@ -687,7 +689,7 @@ struct SharePage {
               .backgroundColor(c.incomingVoiceCall ? '#FFF7E6' : '#F2F4F8')
               .margin({ bottom: 8 })
             }, (c: ClientInfo) =>
-              `${c.id}-${c.incomingVoiceCall}-${c.inVoiceCall}`)
+              `${c.id}-${c.incomingVoiceCall}-${c.inVoiceCall}-${c.unreadChat}`)
           }
 
           Blank().height(24)

@@ -2165,6 +2165,9 @@ impl Connection {
                 })
                 .into();
             }
+            // The LoginResponse oneof carries the error or the peer info;
+            // setting both would overwrite the camera error above.
+            #[cfg(not(target_env = "ohos"))]
             res.set_peer_info(pi);
             self.update_codec_on_login();
         } else {

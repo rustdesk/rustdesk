@@ -13,7 +13,7 @@ import { wantAgent, WantAgent } from '@kit.AbilityKit';
 import { ffiInit, ffiSetCallbacks, ffiServerStart,
   ffiCmHandleIncomingVoiceCall } from '../ohos_ffi';
 import { globalEvents, parseEvent, RdeskEvent } from '../model/RdeskEvents';
-import { evStr, evNum, evBool } from '../model/Utils';
+import { evStr, evNum, evBool, pushPendingChat } from '../model/Utils';
 
 const LOG_DOMAIN = 0x5253;
 const TAG = 'RustDeskAbility';
@@ -199,7 +199,7 @@ export default class EntryAbility extends UIAbility {
       try {
         const state = router.getState();
         if (state.name === 'pages/ChatPage'
-          && evNum(evStr((state.params as Record<string, Object>)['id'])) === id) {
+          && evNum(evStr((state.params as Record<string, Object>)['client'])) === id) {
           return;
         }
       } catch (e) {
@@ -250,6 +250,8 @@ export default class EntryAbility extends UIAbility {
   // the unread badge on the SharePage card.
   private openChatPage(id: number, initialText: string): void {
     if (this.autoChatConnId === id) {
+      // Navigation is still in flight; ChatPage drains the queue on open.
+      pushPendingChat(id, initialText);
       return;
     }
     this.autoChatConnId = id;
