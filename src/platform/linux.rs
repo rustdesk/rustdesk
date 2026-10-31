@@ -1673,6 +1673,291 @@ pub fn is_installed() -> bool {
     }
 }
 
+/// Whether a `DISPLAY` names a local X server that can be shown to be there, or to be gone.
+#[derive(Debug, PartialEq, Eq)]
+enum LocalDisplayStatus {
+    /// Not a form whose socket name follows from the value, so nothing here may refuse it.
+    Unknown,
+    Listening,
+    Dead,
+}
+
+const X11_SOCKET_DIR: &str = "/tmp/.X11-unix";
+/// `SO_ACCEPTCON` in the `Flags` column of `/proc/net/unix`.
+const UNIX_SOCKET_LISTENING: u64 = 0x0001_0000;
+const UNIX_SOCKET_STREAM: u64 = 1;
+
+/// The X socket name of `:N` and `:N.M`, the only forms whose transport follows from the value. A
+/// hostname- or protocol-qualified display reaches its server over TCP or another transport and may
+/// correctly have no local socket at all, so it gets no name here and is never judged.
+fn local_x11_socket_name(display: &str) -> Option<String> {
+    let rest = display.strip_prefix(':')?;
+    let number = match rest.split_once('.') {
+        Some((number, screen)) => {
+            if screen.is_empty() || !screen.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            number
+        }
+        None => rest,
+    };
+    if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    // X clients read the number, so `:00` and `:0` are one display. Comparing the text would look
+    // for `X00` and bury a live server; a number too large to read leaves the display unjudged.
+    Some(format!("{X11_SOCKET_DIR}/X{}", number.parse::<u32>().ok()?))
+}
+
+/// The path of every listening stream socket in a `/proc/net/unix` snapshot, keeping the leading
+/// `@` of a Linux abstract name. `None` unless the whole table was understood, because a snapshot
+/// read only in part would report a live abstract listener as absent and condemn the display it
+/// belongs to -- a worse outcome than not judging the display at all. So the column layout must be
+/// the one parsed here, and a row that cannot be read discards the snapshot rather than itself.
+fn parse_listening_unix_socket_paths(text: &str) -> Option<std::collections::HashSet<String>> {
+    const HEADER: [&str; 8] = [
+        "Num", "RefCount", "Protocol", "Flags", "Type", "St", "Inode", "Path",
+    ];
+    let mut lines = text.lines();
+    if !lines.next()?.split_whitespace().eq(HEADER) {
+        return None;
+    }
+    let mut paths = std::collections::HashSet::new();
+    for line in lines {
+        let mut fields = line.split_whitespace();
+        let Some(_num) = fields.next() else {
+            continue;
+        };
+        let (Some(_refcount), Some(_protocol), Some(flags), Some(kind), Some(_st), Some(_inode)) = (
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+        ) else {
+            return None;
+        };
+        let (Ok(flags), Ok(kind)) = (
+            u64::from_str_radix(flags, 16),
+            u64::from_str_radix(kind, 16),
+        ) else {
+            return None;
+        };
+        // The path is the one optional column: an unnamed socket simply has none.
+        if kind == UNIX_SOCKET_STREAM && flags & UNIX_SOCKET_LISTENING != 0 {
+            if let Some(path) = fields.next() {
+                paths.insert(path.to_owned());
+            }
+        }
+    }
+    Some(paths)
+}
+
+/// `filesystem_socket_visible` is whether this display's derived path is a socket node the caller
+/// can see. A stale node left behind by a dead server is not enough on its own, so it counts only
+/// together with a listener of that name.
+fn local_display_status(
+    display: &str,
+    listening_paths: Option<&std::collections::HashSet<String>>,
+    filesystem_socket_visible: bool,
+) -> LocalDisplayStatus {
+    let (Some(socket), Some(listening)) = (local_x11_socket_name(display), listening_paths) else {
+        return LocalDisplayStatus::Unknown;
+    };
+    if listening.contains(&format!("@{socket}"))
+        || (filesystem_socket_visible && listening.contains(&socket))
+    {
+        return LocalDisplayStatus::Listening;
+    }
+    LocalDisplayStatus::Dead
+}
+
+/// Whether a candidate carries a usable Wayland session of its own. Such a candidate is never
+/// judged on its `DISPLAY`: `get_display_xauth_wayland` wants only the compositor and the bus, and
+/// on some systems a pure Wayland session exports a `DISPLAY` with no X server behind it at all,
+/// which is why that path already refuses to read anything into `DISPLAY` being present.
+fn has_usable_wayland_session(envs: &std::collections::HashMap<&str, String>) -> bool {
+    let value = |key| envs.get(key).map_or("", |v: &String| v.as_str());
+    !value("WAYLAND_DISPLAY").is_empty() && !value("DBUS_SESSION_BUS_ADDRESS").is_empty()
+}
+
+/// A `get_envs_where` validator dropping a candidate that points at a local X display with no
+/// server behind it. A portal orphaned from an exited nested session answers with the display it
+/// was started under, and on the Wayland paths the newest match is taken outright, so that one
+/// dead answer is what `--server` gets on every attempt.
+/// https://github.com/rustdesk/rustdesk/issues/16538
+fn dead_local_display_filter<'a>(
+    process_pat: &'a str,
+) -> impl FnMut(u32, &std::collections::HashMap<&str, String>) -> bool + 'a {
+    let listening = std::fs::read_to_string("/proc/net/unix")
+        .ok()
+        .and_then(|text| parse_listening_unix_socket_paths(&text));
+    move |pid, envs| {
+        if has_usable_wayland_session(envs) {
+            return true;
+        }
+        let display = envs.get("DISPLAY").map_or("", |v| v.as_str());
+        let visible = local_x11_socket_name(display).is_some_and(|path| {
+            use std::os::unix::fs::FileTypeExt;
+            std::fs::metadata(path).is_ok_and(|meta| meta.file_type().is_socket())
+        });
+        if local_display_status(display, listening.as_ref(), visible) != LocalDisplayStatus::Dead {
+            return true;
+        }
+        hbb_common::throttled_log!(
+            std::time::Duration::from_secs(60),
+            info,
+            "Ignoring session env of pid {pid} matching {process_pat:?}: DISPLAY={display} has neither a filesystem nor an abstract local X listener"
+        );
+        false
+    }
+}
+
+#[cfg(test)]
+mod local_display_tests {
+    use super::*;
+
+    /// One listening abstract X socket, one listening filesystem one, and three entries that must
+    /// not count: a stale non-listening node, a listening datagram socket, and an unnamed socket.
+    const PROC_NET_UNIX: &str = concat!(
+        "Num       RefCount Protocol Flags    Type St Inode Path\n",
+        "0000000000000000: 00000002 00000000 00010000 0001 01 12345 @/tmp/.X11-unix/X0\n",
+        "0000000000000000: 00000002 00000000 00010000 0001 01 12346 /tmp/.X11-unix/X1\n",
+        "0000000000000000: 00000003 00000000 00000000 0001 03 12347 /tmp/.X11-unix/X2\n",
+        "0000000000000000: 00000002 00000000 00010000 0002 01 12348 /tmp/.X11-unix/X3\n",
+        "0000000000000000: 00000002 00000000 00010000 0001 01 12349\n",
+    );
+
+    #[test]
+    fn only_a_display_whose_transport_is_certain_is_judged() {
+        let listening = parse_listening_unix_socket_paths(PROC_NET_UNIX);
+        // A display RustDesk cannot name a socket for stays eligible however dead it looks.
+        for display in [
+            "",
+            "host:0.0",
+            "localhost:10.0",
+            "tcp/host:0",
+            "unix/:0",
+            ":",
+            ":0.",
+            ":0.x",
+            ":0.0.0",
+            ":x",
+            " :0",
+            // Too large to be a display number, so nothing here may call it dead.
+            ":99999999999999999999",
+        ] {
+            assert_eq!(
+                local_display_status(display, listening.as_ref(), false),
+                LocalDisplayStatus::Unknown,
+                "{display:?}"
+            );
+        }
+        // Nor is anything judged when the listener table could not be read at all.
+        assert_eq!(
+            local_display_status(":99", None, false),
+            LocalDisplayStatus::Unknown
+        );
+    }
+
+    #[test]
+    fn only_listening_stream_sockets_count_as_listeners() {
+        let listening = parse_listening_unix_socket_paths(PROC_NET_UNIX).unwrap();
+        assert!(listening.contains("@/tmp/.X11-unix/X0"));
+        assert!(listening.contains("/tmp/.X11-unix/X1"));
+        assert_eq!(listening.len(), 2, "{listening:?}");
+        assert!(parse_listening_unix_socket_paths("something else entirely").is_none());
+        // A header carrying both of the names looked for, in another order, is another table.
+        assert!(parse_listening_unix_socket_paths(
+            "Num RefCount Protocol Path Flags Type St Inode\n"
+        )
+        .is_none());
+        // A row that cannot be read leaves the snapshot unusable, rather than one listener short.
+        assert!(parse_listening_unix_socket_paths(concat!(
+            "Num       RefCount Protocol Flags    Type St Inode Path\n",
+            "0000000000000000: 00000002 00000000 zzzzzzzz 0001 01 12345 @/tmp/.X11-unix/X0\n",
+        ))
+        .is_none());
+    }
+
+    fn envs(pairs: &[(&'static str, &str)]) -> std::collections::HashMap<&'static str, String> {
+        pairs.iter().map(|(k, v)| (*k, (*v).to_owned())).collect()
+    }
+
+    #[test]
+    fn a_candidate_with_a_compositor_and_a_bus_is_never_judged_on_its_display() {
+        // A pure Wayland session may export a DISPLAY no X server answers; that path needs only
+        // the two variables below, so refusing the candidate would cost it a working session.
+        assert!(has_usable_wayland_session(&envs(&[
+            ("WAYLAND_DISPLAY", "wayland-0"),
+            ("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus"),
+            ("DISPLAY", ":99"),
+        ])));
+        // The shape reported in the issue: an X11 orphan on a private bus, no compositor of its
+        // own, so its dead DISPLAY is still what decides it.
+        assert!(!has_usable_wayland_session(&envs(&[
+            ("DISPLAY", ":99"),
+            ("XAUTHORITY", "/run/user/1000/.mutter-Xwaylandauth.P3D5W3"),
+            ("WAYLAND_DISPLAY", ""),
+            ("DBUS_SESSION_BUS_ADDRESS", "unix:path=/tmp/dbus-2EpPblXIy4"),
+        ])));
+    }
+
+    #[test]
+    fn a_display_is_refused_only_when_no_listener_of_either_kind_is_left() {
+        let listening = parse_listening_unix_socket_paths(PROC_NET_UNIX);
+        let status = |display, visible| local_display_status(display, listening.as_ref(), visible);
+        // An abstract listener is enough on its own, which is what keeps a private /tmp working.
+        assert_eq!(status(":0", false), LocalDisplayStatus::Listening);
+        assert_eq!(status(":0.0", false), LocalDisplayStatus::Listening);
+        // X reads the number, so this is the same live display, not a missing `X00`.
+        assert_eq!(status(":00", false), LocalDisplayStatus::Listening);
+        assert_eq!(status(":1", true), LocalDisplayStatus::Listening);
+        // A listener this mount namespace cannot reach is no listener for the child.
+        assert_eq!(status(":1", false), LocalDisplayStatus::Dead);
+        // A socket node the dead server left behind is not a server.
+        assert_eq!(status(":2", true), LocalDisplayStatus::Dead);
+        // The reported shape: Xvfb exited and took :99 with it.
+        assert_eq!(status(":99", false), LocalDisplayStatus::Dead);
+    }
+}
+
+/// `get_envs` for the Wayland paths, refusing a candidate whose `DISPLAY` is a local one with no X
+/// server behind it.
+fn get_wayland_envs<'a>(
+    uid: &str,
+    process_pat: &str,
+    names: &[&'a str],
+) -> std::collections::HashMap<&'a str, String> {
+    let mut reject_dead_display = dead_local_display_filter(process_pat);
+    get_envs_where_validated(
+        uid,
+        process_pat,
+        names,
+        false,
+        |count| count == names.len(),
+        Some(&mut reject_dead_display),
+    )
+}
+
+/// `get_envs_of_newest` for the Wayland paths, with the same refusal.
+fn get_wayland_envs_of_newest<'a>(
+    uid: &str,
+    process_pat: &str,
+    names: &[&'a str],
+) -> std::collections::HashMap<&'a str, String> {
+    let mut reject_dead_display = dead_local_display_filter(process_pat);
+    get_envs_where_validated(
+        uid,
+        process_pat,
+        names,
+        true,
+        |_| true,
+        Some(&mut reject_dead_display),
+    )
+}
+
 /// Get multiple environment variables from a process matching the given criteria.
 /// This version reads /proc directly instead of spawning shell commands.
 ///
@@ -1716,7 +2001,24 @@ fn get_envs_where<'a, F>(
     process_pat: &str,
     names: &[&'a str],
     newest_first: bool,
+    accept: F,
+) -> std::collections::HashMap<&'a str, String>
+where
+    F: FnMut(usize) -> bool,
+{
+    get_envs_where_validated(uid, process_pat, names, newest_first, accept, None)
+}
+
+/// `get_envs_where` plus a say over which candidates are eligible at all, for the Wayland paths:
+/// `validate` sees each matching process before it can win outright or be ranked, and a process it
+/// turns down leaves the scan free to reach the next match.
+fn get_envs_where_validated<'a, F>(
+    uid: &str,
+    process_pat: &str,
+    names: &[&'a str],
+    newest_first: bool,
     mut accept: F,
+    mut validate: Option<&mut dyn FnMut(u32, &std::collections::HashMap<&'a str, String>) -> bool>,
 ) -> std::collections::HashMap<&'a str, String>
 where
     F: FnMut(usize) -> bool,
@@ -1746,6 +2048,18 @@ where
     let mut best = empty.clone();
     let mut best_count = 0usize;
     let mut best_mask: u64 = 0;
+    // Which process an environment came from is what turns "Can't open display" into a one-line
+    // diagnosis, so the validating callers record it. Selecting one is expected on every pass of a
+    // service loop that sleeps 500ms, hence `trace`, and one site serves both outcomes.
+    let validating = validate.is_some();
+    let mut best_pid: Option<u32> = None;
+    let trace_selected = |pid: u32, envs: &std::collections::HashMap<&'a str, String>, ranked| {
+        log::trace!(
+            "session env of pid {pid} matching {process_pat:?} taken{}: DISPLAY={:?}",
+            if ranked { " as the best ranked" } else { "" },
+            envs.get("DISPLAY").map_or("", |v| v.as_str())
+        );
+    };
 
     // Iterate /proc to find matching processes. `newest_first` is only for `get_envs_of_newest`,
     // whose callers need the last PID-ordered match their `ps ... | tail -1` pipelines took;
@@ -1828,7 +2142,18 @@ where
             }
         }
 
+        // Before `accept` and before ranking both: a rejected candidate must not win outright,
+        // and must not become the fallback either, or the scan still never reaches the next match.
+        if let Some(validate) = validate.as_mut() {
+            if !validate(pid, &found) {
+                continue;
+            }
+        }
+
         if accept(found_count) {
+            if validating {
+                trace_selected(pid, &found, false);
+            }
             return found;
         }
 
@@ -1836,9 +2161,15 @@ where
             best = found;
             best_count = found_count;
             best_mask = found_mask;
+            best_pid = Some(pid);
         }
     }
 
+    if validating {
+        if let Some(pid) = best_pid {
+            trace_selected(pid, &best, true);
+        }
+    }
     best
 }
 
@@ -2205,7 +2536,7 @@ mod desktop {
         fn get_display_xauth_wayland(&mut self) {
             for _ in 1..=10 {
                 // Prefer Wayland-related variables first when multiple portal processes match.
-                let mut envs = get_envs(
+                let mut envs = get_wayland_envs(
                     &self.uid,
                     XDG_DESKTOP_PORTAL,
                     &[
@@ -2250,7 +2581,7 @@ mod desktop {
                 self.dbus.clear();
                 let mut kept = 0u8;
                 for proc in display_proc {
-                    let mut envs = get_envs_of_newest(
+                    let mut envs = get_wayland_envs_of_newest(
                         &self.uid,
                         proc,
                         &[
