@@ -269,6 +269,22 @@ pub(super) enum FrameTaken {
     YesNewRenderType,
 }
 
+/// Whether a decoded GPU frame may be presented into its display session.
+///
+/// Mirrors the size check `on_rgba` does for software frames: a session whose
+/// size is still unset adopts the first frame, but once a size is known a frame
+/// of any other size must be refused. The session size comes from the
+/// asynchronous peer info, so it lags a resolution change; presenting the
+/// mismatched frame anyway lets the plugin rebuild its texture at the frame size
+/// while the widget still lays out at the old one, i.e. sheared rows that keep
+/// updating. Refusing it costs the few frames until the session size catches up.
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
+fn pixelbuffer_fits_session(session: (usize, usize), width: i32, height: i32) -> bool {
+    // A negative size cannot come from a real surface; casting it to usize keeps
+    // it unequal to any session size instead of silently matching a small one.
+    session == (0, 0) || (session.0 == width as usize && session.1 == height as usize)
+}
+
 #[derive(Clone)]
 pub struct FlutterHandler {
     // ui session id -> display handler data
@@ -675,6 +691,16 @@ impl VideoRenderer {
             return FrameTaken::No;
         };
         if info.texture_rgba_ptr == usize::default() {
+            return FrameTaken::No;
+        }
+        if !pixelbuffer_fits_session(info.size, pixelbuffer.width(), pixelbuffer.height()) {
+            log::debug!(
+                "display #{display}: refusing GPU frame ({}x{}) for session size ({}x{})",
+                pixelbuffer.width(),
+                pixelbuffer.height(),
+                info.size.0,
+                info.size.1
+            );
             return FrameTaken::No;
         }
         let accepted = unsafe {
@@ -2708,5 +2734,35 @@ pub(super) mod async_tasks {
             super::APP_TYPE_MAIN,
             serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
         );
+    }
+}
+
+#[cfg(all(test, target_os = "macos", feature = "hwcodec"))]
+mod tests {
+    use super::pixelbuffer_fits_session;
+
+    #[test]
+    fn unset_session_adopts_the_first_frame() {
+        // The session size arrives out of band; the first frame is what sets it.
+        assert!(pixelbuffer_fits_session((0, 0), 2944, 1656));
+    }
+
+    #[test]
+    fn matching_size_is_presented() {
+        assert!(pixelbuffer_fits_session((2944, 1656), 2944, 1656));
+    }
+
+    #[test]
+    fn resolution_change_race_is_refused() {
+        // The pair seen while switching codec after a resolution change: the
+        // session still holds the native size, the frame already has the new one.
+        assert!(!pixelbuffer_fits_session((4096, 2304), 2944, 1656));
+        assert!(!pixelbuffer_fits_session((2944, 1656), 4096, 2304));
+    }
+
+    #[test]
+    fn either_dimension_alone_is_enough_to_refuse() {
+        assert!(!pixelbuffer_fits_session((2944, 1656), 2944, 1657));
+        assert!(!pixelbuffer_fits_session((2944, 1656), 2943, 1656));
     }
 }
