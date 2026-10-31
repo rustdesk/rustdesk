@@ -197,7 +197,11 @@ pub fn use_texture_render() -> bool {
     return cfg!(feature = "flutter")
         && LocalConfig::get_option(keys::OPTION_TEXTURE_RENDER) == "Y";
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", target_arch = "loongarch64"))]
+    return cfg!(feature = "flutter")
+        && LocalConfig::get_option(keys::OPTION_TEXTURE_RENDER) == "Y";
+
+    #[cfg(all(target_os = "linux", not(target_arch = "loongarch64")))]
     return cfg!(feature = "flutter")
         && LocalConfig::get_option(keys::OPTION_TEXTURE_RENDER) != "N";
 
