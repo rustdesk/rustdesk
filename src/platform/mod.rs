@@ -266,3 +266,48 @@ mod tests {
         assert!(validate_install_app_name("-RustDesk").is_err());
     }
 }
+
+/// Whether an X11 cursor image has no visible pixel at all.
+///
+/// An application that hides the cursor inside its own window, which VNC viewers commonly do,
+/// leaves XFixes returning a valid image whose every pixel is transparent. Relaying that blanks
+/// the controller's pointer, so the caller reports no cursor instead. Alpha is bits 24-31 of each
+/// premultiplied ARGB word, read exactly as `get_cursor_data` reads it, and any nonzero alpha
+/// counts as visible, so this is only true for an image that shows nothing anywhere.
+#[cfg(any(target_os = "linux", test))]
+fn cursor_image_is_fully_transparent(pixels: &[std::os::raw::c_long]) -> bool {
+    pixels.iter().all(|&p| ((p >> 24) & 0xff) == 0)
+}
+
+#[cfg(test)]
+mod cursor_image_tests {
+    use super::*;
+
+    #[test]
+    fn an_image_with_no_pixels_shows_nothing() {
+        assert!(cursor_image_is_fully_transparent(&[]));
+    }
+
+    #[test]
+    fn an_image_whose_every_alpha_is_zero_shows_nothing() {
+        // Colour bits set, alpha clear: still nothing on screen.
+        assert!(cursor_image_is_fully_transparent(&[
+            0x00ff_ffff,
+            0x0000_0000,
+            0x00ab_cdef
+        ]));
+    }
+
+    #[test]
+    fn a_single_barely_opaque_pixel_counts_as_visible() {
+        assert!(!cursor_image_is_fully_transparent(&[
+            0x0000_0000,
+            0x0100_0000
+        ]));
+        // Alpha 0xff makes the word negative where `c_long` is 32 bits, which the mask must
+        // still read as visible.
+        assert!(!cursor_image_is_fully_transparent(&[
+            0xff00_0000_u32 as std::os::raw::c_long
+        ]));
+    }
+}
