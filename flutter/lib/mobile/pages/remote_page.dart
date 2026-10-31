@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -27,6 +29,35 @@ import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
 
 final initText = '1' * 1024;
+
+const String _kOptionMobileToolbarPosition = 'mobile-toolbar-position';
+const double _kDockToolbarThickness = 52;
+const String _kOptionCaptureSystemKeys = 'mobile-capture-system-keys';
+
+const String _kOptionToolbarFabAlong = 'mobile-toolbar-fab-along';
+
+// Places the "show toolbar" button on the edge the toolbar is docked to,
+// at `along` (0..1) of that edge.
+class _DockedFabLocation extends FloatingActionButtonLocation {
+  final String position;
+  final double along;
+  const _DockedFabLocation(this.position, this.along);
+
+  @override
+  Offset getOffset(ScaffoldPrelayoutGeometry geometry) {
+    const margin = 8.0;
+    final fab = geometry.floatingActionButtonSize;
+    final width = geometry.scaffoldSize.width;
+    if (position == 'top') {
+      return Offset((width - fab.width - 2 * margin) * along + margin,
+          geometry.minInsets.top + margin);
+    }
+    final x = position == 'left' ? margin : width - fab.width - margin;
+    final y = geometry.contentTop +
+        (geometry.contentBottom - geometry.contentTop - fab.height) * along;
+    return Offset(x, y);
+  }
+}
 
 // Workaround for Android (default input method, Microsoft SwiftKey keyboard) when using physical keyboard.
 // When connecting a physical keyboard, `KeyEvent.physicalKey.usbHidUsage` are wrong is using Microsoft SwiftKey keyboard.
@@ -88,6 +119,15 @@ class RemotePage extends StatefulWidget {
 class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Timer? _timer;
   bool _showBar = !isWebDesktop;
+  String _toolbarPosition = _loadToolbarPosition();
+  final _dockBodyKey = GlobalKey();
+  Offset? _dockToolbarTapPos;
+  bool _captureSystemKeys =
+      bind.mainGetLocalOption(key: _kOptionCaptureSystemKeys) == 'Y';
+  double _fabAlong = (double.tryParse(
+              bind.mainGetLocalOption(key: _kOptionToolbarFabAlong)) ??
+          0.4)
+      .clamp(0.0, 1.0);
   bool _showGestureHelp = false;
   String _value = '';
   Orientation? _currentOrientation;
@@ -111,6 +151,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   final TextEditingController _textController =
       TextEditingController(text: initText);
 
+  static String _loadToolbarPosition() {
+    final v = bind.mainGetLocalOption(key: _kOptionMobileToolbarPosition);
+    return const ['top', 'left', 'right'].contains(v) ? v : 'bottom';
+  }
+
   _RemotePageState(String id) {
     initSharedStates(id);
     gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
@@ -121,6 +166,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     gFFI.ffiModel.updateEventListener(sessionId, widget.id);
+    if (isAndroid && _captureSystemKeys) _applyCaptureSystemKeys(true);
     gFFI.start(
       widget.id,
       password: widget.password,
@@ -193,6 +239,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // "Connecting...". Dispatching it here makes teardown happen synchronously on
     // pop; the `sessionClose` in `gFFI.close()` becomes a no-op once removed.
     unawaited(bind.sessionClose(sessionId: sessionId));
+    if (isAndroid && _captureSystemKeys) _applyCaptureSystemKeys(false);
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -481,7 +528,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   Widget _bottomWidget() => _showGestureHelp
       ? getGestureHelp()
-      : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
+      : (_showBar &&
+              _toolbarPosition == 'bottom' &&
+              gFFI.ffiModel.pi.displays.isNotEmpty
           ? getBottomAppBar()
           : Offstage());
 
@@ -500,15 +549,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           // workaround for https://github.com/rustdesk/rustdesk/issues/3131
           floatingActionButtonLocation: keyboardIsVisible
               ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
-              : null,
+              : (_showBar || _showGestureHelp ? null : _collapsedFabLocation()),
           floatingActionButton: !showActionButton
               ? null
-              : FloatingActionButton(
+              : _draggableCollapsedFab(FloatingActionButton(
                   mini: !keyboardIsVisible,
                   child: Icon(
                     (keyboardIsVisible || _showGestureHelp)
                         ? Icons.expand_more
-                        : Icons.expand_less,
+                        : _collapsedFabIcon(),
                     color: Colors.white,
                   ),
                   backgroundColor: MyTheme.accent,
@@ -525,7 +574,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         _showBar = !_showBar;
                       }
                     });
-                  }),
+                  }), !_showBar && !keyboardIsVisible && !_showGestureHelp),
           bottomNavigationBar: Obx(() => Stack(
                 alignment: Alignment.bottomCenter,
                 children: [
@@ -543,7 +592,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 ],
               )),
           body: Obx(
-            () => getRawPointerAndKeyBody(Overlay(
+            () => _withDockToolbar(getRawPointerAndKeyBody(Overlay(
               initialEntries: [
                 OverlayEntry(builder: (context) {
                   return Container(
@@ -575,7 +624,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   );
                 })
               ],
-            )),
+            ))),
           )),
     );
   }
@@ -600,7 +649,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   Widget getBottomAppBar() {
-    final ffiModel = Provider.of<FfiModel>(context);
     return BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
@@ -608,8 +656,30 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         mainAxisSize: MainAxisSize.max,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Row(
-              children: <Widget>[
+          Flexible(
+              child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                      children: _toolbarActionButtons() +
+                          _monitorButtons() +
+                          [_peerSwitchButton(), _toolbarPositionButton()]))),
+          Obx(() => IconButton(
+                color: Colors.white,
+                icon: Icon(Icons.expand_more),
+                onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
+                    ? null
+                    : () {
+                        setState(() => _showBar = !_showBar);
+                      },
+              )),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _toolbarActionButtons() {
+    final ffiModel = Provider.of<FfiModel>(context);
+    return <Widget>[
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.clear),
@@ -683,18 +753,302 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         showActions(widget.id);
                       },
                     ),
-                  ]),
+                  ];
+  }
+
+  List<Widget> _monitorButtons() {
+    final pi = gFFI.ffiModel.pi;
+    final privacyModeState = PrivacyModeState.find(widget.id);
+    if (pi.displays.length <= 1 ||
+        pi.currentDisplay == kAllDisplayValue ||
+        !(privacyModeState.isEmpty ||
+            allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value))) {
+      return [];
+    }
+    final cur = pi.currentDisplay;
+    return List.generate(
+        pi.displays.length,
+        (i) => InkWell(
+              onTap: i == cur ? null : () => openMonitorInTheSameTab(i, gFFI, pi),
+              child: Container(
+                width: 32,
+                height: 32,
+                margin: const EdgeInsets.all(8),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white70),
+                    borderRadius: BorderRadius.circular(4),
+                    color: i == cur ? Colors.white : null),
+                child: Text('${i + 1}',
+                    style: TextStyle(
+                        color: i == cur ? MyTheme.accent : Colors.white,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ));
+  }
+
+  Widget _toolbarPositionButton() {
+    PopupMenuItem<String> item(String value, IconData icon, String label) =>
+        PopupMenuItem(
+            value: value,
+            child: Row(children: [
+              Icon(icon),
+              const SizedBox(width: 12),
+              Text(translate(label)),
+            ]));
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.open_with, color: Colors.white),
+      initialValue: _toolbarPosition,
+      onSelected: (v) {
+        if (v == 'syskeys') {
+          final enable = !_captureSystemKeys;
+          bind.mainSetLocalOption(
+              key: _kOptionCaptureSystemKeys, value: enable ? 'Y' : '');
+          setState(() => _captureSystemKeys = enable);
+          _applyCaptureSystemKeys(enable, report: true);
+          return;
+        }
+        bind.mainSetLocalOption(key: _kOptionMobileToolbarPosition, value: v);
+        setState(() => _toolbarPosition = v);
+      },
+      itemBuilder: (_) => [
+        item('top', Icons.vertical_align_top, 'Top'),
+        item('bottom', Icons.vertical_align_bottom, 'Bottom'),
+        item('left', Icons.align_horizontal_left, 'Left'),
+        item('right', Icons.align_horizontal_right, 'Right'),
+        if (isAndroid) const PopupMenuDivider(),
+        if (isAndroid)
+          CheckedPopupMenuItem(
+            value: 'syskeys',
+            checked: _captureSystemKeys,
+            child: const Text('Win / Alt+Tab → remote (DeX)'),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _applyCaptureSystemKeys(bool enable,
+      {bool report = false}) async {
+    final res =
+        await gFFI.invokeMethodWithResult<String>('capture_system_keys', enable);
+    if (report) {
+      showToast(res == 'ok'
+          ? (enable ? 'System keys → remote: ON' : 'System keys → remote: OFF')
+          : 'Not supported on this device ($res)');
+    }
+  }
+
+  Widget _getDockToolbar(bool vertical) {
+    final axis = vertical ? Axis.vertical : Axis.horizontal;
+    final collapseIcon = _toolbarPosition == 'top'
+        ? Icons.expand_less
+        : _toolbarPosition == 'left'
+            ? Icons.chevron_left
+            : Icons.chevron_right;
+    return Listener(
+      onPointerDown: (e) => _dockToolbarTapPos = e.position,
+      child: Material(
+      elevation: 10,
+      color: MyTheme.accent,
+      child: SizedBox(
+        width: vertical ? _kDockToolbarThickness : null,
+        height: vertical ? null : _kDockToolbarThickness,
+        child: Flex(direction: axis, children: [
+          Expanded(
+              child: SingleChildScrollView(
+                  scrollDirection: axis,
+                  child: Flex(
+                      direction: axis,
+                      mainAxisSize: MainAxisSize.min,
+                      children: _toolbarActionButtons() +
+                          _monitorButtons() +
+                          [_peerSwitchButton(), _toolbarPositionButton()]))),
           Obx(() => IconButton(
                 color: Colors.white,
-                icon: Icon(Icons.expand_more),
+                icon: Icon(collapseIcon),
                 onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
                     ? null
-                    : () {
-                        setState(() => _showBar = !_showBar);
-                      },
+                    : () => setState(() => _showBar = !_showBar),
               )),
-        ],
+        ]),
       ),
+    ));
+  }
+
+  Widget _peerSwitchButton() {
+    return Builder(
+        builder: (btnContext) => IconButton(
+              color: Colors.white,
+              icon: const Icon(Icons.swap_horiz),
+              onPressed: () => _showPeerSwitchMenu(btnContext),
+            ));
+  }
+
+  // Favorites first, then the rest by recency, excluding the current peer.
+  Future<List<Map<String, dynamic>>> _loadSwitchablePeers() async {
+    final favs = (await bind.mainGetFav()).toSet();
+    final raw = await bind.mainLoadRecentPeersForAb(filter: '');
+    List<dynamic> list = [];
+    try {
+      list = raw.isEmpty ? [] : jsonDecode(raw) as List<dynamic>;
+    } catch (e) {
+      debugPrint('failed to parse peers: $e');
+    }
+    final peers = list
+        .whereType<Map<String, dynamic>>()
+        .where((p) => p['id'] != widget.id)
+        .toList();
+    final favPeers = peers.where((p) => favs.contains(p['id'])).toList();
+    final others = peers.where((p) => !favs.contains(p['id'])).toList();
+    return [
+      ...favPeers.map((p) => {...p, 'fav': true}),
+      ...others.take(10),
+    ];
+  }
+
+  void _showPeerSwitchMenu(BuildContext btnContext) async {
+    final box = btnContext.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(btnContext).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return;
+    final position = RelativeRect.fromRect(
+        box.localToGlobal(Offset.zero, ancestor: overlay) & box.size,
+        Offset.zero & overlay.size);
+    final peers = await _loadSwitchablePeers();
+    if (!mounted) return;
+    if (peers.isEmpty) {
+      showToast(translate('Empty'));
+      return;
+    }
+    final id = await showMenu<String>(
+      context: context,
+      position: position,
+      elevation: 8,
+      items: peers.map((p) {
+        final String peerId = p['id'] ?? '';
+        final String alias = p['alias'] ?? '';
+        final String hostname = p['hostname'] ?? '';
+        final name =
+            alias.isNotEmpty ? alias : (hostname.isNotEmpty ? hostname : peerId);
+        return PopupMenuItem<String>(
+          value: peerId,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(p['fav'] == true ? Icons.star : Icons.history),
+            title: Text(name),
+            subtitle: name == peerId ? null : Text(formatID(peerId)),
+          ),
+        );
+      }).toList(),
+    );
+    if (id == null || id.isEmpty) return;
+    _switchToPeer(id);
+  }
+
+  static Future<void> _switchToPeer(String id) async {
+    closeConnection();
+    // The old page closes gFFI asynchronously on dispose; starting the new
+    // session before that finishes would let the teardown clear its models.
+    for (var i = 0; i < 50 && gFFI.id.isNotEmpty; i++) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    final ctx = globalKey.currentContext;
+    if (ctx != null) connect(ctx, id);
+  }
+
+  // The button that restores a collapsed toolbar sits on, and points to, the
+  // side the toolbar is docked to.
+  IconData _collapsedFabIcon() {
+    switch (_toolbarPosition) {
+      case 'top':
+        return Icons.expand_more;
+      case 'left':
+        return Icons.chevron_right;
+      case 'right':
+        return Icons.chevron_left;
+      default:
+        return Icons.expand_less;
+    }
+  }
+
+  FloatingActionButtonLocation? _collapsedFabLocation() {
+    if (_toolbarPosition == 'bottom') return null;
+    return _DockedFabLocation(_toolbarPosition, _fabAlong);
+  }
+
+  // Lets the collapsed-toolbar button be dragged along the docked edge.
+  Widget _draggableCollapsedFab(Widget fab, bool collapsed) {
+    if (!collapsed || _toolbarPosition == 'bottom') return fab;
+    return GestureDetector(
+      onPanUpdate: (d) {
+        final size = MediaQuery.of(context).size;
+        final delta = _toolbarPosition == 'top'
+            ? d.delta.dx / size.width
+            : d.delta.dy / size.height;
+        setState(() => _fabAlong = (_fabAlong + delta).clamp(0.0, 1.0));
+      },
+      onPanEnd: (_) => bind.mainSetLocalOption(
+          key: _kOptionToolbarFabAlong, value: _fabAlong.toStringAsFixed(3)),
+      child: fab,
+    );
+  }
+
+  // Menus were laid out for the bottom bar; open them next to the tapped
+  // button when the toolbar is docked elsewhere.
+  RelativeRect _toolbarMenuPosition(RelativeRect bottomBarPosition) {
+    final p = _dockToolbarTapPos;
+    if (_toolbarPosition == 'bottom' || p == null) return bottomBarPosition;
+    final size = MediaQuery.of(context).size;
+    const t = _kDockToolbarThickness;
+    final anchor = _toolbarPosition == 'top'
+        ? Offset(p.dx, t)
+        : _toolbarPosition == 'left'
+            ? Offset(t, p.dy)
+            : Offset(size.width - t, p.dy);
+    return RelativeRect.fromLTRB(anchor.dx, anchor.dy,
+        size.width - anchor.dx, size.height - anchor.dy);
+  }
+
+  // The canvas size is computed from the window, so a docked toolbar must be
+  // subtracted explicitly or it would cover part of the remote screen.
+  void _syncDockToolbarInsets(bool show) {
+    const t = _kDockToolbarThickness;
+    final insets = !show
+        ? EdgeInsets.zero
+        : _toolbarPosition == 'top'
+            ? const EdgeInsets.only(top: t)
+            : _toolbarPosition == 'left'
+                ? const EdgeInsets.only(left: t)
+                : const EdgeInsets.only(right: t);
+    final canvasModel = gFFI.canvasModel;
+    if (canvasModel.mobileToolbarInsets == insets) return;
+    canvasModel.mobileToolbarInsets = insets;
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => canvasModel.updateViewStyle());
+  }
+
+  Widget _withDockToolbar(Widget child) {
+    final show = _showBar &&
+        _toolbarPosition != 'bottom' &&
+        gFFI.ffiModel.pi.displays.isNotEmpty;
+    _syncDockToolbarInsets(show);
+    final body = KeyedSubtree(key: _dockBodyKey, child: child);
+    if (!show) return body;
+    final vertical = _toolbarPosition != 'top';
+    final bar = _getDockToolbar(vertical);
+    return Flex(
+      direction: vertical ? Axis.horizontal : Axis.vertical,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: _toolbarPosition == 'right'
+          ? [Expanded(child: body), SafeArea(left: false, child: bar)]
+          : [
+              SafeArea(
+                  right: vertical ? false : true,
+                  bottom: vertical ? true : false,
+                  child: bar),
+              Expanded(child: body)
+            ],
     );
   }
 
@@ -844,7 +1198,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     () async {
       var index = await showMenu(
         context: context,
-        position: RelativeRect.fromLTRB(x, y, x, y),
+        position: _toolbarMenuPosition(RelativeRect.fromLTRB(x, y, x, y)),
         items: more,
         elevation: 8,
       );
@@ -929,7 +1283,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       final y = size.height;
       var index = await showMenu(
         context: context,
-        position: RelativeRect.fromLTRB(x, y, x, y),
+        position: _toolbarMenuPosition(RelativeRect.fromLTRB(x, y, x, y)),
         items: menuItems,
         elevation: 8,
       );
