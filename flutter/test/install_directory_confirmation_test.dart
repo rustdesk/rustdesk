@@ -43,6 +43,9 @@ class _Binding extends Fake implements RustdeskImpl {
 }
 
 void main() {
+  const inlineWarning = 'The selected folder is not empty. '
+      'Installation may delete existing data. '
+      'Consider choosing a different folder.';
   final testBinding = TestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
   late Directory existing;
@@ -74,6 +77,8 @@ void main() {
   }
 
   Future<void> pressInstall(WidgetTester tester) async {
+    await tester.ensureVisible(find.text('Accept and Install'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Accept and Install'));
     while (find.byType(AlertDialog).evaluate().isEmpty &&
         binding.installedPaths.isEmpty) {
@@ -81,6 +86,15 @@ void main() {
       await tester.pump();
     }
     if (binding.installedPaths.isEmpty) await tester.pumpAndSettle();
+  }
+
+  Future<void> settleDirectoryChecks(WidgetTester tester) async {
+    await tester.pump();
+    for (final builder in tester
+        .widgetList<FutureBuilder<bool>>(find.byType(FutureBuilder<bool>))) {
+      await builder.future;
+    }
+    await tester.pumpAndSettle();
   }
 
   Finder button(String label) => find.ancestor(
@@ -92,6 +106,45 @@ void main() {
       of: find.byType(AlertDialog), matching: find.textContaining(directory));
 
   testWidgets(
+      'selected nonempty directory shows an inline warning below the path',
+      (tester) => tester.runAsync(() async {
+            await openInstaller(tester);
+            await settleDirectoryChecks(tester);
+            expect(find.text(inlineWarning), findsOneWidget);
+            const minimumWarningGap = 8.0;
+            const maximumWarningGap = 16.0;
+            final warningPosition = tester.getTopLeft(find.text(inlineWarning));
+            final pathBottom = tester.getBottomLeft(find.byType(TextField));
+            expect(warningPosition.dy - pathBottom.dy,
+                inInclusiveRange(minimumWarningGap, maximumWarningGap));
+            expect(warningPosition.dx, pathBottom.dx);
+            expect(find.byType(AlertDialog), findsNothing);
+
+            final controller =
+                tester.widget<TextField>(find.byType(TextField)).controller!;
+            final empty = Directory(path.join(root.path, 'Empty'))
+              ..createSync();
+            for (final directory in [
+              empty.path,
+              path.join(root.path, 'Missing')
+            ]) {
+              controller.text = directory;
+              await settleDirectoryChecks(tester);
+              expect(find.text(inlineWarning), findsNothing);
+            }
+            controller.text = existing.path;
+            await settleDirectoryChecks(tester);
+            expect(find.text(inlineWarning), findsOneWidget);
+
+            await pressInstall(tester);
+            expect(warningFor(existing.path), findsOneWidget);
+            expect(binding.installedPaths, isEmpty);
+            await tester.tap(find.descendant(
+                of: find.byType(AlertDialog), matching: find.text('Cancel')));
+            await tester.pumpAndSettle();
+          }));
+
+  testWidgets(
       'canceling installation preserves files and permits another path',
       (tester) => tester.runAsync(() async {
             await openInstaller(tester);
@@ -99,6 +152,11 @@ void main() {
 
             expect(binding.installedPaths, isEmpty);
             expect(warningFor(existing.path), findsOneWidget);
+            expect(
+                find.descendant(
+                    of: find.byType(AlertDialog),
+                    matching: find.text('$inlineWarning\n${existing.path}')),
+                findsOneWidget);
             await tester.tap(find.descendant(
                 of: find.byType(AlertDialog), matching: find.text('Cancel')));
             await tester.pumpAndSettle();
@@ -132,7 +190,12 @@ void main() {
                 .writeAsStringSync('keep');
             await pressInstall(tester);
             expect(warningFor(destination.path), findsOneWidget);
-            expect(find.textContaining('may overwrite'), findsOneWidget);
+            expect(find.textContaining('$inlineWarning\n${destination.path}'),
+                findsOneWidget);
+            expect(
+                find.textContaining(
+                    'Installation will delete this folder and all its contents:\n${existing.path}'),
+                findsOneWidget);
             expect(binding.installedPaths, isEmpty);
             await tester.tap(find.text('Continue'));
             await tester.pump();

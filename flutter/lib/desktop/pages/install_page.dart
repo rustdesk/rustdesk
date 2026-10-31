@@ -165,27 +165,46 @@ class _InstallPageBodyState extends State<_InstallPageBody>
             children: [
               Text(translate('Installation'),
                   style: Theme.of(context).textTheme.headlineMedium),
-              Row(
+              Table(
+                columnWidths: const {
+                  0: IntrinsicColumnWidth(),
+                  2: IntrinsicColumnWidth(),
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                 children: [
-                  Text('${translate('Installation Path')}:')
-                      .marginOnly(right: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        contentPadding: EdgeInsets.all(0.75 * em),
+                  TableRow(
+                    children: [
+                      Text('${translate('Installation Path')}:')
+                          .marginOnly(right: 10),
+                      TextField(
+                        controller: controller,
+                        readOnly: true,
+                        decoration: InputDecoration(
+                          contentPadding: EdgeInsets.all(0.75 * em),
+                        ),
+                      ).workaroundFreezeLinuxMint().marginOnly(right: 10),
+                      Obx(
+                        () => OutlinedButton.icon(
+                          icon: Icon(Icons.folder_outlined, size: 16),
+                          onPressed:
+                              btnEnabled.value ? selectInstallPath : null,
+                          style: buttonStyle,
+                          label: Text(translate('Change Path')),
+                        ),
                       ),
-                    ).workaroundFreezeLinuxMint().marginOnly(right: 10),
+                    ],
                   ),
-                  Obx(
-                    () => OutlinedButton.icon(
-                      icon: Icon(Icons.folder_outlined, size: 16),
-                      onPressed: btnEnabled.value ? selectInstallPath : null,
-                      style: buttonStyle,
-                      label: Text(translate('Change Path')),
-                    ),
-                  )
+                  TableRow(
+                    children: [
+                      const SizedBox.shrink(),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: controller,
+                        builder: (context, value, child) =>
+                            InstallDirectoryWarning(directoryPath: value.text),
+                      ).marginOnly(right: 10),
+                      const SizedBox.shrink(),
+                    ],
+                  ),
                 ],
               ).marginSymmetric(vertical: 2 * em),
               Option(startmenu, label: 'Create start menu shortcuts')

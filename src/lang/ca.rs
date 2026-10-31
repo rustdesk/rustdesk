@@ -824,6 +824,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Durada de la confiança (dies)"),
         ("Renew trust", "Renova la confiança"),
         ("Installation will delete this folder and all its contents:", ""),
-        ("Installation may overwrite files with the same name in this folder:", ""),
+        ("The selected folder is not empty. Installation may delete existing data. Consider choosing a different folder.", ""),
     ].iter().cloned().collect();
 }

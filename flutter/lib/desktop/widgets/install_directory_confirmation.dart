@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:path/path.dart' as path;
 
+const _nonemptyDirectoryWarning = 'The selected folder is not empty. '
+    'Installation may delete existing data. '
+    'Consider choosing a different folder.';
+
 Future<bool> confirmInstallDirectory(BuildContext context,
     {required String existingPath, required String targetPath}) async {
   try {
@@ -22,14 +26,17 @@ Future<bool> confirmInstallDirectory(BuildContext context,
 
 Future<List<String>> _directoryWarnings(
     String existingPath, String targetPath) async {
+  final isSameDirectory = path.equals(existingPath, targetPath);
   final deletesContents = await _containsFiles(existingPath);
-  final overwritesContents = !path.equals(existingPath, targetPath) &&
-      await _containsFiles(targetPath);
+  final overwritesContents =
+      !isSameDirectory && await _containsFiles(targetPath);
+  final existingWarning = isSameDirectory
+      ? _nonemptyDirectoryWarning
+      : 'Installation will delete this folder and all its contents:';
   return [
-    if (deletesContents)
-      '${translate('Installation will delete this folder and all its contents:')}\n$existingPath',
+    if (deletesContents) '${translate(existingWarning)}\n$existingPath',
     if (overwritesContents)
-      '${translate('Installation may overwrite files with the same name in this folder:')}\n$targetPath',
+      '${translate(_nonemptyDirectoryWarning)}\n$targetPath',
   ];
 }
 
@@ -58,4 +65,63 @@ Future<bool> _showDirectoryDialog(BuildContext context, String message,
     ),
   );
   return confirmed == true;
+}
+
+class InstallDirectoryWarning extends StatefulWidget {
+  const InstallDirectoryWarning({super.key, required this.directoryPath});
+
+  final String directoryPath;
+
+  @override
+  State<InstallDirectoryWarning> createState() =>
+      _InstallDirectoryWarningState();
+}
+
+class _InstallDirectoryWarningState extends State<InstallDirectoryWarning> {
+  static const _topSpacing = 8.0;
+  static const _bottomSpacing = 8.0;
+  late Future<bool> _hasContents;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasContents = _containsFiles(widget.directoryPath);
+  }
+
+  @override
+  void didUpdateWidget(covariant InstallDirectoryWarning oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.directoryPath != widget.directoryPath) {
+      _hasContents = _containsFiles(widget.directoryPath);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _hasContents,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox.shrink();
+        }
+        final String message;
+        if (snapshot.hasError) {
+          message = '${translate('Error')}: ${snapshot.error}';
+        } else if (snapshot.data == true) {
+          message = translate(_nonemptyDirectoryWarning);
+        } else {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding:
+              const EdgeInsets.only(top: _topSpacing, bottom: _bottomSpacing),
+          child: Text(message,
+              style: TextStyle(
+                  color: snapshot.hasError
+                      ? Theme.of(context).colorScheme.error
+                      : Colors.orange.shade700)),
+        );
+      },
+    );
+  }
 }
