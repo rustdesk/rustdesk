@@ -199,10 +199,10 @@ pub fn clip_cursor(rect: Option<(i32, i32, i32, i32)>) -> bool {
 
 pub fn reset_input_cache() {}
 
+/// Returns the visible cursor handle, or `None` while Windows hides the cursor.
 pub fn get_cursor() -> ResultType<Option<u64>> {
     unsafe {
-        #[allow(invalid_value)]
-        let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
+        let mut ci: CURSORINFO = mem::zeroed();
         ci.cbSize = std::mem::size_of::<CURSORINFO>() as _;
         if crate::portable_service::client::get_cursor_info(&mut ci) == FALSE {
             return Err(io::Error::last_os_error().into());
@@ -218,10 +218,10 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
 struct IconInfo(ICONINFO);
 
 impl IconInfo {
+    /// Takes ownership of the bitmap copies from `GetIconInfo`; `Drop` releases them.
     fn new(icon: HICON) -> ResultType<Self> {
         unsafe {
-            #[allow(invalid_value)]
-            let mut ii = mem::MaybeUninit::uninit().assume_init();
+            let mut ii = mem::zeroed();
             if GetIconInfo(icon, &mut ii) == FALSE {
                 Err(io::Error::last_os_error().into())
             } else {
@@ -2352,7 +2352,10 @@ oLink.Save
     Ok(())
 }
 
-pub fn enable_lowlevel_keyboard(hwnd: HWND) {
+/// # Safety
+/// `hwnd` must be a valid window handle owned by this application, or null to
+/// reuse the previously registered default window.
+pub unsafe fn enable_lowlevel_keyboard(hwnd: HWND) {
     let ret = unsafe { win32_enable_lowlevel_keyboard(hwnd) };
     if ret != 0 {
         log::error!("Failure grabbing keyboard");
@@ -2360,7 +2363,10 @@ pub fn enable_lowlevel_keyboard(hwnd: HWND) {
     }
 }
 
-pub fn disable_lowlevel_keyboard(hwnd: HWND) {
+/// # Safety
+/// `hwnd` must be the window handle used for the active hook, or null to use
+/// the previously registered default window.
+pub unsafe fn disable_lowlevel_keyboard(hwnd: HWND) {
     unsafe { win32_disable_lowlevel_keyboard(hwnd) };
 }
 
@@ -2880,7 +2886,11 @@ pub fn get_logon_user_token(user: &str, pwd: &str) -> ResultType<HANDLE> {
 // If the provided token is an impersonation token, it duplicates it to a primary token.
 // If the provided token is already a primary token, it returns it as is.
 // The caller is responsible for closing the returned token handle.
-pub fn ensure_primary_token(user_token: HANDLE) -> ResultType<HANDLE> {
+/// # Safety
+/// The caller must exclusively own a valid token handle for this call. If it is
+/// an impersonation token, the input is closed even if duplication fails; on
+/// success, ownership of the returned handle transfers back to the caller.
+pub unsafe fn ensure_primary_token(user_token: HANDLE) -> ResultType<HANDLE> {
     if user_token.is_null() || user_token == INVALID_HANDLE_VALUE {
         bail!("Invalid user token provided");
     }
@@ -2920,7 +2930,9 @@ pub fn ensure_primary_token(user_token: HANDLE) -> ResultType<HANDLE> {
     }
 }
 
-pub fn is_user_token_admin(user_token: HANDLE) -> ResultType<bool> {
+/// # Safety
+/// `user_token` must be a valid token handle that remains open for this call.
+pub unsafe fn is_user_token_admin(user_token: HANDLE) -> ResultType<bool> {
     if user_token.is_null() || user_token == INVALID_HANDLE_VALUE {
         bail!("Invalid user token provided");
     }
@@ -4404,7 +4416,9 @@ fn nt_terminate_process(process_id: DWORD) -> ResultType<()> {
     }
 }
 
-pub fn try_set_window_foreground(window: HWND) {
+/// # Safety
+/// `window` must identify a live window for the duration of this call.
+pub unsafe fn try_set_window_foreground(window: HWND) {
     let env_key = SET_FOREGROUND_WINDOW;
     if let Ok(value) = std::env::var(env_key) {
         if value == "1" {

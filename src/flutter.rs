@@ -148,7 +148,12 @@ pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
 
 #[cfg(windows)]
 #[no_mangle]
-pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_char {
+/// Runs the Windows core entry point and returns arguments for the Flutter UI.
+///
+/// # Safety
+/// `args_len` must be non-null, aligned, and valid for writing one `c_int`
+/// for the duration of this call.
+pub unsafe extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_char {
     unsafe { std::ptr::write(args_len, 0) };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {

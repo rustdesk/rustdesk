@@ -73,6 +73,9 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
 #[cfg(windows)]
 use crate::virtual_display_manager;
+#[cfg(any(all(windows, feature = "coalesce-mouse-moves"), test))]
+#[path = "input_queue.rs"]
+mod input_queue;
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 mod trusted_devices;
@@ -1251,7 +1254,10 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    /// Consumes ordered input until disconnect, reasserting input blocking on receive errors.
     fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
+        #[cfg(all(windows, feature = "coalesce-mouse-moves"))]
+        let mut receiver = input_queue::coalesce_mouse_moves(receiver);
         let mut block_input_mode = false;
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         {
@@ -4174,6 +4180,7 @@ impl Connection {
     }
 
     #[cfg(target_os = "windows")]
+    /// Closes the temporary logon token after checking administrator membership.
     fn handle_administrator_check(
         &mut self,
         username: &str,
@@ -4181,7 +4188,8 @@ impl Connection {
     ) -> Option<&'static str> {
         let check_admin_res =
             crate::platform::get_logon_user_token(username, password).map(|token| {
-                let is_token_admin = crate::platform::is_user_token_admin(token);
+                // SAFETY: the successful logon returned this live token; it is closed below.
+                let is_token_admin = unsafe { crate::platform::is_user_token_admin(token) };
                 unsafe {
                     hbb_common::allow_err!(CloseHandle(HANDLE(token as _)));
                 };
@@ -4208,6 +4216,7 @@ impl Connection {
     }
 
     #[cfg(target_os = "windows")]
+    /// The service account may differ from the desktop user; terminals must use the session user's token.
     fn handle_installed_user(&mut self) -> Option<&'static str> {
         let session_id = crate::platform::get_current_session_id(true);
         if session_id == 0xFFFFFFFF {
@@ -4215,7 +4224,8 @@ impl Connection {
         }
         let token = crate::platform::get_user_token(session_id, true);
         if !token.is_null() {
-            match crate::platform::ensure_primary_token(token) {
+            // SAFETY: get_user_token returned an owned token, with no concurrent users.
+            match unsafe { crate::platform::ensure_primary_token(token) } {
                 Ok(t) => {
                     self.terminal_user_token = Some(TerminalUserToken::CurrentLogonUser(
                         crate::terminal_service::UserToken::new(t as usize),
