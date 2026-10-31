@@ -108,6 +108,7 @@ async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     assert!(!is_trusted(&token).await);
     service_operations_share_and_revoke_persisted_grants().await;
     recovery::service_sync_preserves_grants_and_revocations().await;
+    recovery::cli_security_sync_preserves_unrelated_local_settings().await;
     unavailable_grants_keep_password_totp_available().await;
     password_write_failure_is_reported().await;
 }

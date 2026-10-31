@@ -1,5 +1,8 @@
 #[path = "ipc/auth.rs"]
 mod ipc_auth;
+#[path = "ipc/cli_options.rs"]
+mod cli_options;
+pub use cli_options::set_option_from_cli;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "ipc/fs.rs"]
 mod ipc_fs;
