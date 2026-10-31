@@ -199,7 +199,7 @@ home/.local/share/logs/RustDesk/rustdesk-ohos/rs_rCURRENT.log`，`hdc file recv`
 | `src/server.rs` | `start_server` 走 android 变体（`RendezvousMediator::start_all`）；`terminal_service`/`ServiceTmpl`/桌面 `input_service` 排除 ohos |
 | `src/server/connection.rs` | CM 通道 `start_channel` 走 ohos 分支（`ohos_ffi::connection_manager`）；`keyboard` 权限恒 false（无注入能力）；`platform`/`whiteboard`/`terminal` 等桌面分支补 ohos 排除（编译器驱动，`target_os="linux"` 在 ohos 为真，全部需 `not(ohos)`） |
 | `src/server/video_service.rs` / `display_service.rs` | camera 源排除 ohos（nokhwa 未接）；aom/AV1 编码臂排除；linux 专属路径排除 |
-| `src/server/audio_service.rs` | `pa_impl::run` ohos 分支：AVScreenCapture s16le PCM → f32，攒批 960×2 采样（20ms 立体声）→ opus；语音通话经 `VOICE_CALL_INPUT_DEVICE="mic"` 切麦克风流（`ohos_capture_mic`） |
+| `src/server/audio_service.rs` | `pa_impl::run` ohos 分支：AVScreenCapture s16le PCM → f32，攒批 960×2 采样（20ms 立体声）→ opus；语音通话经 `VOICE_CALL_INPUT_DEVICE="mic"` 切到专用 `OhosMicSource`（OHAudio VOICE_COMMUNICATION capturer，见 2026-10-29 修复） |
 | `src/server/clipboard_service.rs` / `src/clipboard.rs` | android 分支扩至 ohos：`get_clipboards_msg` 读 `scrap::ohos::ffi` 通道；远端→本机经 `cm_write_clipboard` 事件写 pasteboard |
 | `src/ui_cm_interface.rs` | `start_listen` / `authorize` / `close` / `switch_permission` / `handle_fs` 等对 ohos 解禁 |
 | `src/ohos_ffi.rs` | 新增 §6 的 16 个被控端 C ABI + `connection_manager` 模块（`InvokeUiCM` 实现 → `cm_*` 事件）+ `cm_write_clipboard` |
@@ -245,8 +245,14 @@ server 栈 + AVScreenCapture 绑定），x86_64 23.0MB。
   「ID 不存在」（2026-10-27 已修复并在模拟器自拨验证）。
 - 连接请求仅在 SharePage 打开时可见（无全局通知，Android 用前台服务通知解决）；
   后续可接 NotificationKit。
-- 被控端麦克风语音通话依赖 AVScreenCapture 的 mic 通道（`SetMicrophoneEnabled`），
-  系统内录与麦克风同时开启时为混音/双流，取决于系统实现，待真机验证。
+- 被控端麦克风语音通话（2026-10-29 修复）：原走 AVScreenCapture 的 mic 通道
+  （`SetMicrophoneEnabled`），真机（Pura 70）实测两处问题：① 通话依赖共享在跑
+  （capture 停止即上行无声）；② mic 流交付速率与配置不符（48kHz 配置下实测
+  2 倍数据量，编码后对端 2 倍速变调）。现改为与主控端同款的专用 OHAudio
+  VOICE_COMMUNICATION capturer（`src/ohos_voice_call.rs` `OhosMicSource`）：
+  48kHz 单声道 f32 → 复制双声道进既有 opus 管线；不依赖共享；带
+  `CONCURRENCY_MIX_WITH_OTHERS` 会话保证与下行播放共存；通话期间 AVScreenCapture
+  mic 显式关闭避免双采。OHAudio capturer 启动失败时回退 AVScreenCapture mic 流。
 - AV1 编码仍为存桩门控；H264/H265 硬编（OH_VideoEncoder）未接，编码仅 VP8/VP9 软编。
 
 ### 硬件编码补充（2026-10-27）
