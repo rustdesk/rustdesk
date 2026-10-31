@@ -3199,55 +3199,6 @@ mod tests {
     use super::*;
     use crate::flutter::FlutterHandler;
 
-    /// The published bound is "at most 60 frames when nothing accepts": change the constant and this test
-    /// goes red, so the number in the PR thread cannot drift away from the code.
-    #[test]
-    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
-    fn gpu_refuse_streak_limit_is_the_published_bound() {
-        assert_eq!(GPU_FRAME_REFUSE_LIMIT, 60);
-    }
-
-    /// A regression that fires the fallback early (freezing the picture sooner than needed) or never
-    /// (freezing for good) both show up here.
-    #[test]
-    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
-    fn gpu_refuse_streak_self_heals_at_the_limit_then_restarts() {
-        let mut streak = 0;
-        let mut healed_at = None;
-        for frame in 1..=GPU_FRAME_REFUSE_LIMIT {
-            let (next, healed) = next_refuse_streak(streak, GPU_FRAME_REFUSE_LIMIT);
-            streak = next;
-            if healed {
-                healed_at = Some(frame);
-            }
-        }
-        assert_eq!(
-            healed_at,
-            Some(GPU_FRAME_REFUSE_LIMIT),
-            "the software fallback must fire once, at the limit"
-        );
-        assert_eq!(
-            streak, 0,
-            "the streak restarts after self-healing, so the next run needs the full limit again"
-        );
-    }
-
-    /// One accepted frame resets the streak at the call site; this is the other half of that contract, so a
-    /// renderer that accepts occasionally can never trip the fallback.
-    #[test]
-    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
-    fn gpu_refuse_streak_partial_never_heals() {
-        let mut streak = 0;
-        for _ in 1..GPU_FRAME_REFUSE_LIMIT {
-            let (next, healed) = next_refuse_streak(streak, GPU_FRAME_REFUSE_LIMIT);
-            assert!(!healed);
-            streak = next;
-        }
-        assert_eq!(streak, GPU_FRAME_REFUSE_LIMIT - 1);
-        let (reset_streak, healed) = next_refuse_streak(streak, GPU_FRAME_REFUSE_LIMIT);
-        assert_eq!((reset_streak, healed), (0, true));
-    }
-
     /// A round's `Remote` over a loopback pair, before any login: what it sends to `peer`
     /// arrives at `far`.
     async fn remote_and_peer() -> (Remote<FlutterHandler>, Stream, Stream) {
@@ -3415,7 +3366,10 @@ mod kept_cursor_tests {
 /// frames of a session (the texture is registered after the first one arrives) do
 /// not trip it, short enough that a renderer that genuinely cannot present them
 /// is repaired inside the same second the picture would otherwise freeze.
-#[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
+#[cfg(any(
+    all(target_os = "macos", feature = "flutter", feature = "hwcodec"),
+    test
+))]
 const GPU_FRAME_REFUSE_LIMIT: usize = 60;
 
 /// Count a decoded GPU frame that no UI session could present.
@@ -3444,12 +3398,68 @@ fn count_gpu_frame_refused(display: usize) {
 /// One refused GPU frame as a count: the streak to keep, and whether the self-heal
 /// threshold was just reached. Reaching it restarts the streak, so the next run of
 /// refusals needs the full limit again.
-#[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
+#[cfg(any(
+    all(target_os = "macos", feature = "flutter", feature = "hwcodec"),
+    test
+))]
 fn next_refuse_streak(streak: usize, limit: usize) -> (usize, bool) {
     let next = streak + 1;
     if next >= limit {
         (0, true)
     } else {
         (next, false)
+    }
+}
+
+/// Arithmetic only, so these run on every platform instead of only where the call
+/// site is gated; AGENTS.md asks for a pure helper to keep its tests everywhere.
+#[cfg(test)]
+mod gpu_refuse_streak_tests {
+    use super::*;
+
+    /// The published bound is "at most 60 frames when nothing accepts": change the constant and this test
+    /// goes red, so the number in the PR thread cannot drift away from the code.
+    #[test]
+    fn gpu_refuse_streak_limit_is_the_published_bound() {
+        assert_eq!(GPU_FRAME_REFUSE_LIMIT, 60);
+    }
+
+    /// A regression that fires the fallback early (freezing the picture sooner than needed) or never
+    /// (freezing for good) both show up here.
+    #[test]
+    fn gpu_refuse_streak_self_heals_at_the_limit_then_restarts() {
+        let mut streak = 0;
+        let mut healed_at = None;
+        for frame in 1..=GPU_FRAME_REFUSE_LIMIT {
+            let (next, healed) = next_refuse_streak(streak, GPU_FRAME_REFUSE_LIMIT);
+            streak = next;
+            if healed {
+                healed_at = Some(frame);
+            }
+        }
+        assert_eq!(
+            healed_at,
+            Some(GPU_FRAME_REFUSE_LIMIT),
+            "the software fallback must fire once, at the limit"
+        );
+        assert_eq!(
+            streak, 0,
+            "the streak restarts after self-healing, so the next run needs the full limit again"
+        );
+    }
+
+    /// One accepted frame resets the streak at the call site; this is the other half of that contract, so a
+    /// renderer that accepts occasionally can never trip the fallback.
+    #[test]
+    fn gpu_refuse_streak_partial_never_heals() {
+        let mut streak = 0;
+        for _ in 1..GPU_FRAME_REFUSE_LIMIT {
+            let (next, healed) = next_refuse_streak(streak, GPU_FRAME_REFUSE_LIMIT);
+            assert!(!healed);
+            streak = next;
+        }
+        assert_eq!(streak, GPU_FRAME_REFUSE_LIMIT - 1);
+        let (reset_streak, healed) = next_refuse_streak(streak, GPU_FRAME_REFUSE_LIMIT);
+        assert_eq!((reset_streak, healed), (0, true));
     }
 }
