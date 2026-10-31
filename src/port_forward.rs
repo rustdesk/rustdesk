@@ -296,6 +296,10 @@ type UiLogin = (String, String, String, bool);
 /// the `Hash` was on its way is kept and answers it now, rather than being
 /// dropped in the hope that the mapping which prompted has already stored
 /// it in the shared handler.
+///
+/// A direct IP server's offer to encrypt the stream is answered here, before
+/// either login path: the pending password goes through `login_from_ui`, which
+/// does not pass `handle_hash`, and would otherwise log in in the clear.
 async fn hash_arrived(
     interface: &impl Interface,
     password: &str,
@@ -307,6 +311,11 @@ async fn hash_arrived(
     trust: &mut crate::trusted_devices::client::Session,
     stream: &mut Stream,
 ) -> bool {
+    if let Err(err) = crate::common::direct_ip_kx_accept(stream, &hash).await {
+        log::error!("Direct IP key exchange failed: {}", err);
+        interface.msgbox("error", "Connection Error", &err.to_string(), "");
+        return false;
+    }
     match pending_login {
         Some(login) => {
             login_from_ui(interface, &hash, login, remote_host, remote_port, mux, trust, stream).await;
