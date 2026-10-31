@@ -1016,6 +1016,8 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
             Ok(output) => log_update_cleanup_warning(&output),
         }
         if crate::common::is_server_running() {
+            // This process hosts the backend. A new GUI could reuse our IPC and
+            // skip starting its own backend, leaving it "Not ready" when we exit.
             return relaunch_after_update_exit(&app_name);
         }
     }
@@ -1038,7 +1040,9 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
 }
 
 fn relaunch_after_update_exit(app_name: &str) -> ResultType<()> {
-    // The new GUI must not attach to the main IPC owned by this departing process.
+    // The update caller cleans up and quits this GUI after we return. Waiting
+    // in a separate process lets that caller finish instead of blocking its exit.
+    // The shell's kill -0 only checks whether our PID exists; it does not kill us.
     const RELAUNCH: &str = r#"
 poll_interval=0.1
 while /bin/kill -0 "$1" 2>/dev/null; do
