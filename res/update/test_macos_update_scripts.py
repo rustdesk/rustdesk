@@ -1,4 +1,5 @@
 import plistlib
+import select
 import socket
 import subprocess
 import sys
@@ -28,6 +29,40 @@ def write_bundle_id(app, bundle_id):
 
 
 class MacosUpdateScriptTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", "requires macOS process handling")
+    def test_relaunch_waits_for_old_backend_exit(self):
+        process_timeout = 5
+        script = MACOS_SOURCE.split('const RELAUNCH: &str = r#"', 1)[1].split('"#;', 1)[0]
+        backend_code = (
+            "import socket, sys; listener = socket.socket(); "
+            "listener.bind(('127.0.0.1', 0)); listener.listen(1); "
+            "print(listener.getsockname()[1], flush=True); sys.stdin.read(1)"
+        )
+        backend = subprocess.Popen(
+            [sys.executable, "-c", backend_code],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+        )
+        self.addCleanup(backend.communicate, timeout=process_timeout)
+        self.addCleanup(backend.kill)
+        self.assertTrue(select.select([backend.stdout], [], [], process_timeout)[0])
+        port = int(backend.stdout.readline())
+        probe = (
+            '"$2" -c \'import socket, sys; listener = socket.socket(); '
+            'listener.bind(("127.0.0.1", int(sys.argv[1])))\' "$3"'
+        )
+        self.assertIn('/usr/bin/open -n "$2"', script)
+        script = script.replace('/usr/bin/open -n "$2"', probe)
+        relaunch = subprocess.Popen(
+            ["/bin/sh", "-c", script, "rustdesk-relaunch-test",
+             str(backend.pid), sys.executable, str(port)],
+        )
+        self.addCleanup(relaunch.wait, timeout=process_timeout)
+        self.addCleanup(relaunch.kill)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            relaunch.wait(timeout=0.5)
+        backend.communicate(input="\n", timeout=process_timeout)
+        self.assertEqual(relaunch.wait(timeout=process_timeout), 0)
+
     @unittest.skipUnless(sys.platform == "darwin", "requires macOS AppleScript")
     def test_daemon_update_rejects_stale_ipc_sockets(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as directory:

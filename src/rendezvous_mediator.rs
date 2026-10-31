@@ -257,6 +257,13 @@ pub(crate) fn reset_needs_deploy_notification() {
     NOTIFIED_NEEDS_DEPLOY.store(false, Ordering::SeqCst);
 }
 
+async fn wait_for_retry(delay: f32, restarted: tokio::sync::futures::Notified<'_>) {
+    select! {
+        _ = sleep(delay) => {}
+        _ = restarted => {}
+    }
+}
+
 #[derive(Clone)]
 pub struct RendezvousMediator {
     addr: TargetAddr<'static>,
@@ -346,10 +353,7 @@ impl RendezvousMediator {
             if !MANUAL_RESTARTED.load(Ordering::SeqCst) {
                 let elapsed = conn_start_time.elapsed().as_millis() as u64;
                 if elapsed < timeout {
-                    select! {
-                        _ = sleep(((timeout - elapsed) / 1000) as _) => {}
-                        _ = restarted => {}
-                    }
+                    wait_for_retry(((timeout - elapsed) / 1000) as _, restarted).await;
                 }
             } else {
                 // https://github.com/rustdesk/rustdesk/issues/12233
@@ -1726,10 +1730,32 @@ impl Drop for CheckIfResendPk {
 #[cfg(test)]
 mod tests {
     use super::{
-        connection_meta, mpsc, tokio, AnswererSlot, IceRoute, IntoTargetAddr, PunchHoleSent,
-        RendezvousMediator, RendezvousMessage, MAX_WEBRTC_ANSWERERS, TCP_PUNCHES, UDP_PUNCHES,
+        connection_meta, mpsc, tokio, wait_for_retry, AnswererSlot, Duration, IceRoute,
+        IntoTargetAddr, Ordering, PunchHoleSent, RendezvousMediator, RendezvousMessage,
+        CONNECT_TIMEOUT, MANUAL_RESTARTED, MANUAL_RESTART_NOTIFY, MAX_WEBRTC_ANSWERERS,
+        SHOULD_EXIT, TCP_PUNCHES, UDP_PUNCHES,
     };
     use hbb_common::protobuf::Message as _;
+
+    #[tokio::test]
+    async fn manual_restart_interrupts_retry_wait() {
+        const WAKE_TIMEOUT: Duration = Duration::from_secs(1);
+        let waiting = wait_for_retry(
+            (CONNECT_TIMEOUT / 1000) as _,
+            MANUAL_RESTART_NOTIFY.notified(),
+        );
+        tokio::pin!(waiting);
+        assert!(hbb_common::futures::poll!(waiting.as_mut()).is_pending());
+
+        RendezvousMediator::restart();
+        let result = tokio::time::timeout(WAKE_TIMEOUT, waiting).await;
+        MANUAL_RESTARTED.store(false, Ordering::SeqCst);
+        SHOULD_EXIT.store(false, Ordering::SeqCst);
+        assert!(
+            result.is_ok(),
+            "restart must interrupt the pending retry delay"
+        );
+    }
 
     // The places are the bound and they come back on drop: a punch past the limit is declined
     // while the ones in flight are left alone, and the next one in is admitted only once a

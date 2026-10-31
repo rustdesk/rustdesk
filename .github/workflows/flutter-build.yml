@@ -1036,6 +1036,7 @@ jobs:
       - name: Run the Rust tests
         if: ${{ !inputs.upload-artifact && matrix.job.arch == 'aarch64' }}
         run: |
+          python3 -m unittest res/update/test_macos_update_scripts.py
           # The build's own features, so the tests see the code that ships. MACOSX_DEPLOYMENT_TARGET
           # comes from the build step's export.
           FEATURES=$(./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }} --print-features)
