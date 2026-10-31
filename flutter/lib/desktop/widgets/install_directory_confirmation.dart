@@ -68,7 +68,8 @@ Future<bool> _showDirectoryDialog(BuildContext context, String message,
 }
 
 class InstallDirectoryWarning extends StatefulWidget {
-  const InstallDirectoryWarning({super.key, required this.directoryPath});
+  InstallDirectoryWarning({required this.directoryPath})
+      : super(key: ValueKey(directoryPath));
 
   final String directoryPath;
 
@@ -78,44 +79,23 @@ class InstallDirectoryWarning extends StatefulWidget {
 }
 
 class _InstallDirectoryWarningState extends State<InstallDirectoryWarning> {
-  static const _topSpacing = 8.0;
-  static const _bottomSpacing = 8.0;
-  late Future<bool> _hasContents;
-
-  @override
-  void initState() {
-    super.initState();
-    _hasContents = _containsFiles(widget.directoryPath);
-  }
-
-  @override
-  void didUpdateWidget(covariant InstallDirectoryWarning oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.directoryPath != widget.directoryPath) {
-      _hasContents = _containsFiles(widget.directoryPath);
-    }
-  }
+  static const _spacing = 8.0;
+  late final Future<bool> _hasContents = _containsFiles(widget.directoryPath);
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
       future: _hasContents,
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const SizedBox.shrink();
-        }
-        final String message;
-        if (snapshot.hasError) {
-          message = '${translate('Error')}: ${snapshot.error}';
-        } else if (snapshot.data == true) {
-          message = translate(_nonemptyDirectoryWarning);
-        } else {
+        if (!snapshot.hasError && snapshot.data != true) {
           return const SizedBox.shrink();
         }
         return Padding(
-          padding:
-              const EdgeInsets.only(top: _topSpacing, bottom: _bottomSpacing),
-          child: Text(message,
+          padding: const EdgeInsets.symmetric(vertical: _spacing),
+          child: Text(
+              snapshot.hasError
+                  ? '${translate('Error')}: ${snapshot.error}'
+                  : translate(_nonemptyDirectoryWarning),
               style: TextStyle(
                   color: snapshot.hasError
                       ? Theme.of(context).colorScheme.error
