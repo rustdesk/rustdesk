@@ -1060,6 +1060,8 @@ fi
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
+        // Survive cleanup of the old app's process group after it exits.
+        .process_group(0)
         .spawn()
         .map_err(|err| anyhow!("Failed to schedule updated app relaunch: {}", err))?;
     Ok(())
