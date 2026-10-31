@@ -2,15 +2,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:path/path.dart' as path;
 
 const _nonemptyDirectoryWarning = 'install-directory-not-empty-tip';
 
 Future<bool> confirmInstallDirectory(BuildContext context,
     {required String targetPath}) async {
   try {
-    final hasContents = await _containsFiles(targetPath);
+    final needsWarning = await _needsDirectoryWarning(targetPath);
     if (!context.mounted) return false;
-    if (!hasContents) return true;
+    if (!needsWarning) return true;
     return await _showDirectoryDialog(
         context, '${translate(_nonemptyDirectoryWarning)}\n$targetPath');
   } on FileSystemException catch (error) {
@@ -22,7 +24,11 @@ Future<bool> confirmInstallDirectory(BuildContext context,
   }
 }
 
-Future<bool> _containsFiles(String directoryPath) async {
+Future<bool> _needsDirectoryWarning(String directoryPath) async {
+  if (bind.mainIsInstalled() &&
+      path.equals(directoryPath, bind.installInstallPath())) {
+    return false;
+  }
   final directory = Directory(directoryPath);
   return await directory.exists() &&
       !await directory.list(followLinks: false).isEmpty;
@@ -62,12 +68,13 @@ class InstallDirectoryWarning extends StatefulWidget {
 
 class _InstallDirectoryWarningState extends State<InstallDirectoryWarning> {
   static const _spacing = 8.0;
-  late final Future<bool> _hasContents = _containsFiles(widget.directoryPath);
+  late final Future<bool> _needsWarning =
+      _needsDirectoryWarning(widget.directoryPath);
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
-      future: _hasContents,
+      future: _needsWarning,
       builder: (context, snapshot) {
         if (!snapshot.hasError && snapshot.data != true) {
           return const SizedBox.shrink();
