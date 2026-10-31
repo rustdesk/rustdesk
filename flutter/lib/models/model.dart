@@ -4032,7 +4032,6 @@ class FFI {
   var id = '';
   var version = '';
   var connType = ConnType.defaultConn;
-  var loginMethod = '';
   var closed = false;
 
   /// dialogManager use late to ensure init after main page binding [globalKey]
@@ -4127,7 +4126,6 @@ class FFI {
     List<int>? displays,
     String loginMethod = '',
   }) {
-    this.loginMethod = loginMethod;
     closed = false;
     if (isMobile) mobileReset();
     assert(

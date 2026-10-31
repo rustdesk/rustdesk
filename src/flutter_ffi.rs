@@ -3055,6 +3055,8 @@ pub fn session_get_common(
     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
         let v = if key == "is_screenshot_supported" {
             s.is_screenshot_supported().to_string()
+        } else if key == "login_method" {
+            s.lc.read().unwrap().get_login_method().to_owned()
         } else {
             "".to_owned()
         };

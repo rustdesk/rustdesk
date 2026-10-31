@@ -1966,6 +1966,9 @@ class RustdeskImpl {
       required String key,
       required String param,
       dynamic hint}) {
+    if (key == 'login_method') {
+      return js.context.callMethod('getByName', ['login_method']);
+    }
     throw UnimplementedError("sessionGetCommonSync");
   }
 

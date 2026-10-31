@@ -19,6 +19,13 @@ impl LoginConfigHandler {
     pub(crate) fn skips_saved_password(&self) -> bool {
         self.login_method != LoginMethod::Automatic
     }
+
+    pub(crate) fn get_login_method(&self) -> &'static str {
+        match self.login_method {
+            LoginMethod::Automatic => "",
+            LoginMethod::Consent => "consent",
+        }
+    }
 }
 
 #[cfg(all(test, feature = "flutter"))]
@@ -70,9 +77,27 @@ mod tests {
                 None,
                 method.to_owned(),
             );
+            let monitor_session_id = uuid::Uuid::new_v4();
+            let monitor_result = crate::flutter_ffi::session_add_existed_sync(
+                format!("login-method-init-{}", session_id),
+                monitor_session_id,
+                vec![0],
+                false,
+            );
+            let methods = [session_id, monitor_session_id].map(|id| {
+                crate::flutter_ffi::session_get_common_sync(
+                    id,
+                    "login_method".to_owned(),
+                    String::new(),
+                )
+                .0
+            });
+            crate::flutter::sessions::remove_session_by_session_id(&monitor_session_id);
             let session = crate::flutter::sessions::remove_session_by_session_id(&session_id);
             hbb_common::config::LocalConfig::set_remote_id(&remote_id);
             assert!(result.0.is_empty(), "{}", result.0);
+            assert!(monitor_result.0.is_empty(), "{}", monitor_result.0);
+            assert_eq!(methods, [Some(method.to_owned()), Some(method.to_owned())]);
             let session = session.unwrap();
             let request = session
                 .lc
