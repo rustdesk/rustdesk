@@ -310,6 +310,10 @@ impl HwRamEncoder {
 pub struct HwRamDecoder {
     decoder: Decoder,
     pub info: CodecInfo,
+    /// The same switch the inner decoder consults, kept here so the decode loop
+    /// can read it without a second handle.
+    #[cfg(target_os = "macos")]
+    pixelbuffer_wanted: crate::GpuFramesWanted,
 }
 
 impl HwRamDecoder {
@@ -360,7 +364,22 @@ impl HwRamDecoder {
             thread_count: codec_thread_num(16) as _,
         };
         match Decoder::new(ctx) {
-            Ok(decoder) => Ok(HwRamDecoder { decoder, info }),
+            Ok(mut decoder) => {
+                // Reject by default: a decoder nobody configured must keep
+                // producing software frames. The owner installs its own switch
+                // with `set_pixelbuffer_wanted` when its renderer can present
+                // GPU frames.
+                #[cfg(target_os = "macos")]
+                let pixelbuffer_wanted = crate::gpu_frames_wanted_flag(false);
+                #[cfg(target_os = "macos")]
+                decoder.set_pixelbuffer_wanted(pixelbuffer_wanted.clone());
+                Ok(HwRamDecoder {
+                    decoder,
+                    info,
+                    #[cfg(target_os = "macos")]
+                    pixelbuffer_wanted,
+                })
+            }
             Err(_) => {
                 HwCodecConfig::clear(false, false);
                 Err(anyhow!(format!("Failed to create decoder")))
@@ -372,6 +391,45 @@ impl HwRamDecoder {
             Ok(v) => Ok(v.iter().map(|f| HwRamDecoderImage { frame: f }).collect()),
             Err(e) => Err(anyhow!(e)),
         }
+    }
+
+    /// Whether this decoder may hand out a GPU frame right now.
+    ///
+    /// Read by the decode loop to decide between the two-step form (needed to
+    /// take the surface before the software images are borrowed) and the single
+    /// allocation that the software-only path has always used.
+    #[cfg(target_os = "macos")]
+    pub fn pixelbuffer_wanted(&self) -> bool {
+        self.pixelbuffer_wanted
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Install the owner's "can the renderer present GPU frames" handle.
+    ///
+    /// Called once per decoder owner (session / display video handler), so two
+    /// sessions with different render paths do not share one switch.
+    #[cfg(target_os = "macos")]
+    pub fn set_pixelbuffer_wanted(&mut self, wanted: crate::GpuFramesWanted) {
+        self.pixelbuffer_wanted = wanted.clone();
+        self.decoder.set_pixelbuffer_wanted(wanted);
+    }
+
+    /// Take the GPU frame produced by the last `decode` call, if any.
+    ///
+    /// `decode` hands out a mutable borrow, so callers read the GPU frame first
+    /// and then the software frames through [`Self::last_frame_images`].
+    #[cfg(target_os = "macos")]
+    pub fn take_pixelbuffer(&mut self) -> crate::PixelBufferOutput {
+        self.decoder.take_pixelbuffer()
+    }
+
+    /// Software frames of the last `decode` call, behind a shared borrow.
+    pub fn last_frame_images(&self) -> Vec<HwRamDecoderImage<'_>> {
+        self.decoder
+            .last_frames()
+            .iter()
+            .map(|f| HwRamDecoderImage { frame: f })
+            .collect()
     }
 }
 

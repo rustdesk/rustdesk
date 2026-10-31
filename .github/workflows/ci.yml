@@ -248,3 +248,67 @@ jobs:
         use-cross: ${{ matrix.job.use-cross }}
         command: test
         args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
+
+  # `hwcodec` is an optional feature of `libs/scrap`, and no other job builds the
+  # configuration where it is off -- every other lane enables `flutter,hwcodec`. A
+  # `#[cfg(all(target_os = "macos", feature = "hwcodec"))]` gate that is wrong only in
+  # that combination therefore passes every other job. `scrap`'s build script still
+  # needs libyuv from vcpkg for a plain `check`, hence the vcpkg steps. Only the crate
+  # is checked: the app crate in this configuration also needs the generated flutter
+  # bridge, which is a separate artifact.
+  check-macos-without-hwcodec:
+    name: cargo check (macOS x86_64, hwcodec off)
+    runs-on: macos-15-intel
+    # This job runs dependency build scripts (vcpkg, `cargo check`), so the checkout
+    # token must not be lying around in the git config: same pattern as
+    # flutter-build.yml. Nothing here needs more than reading the repository.
+    permissions:
+      contents: read
+    steps:
+    - name: Export GitHub Actions cache environment variables
+      uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+    - name: Checkout source code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        submodules: recursive
+        persist-credentials: false
+
+    - name: Setup vcpkg with Github Actions binary cache
+      uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+      with:
+        vcpkgDirectory: ${{ runner.temp }}/vcpkg
+        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+    - name: Install nasm (aom builds with it on macOS)
+      shell: bash
+      run: |
+        # Do NOT use `brew install nasm`, which installs NASM 3.x: its changed
+        # options break the aom build. Same pin as flutter-build.yml.
+        if ! command -v nasm &>/dev/null; then
+          wget --no-verbose https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip
+          unzip -q nasm-2.16.03-macosx.zip
+          sudo cp nasm-2.16.03/nasm /usr/local/bin/nasm
+        fi
+        nasm --version
+
+    - name: Install vcpkg dependencies
+      shell: bash
+      run: |
+        $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+      with:
+        toolchain: stable
+        components: ''
+
+    - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+    - name: cargo check with the hwcodec feature off
+      shell: bash
+      run: cargo check -p scrap --no-default-features
