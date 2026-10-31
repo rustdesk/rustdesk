@@ -80,6 +80,8 @@ lazy_static::lazy_static! {
     };
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod unicode;
 pub mod shortcuts;
 
 pub mod client {
@@ -100,6 +102,10 @@ pub mod client {
     #[derive(Default)]
     struct GrabOwnerState {
         owner: Option<u128>,
+        #[cfg(windows)]
+        unicode_packet: crate::platform::windows::keyboard::UnicodePacket,
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        unicode_input: super::unicode::UnicodeInput,
         last_grab: Option<std::time::Instant>,
         /// True while a deferred-release thread is in flight. Prevents
         /// spawning redundant threads during the X11 feedback loop.
@@ -206,6 +212,14 @@ pub mod client {
                 #[cfg(target_os = "linux")]
                 let had_owner = gs.owner.is_some();
                 gs.owner = Some(session_id);
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                {
+                    gs.unicode_input = Default::default();
+                }
+                #[cfg(windows)]
+                {
+                    gs.unicode_packet = Default::default();
+                }
                 gs.last_grab = Some(std::time::Instant::now());
                 // Invalidate any in-flight deferred release from the previous
                 // owner so it cannot suppress a fresh timer for the new owner.
@@ -262,6 +276,7 @@ pub mod client {
                                         );
                                         KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
                                         gs.owner = None;
+                                        gs.unicode_input = Default::default();
                                         gs.last_grab = None;
                                         Some(to_release)
                                     } else {
@@ -296,6 +311,14 @@ pub mod client {
                 KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
 
                 gs.owner = None;
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                {
+                    gs.unicode_input = Default::default();
+                }
+                #[cfg(windows)]
+                {
+                    gs.unicode_packet = Default::default();
+                }
                 gs.last_grab = None;
                 gs.deferred_pending = false;
                 release_after_unlock = Some(take_remote_keys());
@@ -319,6 +342,78 @@ pub mod client {
         if let Some(to_release) = release_after_unlock {
             release_remote_keys_for_events(keyboard_mode, to_release);
         }
+    }
+
+    #[cfg(windows)]
+    pub(super) fn handle_unicode_packet(event: &Event) -> bool {
+        const ERROR_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+        let mut gs = GRAB_STATE.lock().unwrap();
+        let Some(_owner) = gs.owner else {
+            return false;
+        };
+        #[cfg(feature = "flutter")]
+        let Some(session) =
+            flutter::sessions::get_session_by_session_id(&hbb_common::SessionID::from_u128(_owner))
+        else {
+            gs.unicode_packet = Default::default();
+            return false;
+        };
+        #[cfg(feature = "flutter")]
+        if !*session.server_keyboard_enabled.read().unwrap()
+            || session.lc.read().unwrap().view_only.v
+        {
+            gs.unicode_packet = Default::default();
+            return false;
+        }
+        if matches!(event.event_type, EventType::KeyPress(_)) {
+            match gs.unicode_packet.decode(event.position_code) {
+                Ok(Some(key_event)) => {
+                    #[cfg(feature = "flutter")]
+                    session.send_key_event(&key_event);
+                    #[cfg(not(feature = "flutter"))]
+                    send_key_event(&key_event);
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    hbb_common::throttled_log!(ERROR_LOG_INTERVAL, warn, "{err}");
+                }
+            }
+        }
+        true
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(super) fn handle_unicode_input(event: &Event) -> bool {
+        const ERROR_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+        let mut gs = GRAB_STATE.lock().unwrap();
+        let Some(_owner) = gs.owner else {
+            return false;
+        };
+        #[cfg(feature = "flutter")]
+        let Some(session) =
+            flutter::sessions::get_session_by_session_id(&hbb_common::SessionID::from_u128(_owner))
+        else {
+            gs.unicode_input = Default::default();
+            return false;
+        };
+        #[cfg(feature = "flutter")]
+        if !*session.server_keyboard_enabled.read().unwrap()
+            || session.lc.read().unwrap().view_only.v
+        {
+            gs.unicode_input = Default::default();
+            return false;
+        }
+        match gs.unicode_input.decode(event) {
+            Ok(Some(key_event)) => {
+                #[cfg(feature = "flutter")]
+                session.send_key_event(&key_event);
+                #[cfg(not(feature = "flutter"))]
+                send_key_event(&key_event);
+            }
+            Ok(None) => {}
+            Err(err) => hbb_common::throttled_log!(ERROR_LOG_INTERVAL, warn, "{err}"),
+        }
+        true
     }
 
     pub fn process_event(keyboard_mode: &str, event: &Event, lock_modes: Option<i32>) {
@@ -668,6 +763,37 @@ fn start_grab_loop() {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
         let try_handle_keyboard = move |event: Event, key: Key, is_press: bool| -> Option<Event> {
+            #[cfg(target_os = "macos")]
+            if unicode::is_text_event(&event) {
+                #[cfg(feature = "flutter")]
+                if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
+                    return Some(event);
+                }
+                return if client::handle_unicode_input(&event) {
+                    None
+                } else {
+                    Some(event)
+                };
+            }
+            #[cfg(windows)]
+            if crate::platform::windows::keyboard::is_unicode_packet(&event) {
+                // VK_PACKET forwarding is supported only with Input Source 1.
+                // Source 2 forwards physical keys asynchronously through Flutter,
+                // while packet text would be sent directly from this native hook.
+                // These paths cannot preserve text ordering relative to Tab/Enter:
+                // characters may reach the wrong field or follow an early submit.
+                // Use Source 1 so text and control keys share the native input path.
+                #[cfg(feature = "flutter")]
+                if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
+                    return Some(event);
+                }
+                return if client::handle_unicode_packet(&event) {
+                    None
+                } else {
+                    Some(event)
+                };
+            }
+
             // fix #2211：CAPS LOCK don't work
             if key == Key::CapsLock || key == Key::NumLock {
                 return Some(event);
@@ -741,15 +867,15 @@ fn start_grab_loop() {
     if let Err(err) = rdev::start_grab_listen(move |event: Event| match event.event_type {
         EventType::KeyPress(key) | EventType::KeyRelease(key) => {
             let is_press = matches!(event.event_type, EventType::KeyPress(_));
-            if let Key::Unknown(keycode) = key {
-                log::error!("rdev get unknown key, keycode is {:?}", keycode);
-            } else {
-                #[cfg(feature = "flutter")]
-                if should_block_relative_mouse_shortcut(key, is_press) {
-                    return None;
-                }
-                client::process_event(&get_keyboard_mode(), &event, None);
+            if unicode::is_text_event(&event) {
+                client::handle_unicode_input(&event);
+                return None;
             }
+            #[cfg(feature = "flutter")]
+            if should_block_relative_mouse_shortcut(key, is_press) {
+                return None;
+            }
+            client::process_event(&get_keyboard_mode(), &event, None);
             None
         }
         _ => Some(event),
@@ -1616,10 +1742,23 @@ pub mod input_source {
 
     pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_1;
 
+    #[cfg(target_os = "linux")]
+    fn uses_x11_backend() -> bool {
+        // XWayland windows can use rdev even when the desktop session is Wayland.
+        unsafe {
+            let display = gtk::gdk::ffi::gdk_display_get_default();
+            let x11_type =
+                gtk::glib::gobject_ffi::g_type_from_name(b"GdkX11Display\0".as_ptr().cast());
+            !display.is_null()
+                && x11_type != 0
+                && gtk::glib::gobject_ffi::g_type_check_instance_is_a(display.cast(), x11_type) != 0
+        }
+    }
+
     pub fn init_input_source() {
         #[cfg(target_os = "linux")]
-        if !crate::platform::linux::is_x11() {
-            // If switching from X11 to Wayland, the grab loop will not be started.
+        if !uses_x11_backend() {
+            // Native Wayland windows cannot use the X11 grab loop.
             // Do not change the config here.
             return;
         }
@@ -1665,7 +1804,7 @@ pub mod input_source {
     #[inline]
     pub fn get_cur_session_input_source() -> String {
         #[cfg(target_os = "linux")]
-        if !crate::platform::linux::is_x11() {
+        if !uses_x11_backend() {
             return CONFIG_INPUT_SOURCE_2.to_string();
         }
         let input_source = get_local_option(CONFIG_OPTION_INPUT_SOURCE.to_string());
@@ -1679,7 +1818,7 @@ pub mod input_source {
     #[inline]
     pub fn get_supported_input_source() -> Vec<(String, String)> {
         #[cfg(target_os = "linux")]
-        if !crate::platform::linux::is_x11() {
+        if !uses_x11_backend() {
             return vec![(
                 CONFIG_INPUT_SOURCE_2.to_string(),
                 CONFIG_INPUT_SOURCE_2_TIP.to_string(),
