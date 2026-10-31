@@ -63,7 +63,8 @@
 | `ohos_send_mouse(uuid, mask, x, y, alt, ctrl, shift, command) -> c_int` | `mask = (buttons << 3) \| type`；type（低 3 位）：`MOVE=0, DOWN=1, UP=2, WHEEL=3, TRACKPAD=4`；buttons：`LEFT=0x01, RIGHT=0x02, WHEEL=0x04, BACK=0x08, FORWARD=0x10`（`src/common.rs::input`）。滚轮/触控板时 `x`/`y` 为滚动增量 |
 | `ohos_input_key(uuid, name, down, press, alt, ctrl, shift, command) -> c_int` | `name` 为单字符或 CtrlKey 名（同 Flutter `CtrlKey` 枚举名） |
 | `ohos_input_string(uuid, value) -> c_int` | 软键盘差量文本提交 |
-| `ohos_session_refresh(uuid) -> c_int` | 请求重绘（全帧刷新） || `ohos_switch_display(uuid, display: c_int) -> c_int` | 切换显示器 |
+| `ohos_session_refresh(uuid) -> c_int` | 请求重绘（全帧刷新） |
+| `ohos_switch_display(uuid, display: c_int) -> c_int` | 切换显示器 |
 
 ### 剪贴板（客户端 → 远端）
 | 函数 | 说明 |

@@ -362,7 +362,7 @@ impl KeyboardState for Keyboard {
                 }
                 Key::ShiftRight => {
                     self.last_state[VK_SHIFT_] &= !HIGHBIT;
-                    self.last_state[VK_RSHIFT_] &= HIGHBIT;
+                    self.last_state[VK_RSHIFT_] &= !HIGHBIT;
                     None
                 }
                 _ => None,

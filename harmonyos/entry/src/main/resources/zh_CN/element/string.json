@@ -543,6 +543,7 @@
     {"name": "chat_no_connection", "value": "连接已断开"},
     {"name": "back", "value": "返回"},
     {"name": "copied", "value": "已复制"},
-    {"name": "share_id_reachable_hint", "value": "应用打开期间 ID 即可被连接；点「开始共享」后才会传输屏幕画面。"}
+    {"name": "share_id_reachable_hint", "value": "应用打开期间 ID 即可被连接；点「开始共享」后才会传输屏幕画面。"},
+    {"name": "chat_send_failed", "value": "消息发送失败"}
   ]
 }

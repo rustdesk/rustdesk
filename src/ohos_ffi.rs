@@ -1221,7 +1221,8 @@ pub fn cm_write_clipboard(clipboards: &MultiClipboards) {
             ClipboardFormat::ImagePng => {
                 png = hbb_common::base64::engine::general_purpose::STANDARD.encode(&cb.content);
             }
-            _ => text = std::str::from_utf8(&cb.content).unwrap_or(""),
+            ClipboardFormat::Text => text = std::str::from_utf8(&cb.content).unwrap_or(""),
+            _ => {}
         }
     }
     push_event(

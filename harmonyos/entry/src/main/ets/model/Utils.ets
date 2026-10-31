@@ -128,3 +128,19 @@ export function formatBytes(n: number): string {
   }
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
+
+// Chat messages that arrive while ChatPage is still opening: the page drains
+// them in aboutToAppear, before its own event subscription starts.
+const pendingChats: Map<number, string[]> = new Map();
+
+export function pushPendingChat(id: number, text: string): void {
+  const arr = pendingChats.get(id) ?? [];
+  arr.push(text);
+  pendingChats.set(id, arr);
+}
+
+export function drainPendingChats(id: number): string[] {
+  const arr = pendingChats.get(id) ?? [];
+  pendingChats.delete(id);
+  return arr;
+}

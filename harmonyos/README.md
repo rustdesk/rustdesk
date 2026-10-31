@@ -12,9 +12,9 @@ harmonyos/
 ├── entry/                  ArkTS 模块
 │   └── src/main/
 │       ├── cpp/            NAPI 包装（dlopen librustdesk.so + RGBA→NativeWindow 渲染）
-│       └── ets/            页面：Index（连接）/ RemotePage（远程桌面）/ FileTransferPage
+│       └── ets/            页面：Index（连接）/ RemotePage（远程桌面）/ FileTransferPage / SharePage（被控共享）/ ChatPage
 └── client/                 Rust 侧构建
-    ├── build-ohos-deps.sh  vcpkg 构建 libvpx/libyuv/aom（arm64-ohos triplet）
+    ├── build-ohos-deps.sh  vcpkg 构建 libvpx/libyuv/opus/libsodium（aom 用桩，AV1 通告关闭）
     ├── build-rust.sh       交叉编译 librustdesk.so
     ├── deps/               (生成) 预编译 C 库 include/lib
     └── out/                (生成) librustdesk.so 产物
