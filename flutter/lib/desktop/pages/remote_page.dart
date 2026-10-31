@@ -1167,7 +1167,7 @@ class _ImagePaintState extends State<ImagePaint> {
           m.useTextureRender || widget.ffi.ffiModel.pi.forceTextureRender
               ? _BuildPaintTextureRender(
                   c, s, Offset.zero, paintSize, isViewOriginal())
-              : _buildScrollbarNonTextureRender(m, paintSize, s);
+              : _buildScrollbarNonTextureRender(m, c, paintSize, s);
       return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             c.updateScrollPercent();
@@ -1257,7 +1257,7 @@ class _ImagePaintState extends State<ImagePaint> {
   }
 
   Widget _buildScrollbarNonTextureRender(
-      ImageModel m, Size imageSize, double s) {
+      ImageModel m, CanvasModel c, Size imageSize, double s) {
     double sizeScale = s;
     if (widget.ffi.ffiModel.isPeerLinux) {
       final displays = widget.ffi.ffiModel.pi.getCurDisplays();
@@ -1267,7 +1267,11 @@ class _ImagePaintState extends State<ImagePaint> {
     }
     return CustomPaint(
       size: imageSize,
-      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: sizeScale),
+      painter: ImagePainter(
+          image: m.image,
+          x: c.displayPaddingX,
+          y: c.displayPaddingY,
+          scale: sizeScale),
     );
   }
 
@@ -1284,8 +1288,8 @@ class _ImagePaintState extends State<ImagePaint> {
       size: Size(c.size.width, c.size.height),
       painter: ImagePainter(
           image: m.image,
-          x: c.x / sizeScale,
-          y: c.y / sizeScale,
+          x: c.x / sizeScale + c.displayPaddingX,
+          y: c.y / sizeScale + c.displayPaddingY,
           scale: sizeScale),
     );
   }
@@ -1295,7 +1299,7 @@ class _ImagePaintState extends State<ImagePaint> {
     final ffiModel = c.parent.target!.ffiModel;
     final displays = ffiModel.pi.getCurDisplays();
     final children = <Widget>[];
-    final rect = ffiModel.rect;
+    final rect = c.paddedRect;
     if (rect == null) {
       return Container();
     }
@@ -1475,7 +1479,7 @@ class CursorPaint extends StatelessWidget {
     double cy = c.y;
     if (c.viewStyle.style == kRemoteViewStyleOriginal &&
         c.scrollStyle == ScrollStyle.scrollbar) {
-      final rect = c.parent.target!.ffiModel.rect;
+      final rect = c.paddedRect;
       if (rect == null) {
         // unreachable!
         debugPrint('unreachable! The displays rect is null.');
