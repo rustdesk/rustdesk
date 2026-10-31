@@ -2251,7 +2251,6 @@ impl AudioBuffer {
         }
     }
 
-    #[cfg(target_env = "ohos")]
     pub fn try_shrink(&mut self, having: usize) {
         extern crate chrono;
         use chrono::prelude::*;
