@@ -920,9 +920,10 @@ class FfiModel with ChangeNotifier {
       enter2FaDialog(sessionId, dialogManager);
     } else if (type == 'input-password') {
       enterPasswordDialog(sessionId, dialogManager);
-    } else if (type == 'terminal-admin-login') {
-      enterUserLoginDialog(
-          sessionId, dialogManager, 'terminal-admin-login-tip');
+    } else if (type == 'terminal-admin-login' ||
+        type == 'terminal-admin-login-consent') {
+      enterUserLoginDialog(sessionId, dialogManager, 'terminal-admin-login-tip',
+          waitForAccept: type == 'terminal-admin-login-consent');
     } else if (type == 'terminal-admin-login-password') {
       enterUserLoginAndPasswordDialog(
           sessionId, dialogManager, 'terminal-admin-login-tip');
@@ -4123,6 +4124,7 @@ class FFI {
     int? tabWindowId,
     int? display,
     List<int>? displays,
+    String loginMethod = '',
   }) {
     closed = false;
     if (isMobile) mobileReset();
@@ -4168,6 +4170,7 @@ class FFI {
         password: password ?? '',
         isSharedPassword: isSharedPassword ?? false,
         connToken: connToken,
+        loginMethod: loginMethod,
       );
     } else if (display != null) {
       if (displays == null) {

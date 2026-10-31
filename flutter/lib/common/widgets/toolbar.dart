@@ -579,6 +579,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       bool isTerminal = false}) {
     final connToken = bind.sessionGetConnToken(sessionId: ffi.sessionId);
     connect(context, id,
+        loginMethod: bind.sessionGetCommonSync(
+                sessionId: ffi.sessionId, key: 'login_method', param: '') ??
+            '',
         isFileTransfer: isFileTransfer,
         isViewCamera: isViewCamera,
         isTerminal: isTerminal,

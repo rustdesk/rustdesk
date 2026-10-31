@@ -93,6 +93,8 @@ use crate::ui_session_interface::SessionPermissionConfig;
 
 pub use super::lang::*;
 
+mod login_method;
+
 #[cfg(not(target_os = "linux"))]
 mod audio_playback;
 #[cfg(target_os = "windows")]
@@ -2834,6 +2836,7 @@ pub struct LoginConfigHandler {
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
+    login_method: login_method::LoginMethod,
     config: PeerConfig,
     pub port_forward: (String, i32),
     /// This login's `multiplex`, filled with `port_forward` under the turn
@@ -2911,6 +2914,7 @@ impl LoginConfigHandler {
         adapter_luid: Option<i64>,
         shared_password: Option<String>,
         conn_token: Option<String>,
+        login_method: &str,
     ) {
         let mut id = id;
         if id.contains("@") {
@@ -2951,6 +2955,10 @@ impl LoginConfigHandler {
 
         self.id = id;
         self.conn_type = conn_type;
+        self.login_method = Default::default();
+        if !login_method.is_empty() && !self.set_login_method(login_method) {
+            log::warn!("Failed to initialize login method: {}", login_method);
+        }
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
@@ -3860,6 +3868,9 @@ impl LoginConfigHandler {
             avatar,
             ..Default::default()
         };
+        if self.skips_saved_password() {
+            lr.password.clear();
+        }
         match self.conn_type {
             ConnType::FILE_TRANSFER => lr.set_file_transfer(FileTransfer {
                 dir: self.get_remote_dir(),
@@ -4733,10 +4744,14 @@ pub async fn handle_hash(
 
     lc.write().unwrap().password = password.clone();
 
+    let request_consent = lc.read().unwrap().skips_saved_password();
+
     let is_terminal_admin = lc.read().unwrap().is_terminal_admin;
     let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
     if is_terminal && is_terminal_admin {
-        if password.is_empty() {
+        if request_consent {
+            interface.msgbox("terminal-admin-login-consent", "", "", "");
+        } else if password.is_empty() {
             interface.msgbox("terminal-admin-login-password", "", "", "");
         } else {
             interface.msgbox("terminal-admin-login", "", "", "");
@@ -4747,7 +4762,9 @@ pub async fn handle_hash(
 
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
-        interface.msgbox("input-password", "Password Required", "", "");
+        if !request_consent {
+            interface.msgbox("input-password", "Password Required", "", "");
+        }
         Vec::new()
     } else {
         let mut hasher = Sha256::new();
@@ -4755,6 +4772,15 @@ pub async fn handle_hash(
         hasher.update(&hash.challenge);
         hasher.finalize()[..].into()
     };
+
+    if request_consent {
+        interface.msgbox(
+            "wait-remote-accept-nook",
+            "Prompt",
+            "Please wait for the remote side to accept your session request...",
+            "",
+        );
+    }
 
     if let Err(error) = send_login(
         lc.clone(),
