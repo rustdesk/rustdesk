@@ -694,7 +694,12 @@ impl VideoRenderer {
             return FrameTaken::No;
         }
         if !pixelbuffer_fits_session(info.size, pixelbuffer.width(), pixelbuffer.height()) {
-            log::debug!(
+            // Frame-driven: while the peer info lags a resolution change this fires for every
+            // frame, so it goes through the throttle that `AGENTS.md` requires for a recurring
+            // frame-driven line. The sizes are kept because they are what identifies the race.
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(5),
+                debug,
                 "display #{display}: refusing GPU frame ({}x{}) for session size ({}x{})",
                 pixelbuffer.width(),
                 pixelbuffer.height(),
