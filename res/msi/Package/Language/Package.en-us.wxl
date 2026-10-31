@@ -1,10 +1,12 @@
 ﻿<!--
 This file contains the declaration of all the localizable strings.
+Change the Culture and Codepage to appropriate values. Unicode is not supported.
 -->
 <WixLocalization Culture="en-us" Codepage="1252"
 	xmlns="http://wixtoolset.org/schemas/v4/wxl">
-
+    <!-- Same as codepage above -->
 	<String Id="SummaryCodepage" Value="1252" />
+    <!-- Language Code ID (LCID) see https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oe376/6c085406-a698-4e12-9d4d-c3b0ee3dbc4a -->
 	<String Id="ProductLanguage" Value="1033" />
 
 	<!-- General strings -->
