@@ -145,6 +145,9 @@ pub(crate) async fn connect_trusted_device_service(
     let connection = connect_service(ms_timeout)
         .await
         .map_err(crate::trusted_devices::authority::Unavailable)?;
+    // The root-service uid check only applies where the installed service
+    // exists; on ohos connect_service fails anyway (no service socket).
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     if connection.peer_uid() != Some(0) {
         bail!("Trusted-device system service is not an authenticated root peer");
     }

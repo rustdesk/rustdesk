@@ -248,7 +248,7 @@ pub fn need_fs_cm_send_files() -> bool {
 ///
 /// Only the `ReadDir` protocol action treats an empty path as the home directory.
 /// Callers must opt in to that protocol-specific behavior with `allow_empty`.
-#[cfg(any(target_os = "android", target_env = "ohos"))]
+#[cfg(target_os = "android")]
 pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
     use std::path::{Component, Path, PathBuf};
 
@@ -267,6 +267,47 @@ pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
             }
         };
     }
+
+    // Canonicalize the deepest existing ancestor and re-append the missing tail.
+    fn resolve(path: &Path) -> Option<PathBuf> {
+        let mut tail: Vec<std::ffi::OsString> = Vec::new();
+        let mut base = path.to_path_buf();
+        loop {
+            if let Ok(mut resolved) = base.canonicalize() {
+                while let Some(component) = tail.pop() {
+                    resolved.push(component);
+                }
+                return Some(resolved);
+            }
+            tail.push(base.file_name()?.to_os_string());
+            if !base.pop() {
+                return None;
+            }
+        }
+    }
+
+    if path.is_empty() {
+        return allow_empty;
+    }
+    let path = Path::new(path);
+    // `..` is never needed by the protocol and would defeat the prefix check below.
+    if !path.is_absolute() || path.components().any(|c| c == Component::ParentDir) {
+        return false;
+    }
+    let home = base::fs::get_path(&base::fs::get_home_as_string());
+    let home = home.canonicalize().unwrap_or(home);
+    if home.as_os_str().is_empty() {
+        return false;
+    }
+    // `Path::starts_with` compares whole components, and is true for equal paths.
+    resolve(path).map_or(false, |target| target.starts_with(&home))
+}
+
+// Same policy as the android impl above, without base::fs::android's SAF
+// document roots: ohos builds the peer workspace check from the home prefix.
+#[cfg(target_env = "ohos")]
+pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
+    use std::path::{Component, Path, PathBuf};
 
     // Canonicalize the deepest existing ancestor and re-append the missing tail.
     fn resolve(path: &Path) -> Option<PathBuf> {

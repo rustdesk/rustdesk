@@ -444,9 +444,9 @@ pub fn set_auth_option(key: String, value: String) -> hbb_common::ResultType<()>
     {
         hbb_common::bail!("Invalid trusted-device expiration period");
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let mut options = ipc::get_options();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let mut options = Config::get_options();
     if value.is_empty() {
         options.remove(&key);

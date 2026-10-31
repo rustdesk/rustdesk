@@ -51,7 +51,7 @@ pub mod ohos_voice_call;
 use common::*;
 mod auth_2fa;
 mod trusted_devices;
-#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
+#[cfg(not(target_os = "ios"))]
 mod clipboard;
 #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub mod core_main;
