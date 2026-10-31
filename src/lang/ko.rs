@@ -823,5 +823,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please select Android → media.", "Android → media를 선택해 주시기 바랍니다."),
         ("Trust duration (days)", "신뢰 유지 기간 (일)"),
         ("Renew trust", "신뢰 갱신"),
+        ("Installation will delete this folder and all its contents:", ""),
+        ("Installation may overwrite files with the same name in this folder:", ""),
     ].iter().cloned().collect();
 }

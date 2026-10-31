@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/desktop/widgets/install_directory_confirmation.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -277,7 +278,9 @@ class _InstallPageBodyState extends State<_InstallPageBody>
         ));
   }
 
-  void install() {
+  Future<void> install() async {
+    if (!btnEnabled.value) return;
+    final installPath = controller.text;
     do_install() {
       btnEnabled.value = false;
       cancelEnabled.value = false;
@@ -286,10 +289,18 @@ class _InstallPageBodyState extends State<_InstallPageBody>
       if (startmenu.value) args += ' startmenu';
       if (desktopicon.value) args += ' desktopicon';
       if (printer.value) args += ' printer';
-      bind.installInstallMe(options: args, path: controller.text);
+      bind.installInstallMe(options: args, path: installPath);
     }
 
-    do_install();
+    btnEnabled.value = false;
+    try {
+      final confirmed = await confirmInstallDirectory(this.context,
+          existingPath: bind.installInstallPath(), targetPath: installPath);
+      if (!mounted || !confirmed) return;
+      do_install();
+    } finally {
+      if (mounted && !showProgress.value) btnEnabled.value = true;
+    }
   }
 
   void selectInstallPath() async {
