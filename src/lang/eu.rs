@@ -823,7 +823,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please select Android → media.", "Hautatu Android → media."),
         ("Trust duration (days)", "Konfiantzaren iraupena (egunak)"),
         ("Renew trust", "Berritu konfiantza"),
-        ("Installation will delete this folder and all its contents:", ""),
-        ("The selected folder is not empty. Installation may delete existing data. Consider choosing a different folder.", ""),
+        ("install-directory-not-empty-tip", ""),
     ].iter().cloned().collect();
 }

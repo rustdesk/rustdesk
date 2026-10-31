@@ -2,19 +2,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:path/path.dart' as path;
 
-const _nonemptyDirectoryWarning = 'The selected folder is not empty. '
-    'Installation may delete existing data. '
-    'Consider choosing a different folder.';
+const _nonemptyDirectoryWarning = 'install-directory-not-empty-tip';
 
 Future<bool> confirmInstallDirectory(BuildContext context,
-    {required String existingPath, required String targetPath}) async {
+    {required String targetPath}) async {
   try {
-    final warnings = await _directoryWarnings(existingPath, targetPath);
+    final hasContents = await _containsFiles(targetPath);
     if (!context.mounted) return false;
-    if (warnings.isEmpty) return true;
-    return await _showDirectoryDialog(context, warnings.join('\n\n'));
+    if (!hasContents) return true;
+    return await _showDirectoryDialog(
+        context, '${translate(_nonemptyDirectoryWarning)}\n$targetPath');
   } on FileSystemException catch (error) {
     debugPrint('Failed to inspect installation directory: $error');
     if (context.mounted) {
@@ -22,22 +20,6 @@ Future<bool> confirmInstallDirectory(BuildContext context,
     }
     return false;
   }
-}
-
-Future<List<String>> _directoryWarnings(
-    String existingPath, String targetPath) async {
-  final isSameDirectory = path.equals(existingPath, targetPath);
-  final deletesContents = await _containsFiles(existingPath);
-  final overwritesContents =
-      !isSameDirectory && await _containsFiles(targetPath);
-  final existingWarning = isSameDirectory
-      ? _nonemptyDirectoryWarning
-      : 'Installation will delete this folder and all its contents:';
-  return [
-    if (deletesContents) '${translate(existingWarning)}\n$existingPath',
-    if (overwritesContents)
-      '${translate(_nonemptyDirectoryWarning)}\n$targetPath',
-  ];
 }
 
 Future<bool> _containsFiles(String directoryPath) async {

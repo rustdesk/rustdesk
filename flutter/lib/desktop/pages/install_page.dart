@@ -313,8 +313,8 @@ class _InstallPageBodyState extends State<_InstallPageBody>
 
     btnEnabled.value = false;
     try {
-      final confirmed = await confirmInstallDirectory(this.context,
-          existingPath: bind.installInstallPath(), targetPath: installPath);
+      final confirmed =
+          await confirmInstallDirectory(this.context, targetPath: installPath);
       if (!mounted || !confirmed) return;
       do_install();
     } finally {
