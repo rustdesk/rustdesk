@@ -379,6 +379,11 @@ class _FloatingMouseState extends State<FloatingMouse> {
       if (!_isExpanded) {
         return;
       }
+      if (isIOS && _canvasModel.mobileControlsOutsideCanvas) {
+        // Lower-pane positions are outside the remote image's coordinate space.
+        _cursorModel.updatePan(delta, Offset.zero, false);
+        return;
+      }
 
       Offset? mouseGlobalPosition;
       Offset? positionInRemoteDisplay;
