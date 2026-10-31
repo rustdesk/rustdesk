@@ -3459,7 +3459,7 @@ impl Connection {
                                 }
                             }
                         }
-                        #[cfg(target_os = "android")]
+                        #[cfg(any(target_os = "android", target_env = "ohos"))]
                         crate::clipboard::handle_msg_clipboard(cb);
                     }
                 }
@@ -3467,7 +3467,7 @@ impl Connection {
                     if self.should_handle_text_clipboard_message() && self.clipboard_enabled() {
                         #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                         update_clipboard(_mcb.clipboards, ClipboardSide::Host);
-                        #[cfg(target_os = "android")]
+                        #[cfg(any(target_os = "android", target_env = "ohos"))]
                         crate::clipboard::handle_msg_multi_clipboards(_mcb);
                     }
                 }
@@ -3593,9 +3593,10 @@ impl Connection {
                                 return true;
                             }
                         }
-                        // Android is scoped-storage only: reject any peer supplied path that
-                        // escapes the app workspace before it reaches the filesystem.
-                        #[cfg(target_os = "android")]
+                        // Android is scoped-storage only and ohos shares the same workspace
+                        // model: reject any peer supplied path that escapes the app workspace
+                        // before it reaches the filesystem.
+#[cfg(any(target_os = "android", target_env = "ohos"))]
                         {
                             // (path, job id, allow empty) of the peer supplied path this action
                             // operates on.
@@ -4134,10 +4135,9 @@ impl Connection {
                 }
                 Some(message::Union::VoiceCallRequest(request)) => {
                     if request.is_connect {
-                        self.voice_call_request_timestamp = Some(
-                            NonZeroI64::new(request.req_timestamp)
-                                .unwrap_or(NonZeroI64::new(get_time()).unwrap()),
-                        );
+                        let ts = request.req_timestamp;
+                        self.voice_call_request_timestamp =
+                            NonZeroI64::new(if ts != 0 { ts } else { get_time() });
                         // Notify the connection manager.
                         self.send_to_cm(Data::VoiceCallIncoming);
                     } else {
@@ -4940,10 +4940,9 @@ impl Connection {
             return;
         }
         let msg = new_voice_call_request(true);
-        self.voice_call_request_timestamp = Some(
-            NonZeroI64::new(msg.voice_call_request().req_timestamp)
-                .unwrap_or(NonZeroI64::new(get_time()).unwrap()),
-        );
+        let ts = msg.voice_call_request().req_timestamp;
+        self.voice_call_request_timestamp =
+            NonZeroI64::new(if ts != 0 { ts } else { get_time() });
         self.send(msg).await;
     }
 

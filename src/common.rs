@@ -350,7 +350,7 @@ pub fn is_peer_path_allowed(_path: &str, _allow_empty: bool) -> bool {
     true
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub async fn is_peer_path_allowed_async(path: &str, allow_empty: bool) -> bool {
     let path = path.to_owned();
     match tokio::task::spawn_blocking(move || is_peer_path_allowed(&path, allow_empty)).await {

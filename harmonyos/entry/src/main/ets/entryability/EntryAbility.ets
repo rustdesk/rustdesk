@@ -25,6 +25,9 @@ const VOICE_CALL_NOTIFICATION_ID = 0x5253;
 class ClientParams {
   client: string = '';
   name: string = '';
+  // The peer message that triggered an auto-opened ChatPage, so the page can
+  // render it before its own cm_chat subscription starts.
+  firstMessage: string = '';
 }
 
 export default class EntryAbility extends UIAbility {
@@ -192,6 +195,7 @@ export default class EntryAbility extends UIAbility {
         return;
       }
       const id = ev.num('id');
+      const text = ev.get('text');
       try {
         const state = router.getState();
         if (state.name === 'pages/ChatPage'
@@ -201,7 +205,7 @@ export default class EntryAbility extends UIAbility {
       } catch (e) {
         // Fall through: an unavailable router state still opens the chat.
       }
-      this.openChatPage(id);
+      this.openChatPage(id, text);
     });
 
     windowStage.loadContent('pages/Index', (err) => {
@@ -244,7 +248,7 @@ export default class EntryAbility extends UIAbility {
   // Open the conversation for one connection. Only auto-opens once per
   // connection: after the user leaves the page, further messages go back to
   // the unread badge on the SharePage card.
-  private openChatPage(id: number): void {
+  private openChatPage(id: number, initialText: string): void {
     if (this.autoChatConnId === id) {
       return;
     }
@@ -252,6 +256,7 @@ export default class EntryAbility extends UIAbility {
     const params = new ClientParams();
     params.client = `${id}`;
     params.name = this.peerNames.get(id) ?? '';
+    params.firstMessage = initialText;
     router.pushUrl({ url: 'pages/ChatPage', params: params })
       .then(() => {
         this.autoChatConnId = -1;
@@ -290,7 +295,11 @@ export default class EntryAbility extends UIAbility {
   }
 
   private showVoiceCallDialog(id: number, name: string): void {
-    this.showVoiceCallDialogWithSeq(id, name, 0);
+    // Allocate a fresh sequence: once any dialog was replayed or cancelled,
+    // pendingCallSeq is nonzero and a fixed zero would fail the stale-dialog
+    // check, leaving the accept/reject buttons inert.
+    const seq = ++this.pendingCallSeq;
+    this.showVoiceCallDialogWithSeq(id, name, seq);
   }
 
   private showVoiceCallDialogWithSeq(id: number, name: string, seq: number): void {

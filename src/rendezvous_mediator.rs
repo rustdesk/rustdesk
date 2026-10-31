@@ -482,7 +482,12 @@ impl RendezvousMediator {
                                             addr = new_addr;
                                         }
                                         Ok(None) => {}
+                                        // On ohos (emulator NAT) a failed rebind used to tear down the whole
+                                        // registration loop; keep looping and retry instead.
+                                        #[cfg(target_env = "ohos")]
                                         Err(e) => log::debug!("Failed to rebind udp socket for {}: {}", rz.host, e),
+                                        #[cfg(not(target_env = "ohos"))]
+                                        Err(e) => return Err(e),
                                     }
                                     last_dns_check = Instant::now();
                                 }

@@ -56,6 +56,8 @@ export const serverStart: () => number;
 export const serverStartService: () => number;
 export const serverStopService: () => number;
 export const getServerId: () => string;
+
+export const getClients: () => string;
 export const getServerPassword: () => string;
 export const updateServerPassword: () => number;
 export const hasPermanentPassword: () => number;

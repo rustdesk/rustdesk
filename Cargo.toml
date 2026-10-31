@@ -228,6 +228,8 @@ exclude = ["vdi/host"]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # Vendored: adds a target-scoped SODIUM_LIB_DIR_<target> lookup so a windows
 # host cross build does not feed aarch64 libsodium into host build scripts.
+# The copy ships no bundled libsodium/ source or msvc/mingw prebuilts: hosts
+# build sodium from vcpkg (windows) or pkg-config (unix), see the CI steps.
 libsodium-sys = { path = "libs/libsodium-sys" }
 
 # Upstream reserves a frame's whole declared length as soon as its header is in, so a header alone

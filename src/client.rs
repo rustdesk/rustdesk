@@ -2584,7 +2584,7 @@ impl AudioHandler {
                 ) {
                     Ok(output) => output,
                     Err(error) => {
-                        log::error!("Failed to resample decoded audio: {error:#}");
+                        hbb_common::throttled_log!(std::time::Duration::from_secs(1), error, "Failed to resample decoded audio: {error:#}");
                         return;
                     }
                 };
@@ -2607,7 +2607,7 @@ impl AudioHandler {
                 ) {
                     Ok(output) => output,
                     Err(error) => {
-                        log::error!("Failed to resample decoded audio: {error:#}");
+                        hbb_common::throttled_log!(std::time::Duration::from_secs(1), error, "Failed to resample decoded audio: {error:#}");
                         return;
                     }
                 };

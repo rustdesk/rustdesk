@@ -405,6 +405,15 @@ export function ffiGetServerId(): string {
   }
 }
 
+export function ffiGetClients(): string {
+  try {
+    return native.getClients();
+  } catch (e) {
+    logFail('getClients', e as Object);
+    return '';
+  }
+}
+
 export function ffiGetServerPassword(): string {
   try {
     return native.getServerPassword();

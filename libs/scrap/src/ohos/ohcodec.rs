@@ -185,8 +185,8 @@ pub struct OhCodecDecoder {
 impl OhCodecDecoder {
     pub fn new(format: CodecFormat) -> Option<Self> {
         let mime = match format {
-            CodecFormat::H264 => "video/avc",
-            CodecFormat::H265 => "video/hevc",
+            CodecFormat::H264 => "video/avc\0,",
+            CodecFormat::H265 => "video/hevc\0,",
             _ => {
                 log::error!("Unsupported codec format for ohcodec: {format:?}");
                 return None;
@@ -198,7 +198,7 @@ impl OhCodecDecoder {
     fn with_mime(mime: &'static str) -> Option<Self> {
         let codec = unsafe { OH_VideoDecoder_CreateByMime(mime.as_ptr() as _) };
         if codec.is_null() {
-            log::error!("OH_VideoDecoder_CreateByMime({mime}) failed");
+            log::error!("OH_VideoDecoder_CreateByMime({}) failed", mime.trim_end_matches('\0'));
             return None;
         }
         let inner = Arc::new(DecoderInner {
@@ -261,7 +261,7 @@ impl OhCodecDecoder {
             }
             return None;
         }
-        log::info!("ohcodec decoder created: {mime}");
+        log::info!("ohcodec decoder created: {}", mime.trim_end_matches('\0'));
         Some(Self {
             mime,
             inner,
@@ -640,10 +640,10 @@ fn encode_support_bits() -> u8 {
     let mut support = ENCODE_SUPPORT.lock().unwrap();
     if support.is_none() {
         let mut bits = 0u8;
-        if probe_encoder("video/avc") {
+        if probe_encoder("video/avc\0") {
             bits |= 0b01;
         }
-        if probe_encoder("video/hevc") {
+        if probe_encoder("video/hevc\0") {
             bits |= 0b10;
         }
         log::info!(
@@ -665,7 +665,12 @@ impl OhCodecEncoder {
             CodecFormat::H265 => bits & 0b10 != 0,
             _ => false,
         };
-        supported.then(|| format!("OH_VideoEncoder({})", mime.trim_start_matches("video/")))
+        supported.then(|| {
+            format!(
+                "OH_VideoEncoder({})",
+                mime.trim_start_matches("video/").trim_end_matches('\0')
+            )
+        })
     }
 
     pub fn clear_support_cache() {
@@ -812,8 +817,8 @@ impl OhCodecEncoder {
 
 fn mime_for(format: CodecFormat) -> Option<&'static str> {
     match format {
-        CodecFormat::H264 => Some("video/avc"),
-        CodecFormat::H265 => Some("video/hevc"),
+        CodecFormat::H264 => Some("video/avc\0"),
+        CodecFormat::H265 => Some("video/hevc\0"),
         _ => None,
     }
 }
@@ -828,14 +833,17 @@ impl EncoderApi for OhCodecEncoder {
                 if config.format != CodecFormat::H264 && config.format != CodecFormat::H265 {
                     bail!("unsupported format: {:?}", config.format);
                 }
-                let mime = mime_for(config.format).unwrap();
+                let mime = match mime_for(config.format) {
+                    Some(mime) => mime,
+                    None => bail!("unsupported format: {:?}", config.format),
+                };
                 let bitrate = Self::bitrate(config.width, config.height, config.quality);
                 let gop_ms = config.keyframe_interval.map_or(DEFAULT_GOP_MS, |frames| {
                     ((frames as i32) * 1000 / DEFAULT_FPS).max(1000)
                 });
                 let codec = unsafe { OH_VideoEncoder_CreateByMime(mime.as_ptr() as _) };
                 if codec.is_null() {
-                    bail!("OH_VideoEncoder_CreateByMime({mime}) failed");
+                    bail!("OH_VideoEncoder_CreateByMime({}) failed", mime.trim_end_matches('\0'));
                 }
                 let inner = Arc::new(EncoderInner {
                     codec,
@@ -911,7 +919,8 @@ impl EncoderApi for OhCodecEncoder {
                     bail!("OH_VideoEncoder Prepare/Start failed");
                 }
                 log::info!(
-                    "ohcodec encoder created: {mime}, {}x{}, bitrate {bitrate} kbps, gop {gop_ms} ms",
+                    "ohcodec encoder created: {}, {}x{}, bitrate {bitrate} kbps, gop {gop_ms} ms",
+                    mime.trim_end_matches('\0'),
                     config.width,
                     config.height
                 );

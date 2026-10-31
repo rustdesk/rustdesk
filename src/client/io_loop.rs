@@ -1409,10 +1409,9 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::NewVoiceCall => {
                 let msg = new_voice_call_request(true);
                 // Save the voice call request timestamp for the further validation.
-                self.voice_call_request_timestamp = Some(
-                    NonZeroI64::new(msg.voice_call_request().req_timestamp)
-                        .unwrap_or(NonZeroI64::new(get_time()).unwrap()),
-                );
+                let ts = msg.voice_call_request().req_timestamp;
+                self.voice_call_request_timestamp =
+                    NonZeroI64::new(if ts != 0 { ts } else { get_time() });
                 allow_err!(peer.send(&msg).await);
                 self.handler.on_voice_call_waiting();
             }
@@ -2643,10 +2642,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     if request.is_connect {
                         // A voice call offered by the controlled side: surface it
                         // to the user, who answers through Data::AnswerVoiceCall.
-                        self.incoming_voice_call_timestamp = Some(
-                            NonZeroI64::new(request.req_timestamp)
-                                .unwrap_or(NonZeroI64::new(get_time()).unwrap()),
-                        );
+                        let ts = request.req_timestamp;
+                        self.incoming_voice_call_timestamp =
+                            NonZeroI64::new(if ts != 0 { ts } else { get_time() });
                         self.handler.on_voice_call_incoming();
                     } else {
                         log::debug!("The remote has requested to close the voice call");

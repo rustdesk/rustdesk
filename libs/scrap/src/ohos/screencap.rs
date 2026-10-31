@@ -261,6 +261,9 @@ pub struct OH_AVCodecBufferAttr {
     pub pts: i64,
     pub size: i32,
     pub offset: i32,
+    // Same four-field layout as the native struct in ohcodec.rs; omitting
+    // flags undersized the struct for OH_AVBuffer_GetBufferAttr.
+    pub flags: u32,
 }
 
 #[link(name = "native_avscreen_capture")]

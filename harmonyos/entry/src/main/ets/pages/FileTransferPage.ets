@@ -510,6 +510,8 @@ struct FileTransferPage {
       return;
     }
     this.remoteDir = e.path;
+    // The old selection belongs to the previous directory.
+    this.remoteHasSel = false;
     this.refreshRemote();
   }
 
@@ -522,6 +524,7 @@ struct FileTransferPage {
     if (this.remoteDir.length === 0) {
       this.remoteDir = '/';
     }
+    this.remoteHasSel = false;
     this.refreshRemote();
   }
 
@@ -552,7 +555,9 @@ struct FileTransferPage {
       promptAction.showToast({ message: $r('app.string.select_remote_file'), duration: 2000 });
       return;
     }
-    const from = joinPath(this.remoteDir, this.remoteSel.name);
+    // The selection carries its own full path: remoteDir may have changed
+    // since it was picked.
+    const from = this.remoteSel.path;
     const to = joinPath(this.localDir, this.remoteSel.name);
     const id = this.actId++;
     const job = new JobItem();

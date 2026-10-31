@@ -20,7 +20,7 @@ import {
   ffiCmHandleIncomingVoiceCall, ffiCmCloseVoiceCall,
 } from '../ohos_ffi';
 import { globalEvents, parseEvent, RdeskEvent } from '../model/RdeskEvents';
-import { evBool, evNum, evStr } from '../model/Utils';
+import { evBool, evNum, evStr, parseJsonArray } from '../model/Utils';
 
 const LOG_DOMAIN = 0x5253;
 const TAG = 'RustDeskShare';
@@ -31,6 +31,7 @@ const CAPTURE_STATE_CANCELED = 1;
 const CAPTURE_STATE_STOPPED_BY_USER = 2;
 const CAPTURE_STATE_INTERRUPTED = 3;
 const CAPTURE_STATE_STOPPED_BY_CALL = 4;
+const CAPTURE_STATE_PENDING = -1;
 const CAPTURE_STATE_STOPPED_BY_SWITCHES = 10;
 
 class ClientInfo {
@@ -74,6 +75,18 @@ struct SharePage {
     this.captureRunning = ffiCaptureRunning() === 1;
     this.serviceRunning = this.captureRunning;
     globalEvents.subscribe(this.handler);
+    // Requests that arrived while this page was closed are already in the
+    // CM state; pull them so they are not lost to the missed live events.
+    try {
+      for (const it of parseJsonArray(ffiGetClients())) {
+        const c = this.parseClient(JSON.stringify(it));
+        if (c !== null) {
+          this.upsertClient(c);
+        }
+      }
+    } catch (e) {
+      hilog.warn(LOG_DOMAIN, TAG, 'fetch clients failed: %{public}s', `${e}`);
+    }
   }
 
   aboutToDisappear(): void {
@@ -232,6 +245,10 @@ struct SharePage {
 
   private onCaptureState(state: number): void {
     hilog.info(LOG_DOMAIN, TAG, 'capture state %{public}d', state);
+    if (state === CAPTURE_STATE_PENDING) {
+      // The consent picker is still on screen; keep the starting indicator.
+      return;
+    }
     this.captureStarting = false;
     if (state === CAPTURE_STATE_STARTED) {
       this.captureRunning = true;

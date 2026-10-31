@@ -466,7 +466,12 @@ pub fn switch_permission_all(name: String, enabled: bool) {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+))]
 #[inline]
 pub fn get_clients_state() -> String {
     let clients = CLIENTS.read().unwrap();
@@ -1008,10 +1013,11 @@ async fn handle_fs(
     tx_log: Option<&UnboundedSender<String>>,
     _conn_id: i32,
 ) {
-    // Android is scoped-storage only, so every peer supplied path has to stay inside the
-    // app workspace. This is the filesystem boundary, keep it enforced here even though
-    // `Connection` rejects out-of-workspace requests earlier as well.
-    #[cfg(target_os = "android")]
+    // Android is scoped-storage only and ohos shares the same workspace model, so
+    // every peer supplied path has to stay inside the app workspace. This is the
+    // filesystem boundary, keep it enforced here even though `Connection` rejects
+    // out-of-workspace requests earlier as well.
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     {
         // (path, job id, file num, allow empty) of the peer supplied path this message
         // acts on.

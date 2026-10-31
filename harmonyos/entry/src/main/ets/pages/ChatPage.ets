@@ -38,6 +38,15 @@ struct ChatPage {
     const p = routerParams();
     this.connId = evNumParam(p['client']);
     this.peerName = evStrParam(p['name']);
+    // The message that opened this page was dispatched before the
+    // subscription below started; EntryAbility forwards it in the params.
+    const firstMessage = evStrParam(p['firstMessage']);
+    if (firstMessage.length > 0) {
+      const msg = new ChatMsg();
+      msg.text = firstMessage;
+      msg.fromPeer = true;
+      this.messages.push(msg);
+    }
     globalEvents.subscribe(this.handler);
   }
 
