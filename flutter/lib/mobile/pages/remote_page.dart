@@ -8,6 +8,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
+import 'package:flutter_hbb/mobile/widgets/window_metrics_watcher.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:flutter_svg/svg.dart';
@@ -553,7 +554,32 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                     color: kColorCanvas,
                     child: isWebDesktop
                         ? getBodyForDesktopWithListener()
-                        : SafeArea(
+                        : isIOS
+                            ? Consumer<CanvasModel>(
+                                builder: (_, canvas, child) =>
+                                    WindowMetricsWatcher(
+                                  refitOnViewportChange:
+                                      !canvas.isMobileCanvasChanged,
+                                  onViewportChanged:
+                                      canvas.setMobileViewportSize,
+                                  onChanged: () {
+                                    gFFI.dialogManager
+                                        .resetMobileActionsOverlay(ffi: gFFI);
+                                    canvas.updateViewStyle();
+                                  },
+                                  child: child!,
+                                ),
+                                child: Container(
+                                  color: MyTheme.canvasColor,
+                                  child: inputModel.isPhysicalMouse.value
+                                      ? getBodyForMobile()
+                                      : RawTouchGestureDetectorRegion(
+                                          child: getBodyForMobile(),
+                                          ffi: gFFI,
+                                        ),
+                                ),
+                              )
+                            : SafeArea(
                             child:
                                 OrientationBuilder(builder: (ctx, orientation) {
                               if (_currentOrientation != orientation) {
@@ -715,7 +741,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
             Positioned(
               top: 10,
               right: 10,
-              child: QualityMonitor(gFFI.qualityMonitorModel),
+              child: isIOS
+                  ? SafeArea(
+                      left: false,
+                      top: false,
+                      bottom: false,
+                      child: QualityMonitor(gFFI.qualityMonitorModel),
+                    )
+                  : QualityMonitor(gFFI.qualityMonitorModel),
             ),
             Obx(() {
               final chatKeyboardRequested =
@@ -1191,7 +1224,10 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         key: _key,
         color: Color(0xAA000000),
         padding: EdgeInsets.only(
-            top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
+                top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8)
+            .add(isIOS
+                ? MediaQuery.of(context).padding.copyWith(bottom: 0)
+                : EdgeInsets.zero),
         child: Wrap(
           spacing: space,
           runSpacing: space,
