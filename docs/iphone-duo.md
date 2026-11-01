@@ -19,11 +19,15 @@ not used to identify folding hardware.
 
 The local Latin QWERTY keyboard supplements the system keyboard. macOS peers use
 Command, Option and Control symbols; other peers retain Ctrl/Alt/Win conventions.
+Shift selects uppercase letters and shifted symbols (for example, `1` becomes
+`!`) and releases after one character or space. `?123` opens the punctuation
+page; `ABC` returns to letters. Command, Control and Option remain selected until
+toggled off.
 The Fn menu provides Escape, Tab, Enter, arrow keys, modifiers, F1-F12,
 Home/End, Insert/Delete, Page Up/Down and
 copy/paste/save shortcuts, including flat and cover modes. Windows/Linux peers
-also have Print Screen, Scroll Lock, Pause and Menu. Other languages, punctuation
-and IME composition use the existing system keyboard.
+also have Print Screen, Scroll Lock, Pause and Menu. Other languages and IME
+composition use the existing system keyboard.
 
 Trackpad tap left-clicks and long-press right-clicks; explicit click buttons are
 also available. Existing display options, disconnect, control menus, chat,

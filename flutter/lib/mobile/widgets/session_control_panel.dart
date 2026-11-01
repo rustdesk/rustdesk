@@ -49,10 +49,53 @@ class SessionControlPanel extends StatefulWidget {
 class _SessionControlPanelState extends State<SessionControlPanel> {
   bool? _keyboard;
   bool _shift = false;
+  bool _symbols = false;
   bool get shifted => widget.onModifier != null
       ? widget.modifiers.contains(SessionModifier.shift)
       : _shift;
   bool get canType => widget.enabled && widget.keyboardEnabled;
+
+  String character(String value) => !shifted
+      ? value
+      : const {
+            '1': '!',
+            '2': '@',
+            '3': '#',
+            '4': r'$',
+            '5': '%',
+            '6': '^',
+            '7': '&',
+            '8': '*',
+            '9': '(',
+            '0': ')',
+            ',': '<',
+            '.': '>',
+            '-': '_',
+            '=': '+',
+            '/': '?',
+            ';': ':',
+            "'": '"',
+            '[': '{',
+            ']': '}',
+            r'\': '|',
+            '`': '~',
+          }[value] ??
+          value.toUpperCase();
+
+  void typeKey(String value) {
+    final releaseShift = shifted && (value.length == 1 || value == 'VK_SPACE');
+    widget.onKey(value.length == 1 ? character(value) : value);
+    if (releaseShift) {
+      if (widget.onModifier != null) {
+        widget.onModifier!(SessionModifier.shift);
+      } else {
+        setState(() => _shift = false);
+      }
+    }
+  }
+
+  Widget symbols() => key(_symbols ? 'ABC' : '?123', '',
+      utility: true, onPressed: () => setState(() => _symbols = !_symbols));
 
   Widget key(String label, String value,
       {int flex = 1,
@@ -101,12 +144,8 @@ class _SessionControlPanelState extends State<SessionControlPanel> {
                         .bodyMedium
                         ?.copyWith(fontSize: 15, fontWeight: FontWeight.w500)),
                   ),
-                  onPressed: !canType
-                      ? null
-                      : onPressed ??
-                          () => widget.onKey(shifted && value.length == 1
-                              ? value.toUpperCase()
-                              : value),
+                  onPressed:
+                      !canType ? null : onPressed ?? () => typeKey(value),
                   child: icon == null
                       ? Text(label,
                           maxLines: 1, overflow: TextOverflow.ellipsis)
@@ -116,10 +155,8 @@ class _SessionControlPanelState extends State<SessionControlPanel> {
         ));
   }
 
-  List<Widget> letters(String values) => values
-      .split('')
-      .map((value) => key(shifted ? value.toUpperCase() : value, value))
-      .toList();
+  List<Widget> letters(String values) =>
+      values.split('').map((value) => key(character(value), value)).toList();
 
   Widget shift() => Tooltip(
       message: 'Shift',
@@ -165,21 +202,22 @@ class _SessionControlPanelState extends State<SessionControlPanel> {
                     ]),
                     Row(children: [
                       key('tab', 'VK_TAB', utility: true),
-                      ...letters('qwertyuiop')
+                      ...letters(_symbols ? r'-/:;()$&@"' : 'qwertyuiop')
                     ]),
                     Row(children: [
-                      ...letters('asdfghjkl'),
+                      ...letters(_symbols ? '.,[]{}+=_' : 'asdfghjkl'),
                       key('Return', 'VK_RETURN',
                           flex: 2, icon: Icons.keyboard_return, utility: true)
                     ]),
                     Row(children: [
                       Expanded(child: shift()),
-                      ...letters('zxcvbnm'),
-                      ...letters(',.'),
+                      ...letters(_symbols ? r"?!'\`~|" : 'zxcvbnm'),
+                      if (!_symbols) ...letters(',.'),
                       key('Up', 'VK_UP',
                           icon: Icons.keyboard_arrow_up, utility: true)
                     ]),
                     Row(children: [
+                      symbols(),
                       key('esc', 'VK_ESCAPE', utility: true),
                       modifier('Control', SessionModifier.control,
                           Icons.keyboard_control_key),
@@ -198,19 +236,22 @@ class _SessionControlPanelState extends State<SessionControlPanel> {
                   ]
                 : [
                     Row(children: letters('1234567890')),
-                    Row(children: letters('qwertyuiop')),
+                    Row(
+                        children:
+                            letters(_symbols ? r'-/:;()$&@"' : 'qwertyuiop')),
                     Row(children: [
                       const Spacer(),
-                      ...letters('asdfghjkl'),
+                      ...letters(_symbols ? '.,[]{}+=_' : 'asdfghjkl'),
                       const Spacer()
                     ]),
                     Row(children: [
                       Expanded(child: shift()),
-                      ...letters('zxcvbnm'),
+                      ...letters(_symbols ? r"?!'\`~|" : 'zxcvbnm'),
                       key('Backspace', 'VK_BACK',
                           icon: Icons.backspace_outlined, utility: true)
                     ]),
                     Row(children: [
+                      symbols(),
                       key('Esc', 'VK_ESCAPE', utility: true),
                       key('Tab', 'VK_TAB', utility: true),
                       key(widget.spaceLabel, 'VK_SPACE', flex: 3),

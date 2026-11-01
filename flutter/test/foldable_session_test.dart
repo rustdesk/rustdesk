@@ -118,13 +118,15 @@ void main() {
     expect(keys, ['q', 'Q']);
     expect(clicks, [true]);
     expect(moves, isNotEmpty);
+    await tester.pump();
+    expect(find.text('q'), findsOneWidget);
     await render(true, const Size(626, 410), keyboardEnabled: false);
-    await tester.tap(find.text('Q'));
+    await tester.tap(find.text('q'));
     await tester.tap(find.text('Right click'));
     expect(keys, ['q', 'Q']);
     expect(clicks, [true, false]);
     await render(false, const Size(626, 410));
-    await tester.tap(find.text('Q'));
+    await tester.tap(find.text('q'));
     await tester.tap(find.text('Right click'));
     expect(keys, ['q', 'Q']);
     expect(clicks, [true, false]);
@@ -133,6 +135,62 @@ void main() {
     expect(find.byIcon(Icons.touch_app_outlined), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+      'folding keyboard types punctuation and releases Shift after a character',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(669, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final isMac in [true, false]) {
+      final modifiers = <SessionModifier>{};
+      final sent = <String>[];
+      await tester.pumpWidget(MaterialApp(
+          key: ValueKey(isMac),
+          home: StatefulBuilder(
+              builder: (context, setState) => SessionControlPanel(
+                    toolbar: const SizedBox(),
+                    enabled: true,
+                    isMac: isMac,
+                    modifiers: modifiers,
+                    onModifier: (modifier) => setState(() {
+                      if (!modifiers.add(modifier)) modifiers.remove(modifier);
+                    }),
+                    onKey: sent.add,
+                    onMove: (_) {},
+                    onClick: (_) {},
+                    keyboardLabel: 'Keyboard',
+                    mouseLabel: 'Mouse mode',
+                    leftClickLabel: 'Left click',
+                    rightClickLabel: 'Right click',
+                  ))));
+      await tester.tap(find.byTooltip('Shift'));
+      await tester.pump();
+      expect(find.text('!'), findsOneWidget);
+      await tester.tap(find.text('!'));
+      await tester.pump();
+      await tester.tap(find.text('a'));
+      await tester.pump();
+      expect(sent, ['!', 'a']);
+      expect(modifiers, isEmpty);
+      await tester.tap(find.byTooltip('Shift'));
+      await tester.pump();
+      await tester.tap(find.text('A'));
+      await tester.pump();
+      await tester.tap(find.text('b'));
+      expect(sent, ['!', 'a', 'A', 'b']);
+      await tester.tap(find.text('?123'));
+      await tester.pump();
+      for (final symbol in ['?', '@', '.', '/', '+', '_']) {
+        await tester.tap(find.text(symbol));
+        await tester.pump();
+        expect(sent.last, symbol);
+      }
+      await tester.tap(find.text('ABC'));
+      await tester.pump();
+      expect(find.text('a'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('Mac modifier keys select the existing input flags',
       (tester) async {
     final modifiers = <SessionModifier>{};
