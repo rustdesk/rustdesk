@@ -1938,6 +1938,9 @@ class InputModel {
     if (isDesktop || isWebDesktop) {
       return event.position;
     }
+    if (parent.target?.canvasModel.mobileViewportSize != null) {
+      return event.localPosition;
+    }
     final mediaData = MediaQueryData.fromView(
         WidgetsBinding.instance.platformDispatcher.views.first);
     final adjustY = parent.target?.canvasModel.getAdjustY() ?? 0.0;
