@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/common/widgets/request_approval_menu.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
@@ -88,6 +89,32 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
 }
 
 void main() {
+  testWidgets('approval trigger has one Tab stop and opens with Enter',
+      (tester) async {
+    await openMenu(tester, []);
+    bool approvalHasFocus() => FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<PopupMenuChildrenItem<String>>() != null;
+
+    for (var i = 0; i < 30 && !approvalHasFocus(); i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+    }
+    expect(approvalHasFocus(), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(approvalHasFocus(), isFalse,
+        reason: 'Tab must leave the approval row after one stop');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(approvalHasFocus(), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Terminal (Run as administrator)'), findsOneWidget);
+  });
+
   testWidgets('tapping outside the approval submenu closes both menus',
       (tester) async {
     final actions = <String>[];

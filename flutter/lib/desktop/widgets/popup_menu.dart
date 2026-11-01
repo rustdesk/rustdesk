@@ -101,9 +101,12 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
                     .findAncestorStateOfType<mod_menu.PopupMenuButtonState<T>>()
                     ?.showButtonMenu()
                 : null;
-            return TextButton(
-              onPressed: onPressed,
-              child: TextButton(onPressed: onPressed, child: child),
+            // The popup trigger owns keyboard focus; retain the menu button sizing.
+            return ExcludeFocus(
+              child: TextButton(
+                onPressed: onPressed,
+                child: TextButton(onPressed: onPressed, child: child),
+              ),
             );
           }),
         ));
