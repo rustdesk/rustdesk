@@ -1713,6 +1713,10 @@ impl<T: InvokeUiSession> Session<T> {
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
+    #[cfg(target_env = "ohos")]
+    fn ohos_session_id(&self) -> SessionID {
+        Default::default()
+    }
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
     fn set_cursor_position(&self, cp: CursorPosition);
@@ -1765,6 +1769,11 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     // A remote HTML clipboard payload (OpenHarmony controller).
     #[cfg(target_env = "ohos")]
     fn clipboard_html(&self, _html: String) {}
+    // The session is over (network drop or terminal error). Only the
+    // OpenHarmony controller consumes it: its page has no other close signal
+    // and would otherwise keep showing a connecting spinner.
+    #[cfg(target_env = "ohos")]
+    fn on_connection_closed(&self) {}
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
     fn portable_service_running(&self, running: bool);

@@ -44,6 +44,9 @@ typedef int32_t (*fn_ohos_init_t)(const char* home_dir, const char* app_dir,
                                   const char* custom_client_config);
 typedef void (*fn_ohos_set_callbacks_t)(rd_event_cb_t event_cb, rd_rgba_cb_t rgba_cb,
                                         rd_clipboard_cb_t clipboard_cb);
+typedef int32_t (*fn_ohos_init_video_t)(const char* uuid, int32_t display, uint64_t surface_id,
+                                       int32_t width, int32_t height);
+typedef int32_t (*fn_ohos_deinit_video_t)(const char* uuid);
 typedef void (*fn_ohos_free_string_t)(char* s);
 typedef const char* (*fn_ohos_version_t)(void);
 
@@ -124,6 +127,8 @@ typedef int32_t (*fn_ohos_capture_running_t)(void);
 struct RustFns {
     fn_ohos_init_t init = nullptr;
     fn_ohos_set_callbacks_t set_callbacks = nullptr;
+    fn_ohos_init_video_t init_video = nullptr;
+    fn_ohos_deinit_video_t deinit_video = nullptr;
     fn_ohos_free_string_t free_string = nullptr;
     fn_ohos_version_t version = nullptr;
     fn_ohos_session_new_t session_new = nullptr;
@@ -191,6 +196,8 @@ static bool EnsureLib() {
     const Entry table[] = {
         {"ohos_init", reinterpret_cast<void**>(&g_fns.init)},
         {"ohos_set_callbacks", reinterpret_cast<void**>(&g_fns.set_callbacks)},
+        {"ohos_init_video", reinterpret_cast<void**>(&g_fns.init_video)},
+        {"ohos_deinit_video", reinterpret_cast<void**>(&g_fns.deinit_video)},
         {"ohos_free_string", reinterpret_cast<void**>(&g_fns.free_string)},
         {"ohos_version", reinterpret_cast<void**>(&g_fns.version)},
         {"ohos_session_new", reinterpret_cast<void**>(&g_fns.session_new)},
@@ -591,16 +598,30 @@ static napi_value NapiSetCallbacks(napi_env env, napi_callback_info info) {
 
 static napi_value NapiInitVideo(napi_env env, napi_callback_info info) {
     CallArgs args;
-    if (!GetCallArgs(env, info, 1, &args)) {
+    if (!GetCallArgs(env, info, 5, &args)) {
         return nullptr;
     }
+    std::string uuid;
     std::string surface_id;
-    if (!GetArgStr(env, args.argv[0], &surface_id)) {
-        return ThrowErr(env, "initVideo: surfaceId must be a string");
+    int32_t display = 0;
+    int32_t width = 0;
+    int32_t height = 0;
+    if (!GetArgStr(env, args.argv[0], &uuid) || !GetArgInt32(env, args.argv[1], &display) ||
+        !GetArgStr(env, args.argv[2], &surface_id) || !GetArgInt32(env, args.argv[3], &width) ||
+        !GetArgInt32(env, args.argv[4], &height) || display < 0 || width <= 0 || height <= 0) {
+        return ThrowErr(env, "initVideo: invalid arguments");
+    }
+    void* fn = RequireFn(env, "ohos_init_video");
+    if (fn == nullptr) {
+        return nullptr;
     }
     uint64_t sid = strtoull(surface_id.c_str(), nullptr, 10);
+    int32_t rc = reinterpret_cast<fn_ohos_init_video_t>(fn)(uuid.c_str(), display, sid, width, height);
+    if (rc != 0) {
+        return MakeInt32(env, rc);
+    }
     OHNativeWindow* win = nullptr;
-    int32_t rc = OH_NativeWindow_CreateNativeWindowFromSurfaceId(sid, &win);
+    rc = OH_NativeWindow_CreateNativeWindowFromSurfaceId(sid, &win);
     if (rc != 0 || win == nullptr) {
         return ThrowErr(env, "initVideo: CreateNativeWindowFromSurfaceId failed");
     }
@@ -610,6 +631,28 @@ static napi_value NapiInitVideo(napi_env env, napi_callback_info info) {
     }
     g_window = win;
     return MakeInt32(env, 0);
+}
+
+static napi_value NapiDeinitVideo(napi_env env, napi_callback_info info) {
+    CallArgs args;
+    if (!GetCallArgs(env, info, 1, &args)) {
+        return nullptr;
+    }
+    std::string uuid;
+    if (!GetArgStr(env, args.argv[0], &uuid)) {
+        return ThrowErr(env, "deinitVideo: invalid uuid");
+    }
+    void* fn = RequireFn(env, "ohos_deinit_video");
+    if (fn == nullptr) {
+        return nullptr;
+    }
+    int32_t rc = reinterpret_cast<fn_ohos_deinit_video_t>(fn)(uuid.c_str());
+    std::lock_guard<std::mutex> lock(g_win_mutex);
+    if (g_window != nullptr) {
+        OH_NativeWindow_DestroyNativeWindow(g_window);
+        g_window = nullptr;
+    }
+    return MakeInt32(env, rc);
 }
 
 static napi_value NapiSessionNew(napi_env env, napi_callback_info info) {
@@ -1579,6 +1622,7 @@ static napi_value EntryInit(napi_env env, napi_value exports) {
         {"init", NapiInit},
         {"setCallbacks", NapiSetCallbacks},
         {"initVideo", NapiInitVideo},
+        {"deinitVideo", NapiDeinitVideo},
         {"sessionNew", NapiSessionNew},
         {"sessionStart", NapiSessionStart},
         {"sessionLogin", NapiSessionLogin},

@@ -410,7 +410,7 @@
     },
     {
       "name": "bitrate",
-      "value": "码率"
+      "value": "画质"
     },
     {
       "name": "fps_limit",
@@ -419,6 +419,10 @@
     {
       "name": "codec_preference",
       "value": "编解码偏好"
+    },
+    {
+      "name": "current_codec",
+      "value": "当前解码"
     },
     {
       "name": "codec_auto",
@@ -544,6 +548,23 @@
     {"name": "back", "value": "返回"},
     {"name": "copied", "value": "已复制"},
     {"name": "share_id_reachable_hint", "value": "应用打开期间 ID 即可被连接；点「开始共享」后才会传输屏幕画面。"},
-    {"name": "chat_send_failed", "value": "消息发送失败"}
+    {"name": "chat_send_failed", "value": "消息发送失败"},
+    {"name": "recording_badge", "value": "录制中"},
+    {"name": "voice_call_active", "value": "通话中"},
+    {"name": "display_single", "value": "远端只有一个显示器"},
+    {"name": "conn_encrypted", "value": "加密"},
+    {"name": "conn_unencrypted", "value": "未加密"},
+    {"name": "conn_direct", "value": "直连"},
+    {"name": "conn_relayed", "value": "中继"},
+    {"name": "perm_keyboard", "value": "键盘"},
+    {"name": "perm_clipboard", "value": "剪贴板"},
+    {"name": "perm_audio", "value": "音频"},
+    {"name": "perm_recording", "value": "录制"},
+    {"name": "perm_file", "value": "文件"},
+    {"name": "perm_restart", "value": "重启"},
+    {"name": "perm_block_input", "value": "阻止输入"},
+    {"name": "perm_privacy_mode", "value": "隐私模式"},
+    {"name": "voice_call_no_answer", "value": "对方未响应，已取消呼叫"},
+    {"name": "gesture_hint", "value": "双指轻点=右键 · 三指轻点=快捷面板 · 长按=右键 · 点按后按住拖动=拖拽 · 双指缩放 · 双指拖动=滚动"}
   ]
 }

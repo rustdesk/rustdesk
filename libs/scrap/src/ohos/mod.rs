@@ -3,6 +3,8 @@
 // (AVScreenCapture raw stream) feeding the same channel contract as the
 // Android JNI layer.
 
+pub mod decoder;
+pub mod direct_render;
 pub mod ohcodec;
 
 pub mod ffi;

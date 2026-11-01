@@ -90,6 +90,9 @@ impl OhosHandler {
 }
 
 impl InvokeUiSession for OhosHandler {
+    fn ohos_session_id(&self) -> SessionID {
+        self.session_id
+    }
     // Colors arrive validated and uncompressed from the receive loop; base64
     // keeps the JSON event single-line for the ArkTS JSON parser. Order with
     // the cursor_id events around each shape matters and is preserved by the
@@ -185,6 +188,10 @@ impl InvokeUiSession for OhosHandler {
     }
 
     fn close_success(&self) {}
+
+    fn on_connection_closed(&self) {
+        push_event::<&str>("connection_closed", &[]);
+    }
 
     fn new_message(&self, msg: String) {
         push_event("chat_client_mode", &[("text", &msg)]);
@@ -599,6 +606,47 @@ pub extern "C" fn ohos_set_callbacks(
 }
 
 #[no_mangle]
+pub extern "C" fn ohos_init_video(
+    session_id: *const c_char,
+    display: c_int,
+    surface_id: u64,
+    width: c_int,
+    height: c_int,
+) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    if display < 0 || surface_id == 0 || width <= 0 || height <= 0
+        || !SESSIONS.read().unwrap().contains_key(&session_id)
+    {
+        return -1;
+    }
+    scrap::ohos::direct_render::register(
+        session_id.as_u128(),
+        display as usize,
+        surface_id,
+        width,
+        height,
+    );
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.send(Data::ResetDecoder(None));
+    }
+    0
+}
+
+#[no_mangle]
+pub extern "C" fn ohos_deinit_video(session_id: *const c_char) -> c_int {
+    let Some(session_id) = parse_session_id(session_id) else {
+        return -1;
+    };
+    scrap::ohos::direct_render::unregister(session_id.as_u128());
+    if let Some(session) = get_session_by_session_id(&session_id) {
+        session.send(Data::ResetDecoder(None));
+    }
+    0
+}
+
+#[no_mangle]
 pub extern "C" fn ohos_session_new(
     peer_id: *const c_char,
     // 0 = remote control, 1 = file transfer, 2 = view camera.
@@ -708,6 +756,7 @@ pub extern "C" fn ohos_session_close(session_id: *const c_char) -> c_int {
         return -1;
     };
     if let Some(session) = remove_session_by_session_id(&session_id) {
+        scrap::ohos::direct_render::unregister(session_id.as_u128());
         crate::keyboard::release_remote_keys("map");
         session.close();
         return 0;
