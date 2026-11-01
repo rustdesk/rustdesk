@@ -111,9 +111,9 @@ pub struct Decoder {
     #[cfg(not(target_env = "ohos"))]
     av1: Option<AomDecoder>,
     #[cfg(target_env = "ohos")]
-    h264_ohcodec: Option<crate::ohos::ohcodec::OhCodecDecoder>,
+    h264_ohcodec: Option<crate::ohos::decoder::OhCodecDecoder>,
     #[cfg(target_env = "ohos")]
-    h265_ohcodec: Option<crate::ohos::ohcodec::OhCodecDecoder>,
+    h265_ohcodec: Option<crate::ohos::decoder::OhCodecDecoder>,
     #[cfg(feature = "hwcodec")]
     h264_ram: Option<HwRamDecoder>,
     #[cfg(feature = "hwcodec")]
@@ -605,7 +605,7 @@ impl Decoder {
             CodecFormat::H264 => {
                 #[cfg(target_env = "ohos")]
                 {
-                    h264_ohcodec = crate::ohos::ohcodec::OhCodecDecoder::new(format);
+                    h264_ohcodec = crate::ohos::decoder::OhCodecDecoder::new(format);
                     valid = h264_ohcodec.is_some();
                 }
                 #[cfg(not(target_env = "ohos"))]
@@ -639,7 +639,7 @@ impl Decoder {
             CodecFormat::H265 => {
                 #[cfg(target_env = "ohos")]
                 {
-                    h265_ohcodec = crate::ohos::ohcodec::OhCodecDecoder::new(format);
+                    h265_ohcodec = crate::ohos::decoder::OhCodecDecoder::new(format);
                     valid = h265_ohcodec.is_some();
                 }
                 #[cfg(not(target_env = "ohos"))]
@@ -711,6 +711,18 @@ impl Decoder {
         self.format
     }
 
+    #[cfg(target_env = "ohos")]
+    pub fn pending_surface_output(&self) -> bool {
+        self.h264_ohcodec
+            .as_ref()
+            .map(|decoder| decoder.is_surface_mode())
+            .unwrap_or_else(|| {
+                self.h265_ohcodec
+                    .as_ref()
+                    .is_some_and(|decoder| decoder.is_surface_mode())
+            })
+    }
+
     pub fn valid(&self) -> bool {
         self.valid
     }
@@ -755,7 +767,7 @@ impl Decoder {
             video_frame::Union::H264s(h264s) => {
                 *chroma = Some(Chroma::I420);
                 if let Some(decoder) = &mut self.h264_ohcodec {
-                    Decoder::handle_ohcodec_video_frame(decoder, h264s, rgb)
+                    Decoder::handle_ohcodec_video_frame(decoder, h264s, rgb, _pixelbuffer)
                 } else {
                     Err(anyhow!("don't support h264!"))
                 }
@@ -764,7 +776,7 @@ impl Decoder {
             video_frame::Union::H265s(h265s) => {
                 *chroma = Some(Chroma::I420);
                 if let Some(decoder) = &mut self.h265_ohcodec {
-                    Decoder::handle_ohcodec_video_frame(decoder, h265s, rgb)
+                    Decoder::handle_ohcodec_video_frame(decoder, h265s, rgb, _pixelbuffer)
                 } else {
                     Err(anyhow!("don't support h265!"))
                 }
@@ -877,11 +889,13 @@ impl Decoder {
     // rgb [in/out] fmt and stride must be set in ImageRgb
     #[cfg(target_env = "ohos")]
     fn handle_ohcodec_video_frame(
-        decoder: &mut crate::ohos::ohcodec::OhCodecDecoder,
+        decoder: &mut crate::ohos::decoder::OhCodecDecoder,
         frames: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
+        pixelbuffer: &mut bool,
     ) -> ResultType<bool> {
         let mut ret = false;
+        *pixelbuffer = !decoder.is_surface_mode();
         for frame in frames.frames.iter() {
             if decoder.decode(&frame.data, frame.key, rgb)? {
                 ret = true;
@@ -1288,7 +1302,7 @@ pub fn test_av1() {
 
 #[cfg(target_env = "ohos")]
 fn ohcodec_support() -> (bool, bool) {
-    use crate::ohos::ohcodec::OhCodecDecoder;
+    use crate::ohos::decoder::OhCodecDecoder;
     use std::sync::atomic::{AtomicU8, Ordering};
     // 0 = unprobed, 1 = probing/failed, 2..4 bit flags: bit0 h264, bit1 h265.
     static SUPPORT: AtomicU8 = AtomicU8::new(0);

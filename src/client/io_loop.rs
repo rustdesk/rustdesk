@@ -479,6 +479,8 @@ impl<T: InvokeUiSession> Remote<T> {
             .unwrap()
             .set_disconnected(round);
 
+        #[cfg(target_env = "ohos")]
+        self.handler.on_connection_closed();
         #[cfg(not(target_os = "ios"))]
         if self.handler.is_default() && _set_disconnected_ok {
             // Other sessions may keep the listener running after this one disconnects.

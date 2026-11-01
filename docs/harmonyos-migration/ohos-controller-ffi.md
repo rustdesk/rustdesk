@@ -33,6 +33,8 @@
 ### 会话生命周期
 | 函数 | 说明 |
 |------|------|
+| `ohos_init_video(uuid, display: c_int, surface_id: u64, width: c_int, height: c_int) -> c_int` | 注册会话/显示器的 XComponent Surface，H.264/H.265 优先由硬解直接渲染；尺寸用于解码器预分配，每次注册生成新代次并重建解码器，失败时回退原生 buffer 输出 |
+| `ohos_deinit_video(uuid) -> c_int` | 注销该会话的 Surface 并触发解码器重建；页面消失或 XComponent 销毁时先于关闭会话调用 |
 | `ohos_session_new(peer_id, session_kind: c_int, password, force_relay: c_int) -> *mut c_char` | 创建会话，返回 session uuid 字符串（失败返回空串）。`session_kind`：`0`=远程控制，`1`=文件传输，`2`=摄像头查看（VIEW_CAMERA） |
 | `ohos_session_start(uuid) -> c_int` | 启动 io_loop（连接、握手） |
 | `ohos_session_login(uuid, password, remember: c_int) -> c_int` | 应答 `input-password` msgbox（OS 用户名/密码桌面流程，M1 传空） |

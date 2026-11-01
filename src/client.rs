@@ -2758,6 +2758,16 @@ impl VideoHandler {
         }
     }
 
+    fn pending_output(&self, result: &ResultType<bool>) -> bool {
+        #[cfg(target_env = "ohos")]
+        return result.is_ok() && self.decoder.pending_surface_output();
+        #[cfg(not(target_env = "ohos"))]
+        {
+            let _ = result;
+            false
+        }
+    }
+
     /// Handle a new video frame.
     #[inline]
     pub fn handle_frame(
@@ -2781,7 +2791,8 @@ impl VideoHandler {
                 );
                 if res.as_ref().is_ok_and(|x| *x) {
                     self.fail_counter = 0;
-                } else {
+                    self.first_frame = false;
+                } else if !self.pending_output(&res) {
                     if self.fail_counter < usize::MAX {
                         if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
                             log::error!("decode first frame failed");
@@ -4075,6 +4086,11 @@ pub fn start_video_thread<F, T>(
         #[cfg(windows)]
         sync_cpu_usage();
         get_hwcodec_config();
+        #[cfg(target_env = "ohos")]
+        let _direct_render_context = scrap::ohos::direct_render::enter(
+            session.ohos_session_id().as_u128(),
+            display,
+        );
         let mut video_handler = None;
         let mut count = 0;
         let mut duration = std::time::Duration::ZERO;

@@ -7,7 +7,9 @@
 export const init: (home: string, appDir: string, customConfig: string) => number;
 export const setCallbacks: (onEvent: (json: string) => void,
                             onClipboard: (text: string) => void) => number;
-export const initVideo: (surfaceId: string) => number;
+export const initVideo: (uuid: string, display: number, surfaceId: string,
+                         width: number, height: number) => number;
+export const deinitVideo: (uuid: string) => number;
 export const sessionNew: (peerId: string, sessionKind: number, password: string,
                           forceRelay: boolean) => string;
 export const sessionStart: (uuid: string) => number;

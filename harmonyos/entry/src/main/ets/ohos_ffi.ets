@@ -32,11 +32,21 @@ export function ffiSetCallbacks(onEvent: (json: string) => void,
   }
 }
 
-export function ffiInitVideo(surfaceId: string): number {
+export function ffiInitVideo(uuid: string, display: number, surfaceId: string,
+                             width: number, height: number): number {
   try {
-    return native.initVideo(surfaceId);
+    return native.initVideo(uuid, display, surfaceId, width, height);
   } catch (e) {
     logFail('initVideo', e as Object);
+    return -1;
+  }
+}
+
+export function ffiDeinitVideo(uuid: string): number {
+  try {
+    return native.deinitVideo(uuid);
+  } catch (e) {
+    logFail('deinitVideo', e as Object);
     return -1;
   }
 }

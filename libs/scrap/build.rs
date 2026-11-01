@@ -286,6 +286,8 @@ fn main() {
         // pump maps OH_NativeBuffer frames from AcquireVideoBuffer.
         println!("cargo:rustc-link-lib=dylib=native_avscreen_capture");
         println!("cargo:rustc-link-lib=dylib=native_buffer");
+        // H264/H265 decoding can render directly into an XComponent surface.
+        println!("cargo:rustc-link-lib=dylib=native_window");
         // No libaom on OpenHarmony for M1: link a stub that fails AV1 calls at
         // runtime (see src/ohos/aom_stub.c).
         cc::Build::new()

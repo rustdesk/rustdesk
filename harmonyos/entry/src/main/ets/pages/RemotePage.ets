@@ -5,7 +5,7 @@ import { abilityAccessCtrl, PermissionRequestResult, Permissions } from '@kit.Ab
 import { image } from '@kit.ImageKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { util } from '@kit.ArkTS';
-import { ffiSendMouse, ffiInputKey, ffiInputString, ffiInitVideo, ffiRefreshVideo,
+import { ffiSendMouse, ffiInputKey, ffiInputString, ffiInitVideo, ffiDeinitVideo, ffiRefreshVideo,
          ffiSwitchDisplay, ffiSessionLogin, ffiSessionSend2fa, ffiSessionReconnect,
          ffiSessionClose, ffiSendClipboard, ffiRecordScreen, ffiRequestVoiceCall,
          ffiCloseVoiceCall, ffiAnswerVoiceCall, ffiSessionGetOption, ffiSessionSetOption,
@@ -29,6 +29,10 @@ const MOUSE_BUTTON_WHEEL = 0x04;
 // Two-finger scroll sensitivity multiplier (tunable).
 const WHEEL_FACTOR = 5;
 const LONG_PRESS_MS = 500;
+// A waiting voice call must not outlive the user's attention: the desktop CM
+// never surfaces an accept dialog for a client-initiated request (it only
+// raises its window upstream), so nobody may ever answer it.
+const VOICE_CALL_WAIT_MS = 30000;
 // Window after a tap in which starting a drag presses the left button
 // (hold-drag, mirrors the Flutter client's mouse mode).
 const DRAG_AFTER_TAP_MS = 350;
@@ -41,6 +45,10 @@ const MAX_ZOOM = 8;
 const TAP_SLOP = 15;
 // Pointer (trackpad) mode: finger travel -> cursor travel ratio.
 const POINTER_SPEED = 1.4;
+
+// First-session gesture guide: shown once per app process, on the first
+// connection_ready, dismissed by tap or an 8s timer.
+let gestureHintShown = false;
 
 // Image quality / fps slider bounds (flutter/lib/consts.dart).
 const MIN_QUALITY = 10;
@@ -191,6 +199,28 @@ struct StatCell {
   }
 }
 
+// One chip of the keyboard bar: sticky modifiers (Ctrl/Alt/Shift) and
+// single-shot keys (Esc/Tab). A component, not a @Builder: the sticky state
+// must re-render while the bar stays open (same reason as ToolbarItem).
+@Component
+struct KeyChip {
+  @Prop label: string = '';
+  @Prop on: boolean = false;
+  onTap: () => void = (): void => {};
+
+  build() {
+    Text(this.label)
+      .fontSize(13)
+      .fontColor(this.on ? '#FFFFFF' : '#C3CAD6')
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .borderRadius(8)
+      .backgroundColor(this.on ? '#1A6AF5' : 'rgba(255,255,255,0.12)')
+      .onClick(() => {
+        this.onTap();
+      })
+  }
+}
+
 @Entry
 @Component
 struct RemotePage {
@@ -274,6 +304,10 @@ struct RemotePage {
   // measured against it.
   private lastPtrX: number = 0;
   private lastPtrY: number = 0;
+  // Previous finger position on the virtual-mouse pad body (pad-local vp);
+  // the pad doubles as a small trackpad in pointer mode.
+  private padLastX: number = 0;
+  private padLastY: number = 0;
   // Quick-actions panel (three-finger tap / menu entry).
   @State showQuickActions: boolean = false;
   // Virtual-mouse pad (pointer mode): left/right click, double click, wheel.
@@ -297,6 +331,10 @@ struct RemotePage {
   @State customFps: number = DEFAULT_FPS;
   // Selected codec-preference value ("auto"/"vp8"/"vp9"/"h264"/"h265").
   @State codecPreference: string = 'auto';
+  // Codec actually negotiated with the peer ("H264"/"H265"/"VP8"/"VP9"), from
+  // update_quality_status; empty before the first frame. Shown next to the
+  // codec preference radios.
+  @State effectiveCodec: string = '';
   @State altCodecs: AlternativeCodecs = new AlternativeCodecs();
   @State viewOnly: boolean = false;
   // Voice call state machine: idle -> waiting (peer deciding) -> active.
@@ -313,6 +351,11 @@ struct RemotePage {
   // Scrollbar indicators while zoomed and panning.
   @State showScrollbars: boolean = false;
   private scrollbarTimer: number = -1;
+  // First-connection gesture guide; auto-hides, tap to dismiss.
+  @State showGestureHint: boolean = false;
+  private gestureHintTimer: number = -1;
+  // No-answer guard for an outgoing voice call (see VOICE_CALL_WAIT_MS).
+  private voiceCallTimer: number = -1;
   // Remote cursor (the peer's real pointer, distinct from the touch overlay):
   // position in remote pixels, current shape as @State fields mirroring the
   // entry in the shape cache. Mirrors Flutter mobile's showCursorPaint (drawn
@@ -331,6 +374,7 @@ struct RemotePage {
   // re-selecting a stale shape after the peer switched to another one.
   private rcurId: string = '';
   private xcController: XComponentController = new XComponentController();
+  private videoRegistered: boolean = false;
   private eventHandler: ((ev: RdeskEvent) => void) | null = null;
 
   aboutToAppear(): void {
@@ -350,8 +394,31 @@ struct RemotePage {
       this.eventHandler = null;
     }
     this.setKeepScreenOn(false);
+    this.hideGestureHint();
+    this.clearVoiceCallTimer();
+    if (this.videoRegistered) {
+      ffiDeinitVideo(this.uuid);
+      this.videoRegistered = false;
+    }
     // Idempotent: Rust returns -1 for an unknown/already-closed session.
     ffiSessionClose(this.uuid);
+  }
+
+  private registerVideo(): void {
+    if (!this.videoRegistered) {
+      return;
+    }
+    try {
+      const sid = this.xcController.getXComponentSurfaceId();
+      // Codec pre-allocation hint: the remote video size when known, else a
+      // small placeholder — the real geometry still comes from the stream.
+      const width = this.remoteW > 0 ? this.remoteW : 128;
+      const height = this.remoteH > 0 ? this.remoteH : 128;
+      this.videoRegistered = ffiInitVideo(this.uuid, this.currentDisplay, sid, width, height) === 0;
+    } catch (e) {
+      this.videoRegistered = false;
+      hilog.error(LOG_DOMAIN, TAG, 'initVideo failed: %{public}s', `${e}`);
+    }
   }
 
   // A remote-control session is a watching experience: keep the screen from
@@ -382,12 +449,38 @@ struct RemotePage {
         this.remoteW = ev.num('width');
         this.remoteH = ev.num('height');
         this.cursorEmbedded = ev.bool('cursor_embedded');
+        this.registerVideo();
         this.fitVideo();
         break;
-      case 'connection_ready':
+      case 'connection_ready': {
         this.connState = 'ready';
-        this.connDetail = (ev.bool('secure') ? 'encrypted' : 'unencrypted') +
-          (ev.bool('direct') ? ', direct' : ', relayed');
+        const rm = getContext(this).resourceManager;
+        this.connDetail =
+          (ev.bool('secure') ? rm.getStringSync($r('app.string.conn_encrypted'))
+                             : rm.getStringSync($r('app.string.conn_unencrypted'))) +
+          ' · ' +
+          (ev.bool('direct') ? rm.getStringSync($r('app.string.conn_direct'))
+                             : rm.getStringSync($r('app.string.conn_relayed')));
+        if (!gestureHintShown) {
+          gestureHintShown = true;
+          this.showGestureHint = true;
+          this.gestureHintTimer = setTimeout((): void => {
+            this.showGestureHint = false;
+            this.gestureHintTimer = -1;
+          }, 8000) as number;
+        }
+        break;
+      }
+      case 'connection_closed':
+        // Session over (network drop or terminal error; any msgbox already
+        // carried the reason). The center overlay switches to the failed view.
+        this.connState = 'failed';
+        // A voice call cannot survive the connection round (the new io_loop
+        // owns no audio pipeline and never replays the call), so a kept
+        // waiting/active state would show a stale chip that nothing clears.
+        this.voiceCallState = 'idle';
+        this.clearVoiceCallTimer();
+        this.showVoiceCallIncomingDialog = false;
         break;
       case 'cursor_data':
         this.onCursorData(ev);
@@ -411,15 +504,16 @@ struct RemotePage {
       case 'permission': {
         const parts: string[] = [];
         for (const k of ev.keys) {
-          parts.push(`${k}: ${ev.get(k) === 'true' ? 'Y' : 'N'}`);
+          const on = ev.get(k) === 'true';
           if (k === 'recording') {
-            this.recordingAllowed = ev.get(k) === 'true';
+            this.recordingAllowed = on;
             if (!this.recordingAllowed) {
               this.recording = false;
             }
           } else if (k === 'audio') {
-            this.audioAllowed = ev.get(k) === 'true';
+            this.audioAllowed = on;
           }
+          parts.push(`${this.permLabel(k)} ${on ? '✓' : '✗'}`);
         }
         this.permissionText = parts.join('  ');
         break;
@@ -428,16 +522,28 @@ struct RemotePage {
         this.speed = ev.get('speed');
         this.fps = ev.get('fps');
         this.delay = ev.get('delay');
+        // The negotiated codec ("H264"/"H265"/"VP8"/...), shown as the
+        // currently active decoder next to the codec preference radios.
+        // TestDelay-driven events omit codec_format (Rust sends two
+        // update_quality_status flavors); only overwrite when present,
+        // mirroring the Flutter merge semantics — otherwise the label
+        // flickers every test-delay tick.
+        const cf = ev.get('codec_format');
+        if (cf.length > 0 && cf !== 'Unknown') {
+          this.effectiveCodec = cf.toUpperCase();
+        }
         break;
       case 'voice_call_waiting':
         this.voiceCallState = 'waiting';
         break;
       case 'voice_call_started':
         this.voiceCallState = 'active';
+        this.clearVoiceCallTimer();
         this.showVoiceCallIncomingDialog = false;
         break;
       case 'voice_call_closed':
         this.voiceCallState = 'idle';
+        this.clearVoiceCallTimer();
         this.showVoiceCallIncomingDialog = false;
         break;
       case 'voice_call_incoming':
@@ -578,7 +684,9 @@ struct RemotePage {
   }
 
   private remoteCursorDrawn(): boolean {
-    return this.showRemoteCursor && !this.cursorEmbedded &&
+    // Pointer mode owns the only on-screen cursor while active; the toggle
+    // keeps the user's preference for when pointer mode is left again.
+    return this.showRemoteCursor && !this.pointerMode && !this.cursorEmbedded &&
       this.platform !== 'Android' && this.rcurPm !== undefined &&
       this.remoteW > 0 && this.remoteH > 0;
   }
@@ -595,7 +703,44 @@ struct RemotePage {
       this.showErrorDialog = true;
     } else {
       promptAction.showToast({ message: this.msgboxText, duration: 3000 });
+      // A terminal error before the session is ready must not leave the
+      // "connecting" overlay spinning forever; connection_closed also lands
+      // here shortly after.
+      if (this.connState !== 'ready') {
+        this.connState = 'failed';
+      }
     }
+  }
+
+  // Localized display name for a peer permission key; unknown keys fall back
+  // to the raw key so a newer peer never shows an empty label.
+  private permLabel(k: string): string {
+    const rm = getContext(this).resourceManager;
+    if (k === 'keyboard') {
+      return rm.getStringSync($r('app.string.perm_keyboard'));
+    }
+    if (k === 'clipboard') {
+      return rm.getStringSync($r('app.string.perm_clipboard'));
+    }
+    if (k === 'audio') {
+      return rm.getStringSync($r('app.string.perm_audio'));
+    }
+    if (k === 'recording') {
+      return rm.getStringSync($r('app.string.perm_recording'));
+    }
+    if (k === 'file') {
+      return rm.getStringSync($r('app.string.perm_file'));
+    }
+    if (k === 'restart') {
+      return rm.getStringSync($r('app.string.perm_restart'));
+    }
+    if (k === 'block_input') {
+      return rm.getStringSync($r('app.string.perm_block_input'));
+    }
+    if (k === 'privacy_mode') {
+      return rm.getStringSync($r('app.string.perm_privacy_mode'));
+    }
+    return k;
   }
 
   // ------------------------------------------------------------------
@@ -889,9 +1034,9 @@ struct RemotePage {
     this.vptrX = this.remoteCursorDrawn() ? this.rcurX * this.cursorScale() : this.videoW / 2;
     this.vptrY = this.remoteCursorDrawn() ? this.rcurY * this.cursorScale() : this.videoH / 2;
     this.vptrClamp();
-    // The two modes are mutually exclusive: the virtual pointer replaces the
-    // remote-cursor overlay while it is active.
-    this.showRemoteCursor = false;
+    // The virtual pointer replaces the remote-cursor overlay while active;
+    // remoteCursorDrawn() owns that exclusion so the user's overlay toggle
+    // survives mode switches.
     this.pointerMode = true;
     this.showVirtualMouse = true;
   }
@@ -911,8 +1056,8 @@ struct RemotePage {
       this.vptrMouse((MOUSE_BUTTON_LEFT << 3) | MOUSE_TYPE_UP);
       this.vptrDragging = false;
     }
-    // Back to cursor mode: restore the remote-cursor overlay.
-    this.showRemoteCursor = true;
+    // Back to cursor mode: the remote-cursor overlay reappears only if the
+    // user left its toggle on (remoteCursorDrawn()).
     this.showVirtualMouse = false;
   }
 
@@ -921,6 +1066,15 @@ struct RemotePage {
   private mouseAt(mask: number, fingerX: number, fingerY: number): void {
     this.mouse(mask, this.mapX(fingerX) + this.displayOriginX(),
       this.mapY(fingerY) + this.displayOriginY());
+  }
+
+  // Dismiss the gesture guide early (tap or page leave); safe to call twice.
+  private hideGestureHint(): void {
+    if (this.gestureHintTimer >= 0) {
+      clearTimeout(this.gestureHintTimer);
+      this.gestureHintTimer = -1;
+    }
+    this.showGestureHint = false;
   }
 
   // Flash the scrollbars while zoomed; called on any pan/zoom change.
@@ -979,8 +1133,8 @@ struct RemotePage {
       return;
     }
     // markAnchor(100%,100%) means x/y track the ball's bottom-right corner;
-    // clamp so a slice of the ball always stays grabbable on every edge.
-    const x = Math.min(Math.max(dx, 30), this.rootW - 4);
+    // clamp so the ball stays fully on-screen and grabbable on every edge.
+    const x = Math.min(Math.max(dx, 40), this.rootW - 4);
     const y = Math.min(Math.max(dy, 40), this.rootH - 4);
     this.ballX = x;
     this.ballY = y;
@@ -990,7 +1144,7 @@ struct RemotePage {
   // display it does nothing.
   private quickSwitchDisplay(): void {
     if (this.displays.length < 2) {
-      promptAction.showToast({ message: $r('app.string.display'), duration: 1500 });
+      promptAction.showToast({ message: $r('app.string.display_single'), duration: 1500 });
       return;
     }
     const next = (this.currentDisplay + 1) % this.displays.length;
@@ -1090,11 +1244,40 @@ struct RemotePage {
   // ------------------------------------------------------------------
 
   private toggleVoiceCall(): void {
+    hilog.info(LOG_DOMAIN, TAG, 'dbg toggleVoiceCall state=%{public}s', this.voiceCallState);
     if (this.voiceCallState === 'idle') {
       this.requestMicThenCall();
     } else {
-      ffiCloseVoiceCall(this.uuid);
-      this.voiceCallState = 'idle';
+      this.closeVoiceCallUi();
+    }
+  }
+
+  // Tear the call down locally and tell the peer; shared by the toolbar
+  // toggle, the status chip and the no-answer timeout.
+  private closeVoiceCallUi(): void {
+    ffiCloseVoiceCall(this.uuid);
+    this.voiceCallState = 'idle';
+    this.clearVoiceCallTimer();
+  }
+
+  private startVoiceCallTimer(): void {
+    this.clearVoiceCallTimer();
+    this.voiceCallTimer = setTimeout((): void => {
+      this.voiceCallTimer = -1;
+      if (this.voiceCallState === 'waiting') {
+        hilog.info(LOG_DOMAIN, TAG, 'dbg voice call wait timeout');
+        this.closeVoiceCallUi();
+        promptAction.showToast({
+          message: $r('app.string.voice_call_no_answer'), duration: 2500
+        });
+      }
+    }, VOICE_CALL_WAIT_MS) as number;
+  }
+
+  private clearVoiceCallTimer(): void {
+    if (this.voiceCallTimer >= 0) {
+      clearTimeout(this.voiceCallTimer);
+      this.voiceCallTimer = -1;
     }
   }
 
@@ -1110,9 +1293,13 @@ struct RemotePage {
           return;
         }
         this.voiceCallState = 'waiting';
-        if (ffiRequestVoiceCall(this.uuid) !== 0) {
+        const rc = ffiRequestVoiceCall(this.uuid);
+        hilog.info(LOG_DOMAIN, TAG, 'dbg requestVoiceCall rc=%{public}d', rc);
+        if (rc !== 0) {
           this.voiceCallState = 'idle';
           promptAction.showToast({ message: $r('app.string.voice_call_failed'), duration: 2000 });
+        } else {
+          this.startVoiceCallTimer();
         }
       })
       .catch((e: BusinessError) => {
@@ -1436,11 +1623,13 @@ struct RemotePage {
             .width('100%')
             .height('100%')
             .onLoad(() => {
-              try {
-                const sid = this.xcController.getXComponentSurfaceId();
-                ffiInitVideo(sid);
-              } catch (e) {
-                hilog.error(LOG_DOMAIN, TAG, 'initVideo failed: %{public}s', `${e}`);
+              this.videoRegistered = true;
+              this.registerVideo();
+            })
+            .onDestroy(() => {
+              if (this.videoRegistered) {
+                ffiDeinitVideo(this.uuid);
+                this.videoRegistered = false;
               }
             })
             .onTouch((e: TouchEvent) => {
@@ -1738,25 +1927,32 @@ struct RemotePage {
             .justifyContent(FlexAlign.End)
             .hitTestBehavior(HitTestMode.None)
           }
-          if (this.connState !== 'ready') {
-            Column({ space: 8 }) {
+          if (this.connState === 'failed') {
+            Column({ space: 12 }) {
+              Text($r('app.string.chat_no_connection'))
+                .fontSize(15)
+                .fontColor('#FFFFFF')
+              if (this.msgboxText.length > 0) {
+                Text(this.msgboxText)
+                  .fontSize(12)
+                  .fontColor('#CCCCCC')
+                  .textAlign(TextAlign.Center)
+                  .constraintSize({ maxWidth: '80%' })
+              }
+              Button($r('app.string.back_home'))
+                .onClick(() => {
+                  this.disconnect();
+                })
+            }
+          } else if (this.connState !== 'ready') {
+            Column({ space: 12 }) {
               LoadingProgress().width(36).height(36).color('#FFFFFF')
               Text($r('app.string.connecting')).fontSize(13).fontColor('#CCCCCC')
+              Button($r('app.string.cancel'), { buttonStyle: ButtonStyleMode.NORMAL })
+                .onClick(() => {
+                  this.disconnect();
+                })
             }
-          }
-          if (this.isLandscape) {
-            SymbolGlyph($r('sys.symbol.line_3_horizontal'))
-              .fontSize(16)
-              .fontColor([this.landscapeToolbar ? '#333333' : '#FFFFFF'])
-              .width(30)
-              .height(30)
-              .borderRadius(15)
-              .backgroundColor(this.landscapeToolbar ? '#E8E8E8' : 'rgba(0,0,0,0.35)')
-              .position({ x: '96%', y: '96%' })
-              .markAnchor({ x: '50%', y: '50%' })
-              .onClick(() => {
-                this.landscapeToolbar = !this.landscapeToolbar;
-              })
           }
         }
         .width('100%')
@@ -1847,12 +2043,29 @@ struct RemotePage {
         })
       }
 
+      // ---- first-connection gesture guide (below the status pill) ----
+      if (this.showGestureHint) {
+        Text($r('app.string.gesture_hint'))
+          .fontSize(12)
+          .fontColor('#E7EBF2')
+          .textAlign(TextAlign.Center)
+          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+          .borderRadius(12)
+          .backgroundColor('rgba(15,18,24,0.72)')
+          .constraintSize({ maxWidth: '86%' })
+          .position({ x: '50%', y: 54 })
+          .markAnchor({ x: '50%', y: 0 })
+          .onClick(() => {
+            this.hideGestureHint();
+          })
+      }
+
       // ---- status badges (top-right: recording / voice call / view-only)
       // ---- plus the virtual-mouse entry. Badges are informational (pass-
       // ---- through hit test); the mouse button below them is clickable.
       Column({ space: 6 }) {
         if (this.recording) {
-          Text($r('app.string.record_stop'))
+          Text($r('app.string.recording_badge'))
             .fontSize(11)
             .fontColor('#FF8484')
             .padding({ left: 9, right: 9, top: 4, bottom: 4 })
@@ -1861,14 +2074,19 @@ struct RemotePage {
             .hitTestBehavior(HitTestMode.None)
         }
         if (this.voiceCallState !== 'idle') {
-          Text(this.voiceCallState === 'active' ? $r('app.string.voice_call_end')
+          Text(this.voiceCallState === 'active' ? $r('app.string.voice_call_active')
                                                 : $r('app.string.voice_call_waiting'))
             .fontSize(11)
             .fontColor('#8FD3A7')
             .padding({ left: 9, right: 9, top: 4, bottom: 4 })
             .borderRadius(12)
             .backgroundColor('rgba(15,18,24,0.6)')
-            .hitTestBehavior(HitTestMode.None)
+            .onClick(() => {
+              // Tap the chip to hang up: a waiting peer may never answer and
+              // the toolbar toggle is easy to miss, so the status itself must
+              // offer the way out (same action as the toolbar toggle).
+              this.toggleVoiceCall();
+            })
         }
         if (this.viewOnly) {
           Text($r('app.string.view_only'))
@@ -1924,7 +2142,7 @@ struct RemotePage {
       // ---- sunlogin-style toolbar: a draggable corner chip ("<>") toggles
       // ---- the bottom icon panel that holds every toolbar function.
       if (!this.isLandscape || this.landscapeToolbar) {
-        SymbolGlyph(this.showToolbar ? $r('sys.symbol.xmark') : $r('sys.symbol.ellipsis_bubble'))
+        SymbolGlyph(this.showToolbar ? $r('sys.symbol.xmark') : $r('sys.symbol.line_3_horizontal'))
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
           .fontColor([this.showToolbar ? '#FFFFFF' : '#1A6AF5'])
@@ -2000,7 +2218,8 @@ struct RemotePage {
               })
               ToolbarItem({
                 icon: $r('sys.symbol.phone_down_fill'),
-                label: $r('app.string.voice_call_start'),
+                label: this.voiceCallState === 'idle' ? $r('app.string.voice_call_start')
+                                                      : $r('app.string.voice_call_end'),
                 on: this.voiceCallState !== 'idle',
                 onTap: (): void => {
                   this.showToolbar = false;
@@ -2079,42 +2298,86 @@ struct RemotePage {
       }
 
       // ---- remote text input bar (bottom, dark to match the toolbar) ----
+      // Tools row: sticky modifiers act on the text/mouse input below, the
+      // single-shot keys fire once. Input row flexes so narrow screens fit.
       if (this.showKeyboard) {
-        Row({ space: 8 }) {
-          TextInput({ placeholder: $r('app.string.keyboard_hint'), text: this.keyboardInput })
-            .width('72%')
-            .height(38)
-            .fontSize(14)
-            .fontColor('#FFFFFF')
-            .placeholderColor('#8A93A0')
-            .backgroundColor('rgba(255,255,255,0.12)')
-            .onChange((v: string) => {
-              this.onKeyboardChange(v);
+        Column({ space: 8 }) {
+          Row({ space: 6 }) {
+            KeyChip({
+              label: 'Ctrl',
+              on: this.ctrlOn,
+              onTap: (): void => {
+                this.ctrlOn = !this.ctrlOn;
+              }
             })
-            .onSubmit(() => {
-              this.pressKey('VK_RETURN');
-              this.keyboardInput = '';
-              this.sentKeyboardText = '';
+            KeyChip({
+              label: 'Alt',
+              on: this.altOn,
+              onTap: (): void => {
+                this.altOn = !this.altOn;
+              }
             })
-          Text($r('app.string.key_enter'))
-            .fontSize(13)
-            .fontColor('#FFFFFF')
-            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-            .borderRadius(9)
-            .backgroundColor('#1A6AF5')
-            .onClick(() => {
-              this.pressKey('VK_RETURN');
+            KeyChip({
+              label: 'Shift',
+              on: this.shiftOn,
+              onTap: (): void => {
+                this.shiftOn = !this.shiftOn;
+              }
             })
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .fontSize(15)
-            .fontColor(['#FFFFFF'])
-            .width(36)
-            .height(38)
-            .borderRadius(9)
-            .backgroundColor('rgba(255,255,255,0.12)')
-            .onClick(() => {
-              this.showKeyboard = false;
+            KeyChip({
+              label: 'Esc',
+              onTap: (): void => {
+                this.pressKey('VK_ESCAPE');
+              }
             })
+            KeyChip({
+              label: 'Tab',
+              onTap: (): void => {
+                this.pressKey('VK_TAB');
+              }
+            })
+            Blank()
+            Text($r('app.string.key_enter'))
+              .fontSize(13)
+              .fontColor('#FFFFFF')
+              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+              .borderRadius(9)
+              .backgroundColor('#1A6AF5')
+              .onClick(() => {
+                this.pressKey('VK_RETURN');
+                this.keyboardInput = '';
+                this.sentKeyboardText = '';
+              })
+          }
+          .width('100%')
+          Row({ space: 8 }) {
+            TextInput({ placeholder: $r('app.string.keyboard_hint'), text: this.keyboardInput })
+              .layoutWeight(1)
+              .height(38)
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .placeholderColor('#8A93A0')
+              .backgroundColor('rgba(255,255,255,0.12)')
+              .onChange((v: string) => {
+                this.onKeyboardChange(v);
+              })
+              .onSubmit(() => {
+                this.pressKey('VK_RETURN');
+                this.keyboardInput = '';
+                this.sentKeyboardText = '';
+              })
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(15)
+              .fontColor(['#FFFFFF'])
+              .width(36)
+              .height(38)
+              .borderRadius(9)
+              .backgroundColor('rgba(255,255,255,0.12)')
+              .onClick(() => {
+                this.showKeyboard = false;
+              })
+          }
+          .width('100%')
         }
         .width('100%')
         .padding({ left: 12, right: 12, top: 10, bottom: 10 })
@@ -2399,6 +2662,24 @@ struct RemotePage {
         .position({ x: '50%', y: '100%' })
         .markAnchor({ x: '50%', y: '100%' })
         .margin({ bottom: 76 })
+        .gesture(PanGesture({ fingers: 1, direction: PanDirection.All, distance: 5 })
+          .onActionStart((e: GestureEvent) => {
+            this.padLastX = this.fingerX(e);
+            this.padLastY = this.fingerY(e);
+          })
+          .onActionUpdate((e: GestureEvent) => {
+            if (!this.pointerMode) {
+              return;
+            }
+            // Relative trackpad movement on the pad body, same steering as
+            // the video surface path.
+            this.vptrX += (this.fingerX(e) - this.padLastX) * POINTER_SPEED;
+            this.vptrY += (this.fingerY(e) - this.padLastY) * POINTER_SPEED;
+            this.padLastX = this.fingerX(e);
+            this.padLastY = this.fingerY(e);
+            this.vptrClamp();
+            this.vptrMouse(MOUSE_TYPE_MOVE);
+          }))
       }
 
       // ---- quick actions panel (three-finger tap / toolbar) ----
@@ -2445,7 +2726,6 @@ struct RemotePage {
       // ---- display settings drawer (quality / codec preference) ----
       if (this.showDisplaySettings) {
         Column() {
-          Column() {
             Row({ space: 8 }) {
               Text($r('app.string.display_settings'))
                 .fontSize(15)
@@ -2469,8 +2749,11 @@ struct RemotePage {
                 Row({ space: 8 }) {
                   Radio({ value: q.value, group: 'quality' })
                     .radioStyle({ checkedBackgroundColor: '#1A6AF5' })
+                    .checked(this.imageQuality === q.value)
                     .onChange((on: boolean) => {
-                      if (on) {
+                      // Guard the programmatic .checked() update on panel
+                      // open: only a real user pick writes the option back.
+                      if (on && this.imageQuality !== q.value) {
                         this.pickImageQuality(q.value);
                       }
                     })
@@ -2513,15 +2796,28 @@ struct RemotePage {
                 .padding({ left: 6, right: 6 })
               }
               Divider().margin({ top: 4, bottom: 4 })
-              Text($r('app.string.codec_preference'))
-                .fontSize(13).fontColor('#666666')
+              Row({ space: 8 }) {
+                Text($r('app.string.codec_preference'))
+                  .fontSize(13).fontColor('#666666')
+                  .layoutWeight(1)
+                if (this.effectiveCodec.length > 0) {
+                  Text(getContext(this).resourceManager
+                    .getStringSync($r('app.string.current_codec')) + ' ' + this.effectiveCodec)
+                    .fontSize(12).fontColor('#999999')
+                }
+              }
+              .width('100%')
               ForEach(this.codecItems(), (c: RadioItem) => {
                 Row({ space: 8 }) {
                   Radio({ value: c.value, group: 'codec' })
                     .radioStyle({ checkedBackgroundColor: '#1A6AF5' })
+                    .checked(this.codecPreference === c.value)
                     .enabled(c.enabled)
                     .onChange((on: boolean) => {
-                      if (on) {
+                      // Same guard as the quality radios: the programmatic
+                      // .checked() update on panel open must not rewrite the
+                      // preference.
+                      if (on && this.codecPreference !== c.value) {
                         this.pickCodecPreference(c.value);
                       }
                     })
@@ -2542,13 +2838,13 @@ struct RemotePage {
                   .onChange((on: boolean) => {
                     if (on !== this.showRemoteCursor) {
                       if (on) {
-                        this.showRemoteCursor = true;
-                      } else {
-                        // Mutually exclusive with pointer mode: switching the
-                        // overlay off also leaves pointer mode first.
+                        // Pointer mode owns the only cursor while active;
+                        // enabling the overlay leaves it first.
                         if (this.pointerMode) {
                           this.leavePointerMode();
                         }
+                        this.showRemoteCursor = true;
+                      } else {
                         this.showRemoteCursor = false;
                       }
                     }
@@ -2574,14 +2870,18 @@ struct RemotePage {
             .width('100%')
             .padding({ left: 12, right: 12, bottom: 18 })
           }
-          .constraintSize({ maxHeight: 480 })
-          .align(Alignment.Top)
+          .layoutWeight(1)
         }
+        // Fixed height: the old content-sized wrapper (position+markAnchor
+        // over an unconstrained Scroll) measured to a collapsed/wrong-geometry
+        // subtree — the panel painted but its hit-test tree sat at the wrong
+        // place, so the close button never received taps.
         .width('100%')
-        .padding({ top: 4 })
+        .height(this.rootH > 240 ? Math.min(this.rootH - 120, 1400) : 480)
         .borderRadius({ topLeft: 18, topRight: 18 })
         .backgroundColor('#FFFFFF')
-        }
+        .position({ x: 0, y: '100%' })
+        .markAnchor({ y: '100%' })
       }
     }
     .width('100%')

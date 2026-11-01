@@ -410,7 +410,7 @@
     },
     {
       "name": "bitrate",
-      "value": "Bitrate"
+      "value": "Quality"
     },
     {
       "name": "fps_limit",
@@ -419,6 +419,10 @@
     {
       "name": "codec_preference",
       "value": "Codec preference"
+    },
+    {
+      "name": "current_codec",
+      "value": "Current codec"
     },
     {
       "name": "codec_auto",
@@ -544,6 +548,23 @@
     {"name": "back", "value": "Back"},
     {"name": "copied", "value": "Copied"},
     {"name": "share_id_reachable_hint", "value": "The ID is reachable while the app is open; tap Start sharing to stream the screen."},
-    {"name": "chat_send_failed", "value": "Failed to send the message"}
+    {"name": "chat_send_failed", "value": "Failed to send the message"},
+    {"name": "recording_badge", "value": "Recording"},
+    {"name": "voice_call_active", "value": "In call"},
+    {"name": "display_single", "value": "The remote side has only one display"},
+    {"name": "conn_encrypted", "value": "encrypted"},
+    {"name": "conn_unencrypted", "value": "unencrypted"},
+    {"name": "conn_direct", "value": "direct"},
+    {"name": "conn_relayed", "value": "relayed"},
+    {"name": "perm_keyboard", "value": "Keyboard"},
+    {"name": "perm_clipboard", "value": "Clipboard"},
+    {"name": "perm_audio", "value": "Audio"},
+    {"name": "perm_recording", "value": "Recording"},
+    {"name": "perm_file", "value": "File"},
+    {"name": "perm_restart", "value": "Restart"},
+    {"name": "perm_block_input", "value": "Block input"},
+    {"name": "perm_privacy_mode", "value": "Privacy mode"},
+    {"name": "voice_call_no_answer", "value": "No answer, call cancelled"},
+    {"name": "gesture_hint", "value": "Two-finger tap = right click · Three-finger tap = quick actions · Long-press = right click · Tap then hold-drag = drag · Pinch = zoom · Two-finger drag = scroll"}
   ]
 }
