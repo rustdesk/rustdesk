@@ -11,6 +11,7 @@ use hbb_common::{
 use std::fs;
 
 mod configuration;
+mod credentials;
 mod recovery;
 
 const PASSWORD: &str = "permanent-test-password";
