@@ -34,6 +34,8 @@ const STILL_AFTER: Duration = Duration::from_millis(100);
 const STILL_FPS: u8 = 30;
 
 struct FrameSlot {
+    #[cfg(feature = "drm-vaapi")]
+    latest_dmabuf: Option<scrap::drm_gpu::DmaBufFrame>,
     // Row stride is `pixels.len() / height`, possibly padded; the format and the plane rotation
     // the producer read for this frame (`DmabufDesc::plane_rotation`) are per frame.
     latest: Option<(usize, usize, Pixfmt, Option<u32>, Vec<u8>)>,
@@ -52,6 +54,10 @@ impl FrameSlot {
         plane_rotation: Option<u32>,
         buf: Vec<u8>,
     ) {
+        #[cfg(feature = "drm-vaapi")]
+        {
+            self.latest_dmabuf = None;
+        }
         if let Some((.., old)) = self.latest.take() {
             self.recycle(old);
         }
@@ -75,6 +81,8 @@ impl FrameSlot {
 const TRANSFORM_PENDING: i32 = i32::MIN;
 
 struct Shared {
+    #[cfg(feature = "drm-vaapi")]
+    output_dmabuf: AtomicBool,
     slot: Mutex<FrameSlot>,
     cv: Condvar,
     // The output's real transform, TRANSFORM_PENDING until new() stores it post-handshake. Only
@@ -460,7 +468,11 @@ impl IpcDrmCapturer {
         expected: Option<DrmDisplayInfo>,
     ) -> ResultType<(IpcDrmCapturer, Vec<DrmDisplayInfo>, usize, Option<(i32, i32)>)> {
         let shared = Arc::new(Shared {
+            #[cfg(feature = "drm-vaapi")]
+            output_dmabuf: AtomicBool::new(false),
             slot: Mutex::new(FrameSlot {
+                #[cfg(feature = "drm-vaapi")]
+                latest_dmabuf: None,
                 latest: None,
                 free: [None, None],
                 ended: None,
@@ -573,6 +585,11 @@ impl Drop for IpcDrmCapturer {
 }
 
 impl TraitCapturer for IpcDrmCapturer {
+    #[cfg(feature = "drm-vaapi")]
+    fn set_output_dmabuf(&mut self, enabled: bool) {
+        self.shared.output_dmabuf.store(enabled, Ordering::Relaxed);
+    }
+
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         // video_service passes its spf as the timeout: that, and how busy it is between calls, is
         // the rate the producer is asked for.
@@ -588,6 +605,10 @@ impl TraitCapturer for IpcDrmCapturer {
             let waited = WaitStamp(&self.shared.pace, Instant::now());
             let mut slot = self.shared.slot.lock().unwrap();
             loop {
+                #[cfg(feature = "drm-vaapi")]
+                if slot.latest_dmabuf.is_some() {
+                    break;
+                }
                 if slot.latest.is_some() || slot.ended.is_some() {
                     break;
                 }
@@ -598,6 +619,33 @@ impl TraitCapturer for IpcDrmCapturer {
                 let (guard, _timed_out) =
                     self.shared.cv.wait_timeout(slot, deadline - now).unwrap();
                 slot = guard;
+            }
+            #[cfg(feature = "drm-vaapi")]
+            if let Some(frame) = slot.latest_dmabuf.take() {
+                drop(slot);
+                drop(waited);
+                if scrap::wayland::display::wayland_snapshot_generation() != self.snapshot_gen
+                    || self
+                        .session_size
+                        .is_some_and(|size| size != (frame.width as usize, frame.height as usize))
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "DRM GPU frame layout changed; rebuilding",
+                    ));
+                }
+                if !self.got_frame {
+                    self.got_frame = true;
+                    if let Some(key) = &self.connector {
+                        if let Some(h) = DRM_DISPLAY_HEALTH.lock().unwrap().get_mut(key) {
+                            h.zero_frame_streak = 0;
+                            h.demotes = 0;
+                            h.fallback_rejected = false;
+                        }
+                    }
+                }
+                self.returned_at = Instant::now();
+                return Ok(Frame::DmaBuf(frame));
             }
             if let Some((w, h, fmt, plane_rotation, buf)) = slot.latest.take() {
                 drop(slot);
@@ -827,6 +875,10 @@ async fn recv_thread(
 
     // A cursor that arrived before new() stored the session transform, held for replay. Only the
     // newest matters; the 200 ms recv timeout guarantees this is retried even on an idle wire.
+    #[cfg(feature = "drm-vaapi")]
+    let gpu_render_node = if !force_cpu && render_node_count() == 1 {
+        scrap::drm_gpu::render_node(&render_node).and_then(|p| p.to_str().map(str::to_owned))
+    } else { None };
     let mut pending_cursor: Option<(u64, u32, u32, i32, i32, bool, Vec<u8>)> = None;
     // The shape being measured, or None: hidden, kernel-measured, or no context for this stream.
     let mut cal: Option<CursorCal> = None;
@@ -845,7 +897,7 @@ async fn recv_thread(
                 }
             }
         }
-        let (msg, recv_fd) = match conn.recv_msg_timeout2(200).await {
+        let (msg, mut recv_fd) = match conn.recv_msg_timeout2(200).await {
             None => continue, // timeout: re-check stop at the loop top
             Some(Ok(pair)) => pair,
             Some(Err(err)) => break format!("recv: {err}"),
@@ -864,6 +916,54 @@ async fn recv_thread(
                         display,
                         cursor_epoch,
                     );
+                }
+                #[cfg(feature = "drm-vaapi")]
+                if let Some(node) = gpu_render_node.as_ref().filter(|_| {
+                    shared.output_dmabuf.load(Ordering::Relaxed) && scrap::drm_gpu::enabled()
+                        && shared.cursor_transform.load(Ordering::Acquire) == 0
+                        && desc.plane_rotation == Some(PLANE_ROTATE_0)
+                        && desc.width > 0 && desc.height > 0 && desc.width <= 16384 && desc.height <= 16384
+                        && desc.width % 2 == 0 && desc.height % 2 == 0 && desc.num_planes <= 4
+                        && scrap::drm_gpu::supports_format(desc.format, desc.hdr_eotf)
+                }) {
+                    // Current producers attach an fd on every frame. An older producer
+                    // that elides it must rebuild with the CPU import cache populated.
+                    let fd = match recv_fd.take().filter(|_| desc.has_fd) {
+                        Some(fd) => fd,
+                        None => {
+                            scrap::drm_gpu::disable(
+                                "producer did not supply a per-frame DMA-BUF fd",
+                            );
+                            break "GPU capture needs a fresh fd; rebuilding the CPU path"
+                                .to_owned();
+                        }
+                    };
+                    let frame = scrap::drm_gpu::DmaBufFrame {
+                        fd,
+                        render_node: node.clone(),
+                        width: desc.width,
+                        height: desc.height,
+                        format: desc.format,
+                        modifier: desc.modifier,
+                        num_planes: desc.num_planes.max(1),
+                        offsets: desc.offsets,
+                        pitches: desc.pitches,
+                    };
+                    {
+                        let mut slot = shared.slot.lock().unwrap();
+                        if let Some((.., pixels)) = slot.latest.take() {
+                            slot.recycle(pixels);
+                        }
+                        slot.latest_dmabuf = Some(frame);
+                        shared.cv.notify_one();
+                    }
+                    if let Err(err) = conn
+                        .send_frame_ack(shared.demand_fps.load(Ordering::Relaxed))
+                        .await
+                    {
+                        break format!("GPU frame ack: {err}");
+                    }
+                    continue;
                 }
                 let conv = match converter.as_mut() {
                     Some(c) => c,
@@ -2493,7 +2593,11 @@ mod drm_capturer_tests {
         let connector = key.map(|k| k.to_owned());
         IpcDrmCapturer {
             shared: Arc::new(Shared {
+                #[cfg(feature = "drm-vaapi")]
+                output_dmabuf: AtomicBool::new(false),
                 slot: Mutex::new(FrameSlot {
+                    #[cfg(feature = "drm-vaapi")]
+                    latest_dmabuf: None,
                     latest: None,
                     free: [None, None],
                     ended: None,

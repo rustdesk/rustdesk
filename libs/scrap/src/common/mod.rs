@@ -40,6 +40,8 @@ cfg_if! {
 
 pub mod codec;
 pub mod convert;
+#[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+pub mod drm_gpu;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
@@ -130,6 +132,10 @@ pub fn would_block_if_equal(old: &mut Vec<u8>, b: &[u8]) -> std::io::Result<()> 
 }
 
 pub trait TraitCapturer {
+    /// Only DRM capturers override this optional GPU-frame capability.
+    #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+    fn set_output_dmabuf(&mut self, _enabled: bool) {}
+
     // We doesn't support
     #[cfg(not(any(target_os = "ios")))]
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>>;
@@ -177,6 +183,8 @@ pub trait TraitPixelBuffer {
 
 #[cfg(not(any(target_os = "ios")))]
 pub enum Frame<'a> {
+    #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+    DmaBuf(drm_gpu::DmaBufFrame),
     PixelBuffer(PixelBuffer<'a>),
     Texture((*mut c_void, usize)),
 }
@@ -185,6 +193,8 @@ pub enum Frame<'a> {
 impl Frame<'_> {
     pub fn valid<'a>(&'a self) -> bool {
         match self {
+            #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+            Frame::DmaBuf(frame) => frame.width > 0 && frame.height > 0,
             Frame::PixelBuffer(pixelbuffer) => !pixelbuffer.data().is_empty(),
             Frame::Texture((texture, _)) => !texture.is_null(),
         }
@@ -197,6 +207,8 @@ impl Frame<'_> {
         mid_data: &mut Vec<u8>,
     ) -> ResultType<EncodeInput<'a>> {
         match self {
+            #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+            Frame::DmaBuf(frame) => Ok(EncodeInput::DmaBuf(frame)),
             Frame::PixelBuffer(pixelbuffer) => {
                 convert_to_yuv(&pixelbuffer, yuvfmt, yuv, mid_data)?;
                 Ok(EncodeInput::YUV(yuv))
@@ -207,6 +219,8 @@ impl Frame<'_> {
 }
 
 pub enum EncodeInput<'a> {
+    #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+    DmaBuf(&'a drm_gpu::DmaBufFrame),
     YUV(&'a [u8]),
     Texture((*mut c_void, usize)),
     #[cfg(all(windows, feature = "vram"))]

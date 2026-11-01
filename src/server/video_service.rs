@@ -690,6 +690,11 @@ fn run(vs: VideoService) -> ResultType<()> {
             )?
         }
     };
+    #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+    c.set_output_dmabuf(
+        matches!(&encoder_cfg, EncoderCfg::HWRAM(cfg) if cfg.name == "h264_vaapi")
+            && scrap::drm_gpu::enabled(),
+    );
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     #[cfg(target_os = "android")]
@@ -824,6 +829,13 @@ fn run(vs: VideoService) -> ResultType<()> {
                     if let Some(mut screenshot) = screenshot {
                         let restore_vram = screenshot.restore_vram;
                         let (msg, w, h, data) = match &frame {
+                            #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+                            scrap::Frame::DmaBuf(f) => match scrap::drm_gpu::rgba(f) {
+                                Ok(rgba) => {
+                                    (String::new(), f.width as usize, f.height as usize, rgba)
+                                }
+                                Err(e) => (format!("DRM screenshot: {e}"), 0, 0, vec![]),
+                            },
                             scrap::Frame::PixelBuffer(f) => match get_rgba_from_pixelbuf(f) {
                                 Ok(rgba) => ("".to_owned(), f.width(), f.height(), rgba),
                                 Err(e) => {

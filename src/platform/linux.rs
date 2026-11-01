@@ -960,6 +960,8 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
             }
 
             append_audio_latency_envs(&mut envs, |key| std::env::var(key).ok());
+            #[cfg(feature = "drm-vaapi")]
+            envs.extend(scrap::drm_gpu::service_env());
 
             envs.push((
                 "TERM",

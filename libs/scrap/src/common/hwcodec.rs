@@ -114,10 +114,14 @@ impl EncoderApi for HwRamEncoder {
     fn encode_to_message(&mut self, input: EncodeInput, ms: i64) -> ResultType<VideoFrame> {
         let mut vf = VideoFrame::new();
         let mut frames = Vec::new();
-        for frame in self
-            .encode(input.yuv()?, ms)
-            .with_context(|| "Failed to encode")?
-        {
+        #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+        let encoded = match input {
+            EncodeInput::DmaBuf(frame) => self.encode_dmabuf(frame, ms),
+            _ => self.encode(input.yuv()?, ms),
+        };
+        #[cfg(not(all(target_os = "linux", feature = "drm-vaapi")))]
+        let encoded = self.encode(input.yuv()?, ms);
+        for frame in encoded.with_context(|| "Failed to encode")? {
             frames.push(EncodedVideoFrame {
                 data: Bytes::from(frame.data),
                 pts: frame.pts,
@@ -213,6 +217,24 @@ impl EncoderApi for HwRamEncoder {
 }
 
 impl HwRamEncoder {
+    #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+    fn encode_dmabuf(
+        &mut self,
+        frame: &super::drm_gpu::DmaBufFrame,
+        ms: i64,
+    ) -> ResultType<Vec<EncodeFrame>> {
+        if super::drm_gpu::enabled() {
+            match self.encoder.encode_dmabuf(frame, ms) {
+                Ok(frames) => return Ok(std::mem::take(frames)),
+                Err(code) => super::drm_gpu::disable(&format!("DMA-BUF encoder returned {code}")),
+            }
+        }
+        // Preserve this frame, including any already queued GPU frames, while the
+        // receiver switches back to the proven CPU-visible capture path.
+        let yuv = super::drm_gpu::fallback_yuv(frame, self.yuvfmt())?;
+        self.encode(&yuv, ms)
+    }
+
     pub fn try_get(format: CodecFormat) -> Option<CodecInfo> {
         let mut info = None;
         let best = CodecInfo::prioritized(HwCodecConfig::get().ram_encode);
