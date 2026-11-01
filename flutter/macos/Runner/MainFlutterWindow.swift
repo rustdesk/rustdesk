@@ -114,6 +114,7 @@ class MainFlutterWindow: NSWindow {
             }
 
             if !mainWindowOpened {
+                rustdesk_kill_tray()
                 NSApp.terminate(nil)
                 return
             }
@@ -333,6 +334,7 @@ class MainFlutterWindow: NSWindow {
                     result(nil)
                     break;
                 case "terminate":
+                    rustdesk_kill_tray()
                     exit(0)
                 case "canRecordAudio":
                     switch AVCaptureDevice.authorizationStatus(for: .audio) {

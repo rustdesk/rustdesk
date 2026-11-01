@@ -276,6 +276,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
                 log::info!("Agent file {} installed: {}", agent_plist_file, installed);
                 if installed {
                     log::info!("launch server");
+                    kill_tray();
                     std::process::Command::new("launchctl")
                         .args(&["load", "-w", &agent_plist_file])
                         .status()
@@ -1940,22 +1941,20 @@ pub fn check_start_tray() {
 }
 
 pub fn kill_tray() {
-    if !is_installed_daemon(false) && !crate::check_process("--server", false) {
-        let app_name = crate::get_app_name();
-        match std::process::Command::new("pkill")
-            .arg("-i")
-            .arg("-f")
-            .arg(&format!("{} --tray", app_name))
-            .status()
-        {
-            Ok(status) => {
-                if !status.success() && status.code() != Some(1) {
-                    log::debug!("pkill -i -f '{app_name} --tray' exited with status: {status}");
-                }
+    let app_name = crate::get_app_name();
+    match std::process::Command::new("pkill")
+        .arg("-i")
+        .arg("-f")
+        .arg(&format!("{} --tray", app_name))
+        .status()
+    {
+        Ok(status) => {
+            if !status.success() && status.code() != Some(1) {
+                log::debug!("pkill -i -f '{app_name} --tray' exited with status: {status}");
             }
-            Err(err) => {
-                log::error!("Failed to execute pkill for tray: {err}");
-            }
+        }
+        Err(err) => {
+            log::error!("Failed to execute pkill for tray: {err}");
         }
     }
 }
