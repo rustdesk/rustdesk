@@ -312,8 +312,16 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       _iosKeyboardWorkaroundTimer = null;
       _timer?.cancel();
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-            overlays: SystemUiOverlay.values);
+        if (!isIOS ||
+            _showEdit ||
+            gFFI.chatModel.inputNode.hasFocus ||
+            MediaQueryData.fromView(
+                        WidgetsBinding.instance.platformDispatcher.views.first)
+                    .viewInsets.bottom >
+                0) {
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+              overlays: SystemUiOverlay.values);
+        }
         _mobileFocusNode.requestFocus();
       });
     }
