@@ -187,7 +187,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter your password", "Informe sua senha"),
         ("Logging in...", "Fazendo Login..."),
         ("Enable RDP session sharing", "Habilitar compartilhamento de sessão RDP"),
-        ("Auto Login", "Login Automático (Somente válido se você habilitou \"Bloquear após o fim da sessão\")"),
+        ("Auto Login", "Login Automático (Para que o recurso funcione corretamente, é necessário habilitar \"Bloquear após o fim da sessão\" nas configurações do sistema.)"),
         ("Enable direct IP access", "Habilitar Acesso IP Direto"),
         ("Rename", "Renomear"),
         ("Space", "Espaço"),
@@ -686,7 +686,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("New tab", "Nova aba"),
         ("Keep terminal sessions on disconnect", "Manter sessões de terminal ao desconectar"),
         ("Terminal (Run as administrator)", "Terminal (Executar como administrador)"),
-        ("terminal-admin-login-tip", "Insira o nome do usuário e senha de administrador do dispositivo controlado."),
+        ("terminal-admin-login-tip", "Insira o nome do usuário e senha de administrador do dispositivo."),
         ("Failed to get user token.", "Falha ao obter token do usuário."),
         ("Incorrect username or password.", "Usuário ou senha incorretos"),
         ("The user is not an administrator.", "O usuário não é administrador"),
@@ -824,5 +824,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Duração da confiança (dias)"),
         ("Renew trust", "Renovar confiança"),
         ("Request approval", ""),
+        ("install-directory-not-empty-tip", "A pasta selecionada não está vazia. A instalação pode excluir dados existentes. Considere escolher outra pasta."),
     ].iter().cloned().collect();
 }

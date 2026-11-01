@@ -9,7 +9,7 @@ use base::message_proto::LoginResponse;
 impl Connection {
     pub(super) async fn begin_trusted_device(&mut self) -> bool {
         if self.conn_audit_primary_auth != ConnAuditPrimaryAuth::PermanentPassword
-            || !self.stream.is_secured()
+            || (!self.stream.is_secured() && !crate::common::is_direct_ip_access(&self.lr.username))
             || self.require_2fa.is_none()
             || self.from_switch
             || !hbb_common::config::Config::get_bool_option(

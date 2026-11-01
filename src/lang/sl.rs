@@ -824,5 +824,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Trajanje zaupanja (dni)"),
         ("Renew trust", "Obnovi zaupanje"),
         ("Request approval", ""),
+        ("install-directory-not-empty-tip", "Izbrana mapa ni prazna. Namestitev lahko izbriše obstoječe podatke. Razmislite o izbiri druge mape."),
     ].iter().cloned().collect();
 }

@@ -52,6 +52,12 @@ impl Session {
         secured: bool,
         key: Option<&[u8]>,
     ) -> ResultType<Self> {
+        if crate::common::is_direct_ip_access(login.get_id()) {
+            return Ok(Self {
+                credentials: Some(Credentials::direct_ip(login.get_id())),
+                ..Default::default()
+            });
+        }
         let Some(key) = key.filter(|_| secured) else {
             return Ok(Self::default());
         };
@@ -137,7 +143,7 @@ impl Session {
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Issuer {
     namespace: String,
-    public_key: [u8; TOKEN_BYTES],
+    public_key: Option<[u8; TOKEN_BYTES]>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -153,14 +159,26 @@ pub(super) struct Credentials {
 }
 
 impl Credentials {
+    fn direct_ip(peer_id: &str) -> Self {
+        Self {
+            peer_id: peer_id.to_owned(),
+            issuer: Issuer {
+                namespace: format!("direct-ip:{peer_id}"),
+                public_key: None,
+            },
+        }
+    }
+
     pub fn new(peer_id: String, namespace: String, public_key: &[u8]) -> ResultType<Self> {
         Ok(Self {
             peer_id,
             issuer: Issuer {
                 namespace,
-                public_key: public_key
-                    .try_into()
-                    .map_err(|_| anyhow!("Invalid trusted host public key"))?,
+                public_key: Some(
+                    public_key
+                        .try_into()
+                        .map_err(|_| anyhow!("Invalid trusted host public key"))?,
+                ),
             },
         })
     }

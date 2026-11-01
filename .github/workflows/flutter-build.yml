@@ -426,6 +426,37 @@ jobs:
             throw "RustDesk reports version '$reportedVersion', expected '$env:VERSION'"
           }
 
+      - name: Verify template payload signatures
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: powershell
+        run: |
+          Get-ChildItem ./rustdesk -Recurse -File -ErrorAction Stop |
+            Where-Object { $_.Extension -eq '.exe' -or ($_.Extension -eq '.dll' -and $_.FullName -notmatch 'RustDeskPrinterDriver|usbmmidd_v2') } |
+            ForEach-Object {
+              $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName -ErrorAction Stop
+              if ($signature.Status -ne 'Valid') { throw "Invalid template payload signature: $($_.FullName) ($($signature.Status))" }
+            }
+
+      - name: Build template packer
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../rustdesk/ -e rustdesk.exe -l 11 -t "${{ matrix.job.target }}" --exclude-exe
+          popd
+          mkdir -p ./packer-template
+          cp ./target/${{ matrix.job.target }}/release/rustdesk-portable-packer.exe ./packer-template/rustdesk-template-${{ matrix.job.arch }}.exe
+
+      - name: Upload unsigned template packer
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-unsigned-packer-template-${{ matrix.job.arch }}
+          path: ./packer-template
+          if-no-files-found: error
+
       - name: Build self-extracted executable
         shell: bash
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -689,6 +720,37 @@ jobs:
           if ($reportedVersion -cne $env:VERSION) {
             throw "RustDesk reports version '$reportedVersion', expected '$env:VERSION'"
           }
+
+      - name: Verify template payload signatures
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: powershell
+        run: |
+          Get-ChildItem ./Release -Recurse -File -ErrorAction Stop |
+            Where-Object { $_.Extension -eq '.exe' -or ($_.Extension -eq '.dll' -and $_.FullName -notmatch 'RustDeskPrinterDriver|usbmmidd_v2') } |
+            ForEach-Object {
+              $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName -ErrorAction Stop
+              if ($signature.Status -ne 'Valid') { throw "Invalid template payload signature: $($_.FullName) ($($signature.Status))" }
+            }
+
+      - name: Build template packer
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        shell: bash
+        run: |
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../Release/ -e rustdesk.exe -l 11 -t "${{ matrix.job.target }}"
+          popd
+          mkdir -p ./packer-template
+          cp ./target/${{ matrix.job.target }}/release/rustdesk-portable-packer.exe ./packer-template/rustdesk-template-${{ matrix.job.arch }}.exe
+
+      - name: Upload unsigned template packer
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-unsigned-packer-template-${{ matrix.job.arch }}
+          path: ./packer-template
+          if-no-files-found: error
 
       - name: Build self-extracted executable
         shell: bash
@@ -1301,9 +1363,34 @@ jobs:
           name: rustdesk-unsigned-msi-template-aarch64
           path: ./msi-template/
 
+      - name: Download Artifacts
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rustdesk-unsigned-packer-template-x86_64
+          path: ./packer-template/
+
+      - name: Download Artifacts
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rustdesk-unsigned-packer-template-aarch64
+          path: ./packer-template/
+
+      - name: Download Artifacts
+        if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rustdesk-unsigned-packer-template-x86
+          path: ./packer-template/
+
       - name: Combine unsigned app
         run: |
-          tar czf rustdesk-${{ env.VERSION }}-unsigned.tar.gz *.dmg windows-x86_64 windows-aarch64 windows-x86 msi-template
+          packer_template=()
+          if [[ "$SIGN_BASE_URL" != '-2' ]]; then
+            packer_template=(packer-template)
+          fi
+          tar czf rustdesk-${{ env.VERSION }}-unsigned.tar.gz *.dmg windows-x86_64 windows-aarch64 windows-x86 msi-template "${packer_template[@]}"
 
       - name: Publish unsigned app
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1

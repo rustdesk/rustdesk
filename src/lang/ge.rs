@@ -824,5 +824,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "ნდობის ხანგრძლივობა (დღე)"),
         ("Renew trust", "ნდობის განახლება"),
         ("Request approval", ""),
+        ("install-directory-not-empty-tip", "არჩეული საქაღალდე ცარიელი არ არის. ინსტალაციამ შეიძლება წაშალოს არსებული მონაცემები. რეკომენდებულია სხვა საქაღალდის არჩევა."),
     ].iter().cloned().collect();
 }
