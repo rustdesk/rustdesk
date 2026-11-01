@@ -106,6 +106,13 @@ struct Index {
     this.saveRecent();
   }
 
+  private removeRecent(r: RecentEntry): void {
+    this.recent = this.recent.filter((e: RecentEntry): boolean => {
+      return !(e.peerId === r.peerId && e.sessionKind === r.sessionKind);
+    });
+    this.saveRecent();
+  }
+
   private connect(sessionKind: number): void {
     // RustDesk IDs are numeric; strip the grouping spaces the IME/user may
     // insert ("26 299 697"), mirroring the desktop clients.
@@ -233,24 +240,35 @@ struct Index {
           ForEach(this.recent, (r: RecentEntry) => {
             ListItem() {
               Row({ space: 8 }) {
-                Text(r.peerId)
+                // Tap fills the ID for a deliberate connect; the delete chip
+                // is a sibling, not a child, so the two hit areas never mix.
+                Row({ space: 8 }) {
+                  Text(r.peerId)
+                    .fontSize(16)
+                    .layoutWeight(1)
+                  Text(r.sessionKind === SESSION_KIND_FILE_TRANSFER
+                       ? $r('app.string.file_transfer')
+                       : (r.sessionKind === SESSION_KIND_VIEW_CAMERA
+                          ? $r('app.string.view_camera') : $r('app.string.remote_control')))
+                    .fontSize(12)
+                    .fontColor('#3A7BD5')
+                }
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.peerIdInput = r.peerId;
+                })
+                Text('×')
                   .fontSize(16)
-                  .layoutWeight(1)
-                Text(r.sessionKind === SESSION_KIND_FILE_TRANSFER
-                     ? $r('app.string.file_transfer')
-                     : (r.sessionKind === SESSION_KIND_VIEW_CAMERA
-                        ? $r('app.string.view_camera') : $r('app.string.remote_control')))
-                  .fontSize(12)
-                  .fontColor('#3A7BD5')
+                  .fontColor('#BBBBBB')
+                  .padding({ left: 8, right: 8 })
+                  .onClick(() => {
+                    this.removeRecent(r);
+                  })
               }
               .width('100%')
               .padding({ left: 14, right: 14, top: 12, bottom: 12 })
               .borderRadius(8)
               .backgroundColor('#F2F3F5')
-              .onClick(() => {
-                this.peerIdInput = r.peerId;
-                this.connect(r.sessionKind);
-              })
             }
           }, (r: RecentEntry) => `${r.peerId}_${r.sessionKind}`)
         }
