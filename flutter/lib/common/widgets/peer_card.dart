@@ -751,6 +751,10 @@ abstract class BasePeerCard extends StatelessWidget {
                     child: IconButton(
                       icon: const Icon(Icons.edit),
                       padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: kMinInteractiveDimension - 8,
+                        minHeight: kMinInteractiveDimension,
+                      ),
                       onPressed: () {
                         if (Navigator.canPop(context)) {
                           Navigator.pop(context);

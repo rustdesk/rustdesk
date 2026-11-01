@@ -16,6 +16,7 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
     this.textStyle,
     this.onTap,
     this.dismissParentOnCanceled = false,
+    this.useButtonLayout = false,
     this.position = mod_menu.PopupMenuPosition.overSide,
     this.offset = Offset.zero,
     required this.itemBuilder,
@@ -29,6 +30,7 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
   final RxBool? enabled;
   final void Function()? onTap;
   final bool dismissParentOnCanceled;
+  final bool useButtonLayout;
   final List<mod_menu.PopupMenuEntry<T>> Function(BuildContext) itemBuilder;
   final Widget child;
 
@@ -80,18 +82,30 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
               : null,
           itemBuilder: widget.itemBuilder,
           padding: EdgeInsets.zero,
-          child: AnimatedDefaultTextStyle(
-            style: style,
-            duration: kThemeChangeDuration,
-            child: Container(
-              alignment: AlignmentDirectional.centerStart,
-              constraints: BoxConstraints(
-                  minHeight: widget.height, maxHeight: widget.height),
-              padding:
-                  widget.padding ?? const EdgeInsets.symmetric(horizontal: 16),
-              child: widget.child,
-            ),
-          ),
+          child: Builder(builder: (context) {
+            final child = AnimatedDefaultTextStyle(
+              style: style,
+              duration: kThemeChangeDuration,
+              child: Container(
+                alignment: AlignmentDirectional.centerStart,
+                constraints: BoxConstraints(
+                    minHeight: widget.height, maxHeight: widget.height),
+                padding: widget.padding ??
+                    const EdgeInsets.symmetric(horizontal: 16),
+                child: widget.child,
+              ),
+            );
+            if (!widget.useButtonLayout) return child;
+            final onPressed = enabled.value
+                ? () => context
+                    .findAncestorStateOfType<mod_menu.PopupMenuButtonState<T>>()
+                    ?.showButtonMenu()
+                : null;
+            return TextButton(
+              onPressed: onPressed,
+              child: TextButton(onPressed: onPressed, child: child),
+            );
+          }),
         ));
   }
 }
@@ -655,12 +669,14 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   final List<MenuEntryBase<T>> entries;
   final EdgeInsets? padding;
   final bool dismissParentOnCanceled;
+  final double arrowScale;
 
   MenuEntrySubMenu({
     required this.text,
     required this.entries,
     this.padding,
     this.dismissParentOnCanceled = false,
+    this.arrowScale = MenuConfig.iconScale,
     RxBool? enabled,
   }) : super(enabled: enabled);
 
@@ -674,13 +690,13 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
         height: conf.height,
         padding: padding,
         dismissParentOnCanceled: dismissParentOnCanceled,
+        useButtonLayout: true,
         position: mod_menu.PopupMenuPosition.overSide,
         itemBuilder: (BuildContext context) => entries
             .map((entry) => entry.build(context, conf))
             .expand((i) => i)
             .toList(),
         child: Row(children: [
-          const SizedBox(width: MenuConfig.midPadding),
           Obx(() => Text(
                 text,
                 style: super.enabled!.value
@@ -691,7 +707,7 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
               child: Align(
             alignment: Alignment.centerRight,
             child: Transform.scale(
-              scale: MenuConfig.iconScale,
+              scale: arrowScale,
               child: Obx(() => Icon(
                     Icons.keyboard_arrow_right,
                     color: super.enabled!.value

@@ -7,27 +7,18 @@ class RequestApprovalMenu extends MenuEntryBase<String> {
   final String title;
   final List<MenuEntryButton<String>> entries;
   final EdgeInsets? padding;
+  final double arrowScale;
 
   RequestApprovalMenu(
-      {required this.title, required this.entries, this.padding});
+      {required this.title,
+      required this.entries,
+      this.padding,
+      this.arrowScale = 1.0});
 
   @override
   List<mod_menu.PopupMenuEntry<String>> build(
       BuildContext context, MenuConfig conf) {
     final theme = Theme.of(context);
-    final buttonPadding =
-        (TextButtonTheme.of(context).style?.padding?.resolve({}) ??
-                ButtonStyleButton.scaledPadding(
-                  theme.useMaterial3
-                      ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
-                      : const EdgeInsets.all(8),
-                  const EdgeInsets.symmetric(horizontal: 8),
-                  const EdgeInsets.symmetric(horizontal: 4),
-                  MediaQuery.textScalerOf(context)
-                          .scale(theme.textTheme.labelLarge?.fontSize ?? 14) /
-                      14,
-                ))
-            .resolve(Directionality.of(context));
     final checkboxTheme = CheckboxTheme.of(context);
     final checkboxWidth =
         ((checkboxTheme.materialTapTargetSize ?? theme.materialTapTargetSize) ==
@@ -41,14 +32,9 @@ class RequestApprovalMenu extends MenuEntryBase<String> {
     return MenuEntrySubMenu<String>(
       text: title,
       dismissParentOnCanceled: true,
-      // Normal entries contain two TextButtons; the submenu adds a leading gap.
+      arrowScale: arrowScale,
       padding: (padding ?? EdgeInsets.zero)
-          .add(EdgeInsets.only(
-              left: buttonPadding.left * 2,
-              right: buttonPadding.right * 2 + arrowInset))
-          .subtract(
-              const EdgeInsetsDirectional.only(start: MenuConfig.midPadding))
-          .resolve(Directionality.of(context)),
+          .copyWith(right: (padding?.right ?? 0) + arrowInset),
       entries: entries
           .map((entry) => MenuEntryButton<String>(
                 childBuilder: entry.childBuilder,
