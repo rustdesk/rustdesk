@@ -56,6 +56,13 @@ class SessionKeyMenu extends StatelessWidget {
             ),
           const PopupMenuDivider(),
           for (final entry in const {
+            'Esc': 'VK_ESCAPE',
+            'Tab': 'VK_TAB',
+            'Enter': 'VK_RETURN',
+            'Left': 'VK_LEFT',
+            'Up': 'VK_UP',
+            'Down': 'VK_DOWN',
+            'Right': 'VK_RIGHT',
             'Home': 'VK_HOME',
             'End': 'VK_END',
             'Ins': 'VK_INSERT',

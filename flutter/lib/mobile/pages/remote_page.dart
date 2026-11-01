@@ -713,15 +713,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   }),
                 ),
               if (geometry.controls == null)
-                Positioned(
-                  right: media.padding.right + 8,
-                  bottom: media.padding.bottom + 8,
-                  child: FloatingActionButton(
-                    mini: true,
-                    tooltip: translate('Show Toolbar'),
-                    onPressed: () => setState(() => _showBar = true),
-                    child: const Icon(Icons.expand_less),
-                  ),
+                SessionToolbarReveal(
+                  canvas: geometry.canvas,
+                  tooltip: translate('Show Toolbar'),
+                  onPressed: () => setState(() => _showBar = true),
                 ),
               Positioned.fill(
                   child: Obx(() => Listener(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/mobile/services/foldable_layout.dart';
 import 'package:flutter_hbb/mobile/widgets/session_control_panel.dart';
 import 'package:flutter_hbb/mobile/widgets/session_toolbar.dart';
+import 'package:flutter_hbb/mobile/widgets/session_key_menu.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -173,10 +174,75 @@ void main() {
     expect(sentModifiers, {SessionModifier.command, SessionModifier.option});
     await tester.tap(find.byTooltip('Fn'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Home'));
     await tester.tap(find.text('Home'));
     await tester.pumpAndSettle();
     expect(sentKey, 'VK_HOME');
     expect(find.byTooltip('Fn'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('flat Fn controls retain escape, tab, enter and arrow keys',
+      (tester) async {
+    final sent = <String>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SessionKeyMenu(
+      enabled: true,
+      isMac: true,
+      modifiers: const {},
+      onModifier: (_) {},
+      onKey: sent.add,
+      onShortcut: (_) {},
+    ))));
+    final keys = {
+      'Esc': 'VK_ESCAPE',
+      'Tab': 'VK_TAB',
+      'Enter': 'VK_RETURN',
+      'Left': 'VK_LEFT',
+      'Up': 'VK_UP',
+      'Down': 'VK_DOWN',
+      'Right': 'VK_RIGHT'
+    };
+    for (final entry in keys.entries) {
+      await tester.tap(find.byTooltip('Fn'));
+      await tester.pumpAndSettle();
+      expect(find.text(entry.key), findsOneWidget);
+      await tester.ensureVisible(find.text(entry.key));
+      await tester.tap(find.text(entry.key));
+      await tester.pumpAndSettle();
+      expect(sent.last, entry.value);
+    }
+    expect(sent.length, keys.length);
+  });
+
+  testWidgets('hidden toolbar can be revealed above the system keyboard',
+      (tester) async {
+    const size = Size(626, 890);
+    const insets = EdgeInsets.only(bottom: 350);
+    final geometry = FoldableSessionGeometry.resolve(
+        size: size,
+        padding: EdgeInsets.zero,
+        viewInsets: insets,
+        layout: const FoldableLayout(),
+        showControls: false);
+    var revealed = false;
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+        home: MediaQuery(
+      data: const MediaQueryData(size: size, viewInsets: insets),
+      child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          body: Stack(children: [
+            SessionToolbarReveal(
+                canvas: geometry.canvas,
+                tooltip: 'Show Toolbar',
+                onPressed: () => revealed = true),
+          ])),
+    )));
+    expect(tester.getRect(find.byType(FloatingActionButton)).bottom,
+        lessThanOrEqualTo(size.height - insets.bottom));
+    await tester.tap(find.byTooltip('Show Toolbar'));
+    expect(revealed, isTrue);
   });
 }

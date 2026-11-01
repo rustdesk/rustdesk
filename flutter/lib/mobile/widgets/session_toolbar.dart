@@ -54,3 +54,31 @@ class SessionToolbar extends StatelessWidget {
     );
   }
 }
+
+class SessionToolbarReveal extends StatelessWidget {
+  const SessionToolbarReveal(
+      {super.key,
+      required this.canvas,
+      required this.tooltip,
+      required this.onPressed});
+
+  final Rect canvas;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Positioned.fromRect(
+        rect: canvas,
+        child: Align(
+          alignment: Alignment.bottomRight,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: FloatingActionButton(
+                mini: true,
+                tooltip: tooltip,
+                onPressed: onPressed,
+                child: const Icon(Icons.expand_less)),
+          ),
+        ),
+      );
+}
