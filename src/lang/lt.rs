@@ -823,7 +823,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please select Android → media.", "Pasirinkite Android → media."),
         ("Trust duration (days)", "Pasitikėjimo trukmė (dienomis)"),
         ("Renew trust", "Atnaujinti pasitikėjimą"),
-        ("Request approval", ""),
         ("install-directory-not-empty-tip", "Pasirinktas aplankas nėra tuščias. Diegimas gali ištrinti esamus duomenis. Apsvarstykite galimybę pasirinkti kitą aplanką."),
+        ("Request approval", ""),
     ].iter().cloned().collect();
 }

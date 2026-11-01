@@ -823,7 +823,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please select Android → media.", "გთხოვთ, აირჩიოთ Android → media."),
         ("Trust duration (days)", "ნდობის ხანგრძლივობა (დღე)"),
         ("Renew trust", "ნდობის განახლება"),
-        ("Request approval", ""),
         ("install-directory-not-empty-tip", "არჩეული საქაღალდე ცარიელი არ არის. ინსტალაციამ შეიძლება წაშალოს არსებული მონაცემები. რეკომენდებულია სხვა საქაღალდის არჩევა."),
+        ("Request approval", ""),
     ].iter().cloned().collect();
 }

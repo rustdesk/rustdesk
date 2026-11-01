@@ -823,7 +823,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Please select Android → media.", "Android → media என்பதைத் தேர்ந்தெடுக்கவும்."),
         ("Trust duration (days)", "நம்பிக்கைக் காலம் (நாட்கள்)"),
         ("Renew trust", "நம்பிக்கையைப் புதுப்பி"),
-        ("Request approval", ""),
         ("install-directory-not-empty-tip", "தேர்ந்தெடுக்கப்பட்ட கோப்புறை காலியாக இல்லை. நிறுவல் ஏற்கனவே உள்ள தரவை நீக்கக்கூடும். வேறு கோப்புறையைத் தேர்ந்தெடுப்பது நல்லது."),
+        ("Request approval", ""),
     ].iter().cloned().collect();
 }
