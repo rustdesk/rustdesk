@@ -8,7 +8,7 @@ anyone opens the app, sets a permanent password and prints the ID and password
 needed to connect. Run it from an elevated PowerShell prompt. Safe to re-run.
 
 .PARAMETER Installer
-RustDesk .exe or .msi, as a local path or http(s) URL. Omit if RustDesk is
+RustDesk .exe or .msi, as a local path or https URL. Omit if RustDesk is
 already installed.
 
 .PARAMETER Password
@@ -101,6 +101,9 @@ function Wait-Until([scriptblock]$Condition, [int]$TimeoutSeconds, [string]$What
 
 if ($Installer) {
     if ($Installer -match "^https?://") {
+        if ($Installer -notmatch "^https://") {
+            throw "Refusing to download the installer over http. Use an https URL or a local file."
+        }
         $name = [IO.Path]::GetFileName([Uri]::UnescapeDataString(([Uri]$Installer).AbsolutePath))
         if (-not $name) { $name = "rustdesk-setup.exe" }
         $downloadDir = Join-Path $env:TEMP ("rustdesk-" + [Guid]::NewGuid())
@@ -108,7 +111,14 @@ if ($Installer) {
         $localInstaller = Join-Path $downloadDir $name
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         Write-Host "Downloading $Installer"
-        Invoke-WebRequest -Uri $Installer -OutFile $localInstaller -UseBasicParsing
+        $response = Invoke-WebRequest -Uri $Installer -OutFile $localInstaller -UseBasicParsing -PassThru
+        # Windows PowerShell follows https-to-http redirects, so check where the file really came from.
+        $finalUri = $response.BaseResponse.ResponseUri
+        if (-not $finalUri) { $finalUri = $response.BaseResponse.RequestMessage.RequestUri }
+        if (-not $finalUri -or $finalUri.Scheme -ne "https") {
+            Remove-Item -LiteralPath $localInstaller -Force
+            throw "The download was redirected away from https; refusing to run it."
+        }
         $Installer = $localInstaller
     }
     $Installer = (Resolve-Path $Installer).Path
@@ -120,8 +130,13 @@ if ($Installer) {
             throw "msiexec failed with exit code $($msi.ExitCode)."
         }
     } else {
-        # Not -Wait: the installer starts long-lived processes that -Wait would also wait on.
-        Start-Process -FilePath $Installer -ArgumentList "--silent-install" | Out-Null
+        # Not -Wait: it also waits on descendants, and the installer leaves --tray running.
+        $setup = Start-Process -FilePath $Installer -ArgumentList "--silent-install" -PassThru
+        if (-not $setup.WaitForExit(300000)) {
+            throw "Timed out waiting for the installer to finish."
+        }
+        # The released exe only unpacks itself, hands off to a --silent-install child and exits.
+        Wait-Until { -not (Get-CimInstance Win32_Process -Filter "CommandLine LIKE '%--silent-install%'") } 300 "the installer to finish"
     }
 } elseif (-not (Test-Path $exe)) {
     throw "$exe not found. Pass -Installer to install RustDesk."

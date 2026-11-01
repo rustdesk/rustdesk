@@ -39,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File .\install-windows.ps1 `
   -ReportUrl https://example.com/rustdesk-checkin
 ```
 
-`-Installer` takes the `.exe` or `.msi`, as a local path or URL. Leave it out if
+`-Installer` takes the `.exe` or `.msi`, as a local path or `https://` URL. Leave it out if
 RustDesk is already installed. Other options: `-Password`, `-OutFile`,
 `-AppName` (for a renamed build; default `RustDesk`).
 
@@ -55,7 +55,8 @@ sudo ./install-linux.sh \
   --report-url https://example.com/rustdesk-checkin
 ```
 
-`--package` takes a `.deb`, `.rpm` or `.pkg.tar.zst`. Leave it out if RustDesk
+`--package` takes a `.deb`, `.rpm` or `.pkg.tar.zst`, as a local path or
+`https://` URL. Leave it out if RustDesk
 is already installed. Other options: `--password`, `--out-file`.
 
 RustDesk shares an existing graphical session (or the login screen); it does

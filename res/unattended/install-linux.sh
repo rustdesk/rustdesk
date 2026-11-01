@@ -7,7 +7,8 @@ usage() {
 	cat <<'EOF'
 Usage: sudo ./install-linux.sh [options]
 
-  --package PATH|URL   RustDesk .deb, .rpm or .pkg.tar.zst to install.
+  --package PATH|URL   RustDesk .deb, .rpm or .pkg.tar.zst (local path or
+                       https URL) to install.
                        Omit if RustDesk is already installed.
   --password PASS      Permanent password to set (random if omitted).
   --config STRING      Server config: "host=...,key=..." or the encoded
@@ -41,6 +42,9 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
+case "$PASSWORD" in
+*[[:cntrl:]]*) die "--password must not contain control characters." ;;
+esac
 [ "$(id -u)" -eq 0 ] || die "run this script as root (sudo)."
 command -v systemctl >/dev/null || die "systemd is required."
 
@@ -65,14 +69,10 @@ install_package() {
 		dir="$(mktemp -d)"
 		name="$(basename "${pkg%%\?*}")"
 		[ -n "$name" ] || name="rustdesk-package"
+		[[ "$pkg" =~ ^https:// ]] || die "refusing to download the package over http. Use an https URL or a local file."
+		command -v curl >/dev/null || die "curl is required to download the package."
 		echo "Downloading $pkg"
-		if command -v curl >/dev/null; then
-			curl -fL --retry 3 -o "$dir/$name" "$pkg"
-		elif command -v wget >/dev/null; then
-			wget -O "$dir/$name" "$pkg"
-		else
-			die "curl or wget is required to download the package."
-		fi
+		curl -fL --proto '=https' --proto-redir '=https' --retry 3 -o "$dir/$name" "$pkg"
 		pkg="$dir/$name"
 	fi
 	[ -f "$pkg" ] || die "package not found: $pkg"
