@@ -776,8 +776,8 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             "--relay" => {
                 param_array.push(format!("relay=true"));
             }
-            "--without-password" => {
-                param_array.push("without-password=true".to_owned());
+            "--request-approval" => {
+                param_array.push("request-approval=true".to_owned());
             }
             // inner
             "--switch_uuid" => {

@@ -241,8 +241,8 @@ class WebHomePage extends StatelessWidget {
           password = args[i + 1];
           i++;
           break;
-        case '--without-password':
-          loginMethod = 'consent';
+        case '--request-approval':
+          loginMethod = 'request-approval';
           break;
         default:
           break;

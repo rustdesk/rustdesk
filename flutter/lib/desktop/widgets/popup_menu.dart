@@ -15,6 +15,7 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
     this.enabled,
     this.textStyle,
     this.onTap,
+    this.dismissParentOnCanceled = false,
     this.position = mod_menu.PopupMenuPosition.overSide,
     this.offset = Offset.zero,
     required this.itemBuilder,
@@ -27,6 +28,7 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
   final EdgeInsets? padding;
   final RxBool? enabled;
   final void Function()? onTap;
+  final bool dismissParentOnCanceled;
   final List<mod_menu.PopupMenuEntry<T>> Function(BuildContext) itemBuilder;
   final Widget child;
 
@@ -69,6 +71,13 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
           position: widget.position,
           offset: widget.offset,
           onSelected: handleTap,
+          onCanceled: widget.dismissParentOnCanceled
+              ? () {
+                  if (ModalRoute.of(context)?.isCurrent == true) {
+                    Navigator.pop(context);
+                  }
+                }
+              : null,
           itemBuilder: widget.itemBuilder,
           padding: EdgeInsets.zero,
           child: AnimatedDefaultTextStyle(
@@ -645,11 +654,13 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   final String text;
   final List<MenuEntryBase<T>> entries;
   final EdgeInsets? padding;
+  final bool dismissParentOnCanceled;
 
   MenuEntrySubMenu({
     required this.text,
     required this.entries,
     this.padding,
+    this.dismissParentOnCanceled = false,
     RxBool? enabled,
   }) : super(enabled: enabled);
 
@@ -662,6 +673,7 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
         enabled: super.enabled,
         height: conf.height,
         padding: padding,
+        dismissParentOnCanceled: dismissParentOnCanceled,
         position: mod_menu.PopupMenuPosition.overSide,
         itemBuilder: (BuildContext context) => entries
             .map((entry) => entry.build(context, conf))
@@ -678,10 +690,15 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
           Expanded(
               child: Align(
             alignment: Alignment.centerRight,
-            child: Obx(() => Icon(
-                  Icons.keyboard_arrow_right,
-                  color: super.enabled!.value ? conf.commonColor : Colors.grey,
-                )),
+            child: Transform.scale(
+              scale: MenuConfig.iconScale,
+              child: Obx(() => Icon(
+                    Icons.keyboard_arrow_right,
+                    color: super.enabled!.value
+                        ? Theme.of(context).unselectedWidgetColor
+                        : disabledStyle().color,
+                  )),
+            ),
           ))
         ]),
       )

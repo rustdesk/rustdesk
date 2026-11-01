@@ -4,13 +4,13 @@ use super::LoginConfigHandler;
 pub(super) enum LoginMethod {
     #[default]
     Automatic,
-    Consent,
+    RequestApproval,
 }
 
 impl LoginConfigHandler {
     pub(crate) fn set_login_method(&mut self, method: &str) -> bool {
         self.login_method = match method {
-            "consent" => LoginMethod::Consent,
+            "request-approval" => LoginMethod::RequestApproval,
             _ => return false,
         };
         true
@@ -23,7 +23,7 @@ impl LoginConfigHandler {
     pub(crate) fn get_login_method(&self) -> &'static str {
         match self.login_method {
             LoginMethod::Automatic => "",
-            LoginMethod::Consent => "consent",
+            LoginMethod::RequestApproval => "request-approval",
         }
     }
 }
@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn session_creation_initializes_login_method() {
         let remote_id = hbb_common::config::LocalConfig::get_remote_id();
-        for method in ["", "consent"] {
+        for method in ["", "request-approval"] {
             let session_id = uuid::Uuid::new_v4();
             let result = crate::flutter_ffi::session_add_sync(
                 session_id,
@@ -106,7 +106,7 @@ mod tests {
                 .create_login_msg(String::new(), String::new(), vec![1; 32]);
             assert_eq!(
                 request.login_request().password.is_empty(),
-                method == "consent"
+                method == "request-approval"
             );
         }
     }
@@ -132,7 +132,7 @@ mod tests {
                     lc.shared_password = Some("shared password".into());
                     let token = lc.get_conn_token();
                     if skip {
-                        assert!(lc.set_login_method("consent"));
+                        assert!(lc.set_login_method("request-approval"));
                     }
                     assert_eq!(lc.get_conn_token(), token);
                     let request = lc.create_login_msg(String::new(), String::new(), vec![4; 32]);
@@ -161,13 +161,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn admin_terminal_waits_for_os_credentials_before_requesting_consent() {
+    async fn admin_terminal_waits_for_os_credentials_before_requesting_approval() {
         let session = Session::<FlutterHandler>::default();
         {
             let mut lc = session.lc.write().unwrap();
             lc.conn_type = ConnType::TERMINAL;
             lc.is_terminal_admin = true;
-            assert!(lc.set_login_method("consent"));
+            assert!(lc.set_login_method("request-approval"));
         }
         let (mut stream, mut peer) = connection().await;
         let mut trust = Default::default();
@@ -203,24 +203,31 @@ mod tests {
     }
 
     #[test]
-    fn consent_does_not_save_personal_ab_password() {
-        for consent in [false, true] {
+    fn request_approval_does_not_save_personal_ab_password() {
+        for request_approval in [false, true] {
             let mut lc = client::LoginConfigHandler::default();
-            lc.id = format!("consent-ab-password-test-{}", uuid::Uuid::new_v4());
+            lc.id = format!("request-approval-ab-password-test-{}", uuid::Uuid::new_v4());
             lc.password = vec![3; 32];
             lc.password_source = client::PasswordSource::PersonalAb(lc.password.clone());
-            if consent {
-                assert!(lc.set_login_method("consent"));
+            if request_approval {
+                assert!(lc.set_login_method("request-approval"));
             }
             lc.handle_peer_info(&PeerInfo::default());
             let saved = PeerConfig::load(&lc.id).password;
             PeerConfig::remove(&lc.id);
-            assert_eq!(saved, if consent { Vec::new() } else { lc.password });
+            assert_eq!(
+                saved,
+                if request_approval {
+                    Vec::new()
+                } else {
+                    lc.password
+                }
+            );
         }
     }
 
     #[tokio::test]
-    async fn consent_preserves_saved_password() {
+    async fn request_approval_preserves_saved_password() {
         let (mut stream, mut peer) = connection().await;
         let id = format!("skip-saved-password-test-{}", uuid::Uuid::new_v4());
         let mut config = PeerConfig::default();
@@ -240,7 +247,7 @@ mod tests {
                 "",
             );
             assert!(!lc.set_login_method("password"));
-            assert!(lc.set_login_method("consent"));
+            assert!(lc.set_login_method("request-approval"));
         }
         assert!(
             client::handle_hash(

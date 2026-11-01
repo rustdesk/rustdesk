@@ -921,9 +921,9 @@ class FfiModel with ChangeNotifier {
     } else if (type == 'input-password') {
       enterPasswordDialog(sessionId, dialogManager);
     } else if (type == 'terminal-admin-login' ||
-        type == 'terminal-admin-login-consent') {
+        type == 'terminal-admin-login-request-approval') {
       enterUserLoginDialog(sessionId, dialogManager, 'terminal-admin-login-tip',
-          waitForAccept: type == 'terminal-admin-login-consent');
+          waitForAccept: type == 'terminal-admin-login-request-approval');
     } else if (type == 'terminal-admin-login-password') {
       enterUserLoginAndPasswordDialog(
           sessionId, dialogManager, 'terminal-admin-login-tip');

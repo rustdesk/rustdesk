@@ -4745,13 +4745,13 @@ pub async fn handle_hash(
 
     lc.write().unwrap().password = password.clone();
 
-    let request_consent = lc.read().unwrap().skips_saved_password();
+    let request_approval = lc.read().unwrap().skips_saved_password();
 
     let is_terminal_admin = lc.read().unwrap().is_terminal_admin;
     let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
     if is_terminal && is_terminal_admin {
-        if request_consent {
-            interface.msgbox("terminal-admin-login-consent", "", "", "");
+        if request_approval {
+            interface.msgbox("terminal-admin-login-request-approval", "", "", "");
         } else if password.is_empty() {
             interface.msgbox("terminal-admin-login-password", "", "", "");
         } else {
@@ -4763,7 +4763,7 @@ pub async fn handle_hash(
 
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
-        if !request_consent {
+        if !request_approval {
             interface.msgbox("input-password", "Password Required", "", "");
         }
         Vec::new()
@@ -4774,7 +4774,7 @@ pub async fn handle_hash(
         hasher.finalize()[..].into()
     };
 
-    if request_consent {
+    if request_approval {
         interface.msgbox(
             "wait-remote-accept-nook",
             "Prompt",
