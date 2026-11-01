@@ -18,8 +18,9 @@ class FoldableFlutterViewController: FlutterViewController, FlutterStreamHandler
     #if compiler(>=6.4)
     if #available(iOS 27.1, *) {
       view.addInteraction(UIHingeInteraction { [weak self] _, update in
-        self?.hingeAvailable = update.hinge != nil
-        self?.view.setNeedsLayout()
+        guard let self, self.view.window != nil else { return }
+        self.hingeAvailable = update.hinge != nil
+        self.view.setNeedsLayout()
       })
     }
     #endif
@@ -49,7 +50,7 @@ class FoldableFlutterViewController: FlutterViewController, FlutterStreamHandler
   }
 
   private func publishLayout() {
-    guard let sink = layoutSink else { return }
+    guard let sink = layoutSink, view.window != nil else { return }
     var supported = false
     var divisions: [[CGFloat]] = []
     #if compiler(>=6.4)
