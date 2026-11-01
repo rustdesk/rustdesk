@@ -73,48 +73,26 @@ policy, package versions and submodule revisions are unchanged.
 
 ## Validation
 
-Validated with Flutter 3.24.5 / Dart 3.5.4 and Xcode 27.2. The full iOS release
-build was signed, installed over the existing development app and launched on a
-physical Duo. A saved macOS connection displayed the remote desktop; the system
-keyboard opened, stayed visible through follow-up checks and dismissed with the
-desktop geometry restored. The device owner accepted the build for contribution.
-
-The nine focused tests cover geometry, action reachability, permission-checked
-input, Mac modifier flags, keyboard/content retention through inset updates,
-session/dialog retention through pose updates, clean disposal, and repeated
-open/dismiss cycles using the real `OverlayDialogManager`, Fn navigation-key
-dispatch with no keyboard panel, and toolbar restoration above the system keyboard.
+Run the focused layout, control and overlay regressions with the repository's
+Flutter toolchain:
 
 ```sh
 cd flutter
 flutter test --no-pub test/foldable_session_test.dart test/session_overlay_test.dart
 ```
 
-The existing modifier, floating-mouse hold, keyboard-shortcut, local-shortcut and
-cursor tests also passed. Combined result: **92 passed, one web-only test skipped**
-on the VM. Targeted analysis reported four `WillPopScope` deprecation notices,
-using the same navigation API as the original page, and no errors or warnings.
-This was a targeted run, not the entire application test suite.
+These tests exercise geometry, permission-checked input, Mac modifiers,
+navigation-key access without the local keyboard deck, toolbar restoration above
+the system keyboard, and retention of focused input and dialogs through updates.
+They do not establish native hinge timing or delivery to a remote host.
 
-The two new control regressions first failed against the PR implementation:
-Escape was absent from Fn, and the reveal button's bottom was 882 points while
-the keyboard began at 540. Both now pass. A native simulator probe also subscribed
-before window attachment: the original controller emitted unsupported capability;
-the guarded controller emitted nothing until attachment, then reported supported
-on Duo (`regions=1`) and unsupported on an ordinary iPhone (`regions=0`). The Duo
-snapshot was valid before its first hinge callback. This uses the existing
-hierarchy and region data without another startup flag. The updated iOS Release
-build and strict signature verification passed.
-
-The owner's physical iPhone Duo test preceded these review follow-ups. The
-follow-ups were validated with VM tests, native simulator probes and a fresh iOS
-build; they have not been rechecked in a physical remote session.
-
-The full local iOS build used ignored generated bridge and native artifacts from
-[CI run 41280309181](https://github.com/rustdesk/rustdesk/actions/runs/41280309181),
-matching baseline `23e5bb471a040d62f0a6ad52591fb30784265b73`. Bridge codegen was not
-run. Local signing and CocoaPods checksum changes were restored after building;
-generated artifacts, signing material and preview tooling are excluded.
+Physical acceptance should cover a live session through cover, flat, horizontal
+and vertical divisions; pointer alignment and zoom; repeated system-keyboard
+cycles; toolbar restoration; trackpad and mouse buttons; chat draft/send; OS
+Password editing; reconnect/error recovery; background/resume; and permissions.
+Check ordinary-iPhone startup, safe areas and cold/warm links, including an older
+supported iOS runtime. Record the tested revision and distinguish physical,
+simulator, component-test and build results in the pull request.
 
 ## Regression surface
 
@@ -135,12 +113,13 @@ desktop layout paths are unchanged.
 ## Known limits and remaining acceptance
 
 - The local keyboard is Latin QWERTY; use the system keyboard for other input.
+- The first attached capability snapshot selects the session tree. If it reports
+  unsupported before folding capability is available, the route retains the
+  original mobile layout until the session is reopened. Waiting indefinitely for
+  a hinge callback is not a safe fallback for ordinary devices.
 - Extended physical-device testing remains: repeated fold/rotate during live
   input, reconnect/error recovery, background/resume, host-side shortcuts, pointer
   alignment at different zoom levels, chat/voice and permission changes.
-- One observed switch to Photos ended the console session with exit code 0. No
-  new Runner crash report appeared; whether the switch was manual was not
-  confirmed. This is not claimed as a diagnosed or fixed operating-system crash.
 - Screenshots are component renders. Simulator layout checks and owner acceptance
   do not replace the remaining live-session matrix or ordinary-device checks.
 
