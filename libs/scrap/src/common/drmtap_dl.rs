@@ -152,6 +152,7 @@ type FnPlaneRotation = unsafe extern "C" fn(*mut drmtap_ctx, *mut u32) -> c_int;
 type FnCrtcRefresh = unsafe extern "C" fn(*mut drmtap_ctx, *mut u64, *mut u64) -> c_int;
 type FnConvertDmabuf =
     unsafe extern "C" fn(*mut drmtap_ctx, *const drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
+type FnSetOutputBuffer = unsafe extern "C" fn(*mut drmtap_ctx, *mut c_void, usize) -> c_int;
 
 /// The dlopen'd libdrmtap; the `Library` is kept alive for the process lifetime, so the raw fn pointers stay valid.
 pub struct DrmtapLib {
@@ -171,6 +172,7 @@ pub struct DrmtapLib {
     pub grab_desc: FnGrabDesc,
     pub open_render: FnOpenRender,
     pub convert_dmabuf: FnConvertDmabuf,
+    pub set_output_buffer: Option<FnSetOutputBuffer>,
     pub render_node: Option<FnRenderNode>,
     /// Optional: it only exists from libdrmtap 0.5.8. Absent means the library cannot say whether
     /// the plane rotated the scanout, and the consumer keeps the pre-0.5.8 rule for that case.
@@ -226,6 +228,7 @@ impl DrmtapLib {
             grab_desc,
             open_render,
             convert_dmabuf,
+            set_output_buffer: None,
             render_node: None,
             plane_rotation: Some(plane_rotation),
             crtc_refresh: None,
@@ -333,6 +336,8 @@ impl DrmtapLib {
             let open_r: Option<FnOpenRender> = lib.get(b"drmtap_open_render").ok().map(|s| *s);
             let conv: Option<FnConvertDmabuf> =
                 lib.get(b"drmtap_convert_dmabuf").ok().map(|s| *s);
+            let set_output_buffer: Option<FnSetOutputBuffer> =
+                lib.get(b"drmtap_set_output_buffer").ok().map(|s| *s);
             let (grab_desc, open_render, convert_dmabuf) = match (grab, open_r, conv) {
                 (Some(g), Some(o), Some(c)) => (g, o, c),
                 (grab, open_r, conv) => {
@@ -436,6 +441,7 @@ impl DrmtapLib {
                 grab_desc,
                 open_render,
                 convert_dmabuf,
+                set_output_buffer,
                 render_node,
                 plane_rotation,
                 crtc_refresh,

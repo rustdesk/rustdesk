@@ -893,19 +893,16 @@ async fn recv_thread(
                     hdr_eotf: desc.hdr_eotf,
                     hdr_max_nits: desc.hdr_max_nits,
                 };
-                match conv.convert(&mut ddesc, received_fd) {
-                    Ok((data, w, h, fmt)) => {
-                        // Borrowed from the render context, valid only until the next convert.
-                        // Copy into a recycled buffer, and OUTSIDE the slot lock, so a
-                        // multi-megabyte memcpy never holds the encoder off the slot.
-                        let mut buf = shared.slot.lock().unwrap().take_free().unwrap_or_default();
-                        buf.clear();
-                        buf.extend_from_slice(data);
+                let mut buf = shared.slot.lock().unwrap().take_free().unwrap_or_default();
+                match conv.convert_into(&mut ddesc, received_fd, &mut buf) {
+                    Ok((w, h, fmt)) => {
                         let mut slot = shared.slot.lock().unwrap();
                         slot.publish(w as usize, h as usize, fmt, desc.plane_rotation, buf);
                         shared.cv.notify_one();
                     }
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                        shared.slot.lock().unwrap().recycle(buf);
+                    }
                     Err(err) => {
                         drm_set_prefer_cpu(&our_key);
                         break format!("convert: {err}");

@@ -23,6 +23,81 @@ pub struct RenderConverter {
 }
 
 impl RenderConverter {
+    /// Convert into a recycled consumer buffer when supported; mapped pixels and older libraries
+    /// retain the copy path. The library's borrowed destination is cleared before returning.
+    pub fn convert_into(
+        &mut self,
+        desc: &mut drmtap_dmabuf_desc,
+        received_fd: RawFd,
+        buf: &mut Vec<u8>,
+    ) -> io::Result<(u32, u32, Pixfmt)> {
+        let Some(set_output) = self.lib.set_output_buffer else {
+            let (data, w, h, fmt) = self.convert(desc, received_fd)?;
+            buf.clear();
+            buf.extend_from_slice(data);
+            return Ok((w, h, fmt));
+        };
+        // CPU conversions can preserve the source pitch; EGL returns tightly packed RGBA.
+        let needed = (desc.pitches[0] as usize)
+            .max((desc.width as usize).saturating_mul(4))
+            .checked_mul(desc.height as usize)
+            .filter(|&n| n > 0 && n <= MAX_FRAME_BYTES);
+        let Some(needed) = needed.filter(|_| {
+            desc.width > 0 && desc.height > 0 && desc.width <= MAX_DIM && desc.height <= MAX_DIM
+        }) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid DRM output size",
+            ));
+        };
+        buf.try_reserve(needed.saturating_sub(buf.len()))
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        buf.resize(needed, 0);
+        let dst = buf.as_mut_ptr();
+        // SAFETY: the destination is initialized, bounded and independent of the scanout. It is
+        // neither moved nor resized during conversion, and is unset before any return below.
+        let rc = unsafe { set_output(self.ctx, dst.cast(), buf.len()) };
+        if rc != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("set DRM output: {rc}"),
+            ));
+        }
+        let ctx = self.ctx;
+        let converted = self.convert(desc, received_fd);
+        // SAFETY: clearing the destination does not invalidate the returned pixels. Do it before
+        // the consumer can resize or recycle its buffer, including when conversion failed.
+        let rc = unsafe { set_output(ctx, std::ptr::null_mut(), 0) };
+        if rc != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("clear DRM output: {rc}"),
+            ));
+        }
+        match converted {
+            Ok((data, w, h, fmt)) => {
+                if data.as_ptr() == dst {
+                    let len = data.len();
+                    if len > buf.len() {
+                        Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "DRM output exceeds destination",
+                        ))
+                    } else {
+                        buf.truncate(len);
+                        Ok((w, h, fmt))
+                    }
+                } else {
+                    // Linear scanouts can be returned mapped, without using the destination.
+                    buf.clear();
+                    buf.extend_from_slice(data);
+                    Ok((w, h, fmt))
+                }
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     /// `node` is the render node of the GPU that exports the scanout; `None`/invalid path falls back to libdrmtap auto-selection.
     pub fn open_render(node: Option<&str>) -> Option<RenderConverter> {
         let lib = drmtap_dl::get()?;
@@ -60,7 +135,7 @@ impl RenderConverter {
         Some(RenderConverter { lib, ctx })
     }
 
-    /// Returns context-owned linear pixels valid ONLY until the next `convert()`; row stride is `len / height`.
+    /// Returns linear pixels valid ONLY until the next conversion; row stride is `len / height`.
     pub fn convert(
         &mut self,
         desc: &mut drmtap_dmabuf_desc,
@@ -109,7 +184,8 @@ impl RenderConverter {
         // LOAD-BEARING: the fd the exporter serialized was process-local; -1 means reuse the cached import for `fb_id`.
         desc.dma_buf_fd = received_fd;
         // SAFETY: self.ctx is a valid render context; `desc` is fully initialized; `frame` is zeroed
-        // before the call. libdrmtap OWNS `frame.data`: no release/free from this side (drmtap.h).
+        // before the call. frame.data belongs to the context or its configured destination;
+        // neither is released/freed through the returned frame (drmtap.h).
         unsafe {
             let mut frame: drmtap_frame_info = std::mem::zeroed();
             let ret = convert_dmabuf(self.ctx, &*desc as *const drmtap_dmabuf_desc, &mut frame);
@@ -180,5 +256,151 @@ impl Drop for RenderConverter {
             unsafe { (self.lib.close)(self.ctx) };
             self.ctx = std::ptr::null_mut();
         }
+    }
+}
+
+#[cfg(test)]
+mod output_buffer_tests {
+    use super::*;
+    use std::ffi::c_void;
+
+    struct Context {
+        dst: *mut u8,
+        len: usize,
+        mapped: [u8; 16],
+        fail: bool,
+        use_mapped: bool,
+    }
+
+    unsafe extern "C" fn set_output(ctx: *mut drmtap_ctx, dst: *mut c_void, len: usize) -> i32 {
+        let ctx = &mut *ctx.cast::<Context>();
+        ctx.dst = dst.cast();
+        ctx.len = len;
+        0
+    }
+
+    unsafe extern "C" fn convert(
+        ctx: *mut drmtap_ctx,
+        _: *const drmtap_dmabuf_desc,
+        frame: *mut drmtap_frame_info,
+    ) -> i32 {
+        let ctx = &mut *ctx.cast::<Context>();
+        if ctx.fail {
+            return -hbb_common::libc::EAGAIN;
+        }
+        let data = if !ctx.use_mapped && !ctx.dst.is_null() {
+            assert!(ctx.len >= ctx.mapped.len());
+            std::ptr::copy_nonoverlapping(ctx.mapped.as_ptr(), ctx.dst, ctx.mapped.len());
+            ctx.dst
+        } else {
+            ctx.mapped.as_mut_ptr()
+        };
+        *frame = std::mem::zeroed();
+        (*frame).data = data.cast();
+        (*frame).width = 2;
+        (*frame).height = 2;
+        (*frame).stride = 8;
+        (*frame).format = DRM_FORMAT_ABGR8888;
+        0
+    }
+
+    fn library(direct: bool) -> &'static DrmtapLib {
+        unsafe extern "C" fn grab(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) -> i32 {
+            -1
+        }
+        unsafe extern "C" fn release(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) {}
+        unsafe extern "C" fn desc(
+            _: *mut drmtap_ctx,
+            _: *mut drmtap_dmabuf_desc,
+            _: *mut drmtap_frame_info,
+        ) -> i32 {
+            -1
+        }
+        unsafe extern "C" fn rotation(_: *mut drmtap_ctx, _: *mut u32) -> i32 {
+            -1
+        }
+        let mut lib = DrmtapLib::fake(grab, release, desc, rotation);
+        lib.convert_dmabuf = convert;
+        lib.set_output_buffer = direct.then_some(set_output);
+        Box::leak(Box::new(lib))
+    }
+
+    fn descriptor() -> drmtap_dmabuf_desc {
+        drmtap_dmabuf_desc {
+            width: 2,
+            height: 2,
+            pitches: [8, 0, 0, 0],
+            ..Default::default()
+        }
+    }
+
+    fn context() -> Context {
+        Context {
+            dst: std::ptr::null_mut(),
+            len: 0,
+            mapped: [37; 16],
+            fail: false,
+            use_mapped: false,
+        }
+    }
+
+    #[test]
+    fn converts_into_reusable_destination() {
+        let mut ctx = context();
+        let mut conv = RenderConverter {
+            lib: library(true),
+            ctx: (&mut ctx as *mut Context).cast(),
+        };
+        let mut buf = vec![0; 16];
+        let allocation = buf.as_ptr();
+        let (w, h, fmt) = conv.convert_into(&mut descriptor(), -1, &mut buf).unwrap();
+        assert_eq!((w, h), (2, 2));
+        assert!(matches!(fmt, Pixfmt::RGBA));
+        assert_eq!(buf, [37; 16]);
+        assert_eq!(buf.as_ptr(), allocation);
+        // The C API must not retain a borrow of a buffer the consumer now owns.
+        assert!(ctx.dst.is_null());
+        ctx.mapped.fill(83);
+        conv.convert_into(&mut descriptor(), -1, &mut buf).unwrap();
+        assert_eq!(buf, [83; 16]);
+    }
+
+    #[test]
+    fn copies_mapped_frames_and_supports_older_libraries() {
+        for direct in [false, true] {
+            let mut ctx = context();
+            ctx.use_mapped = true;
+            let mut conv = RenderConverter {
+                lib: library(direct),
+                ctx: (&mut ctx as *mut Context).cast(),
+            };
+            let mut buf = Vec::new();
+            conv.convert_into(&mut descriptor(), -1, &mut buf).unwrap();
+            assert_eq!(buf, [37; 16]);
+            ctx.mapped.fill(0);
+            assert_eq!(buf, [37; 16]);
+            assert!(ctx.dst.is_null());
+        }
+    }
+
+    #[test]
+    fn releases_destination_on_failed_conversion() {
+        let mut ctx = context();
+        ctx.fail = true;
+        let mut conv = RenderConverter {
+            lib: library(true),
+            ctx: (&mut ctx as *mut Context).cast(),
+        };
+        let mut buf = Vec::new();
+        let err = conv
+            .convert_into(&mut descriptor(), -1, &mut buf)
+            .unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+        assert!(ctx.dst.is_null());
+        drop(buf);
+        ctx.fail = false;
+        let mut next = Vec::new();
+        conv.convert_into(&mut descriptor(), -1, &mut next).unwrap();
+        assert_eq!(next, [37; 16]);
     }
 }
