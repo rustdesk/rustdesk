@@ -9,6 +9,8 @@ use bin_reader::{normalize_path, BinaryReader};
 
 pub mod bin_reader;
 #[cfg(windows)]
+mod secure_update;
+#[cfg(windows)]
 mod ui;
 
 #[cfg(windows)]
@@ -271,6 +273,48 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
     }
 }
 
+#[cfg(windows)]
+fn execute_update(reader: &BinaryReader, args: &[String]) -> std::io::Result<()> {
+    use std::{io, os::windows::process::CommandExt};
+
+    let mut update_dir = secure_update::SecureUpdateDir::create()?;
+    let executable = update_dir.extract(reader)?;
+    let portable_exe = std::env::current_exe()?;
+    let portable_name = portable_exe.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Portable executable name is unavailable",
+        )
+    })?;
+    let mut command = Command::new(executable);
+    command
+        .args(args)
+        .env(APPNAME_RUNTIME_ENV_KEY, portable_name)
+        .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW);
+    if use_null_stdio() {
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+    } else {
+        command
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+    }
+    let status = command.status()?;
+    if !status.success() {
+        return Err(io::Error::other(format!(
+            "Embedded updater exited with status {status}"
+        )));
+    }
+    // Cleanup failure must not change the updater's successful exit status.
+    if let Err(error) = update_dir.cleanup() {
+        eprintln!("{error}");
+    }
+    Ok(())
+}
+
 fn main() -> Result<(), String> {
     let mut args = Vec::new();
     let mut arg_exe = Default::default();
@@ -298,6 +342,13 @@ fn main() -> Result<(), String> {
 
     let mut ui = false;
     let reader = BinaryReader::new()?;
+    #[cfg(windows)]
+    if args.first().map(String::as_str) == Some("--update") {
+        if let Err(error) = execute_update(&reader, &args) {
+            return Err(format!("Protected full update did not complete cleanly: {error}"));
+        }
+        return Ok(());
+    }
     if let Some(exe) = setup(
         reader,
         None,
