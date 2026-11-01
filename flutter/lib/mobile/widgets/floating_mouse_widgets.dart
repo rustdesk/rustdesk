@@ -33,9 +33,11 @@ const int _kInputTimerIntervalMillis = 100;
 
 class FloatingMouseWidgets extends StatefulWidget {
   final FFI ffi;
+  final bool persistPosition;
   const FloatingMouseWidgets({
     super.key,
     required this.ffi,
+    this.persistPosition = true,
   });
 
   @override
@@ -91,11 +93,13 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
           isLeft: true,
           inputModel: _inputModel,
           cursorModel: _cursorModel,
+          persistPosition: widget.persistPosition,
         ),
         FloatingLeftRightButton(
           isLeft: false,
           inputModel: _inputModel,
           cursorModel: _cursorModel,
+          persistPosition: widget.persistPosition,
         ),
       ],
     );
@@ -357,11 +361,13 @@ class FloatingLeftRightButton extends StatefulWidget {
   final bool isLeft;
   final InputModel inputModel;
   final CursorModel cursorModel;
+  final bool persistPosition;
   const FloatingLeftRightButton(
       {super.key,
       required this.isLeft,
       required this.inputModel,
-      required this.cursorModel});
+      required this.cursorModel,
+      this.persistPosition = true});
 
   @override
   State<FloatingLeftRightButton> createState() =>
@@ -453,6 +459,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   }
 
   void _trySavePosition() {
+    if (!widget.persistPosition) return;
     if (_previousOrientation == null) return;
     if (((_position - _preSavedPos)).distanceSquared < 0.1) return;
     final pos = jsonEncode({
@@ -465,7 +472,9 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   }
 
   void _restorePosition(Orientation ori) {
-    final ps = bind.getLocalFlutterOption(k: _getPositionKey(ori));
+    final ps = widget.persistPosition
+        ? bind.getLocalFlutterOption(k: _getPositionKey(ori))
+        : '';
     final pos = _loadPositionFromString(ps);
     if (pos == null) {
       final size = MediaQuery.of(context).size;

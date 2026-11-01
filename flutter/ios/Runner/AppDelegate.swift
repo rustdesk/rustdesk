@@ -4,6 +4,7 @@ import AVFoundation
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  var windowGeometry: IosWindowGeometryStream?
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -20,6 +21,7 @@ import AVFoundation
     
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    windowGeometry = IosWindowGeometryStream(messenger: engineBridge.applicationRegistrar.messenger())
   }
 
   public func dummyMethodToEnforceBundling() {

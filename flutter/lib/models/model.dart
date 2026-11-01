@@ -2336,6 +2336,8 @@ class CanvasModel with ChangeNotifier {
   static double get bottomToEdge =>
       isDesktop ? windowBorderWidth + kDragToResizeAreaPadding.bottom : 0;
 
+  bool mobileControlsOutsideCanvas = false;
+
   EdgeInsets get mobileCanvasPadding {
     final padding = MediaQueryData.fromView(
             WidgetsBinding.instance.platformDispatcher.views.first)
@@ -2394,6 +2396,7 @@ class CanvasModel with ChangeNotifier {
 
   // mobile only
   double getAdjustY() {
+    if (isIOS && mobileControlsOutsideCanvas) return 0;
     final bottom =
         parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ?? 0;
     if (isIOS && _mobileViewportSize != null) return bottom;
@@ -2789,6 +2792,7 @@ class CanvasModel with ChangeNotifier {
 
   clear() {
     _mobileViewportSize = null;
+    mobileControlsOutsideCanvas = false;
     if (isIOS) isMobileCanvasChanged = false;
     _x = 0;
     _y = 0;
@@ -3185,7 +3189,9 @@ class CursorModel with ChangeNotifier {
       // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
       _lastIsBlocked = true;
     }
-    if (isMobile && _lastKeyboardIsVisible != keyboardIsVisible) {
+    if (isMobile &&
+        !(parent.target?.canvasModel.mobileControlsOutsideCanvas ?? false) &&
+        _lastKeyboardIsVisible != keyboardIsVisible) {
       if (keyboardIsVisible) {
         parent.target?.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
         parent.target?.canvasModel.mobileFocusCanvasCursor();
@@ -3292,6 +3298,10 @@ class CursorModel with ChangeNotifier {
   shouldBlock(double x, double y) {
     if (_blockEvents) {
       return true;
+    }
+    if (isIOS &&
+        (parent.target?.canvasModel.mobileControlsOutsideCanvas ?? false)) {
+      return false;
     }
     final offset = Offset(x, y);
     for (final rect in _blockedRects) {

@@ -77,24 +77,24 @@ void main() {
     expect(changes, 2);
   });
 
-  testWidgets('Scaffold keyboard resize preserves scale unless refit is requested',
+  testWidgets('Scaffold keyboard resize preserves scale except in half fold',
       (tester) async {
     tester.view.physicalSize = const Size(820, 1100);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetViewInsets);
-    final refitOnKeyboard = ValueNotifier(false);
-    addTearDown(refitOnKeyboard.dispose);
+    final halfFold = ValueNotifier(false);
+    addTearDown(halfFold.dispose);
     final viewports = <Size>[];
     var changes = 0;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         bottomNavigationBar: const SizedBox(height: 60),
         body: ValueListenableBuilder<bool>(
-          valueListenable: refitOnKeyboard,
-          builder: (_, refit, __) => WindowMetricsWatcher(
-            refitOnKeyboardChange: refit,
+          valueListenable: halfFold,
+          builder: (_, half, __) => WindowMetricsWatcher(
+            refitOnKeyboardChange: half,
             onChanged: () => changes++,
             onViewportChanged: viewports.add,
             child: const SizedBox.expand(),
@@ -112,7 +112,7 @@ void main() {
     await tester.pump();
     expect(viewports.last, const Size(820, 1040));
     expect(changes, 1);
-    refitOnKeyboard.value = true;
+    halfFold.value = true;
     await tester.pump();
     tester.view.viewInsets = const FakeViewPadding(bottom: 400);
     await tester.pump();
