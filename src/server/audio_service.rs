@@ -160,6 +160,17 @@ mod pa_impl {
         let mut ohos_data = vec![];
         #[cfg(target_env = "ohos")]
         let mut ohos_pending: Vec<f32> = vec![];
+        // The capturer HAL may deliver at its native rate/channel layout rather
+        // than the requested 48 kHz mono (the emulator's virtual mic hands back
+        // the host's stereo mix format, which reads back as 2x garbled data),
+        // so the delivery rate is measured over the first half second and the
+        // stream is resampled to 48 kHz mono when it deviates.
+        #[cfg(target_env = "ohos")]
+        let mut ohos_mic_rate: Option<u32> = None;
+        #[cfg(target_env = "ohos")]
+        let mut ohos_mic_measure: Option<(std::time::Instant, usize)> = None;
+        #[cfg(target_env = "ohos")]
+        let mut ohos_mic_resampler: Option<crate::audio_resampler::AudioResampler> = None;
         while sp.ok() && !RESTARTING.load(Ordering::SeqCst) {
             sp.snapshot(|sps| {
                 sps.send(create_format_msg(crate::platform::PA_SAMPLE_RATE, 2));
@@ -228,15 +239,83 @@ mod pa_impl {
                     ohos_data.clear();
                 }
                 if let Some(mic) = &ohos_mic {
+                    let before = ohos_mic_data.len();
                     mic.take_pending(&mut ohos_mic_data);
-                    if !ohos_mic_data.is_empty() {
-                        got = true;
-                        ohos_pending.reserve(ohos_mic_data.len() * 2);
-                        for s in ohos_mic_data.drain(..) {
-                            // The call stream is mono; feed both channels so
-                            // the stereo opus encoder sees whole frames.
-                            ohos_pending.push(s);
-                            ohos_pending.push(s);
+                    let new_samples = ohos_mic_data.len() - before;
+                    if new_samples > 0 {
+                        if ohos_mic_rate.is_none() {
+                            // Measuring the delivery rate: hold the backlog
+                            // and keep the loop on its 20 ms poll until the
+                            // window fills.
+                            let (since, samples) = ohos_mic_measure
+                                .get_or_insert((std::time::Instant::now(), 0));
+                            *samples += new_samples;
+                            if since.elapsed() >= std::time::Duration::from_millis(500) {
+                                let measured =
+                                    (*samples as f64 / since.elapsed().as_secs_f64()).round()
+                                        as u32;
+                                // Within ~5% of the request (the callback
+                                // quantum on a 500 ms window), treat the
+                                // stream as the requested 48 kHz mono.
+                                let rate = if (measured as i64 - 48000).abs() <= 2400 {
+                                    48000
+                                } else {
+                                    measured
+                                };
+                                log::info!(
+                                    "ohos call mic delivered ~{measured} f32/s (requested 48000; capturer reports {} Hz/{} ch)",
+                                    mic.actual_rate(),
+                                    mic.actual_channels()
+                                );
+                                ohos_mic_rate = Some(rate);
+                                if rate != crate::platform::PA_SAMPLE_RATE {
+                                    ohos_mic_resampler = match crate::audio_resampler::AudioResampler::new(
+                                        crate::audio_resampler::AudioResamplerConfig {
+                                            input_rate: rate,
+                                            output_rate: crate::platform::PA_SAMPLE_RATE,
+                                            channels: 1,
+                                        },
+                                    ) {
+                                        Ok(r) => Some(r),
+                                        Err(e) => {
+                                            log::error!("Failed to create the ohos call mic resampler: {e}");
+                                            None
+                                        }
+                                    };
+                                }
+                            }
+                        }
+                        if let Some(rate) = ohos_mic_rate {
+                            if !ohos_mic_data.is_empty() {
+                                got = true;
+                                // Treat the delivered stream as a mono
+                                // timeline at the measured rate: resampling a
+                                // stereo mix read back as 2x mono averages L/R
+                                // into a clean downmix, and a native 96 kHz
+                                // mono stream comes out at the right speed
+                                // either way.
+                                let mono = match &mut ohos_mic_resampler {
+                                    Some(r) => match r.process(&ohos_mic_data) {
+                                        Ok(v) => v,
+                                        Err(e) => {
+                                            log::error!(
+                                                "Failed to resample the ohos call mic stream: {e}"
+                                            );
+                                            Vec::new()
+                                        }
+                                    },
+                                    None => std::mem::take(&mut ohos_mic_data),
+                                };
+                                ohos_mic_data.clear();
+                                ohos_pending.reserve(ohos_pending.len() + mono.len() * 2);
+                                for s in mono {
+                                    // The call stream is mono; feed both
+                                    // channels so the stereo opus encoder sees
+                                    // whole frames.
+                                    ohos_pending.push(s);
+                                    ohos_pending.push(s);
+                                }
+                            }
                         }
                     }
                 }
