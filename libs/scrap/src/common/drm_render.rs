@@ -267,7 +267,7 @@ mod output_buffer_tests {
     struct Context {
         dst: *mut u8,
         len: usize,
-        mapped: [u8; 16],
+        mapped: [u8; 24],
         fail: bool,
         use_mapped: bool,
     }
@@ -279,6 +279,7 @@ mod output_buffer_tests {
         0
     }
 
+    /// Model pitch-preserving conversion that needs caller storage, or a separately mapped frame.
     unsafe extern "C" fn convert(
         ctx: *mut drmtap_ctx,
         _: *const drmtap_dmabuf_desc,
@@ -288,8 +289,10 @@ mod output_buffer_tests {
         if ctx.fail {
             return -hbb_common::libc::EAGAIN;
         }
-        let data = if !ctx.use_mapped && !ctx.dst.is_null() {
-            assert!(ctx.len >= ctx.mapped.len());
+        let data = if !ctx.use_mapped {
+            if ctx.dst.is_null() || ctx.len < ctx.mapped.len() {
+                return -hbb_common::libc::ENOSPC;
+            }
             std::ptr::copy_nonoverlapping(ctx.mapped.as_ptr(), ctx.dst, ctx.mapped.len());
             ctx.dst
         } else {
@@ -299,7 +302,7 @@ mod output_buffer_tests {
         (*frame).data = data.cast();
         (*frame).width = 2;
         (*frame).height = 2;
-        (*frame).stride = 8;
+        (*frame).stride = 12;
         (*frame).format = DRM_FORMAT_ABGR8888;
         0
     }
@@ -329,7 +332,7 @@ mod output_buffer_tests {
         drmtap_dmabuf_desc {
             width: 2,
             height: 2,
-            pitches: [8, 0, 0, 0],
+            pitches: [12, 0, 0, 0],
             ..Default::default()
         }
     }
@@ -338,7 +341,7 @@ mod output_buffer_tests {
         Context {
             dst: std::ptr::null_mut(),
             len: 0,
-            mapped: [37; 16],
+            mapped: [37; 24],
             fail: false,
             use_mapped: false,
         }
@@ -351,20 +354,21 @@ mod output_buffer_tests {
             lib: library(true),
             ctx: (&mut ctx as *mut Context).cast(),
         };
-        let mut buf = vec![0; 16];
+        let mut buf = vec![0; 24];
         let allocation = buf.as_ptr();
         let (w, h, fmt) = conv.convert_into(&mut descriptor(), -1, &mut buf).unwrap();
         assert_eq!((w, h), (2, 2));
         assert!(matches!(fmt, Pixfmt::RGBA));
-        assert_eq!(buf, [37; 16]);
+        assert_eq!(buf, [37; 24]);
         assert_eq!(buf.as_ptr(), allocation);
         // The C API must not retain a borrow of a buffer the consumer now owns.
         assert!(ctx.dst.is_null());
         ctx.mapped.fill(83);
         conv.convert_into(&mut descriptor(), -1, &mut buf).unwrap();
-        assert_eq!(buf, [83; 16]);
+        assert_eq!(buf, [83; 24]);
     }
 
+    /// Mapped pixels stay consumer-owned after the mapping changes, even without the optional API.
     #[test]
     fn copies_mapped_frames_and_supports_older_libraries() {
         for direct in [false, true] {
@@ -376,9 +380,9 @@ mod output_buffer_tests {
             };
             let mut buf = Vec::new();
             conv.convert_into(&mut descriptor(), -1, &mut buf).unwrap();
-            assert_eq!(buf, [37; 16]);
+            assert_eq!(buf, [37; 24]);
             ctx.mapped.fill(0);
-            assert_eq!(buf, [37; 16]);
+            assert_eq!(buf, [37; 24]);
             assert!(ctx.dst.is_null());
         }
     }
@@ -401,6 +405,6 @@ mod output_buffer_tests {
         ctx.fail = false;
         let mut next = Vec::new();
         conv.convert_into(&mut descriptor(), -1, &mut next).unwrap();
-        assert_eq!(next, [37; 16]);
+        assert_eq!(next, [37; 24]);
     }
 }

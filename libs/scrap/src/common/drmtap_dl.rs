@@ -261,6 +261,8 @@ fn abi_accepted(major: c_int, minor: c_int, patch: c_int) -> bool {
 }
 
 impl DrmtapLib {
+    /// Verify the capture ABI before resolving optional fast paths, so compatible older libraries
+    /// keep their existing behavior when an optimization entry point is absent.
     fn load() -> Option<Self> {
         // Absolute path FIRST: the deb bundles the .so privately under /usr/lib/rustdesk and does NOT register that dir with ld.so.
         const INSTALLED: &str = "/usr/lib/rustdesk/libdrmtap.so.0";

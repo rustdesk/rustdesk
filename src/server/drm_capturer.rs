@@ -712,6 +712,8 @@ impl TraitCapturer for IpcDrmCapturer {
     }
 }
 
+/// Keep EGL conversion and borrowed output buffers on the dedicated receive thread that owns
+/// the render context; publish only consumer-owned frames to the encoder.
 #[tokio::main(flavor = "current_thread")]
 async fn recv_thread(
     display: i32,
