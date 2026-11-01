@@ -172,6 +172,8 @@ extern "C" {
     pub fn OH_AudioCapturer_Flush(capturer: *mut OH_AudioCapturer) -> c_int;
     pub fn OH_AudioCapturer_Release(capturer: *mut OH_AudioCapturer) -> c_int;
     pub fn OH_AudioCapturer_GetFrameSizeInCallback(capturer: *mut OH_AudioCapturer, frameSize: *mut c_int32) -> c_int;
+    pub fn OH_AudioCapturer_GetSamplingRate(capturer: *mut OH_AudioCapturer, rate: *mut c_int32) -> c_int;
+    pub fn OH_AudioCapturer_GetChannelCount(capturer: *mut OH_AudioCapturer, channelCount: *mut c_int32) -> c_int;
 
     pub fn OH_AudioManager_GetAudioSessionManager(
         manager: *mut *mut OH_AudioSessionManager,

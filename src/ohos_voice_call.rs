@@ -274,10 +274,19 @@ unsafe extern "C" fn on_mic_read_data(
 /// independently of AVScreenCapture, so the call mic works without an active
 /// screen share; the mix session keeps the app's own playback (the remote
 /// voice) audible while the capturer holds voice-communication focus.
+///
+/// The HAL may run the stream at its native rate/channel layout instead of the
+/// requested 48 kHz mono (an emulator's virtual mic hands back the host's
+/// stereo mix format, which reads back as 2x garbled data), so the reported
+/// stream parameters are exposed via
+/// [`actual_rate`](Self::actual_rate)/[`actual_channels`](Self::actual_channels)
+/// and the consumer must convert.
 pub struct OhosMicSource {
     capturer: *mut OH_AudioCapturer,
     pending: std::sync::Arc<std::sync::Mutex<Vec<f32>>>,
     stopped: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    reported_rate: u32,
+    reported_channels: u16,
 }
 
 // The raw capturer handle is only passed back into the OHAudio C API
@@ -355,19 +364,43 @@ impl OhosMicSource {
         // leaked like the controller-side capturer's: the callback may still
         // run while stop() releases the stream, so it cannot be freed on the
         // Rust side.
-        log::info!("ohos voice call mic source started");
+        let (mut rate, mut channels) = (0i32, 0i32);
+        let _ = OH_AudioCapturer_GetSamplingRate(capturer, &mut rate);
+        let _ = OH_AudioCapturer_GetChannelCount(capturer, &mut channels);
+        let reported_rate = if rate > 0 { rate as u32 } else { VOICE_CALL_SAMPLE_RATE };
+        let reported_channels = if channels > 0 { channels as u16 } else { 1 };
+        log::info!(
+            "ohos voice call mic source started: requested {} Hz/1 ch, capturer reports {} Hz/{} ch",
+            VOICE_CALL_SAMPLE_RATE,
+            reported_rate,
+            reported_channels
+        );
         Ok(Self {
             capturer,
             pending,
             stopped,
+            reported_rate,
+            reported_channels,
         })
     }
 
-    /// Move out the PCM accumulated since the last call (mono f32, 48 kHz).
+    /// Move out the PCM accumulated since the last call (interleaved f32 at
+    /// the layout reported by [`actual_rate`](Self::actual_rate)).
     pub fn take_pending(&self, dst: &mut Vec<f32>) {
         if let Ok(mut pending) = self.pending.lock() {
             dst.append(&mut *pending);
         }
+    }
+
+    /// The capturer stream's reported sampling rate (may differ from the
+    /// requested 48 kHz; pair with [`actual_channels`](Self::actual_channels)).
+    pub fn actual_rate(&self) -> u32 {
+        self.reported_rate
+    }
+
+    /// The capturer stream's reported channel count.
+    pub fn actual_channels(&self) -> u16 {
+        self.reported_channels
     }
 
     pub fn stop(&mut self) {
