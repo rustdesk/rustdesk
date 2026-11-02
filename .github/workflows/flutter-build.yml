@@ -31,9 +31,10 @@ env:
   FLUTTER_VERSION: "3.24.5"
   ANDROID_FLUTTER_VERSION: "3.24.5"
   # Windows arm64 only: the first stable Flutter to ship a native arm64 Windows Dart SDK +
-  # engine is 3.44. Every other platform stays on FLUTTER_VERSION (3.24.5) until Windows 7
-  # support is restored after the upstream-wide Flutter bump. The arm64 job patches the few
-  # 3.44-only source/pubspec changes on the fly (see "Patch RustDesk sources for Flutter 3.44").
+  # engine is 3.44. Every other platform except macOS arm64 (below) stays on FLUTTER_VERSION
+  # (3.24.5) until Windows 7 support is restored after the upstream-wide Flutter bump. The 3.44
+  # jobs patch the few 3.44-only source/pubspec changes on the fly (see "Patch RustDesk sources
+  # for Flutter 3.44").
   FLUTTER_WINDOWS_ARM_VERSION: "3.44.9"
   # macOS arm64 only: 3.24.5's engine crashes in attributedSubstringForProposedRange
   # (https://github.com/rustdesk/rustdesk/issues/16817, https://github.com/flutter/flutter/issues/153157).
@@ -277,8 +278,9 @@ jobs:
           fi
 
       - name: Patch RustDesk sources for Flutter 3.44 (arm64)
-        # arm64 is the only target on Flutter 3.44; apply its source/pubspec deltas on the fly
-        # (shared with the 3.44 bridge job) so the committed sources stay on Flutter 3.24.5.
+        # arm64 is on Flutter 3.44 (as is macOS arm64); apply its source/pubspec deltas on the fly
+        # (shared with the macOS arm64 build and the 3.44 bridge job) so the committed sources
+        # stay on Flutter 3.24.5.
         # `flutter build` then runs `pub get`, regenerating pubspec.lock for the bumped deps.
         if: ${{ matrix.job.arch == 'aarch64' }}
         shell: bash
