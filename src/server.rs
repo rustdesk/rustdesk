@@ -676,17 +676,26 @@ pub async fn start_server(is_server: bool, no_server: bool) {
     });
 
     if is_server {
-        crate::common::set_server_running(true);
-        std::thread::spawn(move || {
-            if let Err(err) = crate::ipc::start("") {
-                log::error!("Failed to start ipc: {}", err);
-                if crate::is_server() {
-                    log::error!("ipc is occupied by another process, try kill it");
-                    std::thread::spawn(stop_main_window_process).join().ok();
-                }
-                std::process::exit(-1);
+        #[cfg(windows)]
+        if !crate::is_server() {
+            if let Err(err) = start_gui_ipc().await {
+                log::error!("Local hosting unavailable: failed to start GUI IPC listener: {err:#}");
+                return;
             }
-        });
+        }
+        crate::common::set_server_running(true);
+        if !cfg!(windows) || crate::is_server() {
+            std::thread::spawn(move || {
+                if let Err(err) = crate::ipc::start("") {
+                    log::error!("Failed to start ipc: {}", err);
+                    if crate::is_server() {
+                        log::error!("ipc is occupied by another process, try kill it");
+                        std::thread::spawn(stop_main_window_process).join().ok();
+                    }
+                    std::process::exit(-1);
+                }
+            });
+        }
         // Warm the DRM availability cache before any client connects, so the first connection does
         // not race a cold `_drm` probe and ship an empty display list ("No displays" + retry).
         // X11 is skipped -- probing there makes the root service open DRM readers for a path this
@@ -753,6 +762,11 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                 crate::ipc::client_get_hwcodec_config_thread(0);
             }
             Err(err) => {
+                #[cfg(windows)]
+                if !no_server && !ipc_listener_is_missing(&Config::ipc_path("")) {
+                    log::warn!("Main IPC unavailable; local hosting was not started: {err:#}");
+                    return;
+                }
                 log::info!("server not started: {err:?}, no_server: {no_server}");
                 if no_server {
                     hbb_common::sleep(1.0).await;
@@ -763,6 +777,31 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                 }
             }
         }
+    }
+}
+
+#[cfg(windows)]
+async fn start_gui_ipc() -> ResultType<()> {
+    let incoming = crate::ipc::new_listener("").await?;
+    tokio::spawn(crate::ipc::start_with_listener("", incoming));
+    Ok(())
+}
+
+#[cfg(windows)]
+fn ipc_listener_is_missing(path: &str) -> bool {
+    use windows::{
+        core::PCWSTR,
+        Win32::{
+            Foundation::{GetLastError, ERROR_FILE_NOT_FOUND},
+            System::Pipes::{WaitNamedPipeW, NMPWAIT_NOWAIT},
+        },
+    };
+
+    let path: Vec<u16> = path.encode_utf16().chain(Some(0)).collect();
+    // Authentication failures do not prove absence, and a busy pipe still exists.
+    unsafe {
+        !WaitNamedPipeW(PCWSTR(path.as_ptr()), NMPWAIT_NOWAIT).as_bool()
+            && GetLastError() == ERROR_FILE_NOT_FOUND
     }
 }
 
@@ -972,5 +1011,96 @@ pub async fn stop_main_window_process() {
         if let Err(e) = crate::platform::try_kill_rustdesk_main_window_process() {
             log::error!("kill failed: {}", e);
         }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_gui_startup_tests {
+    use super::*;
+    use parity_tokio_ipc::{Endpoint, SecurityAttributes};
+    use std::{os::windows::io::AsRawHandle, process::Command};
+    use windows::Win32::{
+        Foundation::{HANDLE, WAIT_OBJECT_0},
+        System::Threading::WaitForSingleObject,
+    };
+
+    const CHILD_TEST: &str = "RUSTDESK_TEST_GUI_IPC_CHILD";
+    const CHILD_TIMEOUT_MS: u32 = 10_000;
+    const OBSERVATION_TIME: Duration = Duration::from_secs(1);
+    const IPC_TIMEOUT_MS: u64 = 2_000;
+
+    fn check_startup_in_subprocess(test_name: &str, is_server: bool) {
+        if std::env::var_os(CHILD_TEST).is_some() {
+            *hbb_common::config::APP_NAME.write().unwrap() =
+                format!("RustDesk-ipc-test-{}", std::process::id());
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let _incoming = runtime.block_on(async {
+                let mut endpoint = Endpoint::new(Config::ipc_path(""));
+                endpoint
+                    .set_security_attributes(SecurityAttributes::allow_everyone_create().unwrap());
+                endpoint.incoming().unwrap()
+            });
+            start_server(is_server, false);
+            std::thread::sleep(OBSERVATION_TIME);
+            assert!(!crate::common::is_server_running());
+            return;
+        }
+
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", test_name, "--nocapture"])
+            .env(CHILD_TEST, "1")
+            .spawn()
+            .unwrap();
+        let result =
+            unsafe { WaitForSingleObject(HANDLE(child.as_raw_handle()), CHILD_TIMEOUT_MS) };
+        if result != WAIT_OBJECT_0 {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("GUI IPC startup test timed out or failed to wait: {result:?}");
+        }
+        assert!(
+            child.wait().unwrap().success(),
+            "GUI process did not survive"
+        );
+    }
+
+    #[test]
+    fn windows_gui_survives_rejected_ipc_server() {
+        check_startup_in_subprocess(
+            "server::windows_gui_startup_tests::windows_gui_survives_rejected_ipc_server",
+            false,
+        );
+    }
+
+    #[test]
+    fn windows_gui_survives_ipc_bind_failure() {
+        check_startup_in_subprocess(
+            "server::windows_gui_startup_tests::windows_gui_survives_ipc_bind_failure",
+            true,
+        );
+    }
+
+    #[tokio::test]
+    async fn windows_gui_standalone_ipc_serves_requests() {
+        timeout(IPC_TIMEOUT_MS, async {
+            let path = parity_tokio_ipc::dummy_endpoint();
+            assert!(ipc_listener_is_missing(&path));
+            let incoming = Endpoint::new(path.clone()).incoming().unwrap();
+            assert!(!ipc_listener_is_missing(&path));
+            let client = Endpoint::connect(path.clone()).await.unwrap();
+            assert!(!ipc_listener_is_missing(&path));
+            tokio::spawn(crate::ipc::start_with_listener("", incoming));
+            let mut client = crate::ipc::ConnectionTmpl::new(client);
+            client.send(&Data::OnlineStatus(None)).await.unwrap();
+            assert!(matches!(
+                client.next_timeout(IPC_TIMEOUT_MS).await.unwrap(),
+                Some(Data::OnlineStatus(Some(_)))
+            ));
+        })
+        .await
+        .expect("standalone GUI IPC test timed out");
     }
 }

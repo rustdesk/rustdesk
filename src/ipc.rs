@@ -614,7 +614,12 @@ fn legacy_hot_measured() -> bool {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn start(postfix: &str) -> ResultType<()> {
-    let mut incoming = new_listener(postfix).await?;
+    let incoming = new_listener(postfix).await?;
+    start_with_listener(postfix, incoming).await;
+    Ok(())
+}
+
+pub(crate) async fn start_with_listener(postfix: &str, mut incoming: Incoming) {
     loop {
         if let Some(result) = incoming.next().await {
             match result {
