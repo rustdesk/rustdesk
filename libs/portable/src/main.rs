@@ -276,6 +276,7 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
 #[cfg(windows)]
 fn execute_update(reader: &BinaryReader, args: &[String]) -> std::io::Result<()> {
     use std::{io, os::windows::process::CommandExt};
+    use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 
     let mut update_dir = secure_update::SecureUpdateDir::create()?;
     let executable = update_dir.extract(reader)?;
@@ -290,7 +291,7 @@ fn execute_update(reader: &BinaryReader, args: &[String]) -> std::io::Result<()>
     command
         .args(args)
         .env(APPNAME_RUNTIME_ENV_KEY, portable_name)
-        .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW);
+        .creation_flags(CREATE_NO_WINDOW.0);
     if use_null_stdio() {
         command
             .stdin(Stdio::null())

@@ -8,25 +8,25 @@ use std::{
         io::FromRawHandle,
     },
     path::{Path, PathBuf},
-    ptr,
 };
 
-use winapi::{
-    shared::{
-        bcrypt::{BCryptGenRandom, BCRYPT_SUCCESS, BCRYPT_USE_SYSTEM_PREFERRED_RNG},
-        minwindef::{FALSE, MAX_PATH},
-        sddl::{ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1},
-    },
-    um::{
-        fileapi::{CreateDirectoryW, CreateFileW, CREATE_NEW},
-        handleapi::INVALID_HANDLE_VALUE,
-        minwinbase::SECURITY_ATTRIBUTES,
-        shlobj::{SHGetSpecialFolderPathW, CSIDL_COMMON_APPDATA},
-        winbase::{LocalFree, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT},
-        winnt::{
-            FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_READ, FILE_SHARE_WRITE,
-            GENERIC_READ, GENERIC_WRITE, PSECURITY_DESCRIPTOR,
+use windows::{
+    core::{Error as WindowsError, PCWSTR},
+    Win32::{
+        Foundation::{LocalFree, GENERIC_READ, GENERIC_WRITE, HLOCAL, MAX_PATH, WIN32_ERROR},
+        Security::{
+            Authorization::{
+                ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+            },
+            Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG},
+            PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
         },
+        Storage::FileSystem::{
+            CreateDirectoryW, CreateFileW, CREATE_NEW, FILE_ATTRIBUTE_NORMAL,
+            FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+            FILE_SHARE_READ, FILE_SHARE_WRITE,
+        },
+        UI::Shell::{SHGetSpecialFolderPathW, CSIDL_COMMON_APPDATA},
     },
 };
 
@@ -119,18 +119,16 @@ struct SecurityDescriptor(PSECURITY_DESCRIPTOR);
 impl SecurityDescriptor {
     fn new() -> io::Result<Self> {
         let sddl = to_wide(OsStr::new(UPDATE_DIR_SDDL));
-        let mut descriptor = ptr::null_mut();
-        let converted = unsafe {
+        let mut descriptor = PSECURITY_DESCRIPTOR::default();
+        unsafe {
             ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                sddl.as_ptr(),
-                SDDL_REVISION_1 as u32,
+                PCWSTR(sddl.as_ptr()),
+                SDDL_REVISION_1,
                 &mut descriptor,
-                ptr::null_mut(),
+                None,
             )
-        };
-        if converted == FALSE {
-            return Err(io::Error::last_os_error());
         }
+        .map_err(win32_io_error)?;
         Ok(Self(descriptor))
     }
 }
@@ -138,57 +136,56 @@ impl SecurityDescriptor {
 impl Drop for SecurityDescriptor {
     fn drop(&mut self) {
         unsafe {
-            let _ = LocalFree(self.0.cast());
+            let _ = LocalFree(Some(HLOCAL(self.0 .0)));
         }
     }
 }
 
 fn create_directory(path: &Path, descriptor: &SecurityDescriptor) -> io::Result<()> {
     let path_wide = to_wide(path.as_os_str());
-    let mut attributes = security_attributes(descriptor);
-    if unsafe { CreateDirectoryW(path_wide.as_ptr(), &mut attributes) } == FALSE {
-        return Err(path_error(
+    let attributes = security_attributes(descriptor);
+    unsafe { CreateDirectoryW(PCWSTR(path_wide.as_ptr()), Some(&attributes)) }.map_err(|error| {
+        path_error(
             "Failed to create protected directory",
             path,
-            io::Error::last_os_error(),
-        ));
-    }
-    Ok(())
+            win32_io_error(error),
+        )
+    })
 }
 
 fn create_file(path: &Path, descriptor: &SecurityDescriptor) -> io::Result<File> {
     let path_wide = to_wide(path.as_os_str());
-    let mut attributes = security_attributes(descriptor);
+    let attributes = security_attributes(descriptor);
     let handle = unsafe {
         CreateFileW(
-            path_wide.as_ptr(),
-            GENERIC_READ | GENERIC_WRITE,
+            PCWSTR(path_wide.as_ptr()),
+            (GENERIC_READ | GENERIC_WRITE).0,
             FILE_SHARE_READ,
-            &mut attributes,
+            Some(&attributes),
             CREATE_NEW,
             FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
-            ptr::null_mut(),
+            None,
         )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(path_error(
+    }
+    .map_err(|error| {
+        path_error(
             "Failed to create protected file",
             path,
-            io::Error::last_os_error(),
-        ));
-    }
-    Ok(unsafe { File::from_raw_handle(handle.cast()) })
+            win32_io_error(error),
+        )
+    })?;
+    Ok(unsafe { File::from_raw_handle(handle.0) })
 }
 
 fn open_directory(path: &Path) -> io::Result<File> {
     let file = OpenOptions::new()
         .read(true)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
-        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .share_mode((FILE_SHARE_READ | FILE_SHARE_WRITE).0)
+        .custom_flags((FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT).0)
         .open(path)
         .map_err(|error| path_error("Failed to lock protected directory", path, error))?;
     let metadata = file.metadata()?;
-    if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+    if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
@@ -203,22 +200,16 @@ fn open_directory(path: &Path) -> io::Result<File> {
 fn security_attributes(descriptor: &SecurityDescriptor) -> SECURITY_ATTRIBUTES {
     SECURITY_ATTRIBUTES {
         nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: descriptor.0,
-        bInheritHandle: FALSE,
+        lpSecurityDescriptor: descriptor.0 .0,
+        bInheritHandle: false.into(),
     }
 }
 
 fn program_data_dir() -> io::Result<PathBuf> {
-    let mut path = [0_u16; MAX_PATH];
-    let found = unsafe {
-        SHGetSpecialFolderPathW(
-            ptr::null_mut(),
-            path.as_mut_ptr(),
-            CSIDL_COMMON_APPDATA,
-            FALSE,
-        )
-    };
-    if found == FALSE {
+    let mut path = [0_u16; MAX_PATH as usize];
+    let found =
+        unsafe { SHGetSpecialFolderPathW(None, &mut path, CSIDL_COMMON_APPDATA as i32, false) };
+    if !found.as_bool() {
         return Err(io::Error::last_os_error());
     }
     let length = path
@@ -243,17 +234,11 @@ fn cleanup_create_failure(path: &Path, create_error: io::Error) -> io::Error {
 
 fn random_suffix() -> io::Result<String> {
     let mut bytes = [0_u8; RANDOM_BYTE_COUNT];
-    let status = unsafe {
-        BCryptGenRandom(
-            ptr::null_mut(),
-            bytes.as_mut_ptr(),
-            bytes.len() as u32,
-            BCRYPT_USE_SYSTEM_PREFERRED_RNG,
-        )
-    };
-    if !BCRYPT_SUCCESS(status) {
+    let status = unsafe { BCryptGenRandom(None, &mut bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
+    if status.is_err() {
         return Err(io::Error::other(format!(
-            "BCryptGenRandom failed with NTSTATUS 0x{status:08x}"
+            "BCryptGenRandom failed with NTSTATUS 0x{:08x}",
+            status.0
         )));
     }
     let mut suffix = String::with_capacity(RANDOM_BYTE_COUNT * HEX_CHARS_PER_BYTE);
@@ -262,6 +247,13 @@ fn random_suffix() -> io::Result<String> {
         suffix.push(HEX_DIGITS[(byte & HALF_BYTE_MASK) as usize] as char);
     }
     Ok(suffix)
+}
+
+fn win32_io_error(error: WindowsError) -> io::Error {
+    match WIN32_ERROR::from_error(&error) {
+        Some(code) => io::Error::from_raw_os_error(code.0 as i32),
+        None => io::Error::other(error),
+    }
 }
 
 fn path_error(action: &str, path: &Path, error: io::Error) -> io::Error {
@@ -286,7 +278,12 @@ mod tests {
         let path = directory.path().to_path_buf();
         assert_eq!(path.parent(), Some(expected_parent.as_path()));
         assert!(path.is_dir());
-        drop(directory.create_file(&path.join("payload.bin"))?);
+        let payload = path.join("payload.bin");
+        drop(directory.create_file(&payload)?);
+        assert_eq!(
+            directory.create_file(&payload).unwrap_err().kind(),
+            io::ErrorKind::AlreadyExists
+        );
         directory.cleanup()?;
         assert!(!path.try_exists()?);
         Ok(())

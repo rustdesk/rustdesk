@@ -12,7 +12,7 @@ use crate::bin_reader::{normalize_path, BinaryData, BinaryReader};
 mod protected_dir;
 
 use protected_dir::ProtectedDirectory;
-use winapi::um::winnt::FILE_ATTRIBUTE_REPARSE_POINT;
+use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 const INVALID_FILENAME_CHARS: &str = "<>:\"/\\|?*";
 
@@ -125,7 +125,7 @@ fn is_reserved_device_name(stem: &str) -> bool {
 
 fn ensure_regular_file(path: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(path)?;
-    if metadata.is_file() && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
+    if metadata.is_file() && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 == 0 {
         return Ok(());
     }
     Err(io::Error::new(
