@@ -18,7 +18,10 @@ const connectionTypes = [
 ];
 
 Future<void> openMenu(WidgetTester tester, List<String> actions,
-    {ThemeData? theme, EdgeInsets? padding, bool includeRelay = false}) async {
+    {ThemeData? theme,
+    EdgeInsets? padding,
+    bool includeRelay = false,
+    RelativeRect position = const RelativeRect.fromLTRB(20, 20, 780, 580)}) async {
   MenuEntryButton<String> entry(String title, {bool requestApproval = false}) =>
       MenuEntryButton<String>(
         childBuilder: (style) => Text(title, style: style),
@@ -35,7 +38,7 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
         return TextButton(
           onPressed: () => mod_menu.showMenu<String>(
             context: context,
-            position: const RelativeRect.fromLTRB(20, 20, 780, 580),
+            position: position,
             items: [
               entry('Connect'),
               entry('Transfer file'),
@@ -90,6 +93,56 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
 }
 
 void main() {
+  testWidgets('submenu prefers the left screen edge when neither side fits',
+      (tester) async {
+    final wasMobile = common.isMobile;
+    addTearDown(() => common.isMobile = wasMobile);
+    tester.view.physicalSize = const Size(500, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final mobile in [false, true]) {
+      common.isMobile = mobile;
+      await openMenu(tester, [],
+          position: const RelativeRect.fromLTRB(480, 20, 20, 780));
+      await tester.tap(find.text('Request approval'));
+      await tester.pumpAndSettle();
+      final submenu = tester.getRect(find.ancestor(
+          of: find.text('Connect').last,
+          matching: find.byType(mod_menu.PopupMenuItem<String>)));
+      expect(submenu.left, closeTo(0, 0.01));
+      expect(submenu.right, lessThanOrEqualTo(500));
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('approval submenu opens beside its parent on either screen edge',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final atRight in [false, true]) {
+      await openMenu(tester, [],
+          position: RelativeRect.fromLTRB(atRight ? 1180 : 20, 20,
+              atRight ? 20 : 1180, 780));
+      final parent = tester.getRect(find.byType(PopupMenuChildrenItem<String>));
+      await tester.tap(find.text('Request approval'));
+      await tester.pumpAndSettle();
+      final submenu = tester.getRect(find.ancestor(
+          of: find.text('Connect').last,
+          matching: find.byType(mod_menu.PopupMenuItem<String>)));
+      if (atRight) {
+        expect(submenu.right, lessThanOrEqualTo(parent.left));
+      } else {
+        expect(submenu.left, greaterThanOrEqualTo(parent.right));
+      }
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
+    }
+  });
+
   testWidgets('only mobile approval submenus have a heading and dim background',
       (tester) async {
     final wasMobile = common.isMobile;
