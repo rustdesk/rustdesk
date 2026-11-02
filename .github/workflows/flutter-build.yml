@@ -1010,6 +1010,12 @@ jobs:
           channel: "stable"
           flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_MACOS_ARM_VERSION || env.FLUTTER_VERSION }}
 
+      - name: Keep CocoaPods for Flutter 3.44 (arm64)
+        # 3.44 turns on Swift Package Manager by default, which would migrate Runner.xcodeproj and
+        # move some plugins off CocoaPods; every plugin still ships a podspec.
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Patch flutter
         # Flutter 3.44 (arm64) already has this dropdown fix.
         if: ${{ matrix.job.arch == 'x86_64' }}
@@ -1055,8 +1061,8 @@ jobs:
           path: ./
 
       - name: Run the Dart tests
-        # CI's only Dart test run; keep it on the Flutter 3.24.5 sources most platforms ship.
-        if: ${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}
+        # x86_64 tests the Flutter 3.24.5 sources most platforms ship, arm64 the patched 3.44 ones.
+        if: ${{ !inputs.upload-artifact }}
         working-directory: flutter
         run: flutter test --timeout 60s
 
