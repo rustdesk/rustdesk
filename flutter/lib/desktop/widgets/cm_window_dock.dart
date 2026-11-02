@@ -5,6 +5,7 @@ import 'package:window_size/window_size.dart' as window_size;
 import '../../common.dart';
 import '../../consts.dart';
 import '../../models/platform_model.dart';
+import '../../models/server_model.dart';
 import '../../utils/platform_channel.dart';
 
 final cmWindowDock = CmWindowDock();
@@ -17,14 +18,56 @@ class CmWindowDock extends ValueNotifier<bool> {
 
   static const size = Size(36, 72);
   static const bottomInset = 64.0;
+  static final compactSize =
+      Size(kConnectionManagerWindowSizeClosedChat.width, 280);
   Future<void>? _transition;
 
   // Keep the mode fixed for the lifetime of this CM process.
   final bool enabled;
 
-  Size get expandedSize => gFFI.chatModel.isShowCMSidePage
-      ? kConnectionManagerWindowSizeOpenChat
-      : kConnectionManagerWindowSizeClosedChat;
+  Size get expandedSize {
+    final contentSize = gFFI.chatModel.isShowCMSidePage
+        ? kConnectionManagerWindowSizeOpenChat
+        : kConnectionManagerWindowSizeClosedChat;
+    return enabled ? Size(contentSize.width, expandedHeight) : contentSize;
+  }
+
+  double get expandedHeight {
+    if (!enabled) return compactSize.height;
+    final model = gFFI.serverModel;
+    var extraRows = 0;
+    for (final client in model.clients.where((client) => !client.disconnected)) {
+      final elevate = model.showElevation &&
+          client.type_() == ClientType.remote &&
+          bind.cmCanElevate();
+      var rows = 0;
+      if (client.authorized) {
+        rows = (client.inVoiceCall ? 1 : 0) +
+            (client.incomingVoiceCall ? 1 : 0) +
+            (client.fromSwitch ? 1 : 0) +
+            (elevate ? 1 : 0);
+      } else if (elevate &&
+          model.approveMode != 'password' &&
+          bind.mainGetBuildinOption(
+                  key: kOptionHideElevateButtonInAcceptWindow) !=
+              'Y') {
+        rows = 1;
+      }
+      if (rows > extraRows) extraRows = rows;
+    }
+    // Button rows are 28 high, with a 4-pixel margin above and below.
+    return compactSize.height + extraRows * 36;
+  }
+
+  Future<void> syncExpandedHeight() async {
+    if (!enabled || value) return;
+    final bounds = await windowManager.getBounds();
+    if (value) return;
+    final height = expandedHeight;
+    if (bounds.height == height) return;
+    await windowManager.setBounds(Rect.fromLTWH(
+        bounds.left, bounds.bottom - height, bounds.width, height));
+  }
 
   Future<void> syncMinimizable() async {
     final minimizable = !enabled;
@@ -42,7 +85,7 @@ class CmWindowDock extends ValueNotifier<bool> {
   }
 
   Future<void> resizeExpanded(Size contentSize, {bool align = false}) async {
-    final windowSize = Size(contentSize.width + size.width, contentSize.height);
+    final windowSize = Size(contentSize.width + size.width, expandedHeight);
     // On macOS, hiding just the title-bar buttons leaves the native title-bar
     // view over the transparent margin. Hide the whole view and its shadow.
     if (isMacOS || isWindows) {

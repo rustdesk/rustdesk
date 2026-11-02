@@ -309,8 +309,8 @@ showCmWindow({bool isStartup = false}) async {
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: cmWindowDock.enabled
-            ? Size(kConnectionManagerWindowSizeClosedChat.width + CmWindowDock.size.width,
-                kConnectionManagerWindowSizeClosedChat.height)
+            ? Size(CmWindowDock.compactSize.width + CmWindowDock.size.width,
+                cmWindowDock.expandedHeight)
             : kConnectionManagerWindowSizeClosedChat,
         alwaysOnTop: true);
     await windowManager.waitUntilReadyToShow(windowOptions, null);

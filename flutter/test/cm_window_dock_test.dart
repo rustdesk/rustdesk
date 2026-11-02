@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/widgets/cm_window_dock.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/main.dart' show showCmWindow;
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_test/flutter_test.dart' hide isWindows;
+import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 
 class _Binding extends Fake implements RustdeskImpl {
@@ -131,7 +134,7 @@ void main() {
   });
 
   test(
-      'opening chat or file transfers preserves CM position',
+      'opening chat or file transfers only widens compact CM',
       () async {
     const channel = MethodChannel('window_manager');
     var bounds = const Rect.fromLTWH(1884, 864, 36, 72);
@@ -159,17 +162,17 @@ void main() {
     addTearDown(dock.dispose);
     await dock.resizeExpanded(kConnectionManagerWindowSizeClosedChat);
     expect(await windowManager.getBounds(),
-        const Rect.fromLTWH(1584, 510, 336, 490));
+        const Rect.fromLTWH(1584, 720, 336, 280));
     dock.value = false;
     await dock.resizeExpanded(kConnectionManagerWindowSizeOpenChat);
     expect(await windowManager.getBounds(),
-        const Rect.fromLTWH(1184, 510, 736, 490));
+        const Rect.fromLTWH(1184, 720, 736, 280));
     await dock.resizeExpanded(kConnectionManagerWindowSizeClosedChat);
     expect(await windowManager.getBounds(),
-        const Rect.fromLTWH(1584, 510, 336, 490));
+        const Rect.fromLTWH(1584, 720, 336, 280));
   });
 
-  test('CM first appears at the bottom right', () async {
+  test('CM first appears compact at the bottom right', () async {
     binding.option = 'Y';
     final oldIsTest = isTest;
     final oldDesktopType = desktopType;
@@ -220,7 +223,7 @@ void main() {
 
     expect(visibleBounds, isNotEmpty);
     expect(visibleBounds,
-        everyElement(const Rect.fromLTWH(1584, 590, 336, 490)));
+        everyElement(const Rect.fromLTWH(1584, 800, 336, 280)));
   });
 
   test('incoming voice call expands CM and keeps the call visible', () async {
@@ -268,10 +271,10 @@ void main() {
     });
     await shown.future.timeout(const Duration(seconds: 2));
     expect(await windowManager.getBounds(),
-        const Rect.fromLTWH(1584, 510, 336, 490));
+        const Rect.fromLTWH(1584, 684, 336, 316));
     await cmWindowDock.dock().timeout(const Duration(seconds: 2));
     expect(await windowManager.getBounds(),
-        const Rect.fromLTWH(1584, 510, 336, 490));
+        const Rect.fromLTWH(1584, 684, 336, 316));
   });
 
   testWidgets('moved CM docks at its screen work area and expands in place',
@@ -285,7 +288,7 @@ void main() {
     gFFI.serverModel.clients.add(
         Client(1, true, false, false, 'Peer', '123456789', true, true, true));
     final dock = CmWindowDock();
-    var bounds = const Rect.fromLTWH(-1000, 200, 336, 490);
+    var bounds = const Rect.fromLTWH(-1000, 200, 336, 280);
     // A frameless Windows window still has an OS minimum tracking width.
     var minimumWidth = isWindows ? 132.0 : 0.0;
     const hostChannel = MethodChannel('org.rustdesk.rustdesk/host');
@@ -301,7 +304,7 @@ void main() {
     const screenChannel = MethodChannel('flutter/windowsize');
     final scale = isWindows ? 2.0 : 1.0;
     messenger.setMockMethodCallHandler(screenChannel, (call) async => {
-          'frame': [-1000.0, 200.0, 336.0, 490.0],
+          'frame': [-1000.0, 200.0, 336.0, 280.0],
           'scaleFactor': 2.0,
           'screen': {
             'frame': [-1600 * scale, 0.0, 1600 * scale, 1080 * scale],
@@ -340,11 +343,93 @@ void main() {
       await tester.pump();
       await collapsing;
       expect(await windowManager.getBounds(),
-          const Rect.fromLTWH(-76, 554, 36, 72));
+          const Rect.fromLTWH(-76, 344, 36, 72));
       await dock.expand();
       expect(await windowManager.getBounds(),
-          const Rect.fromLTWH(-376, 200, 336, 490));
+          const Rect.fromLTWH(-376, 200, 336, 280));
     }
+  });
+
+  testWidgets('all CM actions remain visible without scrolling', (tester) async {
+    binding.option = 'Y';
+    final oldDesktopType = desktopType;
+    final oldIsTest = isTest;
+    isTest = true;
+    desktopType = DesktopType.cm;
+    await initGlobalFFI();
+    final model = gFFI.serverModel;
+    final client =
+        Client(1, false, false, false, 'Peer', '123456789', true, true, true);
+    model.clients.add(client);
+    model.tabController.add(TabInfo(
+        key: '1', label: client.name, page: buildConnectionCard(client)));
+    var bounds = const Rect.fromLTWH(1584, 720, 336, 280);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = bounds.size;
+    const channel = MethodChannel('window_manager');
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method.startsWith('is')) return false;
+      if (call.method == 'getBounds') {
+        return {
+          'x': bounds.left,
+          'y': bounds.top,
+          'width': bounds.width,
+          'height': bounds.height
+        };
+      }
+      if (call.method == 'setBounds') {
+        final args = call.arguments;
+        bounds =
+            Rect.fromLTWH(args['x'], args['y'], args['width'], args['height']);
+        tester.view.physicalSize = bounds.size;
+      }
+      return null;
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(channel, null);
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      model.clients.clear();
+      desktopType = oldDesktopType;
+      isTest = oldIsTest;
+    });
+    await tester.pumpWidget(GetMaterialApp(
+        theme: MyTheme.lightTheme, home: const DesktopServerPage()));
+    await tester.pumpAndSettle();
+
+    model.setShowElevation(true);
+    await tester.pumpAndSettle();
+    expect(bounds, const Rect.fromLTWH(1584, 684, 336, 316));
+    for (final label in ['Accept and Elevate', 'Accept', 'Cancel']) {
+      expect(find.text(label).hitTestable(), findsOneWidget);
+    }
+
+    client.authorized = true;
+    client.fromSwitch = true;
+    model.updateVoiceCallState({
+      'client': jsonEncode(client.toJson()..['incoming_voice_call'] = true)
+    });
+    await tester.pumpAndSettle();
+    expect(bounds, const Rect.fromLTWH(1584, 612, 336, 388));
+    for (final label in [
+      'Accept',
+      'Dismiss',
+      'Switch Sides',
+      'Elevate',
+      'Disconnect'
+    ]) {
+      expect(find.text(label).hitTestable(), findsOneWidget);
+    }
+
+    client.fromSwitch = false;
+    client.incomingVoiceCall = false;
+    model.setShowElevation(false);
+    await tester.pumpAndSettle();
+    expect(bounds, const Rect.fromLTWH(1584, 720, 336, 280));
+    expect(find.text('Disconnect').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 500));
   });
 
   testWidgets(
@@ -357,10 +442,10 @@ void main() {
         builder: (context, setState) => Align(
             alignment: Alignment.bottomRight,
             child: SizedBox.fromSize(
-              size: docked ? CmWindowDock.size : const Size(336, 490),
+              size: docked ? CmWindowDock.size : const Size(336, 280),
               child: CmDockLayout(
                 docked: docked,
-                contentSize: kConnectionManagerWindowSizeClosedChat,
+                contentSize: CmWindowDock.compactSize,
                 onToggle: () => setState(() => docked = !docked),
                 child: const Material(child: TextField()),
               ),
