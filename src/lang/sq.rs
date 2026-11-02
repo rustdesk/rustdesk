@@ -824,5 +824,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Kohëzgjatja e besimit (ditë)"),
         ("Renew trust", "Rinovo besimin"),
         ("install-directory-not-empty-tip", "Dosja e zgjedhur nuk është bosh. Instalimi mund të fshijë të dhënat ekzistuese. Konsideroni të zgjidhni një dosje tjetër."),
+        ("Request approval", "Kërko miratim"),
     ].iter().cloned().collect();
 }

@@ -824,5 +824,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Термін довіри (у днях)"),
         ("Renew trust", "Подовжити довіру"),
         ("install-directory-not-empty-tip", "Вибрана тека не порожня. Встановлення може видалити наявні дані. Радимо вибрати іншу теку."),
+        ("Request approval", "Запросити схвалення"),
     ].iter().cloned().collect();
 }

@@ -15,6 +15,7 @@ import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../../desktop/widgets/popup_menu.dart';
+import 'request_approval_menu.dart';
 import 'dart:math' as math;
 
 typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
@@ -572,7 +573,36 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   Future<List<MenuEntryBase<String>>> _buildMenuItems(BuildContext context);
 
-  MenuEntryBase<String> _connectCommonAction(
+  @protected
+  Future<List<MenuEntryBase<String>>> _buildConnectionMenuItems(
+      BuildContext context) async {
+    final List<MenuEntryBase<String>> menuItems = [
+      _connectAction(context),
+      _transferFileAction(context),
+      _viewCameraAction(context),
+      _terminalAction(context),
+    ];
+
+    if (peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_terminalRunAsAdminAction(context));
+    }
+
+    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
+      menuItems.add(_tcpTunnelingAction(context));
+    }
+    if (isWindows && peer.platform == kPeerPlatformWindows) {
+      menuItems.add(_rdpAction(context, peer.id));
+    }
+    menuItems.add(MenuEntryDivider<String>());
+    menuItems.add(_requestApprovalAction(context));
+    // menuItems.add(await _openNewConnInOptAction(peer.id));
+    if (!isWeb) {
+      menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
+    return menuItems;
+  }
+
+  MenuEntryButton<String> _connectCommonAction(
     BuildContext context,
     String title, {
     bool isFileTransfer = false,
@@ -581,12 +611,10 @@ abstract class BasePeerCard extends StatelessWidget {
     bool isRDP = false,
     bool isTerminal = false,
     bool isTerminalRunAsAdmin = false,
+    String loginMethod = '',
   }) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        title,
-        style: style,
-      ),
+      childBuilder: (TextStyle? style) => Text(title, style: style),
       proc: () {
         if (isTerminalRunAsAdmin) {
           setEnvTerminalAdmin();
@@ -600,6 +628,7 @@ abstract class BasePeerCard extends StatelessWidget {
           isTcpTunneling: isTcpTunneling,
           isRDP: isRDP,
           isTerminal: isTerminal || isTerminalRunAsAdmin,
+          loginMethod: loginMethod,
         );
       },
       padding: menuPadding,
@@ -607,13 +636,53 @@ abstract class BasePeerCard extends StatelessWidget {
     );
   }
 
+  MenuEntryBase<String> _requestApprovalAction(BuildContext context) {
+    MenuEntryButton<String> action(String title,
+            {bool isFileTransfer = false,
+            bool isViewCamera = false,
+            bool isTcpTunneling = false,
+            bool isRDP = false,
+            bool isTerminal = false,
+            bool isTerminalRunAsAdmin = false}) =>
+        _connectCommonAction(
+          context,
+          isTerminal || isTerminalRunAsAdmin
+              ? '${translate(title)} (beta)'
+              : translate(title),
+          isFileTransfer: isFileTransfer,
+          isViewCamera: isViewCamera,
+          isTcpTunneling: isTcpTunneling,
+          isRDP: isRDP,
+          isTerminal: isTerminal,
+          isTerminalRunAsAdmin: isTerminalRunAsAdmin,
+          loginMethod: 'request-approval',
+        );
+
+    return RequestApprovalMenu(
+      title: translate('Request approval'),
+      padding: menuPadding,
+      entries: [
+        action('Connect'),
+        action('Transfer file', isFileTransfer: true),
+        action('View camera', isViewCamera: true),
+        action('Terminal', isTerminal: true),
+        if (peer.platform == kPeerPlatformWindows)
+          action('Terminal (Run as administrator)', isTerminalRunAsAdmin: true),
+        if (isDesktop && peer.platform != kPeerPlatformAndroid)
+          action('TCP tunneling', isTcpTunneling: true),
+        if (isWindows && peer.platform == kPeerPlatformWindows)
+          action('RDP', isRDP: true),
+      ],
+    );
+  }
+
   @protected
   MenuEntryBase<String> _connectAction(BuildContext context) {
     return _connectCommonAction(
       context,
-      (peer.alias.isEmpty
+      peer.alias.isEmpty
           ? translate('Connect')
-          : '${translate('Connect')} ${peer.id}'),
+          : '${translate('Connect')} ${peer.id}',
     );
   }
 
@@ -682,6 +751,10 @@ abstract class BasePeerCard extends StatelessWidget {
                     child: IconButton(
                       icon: const Icon(Icons.edit),
                       padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: kMinInteractiveDimension - 8,
+                        minHeight: kMinInteractiveDimension,
+                      ),
                       onPressed: () {
                         if (Navigator.canPop(context)) {
                           Navigator.pop(context);
@@ -1000,33 +1073,13 @@ class RecentPeerCard extends BasePeerCard {
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
-    final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context),
-      _transferFileAction(context),
-      _viewCameraAction(context),
-      _terminalAction(context),
-    ];
-
-    if (peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_terminalRunAsAdminAction(context));
-    }
-
     final List favs = (await bind.mainGetFav()).toList();
 
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context));
-    }
-    // menuItems.add(await _openNewConnInOptAction(peer.id));
-    if (!isWeb) {
-      menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    }
-    if (isWindows && peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_rdpAction(context, peer.id));
-    }
+    final menuItems = await _buildConnectionMenuItems(context);
+    menuItems.add(MenuEntryDivider());
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
-    menuItems.add(MenuEntryDivider());
     if (isMobile || isDesktop || isWebDesktop) {
       menuItems.add(_renameAction(peer.id));
     }
@@ -1065,31 +1118,11 @@ class FavoritePeerCard extends BasePeerCard {
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
-    final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context),
-      _transferFileAction(context),
-      _viewCameraAction(context),
-      _terminalAction(context),
-    ];
-
-    if (peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_terminalRunAsAdminAction(context));
-    }
-
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context));
-    }
-    // menuItems.add(await _openNewConnInOptAction(peer.id));
-    if (!isWeb) {
-      menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    }
-    if (isWindows && peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_rdpAction(context, peer.id));
-    }
+    final menuItems = await _buildConnectionMenuItems(context);
+    menuItems.add(MenuEntryDivider());
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
-    menuItems.add(MenuEntryDivider());
     if (isMobile || isDesktop || isWebDesktop) {
       menuItems.add(_renameAction(peer.id));
     }
@@ -1125,29 +1158,10 @@ class DiscoveredPeerCard extends BasePeerCard {
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
-    final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context),
-      _transferFileAction(context),
-      _viewCameraAction(context),
-      _terminalAction(context),
-    ];
-
-    if (peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_terminalRunAsAdminAction(context));
-    }
-
     final List favs = (await bind.mainGetFav()).toList();
 
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context));
-    }
-    // menuItems.add(await _openNewConnInOptAction(peer.id));
-    if (!isWeb) {
-      menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    }
-    if (isWindows && peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_rdpAction(context, peer.id));
-    }
+    final menuItems = await _buildConnectionMenuItems(context);
+    menuItems.add(MenuEntryDivider());
     menuItems.add(_wolAction(peer.id));
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
@@ -1184,32 +1198,12 @@ class AddressBookPeerCard extends BasePeerCard {
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
-    final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context),
-      _transferFileAction(context),
-      _viewCameraAction(context),
-      _terminalAction(context),
-    ];
-
-    if (peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_terminalRunAsAdminAction(context));
-    }
-
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context));
-    }
-    // menuItems.add(await _openNewConnInOptAction(peer.id));
-    if (!isWeb) {
-      menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    }
-    if (isWindows && peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_rdpAction(context, peer.id));
-    }
+    final menuItems = await _buildConnectionMenuItems(context);
+    menuItems.add(MenuEntryDivider());
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
     }
     if (gFFI.abModel.current.canWrite()) {
-      menuItems.add(MenuEntryDivider());
       if (isMobile || isDesktop || isWebDesktop) {
         menuItems.add(_renameAction(peer.id));
       }
@@ -1341,26 +1335,9 @@ class MyGroupPeerCard extends BasePeerCard {
   @override
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
-    final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context),
-      _transferFileAction(context),
-      _viewCameraAction(context),
-      _terminalAction(context),
-    ];
-
-    if (peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_terminalRunAsAdminAction(context));
-    }
-
-    if (isDesktop && peer.platform != kPeerPlatformAndroid) {
-      menuItems.add(_tcpTunnelingAction(context));
-    }
-    // menuItems.add(await _openNewConnInOptAction(peer.id));
-    if (!isWeb) {
-      menuItems.add(await _forceAlwaysRelayAction(peer.id));
-    }
-    if (isWindows && peer.platform == kPeerPlatformWindows) {
-      menuItems.add(_rdpAction(context, peer.id));
+    final menuItems = await _buildConnectionMenuItems(context);
+    if (isWindows || gFFI.userModel.userName.isNotEmpty) {
+      menuItems.add(MenuEntryDivider());
     }
     if (isWindows) {
       menuItems.add(_createShortCutAction(peer.id));
@@ -1591,7 +1568,8 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
     bool isViewCamera = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
-    bool isTerminal = false}) async {
+    bool isTerminal = false,
+    String loginMethod = ''}) async {
   var password = '';
   bool isSharedPassword = false;
   if (tab == PeerTabIndex.ab) {
@@ -1619,6 +1597,7 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
     }
   }
   connect(context, peer.id,
+      loginMethod: loginMethod,
       password: password,
       isSharedPassword: isSharedPassword,
       isFileTransfer: isFileTransfer,
