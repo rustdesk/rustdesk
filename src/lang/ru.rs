@@ -827,5 +827,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Запросить одобрение"),
         ("Forever", "Навсегда"),
         ("username-login-disabled-oidc-unavailable", "Вход по имени пользователя и паролю отключён, и нет доступных способов входа через OIDC."),
+        ("Dock connection manager to the right", ""),
+        ("Use banner mode for the accept window", ""),
     ].iter().cloned().collect();
 }

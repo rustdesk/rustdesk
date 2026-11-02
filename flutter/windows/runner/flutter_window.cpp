@@ -110,7 +110,7 @@ bool FlutterWindow::OnCreate() {
     &flutter::StandardMethodCodec::GetInstance());
 
   channel.SetMethodCallHandler(
-    [](const flutter::MethodCall<>& call, std::unique_ptr<flutter::MethodResult<>> result) {
+    [this](const flutter::MethodCall<>& call, std::unique_ptr<flutter::MethodResult<>> result) {
       if (call.method_name() == "bumpMouse") {
         auto arguments = call.arguments();
 
@@ -142,6 +142,20 @@ bool FlutterWindow::OnCreate() {
         bool succeeded = Win32Desktop::BumpMouse(dx, dy);
 
         result->Success(succeeded);
+      } else if (call.method_name() == "setCmBannerWindow") {
+        // Hiding the caption alone retains its minimum width. A dock tab then
+        // spills onto the next monitor and can trigger a DPI change on resize.
+        const HWND hwnd = GetHandle();
+        const LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+        SetLastError(0);
+        if (SetWindowLongPtr(hwnd, GWL_STYLE,
+                            style & ~(WS_CAPTION | WS_SYSMENU |
+                                      WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) == 0 &&
+            GetLastError() != 0) {
+          result->Error("cm_banner_window", "Failed to remove the native caption controls");
+        } else {
+          result->Success();
+        }
       }
     });
 

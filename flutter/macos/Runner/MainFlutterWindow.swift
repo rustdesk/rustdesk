@@ -59,6 +59,10 @@ class MainFlutterWindow: NSWindow {
         rustdesk_core_main();
         _ = MainFlutterWindow.fullscreenObserver
         let flutterViewController = FlutterViewController.init()
+        if CommandLine.arguments.contains("--cm") {
+            // window_manager clears NSWindow, but FlutterView has its own black background.
+            flutterViewController.backgroundColor = .clear
+        }
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
         self.setFrame(windowFrame, display: true)

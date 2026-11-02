@@ -15,6 +15,7 @@ import 'package:flutter_hbb/desktop/screen/desktop_view_camera_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_terminal_screen.dart';
+import 'package:flutter_hbb/desktop/widgets/cm_window_dock.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -304,27 +305,44 @@ void runConnectionManagerScreen() async {
 bool _isCmReadyToShow = false;
 
 showCmWindow({bool isStartup = false}) async {
+  if (isMacOS || isWindows) await cmWindowDock.syncMinimizable();
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
-        size: kConnectionManagerWindowSizeClosedChat, alwaysOnTop: true);
+        size: cmWindowDock.enabled
+            ? Size(kConnectionManagerWindowSizeClosedChat.width + CmWindowDock.size.width,
+                kConnectionManagerWindowSizeClosedChat.height)
+            : kConnectionManagerWindowSizeClosedChat,
+        alwaysOnTop: true);
     await windowManager.waitUntilReadyToShow(windowOptions, null);
     bind.mainHideDock();
+    if (cmWindowDock.enabled) {
+      await cmWindowDock.resizeExpanded(
+          kConnectionManagerWindowSizeClosedChat, align: true);
+    }
     await Future.wait([
       windowManager.show(),
       windowManager.focus(),
       windowManager.setOpacity(1)
     ]);
     // ensure initial window size to be changed
-    await windowManager.setSizeAlignment(
-        kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+    if (!cmWindowDock.enabled) {
+      await windowManager.setSizeAlignment(
+          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+    }
     _isCmReadyToShow = true;
   } else if (_isCmReadyToShow) {
     if (await windowManager.getOpacity() != 1) {
+      if (cmWindowDock.enabled) {
+        await cmWindowDock.resizeExpanded(
+            kConnectionManagerWindowSizeClosedChat, align: true);
+      }
       await windowManager.setOpacity(1);
       await windowManager.focus();
       await windowManager.minimize(); //needed
-      await windowManager.setSizeAlignment(
-          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+      if (!cmWindowDock.enabled) {
+        await windowManager.setSizeAlignment(
+            kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+      }
       windowOnTop(null);
     }
   }

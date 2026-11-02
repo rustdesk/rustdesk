@@ -16,6 +16,11 @@ class RdPlatformChannel {
   final MethodChannel _hostMethodChannel =
       MethodChannel("org.rustdesk.rustdesk/host");
 
+  Future<void> setCmBannerWindow() {
+    assert(isWindows);
+    return _hostMethodChannel.invokeMethod('setCmBannerWindow');
+  }
+
   /// Bump the position of the mouse cursor, if applicable
   Future<bool> bumpMouse({required int dx, required int dy}) async {
     // No debug output; this call is too chatty.

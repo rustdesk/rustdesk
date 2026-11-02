@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/widgets/cm_window_dock.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
@@ -97,6 +98,20 @@ class _DesktopServerPageState extends State<DesktopServerPage>
             backgroundColor: Theme.of(context).colorScheme.background,
             body: ConnectionManager(),
           );
+          if (cmWindowDock.enabled || cmWindowDock.value) {
+            final borderRadius = BorderRadius.circular(12);
+            return CmWindowDockView(
+              child: Container(
+                padding: const EdgeInsets.all(1),
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(borderRadius: borderRadius),
+                foregroundDecoration: BoxDecoration(
+                    borderRadius: borderRadius,
+                    border: Border.all(color: MyTheme.color(context).border!)),
+                child: body,
+              ),
+            );
+          }
           return isLinux
               ? buildVirtualWindowFrame(context, body)
               : workaroundWindowBorder(
@@ -200,13 +215,20 @@ class ConnectionManagerState extends State<ConnectionManager>
             child: DesktopTab(
               showTitle: false,
               showMaximize: false,
-              showMinimize: true,
+              showMinimize: !cmWindowDock.enabled,
               showClose: true,
               onWindowCloseButton: handleWindowCloseButton,
               controller: serverModel.tabController,
               selectedBorderColor: MyTheme.accent,
               maxLabelWidth: 100,
-              tail: null, //buildScrollJumper(),
+              tail: cmWindowDock.enabled && isMacOS
+                  ? ActionIcon(
+                      message: 'Close',
+                      icon: IconFont.close,
+                      isClose: true,
+                      onTap: handleWindowCloseButton,
+                    )
+                  : null,
               tabBuilder: (key, icon, label, themeConf) {
                 final client = serverModel.clients
                     .firstWhereOrNull((client) => client.id.toString() == key);
@@ -1023,7 +1045,11 @@ class _CmControlPanel extends StatelessWidget {
             color: MyTheme.accent,
             onClick: () {
               handleElevate(context);
-              windowManager.minimize();
+              if (cmWindowDock.enabled) {
+                cmWindowDock.dock();
+              } else {
+                windowManager.minimize();
+              }
             },
             icon: Icon(
               Icons.security_rounded,
@@ -1086,7 +1112,11 @@ class _CmControlPanel extends StatelessWidget {
           child: buildButton(context, color: Colors.green[700], onClick: () {
             handleAccept(context);
             handleElevate(context);
-            windowManager.minimize();
+            if (cmWindowDock.enabled) {
+              cmWindowDock.dock();
+            } else {
+              windowManager.minimize();
+            }
           },
               text: 'Accept and Elevate',
               icon: Icon(
@@ -1109,7 +1139,11 @@ class _CmControlPanel extends StatelessWidget {
                       color: MyTheme.accent,
                       onClick: () {
                         handleAccept(context);
-                        windowManager.minimize();
+                        if (cmWindowDock.enabled) {
+                          cmWindowDock.dock();
+                        } else {
+                          windowManager.minimize();
+                        }
                       },
                       text: 'Accept',
                       textColor: Colors.white,
