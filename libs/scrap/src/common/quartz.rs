@@ -4,7 +4,9 @@ use std::sync::{Arc, Mutex, TryLockError};
 use std::{io, mem};
 
 pub fn uses_screen_capture_kit() -> bool {
-    quartz::SckCapturer::is_available()
+    // Keep the original capture path unless the local screen frame is enabled.
+    hbb_common::config::Config::get_bool_option(base::config::keys::OPTION_ALLOW_SCREEN_FRAME)
+        && quartz::SckCapturer::is_available()
 }
 
 enum Backend {
@@ -239,5 +241,38 @@ impl Display {
 
     pub fn is_primary(&self) -> bool {
         self.0.is_primary()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::uses_screen_capture_kit;
+    use base::config::keys::OPTION_ALLOW_SCREEN_FRAME;
+    use hbb_common::config::OVERWRITE_SETTINGS;
+
+    #[test]
+    fn screen_capture_kit_requires_screen_frame_opt_in() {
+        let previous = OVERWRITE_SETTINGS
+            .write()
+            .unwrap()
+            .remove(OPTION_ALLOW_SCREEN_FRAME);
+        let actual = ["", "N", "Y"].map(|value| {
+            OVERWRITE_SETTINGS
+                .write()
+                .unwrap()
+                .insert(OPTION_ALLOW_SCREEN_FRAME.into(), value.into());
+            uses_screen_capture_kit()
+        });
+        let mut options = OVERWRITE_SETTINGS.write().unwrap();
+        if let Some(value) = previous {
+            options.insert(OPTION_ALLOW_SCREEN_FRAME.into(), value);
+        } else {
+            options.remove(OPTION_ALLOW_SCREEN_FRAME);
+        }
+        drop(options);
+        assert_eq!(
+            actual,
+            [false, false, crate::quartz::SckCapturer::is_available()]
+        );
     }
 }

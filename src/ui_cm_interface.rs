@@ -131,6 +131,9 @@ pub struct Client {
     pub id: i32,
     pub authorized: bool,
     pub disconnected: bool,
+    #[cfg(any(target_os = "macos", target_os = "windows", test))]
+    #[serde(skip)]
+    screen_frame_displays: Option<Vec<String>>,
     pub is_file_transfer: bool,
     pub is_view_camera: bool,
     pub is_terminal: bool,
@@ -241,6 +244,8 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             id,
             authorized,
             disconnected: false,
+            #[cfg(any(target_os = "macos", target_os = "windows", test))]
+            screen_frame_displays: None,
             is_file_transfer,
             is_view_camera,
             is_terminal,
@@ -268,6 +273,8 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             .retain(|_, c| !(c.disconnected && c.peer_id == client.peer_id));
         CLIENTS.write().unwrap().insert(id, client.clone());
         self.ui_handler.add_connection(&client);
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        update_screen_frame();
     }
 
     #[inline]
@@ -314,6 +321,8 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
 
         self.ui_handler.remove_connection(id, close);
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        update_screen_frame();
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -365,10 +374,24 @@ pub fn get_click_time() -> i64 {
 #[inline]
 #[cfg(not(any(target_os = "ios")))]
 pub fn authorize(id: i32) {
+    #[cfg(target_os = "macos")]
+    {
+        let sender = CLIENTS.write().unwrap().get_mut(&id).map(|client| {
+            client.authorized = true;
+            client.tx.clone()
+        });
+        update_screen_frame();
+        if let Some(sender) = sender {
+            allow_err!(sender.send(Data::Authorize));
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
         client.authorized = true;
         allow_err!(client.tx.send(Data::Authorize));
     };
+    #[cfg(target_os = "windows")]
+    update_screen_frame();
 }
 
 #[inline]
@@ -391,6 +414,98 @@ pub fn close_window(id: i32) {
 #[inline]
 pub fn remove(id: i32) {
     CLIENTS.write().unwrap().remove(&id);
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    update_screen_frame();
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn update_screen_frame() {
+    #[cfg(target_os = "macos")]
+    if unsafe { hbb_common::libc::pthread_main_np() } == 0 {
+        // Read on the window thread so an older snapshot cannot overwrite a newer update.
+        dispatch::Queue::main().exec_sync(update_screen_frame);
+        return;
+    }
+    use base::config::keys::OPTION_ALLOW_SCREEN_FRAME;
+
+    // CM's local Config can be stale; use the options synced from the server.
+    let enabled = option2bool(
+        OPTION_ALLOW_SCREEN_FRAME,
+        &crate::ui_interface::get_option(OPTION_ALLOW_SCREEN_FRAME),
+    );
+    let clients = CLIENTS.read().unwrap();
+    let visible = should_show_screen_frame(&clients, enabled);
+    // AppKit broadcasts window IDs through CLIENTS; Windows only notifies its worker,
+    // so keep the read lock there until the visibility request has been submitted.
+    #[cfg(target_os = "macos")]
+    drop(clients);
+    crate::platform::set_screen_frame_visible(visible);
+    #[cfg(target_os = "macos")]
+    screen_frame_window_ids_changed(crate::platform::screen_frame_window_ids());
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn screen_frame_window_ids_changed(window_ids: Vec<u32>) {
+    let data = Data::ScreenFrameWindowIds(window_ids);
+    for client in CLIENTS.read().unwrap().values() {
+        allow_err!(client.tx.send(data.clone()));
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
+fn should_show_screen_frame(clients: &HashMap<i32, Client>, enabled: bool) -> bool {
+    if !enabled {
+        return false;
+    }
+    clients.values().any(|client| {
+        client.authorized
+            && !client.disconnected
+            && !client.is_file_transfer
+            && !client.is_view_camera
+            && !client.is_terminal
+            && client.port_forward.is_empty()
+    })
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn is_screen_frame_display_viewed(name: &str) -> bool {
+    screen_frame_display_viewed(&CLIENTS.read().unwrap(), name)
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
+fn screen_frame_display_viewed(clients: &HashMap<i32, Client>, name: &str) -> bool {
+    clients.values().any(|client| {
+        client.authorized
+            && !client.disconnected
+            && !client.is_file_transfer
+            && !client.is_view_camera
+            && !client.is_terminal
+            && client.port_forward.is_empty()
+            // Before the first snapshot (or with an older server process), prefer an active frame
+            // rather than falsely marking a potentially viewed screen as unviewed.
+            && client.screen_frame_displays.as_ref()
+                .map_or(true, |names| names.iter().any(|display| display == name))
+    })
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn update_screen_frame_displays(id: i32, displays: Option<Vec<String>>) {
+    let changed = {
+        let mut clients = CLIENTS.write().unwrap();
+        if let Some(client) = clients.get_mut(&id) {
+            if client.screen_frame_displays == displays {
+                false
+            } else {
+                client.screen_frame_displays = displays;
+                true
+            }
+        } else {
+            false
+        }
+    };
+    if changed {
+        crate::platform::refresh_screen_frame_colors();
+    }
 }
 
 // server mode send chat to peer
@@ -580,6 +695,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 Data::ClickTime(ms) => {
                                     CLICK_TIME.store(ms, Ordering::SeqCst);
+                                }
+                                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                                Data::ScreenFrameDisplays(displays) => {
+                                    update_screen_frame_displays(self.conn_id, displays);
                                 }
                                 Data::ChatMessage { text } => {
                                     self.cm.new_message(self.conn_id, text);
@@ -1821,6 +1940,8 @@ pub fn quit_cm() {
     // in case of std::process::exit not work
     log::info!("quit cm");
     CLIENTS.write().unwrap().clear();
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    crate::platform::set_screen_frame_visible(false);
     // `quit_gui()` ends the process on Windows and macOS, but on Linux it calls
     // `gtk_main_quit()`, which has no effect in the Flutter connection manager:
     // `flutter/linux/main.cc` runs `g_application_run()` (GtkApplication), so
@@ -1845,6 +1966,115 @@ mod tests {
     use base::message_proto::{FileDirectory, Message};
     use hbb_common::tokio::{runtime::Runtime, sync::mpsc::unbounded_channel};
     use std::fs;
+
+    fn screen_frame_client(id: i32) -> Client {
+        let (tx, _rx) = unbounded_channel::<Data>();
+        Client {
+            id,
+            authorized: false,
+            disconnected: false,
+            screen_frame_displays: None,
+            is_file_transfer: false,
+            is_view_camera: false,
+            is_terminal: false,
+            port_forward: String::new(),
+            name: String::new(),
+            avatar: String::new(),
+            peer_id: String::new(),
+            keyboard: false,
+            clipboard: false,
+            audio: false,
+            file: false,
+            restart: false,
+            recording: false,
+            block_input: false,
+            privacy_mode: false,
+            from_switch: false,
+            in_voice_call: false,
+            incoming_voice_call: false,
+            #[cfg(not(target_os = "ios"))]
+            tx,
+        }
+    }
+
+    #[test]
+    fn screen_frame_tracks_only_active_screen_sessions() {
+        let mut clients = HashMap::new();
+        let mut client = screen_frame_client(1);
+        clients.insert(client.id, client.clone());
+        assert!(!should_show_screen_frame(&clients, true));
+
+        client.authorized = true;
+        clients.insert(client.id, client.clone());
+        assert!(should_show_screen_frame(&clients, true));
+
+        client.is_file_transfer = true;
+        clients.insert(client.id, client.clone());
+        assert!(!should_show_screen_frame(&clients, true));
+
+        client.is_file_transfer = false;
+        client.is_view_camera = true;
+        clients.insert(client.id, client.clone());
+        assert!(!should_show_screen_frame(&clients, true));
+
+        client.is_view_camera = false;
+        client.is_terminal = true;
+        clients.insert(client.id, client.clone());
+        assert!(!should_show_screen_frame(&clients, true));
+
+        client.is_terminal = false;
+        client.port_forward = "127.0.0.1:21118".to_owned();
+        clients.insert(client.id, client.clone());
+        assert!(!should_show_screen_frame(&clients, true));
+
+        client.port_forward.clear();
+        client.disconnected = true;
+        clients.insert(client.id, client);
+        let mut active = screen_frame_client(2);
+        active.authorized = true;
+        clients.insert(active.id, active);
+        assert!(should_show_screen_frame(&clients, true));
+    }
+
+    #[test]
+    fn screen_frame_requires_explicit_opt_in() {
+        use base::config::keys::OPTION_ALLOW_SCREEN_FRAME;
+
+        let mut client = screen_frame_client(1);
+        client.authorized = true;
+        let clients = HashMap::from([(client.id, client)]);
+        for value in ["", "N", "Y"] {
+            let enabled = option2bool(OPTION_ALLOW_SCREEN_FRAME, value);
+            assert_eq!(should_show_screen_frame(&clients, enabled), value == "Y");
+        }
+        assert!(!should_show_screen_frame(&HashMap::new(), true));
+    }
+
+    #[test]
+    fn screen_frame_colors_follow_the_union_of_active_sessions() {
+        let mut clients = HashMap::new();
+        for (id, name) in [(1, "display-a"), (2, "display-b")] {
+            let mut client = screen_frame_client(id);
+            client.authorized = true;
+            client.screen_frame_displays = Some(vec![name.into()]);
+            clients.insert(id, client);
+        }
+        assert!(screen_frame_display_viewed(&clients, "display-a"));
+        assert!(screen_frame_display_viewed(&clients, "display-b"));
+        assert!(!screen_frame_display_viewed(&clients, "display-c"));
+        clients.get_mut(&1).unwrap().screen_frame_displays = Some(vec!["display-c".into()]);
+        assert!(!screen_frame_display_viewed(&clients, "display-a"));
+        assert!(screen_frame_display_viewed(&clients, "display-c"));
+        clients.get_mut(&2).unwrap().disconnected = true;
+        assert!(!screen_frame_display_viewed(&clients, "display-b"));
+        clients.get_mut(&1).unwrap().screen_frame_displays = None;
+        assert!(screen_frame_display_viewed(&clients, "display-b"));
+        clients.get_mut(&1).unwrap().is_file_transfer = true;
+        assert!(!screen_frame_display_viewed(&clients, "display-b"));
+        clients.get_mut(&1).unwrap().is_file_transfer = false;
+        clients.get_mut(&1).unwrap().screen_frame_displays = Some(vec![]);
+        assert!(!screen_frame_display_viewed(&clients, "display-c"));
+    }
 
     #[test]
     #[cfg(not(any(target_os = "ios")))]

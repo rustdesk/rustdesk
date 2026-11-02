@@ -126,6 +126,11 @@ const String kOptionEnableTunnel = "enable-tunnel";
 const String kOptionEnableRemoteRestart = "enable-remote-restart";
 const String kOptionEnableBlockInput = "enable-block-input";
 const String kOptionEnablePrivacyMode = "enable-privacy-mode";
+const String kOptionAllowScreenFrame = "allow-screen-frame";
+const String kOptionScreenFrameColor = "screen-frame-color";
+const String kOptionScreenFrameInactiveColor = "screen-frame-inactive-color";
+const String kOptionScreenFrameWidth = "screen-frame-width";
+const String kOptionScreenFrameTransparency = "screen-frame-transparency";
 const String kOptionEnablePermChangeInAcceptWindow =
     "enable-perm-change-in-accept-window";
 const String kOptionHideElevateButtonInAcceptWindow =

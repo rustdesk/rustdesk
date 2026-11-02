@@ -14,6 +14,7 @@ import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/page_body.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_keyboard_shortcuts_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
+import 'package:flutter_hbb/desktop/widgets/screen_frame_settings.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
@@ -1042,6 +1043,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 _Card(title: '2FA', children: [tfa()]),
                 if (!isChangeIdDisabled())
                   _Card(title: 'ID', children: [changeId()]),
+                if (!isWeb && (isWindows || isMacOS)) privacy(context),
                 more(context),
               ]),
             ),
@@ -1449,6 +1451,15 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             if (usePassword) radios[2],
           ]);
         })));
+  }
+
+  Widget privacy(BuildContext context) {
+    return _Card(title: 'Privacy', children: [
+      _OptionCheckBox(context, 'Enable screen frame', kOptionAllowScreenFrame,
+          enabled: !locked, update: (_) => setState(() {})),
+      ScreenFrameStyleSettings(
+          enabled: !locked && mainGetBoolOptionSync(kOptionAllowScreenFrame)),
+    ]);
   }
 
   Widget more(BuildContext context) {

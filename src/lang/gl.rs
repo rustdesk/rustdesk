@@ -827,5 +827,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Solicitar aprobación"),
         ("Forever", "Para sempre"),
         ("username-login-disabled-oidc-unavailable", "O inicio de sesión con nome de usuario e contrasinal está desactivado e non hai métodos de inicio de sesión OIDC dispoñibles."),
+        ("Screen frame color", ""),
+        ("Width", ""),
+        ("Opacity", ""),
+        ("Enable screen frame", ""),
+        ("Viewed", ""),
+        ("Unviewed", ""),
+        ("Privacy", ""),
+        ("Viewed display frame color", ""),
+        ("Unviewed display frame color", ""),
     ].iter().cloned().collect();
 }

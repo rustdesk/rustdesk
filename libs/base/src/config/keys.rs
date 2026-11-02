@@ -47,6 +47,11 @@ pub const OPTION_ENABLE_REMOTE_RESTART: &str = "enable-remote-restart";
 pub const OPTION_ENABLE_RECORD_SESSION: &str = "enable-record-session";
 pub const OPTION_ENABLE_BLOCK_INPUT: &str = "enable-block-input";
 pub const OPTION_ENABLE_PRIVACY_MODE: &str = "enable-privacy-mode";
+pub const OPTION_ALLOW_SCREEN_FRAME: &str = "allow-screen-frame";
+pub const OPTION_SCREEN_FRAME_COLOR: &str = "screen-frame-color";
+pub const OPTION_SCREEN_FRAME_INACTIVE_COLOR: &str = "screen-frame-inactive-color";
+pub const OPTION_SCREEN_FRAME_WIDTH: &str = "screen-frame-width";
+pub const OPTION_SCREEN_FRAME_TRANSPARENCY: &str = "screen-frame-transparency";
 pub const OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW: &str = "enable-perm-change-in-accept-window";
 pub const OPTION_HIDE_ELEVATE_BUTTON_IN_ACCEPT_WINDOW: &str =
     "hide-elevate-button-in-accept-window";
@@ -286,6 +291,11 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_ENABLE_RECORD_SESSION,
     OPTION_ENABLE_BLOCK_INPUT,
     OPTION_ENABLE_PRIVACY_MODE,
+    OPTION_ALLOW_SCREEN_FRAME,
+    OPTION_SCREEN_FRAME_COLOR,
+    OPTION_SCREEN_FRAME_INACTIVE_COLOR,
+    OPTION_SCREEN_FRAME_WIDTH,
+    OPTION_SCREEN_FRAME_TRANSPARENCY,
     OPTION_ALLOW_SCOPE_VIOLATION_CLOSE,
     OPTION_ALLOW_SCOPE_VIOLATION_ALARM,
     OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION,

@@ -827,5 +827,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "בקש אישור"),
         ("Forever", "לתמיד"),
         ("username-login-disabled-oidc-unavailable", "כניסה באמצעות שם משתמש וסיסמה מושבתת, ואין שיטות כניסה זמינות באמצעות OIDC."),
+        ("Screen frame color", ""),
+        ("Width", ""),
+        ("Opacity", ""),
+        ("Enable screen frame", ""),
+        ("Viewed", ""),
+        ("Unviewed", ""),
+        ("Privacy", ""),
+        ("Viewed display frame color", ""),
+        ("Unviewed display frame color", ""),
     ].iter().cloned().collect();
 }

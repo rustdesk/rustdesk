@@ -629,6 +629,9 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(windows)]
     let dxgi_recovery_state = vs.dxgi_recovery_state.clone();
     let sp = vs.sp;
+    #[cfg(target_os = "macos")]
+    // Track the preference, not the selected backend: SCK may fall back to CGDisplayStream.
+    let allow_screen_frame = Config::get_bool_option(base::config::keys::OPTION_ALLOW_SCREEN_FRAME);
     let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
     #[cfg(windows)]
     // ACCESS_LOST marks the next successful capturer creation as a recovery. This timestamp is
@@ -746,6 +749,14 @@ fn run(vs: VideoService) -> ResultType<()> {
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
 
     while sp.ok() {
+        #[cfg(target_os = "macos")]
+        if vs.source.is_monitor()
+            && allow_screen_frame
+                != Config::get_bool_option(base::config::keys::OPTION_ALLOW_SCREEN_FRAME)
+        {
+            // Recreate capture through the existing service loop without error backoff or reconnect.
+            return Ok(());
+        }
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._capturer_privacy_mode_id)?;
         check_qos(

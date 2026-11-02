@@ -827,5 +827,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Jóváhagyás kérése"),
         ("Forever", "Örökre"),
         ("username-login-disabled-oidc-unavailable", "A felhasználónévvel és jelszóval történő bejelentkezés le van tiltva, és nem érhető el OIDC bejelentkezési mód."),
+        ("Screen frame color", ""),
+        ("Width", ""),
+        ("Opacity", ""),
+        ("Enable screen frame", ""),
+        ("Viewed", ""),
+        ("Unviewed", ""),
+        ("Privacy", ""),
+        ("Viewed display frame color", ""),
+        ("Unviewed display frame color", ""),
     ].iter().cloned().collect();
 }
