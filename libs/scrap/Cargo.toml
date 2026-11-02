@@ -60,6 +60,7 @@ quest = "0.3"
 [build-dependencies]
 target_build_utils = "0.3"
 bindgen = "0.72.1"
+cc = "1.0"
 pkg-config = { version = "0.3.27", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
