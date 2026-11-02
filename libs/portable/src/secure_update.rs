@@ -1,3 +1,38 @@
+//! Protected payload workspace for Windows portable `--update`.
+//!
+//! An elevated updater must not load EXEs or DLLs from the ordinary user-writable
+//! LocalAppData extraction cache. ProgramData provides a machine-wide parent for
+//! a fresh workspace, separate from normal launches. Protection comes from the
+//! Administrators owner and SYSTEM/Administrators-only DACL applied at creation,
+//! together with path/reparse-point checks and a root handle without delete sharing.
+//! Windows\Temp can also host a protected private workspace; using the same parent
+//! as the installer handoff would not by itself protect the extracted payload.
+//!
+//! ```text
+//! elevated packer --update
+//!     -> %ProgramData%\RustDeskUpdate-<random> (protected at creation)
+//!     -> extract EXE/DLLs -> run updater -> wait -> attempt cleanup
+//! ```
+//!
+//! Other implementations choose directories by purpose (upstream source/docs
+//! checked in November 2026):
+//! - Chromium's elevated updater uses random subdirectories of SystemRoot\SystemTemp,
+//!   falling back to Program Files when unavailable. SystemTemp differs from Windows\Temp.
+//!   https://chromium.googlesource.com/chromium/src/+/main/chrome/updater/util/util.cc
+//!   https://github.com/chromium/chromium/blob/main/base/base_paths_win.cc
+//! - Inno Setup creates a temporary IS-*.tmp directory and deletes it on exit;
+//!   its documented example is C:\Windows\Temp\IS-xxxxx.tmp.
+//!   https://jrsoftware.org/ishelp/topic_consts.htm
+//! - Firefox keeps update data under ProgramData\Mozilla-...\updates\<install hash>,
+//!   while staging the updated application under <install dir>\updated.
+//!   https://github.com/mozilla-firefox/firefox/blob/main/toolkit/mozapps/update/common/commonupdatedir.cpp
+//!   https://github.com/mozilla-firefox/firefox/blob/main/toolkit/xre/nsUpdateDriver.cpp
+//! - Visual Studio keeps its installation/repair package cache under
+//!   %ProgramData%\Microsoft\VisualStudio\Packages.
+//!   https://learn.microsoft.com/en-us/visualstudio/install/configure-policies-for-enterprise-deployments?view=vs-2022
+//! Cache locations and temporary execution workspaces serve different purposes;
+//! these examples do not establish a universally safer parent directory.
+
 use std::{
     collections::HashSet,
     ffi::OsStr,
