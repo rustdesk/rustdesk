@@ -624,11 +624,15 @@ impl TraitCapturer for IpcDrmCapturer {
             if let Some(frame) = slot.latest_dmabuf.take() {
                 drop(slot);
                 drop(waited);
-                if scrap::wayland::display::wayland_snapshot_generation() != self.snapshot_gen
-                    || self
-                        .session_size
-                        .is_some_and(|size| size != (frame.width as usize, frame.height as usize))
-                {
+                let snapshot_changed =
+                    scrap::wayland::display::wayland_snapshot_generation() != self.snapshot_gen;
+                let size_mismatch = self
+                    .session_size
+                    .is_some_and(|size| size != (frame.width as usize, frame.height as usize));
+                if size_mismatch && !snapshot_changed && !self.got_frame {
+                    self.note_session_without_frame();
+                }
+                if snapshot_changed || size_mismatch {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
                         "DRM GPU frame layout changed; rebuilding",
@@ -3036,6 +3040,25 @@ mod drm_capturer_tests {
             0,
             "a session that streamed must not be counted as one that produced nothing"
         );
+    }
+
+    #[cfg(feature = "drm-vaapi")]
+    #[test]
+    fn mismatched_first_gpu_frame_counts_toward_cpu_capture_fallback() {
+        let mut c = capturer_named(Some((4, 4)), Some("test:gpu-first-frame-mismatch"));
+        c.shared.slot.lock().unwrap().latest_dmabuf = Some(scrap::drm_gpu::DmaBufFrame {
+            fd: std::fs::File::open("/dev/null").unwrap().into(),
+            render_node: "/dev/dri/renderD128".into(),
+            width: 2,
+            height: 2,
+            format: 0x3432_5258,
+            modifier: 0,
+            num_planes: 1,
+            offsets: [0; 4],
+            pitches: [8, 0, 0, 0],
+        });
+        assert!(c.frame(Duration::from_millis(50)).is_err());
+        assert_eq!(zero_frame_streak_of(&c), 1);
     }
 
     // ---- cursor hotspot calibration ----
