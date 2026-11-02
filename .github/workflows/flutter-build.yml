@@ -31,10 +31,15 @@ env:
   FLUTTER_VERSION: "3.24.5"
   ANDROID_FLUTTER_VERSION: "3.24.5"
   # Windows arm64 only: the first stable Flutter to ship a native arm64 Windows Dart SDK +
-  # engine is 3.44. Every other platform stays on FLUTTER_VERSION (3.24.5) until Windows 7
-  # support is restored after the upstream-wide Flutter bump. The arm64 job patches the few
-  # 3.44-only source/pubspec changes on the fly (see "Patch RustDesk sources for Flutter 3.44").
+  # engine is 3.44. Every other platform except macOS arm64 (below) stays on FLUTTER_VERSION
+  # (3.24.5) until Windows 7 support is restored after the upstream-wide Flutter bump. The 3.44
+  # jobs patch the few 3.44-only source/pubspec changes on the fly (see "Patch RustDesk sources
+  # for Flutter 3.44").
   FLUTTER_WINDOWS_ARM_VERSION: "3.44.9"
+  # macOS arm64 only: 3.24.5's engine crashes in attributedSubstringForProposedRange
+  # (https://github.com/rustdesk/rustdesk/issues/16817, https://github.com/flutter/flutter/issues/153157).
+  # x86_64 stays on FLUTTER_VERSION: 3.44's FlutterMacOS needs macOS 10.15 there, and it targets 10.14.
+  FLUTTER_MACOS_ARM_VERSION: "3.44.9"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
@@ -273,8 +278,9 @@ jobs:
           fi
 
       - name: Patch RustDesk sources for Flutter 3.44 (arm64)
-        # arm64 is the only target on Flutter 3.44; apply its source/pubspec deltas on the fly
-        # (shared with the 3.44 bridge job) so the committed sources stay on Flutter 3.24.5.
+        # arm64 is on Flutter 3.44 (as is macOS arm64); apply its source/pubspec deltas on the fly
+        # (shared with the macOS arm64 build and the 3.44 bridge job) so the committed sources
+        # stay on Flutter 3.24.5.
         # `flutter build` then runs `pub get`, regenerating pubspec.lock for the bumped deps.
         if: ${{ matrix.job.arch == 'aarch64' }}
         shell: bash
@@ -1004,9 +1010,17 @@ jobs:
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: "stable"
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_MACOS_ARM_VERSION || env.FLUTTER_VERSION }}
+
+      - name: Keep CocoaPods for Flutter 3.44 (arm64)
+        # 3.44 turns on Swift Package Manager by default, which would migrate Runner.xcodeproj and
+        # move some plugins off CocoaPods; every plugin still ships a podspec.
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        run: flutter config --no-enable-swift-package-manager
 
       - name: Patch flutter
+        # Flutter 3.44 (arm64) already has this dropdown fix.
+        if: ${{ matrix.job.arch == 'x86_64' }}
         run: |
           cd $(dirname $(dirname $(which flutter)))
           if [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]]; then
@@ -1020,6 +1034,15 @@ jobs:
           # https://github.com/flutter/flutter/issues/133533
           sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart
           grep -n '_setFramesEnabledState(false);' ../packages/flutter/lib/src/scheduler/binding.dart
+
+      - name: Patch RustDesk sources for Flutter 3.44 (arm64)
+        # The script uses GNU `sed -i`, which macOS's BSD sed rejects.
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        shell: bash
+        run: |
+          brew install gnu-sed
+          export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
+          bash .github/patches/apply_flutter_3.44_source_patches.sh
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -1035,11 +1058,13 @@ jobs:
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: bridge-artifact
+          # arm64's *.freezed.dart must match the freezed it resolves under Flutter 3.44.
+          name: ${{ matrix.job.arch == 'aarch64' && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
           path: ./
 
       - name: Run the Dart tests
-        if: ${{ !inputs.upload-artifact && matrix.job.arch == 'aarch64' }}
+        # x86_64 tests the Flutter 3.24.5 sources most platforms ship, arm64 the patched 3.44 ones.
+        if: ${{ !inputs.upload-artifact }}
         working-directory: flutter
         run: flutter test --timeout 60s
 

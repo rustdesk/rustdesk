@@ -16,11 +16,13 @@ class FileManagerPage extends StatefulWidget {
   FileManagerPage(
       {Key? key,
       required this.id,
+      this.loginMethod = '',
       this.password,
       this.isSharedPassword,
       this.forceRelay})
       : super(key: key);
   final String id;
+  final String loginMethod;
   final String? password;
   final bool? isSharedPassword;
   final bool? forceRelay;
@@ -276,6 +278,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     super.initState();
     gFFI.start(widget.id,
         isFileTransfer: true,
+        loginMethod: widget.loginMethod,
         password: widget.password,
         isSharedPassword: widget.isSharedPassword,
         forceRelay: widget.forceRelay);

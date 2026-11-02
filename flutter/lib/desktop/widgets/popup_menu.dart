@@ -15,6 +15,8 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
     this.enabled,
     this.textStyle,
     this.onTap,
+    this.dismissParentOnCanceled = false,
+    this.useButtonLayout = false,
     this.position = mod_menu.PopupMenuPosition.overSide,
     this.offset = Offset.zero,
     required this.itemBuilder,
@@ -27,6 +29,8 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
   final EdgeInsets? padding;
   final RxBool? enabled;
   final void Function()? onTap;
+  final bool dismissParentOnCanceled;
+  final bool useButtonLayout;
   final List<mod_menu.PopupMenuEntry<T>> Function(BuildContext) itemBuilder;
   final Widget child;
 
@@ -69,20 +73,42 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
           position: widget.position,
           offset: widget.offset,
           onSelected: handleTap,
+          onCanceled: widget.dismissParentOnCanceled
+              ? () {
+                  if (ModalRoute.of(context)?.isCurrent == true) {
+                    Navigator.pop(context);
+                  }
+                }
+              : null,
           itemBuilder: widget.itemBuilder,
           padding: EdgeInsets.zero,
-          child: AnimatedDefaultTextStyle(
-            style: style,
-            duration: kThemeChangeDuration,
-            child: Container(
-              alignment: AlignmentDirectional.centerStart,
-              constraints: BoxConstraints(
-                  minHeight: widget.height, maxHeight: widget.height),
-              padding:
-                  widget.padding ?? const EdgeInsets.symmetric(horizontal: 16),
-              child: widget.child,
-            ),
-          ),
+          child: Builder(builder: (context) {
+            final child = AnimatedDefaultTextStyle(
+              style: style,
+              duration: kThemeChangeDuration,
+              child: Container(
+                alignment: AlignmentDirectional.centerStart,
+                constraints: BoxConstraints(
+                    minHeight: widget.height, maxHeight: widget.height),
+                padding: widget.padding ??
+                    const EdgeInsets.symmetric(horizontal: 16),
+                child: widget.child,
+              ),
+            );
+            if (!widget.useButtonLayout) return child;
+            final onPressed = enabled.value
+                ? () => context
+                    .findAncestorStateOfType<mod_menu.PopupMenuButtonState<T>>()
+                    ?.showButtonMenu()
+                : null;
+            // The popup trigger owns keyboard focus; retain the menu button sizing.
+            return ExcludeFocus(
+              child: TextButton(
+                onPressed: onPressed,
+                child: TextButton(onPressed: onPressed, child: child),
+              ),
+            );
+          }),
         ));
   }
 }
@@ -645,11 +671,15 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   final String text;
   final List<MenuEntryBase<T>> entries;
   final EdgeInsets? padding;
+  final bool dismissParentOnCanceled;
+  final double arrowScale;
 
   MenuEntrySubMenu({
     required this.text,
     required this.entries,
     this.padding,
+    this.dismissParentOnCanceled = false,
+    this.arrowScale = MenuConfig.iconScale,
     RxBool? enabled,
   }) : super(enabled: enabled);
 
@@ -662,13 +692,14 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
         enabled: super.enabled,
         height: conf.height,
         padding: padding,
+        dismissParentOnCanceled: dismissParentOnCanceled,
+        useButtonLayout: true,
         position: mod_menu.PopupMenuPosition.overSide,
         itemBuilder: (BuildContext context) => entries
             .map((entry) => entry.build(context, conf))
             .expand((i) => i)
             .toList(),
         child: Row(children: [
-          const SizedBox(width: MenuConfig.midPadding),
           Obx(() => Text(
                 text,
                 style: super.enabled!.value
@@ -678,10 +709,15 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
           Expanded(
               child: Align(
             alignment: Alignment.centerRight,
-            child: Obx(() => Icon(
-                  Icons.keyboard_arrow_right,
-                  color: super.enabled!.value ? conf.commonColor : Colors.grey,
-                )),
+            child: Transform.scale(
+              scale: arrowScale,
+              child: Obx(() => Icon(
+                    Icons.keyboard_arrow_right,
+                    color: super.enabled!.value
+                        ? Theme.of(context).unselectedWidgetColor
+                        : disabledStyle().color,
+                  )),
+            ),
           ))
         ]),
       )
