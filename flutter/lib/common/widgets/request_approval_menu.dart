@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../common.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../../desktop/widgets/popup_menu.dart';
 
@@ -34,13 +33,10 @@ class RequestApprovalMenu extends MenuEntryBase<String> {
       text: title,
       dismissParentOnCanceled: true,
       arrowScale: arrowScale,
-      barrierColor: isMobile ? Colors.black26 : null,
       padding: (padding ?? EdgeInsets.zero)
           .copyWith(right: (padding?.right ?? 0) + arrowInset),
-      entries: [
-        if (isMobile)
-          _RequestApprovalMenuTitle(title, padding),
-        ...entries.map((entry) => MenuEntryButton<String>(
+      entries: entries
+          .map((entry) => MenuEntryButton<String>(
                 childBuilder: entry.childBuilder,
                 proc: entry.proc,
                 padding: entry.padding,
@@ -49,39 +45,8 @@ class RequestApprovalMenu extends MenuEntryBase<String> {
                 dismissCallback: () {
                   if (Navigator.canPop(context)) Navigator.pop(context);
                 },
-              )),
-      ],
+              ))
+          .toList(),
     ).build(context, conf);
   }
-}
-
-class _RequestApprovalMenuTitle extends MenuEntryBase<String> {
-  final String title;
-  final EdgeInsets? padding;
-
-  _RequestApprovalMenuTitle(this.title, this.padding);
-
-  @override
-  List<mod_menu.PopupMenuEntry<String>> build(
-      BuildContext context, MenuConfig conf) => [
-        mod_menu.PopupMenuItem<String>(
-          enabled: false,
-          height: conf.height,
-          padding: EdgeInsets.zero,
-          child: TextButton(
-            onPressed: null,
-            child: Container(
-              alignment: AlignmentDirectional.centerStart,
-              height: conf.height,
-              padding: padding,
-              child: Semantics(
-                header: true,
-                child: Text(title,
-                    style: enabledStyle(context)
-                        .copyWith(fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ),
-        ),
-      ];
 }

@@ -809,7 +809,6 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
     this.initialValue,
     this.elevation,
     required this.barrierLabel,
-    this.barrierColor,
     this.semanticLabel,
     this.shape,
     this.color,
@@ -846,7 +845,7 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
   bool get barrierDismissible => true;
 
   @override
-  final Color? barrierColor;
+  Color? get barrierColor => null;
 
   @override
   final String barrierLabel;
@@ -1065,7 +1064,6 @@ Future<T?> showMenu<T>({
   String? semanticLabel,
   ShapeBorder? shape,
   Color? color,
-  Color? barrierColor,
   bool useRootNavigator = false,
   BoxConstraints? constraints,
 }) {
@@ -1094,7 +1092,6 @@ Future<T?> showMenu<T>({
     elevation: elevation,
     semanticLabel: semanticLabel,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: barrierColor,
     shape: shape,
     color: color,
     capturedThemes:
@@ -1171,7 +1168,6 @@ class PopupMenuButton<T> extends StatefulWidget {
     this.enabled = true,
     this.shape,
     this.color,
-    this.barrierColor,
     this.enableFeedback,
     this.constraints,
     this.position = PopupMenuPosition.over,
@@ -1268,7 +1264,6 @@ class PopupMenuButton<T> extends StatefulWidget {
   /// If [PopupMenuThemeData.color] is also null, then
   /// Theme.of(context).cardColor is used.
   final Color? color;
-  final Color? barrierColor;
 
   /// Whether detected gestures should provide acoustic and/or haptic feedback.
   ///
@@ -1378,7 +1373,6 @@ class PopupMenuButtonState<T> extends State<PopupMenuButton<T>> {
             : null,
         shape: widget.shape ?? popupMenuTheme.shape,
         color: widget.color ?? popupMenuTheme.color,
-        barrierColor: widget.barrierColor,
         constraints: widget.constraints,
       ).then<void>((T? newValue) {
         if (!mounted) return null;

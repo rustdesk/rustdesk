@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_hbb/common.dart' as common;
 import 'package:flutter_hbb/common/widgets/request_approval_menu.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
@@ -95,26 +94,21 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
 void main() {
   testWidgets('submenu prefers the left screen edge when neither side fits',
       (tester) async {
-    final wasMobile = common.isMobile;
-    addTearDown(() => common.isMobile = wasMobile);
     tester.view.physicalSize = const Size(500, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    for (final mobile in [false, true]) {
-      common.isMobile = mobile;
-      await openMenu(tester, [],
-          position: const RelativeRect.fromLTRB(480, 20, 20, 780));
-      await tester.tap(find.text('Request approval'));
-      await tester.pumpAndSettle();
-      final submenu = tester.getRect(find.ancestor(
-          of: find.text('Connect').last,
-          matching: find.byType(mod_menu.PopupMenuItem<String>)));
-      expect(submenu.left, closeTo(0, 0.01));
-      expect(submenu.right, lessThanOrEqualTo(500));
-      await tester.tapAt(const Offset(2, 2));
-      await tester.pumpAndSettle();
-    }
+    await openMenu(tester, [],
+        position: const RelativeRect.fromLTRB(480, 20, 20, 780));
+    await tester.tap(find.text('Request approval'));
+    await tester.pumpAndSettle();
+    final submenu = tester.getRect(find.ancestor(
+        of: find.text('Connect').last,
+        matching: find.byType(mod_menu.PopupMenuItem<String>)));
+    expect(submenu.left, closeTo(0, 0.01));
+    expect(submenu.right, lessThanOrEqualTo(500));
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('approval submenu opens beside its parent on either screen edge',
@@ -140,34 +134,6 @@ void main() {
       }
       await tester.tapAt(const Offset(2, 2));
       await tester.pumpAndSettle();
-    }
-  });
-
-  testWidgets('only mobile approval submenus have a heading and dim background',
-      (tester) async {
-    final wasMobile = common.isMobile;
-    addTearDown(() => common.isMobile = wasMobile);
-    for (final mobile in [true, false]) {
-      common.isMobile = mobile;
-      final actions = <String>[];
-      await openMenu(tester, actions);
-      await tester.tap(find.text('Request approval'));
-      await tester.pumpAndSettle();
-      expect(find.text('Request approval'), findsNWidgets(mobile ? 2 : 1));
-      expect(
-          find.byWidgetPredicate((widget) =>
-              widget is ModalBarrier && widget.color == Colors.black26),
-          mobile ? findsOneWidget : findsNothing);
-      if (mobile) {
-        await tester.tap(find.text('Request approval').last);
-        await tester.pumpAndSettle();
-        expect(actions, isEmpty);
-        expect(find.text('Request approval'), findsNWidgets(2));
-      }
-      await tester.tapAt(const Offset(2, 2));
-      await tester.pumpAndSettle();
-      expect(find.text('Request approval'), findsNothing);
-      expect(find.text('Rename'), findsNothing);
     }
   });
 
@@ -303,9 +269,6 @@ void main() {
 
   testWidgets('the whole approval row opens the submenu on a narrow screen',
       (tester) async {
-    final wasMobile = common.isMobile;
-    common.isMobile = true;
-    addTearDown(() => common.isMobile = wasMobile);
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);

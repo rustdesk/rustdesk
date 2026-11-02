@@ -17,7 +17,6 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
     this.onTap,
     this.dismissParentOnCanceled = false,
     this.useButtonLayout = false,
-    this.barrierColor,
     this.position = mod_menu.PopupMenuPosition.overSide,
     this.offset = Offset.zero,
     required this.itemBuilder,
@@ -32,7 +31,6 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
   final void Function()? onTap;
   final bool dismissParentOnCanceled;
   final bool useButtonLayout;
-  final Color? barrierColor;
   final List<mod_menu.PopupMenuEntry<T>> Function(BuildContext) itemBuilder;
   final Widget child;
 
@@ -84,7 +82,6 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
               : null,
           itemBuilder: widget.itemBuilder,
           padding: EdgeInsets.zero,
-          barrierColor: widget.barrierColor,
           child: Builder(builder: (context) {
             final child = AnimatedDefaultTextStyle(
               style: style,
@@ -676,7 +673,6 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   final EdgeInsets? padding;
   final bool dismissParentOnCanceled;
   final double arrowScale;
-  final Color? barrierColor;
 
   MenuEntrySubMenu({
     required this.text,
@@ -684,7 +680,6 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
     this.padding,
     this.dismissParentOnCanceled = false,
     this.arrowScale = MenuConfig.iconScale,
-    this.barrierColor,
     RxBool? enabled,
   }) : super(enabled: enabled);
 
@@ -699,7 +694,6 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
         padding: padding,
         dismissParentOnCanceled: dismissParentOnCanceled,
         useButtonLayout: true,
-        barrierColor: barrierColor,
         position: mod_menu.PopupMenuPosition.overSide,
         itemBuilder: (BuildContext context) => entries
             .map((entry) => entry.build(context, conf))
