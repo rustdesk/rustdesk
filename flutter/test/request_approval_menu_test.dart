@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_hbb/common.dart' as common;
 import 'package:flutter_hbb/common/widgets/request_approval_menu.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
@@ -89,6 +90,34 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
 }
 
 void main() {
+  testWidgets('only mobile approval submenus have a heading and dim background',
+      (tester) async {
+    final wasMobile = common.isMobile;
+    addTearDown(() => common.isMobile = wasMobile);
+    for (final mobile in [true, false]) {
+      common.isMobile = mobile;
+      final actions = <String>[];
+      await openMenu(tester, actions);
+      await tester.tap(find.text('Request approval'));
+      await tester.pumpAndSettle();
+      expect(find.text('Request approval'), findsNWidgets(mobile ? 2 : 1));
+      expect(
+          find.byWidgetPredicate((widget) =>
+              widget is ModalBarrier && widget.color == Colors.black26),
+          mobile ? findsOneWidget : findsNothing);
+      if (mobile) {
+        await tester.tap(find.text('Request approval').last);
+        await tester.pumpAndSettle();
+        expect(actions, isEmpty);
+        expect(find.text('Request approval'), findsNWidgets(2));
+      }
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
+      expect(find.text('Request approval'), findsNothing);
+      expect(find.text('Rename'), findsNothing);
+    }
+  });
+
   testWidgets('approval trigger has one Tab stop and opens with Enter',
       (tester) async {
     await openMenu(tester, []);
@@ -221,6 +250,9 @@ void main() {
 
   testWidgets('the whole approval row opens the submenu on a narrow screen',
       (tester) async {
+    final wasMobile = common.isMobile;
+    common.isMobile = true;
+    addTearDown(() => common.isMobile = wasMobile);
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
