@@ -46,6 +46,8 @@ def get_deb_extra_depends() -> str:
     custom_arch = os.environ.get("DEB_ARCH")
     if custom_arch == "armhf": # for arm32v7 libsciter-gtk.so
         return ", libatomic1"
+    if custom_arch == "riscv64": # codecs and libsodium are linked from the distribution
+        return ", libvpx9, libaom3, libopus0, libyuv0, libsodium23"
     return ""
 
 def system2(cmd):

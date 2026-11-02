@@ -6,7 +6,7 @@
 # google_fonts. Every other platform is still on Flutter 3.24.5, where the old names/versions
 # are required, so these changes are kept OUT of the committed sources and applied here instead.
 #
-# Used by BOTH the Windows arm64 build (flutter-build.yml) and its dedicated bridge artifact
+# Used by the Windows arm64 and Linux riscv64 builds (flutter-build.yml) and their bridge artifact
 # (bridge.yml) so they share an identical 3.44 source state -- the generated *.freezed.dart must
 # compile against the same Flutter/freezed version the arm64 build resolves.
 #
