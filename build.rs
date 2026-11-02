@@ -102,6 +102,9 @@ fn main() {
         #[cfg(target_os = "macos")]
         build_mac();
         println!("cargo:rustc-link-lib=framework=ApplicationServices");
+        // CPAL links SCK for audio; allow the same binary to load before macOS 12.3.
+        #[cfg(feature = "screencapturekit")]
+        println!("cargo:rustc-link-arg=-Wl,-weak_framework,ScreenCaptureKit");
     }
     if target_os == "android" {
         build_android_ifaddrs();

@@ -171,7 +171,7 @@ def make_parser():
         parser.add_argument(
             '--screencapturekit',
             action='store_true',
-            help='Enable feature screencapturekit'
+            help='Enable ScreenCaptureKit system audio when supported'
         )
     return parser
 
@@ -933,7 +933,7 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
 
 def build_flutter_dmg(version, features):
     if not skip_cargo:
-        # set minimum osx build target, now is 10.14, which is the same as the flutter xcode project
+        # Keep the legacy deployment target; SCK is optional at runtime.
         system2(
             f'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --locked --features {features} --release')
     # copy dylib
