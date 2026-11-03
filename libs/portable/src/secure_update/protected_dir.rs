@@ -10,10 +10,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use super::path_error;
 use windows::{
-    core::{Error as WindowsError, PCWSTR},
+    core::{w, Error as WindowsError, Owned, PCWSTR},
     Win32::{
-        Foundation::{LocalFree, GENERIC_READ, GENERIC_WRITE, HLOCAL, MAX_PATH, WIN32_ERROR},
+        Foundation::{GENERIC_READ, GENERIC_WRITE, HLOCAL, MAX_PATH, WIN32_ERROR},
         Security::{
             Authorization::{
                 ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -41,10 +42,7 @@ const UPDATE_DIR_PREFIX: &str = "RustDeskUpdate-";
 // same user's unelevated processes rewrite the ACL and tamper with the payload.
 // Assigning BA as owner fails for a filtered, unelevated administrator token.
 // https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
-const UPDATE_DIR_SDDL: &str = "O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
-const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
-const HALF_BYTE_BITS: u8 = 4;
-const HALF_BYTE_MASK: u8 = 0x0f;
+const UPDATE_DIR_SDDL: PCWSTR = w!("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)");
 
 pub(super) struct ProtectedDirectory {
     path: PathBuf,
@@ -89,7 +87,27 @@ impl ProtectedDirectory {
     }
 
     pub(super) fn create_file(&self, path: &Path) -> io::Result<File> {
-        create_file(path, &self.descriptor)
+        let path_wide = to_wide(path.as_os_str());
+        let attributes = security_attributes(&self.descriptor);
+        let handle = unsafe {
+            CreateFileW(
+                PCWSTR(path_wide.as_ptr()),
+                (GENERIC_READ | GENERIC_WRITE).0,
+                FILE_SHARE_READ,
+                Some(&attributes),
+                CREATE_NEW,
+                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                None,
+            )
+        }
+        .map_err(|error| {
+            path_error(
+                "Failed to create protected file",
+                path,
+                win32_io_error(error),
+            )
+        })?;
+        Ok(unsafe { File::from_raw_handle(handle.0) })
     }
 
     pub(super) fn cleanup(mut self) -> io::Result<()> {
@@ -121,29 +139,22 @@ impl Drop for ProtectedDirectory {
     }
 }
 
-struct SecurityDescriptor(PSECURITY_DESCRIPTOR);
+struct SecurityDescriptor(Owned<HLOCAL>);
 
 impl SecurityDescriptor {
     fn new() -> io::Result<Self> {
-        let sddl = to_wide(OsStr::new(UPDATE_DIR_SDDL));
         let mut descriptor = PSECURITY_DESCRIPTOR::default();
+        // SAFETY: UPDATE_DIR_SDDL is a static, NUL-terminated wide string. On
+        // success, the LocalAlloc allocation is transferred exactly once to Owned.
         unsafe {
             ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                PCWSTR(sddl.as_ptr()),
+                UPDATE_DIR_SDDL,
                 SDDL_REVISION_1,
                 &mut descriptor,
                 None,
             )
-        }
-        .map_err(win32_io_error)?;
-        Ok(Self(descriptor))
-    }
-}
-
-impl Drop for SecurityDescriptor {
-    fn drop(&mut self) {
-        unsafe {
-            let _ = LocalFree(Some(HLOCAL(self.0 .0)));
+            .map_err(win32_io_error)?;
+            Ok(Self(Owned::new(HLOCAL(descriptor.0))))
         }
     }
 }
@@ -158,30 +169,6 @@ fn create_directory(path: &Path, descriptor: &SecurityDescriptor) -> io::Result<
             win32_io_error(error),
         )
     })
-}
-
-fn create_file(path: &Path, descriptor: &SecurityDescriptor) -> io::Result<File> {
-    let path_wide = to_wide(path.as_os_str());
-    let attributes = security_attributes(descriptor);
-    let handle = unsafe {
-        CreateFileW(
-            PCWSTR(path_wide.as_ptr()),
-            (GENERIC_READ | GENERIC_WRITE).0,
-            FILE_SHARE_READ,
-            Some(&attributes),
-            CREATE_NEW,
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
-            None,
-        )
-    }
-    .map_err(|error| {
-        path_error(
-            "Failed to create protected file",
-            path,
-            win32_io_error(error),
-        )
-    })?;
-    Ok(unsafe { File::from_raw_handle(handle.0) })
 }
 
 fn open_directory(path: &Path) -> io::Result<File> {
@@ -207,7 +194,7 @@ fn open_directory(path: &Path) -> io::Result<File> {
 fn security_attributes(descriptor: &SecurityDescriptor) -> SECURITY_ATTRIBUTES {
     SECURITY_ATTRIBUTES {
         nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: descriptor.0 .0,
+        lpSecurityDescriptor: (*descriptor.0).0,
         bInheritHandle: false.into(),
     }
 }
@@ -246,12 +233,11 @@ fn random_suffix() -> io::Result<String> {
             "Failed to generate update directory suffix: {error}"
         ))
     })?;
-    let mut suffix = String::with_capacity(RANDOM_BYTE_COUNT * HEX_CHARS_PER_BYTE);
-    for byte in bytes {
-        suffix.push(HEX_DIGITS[(byte >> HALF_BYTE_BITS) as usize] as char);
-        suffix.push(HEX_DIGITS[(byte & HALF_BYTE_MASK) as usize] as char);
-    }
-    Ok(suffix)
+    Ok(format!(
+        "{:0width$x}",
+        u128::from_be_bytes(bytes),
+        width = RANDOM_BYTE_COUNT * HEX_CHARS_PER_BYTE,
+    ))
 }
 
 fn win32_io_error(error: WindowsError) -> io::Error {
@@ -259,13 +245,6 @@ fn win32_io_error(error: WindowsError) -> io::Error {
         Some(code) => io::Error::from_raw_os_error(code.0 as i32),
         None => io::Error::other(error),
     }
-}
-
-fn path_error(action: &str, path: &Path, error: io::Error) -> io::Error {
-    io::Error::new(
-        error.kind(),
-        format!("{action} {}: {error}", path.display()),
-    )
 }
 
 fn to_wide(value: &OsStr) -> Vec<u16> {

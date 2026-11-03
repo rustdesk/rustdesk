@@ -37,34 +37,75 @@ use std::{
     collections::HashSet,
     ffi::OsStr,
     fs,
-    io::{self, Write},
-    os::windows::fs::MetadataExt,
+    io::{self, Read, Write},
+    os::windows::{fs::MetadataExt, process::CommandExt},
     path::{Component, Path, PathBuf},
+    process::{Command, Stdio},
 };
 
-use crate::bin_reader::{normalize_path, BinaryData, BinaryReader};
+use crate::{
+    bin_reader::{normalize_path, BinaryData, BinaryReader},
+    use_null_stdio, APPNAME_RUNTIME_ENV_KEY,
+};
 
 mod protected_dir;
 
 use protected_dir::ProtectedDirectory;
-use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+use windows::Win32::{
+    Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT, System::Threading::CREATE_NO_WINDOW,
+};
 
 const INVALID_FILENAME_CHARS: &str = "<>:\"/\\|?*";
+const DECOMPRESS_BUFFER_SIZE: usize = 4096;
 
-pub(super) struct SecureUpdateDir {
+pub(super) fn execute_update(reader: &BinaryReader, args: &[String]) -> io::Result<()> {
+    let mut update_dir = SecureUpdateDir::create()?;
+    let executable = update_dir.extract(reader)?;
+    let portable_exe = std::env::current_exe()?;
+    let portable_name = portable_exe.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Portable executable name is unavailable",
+        )
+    })?;
+    let mut command = Command::new(executable);
+    command
+        .args(args)
+        .env(APPNAME_RUNTIME_ENV_KEY, portable_name)
+        .creation_flags(CREATE_NO_WINDOW.0);
+    if use_null_stdio() {
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+    }
+    let status = command.status()?;
+    if !status.success() {
+        return Err(io::Error::other(format!(
+            "Embedded updater exited with status {status}"
+        )));
+    }
+    // Cleanup failure must not change the updater's successful exit status.
+    if let Err(error) = update_dir.root.cleanup() {
+        eprintln!("{error}");
+    }
+    Ok(())
+}
+
+struct SecureUpdateDir {
     root: ProtectedDirectory,
     directories: HashSet<String>,
 }
 
 impl SecureUpdateDir {
-    pub(super) fn create() -> io::Result<Self> {
+    fn create() -> io::Result<Self> {
         Ok(Self {
             root: ProtectedDirectory::create()?,
             directories: HashSet::new(),
         })
     }
 
-    pub(super) fn extract(&mut self, reader: &BinaryReader) -> io::Result<PathBuf> {
+    fn extract(&mut self, reader: &BinaryReader) -> io::Result<PathBuf> {
         for data in &reader.files {
             self.write_file(data)?;
         }
@@ -73,16 +114,12 @@ impl SecureUpdateDir {
         Ok(executable)
     }
 
-    pub(super) fn cleanup(self) -> io::Result<()> {
-        self.root.cleanup()
-    }
-
     fn write_file(&mut self, data: &BinaryData) -> io::Result<()> {
         let relative = embedded_path(&data.path)?;
         if let Some(parent) = relative.parent() {
             self.create_parent_directories(parent)?;
         }
-        let contents = data.verified_contents()?;
+        let contents = verified_contents(data)?;
         let path = self.root.path().join(relative);
         let mut file = self.root.create_file(&path)?;
         file.write_all(&contents)
@@ -105,6 +142,34 @@ impl SecureUpdateDir {
         }
         Ok(())
     }
+}
+
+fn verified_contents(data: &BinaryData) -> io::Result<Vec<u8>> {
+    let mut decoder = brotli::Decompressor::new(data.raw, DECOMPRESS_BUFFER_SIZE);
+    let mut contents = Vec::new();
+    decoder.read_to_end(&mut contents).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Failed to decompress {}: {error}", data.path),
+        )
+    })?;
+    let expected = std::str::from_utf8(data.md5_code).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid embedded digest for {}: {error}", data.path),
+        )
+    })?;
+    let actual = format!("{:x}", md5::compute(&contents));
+    if actual != expected {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Embedded digest mismatch for {}: expected {expected}, got {actual}",
+                data.path
+            ),
+        ));
+    }
+    Ok(contents)
 }
 
 fn embedded_path(path: &str) -> io::Result<PathBuf> {
@@ -195,6 +260,6 @@ mod tests {
         let mut update_dir = SecureUpdateDir::create()?;
         update_dir.create_parent_directories(Path::new("data/flutter_assets"))?;
         update_dir.create_parent_directories(Path::new("Data/Flutter_Assets"))?;
-        update_dir.cleanup()
+        update_dir.root.cleanup()
     }
 }

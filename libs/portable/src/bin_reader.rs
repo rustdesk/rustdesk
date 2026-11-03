@@ -5,9 +5,6 @@ use std::{
     path::Path,
 };
 
-#[cfg(windows)]
-use std::io;
-
 // The generic payload, shared by every customer and compiled in once per release.
 #[cfg(windows)]
 const BIN_DATA: &[u8] = include_bytes!("../data.bin");
@@ -234,42 +231,6 @@ impl BinaryData {
             }
         }
         let _ = fs::write(p, self.decompress());
-    }
-
-    #[cfg(windows)]
-    pub(crate) fn verified_contents(&self) -> io::Result<Vec<u8>> {
-        let cursor = Cursor::new(self.raw);
-        let mut decoder = brotli::Decompressor::new(cursor, BUF_SIZE);
-        let mut contents = Vec::new();
-        decoder.read_to_end(&mut contents).map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed to decompress {}: {error}", self.path),
-            )
-        })?;
-        self.verify_contents(&contents)?;
-        Ok(contents)
-    }
-
-    #[cfg(windows)]
-    fn verify_contents(&self, contents: &[u8]) -> io::Result<()> {
-        let expected = std::str::from_utf8(self.md5_code).map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid embedded digest for {}: {error}", self.path),
-            )
-        })?;
-        let actual = format!("{:x}", md5::compute(contents));
-        if actual != expected {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "Embedded digest mismatch for {}: expected {expected}, got {actual}",
-                    self.path
-                ),
-            ));
-        }
-        Ok(())
     }
 }
 
