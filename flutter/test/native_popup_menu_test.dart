@@ -27,7 +27,7 @@ Future<void> openMenu<T>(WidgetTester tester, List<MenuEntryBase<T>> items,
 }
 
 void main() {
-  testWidgets('multiple submenus open independently',
+  testWidgets('multiple submenus position independently on a narrow screen',
       (tester) async {
     final actions = <String>[];
     const entries = {
@@ -46,7 +46,7 @@ void main() {
               ),
             ]),
         ],
-        width: 1200);
+        width: 500);
     for (final name in [
       entries.keys.first,
       entries.keys.last,
@@ -59,7 +59,8 @@ void main() {
       final submenu = tester.getRect(find.ancestor(
           of: find.text(entries[name]!),
           matching: find.byType(MenuItemButton)));
-      expect(submenu.right, lessThanOrEqualTo(parent.left));
+      expect(submenu.left, closeTo(0, 0.01));
+      expect(submenu.right, lessThan(parent.right));
       expect(find.text(entries.entries.firstWhere((e) => e.key != name).value),
           findsNothing);
       expect(actions, isEmpty);

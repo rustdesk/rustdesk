@@ -24,6 +24,7 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
     bool includeRelay = false,
     bool includeIcons = false,
     bool legacy = false,
+    TextDirection? textDirection,
     List<MenuEntryBase<String>> extraEntries = const [],
     RelativeRect position =
         const RelativeRect.fromLTRB(20, 20, 780, 580)}) async {
@@ -78,6 +79,10 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
 
   await tester.pumpWidget(MaterialApp(
     theme: theme,
+    builder: textDirection == null
+        ? null
+        : (_, child) => Directionality(
+            textDirection: textDirection, child: child!),
     home: Scaffold(
       body: Builder(builder: (context) {
         return TextButton(
@@ -329,22 +334,51 @@ void main() {
     await mouse.removePointer();
   });
 
-  testWidgets('submenu stays on screen when neither side fits', (tester) async {
-    tester.view.physicalSize = const Size(500, 800);
+  testWidgets('submenu keeps part of its parent visible on narrow screens',
+      (tester) async {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await openMenu(tester, [],
-        position: const RelativeRect.fromLTRB(480, 20, 20, 780));
-    await tester.tap(find.text('Request approval'));
-    await tester.pumpAndSettle();
-    final submenu = tester.getRect(find.ancestor(
-        of: find.text('Connect').last, matching: find.byType(MenuItemButton)));
-    expect(submenu.left, greaterThanOrEqualTo(0));
-    expect(submenu.right, lessThanOrEqualTo(500));
-    await tester.tapAt(const Offset(2, 2));
-    await tester.pumpAndSettle();
-  });
+    for (final width in [360.0, 500.0]) {
+      tester.view.physicalSize = Size(width, 800);
+      for (final direction in TextDirection.values) {
+        final rtl = direction == TextDirection.rtl;
+        final actions = <String>[];
+        await openMenu(tester, actions,
+            theme: MyTheme.lightTheme.copyWith(
+              visualDensity: VisualDensity.standard,
+              materialTapTargetSize: MaterialTapTargetSize.padded,
+              textButtonTheme: MyTheme.mobileTextButtonTheme,
+            ),
+            textDirection: direction,
+            position: RelativeRect.fromLTRB(
+                rtl ? 20 : width - 20, 20, rtl ? width - 20 : 20, 780));
+        final parent = tester.getRect(find.ancestor(
+            of: find.text('Request approval'),
+            matching: find.byType(TapRegion)).first);
+        await tester.tap(find.text('Request approval'));
+        await tester.pumpAndSettle();
+        final submenu = tester.getRect(find.ancestor(
+            of: find.text('Connect').last,
+            matching: find.byType(TapRegion)).first);
+        expect(submenu.left, greaterThanOrEqualTo(0));
+        expect(submenu.right, lessThanOrEqualTo(width));
+        if (rtl) {
+          expect(submenu.left, greaterThan(parent.left));
+          expect(submenu.right, closeTo(width, 0.01));
+        } else {
+          expect(submenu.left, closeTo(0, 0.01));
+          expect(submenu.right, lessThan(parent.right));
+        }
+        await tester.tap(find.text('Connect').last);
+        await tester.pumpAndSettle();
+        expect(actions, ['Connect:request-approval']);
+        expect(find.text('Request approval'), findsNothing);
+      }
+    }
+  },
+      variant:
+          TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}));
 
   testWidgets('approval submenu opens beside its parent on either screen edge',
       (tester) async {

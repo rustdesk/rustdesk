@@ -165,7 +165,7 @@ class _NativePopupMenuState<T> extends State<_NativePopupMenu<T>> {
     if (entry is MenuEntrySubMenu<T>) {
       final padding = (entry.padding ?? EdgeInsets.zero).copyWith(
           right: (entry.padding?.right ?? 0) + 4);
-      return Obx(() => SubmenuButton(
+      return Obx(() => _NativeSubmenu(
             style: _buttonStyle(padding).copyWith(
               iconColor: MaterialStatePropertyAll<Color?>(entry.enabled!.value
                   ? Theme.of(context).unselectedWidgetColor
@@ -239,5 +239,86 @@ class _NativePopupMenuState<T> extends State<_NativePopupMenu<T>> {
     }
     debugPrint('Unsupported native popup menu entry: ${entry.runtimeType}');
     return const SizedBox.shrink();
+  }
+}
+
+class _NativeSubmenu extends StatefulWidget {
+  final ButtonStyle style;
+  final List<Widget> menuChildren;
+  final Widget child;
+
+  const _NativeSubmenu({
+    required this.style,
+    required this.menuChildren,
+    required this.child,
+  });
+
+  @override
+  State<_NativeSubmenu> createState() => _NativeSubmenuState();
+}
+
+class _NativeSubmenuState extends State<_NativeSubmenu> {
+  final _controller = MenuController();
+  final _buttonKey = GlobalKey();
+  final _itemKey = GlobalKey();
+  Offset _offset = Offset.zero;
+
+  void _positionSubmenu() {
+    // Submenu dimensions are available after its overlay has been laid out.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.isOpen) return;
+      final buttonContext = _buttonKey.currentContext;
+      final button = buttonContext?.findRenderObject();
+      final item = _itemKey.currentContext?.findRenderObject();
+      if (buttonContext == null || button is! RenderBox || item is! RenderBox) {
+        return;
+      }
+      final overlay = Overlay.of(buttonContext).context.findRenderObject();
+      if (overlay is! RenderBox) return;
+      final anchor =
+          button.localToGlobal(Offset.zero, ancestor: overlay) & button.size;
+      final screens = DisplayFeatureSubScreen.subScreensInBounds(
+          Offset.zero & overlay.size,
+          DisplayFeatureSubScreen.avoidBounds(MediaQuery.of(buttonContext)));
+      final screen = screens.reduce((a, b) =>
+          (a.center - anchor.center).distanceSquared <
+                  (b.center - anchor.center).distanceSquared
+              ? a
+              : b);
+      final leftSpace = anchor.left - screen.left;
+      final rightSpace = screen.right - anchor.right;
+      var offset = Offset.zero;
+      if (item.size.width > leftSpace && item.size.width > rightSpace) {
+        if (Directionality.of(buttonContext) == TextDirection.ltr &&
+            leftSpace > rightSpace) {
+          offset = Offset(screen.left - anchor.right, 0);
+        } else if (Directionality.of(buttonContext) == TextDirection.rtl &&
+            rightSpace > leftSpace) {
+          offset = Offset(anchor.left - screen.right, 0);
+        }
+      }
+      if (_offset != offset) {
+        setState(() => _offset = offset);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SubmenuButton(
+      key: _buttonKey,
+      controller: _controller,
+      onOpen: _positionSubmenu,
+      alignmentOffset: _offset,
+      style: widget.style,
+      menuChildren: [
+        for (var i = 0; i < widget.menuChildren.length; i++)
+          if (i == 0)
+            KeyedSubtree(key: _itemKey, child: widget.menuChildren[i])
+          else
+            widget.menuChildren[i],
+      ],
+      child: widget.child,
+    );
   }
 }
