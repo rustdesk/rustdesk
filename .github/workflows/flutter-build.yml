@@ -167,6 +167,9 @@ jobs:
         run: |
           # Windows: build RustDesk
           python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
+          cd flutter
+          flutter pub run msix:create
+          cd ..
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk
 
           # Download usbmmidd_v2.zip and extract it to ./rustdesk
@@ -232,6 +235,13 @@ jobs:
         with:
           name: rustdesk-unsigned-windows-${{ matrix.job.arch }}
           path: rustdesk
+
+      - name: Upload MSIX
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: actions/upload-artifact@master
+        with:
+          name: rocketdesk-windows-${{ matrix.job.arch }}.msix
+          path: flutter/build/windows/x64/runner/Release/RocketDesk.msix
 
       - name: Sign rustdesk files
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != ''
