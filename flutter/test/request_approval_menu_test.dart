@@ -1,7 +1,8 @@
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_hbb/common/widgets/request_approval_menu.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
@@ -16,10 +17,17 @@ const connectionTypes = [
   'RDP',
 ];
 
+Finder get approvalRow => find.ancestor(
+    of: find.text('Request approval'),
+    matching: find.byWidgetPredicate(
+        (widget) => widget is mod_menu.PopupMenuEntry<String>));
+
 Future<void> openMenu(WidgetTester tester, List<String> actions,
     {ThemeData? theme,
     EdgeInsets? padding,
     bool includeRelay = false,
+    bool includeRename = true,
+    List<MenuEntryBase<String>> extraEntries = const [],
     RelativeRect position = const RelativeRect.fromLTRB(20, 20, 780, 580)}) async {
   MenuEntryButton<String> entry(String title, {bool requestApproval = false}) =>
       MenuEntryButton<String>(
@@ -58,12 +66,15 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
                 padding: padding,
                 dismissOnClicked: true,
               ),
-              RequestApprovalMenu(
-                title: 'Request approval',
+              MenuEntrySubMenu<String>(
+                text: 'Request approval',
+                arrowScale: 1.0,
+                dismissParentOnCanceled: true,
                 padding: padding,
                 entries: [
                   for (final title in connectionTypes)
-                    entry(title, requestApproval: true),
+                    entry(title, requestApproval: true)
+                      ..dismissCallback = () => Navigator.pop(context),
                 ],
               ),
               if (includeRelay)
@@ -75,7 +86,8 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
                   padding: padding,
                   dismissOnClicked: true,
                 ),
-              entry('Rename'),
+              if (includeRename) entry('Rename'),
+              ...extraEntries,
             ]
                 .expand((entry) => entry.build(context,
                     const MenuConfig(commonColor: Colors.black, height: 20)))
@@ -92,6 +104,104 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
 }
 
 void main() {
+  testWidgets('last approval item stays open on click and when exiting below it',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final actions = <String>[];
+    await openMenu(tester, actions, includeRename: false);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(2, 2));
+    addTearDown(mouse.removePointer);
+    final trigger = tester.getCenter(approvalRow);
+    await mouse.moveTo(trigger);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Terminal'), findsNothing);
+    await mouse.moveTo(const Offset(2, 2));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Terminal'), findsNothing);
+
+    await mouse.moveTo(trigger);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    expect(find.text('Terminal'), findsOneWidget);
+    for (final kind in [PointerDeviceKind.mouse, PointerDeviceKind.touch]) {
+      if (kind == PointerDeviceKind.mouse) {
+        await mouse.down(trigger);
+        await mouse.up();
+      } else {
+        await tester.tapAt(trigger, kind: kind);
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Terminal'), findsOneWidget, reason: '$kind click');
+      expect(actions, isEmpty);
+    }
+    final bottom = tester.getRect(approvalRow).bottom;
+    for (final distance in [1.0, 20.0]) {
+      await mouse.moveTo(Offset(trigger.dx, bottom + distance));
+      await tester.pumpAndSettle();
+      expect(find.text('Terminal'), findsOneWidget);
+    }
+    final highlight = Theme.of(tester.element(approvalRow))
+        .colorScheme
+        .onSurface
+        .withOpacity(0.08);
+    expect(
+        tester
+            .widgetList<Material>(find.descendant(
+                of: approvalRow, matching: find.byType(Material)))
+            .where((material) => material.color == highlight),
+        hasLength(1));
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('Show menu'), findsNothing);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('approval closes over another parent item but stays open outside',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final actions = <String>[];
+    await openMenu(tester, actions);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(2, 2));
+    addTearDown(mouse.removePointer);
+    final trigger = tester.getCenter(approvalRow);
+    await mouse.moveTo(trigger);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    await mouse.moveTo(tester.getCenter(find.text('Connect').last));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Terminal'), findsOneWidget);
+    await mouse.moveTo(trigger);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Terminal'), findsOneWidget);
+
+    await mouse.moveTo(tester.getCenter(find.text('Connect').last));
+    await mouse.moveTo(const Offset(2, 2));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Terminal'), findsOneWidget);
+    expect(find.text('Request approval'), findsOneWidget);
+    expect(actions, isEmpty);
+    await mouse.moveTo(trigger);
+    await tester.pumpAndSettle();
+    await mouse.moveTo(tester.getCenter(find.text('Connect').first));
+    await tester.pumpAndSettle();
+    expect(find.text('Terminal'), findsNothing);
+    expect(find.text('Request approval'), findsOneWidget);
+    expect(actions, isEmpty);
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+    expect(actions, ['Connect']);
+    expect(find.text('Request approval'), findsNothing);
+  });
+
   testWidgets('submenu prefers the left screen edge when neither side fits',
       (tester) async {
     tester.view.physicalSize = const Size(500, 800);
@@ -121,7 +231,7 @@ void main() {
       await openMenu(tester, [],
           position: RelativeRect.fromLTRB(atRight ? 1180 : 20, 20,
               atRight ? 20 : 1180, 780));
-      final parent = tester.getRect(find.byType(PopupMenuChildrenItem<String>));
+      final parent = tester.getRect(approvalRow);
       await tester.tap(find.text('Request approval'));
       await tester.pumpAndSettle();
       final submenu = tester.getRect(find.ancestor(
@@ -140,8 +250,20 @@ void main() {
   testWidgets('approval trigger has one Tab stop and opens with Enter',
       (tester) async {
     await openMenu(tester, []);
-    bool approvalHasFocus() => FocusManager.instance.primaryFocus?.context
-        ?.findAncestorWidgetOfExactType<PopupMenuChildrenItem<String>>() != null;
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(2, 2));
+    addTearDown(mouse.removePointer);
+    bool approvalHasFocus() {
+      var focused = false;
+      FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
+        if (e == tester.element(approvalRow)) {
+          focused = true;
+          return false;
+        }
+        return true;
+      });
+      return focused;
+    }
 
     for (var i = 0; i < 30 && !approvalHasFocus(); i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
@@ -159,6 +281,8 @@ void main() {
     await tester.pump();
     expect(approvalHasFocus(), isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     expect(find.text('Terminal (Run as administrator)'), findsOneWidget);
   });
@@ -280,7 +404,7 @@ void main() {
     ]) {
       final actions = <String>[];
       await openMenu(tester, actions);
-      final row = tester.getRect(find.byType(PopupMenuChildrenItem<String>));
+      final row = tester.getRect(approvalRow);
       await tester.tapAt(corner.withinRect(row.deflate(2)));
       await tester.pumpAndSettle();
       expect(actions, isEmpty);

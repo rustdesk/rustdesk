@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:core';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderListBody;
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -687,14 +689,24 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
     super.enabled ??= true.obs;
+    final theme = Theme.of(context);
+    final checkboxTheme = CheckboxTheme.of(context);
+    final checkboxWidth =
+        ((checkboxTheme.materialTapTargetSize ?? theme.materialTapTargetSize) ==
+                    MaterialTapTargetSize.padded
+                ? kMinInteractiveDimension
+                : kMinInteractiveDimension - 8) +
+            (checkboxTheme.visualDensity ?? theme.visualDensity)
+                .baseSizeAdjustment
+                .dx;
+    final arrowInset = (checkboxWidth - (IconTheme.of(context).size ?? 24)) / 2;
     return [
-      PopupMenuChildrenItem(
-        enabled: super.enabled,
+      _PopupSubMenuItem<T>(
+        enabled: super.enabled!,
         height: conf.height,
-        padding: padding,
+        padding: (padding ?? EdgeInsets.zero)
+            .copyWith(right: (padding?.right ?? 0) + arrowInset),
         dismissParentOnCanceled: dismissParentOnCanceled,
-        useButtonLayout: true,
-        position: mod_menu.PopupMenuPosition.overSide,
         itemBuilder: (BuildContext context) => entries
             .map((entry) => entry.build(context, conf))
             .expand((i) => i)
@@ -722,6 +734,155 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
         ]),
       )
     ];
+  }
+}
+
+class _PopupSubMenuItem<T> extends mod_menu.PopupMenuEntry<T> {
+  const _PopupSubMenuItem({
+    required this.height,
+    required this.padding,
+    required this.child,
+    required this.itemBuilder,
+    required this.enabled,
+    required this.dismissParentOnCanceled,
+  });
+
+  @override
+  final double height;
+  final EdgeInsets padding;
+  final Widget child;
+  final RxBool enabled;
+  final bool dismissParentOnCanceled;
+  final mod_menu.PopupMenuItemBuilder<T> itemBuilder;
+
+  @override
+  bool represents(T? value) => false;
+
+  @override
+  State<_PopupSubMenuItem<T>> createState() => _PopupSubMenuItemState<T>();
+}
+
+class _PopupSubMenuItemState<T> extends State<_PopupSubMenuItem<T>> {
+  Timer? _hoverTimer;
+  bool _submenuOpen = false;
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    super.dispose();
+  }
+
+  void _hoverTrigger(bool hovered) {
+    // Opening the submenu places its barrier over the trigger.
+    if (_submenuOpen || !widget.enabled.value) return;
+    _hoverTimer?.cancel();
+    if (hovered) {
+      _hoverTimer = Timer(const Duration(milliseconds: 200), _openSubmenu);
+    }
+  }
+
+  Future<void> _openSubmenu() async {
+    _hoverTimer?.cancel();
+    if (!mounted ||
+        !widget.enabled.value ||
+        _submenuOpen ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    final navigator = Navigator.of(context);
+    final button = context.findRenderObject();
+    final overlay = navigator.overlay?.context.findRenderObject();
+    final items = widget.itemBuilder(context);
+    if (button is! RenderBox || overlay is! RenderBox || items.isEmpty) return;
+    final anchor =
+        button.localToGlobal(Offset.zero, ancestor: overlay) & button.size;
+    final parentMenu = Scrollable.maybeOf(context)?.context.findRenderObject();
+    final parentItems =
+        context.findAncestorRenderObjectOfType<RenderListBody>();
+    final parentBounds = parentMenu is RenderBox && parentItems != null
+        ? (parentMenu.localToGlobal(Offset.zero, ancestor: overlay) &
+                parentMenu.size)
+            .intersect(
+                parentItems.localToGlobal(Offset.zero, ancestor: overlay) &
+                    parentItems.size)
+        : Rect.zero;
+    var dismissedByHover = false;
+
+    setState(() => _submenuOpen = true);
+    final value = await mod_menu.showMenu<T>(
+      context: context,
+      position: RelativeRect.fromRect(
+          anchor.shift(Offset(anchor.width, 0)), Offset.zero & overlay.size),
+      submenuAnchor: anchor,
+      items: items,
+      barrierWrapper: (barrier) => MouseRegion(
+        onHover: (event) {
+          final position = overlay.globalToLocal(event.position);
+          if (!dismissedByHover &&
+              parentBounds.contains(position) &&
+              !anchor.contains(position)) {
+            dismissedByHover = true;
+            navigator.pop();
+          }
+        },
+        child: Stack(children: [
+          barrier,
+          // Keep clicks on the covered trigger from dismissing either menu.
+          Positioned.fromRect(
+            rect: anchor,
+            child: const AbsorbPointer(),
+          ),
+        ]),
+      ),
+    );
+    _hoverTimer?.cancel();
+    if (!mounted) return;
+    setState(() => _submenuOpen = false);
+    if (!dismissedByHover &&
+        (value != null || widget.dismissParentOnCanceled) &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      navigator.pop<T>(value);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final highlight = Theme.of(context).colorScheme.onSurface.withOpacity(0.08);
+    return Obx(() => MouseRegion(
+          onEnter: (_) => _hoverTrigger(true),
+          onExit: (_) => _hoverTrigger(false),
+          child: TextButton(
+            onPressed: widget.enabled.value ? _openSubmenu : null,
+            style: ButtonStyle(
+              shape: const MaterialStatePropertyAll(RoundedRectangleBorder()),
+              backgroundColor: MaterialStatePropertyAll(
+                  _submenuOpen ? highlight : Colors.transparent),
+              overlayColor: MaterialStateProperty.resolveWith((states) =>
+                  !_submenuOpen &&
+                          (states.contains(MaterialState.hovered) ||
+                              states.contains(MaterialState.focused) ||
+                              states.contains(MaterialState.pressed))
+                      ? highlight
+                      : Colors.transparent),
+            ),
+            // Retain the old spacing, with one focus stop and one hover highlight.
+            child: ExcludeFocus(
+              child: TextButton(
+                onPressed: widget.enabled.value ? _openSubmenu : null,
+                style: const ButtonStyle(
+                  overlayColor: MaterialStatePropertyAll(Colors.transparent),
+                  splashFactory: NoSplash.splashFactory,
+                ),
+                child: Container(
+                  alignment: AlignmentDirectional.centerStart,
+                  height: widget.height,
+                  padding: widget.padding,
+                  child: widget.child,
+                ),
+              ),
+            ),
+          ),
+        ));
   }
 }
 

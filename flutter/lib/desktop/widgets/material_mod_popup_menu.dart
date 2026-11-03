@@ -806,6 +806,7 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
     this.submenuAnchor,
     required this.items,
     this.menuWrapper,
+    this.barrierWrapper,
     this.initialValue,
     this.elevation,
     required this.barrierLabel,
@@ -820,6 +821,7 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
   final Rect? submenuAnchor;
   final List<PopupMenuEntry<T>> items;
   final MenuWrapper? menuWrapper;
+  final MenuWrapper? barrierWrapper;
   final List<Size?> itemSizes;
   final T? initialValue;
   final double? elevation;
@@ -849,6 +851,12 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
 
   @override
   final String barrierLabel;
+
+  @override
+  Widget buildModalBarrier() {
+    final barrier = super.buildModalBarrier();
+    return barrierWrapper?.call(barrier) ?? barrier;
+  }
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation,
@@ -1059,6 +1067,7 @@ Future<T?> showMenu<T>({
   Rect? submenuAnchor,
   required List<PopupMenuEntry<T>> items,
   MenuWrapper? menuWrapper,
+  MenuWrapper? barrierWrapper,
   T? initialValue,
   double? elevation,
   String? semanticLabel,
@@ -1088,6 +1097,7 @@ Future<T?> showMenu<T>({
     submenuAnchor: submenuAnchor,
     items: items,
     menuWrapper: menuWrapper,
+    barrierWrapper: barrierWrapper,
     initialValue: initialValue,
     elevation: elevation,
     semanticLabel: semanticLabel,
