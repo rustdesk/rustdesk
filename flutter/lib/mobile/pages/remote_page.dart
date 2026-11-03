@@ -752,7 +752,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               child: isIOS
                   ? SafeArea(
                       left: false,
-                      top: false,
                       bottom: false,
                       child: QualityMonitor(gFFI.qualityMonitorModel),
                     )
