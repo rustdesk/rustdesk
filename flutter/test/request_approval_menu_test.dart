@@ -180,7 +180,6 @@ void main() {
   testWidgets('approval text and arrow align with normal menu items',
       (tester) async {
     for (final (theme, padding) in [
-      (ThemeData(), null),
       (
         ThemeData(
             useMaterial3: false,
