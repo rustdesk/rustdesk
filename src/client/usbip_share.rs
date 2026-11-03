@@ -427,6 +427,15 @@ impl Session<FlutterHandler> {
                 );
                 return;
             }
+            if let Some(error) = usbip_flow::usbipd_isolation_error() {
+                session.push_event_(
+                    "usb_push_result",
+                    &[("bus_id", json!(&bus_id)), ("error", json!(error))],
+                    &[],
+                    &[],
+                );
+                return;
+            }
             if is_release_pending(&bus_id) {
                 retry_pending_releases();
                 session.push_event_(

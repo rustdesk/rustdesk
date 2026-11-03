@@ -31,6 +31,7 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String, round: u32
         Ok(l) => l,
         Err(err) => {
             log::error!("usb attach: failed to bind local listener: {}", err);
+            attach_failed(&session, bus_id, format!("Failed to attach: {}", err));
             return;
         }
     };
@@ -38,6 +39,7 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String, round: u32
         Ok(addr) => addr.port(),
         Err(err) => {
             log::error!("usb attach: failed to read local listener port: {}", err);
+            attach_failed(&session, bus_id, format!("Failed to attach: {}", err));
             return;
         }
     };
@@ -92,19 +94,24 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String, round: u32
             session.ui_handler.usb.in_round(round, || session.usb_close_forward(id));
             let message = format!("Failed to attach {}", bus_id);
             log::error!("usb attach: `usbip attach` failed: {}", message);
-            session.ui_handler.push_event_(
-                "usb_attached",
-                &[
-                    ("bus_id", json!(bus_id)),
-                    ("success", json!(false)),
-                    ("port", json!(-1)),
-                    ("message", json!(message)),
-                ],
-                &[],
-                &[],
-            );
+            attach_failed(&session, bus_id, message);
         }
     }
+}
+
+/// The UI ends the pending action and asks the peer to unshare on this.
+fn attach_failed(session: &Session<FlutterHandler>, bus_id: String, message: String) {
+    session.ui_handler.push_event_(
+        "usb_attached",
+        &[
+            ("bus_id", json!(bus_id)),
+            ("success", json!(false)),
+            ("port", json!(-1)),
+            ("message", json!(message)),
+        ],
+        &[],
+        &[],
+    );
 }
 
 // USB/IP `OP_REQ_IMPORT`: 2-byte version + 2-byte command code (0x8003) +
@@ -237,19 +244,29 @@ async fn relay(
 ) {
     session.usb_open_forward(id, bus_id.clone());
 
+    let handshake = tokio::time::sleep(usbip_flow::HANDSHAKE_TIMEOUT);
+    tokio::pin!(handshake);
     let success = loop {
-        match rx.recv().await {
-            Some(Inbound::Opened { success, message }) => {
-                if !success {
-                    log::error!("usb attach: remote refused channel {}: {}", id, message);
-                }
-                break success;
-            }
-            Some(_) => continue,
-            None => {
+        tokio::select! {
+            _ = &mut handshake => {
+                log::warn!("usb attach: no reply to opening channel {} in time", id);
                 session.ui_handler.usb.unregister_forward_channel(id);
+                session.usb_close_forward(id);
                 return;
             }
+            msg = rx.recv() => match msg {
+                Some(Inbound::Opened { success, message }) => {
+                    if !success {
+                        log::error!("usb attach: remote refused channel {}: {}", id, message);
+                    }
+                    break success;
+                }
+                Some(_) => continue,
+                None => {
+                    session.ui_handler.usb.unregister_forward_channel(id);
+                    return;
+                }
+            },
         }
     };
     if !success {
@@ -317,11 +334,17 @@ async fn relay(
 
     // Whichever half ends first ends the other; only an end on our side
     // (local EOF or write error) needs a Close, the peer knows about its own.
+    let mut imported = false;
     let local_ended = loop {
         tokio::select! {
             _ = &mut to_tunnel => break true,
+            _ = &mut handshake, if !imported => {
+                log::warn!("usb attach: no import reply on channel {} in time", id);
+                break true;
+            }
             msg = rx.recv() => match msg {
                 Some(Inbound::Data(data)) => {
+                    imported = true;
                     if writer.write_all(&data).await.is_err() {
                         break true;
                     }

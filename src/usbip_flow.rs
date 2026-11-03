@@ -8,9 +8,10 @@
 // ahead of desktop traffic, so it is kept small. The accounting mirrors
 // `port_forward_mux`'s, with USB's own limits.
 use crate::port_forward_mux::{charge, MIN_FRAME_CHARGE};
-use base::message_proto::*;
+use base::{config::keys, message_proto::*};
 use hbb_common::{
     bytes::Bytes,
+    config::Config,
     log,
     tokio::{
         io::{AsyncRead, AsyncReadExt},
@@ -29,6 +30,94 @@ const UPDATE_THRESHOLD: u32 = CHANNEL_WINDOW / 2;
 
 /// For log lines a peer can trigger at will, e.g. by sending bad frames.
 pub const PEER_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// From accepting `usbip attach`'s connection until the peer's first data,
+/// i.e. its `Opened` and the import reply. `usbip attach` blocks on that
+/// socket meanwhile, holding its privileged permit, so a silent peer must not
+/// keep it open longer.
+pub const HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+const USBIPD_PORT: u16 = 3240;
+
+/// `usbipd` serves every device bound to `usbip-host` to whoever reaches it,
+/// with no authentication, and it always listens on all addresses. So a
+/// device is shared only if nothing listens on its port beyond loopback, over
+/// IPv4 and IPv6 (e.g. `usbipd` in its own network namespace behind a
+/// loopback proxy), or if the administrator confirmed the port is firewalled.
+pub fn usbipd_isolation_error() -> Option<String> {
+    if Config::get_option(keys::OPTION_USBIPD_FIREWALLED) == "Y" {
+        return None;
+    }
+    let mut exposed = Vec::new();
+    for path in ["/proc/net/tcp", "/proc/net/tcp6"] {
+        match std::fs::read_to_string(path) {
+            Ok(table) => exposed.extend(exposed_listeners(&table, USBIPD_PORT)),
+            // A kernel without IPv6 has no IPv6 listener either.
+            Err(err) if path.ends_with('6') && err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Some(format!("Cannot check where usbipd listens: {}", err)),
+        }
+    }
+    if exposed.is_empty() {
+        return None;
+    }
+    log::warn!("usbip: usbipd listens on {}, refusing to share", exposed.join(", "));
+    Some(format!(
+        "usbipd listens on {}, so the device would be shared with the network. Restrict usbipd to loopback, or firewall port {} and set {}=Y",
+        exposed.join(", "),
+        USBIPD_PORT,
+        keys::OPTION_USBIPD_FIREWALLED
+    ))
+}
+
+/// Local addresses other than loopback that listen on `port` in a
+/// `/proc/net/tcp{,6}` table; one that cannot be parsed counts as exposed.
+fn exposed_listeners(table: &str, port: u16) -> Vec<String> {
+    table
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let local = fields.nth(1)?;
+            if fields.nth(1)? != "0A" {
+                return None;
+            }
+            let (addr, local_port) = local.rsplit_once(':')?;
+            if u16::from_str_radix(local_port, 16).ok()? != port {
+                return None;
+            }
+            match proc_net_addr(addr) {
+                Some(ip) if is_loopback(ip) => None,
+                Some(ip) => Some(ip.to_string()),
+                None => Some(addr.to_string()),
+            }
+        })
+        .collect()
+}
+
+/// The kernel prints each 32-bit word of the address in host byte order.
+fn proc_net_addr(hex: &str) -> Option<std::net::IpAddr> {
+    if hex.len() % 8 != 0 {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(hex.len() / 2);
+    for i in (0..hex.len()).step_by(8) {
+        bytes.extend(u32::from_str_radix(hex.get(i..i + 8)?, 16).ok()?.to_ne_bytes());
+    }
+    match bytes.len() {
+        4 => Some(<[u8; 4]>::try_from(bytes).ok()?.into()),
+        16 => Some(<[u8; 16]>::try_from(bytes).ok()?.into()),
+        _ => None,
+    }
+}
+
+fn is_loopback(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => v4.is_loopback(),
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback() || v6.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback())
+        }
+    }
+}
 
 /// Enough queue slots for a whole window of minimum-charge frames, so a
 /// channel's inbound queue can only fill up if the peer overran its window,
@@ -222,6 +311,26 @@ pub fn window_update_msg(channel_id: i32, add: u32) -> Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_endian = "little")]
+    fn usbipd_listening_beyond_loopback_is_exposed() {
+        let tcp = "  sl  local_address rem_address   st tx_queue rx_queue
+   0: 0100007F:0CA8 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 1 1
+   1: 0100007F:0CA8 0100007F:D431 01 00000000:00000000 00:00000000 00000000     0        0 2 1
+   2: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 3 1
+";
+        assert!(exposed_listeners(tcp, USBIPD_PORT).is_empty());
+        let tcp = tcp.replace("0: 0100007F:0CA8", "0: 00000000:0CA8");
+        assert_eq!(exposed_listeners(&tcp, USBIPD_PORT), ["0.0.0.0"]);
+
+        let tcp6 = "  sl  local_address                         remote_address                        st
+   0: 00000000000000000000000001000000:0CA8 00000000000000000000000000000000:0000 0A
+   1: 0000000000000000FFFF00000100007F:0CA8 00000000000000000000000000000000:0000 0A
+   2: 00000000000000000000000000000000:0CA8 00000000000000000000000000000000:0000 0A
+";
+        assert_eq!(exposed_listeners(tcp6, USBIPD_PORT), ["::"]);
+    }
 
     fn import_request(busid: &str) -> Vec<u8> {
         let mut req = vec![0x01, 0x11, 0x80, 0x03, 0x00, 0x00, 0x00, 0x00];

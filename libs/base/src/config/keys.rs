@@ -42,6 +42,9 @@ pub const OPTION_ENABLE_CAMERA: &str = "enable-camera";
 pub const OPTION_ENABLE_TERMINAL: &str = "enable-terminal";
 pub const OPTION_TERMINAL_PERSISTENT: &str = "terminal-persistent";
 pub const OPTION_ENABLE_USBIP: &str = "enable-usbip";
+/// "Y" when the administrator confirms the system `usbipd` port (3240) is
+/// closed to the network, which RustDesk cannot verify itself.
+pub const OPTION_USBIPD_FIREWALLED: &str = "usbipd-firewalled";
 pub const OPTION_ENABLE_AUDIO: &str = "enable-audio";
 pub const OPTION_ENABLE_TUNNEL: &str = "enable-tunnel";
 pub const OPTION_ENABLE_REMOTE_RESTART: &str = "enable-remote-restart";
@@ -279,6 +282,7 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_ENABLE_CAMERA,
     OPTION_ENABLE_TERMINAL,
     OPTION_ENABLE_USBIP,
+    OPTION_USBIPD_FIREWALLED,
     OPTION_ENABLE_REMOTE_PRINTER,
     OPTION_ENABLE_AUDIO,
     OPTION_ENABLE_TUNNEL,

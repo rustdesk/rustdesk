@@ -434,16 +434,25 @@ async fn run_channel(
 ) {
     send(&tx, open_msg(id, bus_id.clone()));
 
+    let handshake = tokio::time::sleep(usbip_flow::HANDSHAKE_TIMEOUT);
+    tokio::pin!(handshake);
     let (success, message) = loop {
-        match inbound.recv().await {
-            Some(Inbound::Opened { success, message }) => {
-                if !success {
-                    log::error!("usb push: peer refused channel {}: {}", id, message);
-                }
-                break (success, message);
+        tokio::select! {
+            _ = &mut handshake => {
+                log::warn!("usb push: no reply to opening channel {} in time", id);
+                send(&tx, close_msg(id));
+                return;
             }
-            Some(_) => continue,
-            None => return,
+            msg = inbound.recv() => match msg {
+                Some(Inbound::Opened { success, message }) => {
+                    if !success {
+                        log::error!("usb push: peer refused channel {}: {}", id, message);
+                    }
+                    break (success, message);
+                }
+                Some(_) => continue,
+                None => return,
+            },
         }
     };
     if !success {
@@ -471,11 +480,17 @@ async fn run_channel(
 
     // Whichever half ends first ends the other; only an end on our side
     // (local EOF or write error) needs a Close, the peer knows about its own.
+    let mut imported = false;
     let local_ended = loop {
         tokio::select! {
             _ = &mut to_tunnel => break true,
+            _ = &mut handshake, if !imported => {
+                log::warn!("usb push: no import reply on channel {} in time", id);
+                break true;
+            }
             msg = inbound.recv() => match msg {
                 Some(Inbound::Data(data)) => {
+                    imported = true;
                     if writer.write_all(&data).await.is_err() {
                         break true;
                     }
@@ -713,6 +728,28 @@ Port 00: <Port in Use> at High Speed(480Mbps)
         let mut buf = [0u8; 1];
         let read = tokio::time::timeout(std::time::Duration::from_secs(5), import.read(&mut buf));
         assert_eq!(read.await.expect("the import socket must close").unwrap(), 0);
+    }
+
+    /// `usbip attach` holds the privileged permit until its socket closes;
+    /// another session's cleanup (`UsbipMux::close_all`) waits for that permit.
+    #[tokio::test(start_paused = true)]
+    async fn a_peer_that_never_opens_cannot_hold_other_sessions_cleanup() {
+        use tokio::io::AsyncReadExt;
+        let privileged = Arc::new(Semaphore::new(1));
+        let permit = privileged.clone().try_acquire_owned().unwrap();
+        let (ours, mut theirs) = socket_pair().await;
+        tokio::spawn(async move {
+            let _permit = permit;
+            let mut buf = [0u8; 64];
+            while matches!(theirs.read(&mut buf).await, Ok(n) if n > 0) {}
+        });
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (_silent_peer, inbound) = mpsc::channel(4);
+        tokio::spawn(run_channel(-1, "1-1".into(), ours, tx, inbound, Flow::new(), CancellationToken::new()));
+
+        let cleanup = tokio::time::timeout(usbip_flow::HANDSHAKE_TIMEOUT * 2, privileged.acquire());
+        assert!(cleanup.await.is_ok(), "a silent peer must not hold the permit");
+        assert_eq!(close_count(&mut rx), 1, "the peer must be told the channel ended");
     }
 
     #[tokio::test]

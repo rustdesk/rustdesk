@@ -195,6 +195,12 @@ impl UsbipMux {
                     self.reply(bind_result_msg(b.bus_id, b.bind, "Session is closing".into()));
                     return;
                 }
+                if b.bind {
+                    if let Some(error) = usbip_flow::usbipd_isolation_error() {
+                        self.reply(bind_result_msg(b.bus_id, b.bind, error));
+                        return;
+                    }
+                }
                 let Ok(permit) = self.privileged.clone().try_acquire_owned() else {
                     self.reply(bind_result_msg(
                         b.bus_id,
