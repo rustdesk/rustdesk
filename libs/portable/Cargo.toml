@@ -15,13 +15,13 @@ md5 = "0.7"
 winapi = { version = "0.3", features = ["winbase", "libloaderapi"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+getrandom = "0.2"
 windows = { version = "0.61", features = [
     "Wdk",
     "Wdk_System",
     "Wdk_System_SystemServices",
     "Win32",
     "Win32_Security_Authorization",
-    "Win32_Security_Cryptography",
     "Win32_Storage_FileSystem",
     "Win32_System",
     "Win32_System_SystemInformation",

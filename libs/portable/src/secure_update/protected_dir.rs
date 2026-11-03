@@ -18,7 +18,6 @@ use windows::{
             Authorization::{
                 ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
             },
-            Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG},
             PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
         },
         Storage::FileSystem::{
@@ -242,13 +241,11 @@ fn cleanup_create_failure(path: &Path, create_error: io::Error) -> io::Error {
 
 fn random_suffix() -> io::Result<String> {
     let mut bytes = [0_u8; RANDOM_BYTE_COUNT];
-    let status = unsafe { BCryptGenRandom(None, &mut bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
-    if status.is_err() {
-        return Err(io::Error::other(format!(
-            "BCryptGenRandom failed with NTSTATUS 0x{:08x}",
-            status.0
-        )));
-    }
+    getrandom::getrandom(&mut bytes).map_err(|error| {
+        io::Error::other(format!(
+            "Failed to generate update directory suffix: {error}"
+        ))
+    })?;
     let mut suffix = String::with_capacity(RANDOM_BYTE_COUNT * HEX_CHARS_PER_BYTE);
     for byte in bytes {
         suffix.push(HEX_DIGITS[(byte >> HALF_BYTE_BITS) as usize] as char);
