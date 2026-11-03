@@ -249,6 +249,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
+  console:
+    dependency: transitive
+    description:
+      name: console
+      sha256: e04e7824384c5b39389acdd6dc7d33f3efe6b232f6f16d7626f194f6a01ad69a
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.1.0"
   contextmenu:
     dependency: "direct main"
     description:
@@ -676,6 +684,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.7.2"
+  get_it:
+    dependency: transitive
+    description:
+      name: get_it
+      sha256: "2b5c6b077aad30bba9782178baff6076a2044141f1d5f2f15b43bca3fbe74874"
+      url: "https://pub.dev"
+    source: hosted
+    version: "9.3.0"
   glob:
     dependency: transitive
     description:
@@ -892,6 +908,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.0"
+  msix:
+    dependency: "direct dev"
+    description:
+      name: msix
+      sha256: "61415c352e8aea084332b8a5514e6408c961c8cdeca202804fff1040eb555ac7"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.18.0"
   nested:
     dependency: transitive
     description:
