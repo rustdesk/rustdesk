@@ -18,9 +18,8 @@ import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../common/widgets/autocomplete.dart';
-import '../../common/widgets/request_approval_menu.dart';
+import '../../common/widgets/native_popup_menu.dart';
 import '../../models/platform_model.dart';
-import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 
 class OnlineStatusWidget extends StatefulWidget {
   const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
@@ -341,7 +340,7 @@ class _ConnectionPageState extends State<ConnectionPage>
         isTcpTunneling: isTcpTunneling);
   }
 
-  RequestApprovalMenu _requestApprovalMenu(BuildContext context) {
+  MenuEntrySubMenu<String> _requestApprovalMenu(BuildContext context) {
     MenuEntryButton<String> action(String title,
             {bool isFileTransfer = false,
             bool isViewCamera = false,
@@ -359,9 +358,9 @@ class _ConnectionPageState extends State<ConnectionPage>
           dismissOnClicked: true,
         );
 
-    return RequestApprovalMenu(
-      title: translate('Request approval'),
-      padding: EdgeInsets.symmetric(horizontal: kDesktopMenuPadding.left),
+    return MenuEntrySubMenu<String>(
+      text: translate('Request approval'),
+      padding: EdgeInsets.only(left: kDesktopMenuPadding.left),
       arrowScale: MenuConfig.iconScale,
       entries: [
         action('Connect'),
@@ -586,8 +585,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                                 _menuOpen.value = true;
                                 final x = offset.dx;
                                 final y = offset.dy;
-                                await mod_menu
-                                    .showMenu(
+                                await showNativePopupMenu<String>(
                                   context: context,
                                   position: RelativeRect.fromLTRB(x, y, x, y),
                                   items: [
@@ -629,19 +627,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                                         MenuEntryDivider<String>(),
                                         _requestApprovalMenu(context),
                                       ])
-                                      .map((e) => e.build(
-                                          context,
-                                          const MenuConfig(
-                                              commonColor: CustomPopupMenuTheme
-                                                  .commonColor,
-                                              height:
-                                                  CustomPopupMenuTheme.height,
-                                              dividerHeight:
-                                                  CustomPopupMenuTheme
-                                                      .dividerHeight)))
-                                      .expand((i) => i)
                                       .toList(),
-                                  elevation: 8,
                                 )
                                     .then((_) {
                                   _menuOpen.value = false;

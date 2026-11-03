@@ -13,12 +13,11 @@ import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
-import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../../desktop/widgets/popup_menu.dart';
-import 'request_approval_menu.dart';
+import 'native_popup_menu.dart';
 import 'dart:math' as math;
 
-typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
+typedef PopupMenuEntryBuilder = Future<List<MenuEntryBase<String>>>
     Function(BuildContext);
 
 enum PeerUiType { grid, tile, list }
@@ -526,11 +525,12 @@ class _PeerCardState extends State<_PeerCard>
   /// Show the peer menu and handle user's choice.
   /// User might remove the peer or send a file to the peer.
   void _showPeerMenu(String id) async {
-    await mod_menu.showMenu(
+    final items = await super.widget.popupMenuEntryBuilder(context);
+    if (!mounted) return;
+    await showNativePopupMenu<String>(
       context: context,
       position: _menuPos,
-      items: await super.widget.popupMenuEntryBuilder(context),
-      elevation: 8,
+      items: items,
     );
   }
 
@@ -554,21 +554,9 @@ abstract class BasePeerCard extends StatelessWidget {
       tab: tab,
       connect: (BuildContext context, String id) =>
           connectInPeerTab(context, peer, tab),
-      popupMenuEntryBuilder: _buildPopupMenuEntry,
+      popupMenuEntryBuilder: _buildMenuItems,
     );
   }
-
-  Future<List<mod_menu.PopupMenuEntry<String>>> _buildPopupMenuEntry(
-          BuildContext context) async =>
-      (await _buildMenuItems(context))
-          .map((e) => e.build(
-              context,
-              const MenuConfig(
-                  commonColor: CustomPopupMenuTheme.commonColor,
-                  height: CustomPopupMenuTheme.height,
-                  dividerHeight: CustomPopupMenuTheme.dividerHeight)))
-          .expand((i) => i)
-          .toList();
 
   @protected
   Future<List<MenuEntryBase<String>>> _buildMenuItems(BuildContext context);
@@ -658,8 +646,8 @@ abstract class BasePeerCard extends StatelessWidget {
           loginMethod: 'request-approval',
         );
 
-    return RequestApprovalMenu(
-      title: translate('Request approval'),
+    return MenuEntrySubMenu<String>(
+      text: translate('Request approval'),
       padding: menuPadding,
       entries: [
         action('Connect'),
