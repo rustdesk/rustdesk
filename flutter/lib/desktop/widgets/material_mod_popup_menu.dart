@@ -389,7 +389,33 @@ class PopupMenuItemState<T, W extends PopupMenuItem<T>> extends State<W> {
         // ),
         child: TextButton(
           onPressed: widget.enabled ? handleTap : null,
-          child: item,
+          style: ButtonStyle(
+            shape: const MaterialStatePropertyAll(RoundedRectangleBorder()),
+            overlayColor: MaterialStateProperty.resolveWith((states) {
+              final color = theme.colorScheme.onSurface;
+              if (states.contains(MaterialState.pressed)) {
+                return color.withOpacity(0.1);
+              }
+              if (states.contains(MaterialState.hovered)) {
+                return color.withOpacity(0.08);
+              }
+              if (states.contains(MaterialState.focused)) {
+                return color.withOpacity(0.1);
+              }
+              return Colors.transparent;
+            }),
+          ),
+          child: TextButtonTheme(
+            data: TextButtonThemeData(
+              // Inner buttons keep their layout and callbacks; the row paints feedback.
+              style: (TextButtonTheme.of(context).style ?? const ButtonStyle())
+                  .copyWith(
+                overlayColor: const MaterialStatePropertyAll(Colors.transparent),
+                splashFactory: NoSplash.splashFactory,
+              ),
+            ),
+            child: item,
+          ),
         ),
       ),
     );
