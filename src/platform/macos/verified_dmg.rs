@@ -4,10 +4,11 @@ use std::{
     io::{self, Write},
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, ExitStatus},
 };
 
 const UPDATE_DMG_MOUNT_TEMPLATE: &str = "/tmp/.rustdeskmount-XXXXXX";
+const HDIUTIL_DETACH_DEPRECATED_MACOS_VERSION: u32 = 27;
 
 #[derive(Debug)]
 pub(super) struct VerifiedDmg {
@@ -105,10 +106,7 @@ impl DmgGuard {
 
 impl Drop for DmgGuard {
     fn drop(&mut self) {
-        match Command::new("/usr/bin/hdiutil")
-            .args(["detach", self.0.as_str(), "-force"])
-            .status()
-        {
+        match detach_dmg(&self.0) {
             Ok(status) if !status.success() => {
                 log::warn!("Failed to detach DMG mount {}: {}", self.0, status);
             }
@@ -117,6 +115,26 @@ impl Drop for DmgGuard {
         }
         remove_dmg_mount_point(&self.0);
     }
+}
+
+fn detach_dmg(mount_point: &str) -> io::Result<ExitStatus> {
+    if super::major_version() >= HDIUTIL_DETACH_DEPRECATED_MACOS_VERSION {
+        match Command::new("/usr/sbin/diskutil")
+            .args(["eject", "force", mount_point])
+            .status()
+        {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                log::warn!(
+                    "/usr/sbin/diskutil not found; falling back to hdiutil: {}",
+                    err
+                );
+            }
+            result => return result,
+        }
+    }
+    Command::new("/usr/bin/hdiutil")
+        .args(["detach", mount_point, "-force"])
+        .status()
 }
 
 pub(super) fn attach_dmg(dmg_path: &str) -> ResultType<DmgGuard> {
