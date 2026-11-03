@@ -34,6 +34,14 @@ const CREATE_ATTEMPTS: usize = 16;
 const RANDOM_BYTE_COUNT: usize = 16;
 const HEX_CHARS_PER_BYTE: usize = 2;
 const UPDATE_DIR_PREFIX: &str = "RustDeskUpdate-";
+// O:BA / G:BA: owner and primary group are BUILTIN\Administrators.
+// D:P: protected DACL; do not inherit permissions from the parent.
+// A = allow; OI/CI = inherit to files/subdirectories; FA = full control.
+// The two ACEs grant full control only to SYSTEM (SY) and Administrators (BA).
+// Keep BA as owner: a user owner implicitly has WRITE_DAC and could let the
+// same user's unelevated processes rewrite the ACL and tamper with the payload.
+// Assigning BA as owner fails for a filtered, unelevated administrator token.
+// https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
 const UPDATE_DIR_SDDL: &str = "O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
 const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
 const HALF_BYTE_BITS: u8 = 4;
