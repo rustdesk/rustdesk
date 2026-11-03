@@ -59,6 +59,7 @@ impl FrameRaw {
     fn set_enable(&mut self, value: bool) {
         self.enable = value;
         self.ready = false;
+        self.data = Vec::new();
     }
 
     fn update(&mut self, data: *mut u8, len: usize) {
@@ -81,12 +82,13 @@ impl FrameRaw {
             return None;
         }
         self.ready = false;
+        // Never true: `last` starts empty and only `would_block_if_equal` fills it. Left off on
+        // purpose: Android sends a frame only when the screen recomposes, so repeats are rare.
         if last.len() == self.data.len() && crate::would_block_if_equal(last, &self.data).is_err()
         {
             return None;
         }
-        dst.clear();
-        dst.extend_from_slice(&self.data);
+        std::mem::swap(dst, &mut self.data);
         Some(())
     }
 }
