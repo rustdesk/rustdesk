@@ -1914,10 +1914,18 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> ResultType<String>
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
     if is_self_service_running() {
         // This CLI entry is synchronous. Portable builds reuse the retained user configuration.
-        tokio::runtime::Builder::new_current_thread()
+        let result = tokio::runtime::Builder::new_current_thread()
             .enable_all()
-            .build()?
-            .block_on(crate::trusted_devices::config::refresh_from_server())?;
+            .build()
+            .map_err(hbb_common::anyhow::Error::from)
+            .and_then(|runtime| {
+                runtime.block_on(crate::trusted_devices::config::refresh_from_server())
+            });
+        if let Err(error) = result {
+            log::warn!(
+                "Failed to synchronize configuration before uninstall; continuing: {error:#}"
+            );
+        }
     }
     run_cmds(get_uninstall(kill_self, true)?, true, "uninstall")
 }
@@ -3355,8 +3363,9 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
                 runtime.block_on(crate::trusted_devices::config::refresh_from_server())
             });
         if let Err(error) = result {
-            log::error!("Cannot stop service before synchronizing its configuration: {error}");
-            return true;
+            log::warn!(
+                "Failed to synchronize configuration before service removal; continuing: {error:#}"
+            );
         }
     }
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
