@@ -797,7 +797,9 @@ struct RemotePage {
   }
 
   // Soft keyboard diff: send only the appended tail; local deletions become
-  // VK_BACK clicks.
+  // VK_BACK clicks. With a modifier chip active, appended characters go
+  // through ffiInputKey instead: input_string is a Unicode sequence and never
+  // carries modifiers, so Ctrl+A would type "a".
   private onKeyboardChange(value: string): void {
     const sent = this.sentKeyboardText;
     if (value === sent) {
@@ -813,7 +815,14 @@ struct RemotePage {
       this.pressKey('VK_BACK');
     }
     if (common < value.length) {
-      ffiInputString(this.uuid, value.substring(common));
+      const appended = value.substring(common);
+      if (this.ctrlOn || this.altOn || this.shiftOn) {
+        for (const ch of appended) {
+          this.pressKey(ch);
+        }
+      } else {
+        ffiInputString(this.uuid, appended);
+      }
     }
     this.sentKeyboardText = value;
   }
