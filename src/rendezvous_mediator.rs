@@ -49,6 +49,28 @@ fn connection_meta(
     }
 }
 
+// Relay addresses this peer put in its own punch replies. A genuine RequestRelay only echoes one
+// of them back, so any other address was picked by whoever sent the request, not by this peer.
+// No expiry: every entry is a relay this peer chose itself, and the controller may wait for its
+// direct attempts for an unbounded time before it asks for the relay.
+static REPORTED_RELAYS: std::sync::Mutex<VecDeque<String>> = std::sync::Mutex::new(VecDeque::new());
+const MAX_REPORTED_RELAYS: usize = 32;
+
+fn remember_reported_relay(relay_server: &str) {
+    let relay_server = check_port(relay_server, config::RELAY_PORT);
+    let mut relays = REPORTED_RELAYS.lock().unwrap();
+    relays.retain(|r| *r != relay_server);
+    if relays.len() >= MAX_REPORTED_RELAYS {
+        relays.pop_front();
+    }
+    relays.push_back(relay_server);
+}
+
+fn is_reported_relay(relay_server: &str) -> bool {
+    let relay_server = check_port(relay_server, config::RELAY_PORT);
+    REPORTED_RELAYS.lock().unwrap().contains(&relay_server)
+}
+
 lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Mutex<String> = Default::default();
     static ref LAST_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
@@ -670,6 +692,10 @@ impl RendezvousMediator {
     }
 
     async fn handle_request_relay(&self, rr: RequestRelay, server: ServerPtr) -> ResultType<()> {
+        if let Err(err) = self.check_relay_request(&rr) {
+            hbb_common::throttled_log!(PUNCH_LOG_INTERVAL, warn, "Ignored relay request: {}", err);
+            return Ok(());
+        }
         let addr = AddrMangle::decode(&rr.socket_addr);
         let last = *LAST_RELAY_MSG.lock().await;
         *LAST_RELAY_MSG.lock().await = (addr, Instant::now());
@@ -771,6 +797,7 @@ impl RendezvousMediator {
         }
         let peer_addr_v6 = hbb_common::AddrMangle::decode(&fla.socket_addr_v6);
         let relay_server = self.get_relay_server(fla.relay_server.clone());
+        remember_reported_relay(&relay_server);
         let relay = use_ws() || Config::is_proxy();
         let mut socket_addr_v6 = Default::default();
         let meta = connection_meta(
@@ -1119,6 +1146,7 @@ impl RendezvousMediator {
             .await;
         }
         let relay_server = self.get_relay_server(ph.relay_server);
+        remember_reported_relay(&relay_server);
         // for ensure, websocket go relay directly
         // A symmetric NAT relays the legacy transports but deliberately not WebRTC: the answer
         // built above rides along on the relay request, and ICE probes the candidate pairs rather
@@ -1338,6 +1366,17 @@ impl RendezvousMediator {
             relay_server = crate::increase_port(&self.host, 1);
         }
         relay_server
+    }
+
+    fn check_relay_request(&self, rr: &RequestRelay) -> ResultType<()> {
+        crate::common::check_relay_uuid(&rr.uuid)?;
+        if !is_reported_relay(&rr.relay_server)
+            && check_port(&rr.relay_server, config::RELAY_PORT)
+                != check_port(self.get_relay_server(String::new()), config::RELAY_PORT)
+        {
+            bail!("relay server {:?} was not offered by this peer", rr.relay_server);
+        }
+        Ok(())
     }
 }
 
@@ -1840,5 +1879,29 @@ mod tests {
         assert!(AnswererSlot::take().is_none());
         drop(held);
         assert!(AnswererSlot::take().is_some());
+    }
+
+    #[test]
+    fn relay_request_must_name_a_relay_this_peer_offered() {
+        let host: std::net::SocketAddr = "127.0.0.1:21116".parse().unwrap();
+        let mediator = RendezvousMediator {
+            addr: host.into_target_addr().unwrap(),
+            host: host.to_string(),
+            host_prefix: String::new(),
+            keep_alive: 0,
+        };
+        super::remember_reported_relay("reported-relay.example");
+        let request = |relay_server: &str, uuid: &str| super::RequestRelay {
+            relay_server: relay_server.to_owned(),
+            uuid: uuid.to_owned(),
+            ..Default::default()
+        };
+        let uuid = "e4c181d0-41c7-4ae6-8ef0-36581b6b2b12";
+        let reported = request("reported-relay.example:21117", uuid);
+        assert!(mediator.check_relay_request(&reported).is_ok());
+        let unknown = request("other-host.example:21117", uuid);
+        assert!(mediator.check_relay_request(&unknown).is_err());
+        let bad_uuid = request("reported-relay.example", "a\r\nb");
+        assert!(mediator.check_relay_request(&bad_uuid).is_err());
     }
 }
