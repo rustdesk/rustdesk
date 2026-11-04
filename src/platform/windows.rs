@@ -1923,8 +1923,11 @@ pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
             });
         if let Err(error) = result {
             log::warn!(
-                "Failed to synchronize configuration before uninstall; continuing: {error:#}"
+                "Failed to synchronize configuration before uninstall; revoking local trusted devices before continuing: {error:#}"
             );
+            if let Err(error) = crate::trusted_devices::clear() {
+                log::warn!("Failed to revoke local trust; continuing removal: {error:#}");
+            }
         }
     }
     run_cmds(get_uninstall(kill_self, true)?, true, "uninstall")
@@ -3364,8 +3367,11 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
             });
         if let Err(error) = result {
             log::warn!(
-                "Failed to synchronize configuration before service removal; continuing: {error:#}"
+                "Failed to synchronize configuration before service removal; revoking local trusted devices before continuing: {error:#}"
             );
+            if let Err(error) = crate::trusted_devices::clear() {
+                log::warn!("Failed to revoke local trust; continuing removal: {error:#}");
+            }
         }
     }
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
