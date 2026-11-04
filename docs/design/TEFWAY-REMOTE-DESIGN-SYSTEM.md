@@ -1,7 +1,7 @@
 # Tefway Remote — Design System
 
-Status: implemented in `flutter/lib/tefway/`, gate `TEFWAY-REMOTE-UX-02` (subgate
-UX-02A/B/C/E). Product copy is Brazilian Portuguese.
+Status: implemented in `flutter/lib/tefway/`, gate `TEFWAY-REMOTE-UX-02`.
+Product copy is Brazilian Portuguese.
 
 ## 1. Direction
 
@@ -10,7 +10,8 @@ one-pixel borders, moderate elevation, strong typographic hierarchy, one primary
 action per screen, and status that never relies on colour alone.
 
 Rejected on purpose: neon, heavy gradients, decorative illustrations, marketing
-banners, and the pink/orange gradient cards inherited from RustDesk.
+banners, and the pink/orange and cyan/blue gradient cards inherited from
+RustDesk.
 
 ## 2. Tokens
 
@@ -25,17 +26,18 @@ Single source: `flutter/lib/tefway/design.dart`.
 | `deepNavy` | `#101C30` | Application background |
 | `surface` | `#1B2B43` | Cards, dialogs |
 | `surfaceElevated` | `#233B56` | Hover/focus surface |
+| `inputFill` | `#16253A` | Inputs and inset blocks |
 | `textPrimary` | `#F5F8FD` | Primary text |
 | `textSecondary` | `#A9BCD7` | Labels, captions, secondary text |
 | `border` | `#37516F` | Card and input borders |
 | `positive` | `#59C99D` | Ready, available |
-| `attention` | `#FFA700` | Active session, advisory notice |
+| `attention` | `#FFA700` | Active session, advisory notice, pending consent |
 | `critical` | `#E76767` | Failure, refusal, destructive action |
 
 Contrast: `textPrimary` on `deepNavy`/`surface` is above WCAG AA for normal text;
-`textSecondary` on `surface` sits just above AA for 13 px and is used only for
-labels and captions, never as the sole carrier of meaning. Status always pairs
-the colour with an icon and a text label.
+`textSecondary` on `surface` sits just above AA at 13 px and is used for labels
+and captions, never as the sole carrier of meaning. Status always pairs the
+colour with an icon and a text label.
 
 Brand blue is not painted over every button: the primary action uses `actionBlue`
 for clarity and the brand stays in the mark and surface accents.
@@ -45,8 +47,8 @@ for clarity and the brand stays in the mark and surface accents.
 - Spacing scale: 4 / 8 / 12 / 16 / 24 / 32 (`TefwaySpacing`).
 - Radii: 8 (inputs, chips), 12 (inner blocks), 16 (cards) — never pills.
 - Type scale (`TefwayTextStyles`): `appTitle` 18/700, `sectionTitle` 15/600,
-  `label` 12/600 uppercase-ish tracking, `body` 13, `bodySecondary` 13/secondary,
-  `caption` 11, `code` 26/600 tabular, `statusLabel` 12/600.
+  `label` 12/600, `body` 13, `bodySecondary` 13/secondary, `caption` 11,
+  `code` 26/600 tabular, `statusLabel` 12/600.
 - Identification codes use `FontFeature.tabularFigures()` so changing digits do
   not shift the string.
 - Font family: platform default. Inter is not bundled; adding a font file is a
@@ -86,14 +88,15 @@ more than one surface, or carrying a security meaning, were created.
 | `TefwayEmptyState` | Honest empty state with explanation |
 | `TefwayNotice` | Contextual warning with inline "Saiba mais" details |
 | `TefwaySupportFooter` | Signature, version, licence attribution |
-| `TefwayCoreErrorNotice` | Real core error surfaced with a retry hook (`notices.dart`) |
-| `TefwayErrorFeedback` | Covered by `TefwayStatusIndicator` + `TefwayCoreErrorNotice` |
+| `TefwayConsentCard` (`consent.dart`) | Incoming session request: requester, capability switches, Recusar / Permitir acesso |
+| `TefwayCapability` (`consent.dart`) | One permission row of the consent card |
+| `TefwayCoreErrorNotice` (`notices.dart`) | Real core error surfaced with a retry hook |
 
-`TefwayConsentDialog` and `TefwayPermissionNotice` were **not** created: the
-session authorization UI still lives in the core approval window
-(`src/server/connection.rs` → connection manager), and a Tefway dialog widget
-with no consumer would be decoration. Restyling that window is UX-02C/D
-remaining work (see the gate report).
+The consent card is presentation only: it receives callbacks and never calls
+`sendLoginResponse` itself. Those calls stay in
+`flutter/lib/desktop/pages/server_page.dart`, beside the click-tampering guard
+(`checkClickTime`) the core window already relied on, so the Tefway surface
+cannot grant more than the stock window could.
 
 ## 4. Accessibility rules applied
 
@@ -106,5 +109,7 @@ remaining work (see the gate report).
   reader and copied manually.
 - Text uses relative line heights and no fixed-height rows around text, so
   scaling does not clip labels.
+- Consent capabilities are `Switch.adaptive` with visible text labels, not
+  colour-coded tiles.
 - No animation was introduced, so there is nothing to reduce for
   `MediaQuery.disableAnimations`.

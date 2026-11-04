@@ -21,6 +21,9 @@ import '../../common/widgets/chat_page.dart';
 import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
+import '../../tefway/branding.dart';
+import '../../tefway/consent.dart';
+import '../../tefway/strings.dart';
 
 /// Set only by this window's own close control, and only once the user has confirmed. Any other
 /// way the window can go - a session logout closing every window, the window manager, a native
@@ -361,6 +364,9 @@ class ConnectionManagerState extends State<ConnectionManager>
 }
 
 Widget buildConnectionCard(Client client) {
+  if (isTefwayBuild() && !client.authorized) {
+    return buildTefwayConsentCard(client);
+  }
   return Consumer<ServerModel>(
     builder: (context, value, child) => Column(
       mainAxisAlignment: MainAxisAlignment.start,
@@ -382,6 +388,106 @@ Widget buildConnectionCard(Client client) {
         )
       ],
     ).paddingSymmetric(vertical: 4.0, horizontal: 8.0),
+  );
+}
+
+Widget buildTefwayConsentCard(Client client) {
+  final model = gFFI.serverModel;
+  final canElevate = client.type_() == ClientType.remote &&
+      bind.cmCanElevate() &&
+      model.showElevation &&
+      bind.mainGetBuildinOption(
+              key: kOptionHideElevateButtonInAcceptWindow) !=
+          'Y';
+  final capabilities = <TefwayCapability>[
+    if (client.type_() == ClientType.camera) ...[
+      TefwayCapability(
+        key: 'audio',
+        label: TefwayStrings.capAudio,
+        icon: Icons.volume_up_outlined,
+        enabled: client.audio,
+      ),
+      TefwayCapability(
+        key: 'recording',
+        label: TefwayStrings.capRecording,
+        icon: Icons.videocam_outlined,
+        enabled: client.recording,
+      ),
+    ] else ...[
+      TefwayCapability(
+        key: 'keyboard',
+        label: TefwayStrings.capKeyboard,
+        icon: Icons.keyboard_outlined,
+        enabled: client.keyboard,
+      ),
+      TefwayCapability(
+        key: 'clipboard',
+        label: TefwayStrings.capClipboard,
+        icon: Icons.content_paste_rounded,
+        enabled: client.clipboard,
+      ),
+      TefwayCapability(
+        key: 'audio',
+        label: TefwayStrings.capAudio,
+        icon: Icons.volume_up_outlined,
+        enabled: client.audio,
+      ),
+      TefwayCapability(
+        key: 'file',
+        label: TefwayStrings.capFile,
+        icon: Icons.folder_outlined,
+        enabled: client.file,
+      ),
+      TefwayCapability(
+        key: 'restart',
+        label: TefwayStrings.capRestart,
+        icon: Icons.restart_alt_rounded,
+        enabled: client.restart,
+      ),
+      TefwayCapability(
+        key: 'recording',
+        label: TefwayStrings.capRecording,
+        icon: Icons.videocam_outlined,
+        enabled: client.recording,
+      ),
+      if (isWindows)
+        TefwayCapability(
+          key: 'block_input',
+          label: TefwayStrings.capBlockInput,
+          icon: Icons.block,
+          enabled: client.blockInput,
+        ),
+      if (bind.mainSupportedPrivacyModeImpls() != '[]')
+        TefwayCapability(
+          key: 'privacy_mode',
+          label: TefwayStrings.capPrivacy,
+          icon: Icons.visibility_off_outlined,
+          enabled: client.privacyMode,
+        ),
+    ],
+  ];
+  return TefwayConsentCard(
+    peerName: client.name.isEmpty ? client.peerId : client.name,
+    peerId: client.peerId,
+    capabilities: capabilities,
+    onToggle: (key, enabled) => checkClickTime(client.id, () {
+      bind.cmSwitchPermission(connId: client.id, name: key, enabled: enabled);
+    }),
+    onAllow: () => checkClickTime(client.id, () {
+      model.sendLoginResponse(client, true);
+      windowManager.minimize();
+    }),
+    onAllowAndElevate: canElevate
+        ? () => checkClickTime(client.id, () {
+              model.sendLoginResponse(client, true);
+              model.setShowElevation(false);
+              bind.cmElevatePortable(connId: client.id);
+              windowManager.minimize();
+            })
+        : null,
+    onRefuse: () => checkClickTime(client.id, () {
+      bind.cmCloseConnection(connId: client.id);
+    }),
   );
 }
 

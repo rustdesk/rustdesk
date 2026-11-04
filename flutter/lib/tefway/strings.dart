@@ -71,6 +71,27 @@ class TefwayStrings {
   static const clientNoOutgoing =
       'Este aplicativo não inicia conexões para outros computadores.';
 
+  // Consent (incoming session, Client side).
+  static const consentSubtitle = 'Solicitação de suporte remoto';
+  static const consentWaiting = 'Aguardando sua autorização';
+  static const consentPeerLabel = 'Solicitado por';
+  static const consentCapabilities = 'Se você permitir, o técnico poderá';
+  static const consentAllow = 'Permitir acesso';
+  static const consentAllowElevate = 'Permitir e elevar';
+  static const consentRefuse = 'Recusar';
+  static const consentNote =
+      'Você pode ajustar essas permissões antes de aceitar. Nada é liberado sem este clique.';
+  static const consentSessionNote =
+      'O atendimento termina quando esta janela for encerrada.';
+  static const capKeyboard = 'Ver e controlar teclado e mouse';
+  static const capClipboard = 'Usar a área de transferência';
+  static const capAudio = 'Ouvir o áudio deste computador';
+  static const capFile = 'Transferir arquivos';
+  static const capRestart = 'Reiniciar o computador';
+  static const capRecording = 'Gravar a sessão';
+  static const capBlockInput = 'Bloquear o seu teclado e mouse';
+  static const capPrivacy = 'Ocultar a sua tela durante o atendimento';
+
   // Notices.
   static const noticePrivacy = 'Seu computador só é acessado com sua autorização.';
   static const uacTitle = 'Permissões administrativas';
