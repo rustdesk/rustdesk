@@ -162,6 +162,17 @@ def build(profile, features=(), skip_cargo=False):
             env=env,
         )
     if not skip_cargo:
+        # Gate 1, item 1/6: force build.rs to re-run for the requested profile.
+        # cargo's fingerprint does not reliably invalidate librustdesk when only
+        # TEFWAY_PROFILE changes (rerun-if-env-changed needs a rebuild trigger),
+        # so touch build.rs (rerun-if-changed=build.rs) and drop any stale
+        # manifest. build.rs then rewrites tefway-build-manifest.json and cargo
+        # recompiles librustdesk with TEFWAY_PROFILE baked into the binary.
+        manifest_src = build_manifest_path()
+        if manifest_src.is_file():
+            manifest_src.unlink()
+        build_rs = REPO / "build.rs"
+        build_rs.touch()
         feats = ",".join(("flutter",) + tuple(features))
         run(
             ["cargo", "build", "--locked", "--features", feats, "--lib", "--release"],
