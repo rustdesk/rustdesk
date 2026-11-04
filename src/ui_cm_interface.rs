@@ -36,6 +36,8 @@ use serde_derive::Serialize;
 use std::iter::FromIterator;
 #[cfg(not(any(target_os = "ios")))]
 use std::path::PathBuf;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::sync::atomic::AtomicBool;
 #[cfg(target_os = "windows")]
 use std::sync::Arc;
 use std::{
@@ -177,6 +179,18 @@ lazy_static::lazy_static! {
 
 static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
+/// Safety net for #15698: on Linux the CM process only exits when its Flutter
+/// window is destroyed (GtkApplication hold/release). If the Dart side fails
+/// to close the window after the last client leaves (e.g. a frozen isolate),
+/// the process and its window linger forever. While `CM_IDLE_EXIT_ARMED` is
+/// set, the CM exits via `quit_cm()` if it stays empty for
+/// `CM_IDLE_EXIT_TIMEOUT`. A healthy UI closes the window in ~6s, well before
+/// this fires, so the watchdog only kicks in when the UI has already failed.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+static CM_IDLE_EXIT_ARMED: AtomicBool = AtomicBool::new(false);
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const CM_IDLE_EXIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[derive(Clone)]
 pub struct ConnectionManager<T: InvokeUiCM> {
     pub ui_handler: T,
@@ -284,6 +298,10 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
     fn remove_connection(&self, id: i32, close: bool) {
         if close {
             CLIENTS.write().unwrap().remove(&id);
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if CLIENTS.read().unwrap().is_empty() {
+                arm_idle_exit_watchdog();
+            }
         } else {
             CLIENTS
                 .write()
@@ -391,6 +409,10 @@ pub fn close_window(id: i32) {
 #[inline]
 pub fn remove(id: i32) {
     CLIENTS.write().unwrap().remove(&id);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if CLIENTS.read().unwrap().is_empty() {
+        arm_idle_exit_watchdog();
+    }
 }
 
 // server mode send chat to peer
@@ -856,6 +878,8 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     }
     match ipc::new_listener("_cm").await {
         Ok(mut incoming) => {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            arm_idle_exit_watchdog();
             while let Some(result) = incoming.next().await {
                 match result {
                     Ok(stream) => {
@@ -1814,6 +1838,39 @@ pub fn close_voice_call(id: i32) {
         #[cfg(not(any(target_os = "ios")))]
         allow_err!(client.tx.send(Data::CloseVoiceCall("".to_owned())));
     };
+}
+
+/// Spawns a one-shot watchdog that exits the CM via `quit_cm()` if no client
+/// is connected within `CM_IDLE_EXIT_TIMEOUT`. See `CM_IDLE_EXIT_ARMED`.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn arm_idle_exit_watchdog() {
+    if CM_IDLE_EXIT_ARMED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return;
+    }
+    std::thread::Builder::new()
+        .name("cm-idle-exit".into())
+        .spawn(|| {
+            let deadline = std::time::Instant::now() + CM_IDLE_EXIT_TIMEOUT;
+            while std::time::Instant::now() < deadline {
+                if !CLIENTS.read().unwrap().is_empty() {
+                    CM_IDLE_EXIT_ARMED.store(false, Ordering::SeqCst);
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            if CLIENTS.read().unwrap().is_empty() {
+                log::info!(
+                    "cm: no clients for {:?}, exiting (UI did not close the window)",
+                    CM_IDLE_EXIT_TIMEOUT
+                );
+                quit_cm();
+            }
+            CM_IDLE_EXIT_ARMED.store(false, Ordering::SeqCst);
+        })
+        .ok();
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
