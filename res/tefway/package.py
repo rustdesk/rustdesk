@@ -61,6 +61,19 @@ SERVER_IDENTITY = {
 }
 
 
+def flutter_cmd(extra):
+    """Build the command to run Flutter.
+
+    On Windows `flutter` is a `.bat` wrapper that `CreateProcess` cannot
+    execute directly, so it must be launched through `cmd /c`. `cargo` is a
+    real `.exe` and is unaffected.
+    """
+    cmd = ["flutter"] + list(extra)
+    if os.name == "nt":
+        cmd = ["cmd", "/c"] + cmd
+    return cmd
+
+
 def run(cmd, cwd=None, env=None):
     printable = " ".join(str(c) for c in cmd)
     print(f"+ {printable}")
@@ -166,7 +179,9 @@ def build(profile, features=(), skip_cargo=False):
                 "in the binary; refusing to package a mismatched profile"
             )
     run(
-        ["flutter", "build", "linux" if os.name != "nt" else "windows", "--release"],
+        flutter_cmd(
+            ["build", "linux" if os.name != "nt" else "windows", "--release"]
+        ),
         cwd=REPO / "flutter",
         env=env,
     )

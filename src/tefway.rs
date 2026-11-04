@@ -6,6 +6,7 @@
 //! stock RustDesk behaviour for ordinary development builds.
 
 use base::config::keys;
+use hbb_common::log;
 
 /// Tefway rendezvous (ID) server. The default rendezvous port 21116 is used,
 /// so the value is a bare host.

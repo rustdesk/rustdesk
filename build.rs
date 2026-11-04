@@ -141,7 +141,7 @@ fn git_commit() -> String {
 /// resources (cargo features) and the server identity the build is pinned to.
 /// No secrets are included: the public key is handed to every client.
 fn write_build_manifest(profile: &str) {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     let target_dir = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("target"));
@@ -149,10 +149,10 @@ fn write_build_manifest(profile: &str) {
     if let Some(parent) = manifest_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let mut features: Vec<&str> = std::env::vars()
+    let mut features: Vec<String> = std::env::vars()
         .filter_map(|(key, value)| {
             if value == "1" {
-                key.strip_prefix("CARGO_FEATURE_")
+                key.strip_prefix("CARGO_FEATURE_").map(|s| s.to_owned())
             } else {
                 None
             }
