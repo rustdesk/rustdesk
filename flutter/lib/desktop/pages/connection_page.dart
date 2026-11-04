@@ -361,7 +361,6 @@ class _ConnectionPageState extends State<ConnectionPage>
     return MenuEntrySubMenu<String>(
       text: translate('Request approval'),
       padding: EdgeInsets.only(left: kDesktopMenuPadding.left),
-      arrowScale: MenuConfig.iconScale,
       entries: [
         action('Connect'),
         action('Transfer file', isFileTransfer: true),

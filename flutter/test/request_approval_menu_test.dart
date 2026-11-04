@@ -62,21 +62,6 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
         dismissOnClicked: true,
       );
 
-  EdgeInsets legacySubmenuPadding(BuildContext context) {
-    final theme = Theme.of(context);
-    final checkboxTheme = CheckboxTheme.of(context);
-    final checkboxWidth =
-        ((checkboxTheme.materialTapTargetSize ?? theme.materialTapTargetSize) ==
-                    MaterialTapTargetSize.padded
-                ? kMinInteractiveDimension
-                : kMinInteractiveDimension - 8) +
-            (checkboxTheme.visualDensity ?? theme.visualDensity)
-                .baseSizeAdjustment.dx;
-    return (padding ?? EdgeInsets.zero).copyWith(
-        right: (padding?.right ?? 0) +
-            (checkboxWidth - (IconTheme.of(context).size ?? 24)) / 2);
-  }
-
   await tester.pumpWidget(MaterialApp(
     theme: theme,
     builder: textDirection == null
@@ -119,9 +104,7 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
               ),
               MenuEntrySubMenu<String>(
                 text: 'Request approval',
-                dismissParentOnCanceled: true,
-                arrowScale: 1.0,
-                padding: legacy ? legacySubmenuPadding(context) : padding,
+                padding: padding,
                 entries: [
                   for (final title in connectionTypes)
                     entry(title, requestApproval: true),
@@ -196,14 +179,18 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    for (final (theme, padding, relay) in [
+    // Measurements captured before removing the legacy approval-menu renderer.
+    for (final (theme, padding, relay, sizes, rowHeight, inset) in [
       (
         MyTheme.lightTheme.copyWith(
             platform: TargetPlatform.windows,
             visualDensity: VisualDensity.compact,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
         const EdgeInsets.only(left: 12, right: 3),
-        true
+        true,
+        [const Size(415, 212), const Size(481, 212)],
+        28.0,
+        const Offset(28, 15),
       ),
       (
         MyTheme.darkTheme.copyWith(
@@ -211,7 +198,10 @@ void main() {
             visualDensity: VisualDensity.compact,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
         const EdgeInsets.symmetric(horizontal: 12),
-        false
+        false,
+        [const Size(316, 184), const Size(490, 212)],
+        28.0,
+        const Offset(28, 15),
       ),
       (
         MyTheme.lightTheme.copyWith(
@@ -220,49 +210,34 @@ void main() {
             materialTapTargetSize: MaterialTapTargetSize.padded,
             textButtonTheme: MyTheme.mobileTextButtonTheme),
         null,
-        true
+        true,
+        [const Size(464, 352), const Size(514, 352)],
+        48.0,
+        const Offset(40, 25),
       ),
     ]) {
-      final previous = <(Size, double, Offset)>[];
-      for (final legacy in [true, false]) {
-        await openMenu(tester, [],
-            theme: theme,
-            padding: padding,
-            includeRelay: relay,
-            legacy: legacy);
-        for (final submenu in [false, true]) {
-          if (submenu) {
-            await tester.tap(find.text('Request approval'));
-            await tester.pumpAndSettle();
-          }
-          final text = find.text('Connect').last;
-          final panel = tester.getRect(find
-              .ancestor(
-                  of: text,
-                  matching: find.byWidgetPredicate(
-                      (widget) => widget is Material && widget.elevation == 8))
-              .first);
-          final row = tester.getRect(find.ancestor(
-              of: text,
-              matching: legacy
-                  ? find.byType(mod_menu.PopupMenuItem<String>)
-                  : find.byType(MenuItemButton)));
-          final inset = tester.getTopLeft(text) - panel.topLeft;
-          if (legacy) {
-            previous.add((panel.size, row.height, inset));
-          } else {
-            final expected = previous[submenu ? 1 : 0];
-            expect(panel.height, expected.$1.height);
-            // The ID menu needs 8px more for the native arrow's aligned inset.
-            expect(panel.width,
-                expected.$1.width + (!relay && !submenu ? 8 : 0));
-            expect(row.height, expected.$2);
-            expect(inset, expected.$3);
-          }
+      await openMenu(tester, [],
+          theme: theme, padding: padding, includeRelay: relay);
+      for (final submenu in [false, true]) {
+        if (submenu) {
+          await tester.tap(find.text('Request approval'));
+          await tester.pumpAndSettle();
         }
-        await tester.tapAt(const Offset(2, 2));
-        await tester.pumpAndSettle();
+        final text = find.text('Connect').last;
+        final panel = tester.getRect(find
+            .ancestor(
+                of: text,
+                matching: find.byWidgetPredicate(
+                    (widget) => widget is Material && widget.elevation == 8))
+            .first);
+        final row = tester.getRect(find.ancestor(
+            of: text, matching: find.byType(MenuItemButton)));
+        expect(panel.size, sizes[submenu ? 1 : 0]);
+        expect(row.height, rowHeight);
+        expect(tester.getTopLeft(text) - panel.topLeft, inset);
       }
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
     }
   });
 
