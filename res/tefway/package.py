@@ -287,7 +287,7 @@ def stage(profile, pkg_version):
     # (Windows) the virtual-display helper DLL.
     for required in (
         info["exe"] + (".exe" if os.name == "nt" else ""),
-        "librustdesk.dll" if os.name == "nt" else "librustdesk.so",
+        "librustdesk.dll" if os.name == "nt" else "lib/librustdesk.so",
         "data/flutter_assets",
     ):
         if not (bundle / required).exists():

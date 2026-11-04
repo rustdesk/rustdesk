@@ -1,5 +1,9 @@
 # Tefway Remote — AppImage x86_64
 
+> **Superseded for Linux:** use the direct-AppDir Podman builder in
+> [`TEFWAY-REMOTE-PORTABLE-LINUX.md`](TEFWAY-REMOTE-PORTABLE-LINUX.md).
+> The DEB-based flow below is kept for history; it is not the portable path.
+
 Produces `TefwayRemoteMaster-x86_64.AppImage` and
 `TefwayRemoteClient-x86_64.AppImage`.
 

@@ -1,0 +1,5 @@
+.git
+target
+build
+flutter/build
+flutter/.dart_tool
