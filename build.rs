@@ -90,8 +90,15 @@ fn install_android_deps() {
     println!("cargo:rustc-link-lib=OpenSLES");
 }
 
-/// Bakes the Tefway product into the binary. Values other than the two known
-/// profiles build stock RustDesk, so a typo cannot ship a half-configured app.
+/// Known Tefway distribution profiles. Anything else is a configuration error:
+/// a typo must never silently ship a half-configured or mislabeled product.
+const TEFWAY_PROFILES: &[&str] = &["master", "client"];
+
+/// Bakes the Tefway product into the binary. An unset profile keeps stock
+/// RustDesk behaviour for ordinary development builds; a set but unknown
+/// profile aborts the build instead of falling back to stock. When a Tefway
+/// profile is selected, a verifiable build manifest is written next to the
+/// artifact so the packager can confirm which profile was really embedded.
 fn build_profile() {
     let requested = std::env::var("TEFWAY_PROFILE")
         .unwrap_or_default()
@@ -101,9 +108,9 @@ fn build_profile() {
         "client" => "client",
         other => {
             if !other.is_empty() {
-                println!(
-                    "cargo:warning=unknown TEFWAY_PROFILE={:?}, building stock RustDesk",
-                    other
+                panic!(
+                    "unknown TEFWAY_PROFILE={:?}; expected one of {:?} for a Tefway distribution build",
+                    other, TEFWAY_PROFILES
                 );
             }
             ""
@@ -111,6 +118,65 @@ fn build_profile() {
     };
     println!("cargo:rustc-env=TEFWAY_PROFILE={}", profile);
     println!("cargo:rerun-if-env-changed=TEFWAY_PROFILE");
+    if !profile.is_empty() {
+        write_build_manifest(profile);
+    }
+}
+
+/// Commit the source tree was built from, for the build manifest. Best effort:
+/// a distribution build should be reproducible from a known commit, but the
+/// build must not fail because git is unavailable in an odd checkout.
+fn git_commit() -> String {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output();
+    match output {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_owned(),
+        _ => "unknown".to_owned(),
+    }
+}
+
+/// Writes `target/release/tefway-build-manifest.json` describing what this
+/// build embeds: profile, version, source commit, OS, architecture, compiled
+/// resources (cargo features) and the server identity the build is pinned to.
+/// No secrets are included: the public key is handed to every client.
+fn write_build_manifest(profile: &str) {
+    use std::path::{Path, PathBuf};
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("target"));
+    let manifest_path = target_dir.join("release").join("tefway-build-manifest.json");
+    if let Some(parent) = manifest_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let mut features: Vec<&str> = std::env::vars()
+        .filter_map(|(key, value)| {
+            if value == "1" {
+                key.strip_prefix("CARGO_FEATURE_")
+            } else {
+                None
+            }
+        })
+        .collect();
+    features.sort_unstable();
+    let features_list = features
+        .iter()
+        .map(|f| format!("\"{}\"", f))
+        .collect::<Vec<_>>()
+        .join(",");
+    let manifest = format!(
+        "{{\n  \"profile\": \"{}\",\n  \"version\": \"{}\",\n  \"commit\": \"{}\",\n  \"os\": \"{}\",\n  \"arch\": \"{}\",\n  \"resources\": [{}]\n,\n  \"server\": {{\n    \"rendezvous\": \"remote.tefway.com.br\",\n    \"relay\": \"remote.tefway.com.br\",\n    \"public_key\": \"3KBIfqldtiCmJkAl2O6rammBCLK4iRiTH3vQdRXoEEs=\"\n  }}\n}}\n",
+        profile,
+        std::env::var("CARGO_PKG_VERSION").unwrap_or_default(),
+        git_commit(),
+        std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default(),
+        std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default(),
+        features_list,
+    );
+    match std::fs::write(&manifest_path, manifest) {
+        Ok(()) => println!("cargo:info=tefway build manifest written to {}", manifest_path.display()),
+        Err(err) => println!("cargo:warning=failed to write tefway build manifest: {err}"),
+    }
 }
 
 fn main() {
