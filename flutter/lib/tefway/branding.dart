@@ -40,26 +40,29 @@ class TefwayProfileBadge extends StatelessWidget {
     if (!isTefwayBuild()) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final description = tefwayProfileDescription();
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          tefwayProductName(),
-          textAlign: TextAlign.center,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        if (description.isNotEmpty)
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Text(
-            description,
+            tefwayProductName(),
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.textTheme.bodySmall?.color?.withOpacity(0.7),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
             ),
           ),
-      ],
-    ).paddingSymmetric(horizontal: 12);
+          if (description.isNotEmpty)
+            Text(
+              description,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.textTheme.bodySmall?.color?.withOpacity(0.7),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

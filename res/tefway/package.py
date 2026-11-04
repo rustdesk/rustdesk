@@ -288,7 +288,7 @@ def stage(profile, pkg_version):
     for required in (
         info["exe"] + (".exe" if os.name == "nt" else ""),
         "librustdesk.dll" if os.name == "nt" else "librustdesk.so",
-        "flutter_assets",
+        "data/flutter_assets",
     ):
         if not (bundle / required).exists():
             raise SystemExit(
