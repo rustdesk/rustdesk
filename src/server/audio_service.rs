@@ -79,16 +79,16 @@ pub fn restart() {
 mod pa_impl {
     use super::*;
 
-    // SAFETY: constrains of hbb_common::mem::aligned_u8_vec must be held
-    unsafe fn align_to_32(data: Vec<u8>) -> Vec<u8> {
+    /// Reading the sample bytes back as `f32` needs a 4-byte aligned pointer.
+    /// Returns an aligned copy only when `data` is not already aligned; `None`
+    /// means the caller can reinterpret `data` where it is, with no copy.
+    fn align_to_32_if_needed(data: &[u8]) -> Option<hbb_common::mem::AlignedU8Vec> {
         if (data.as_ptr() as usize & 3) == 0 {
-            return data;
+            return None;
         }
-
-        let mut buf = vec![];
-        buf = unsafe { hbb_common::mem::aligned_u8_vec(data.len(), 4) };
-        buf.extend_from_slice(data.as_ref());
-        buf
+        let mut buf = hbb_common::mem::aligned_u8_vec(data.len(), 4);
+        buf.extend_from_slice(data);
+        Some(buf)
     }
 
     #[tokio::main(flavor = "current_thread")]
@@ -131,21 +131,28 @@ mod pa_impl {
                     continue;
                 }
 
-                let data = unsafe { align_to_32(data.into()) };
+                let data: Vec<u8> = data.into();
+                let aligned = align_to_32_if_needed(&data);
+                let bytes = aligned.as_deref().unwrap_or(&data[..]);
+                // SAFETY: `bytes` is 4-byte aligned (either checked above or freshly
+                // allocated with align 4), and only whole f32s are read from it.
                 let data = unsafe {
-                    std::slice::from_raw_parts::<f32>(data.as_ptr() as _, data.len() / 4)
+                    std::slice::from_raw_parts::<f32>(bytes.as_ptr() as _, bytes.len() / 4)
                 };
                 send_f32(data, &mut encoder, &sp);
             }
 
             #[cfg(target_os = "android")]
             if scrap::android::ffi::get_audio_raw(&mut android_data, &mut vec![]).is_some() {
+                // Keep `android_data` as the reusable receive buffer: overwriting it with
+                // an exact-capacity aligned buffer only made the next `get_audio_raw`
+                // reallocate it, which dropped the alignment again.
+                let aligned = align_to_32_if_needed(&android_data);
+                let bytes = aligned.as_deref().unwrap_or(&android_data[..]);
+                // SAFETY: `bytes` is 4-byte aligned (either checked above or freshly
+                // allocated with align 4), and only whole f32s are read from it.
                 let data = unsafe {
-                    android_data = align_to_32(android_data);
-                    std::slice::from_raw_parts::<f32>(
-                        android_data.as_ptr() as _,
-                        android_data.len() / 4,
-                    )
+                    std::slice::from_raw_parts::<f32>(bytes.as_ptr() as _, bytes.len() / 4)
                 };
                 send_f32(data, &mut encoder, &sp);
             } else {

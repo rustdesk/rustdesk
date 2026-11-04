@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Alla skärmar"),
         ("#{} monitor", "Skärm {}"),
         ("conn-e2ee-unavailable-tip", "End-to-end-kryptering kunde inte verifieras.\nFjärrenheten kan fortfarande konfigureras. Försök igen senare.\nOm detta fortsätter kan servern vara opålitlig.\nFortsätta ändå?"),
+        ("ID whitelisting", "ID-vitlistning"),
+        ("Use ID whitelisting", "Använd ID-vitlistning"),
+        ("id_whitelist_tip", "Bara vitlistade ID:n kan koppla upp till mig"),
+        ("id_whitelist_wildcard_tip", "Jokertecken stöds: '*' matchar valfritt antal tecken, '?' matchar exakt ett tecken"),
+        ("Invalid ID", "Ogiltigt ID"),
+        ("Your ID is blocked by the peer", "Ditt ID är blockerat av motparten"),
+        ("Your ip is blocked by the peer", "Din IP-adress är blockerad av motparten"),
+        ("id_whitelist_caveat_tip", "ID:t rapporteras av klienten som ansluter. Vitlistan minskar exponeringen och ersätter inte lösenord eller 2FA"),
+        ("whitelist_cidr_tip", "CIDR-notation stöds, till exempel 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

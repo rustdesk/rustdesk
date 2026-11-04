@@ -1589,7 +1589,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "85789bfe6e4cfaf4ecc00c52857467fdb7f26879"
+      resolved-ref: cf4aef0512092fad9344a27ffe1c47ad83269dfc
       url: "https://github.com/rustdesk-org/window_manager"
     source: git
     version: "0.3.6"

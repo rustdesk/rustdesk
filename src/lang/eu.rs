@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Monitore guztiak"),
         ("#{} monitor", "{}. monitorea"),
         ("conn-e2ee-unavailable-tip", "Ezin izan da muturretik muturrerako enkriptatzea egiaztatu.\nUrruneko gailua oraindik konfiguratzen ari daiteke. Saiatu berriro geroago.\nHonek jarraitzen badu, zerbitzaria fidagaitza izan daiteke.\nHala ere jarraitu?"),
+        ("ID whitelisting", "Onartutako IDak"),
+        ("Use ID whitelisting", "Erabili ID onartuen zerrenda"),
+        ("id_whitelist_tip", "Baimendutako IDak soilik konektatu daitezke mahaigain honetara"),
+        ("id_whitelist_wildcard_tip", "Komodinak onartzen dira: '*' edozein karaktere kopururekin bat dator, '?' karaktere bakar batekin"),
+        ("Invalid ID", "ID baliogabea"),
+        ("Your ID is blocked by the peer", "Beste aldeak zure IDa blokeatu du"),
+        ("Your ip is blocked by the peer", "Beste aldeak zure IP helbidea blokeatu du"),
+        ("id_whitelist_caveat_tip", "IDa konektatzen den bezeroak jakinarazten du. Zerrenda honek esposizioa murrizten du eta ez du pasahitza edo 2FA ordezkatzen"),
+        ("whitelist_cidr_tip", "CIDR notazioa onartzen da, adibidez 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

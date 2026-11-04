@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Todos los monitores"),
         ("#{} monitor", "Monitor {}"),
         ("conn-e2ee-unavailable-tip", "No se pudo verificar el cifrado de extremo a extremo.\nEs posible que el dispositivo remoto aún se esté configurando. Inténtelo de nuevo más tarde.\nSi esto sigue ocurriendo, es posible que el servidor no sea de confianza.\n¿Continuar de todos modos?"),
+        ("ID whitelisting", "IDs admitidos"),
+        ("Use ID whitelisting", "Usar lista de IDs admitidos"),
+        ("id_whitelist_tip", "Solo los IDs autorizados pueden conectarse a este escritorio"),
+        ("id_whitelist_wildcard_tip", "Se admiten comodines: '*' coincide con cualquier número de caracteres, '?' con exactamente un carácter"),
+        ("Invalid ID", "ID incorrecto"),
+        ("Your ID is blocked by the peer", "Tu ID está bloqueado por el dispositivo remoto"),
+        ("Your ip is blocked by the peer", "Tu IP está bloqueada por el dispositivo remoto"),
+        ("id_whitelist_caveat_tip", "El ID lo comunica el cliente que se conecta. Esta lista blanca reduce la exposición y no sustituye a la contraseña ni al 2FA"),
+        ("whitelist_cidr_tip", "Se admite la notación CIDR, por ejemplo 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Tous les moniteurs"),
         ("#{} monitor", "Moniteur {}"),
         ("conn-e2ee-unavailable-tip", "Impossible de vérifier le chiffrement de bout en bout.\nL'appareil distant est peut-être encore en cours de configuration. Réessayez plus tard.\nSi le problème persiste, le serveur n'est peut-être pas fiable.\nContinuer quand même ?"),
+        ("ID whitelisting", "Liste blanche d’ID"),
+        ("Use ID whitelisting", "Utiliser une liste blanche d’ID"),
+        ("id_whitelist_tip", "Seuls les ID inclus dans la liste blanche pourront accéder à mon appareil"),
+        ("id_whitelist_wildcard_tip", "Les caractères génériques sont pris en charge : '*' correspond à un nombre quelconque de caractères, '?' à un seul caractère"),
+        ("Invalid ID", "ID non valide"),
+        ("Your ID is blocked by the peer", "Votre ID est bloqué par l’appareil distant"),
+        ("Your ip is blocked by the peer", "Votre adresse IP est bloquée par l’appareil distant"),
+        ("id_whitelist_caveat_tip", "L’ID est déclaré par le client qui se connecte. Cette liste blanche réduit l’exposition et ne remplace ni le mot de passe ni la 2FA"),
+        ("whitelist_cidr_tip", "La notation CIDR est prise en charge, par exemple 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

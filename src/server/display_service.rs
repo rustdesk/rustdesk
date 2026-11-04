@@ -25,10 +25,145 @@ struct ChangedResolution {
 lazy_static::lazy_static! {
     static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
     static ref CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, ChangedResolution>>> = Default::default();
-    // Initial primary display index.
-    // It should not be updated when displays changed.
-    pub static ref PRIMARY_DISPLAY_IDX: usize = get_primary();
     static ref SYNC_DISPLAYS: Arc<Mutex<SyncDisplaysInfo>> = Default::default();
+}
+
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
+    static ref WAYLAND_UINPUT_RECT: Mutex<WaylandUinputRect> = Default::default();
+    static ref WAYLAND_LAYOUT: Mutex<WaylandLayout> = Default::default();
+}
+
+#[cfg(target_os = "linux")]
+const WAYLAND_LAYOUT_CHECK_INTERVAL: Duration = Duration::from_millis(1500);
+
+#[cfg(target_os = "linux")]
+#[derive(Default)]
+struct WaylandUinputRect {
+    rect: Option<(i32, i32, i32, i32)>,
+    last_check: Option<std::time::Instant>,
+}
+
+// Per-display layout used to correct injected coordinates when the compositor moves a
+// monitor mid-session. The client keeps sending coordinates offset by the layout it was
+// told at session init (`baseline`); we remap them onto the current layout (`live`).
+// https://github.com/rustdesk/rustdesk/issues/15601
+#[cfg(target_os = "linux")]
+#[derive(Default)]
+struct WaylandLayout {
+    baseline: Vec<scrap::wayland::display::DisplayRect>,
+    live: Vec<scrap::wayland::display::DisplayRect>,
+}
+
+// Whether `live` differs from `baseline`. Read on every mouse move, so it is an atomic:
+// the common (no-drift) case never touches the layout mutex.
+#[cfg(target_os = "linux")]
+static WAYLAND_LAYOUT_DRIFTED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
+    WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display::DisplayRect>) {
+    WAYLAND_LAYOUT_DRIFTED.store(false, Ordering::Relaxed);
+    let mut lock = WAYLAND_LAYOUT.lock().unwrap();
+    lock.baseline = baseline;
+    lock.live.clear();
+}
+
+// Remap an injected coordinate onto the live compositor layout when it has drifted from
+// what the client was told at session init. Lock-free no-op otherwise.
+#[cfg(target_os = "linux")]
+pub(super) fn remap_wayland_uinput_coord(x: i32, y: i32) -> (i32, i32) {
+    if !WAYLAND_LAYOUT_DRIFTED.load(Ordering::Relaxed) {
+        return (x, y);
+    }
+    let lock = WAYLAND_LAYOUT.lock().unwrap();
+    scrap::wayland::display::remap_to_live_layout(x, y, &lock.baseline, &lock.live)
+}
+
+// The uinput absolute range is set when the session inits. If the compositor layout
+// changes afterwards (monitor scale/position change, or a portal virtual output
+// appearing once the capture starts), injected coordinates get rescaled by the stale
+// range and land offset, https://github.com/rustdesk/rustdesk/issues/15601
+#[cfg(target_os = "linux")]
+fn refresh_wayland_uinput_rect_if_changed() {
+    if is_x11() || !crate::input_service::wayland_use_uinput() {
+        return;
+    }
+    {
+        let mut lock = WAYLAND_UINPUT_RECT.lock().unwrap();
+        if let Some(last_check) = lock.last_check {
+            if last_check.elapsed() < WAYLAND_LAYOUT_CHECK_INTERVAL {
+                return;
+            }
+        }
+        lock.last_check = Some(std::time::Instant::now());
+    }
+    let Some((rect, live_rects)) = scrap::wayland::display::get_layout_for_uinput_live() else {
+        return;
+    };
+    // Refresh the per-display layout every poll: monitor origins can shift (e.g. two
+    // displays swap positions) without changing the overall desktop rect, and the mouse
+    // path needs the current per-display geometry to correct coordinates.
+    let drifted = {
+        let mut layout = WAYLAND_LAYOUT.lock().unwrap();
+        let drifted = !layout.baseline.is_empty()
+            && !live_rects.is_empty()
+            && layout.baseline != live_rects;
+        layout.live = live_rects;
+        drifted
+    };
+    // The remap corrects for per-display origin shifts; the uinput ABS range corrects for
+    // the overall bounding box. Only enable the remap once the range matches the live
+    // layout, otherwise moves would be remapped into a range the device is not yet using.
+    // A drift with no bbox change (origins swapped) needs no range update and enables now.
+    let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
+    if !range_ok {
+        let (minx, maxx, miny, maxy) = rect;
+        log::info!(
+            "desktop layout changed, update mouse resolution: ({}, {}), ({}, {})",
+            minx,
+            maxx,
+            miny,
+            maxy
+        );
+        match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => {
+                // Bound the IPC wait, this runs on the display service loop and
+                // `set_resolution()` has no timeout on the response read.
+                // timeout must be built inside the runtime, or it panics
+                // "there is no reactor running". See clipboard_service.rs.
+                match rt.block_on(async {
+                    timeout(
+                        3_000,
+                        crate::input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+                    )
+                    .await
+                }) {
+                    // Record the rect only after a successful apply, so a transient
+                    // failure is retried on the next check.
+                    Ok(Ok(())) => {
+                        WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
+                        range_ok = true;
+                    }
+                    Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
+                    Err(err) => log::error!("Failed to update mouse resolution: {}", err),
+                }
+            }
+            Err(err) => {
+                log::error!("Failed to build tokio runtime: {}", err);
+            }
+        }
+    }
+    // Publish the flag last: a `true` read is always backed by a current `live` and a
+    // matching uinput range. A failed range apply leaves this false and retries next poll.
+    WAYLAND_LAYOUT_DRIFTED.store(drifted && range_ok, Ordering::Relaxed);
 }
 
 // https://github.com/rustdesk/rustdesk/pull/8537
@@ -41,22 +176,14 @@ struct SyncDisplaysInfo {
 }
 
 impl SyncDisplaysInfo {
-    fn check_changed(&mut self, displays: Vec<DisplayInfo>) {
-        if self.displays.len() != displays.len() {
-            self.displays = displays;
-            if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
-                self.is_synced = false;
-            }
+    fn check_changed(&mut self, displays: &[DisplayInfo]) {
+        if self.displays.as_slice() == displays {
             return;
         }
-        for (i, d) in displays.iter().enumerate() {
-            if d != &self.displays[i] {
-                self.displays = displays;
-                if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
-                    self.is_synced = false;
-                }
-                return;
-            }
+
+        self.displays = displays.to_vec();
+        if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
+            self.is_synced = false;
         }
     }
 
@@ -242,6 +369,12 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
             sp.send(msg_out);
             log::info!("Displays changed");
         }
+
+        #[cfg(target_os = "linux")]
+        if sp.has_subscribes() {
+            refresh_wayland_uinput_rect_if_changed();
+        }
+
         std::thread::sleep(Duration::from_millis(300));
     }
 
@@ -304,6 +437,11 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
 // Display to DisplayInfo
 // The DisplayInfo is be sent to the peer.
 pub(super) fn check_update_displays(all: &Vec<Display>) {
+    let _ = update_sync_displays(all);
+}
+
+// Return the converted input snapshot while updating the shared display cache.
+pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
     // For compatibility: if only one display, scale remains 1.0 and we use the physical size for `uinput`.
     // If there are multiple displays, we use the logical size for `uinput` by setting scale to d.scale().
     #[cfg(target_os = "linux")]
@@ -346,7 +484,8 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
             }
         })
         .collect::<Vec<DisplayInfo>>();
-    SYNC_DISPLAYS.lock().unwrap().check_changed(displays);
+    SYNC_DISPLAYS.lock().unwrap().check_changed(&displays);
+    displays
 }
 
 pub fn is_inited_msg() -> Option<Message> {
@@ -357,34 +496,38 @@ pub fn is_inited_msg() -> Option<Message> {
     None
 }
 
-pub async fn update_get_sync_displays_on_login() -> ResultType<Vec<DisplayInfo>> {
+// Return the primary index with the refreshed list so login cannot mix display snapshots.
+pub async fn update_get_sync_displays_on_login() -> ResultType<(Vec<DisplayInfo>, usize)> {
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
-            return super::wayland::get_displays().await;
+            let (displays, primary_display_idx) =
+                super::wayland::get_displays_and_primary().await?;
+            let primary_display_idx =
+                normalize_primary_display_idx(primary_display_idx, displays.len());
+            return Ok((displays, primary_display_idx));
         }
     }
     #[cfg(not(windows))]
     let displays = display_service::try_get_displays();
     #[cfg(windows)]
     let displays = display_service::try_get_displays_add_amyuni_headless();
-    check_update_displays(&displays?);
-    Ok(SYNC_DISPLAYS.lock().unwrap().displays.clone())
+    let displays = displays?;
+    let primary_display_idx = get_primary_2(&displays);
+    let sync_displays = update_sync_displays(&displays);
+    let primary_display_idx =
+        normalize_primary_display_idx(primary_display_idx, sync_displays.len());
+    Ok((sync_displays, primary_display_idx))
 }
 
 #[inline]
-pub fn get_primary() -> usize {
-    #[cfg(target_os = "linux")]
-    {
-        if !is_x11() {
-            return match super::wayland::get_primary() {
-                Ok(n) => n,
-                Err(_) => 0,
-            };
-        }
+fn normalize_primary_display_idx(primary_display_idx: usize, display_len: usize) -> usize {
+    // Zero is the protocol fallback when the list is empty or its primary index is stale.
+    if primary_display_idx < display_len {
+        primary_display_idx
+    } else {
+        0
     }
-
-    try_get_displays().map(|d| get_primary_2(&d)).unwrap_or(0)
 }
 
 #[inline]
@@ -485,4 +628,17 @@ pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> 
         }
     }
     Ok(displays)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_primary_display_idx;
+
+    #[test]
+    fn normalize_primary_display_idx_bounds() {
+        assert_eq!(normalize_primary_display_idx(0, 0), 0);
+        assert_eq!(normalize_primary_display_idx(0, 2), 0);
+        assert_eq!(normalize_primary_display_idx(1, 2), 1);
+        assert_eq!(normalize_primary_display_idx(2, 2), 0);
+    }
 }

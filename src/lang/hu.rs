@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Minden monitor"),
         ("#{} monitor", "{}. monitor"),
         ("conn-e2ee-unavailable-tip", "A végpontok közötti titkosítás nem volt ellenőrizhető.\nA távoli eszköz talán még beállítás alatt áll. Próbálja újra később.\nHa ez továbbra is előfordul, a szerver lehet, hogy nem megbízható.\nFolytatja így is?"),
+        ("ID whitelisting", "Azonosító engedélyezési lista"),
+        ("Use ID whitelisting", "Azonosító engedélyezési lista használata"),
+        ("id_whitelist_tip", "Csak az engedélyezési listán szereplő azonosítók kapcsolódhatnak"),
+        ("id_whitelist_wildcard_tip", "Helyettesítő karakterek használhatók: a '*' tetszőleges számú karakternek, a '?' pontosan egy karakternek felel meg"),
+        ("Invalid ID", "Érvénytelen azonosító"),
+        ("Your ID is blocked by the peer", "Az azonosítóját a távoli fél letiltotta"),
+        ("Your ip is blocked by the peer", "Az IP-címét a távoli fél letiltotta"),
+        ("id_whitelist_caveat_tip", "Az azonosítót a csatlakozó kliens jelenti. Az engedélyezési lista csökkenti a kitettséget, és nem helyettesíti a jelszót vagy a 2FA-t"),
+        ("whitelist_cidr_tip", "A CIDR jelölés támogatott, például 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", ""),
         ("#{} monitor", ""),
         ("conn-e2ee-unavailable-tip", ""),
+        ("ID whitelisting", ""),
+        ("Use ID whitelisting", ""),
+        ("id_whitelist_tip", ""),
+        ("id_whitelist_wildcard_tip", ""),
+        ("Invalid ID", ""),
+        ("Your ID is blocked by the peer", ""),
+        ("Your ip is blocked by the peer", ""),
+        ("id_whitelist_caveat_tip", ""),
+        ("whitelist_cidr_tip", ""),
     ].iter().cloned().collect();
 }
