@@ -281,7 +281,7 @@ jobs:
         # arm64 is on Flutter 3.44 (as is macOS arm64); apply its source/pubspec deltas on the fly
         # (shared with the macOS arm64 build and the 3.44 bridge job) so the committed sources
         # stay on Flutter 3.24.5.
-        # `flutter build` then runs `pub get`, regenerating pubspec.lock for the bumped deps.
+        # `flutter/flutter_pub_get.py` then runs `pub get` with enforced lockfile
         if: ${{ matrix.job.arch == 'aarch64' }}
         shell: bash
         run: bash .github/patches/apply_flutter_3.44_source_patches.sh
@@ -2993,6 +2993,9 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ env.FLUTTER_VERSION }}" == 3.44.* ]]; then
+            python3 flutter/flutter_pub_get.py check-local-pubspec-changes
+            bash .github/patches/apply_flutter_3.44_source_patches.sh
+            python3 flutter/flutter_pub_get.py get-packages "flutter/pubspec-bridge-3.44.8.lock"
             bash .github/patches/apply_flutter_3.44_web_patches.sh
           fi
 
