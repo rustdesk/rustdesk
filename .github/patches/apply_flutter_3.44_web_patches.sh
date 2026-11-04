@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # Prepares a web build on Flutter 3.44.x. Companion to
-# apply_flutter_3.44_source_patches.sh (which it runs first): the web target
-# additionally needs qr_code_scanner's web implementation patched for the
-# dart:ui platformViewRegistry removal, and flutter/web/fonts refreshed with
-# the font paths the 3.44 engine requests for offline/air-gapped support
+# apply_flutter_3.44_source_patches.sh (followed by 'flutter pub get'):
+# the web target additionally needs qr_code_scanner's web implementation
+# patched for the dart:ui platformViewRegistry removal, and
+# flutter/web/fonts refreshed with the font paths the 3.44 engine requests
+# for offline/air-gapped support
 # (rustdesk-server-pro#996; see flutter/web/fonts/sync_fonts.py).
 #
 # Run from the repository root with Flutter 3.44.x on PATH, then build:
+#   python3 flutter/flutter_pub_get.py check-local-pubspec-changes
+#   bash .github/patches/apply_flutter_3.44_source_patches.sh
+#   python3 flutter/flutter_pub_get.py get-packages "$(find flutter/ -type f -name 'pubspec-bridge-3.44.*.lock')"
 #   bash .github/patches/apply_flutter_3.44_web_patches.sh
 #   (cd flutter && flutter build web --release)   # or ./web/js/flutter_build.py
+#   python3 flutter/flutter_pub_get.py revert-local-pubspec-changes
 #
 # Idempotent. To undo the source changes locally:
 #   git checkout -- flutter/lib/common.dart flutter/pubspec.yaml flutter/pubspec.lock
@@ -19,12 +24,6 @@ flutter --version | grep -q "Flutter 3\.44\." || {
   flutter --version | grep "^Flutter" >&2 || true
   exit 1
 }
-
-# Shared 3.44 source/pubspec patches own their complete-state validation.
-bash .github/patches/apply_flutter_3.44_source_patches.sh
-
-# Populate the pub cache with the 3.44 dependency resolution.
-(cd flutter && flutter pub get)
 
 # qr_code_scanner 1.0.1 (unmaintained) reads platformViewRegistry from
 # dart:ui, which Flutter 3.44 removed; point it at dart:ui_web instead. The
