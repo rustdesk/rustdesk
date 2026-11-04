@@ -1,4 +1,6 @@
-mod security;
+#[cfg(test)]
+#[path = "directory/tests/security.rs"]
+mod security_tests;
 
 use super::super::{
     installer_shell::{get_known_folder, get_system_executable, path_for_cmd_environment},
@@ -31,36 +33,46 @@ pub(in crate::platform::windows) fn path() -> ResultType<PathBuf> {
         .parent()
         .ok_or_else(|| anyhow!("System directory has no parent"))?;
     let temporary = windows.join("Temp");
-    let parent = match candidate_parent(&temporary)? {
-        Some(parent) => parent,
-        None => fallback_parent(&temporary)?,
-    };
+    let parent = temporary_parent(&temporary)?;
     Ok(parent.join(format!(
         "rustdesk-install-{}",
         uuid::Uuid::new_v4().simple()
     )))
 }
 
-fn fallback_parent(temporary: &Path) -> ResultType<PathBuf> {
-    let fallback = get_known_folder(&FOLDERID_ProgramData)?;
-    let parent = candidate_parent(&fallback)?.ok_or_else(|| {
+fn temporary_parent(temporary: &Path) -> ResultType<PathBuf> {
+    let parent = if has_reparse_parent(temporary)? {
+        let fallback = get_known_folder(&FOLDERID_ProgramData)?;
+        if has_reparse_parent(&fallback)? {
+            bail!(
+                "Installer fallback directory contains a reparse point: {}",
+                fallback.display()
+            );
+        }
+        log::warn!(
+            "Installer temporary directory contains a reparse point; using {} instead of {}",
+            fallback.display(),
+            temporary.display()
+        );
+        fallback
+    } else {
+        temporary.to_owned()
+    };
+    if !supports_acls(&parent).map_err(|error| {
         anyhow!(
-            "Installer fallback volume does not support persistent ACLs: {}",
-            fallback.display()
+            "Failed to inspect installer volume {}: {error}",
+            parent.display()
         )
-    })?;
-    log::warn!(
-        "Installer temporary volume lacks persistent ACLs; using {} instead of {}",
-        parent.display(),
-        temporary.display()
-    );
+    })? {
+        bail!(
+            "Installer temporary volume does not support persistent ACLs: {}",
+            parent.display()
+        );
+    }
     Ok(parent)
 }
 
-fn candidate_parent(path: &Path) -> ResultType<Option<PathBuf>> {
-    if !security::supports_acls(path)? {
-        return Ok(None);
-    }
+fn has_reparse_parent(path: &Path) -> ResultType<bool> {
     for parent in path.ancestors() {
         let metadata = fs::symlink_metadata(parent).map_err(|err| {
             anyhow!(
@@ -69,18 +81,7 @@ fn candidate_parent(path: &Path) -> ResultType<Option<PathBuf>> {
             )
         })?;
         if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0 {
-            let resolved = fs::canonicalize(path)?;
-            if !security::is_resolved(&resolved) {
-                bail!(
-                    "Installer junction must resolve to a local drive: {}",
-                    path.display()
-                );
-            }
-            if fs::canonicalize(command_path(&resolved)?)? != resolved {
-                bail!("Installer junction target changes when converted to a command path");
-            }
-            security::guard(&resolved)?;
-            return Ok(Some(resolved));
+            return Ok(true);
         }
         if !metadata.is_dir() {
             bail!(
@@ -89,27 +90,36 @@ fn candidate_parent(path: &Path) -> ResultType<Option<PathBuf>> {
             );
         }
     }
-    Ok(Some(path.to_owned()))
+    Ok(false)
 }
 
-pub(in crate::platform::windows) fn guard_file_parent(path: &Path) -> ResultType<Vec<fs::File>> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| anyhow!("Installer file has no parent"))?;
-    security::guard(parent)
-}
+fn supports_acls(path: &Path) -> ResultType<bool> {
+    use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+    use windows::Win32::{
+        Foundation::HANDLE,
+        Storage::FileSystem::{
+            GetVolumeInformationByHandleW, FILE_FLAG_BACKUP_SEMANTICS, FILE_READ_ATTRIBUTES,
+            FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        },
+    };
 
-pub(in crate::platform::windows) fn command_path(path: &Path) -> ResultType<&str> {
-    let value = path
-        .to_str()
-        .ok_or_else(|| anyhow!("Path is not valid Unicode: {:?}", path))?;
-    if security::is_resolved(path) {
-        // cmd.exe cannot execute a BAT through the extended DOS path spelling.
-        return value
-            .strip_prefix(r"\\?\")
-            .ok_or_else(|| anyhow!("Invalid resolved installer path"));
+    let directory = fs::OpenOptions::new()
+        .access_mode(FILE_READ_ATTRIBUTES.0)
+        .share_mode((FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE).0)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS.0)
+        .open(path)?;
+    let mut flags = 0;
+    unsafe {
+        GetVolumeInformationByHandleW(
+            HANDLE(directory.as_raw_handle()),
+            None,
+            None,
+            None,
+            Some(&mut flags),
+            None,
+        )?;
     }
-    Ok(value)
+    Ok(flags & winapi::um::winnt::FILE_PERSISTENT_ACLS != 0)
 }
 
 pub(super) fn create(path: &Path) -> ResultType<()> {

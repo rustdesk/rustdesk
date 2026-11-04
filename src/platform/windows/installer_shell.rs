@@ -126,7 +126,9 @@ pub(super) fn get_known_folder(id: &windows::core::GUID) -> ResultType<PathBuf> 
 // Reject all `%` so a handoff path cannot alter the elevated bootstrap before hash verification.
 // https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/set_1
 pub(super) fn path_for_cmd_environment(path: &Path) -> ResultType<&str> {
-    let value = directory::command_path(path)?;
+    let value = path
+        .to_str()
+        .ok_or_else(|| anyhow!("Path is not valid Unicode: {:?}", path))?;
     if value.contains(['\0', '"', '%', '\r', '\n']) {
         bail!("Path is unsafe for an elevated cmd.exe handoff: {:?}", path);
     }
