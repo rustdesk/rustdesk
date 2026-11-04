@@ -8,6 +8,8 @@ use std::{
 };
 
 const UPDATE_DMG_MOUNT_TEMPLATE: &str = "/tmp/.rustdeskmount-XXXXXX";
+// macOS 27.0 deprecates hdiutil; this is not diskutil eject force's minimum version.
+// Source: hdiutil(1), WHAT'S NEW: https://keith.github.io/xcode-man-pages/hdiutil.1.html
 const HDIUTIL_DETACH_DEPRECATED_MACOS_VERSION: u32 = 27;
 
 #[derive(Debug)]

@@ -70,6 +70,8 @@ const PRIVILEGED_UPDATE_BODY: &str = r#"
 
 	    set detach_dmg to "/usr/bin/hdiutil detach \"$dmg_mount\" -force >/dev/null"
 	    if expected_sha256 is not "" then
+	        -- macOS 27.0 deprecates hdiutil; this is not diskutil eject force's minimum version.
+	        -- Source: hdiutil(1), WHAT'S NEW: https://keith.github.io/xcode-man-pages/hdiutil.1.html
 	        set hdiutil_deprecated_macos_version to 27
 	        set macos_major to do shell script "set -e; macos_version=$(/usr/bin/sw_vers -productVersion); printf '%s' \"${macos_version%%.*}\""
 	        if (macos_major as integer) >= hdiutil_deprecated_macos_version then
