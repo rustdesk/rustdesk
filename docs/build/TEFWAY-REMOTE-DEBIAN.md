@@ -109,7 +109,7 @@ are removed by the package scripts).
 
 ## Known issues and limits
 
-- The systemd unit starts `/usr/share/<pkg>/rustdesk --service`, the same service
+- The systemd unit starts `/usr/share/<pkg>/<bin> --service`, the same service
   model as upstream. It is what makes the accept dialog reachable from the login
   screen; without it, sessions from the lock screen cannot be captured.
 - Wayland: capture on a Wayland session needs the PipeWire portal and, on some

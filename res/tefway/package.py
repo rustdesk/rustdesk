@@ -87,7 +87,7 @@ def build(profile, features=(), skip_cargo=False):
     if os.name == "nt":
         shutil.copyfile(
             REPO / "target" / "release" / "deps" / "dylib_virtual_display.dll",
-            BUNDLE_WINDOWS,
+            BUNDLE_WINDOWS / "dylib_virtual_display.dll",
         )
 
 
@@ -175,7 +175,8 @@ def package_deb(profile, pkg_version, stage_dir):
         root / "usr" / "bin" / info["exe"],
     )
 
-    control_dir = tree / "control"
+    # dpkg-deb -b builds from a directory that carries DEBIAN/ next to the payload.
+    control_dir = root / "DEBIAN"
     control_dir.mkdir()
     values = mapping_for(profile, pkg_version)
     values["SIZE"] = str(sum(f.stat().st_size for f in share.rglob("*") if f.is_file()) // 1024)
@@ -188,7 +189,6 @@ def package_deb(profile, pkg_version, stage_dir):
         path = control_dir / mode
         path.write_text(render(script, values), encoding="utf-8")
         path.chmod(0o755)
-    (control_dir / "md5sums").write_text("", encoding="utf-8")
 
     deb = OUT / profile / f'{info["pkg"]}_{pkg_version}_amd64.deb'
     run(
@@ -196,11 +196,10 @@ def package_deb(profile, pkg_version, stage_dir):
             "dpkg-deb",
             "--root-owner-group",
             "-b",
-            str(control_dir),
+            str(root),
             str(deb),
         ]
     )
-    # dpkg-deb -b wants the payload next to DEBIAN/ inside one directory.
     print(f"deb: {deb}")
     return deb
 

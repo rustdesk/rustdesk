@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/share/@PKG@/rustdesk --service
+ExecStart=/usr/share/@PKG@/@BIN@ --service
 Restart=always
 RestartSec=3
 

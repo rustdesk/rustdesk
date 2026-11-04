@@ -2,7 +2,7 @@
 set -e
 
 install -d /usr/bin
-ln -sf /usr/share/@PKG@/rustdesk /usr/bin/@BIN@
+ln -sf /usr/share/@PKG@/@BIN@ /usr/bin/@BIN@
 
 install -d /usr/share/applications
 cp /usr/share/@PKG@/files/@PKG@.desktop /usr/share/applications/

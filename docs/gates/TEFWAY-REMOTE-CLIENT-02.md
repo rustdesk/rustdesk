@@ -131,3 +131,26 @@ produces. No platform build was produced in this window.
    a Tefway technician. Needs `TEFWAY-REMOTE-AUTH-01`.
 2. Icon frames above 128 px are upscaled from the supplied ICO.
 3. No installer/MSI branding pass, no code signing.
+
+## Correções de closeout (após o gate)
+
+A revisão de closeout do commit `1cf96f572` corrigiu bugs nos scripts de
+empacotamento que impediam a geração dos artefatos experimentais:
+
+- `res/tefway/package.py`:
+  - `build()` copiava a DLL do virtual display para o diretório do bundle
+    Windows em vez de um arquivo dentro dele (`IsADirectoryError` no Windows).
+  - `package_deb()` gravava os arquivos de controle fora de `DEBIAN/` e chamava
+    `dpkg-deb -b` no diretório errado, quebrando o Debian DEB e, por derivação,
+    o AppImage.
+- `res/tefway/pkg/{postinst.in,tefway-remote.service.in,tefway-remote.spec.in}`:
+  o binário do bundle é renomeado de `rustdesk` para `<exe>` (TefwayRemoteMaster/
+  TefwayRemoteClient), mas symlinks e o unit systemd ainda apontavam para
+  `rustdesk`. Corrigido para `@BIN@`. O spec do RPM agora declara conflito com o
+  outro pacote Tefway, igual ao .deb.
+- `docs/build/TEFWAY-REMOTE-DEBIAN.md`: caminho do unit systemd ajustado para
+  `<bin>`.
+
+Nenhum build de pacote foi executado nestas correções. A geração de Windows EXE,
+Fedora RPM, Debian DEB e Linux AppImage fica a cargo do próximo executor, usando
+a toolchain validada em `docs/build/`.

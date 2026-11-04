@@ -10,7 +10,7 @@ URL:        https://tefway.com.br
 Vendor:     Tefway <suporte@tefway.com.br>
 Requires:   gtk3 libxcb libXfixes alsa-lib libva gstreamer1-plugins-base
 Recommends: libayatana-appindicator-gtk3 libxdo systemd
-Conflicts:  rustdesk
+Conflicts:  rustdesk tefway-remote-master tefway-remote-client
 Obsoletes:  rustdesk
 AutoReqProv: no
 
@@ -34,7 +34,7 @@ mkdir -p %{buildroot}/usr/share/%{name}/files
 install -m 644 %{tefway_stage}/files/%{name}.desktop %{buildroot}/usr/share/%{name}/files/
 install -m 644 %{tefway_stage}/files/%{name}.service %{buildroot}/usr/share/%{name}/files/
 mkdir -p %{buildroot}/usr/bin
-ln -sf /usr/share/%{name}/rustdesk %{buildroot}/usr/bin/@BIN@
+ln -sf /usr/share/%{name}/@BIN@ %{buildroot}/usr/bin/@BIN@
 for s in 16 32 48 64 128 256 512; do
   install -Dm 644 %{tefway_stage}/icons/icon-$s.png %{buildroot}/usr/share/icons/hicolor/${s}x${s}/apps/%{name}.png
 done
@@ -50,7 +50,7 @@ done
 if [ -d /run/systemd/system ]; then
   cp /usr/share/%{name}/files/%{name}.service /etc/systemd/system/
   cp /usr/share/%{name}/files/%{name}.desktop /usr/share/applications/
-  ln -sf /usr/share/%{name}/rustdesk /usr/bin/@BIN@
+  ln -sf /usr/share/%{name}/@BIN@ /usr/bin/@BIN@
   systemctl daemon-reload || true
   systemctl enable %{name}.service || true
   systemctl restart %{name}.service || true
