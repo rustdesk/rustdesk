@@ -115,7 +115,7 @@ pub(super) fn get_system_executable(relative_path: &str) -> ResultType<PathBuf> 
     Ok(path)
 }
 
-fn get_known_folder(id: &windows::core::GUID) -> ResultType<PathBuf> {
+pub(super) fn get_known_folder(id: &windows::core::GUID) -> ResultType<PathBuf> {
     let value = unsafe { SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None) }?;
     let path = unsafe { value.to_string() };
     unsafe { Com::CoTaskMemFree(Some(value.0.cast())) };
@@ -126,9 +126,7 @@ fn get_known_folder(id: &windows::core::GUID) -> ResultType<PathBuf> {
 // Reject all `%` so a handoff path cannot alter the elevated bootstrap before hash verification.
 // https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/set_1
 pub(super) fn path_for_cmd_environment(path: &Path) -> ResultType<&str> {
-    let value = path
-        .to_str()
-        .ok_or_else(|| anyhow!("Path is not valid Unicode: {:?}", path))?;
+    let value = directory::command_path(path)?;
     if value.contains(['\0', '"', '%', '\r', '\n']) {
         bail!("Path is unsafe for an elevated cmd.exe handoff: {:?}", path);
     }

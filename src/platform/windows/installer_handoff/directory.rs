@@ -1,8 +1,10 @@
+mod security;
+
 use super::super::{
-    installer_shell::{get_system_executable, path_for_cmd_environment},
+    installer_shell::{get_known_folder, get_system_executable, path_for_cmd_environment},
     wide_string,
 };
-use hbb_common::{anyhow::anyhow, bail, ResultType};
+use hbb_common::{anyhow::anyhow, bail, log, ResultType};
 use std::{
     fs, mem,
     os::windows::fs::MetadataExt,
@@ -19,6 +21,7 @@ use windows::{
             PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
         },
         Storage::FileSystem::{CreateDirectoryW, FILE_ATTRIBUTE_REPARSE_POINT},
+        UI::Shell::FOLDERID_ProgramData,
     },
 };
 
@@ -28,24 +31,85 @@ pub(in crate::platform::windows) fn path() -> ResultType<PathBuf> {
         .parent()
         .ok_or_else(|| anyhow!("System directory has no parent"))?;
     let temporary = windows.join("Temp");
-    for parent in temporary.ancestors() {
+    let parent = match candidate_parent(&temporary)? {
+        Some(parent) => parent,
+        None => fallback_parent(&temporary)?,
+    };
+    Ok(parent.join(format!(
+        "rustdesk-install-{}",
+        uuid::Uuid::new_v4().simple()
+    )))
+}
+
+fn fallback_parent(temporary: &Path) -> ResultType<PathBuf> {
+    let fallback = get_known_folder(&FOLDERID_ProgramData)?;
+    let parent = candidate_parent(&fallback)?.ok_or_else(|| {
+        anyhow!(
+            "Installer fallback volume does not support persistent ACLs: {}",
+            fallback.display()
+        )
+    })?;
+    log::warn!(
+        "Installer temporary volume lacks persistent ACLs; using {} instead of {}",
+        parent.display(),
+        temporary.display()
+    );
+    Ok(parent)
+}
+
+fn candidate_parent(path: &Path) -> ResultType<Option<PathBuf>> {
+    if !security::supports_acls(path)? {
+        return Ok(None);
+    }
+    for parent in path.ancestors() {
         let metadata = fs::symlink_metadata(parent).map_err(|err| {
             anyhow!(
                 "Failed to inspect installer temporary parent {}: {err}",
                 parent.display()
             )
         })?;
-        if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0 {
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0 {
+            let resolved = fs::canonicalize(path)?;
+            if !security::is_resolved(&resolved) {
+                bail!(
+                    "Installer junction must resolve to a local drive: {}",
+                    path.display()
+                );
+            }
+            if fs::canonicalize(command_path(&resolved)?)? != resolved {
+                bail!("Installer junction target changes when converted to a command path");
+            }
+            security::guard(&resolved)?;
+            return Ok(Some(resolved));
+        }
+        if !metadata.is_dir() {
             bail!(
                 "Installer temporary parent is not a regular directory: {}",
                 parent.display()
             );
         }
     }
-    Ok(temporary.join(format!(
-        "rustdesk-install-{}",
-        uuid::Uuid::new_v4().simple()
-    )))
+    Ok(Some(path.to_owned()))
+}
+
+pub(in crate::platform::windows) fn guard_file_parent(path: &Path) -> ResultType<Vec<fs::File>> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow!("Installer file has no parent"))?;
+    security::guard(parent)
+}
+
+pub(in crate::platform::windows) fn command_path(path: &Path) -> ResultType<&str> {
+    let value = path
+        .to_str()
+        .ok_or_else(|| anyhow!("Path is not valid Unicode: {:?}", path))?;
+    if security::is_resolved(path) {
+        // cmd.exe cannot execute a BAT through the extended DOS path spelling.
+        return value
+            .strip_prefix(r"\\?\")
+            .ok_or_else(|| anyhow!("Invalid resolved installer path"));
+    }
+    Ok(value)
 }
 
 pub(super) fn create(path: &Path) -> ResultType<()> {

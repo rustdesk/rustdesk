@@ -108,6 +108,7 @@ impl Drop for ProtectedInstallFile {
 }
 
 fn create_protected_file(path: &Path) -> ResultType<File> {
+    let _parents = directory::guard_file_parent(path)?;
     let mut descriptor = PSECURITY_DESCRIPTOR::default();
     // Restrict OWNER RIGHTS at creation so the unelevated creator cannot reopen
     // the file for writing or grant itself that permission after staging.
