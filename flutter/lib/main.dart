@@ -17,6 +17,8 @@ import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_terminal_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/tefway/branding.dart';
+import 'package:flutter_hbb/tefway/design.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
@@ -361,9 +363,9 @@ void _runApp(
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: title,
-      theme: MyTheme.lightTheme,
-      darkTheme: MyTheme.darkTheme,
-      themeMode: themeMode,
+      theme: isTefwayBuild() ? TefwayTheme.data() : MyTheme.lightTheme,
+      darkTheme: isTefwayBuild() ? TefwayTheme.data() : MyTheme.darkTheme,
+      themeMode: isTefwayBuild() ? ThemeMode.dark : themeMode,
       home: home,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
@@ -498,9 +500,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           title: isWeb
               ? '${bind.mainGetAppNameSync()} Web Client V2 (Preview)'
               : bind.mainGetAppNameSync(),
-          theme: MyTheme.lightTheme,
-          darkTheme: MyTheme.darkTheme,
-          themeMode: MyTheme.currentThemeMode(),
+          theme: isTefwayBuild() ? TefwayTheme.data() : MyTheme.lightTheme,
+          darkTheme: isTefwayBuild() ? TefwayTheme.data() : MyTheme.darkTheme,
+          themeMode:
+              isTefwayBuild() ? ThemeMode.dark : MyTheme.currentThemeMode(),
           home: isDesktop
               ? const DesktopTabPage()
               : isWeb
