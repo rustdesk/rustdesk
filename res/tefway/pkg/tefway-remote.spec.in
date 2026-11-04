@@ -1,0 +1,75 @@
+%define _build_id_links none
+%global debug_package %{nil}
+
+Name:       @PKG@
+Version:    @VERSION@
+Release:    1
+Summary:    @NAME@
+License:    GPL-3.0
+URL:        https://tefway.com.br
+Vendor:     Tefway <suporte@tefway.com.br>
+Requires:   gtk3 libxcb libXfixes alsa-lib libva gstreamer1-plugins-base
+Recommends: libayatana-appindicator-gtk3 libxdo systemd
+Conflicts:  rustdesk
+Obsoletes:  rustdesk
+AutoReqProv: no
+
+%description
+@NAME@, built from the RustDesk code base.
+
+@DESCRIPTION@
+
+Uses the Tefway rendezvous and relay servers only.
+
+%prep
+# Packaged from a prepared bundle, no source tree is needed here.
+
+%build
+
+%install
+rm -rf %{buildroot}
+mkdir -p %{buildroot}/usr/share/%{name}
+cp -r %{tefway_stage}/bundle/* %{buildroot}/usr/share/%{name}/
+mkdir -p %{buildroot}/usr/share/%{name}/files
+install -m 644 %{tefway_stage}/files/%{name}.desktop %{buildroot}/usr/share/%{name}/files/
+install -m 644 %{tefway_stage}/files/%{name}.service %{buildroot}/usr/share/%{name}/files/
+mkdir -p %{buildroot}/usr/bin
+ln -sf /usr/share/%{name}/rustdesk %{buildroot}/usr/bin/@BIN@
+for s in 16 32 48 64 128 256 512; do
+  install -Dm 644 %{tefway_stage}/icons/icon-$s.png %{buildroot}/usr/share/icons/hicolor/${s}x${s}/apps/%{name}.png
+done
+
+%files
+/usr/share/%{name}
+/usr/bin/@BIN@
+/usr/share/icons/hicolor/*/apps/%{name}.png
+/usr/share/%{name}/files/%{name}.desktop
+/usr/share/%{name}/files/%{name}.service
+
+%post
+if [ -d /run/systemd/system ]; then
+  cp /usr/share/%{name}/files/%{name}.service /etc/systemd/system/
+  cp /usr/share/%{name}/files/%{name}.desktop /usr/share/applications/
+  ln -sf /usr/share/%{name}/rustdesk /usr/bin/@BIN@
+  systemctl daemon-reload || true
+  systemctl enable %{name}.service || true
+  systemctl restart %{name}.service || true
+  update-desktop-database >/dev/null 2>&1 || true
+fi
+
+%preun
+if [ "$1" = "0" ]; then
+  systemctl stop %{name}.service || true
+  systemctl disable %{name}.service || true
+  rm -f /etc/systemd/system/%{name}.service
+  systemctl daemon-reload || true
+fi
+
+%postun
+if [ "$1" = "0" ]; then
+  rm -f /usr/bin/@BIN@
+  rm -f /usr/share/applications/%{name}.desktop
+  update-desktop-database >/dev/null 2>&1 || true
+fi
+
+%changelog

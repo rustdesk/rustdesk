@@ -50,6 +50,7 @@ mod clipboard;
 pub mod core_main;
 mod custom_server;
 mod lang;
+mod tefway;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
 mod port_forward_mux;

@@ -2909,6 +2909,18 @@ impl Connection {
         }
         // After handling CloseReason messages, proceed to process other message types
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            // The Master product is a controller only: it never serves a
+            // session, whatever the peer asks for.
+            if crate::tefway::refuses_incoming() {
+                log::warn!(
+                    "refused incoming login from {}: {}",
+                    lr.my_id,
+                    crate::tefway::MASTER_LOGIN_REFUSED
+                );
+                self.send_login_error(crate::tefway::MASTER_LOGIN_REFUSED)
+                    .await;
+                return false;
+            }
             if !self.check_login_scope(&lr).await {
                 return false;
             }
@@ -3044,7 +3056,11 @@ impl Connection {
                 crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
                     && is_logon();
 
-            if (password::approve_mode() == ApproveMode::Click && !allow_logon_screen_password)
+            // The Client product always takes the click-approval branch below,
+            // so no password, recent-session record or stored preference can
+            // let a connection through without a fresh local click.
+            if crate::tefway::requires_manual_approval()
+                || (password::approve_mode() == ApproveMode::Click && !allow_logon_screen_password)
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]

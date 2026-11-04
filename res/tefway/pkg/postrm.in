@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    rm -f /usr/bin/@BIN@
+    rm -f /usr/share/applications/@PKG@.desktop
+    rmdir /usr/share/@PKG@ || true
+    update-desktop-database >/dev/null 2>&1 || true
+fi
+
+exit 0

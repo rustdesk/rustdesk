@@ -3794,9 +3794,9 @@ Widget loadPowered(BuildContext context) {
   ).marginOnly(top: 6);
 }
 
-const _kDefaultLogoAsset = 'assets/logo.png';
-const _kLightLogoAsset = 'assets/logo_light.png';
-const _kDarkLogoAsset = 'assets/logo_dark.png';
+const _kDefaultLogoAsset = 'assets/tefway_logo.svg';
+const _kLightLogoAsset = 'assets/tefway_logo.svg';
+const _kDarkLogoAsset = 'assets/tefway_logo_dark.svg';
 
 List<String> _logoAssetCandidatesForBrightness(Brightness brightness) {
   return brightness == Brightness.dark
@@ -3840,12 +3840,10 @@ class _LogoState extends State<_Logo> {
       builder: (BuildContext context, AsyncSnapshot<String?> snapshot) {
         final asset = snapshot.data;
         if (asset != null) {
-          final image = Image.asset(
+          final image = SvgPicture.asset(
             asset,
             fit: BoxFit.contain,
-            errorBuilder: (ctx, error, stackTrace) {
-              return Container();
-            },
+            placeholderBuilder: (ctx) => Container(),
           );
           return Container(
             constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),

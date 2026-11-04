@@ -1,0 +1,86 @@
+# appimage-builder recipe, generated from appimage/AppImageBuilder-x86_64.yml by
+# res/tefway/package.py. The runtime environment below is the project's existing
+# one, with the package path replaced per profile.
+version: 1
+script:
+ - rm -rf ./AppDir || true
+ - cp @DEB@ ./tefway.deb
+ - bsdtar -zxvf ./tefway.deb
+ - tar -xvf ./data.tar.xz
+ - mkdir ./AppDir
+ - mv ./usr ./AppDir/usr
+ - for i in 16 32 48 64 128 256 512; do mkdir -p ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/; cp ../stage/icons/icon-$i.png ./AppDir/usr/share/icons/hicolor/$i\x$i/apps/@PKG@.png; done
+ - rm -rf ./AppDir/usr/share/applications
+AppDir:
+  path: ./AppDir
+  app_info:
+    id: @PKG@
+    name: @NAME@
+    icon: @PKG@
+    version: @VERSION@
+    exec: usr/share/@PKG@/@BIN@
+    exec_args: $@
+  apt:
+    arch:
+    - amd64
+    allow_unauthenticated: true
+    sources:
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-backports main restricted
+        universe multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security main restricted
+        universe multiverse
+    include:
+    - libc6:amd64
+    - libgtk-3-0
+    - libxcb-randr0
+    - libxdo3
+    - libxfixes3
+    - libxcb-shape0
+    - libxcb-xfixes0
+    - libasound2
+    - libsystemd0
+    - curl
+    - libva2
+    - libva-drm2
+    - libva-x11-2
+    - libgstreamer-plugins-base1.0-0
+    - gstreamer1.0-pipewire
+    - libwayland-client0
+    - libwayland-cursor0
+    - libwayland-egl1
+    - libpulse0
+    - packagekit-gtk3-module
+    - libcanberra-gtk3-module
+    - libdrm2
+    exclude:
+    - humanity-icon-theme
+    - hicolor-icon-theme
+    - adwaita-icon-theme
+    - ubuntu-mono
+  files:
+    include: []
+    exclude:
+    - usr/share/man
+    - usr/share/doc/*/README.*
+    - usr/share/doc/*/changelog.*
+    - usr/share/doc/*/NEWS.*
+    - usr/share/doc/*/TODO.*
+  runtime:
+    env:
+      GIO_MODULE_DIR: /lib64/gio/modules:/usr/lib/x86_64-linux-gnu/gio/modules:$APPDIR/usr/lib/x86_64-linux-gnu/gio/modules
+      GDK_BACKEND: x11
+      XDG_DATA_DIRS: $APPDIR/usr/local/share:$APPDIR/usr/share:/usr/local/share:/usr/share:$XDG_DATA_DIRS
+      XDG_CONFIG_DIRS: $APPDIR/etc/xdg:/etc/xdg:$XDG_CONFIG_DIRS
+      APPDIR_LIBRARY_PATH: /lib64:/usr/lib/x86_64-linux-gnu:$APPDIR/lib/x86_64-linux-gnu:$APPDIR/lib/x86_64-linux-gnu/security:$APPDIR/lib/systemd:$APPDIR/usr/lib/x86_64-linux-gnu:$APPDIR/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders:$APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules:$APPDIR/usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/printbackends:$APPDIR/usr/lib/x86_64-linux-gnu/krb5/plugins/preauth:$APPDIR/usr/lib/x86_64-linux-gnu/libcanberra-0.30:$APPDIR/usr/lib/x86_64-linux-gnu/pulseaudio:$APPDIR/usr/lib/x86_64-linux-gnu/sasl2:$APPDIR/usr/lib/x86_64-linux-gnu/vdpau:$APPDIR/usr/share/@PKG@/lib:$APPDIR/lib/x86_64
+      GST_PLUGIN_PATH: /lib64/gstreamer-1.0:/usr/lib/x86_64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0
+      GST_PLUGIN_SYSTEM_PATH: /lib64/gstreamer-1.0:/usr/lib/x86_64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0
+AppImage:
+  arch: x86_64
+  update-information: None
+  comp: gzip

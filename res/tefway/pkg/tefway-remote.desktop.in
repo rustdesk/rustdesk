@@ -1,0 +1,18 @@
+[Desktop Entry]
+Name=@NAME@
+GenericName=Remote Desktop
+Comment=@DESCRIPTION@
+Exec=/usr/bin/@BIN@ %u
+Icon=@PKG@
+Terminal=false
+Type=Application
+StartupNotify=true
+Categories=Network;RemoteAccess;GTK;
+Keywords=tefway;remote;desktop;remote-control;support;
+StartupWMClass=@PKG@
+Actions=new-window;
+X-Desktop-File-Install-Version=0.23
+
+[Desktop Action new-window]
+Name=Open a New Window
+Exec=/usr/bin/@BIN@ %u

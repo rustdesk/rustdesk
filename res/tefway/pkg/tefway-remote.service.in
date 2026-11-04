@@ -1,0 +1,12 @@
+[Unit]
+Description=@NAME@
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/share/@PKG@/rustdesk --service
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

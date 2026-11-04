@@ -90,8 +90,32 @@ fn install_android_deps() {
     println!("cargo:rustc-link-lib=OpenSLES");
 }
 
+/// Bakes the Tefway product into the binary. Values other than the two known
+/// profiles build stock RustDesk, so a typo cannot ship a half-configured app.
+fn build_profile() {
+    let requested = std::env::var("TEFWAY_PROFILE")
+        .unwrap_or_default()
+        .to_lowercase();
+    let profile = match requested.as_str() {
+        "master" => "master",
+        "client" => "client",
+        other => {
+            if !other.is_empty() {
+                println!(
+                    "cargo:warning=unknown TEFWAY_PROFILE={:?}, building stock RustDesk",
+                    other
+                );
+            }
+            ""
+        }
+    };
+    println!("cargo:rustc-env=TEFWAY_PROFILE={}", profile);
+    println!("cargo:rerun-if-env-changed=TEFWAY_PROFILE");
+}
+
 fn main() {
     hbb_common::gen_version();
+    build_profile();
     install_android_deps();
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();

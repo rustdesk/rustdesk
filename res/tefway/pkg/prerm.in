@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    systemctl stop @PKG@.service || true
+    systemctl disable @PKG@.service || true
+    rm -f /etc/systemd/system/@PKG@.service
+    systemctl daemon-reload || true
+fi
+
+exit 0

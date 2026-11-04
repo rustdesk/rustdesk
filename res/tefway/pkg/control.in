@@ -1,0 +1,16 @@
+Package: @PKG@
+Version: @VERSION@
+Section: net
+Priority: optional
+Architecture: @ARCH@
+Maintainer: Tefway <suporte@tefway.com.br>
+Installed-Size: @SIZE@
+Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, curl, libva2, libva-drm2, libva-x11-2, libgstreamer-plugins-base1.0-0, libpulse0, libdrm2, libayatana-appindicator3-1
+Conflicts: rustdesk, tefway-remote-master, tefway-remote-client
+Provides: @PKG@
+Description: @NAME@
+ Tefway Remote, built from the RustDesk code base.
+ .
+ @DESCRIPTION@
+ .
+ Uses the Tefway rendezvous and relay servers only.
