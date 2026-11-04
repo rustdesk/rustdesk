@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../desktop/widgets/popup_menu.dart';
@@ -259,9 +261,48 @@ class _NativeSubmenu extends StatefulWidget {
 
 class _NativeSubmenuState extends State<_NativeSubmenu> {
   final _controller = MenuController();
+  late final _focusNode = FocusNode(onKeyEvent: (_, event) {
+    if (event.logicalKey == LogicalKeyboardKey.escape) _cancelHoverOpen();
+    return KeyEventResult.ignored;
+  });
+  Timer? _hoverTimer;
   final _buttonKey = GlobalKey();
   final _itemKey = GlobalKey();
   Offset _offset = Offset.zero;
+
+  @override
+  void dispose() {
+    _cancelHoverOpen();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _cancelHoverOpen() {
+    _hoverTimer?.cancel();
+    _hoverTimer = null;
+  }
+
+  void _onHover(bool hovering) {
+    _cancelHoverOpen();
+    if (hovering) {
+      _focusNode.requestFocus();
+      if (!_controller.isOpen) {
+        _hoverTimer = Timer(const Duration(milliseconds: 200), () {
+          if (mounted && widget.menuChildren.isNotEmpty) _controller.open();
+        });
+      }
+    }
+  }
+
+  void _toggleMenu() {
+    _cancelHoverOpen();
+    _focusNode.requestFocus();
+    if (_controller.isOpen) {
+      _controller.close();
+    } else {
+      _controller.open();
+    }
+  }
 
   void _positionSubmenu() {
     // Submenu dimensions are available after its overlay has been laid out.
@@ -305,20 +346,61 @@ class _NativeSubmenuState extends State<_NativeSubmenu> {
 
   @override
   Widget build(BuildContext context) {
-    return SubmenuButton(
-      key: _buttonKey,
-      controller: _controller,
-      onOpen: _positionSubmenu,
-      alignmentOffset: _offset,
-      style: widget.style,
-      menuChildren: [
-        for (var i = 0; i < widget.menuChildren.length; i++)
-          if (i == 0)
-            KeyedSubtree(key: _itemKey, child: widget.menuChildren[i])
-          else
-            widget.menuChildren[i],
-      ],
-      child: widget.child,
+    final enabled = widget.menuChildren.isNotEmpty;
+    final buttonStyle = widget.style
+        .merge(MenuButtonTheme.of(context).style)
+        .merge(const MenuItemButton().defaultStyleOf(context));
+    final spacing =
+        math.max(4.0, 12 + Theme.of(context).visualDensity.horizontal * 2);
+    final menuPadding = MenuTheme.of(context)
+        .style
+        ?.padding
+        ?.resolve({})
+        ?.resolve(Directionality.of(context));
+    return Focus(
+      canRequestFocus: false,
+      onFocusChange: (focused) {
+        if (!focused) {
+          _cancelHoverOpen();
+          _controller.close();
+        }
+      },
+      child: MenuAnchor(
+        key: _buttonKey,
+        controller: _controller,
+        childFocusNode: _focusNode,
+        onOpen: () {
+          _cancelHoverOpen();
+          setState(() {});
+          _positionSubmenu();
+        },
+        onClose: _cancelHoverOpen,
+        alignmentOffset: _offset - Offset(0, menuPadding?.top ?? 0),
+        menuChildren: [
+          for (var i = 0; i < widget.menuChildren.length; i++)
+            if (i == 0)
+              KeyedSubtree(key: _itemKey, child: widget.menuChildren[i])
+            else
+              widget.menuChildren[i],
+        ],
+        builder: (context, controller, child) => MergeSemantics(
+          child: Semantics(
+            expanded: enabled && controller.isOpen,
+            child: TextButton(
+              focusNode: _focusNode,
+              onHover: enabled ? _onHover : null,
+              onPressed: enabled ? _toggleMenu : null,
+              isSemanticButton: null,
+              style: buttonStyle,
+              child: Row(children: [
+                Expanded(child: ClipRect(child: widget.child)),
+                SizedBox(width: spacing),
+                const Icon(Icons.arrow_right, size: 24),
+              ]),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

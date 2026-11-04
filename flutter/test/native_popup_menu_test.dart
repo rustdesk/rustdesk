@@ -53,7 +53,7 @@ void main() {
       entries.keys.first
     ]) {
       final parent = tester.getRect(find.ancestor(
-          of: find.text(name), matching: find.byType(SubmenuButton)));
+          of: find.text(name), matching: find.byType(TextButton)));
       await tester.tapAt(parent.centerRight - const Offset(12, 0));
       await tester.pumpAndSettle();
       final submenu = tester.getRect(find.ancestor(

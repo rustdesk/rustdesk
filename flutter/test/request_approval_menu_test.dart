@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsFlag;
+
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -241,7 +243,7 @@ void main() {
     }
   });
 
-  testWidgets('approval submenu opens on hover without a tooltip',
+  testWidgets('approval submenu waits 200 ms on hover without a tooltip',
       (tester) async {
     final actions = <String>[];
     await openMenu(tester, actions);
@@ -249,6 +251,16 @@ void main() {
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
     await mouse.moveTo(tester.getCenter(find.text('Request approval')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await mouse.moveTo(const Offset(2, 2));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Terminal (Run as administrator)'), findsNothing);
+    await mouse.moveTo(tester.getCenter(find.text('Request approval')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump(const Duration(milliseconds: 149));
+    expect(find.text('Terminal (Run as administrator)'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1));
     await tester.pumpAndSettle();
     expect(find.text('Terminal (Run as administrator)'), findsOneWidget);
     final triggerContext = tester.element(find.text('Request approval'));
@@ -268,6 +280,75 @@ void main() {
     expect(actions, ['Connect:request-approval']);
     expect(find.text('Request approval'), findsNothing);
     await mouse.removePointer();
+  });
+
+  testWidgets('activation bypasses the hover delay', (tester) async {
+    final semantics = tester.ensureSemantics();
+    for (final input in ['mouse', 'touch', 'keyboard', 'arrow', 'semantics']) {
+      final actions = <String>[];
+      await openMenu(tester, actions);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(2, 2));
+      final trigger = tester.getCenter(find.text('Request approval'));
+      await mouse.moveTo(trigger);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.text('Terminal (Run as administrator)'), findsNothing);
+      if (input == 'keyboard') {
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      } else if (input == 'arrow') {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      } else if (input == 'semantics') {
+        tester.semantics.tap(find.semantics.byLabel('Request approval'));
+      } else if (input == 'touch') {
+        await tester.tapAt(trigger, kind: PointerDeviceKind.touch);
+      } else {
+        await mouse.down(trigger);
+        await mouse.up();
+      }
+      await tester.pump();
+      expect(find.text('Terminal (Run as administrator)'), findsOneWidget,
+          reason: input);
+      expect(
+          tester
+              .getSemantics(find.text('Request approval'))
+              .hasFlag(SemanticsFlag.isExpanded),
+          isTrue);
+      final parent = tester.getCenter(find.text('Connect').first);
+      await mouse.moveTo(parent);
+      await mouse.down(parent);
+      await mouse.up();
+      await tester.pumpAndSettle();
+      expect(actions, ['Connect'], reason: input);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Request approval'), findsNothing);
+      await mouse.removePointer();
+    }
+    semantics.dispose();
+  });
+
+  testWidgets('dismissing a pending submenu cancels the hover', (tester) async {
+    for (final escape in [false, true]) {
+      await openMenu(tester, []);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(2, 2));
+      await mouse.moveTo(tester.getCenter(find.text('Request approval')));
+      await tester.pump(const Duration(milliseconds: 50));
+      if (escape) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      } else {
+        await tester.tapAt(const Offset(2, 2));
+      }
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Request approval'),
+          escape ? findsOneWidget : findsNothing);
+      expect(find.text('Terminal (Run as administrator)'), findsNothing);
+      if (escape) {
+        await tester.tapAt(const Offset(2, 2));
+        await tester.pumpAndSettle();
+      }
+      await mouse.removePointer();
+    }
   });
 
   testWidgets('hovering away closes only the approval submenu on either side',
@@ -365,7 +446,8 @@ void main() {
       await openMenu(tester, [],
           position: RelativeRect.fromLTRB(atRight ? 1180 : 20, 20,
               atRight ? 20 : 1180, 780));
-      final parent = tester.getRect(find.byType(SubmenuButton));
+      final parent =
+          tester.getRect(find.widgetWithText(TextButton, 'Request approval'));
       await tester.tap(find.text('Request approval'));
       await tester.pumpAndSettle();
       final submenu = tester.getRect(find.ancestor(
@@ -385,9 +467,7 @@ void main() {
     final actions = <String>[];
     await openMenu(tester, actions);
     bool approvalHasFocus() =>
-        FocusManager.instance.primaryFocus?.context
-            ?.findAncestorWidgetOfExactType<SubmenuButton>() !=
-        null;
+        Focus.of(tester.element(find.text('Request approval'))).hasPrimaryFocus;
 
     for (var i = 0; i < 30 && !approvalHasFocus(); i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -397,6 +477,8 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     expect(find.text('Terminal (Run as administrator)'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(actions, ['Connect:request-approval']);
@@ -543,7 +625,8 @@ void main() {
     ]) {
       final actions = <String>[];
       await openMenu(tester, actions);
-      final row = tester.getRect(find.byType(SubmenuButton));
+      final row =
+          tester.getRect(find.widgetWithText(TextButton, 'Request approval'));
       await tester.tapAt(corner.withinRect(row.deflate(2)));
       await tester.pumpAndSettle();
       expect(actions, isEmpty);
