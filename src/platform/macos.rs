@@ -54,7 +54,7 @@ static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
 static mut LATEST_SEED: i32 = 0;
 const UPDATE_CLEANUP_FAILED_AFTER_COMMIT: &str = "UPDATE_CLEANUP_FAILED_AFTER_COMMIT";
-const UPDATE_DMG_DETACH_FALLBACK: &str = "UPDATE_DMG_DETACH_FALLBACK";
+const UPDATE_DMG_FALLBACK: &str = "UPDATE_DMG_FALLBACK";
 // `kill -9` may not work without administrator privileges.
 // App-only update transaction used when launchd jobs are absent or intentionally stopped.
 // Keep its verification, staging, bundle rollback, and cleanup aligned with update.scpt.
@@ -69,21 +69,23 @@ const PRIVILEGED_UPDATE_BODY: &str = r#"
 	    set expected_bundle_id_q to quoted form of expected_bundle_id
 
 	    set detach_dmg to "/usr/bin/hdiutil detach \"$dmg_mount\" -force >/dev/null"
+	    set attach_dmg to "/usr/bin/hdiutil attach -readonly -nobrowse -mountpoint \"$dmg_mount\" \"$verified_dmg\" >/dev/null"
 	    if expected_sha256 is not "" then
-	        -- macOS 27.0 deprecates hdiutil; this is not diskutil eject force's minimum version.
+	        -- macOS 27.0 deprecates hdiutil; this is not diskutil's minimum supported version.
 	        -- Source: hdiutil(1), WHAT'S NEW: https://keith.github.io/xcode-man-pages/hdiutil.1.html
 	        set hdiutil_deprecated_macos_version to 27
 	        set macos_major to do shell script "set -e; macos_version=$(/usr/bin/sw_vers -productVersion); printf '%s' \"${macos_version%%.*}\""
 	        if (macos_major as integer) >= hdiutil_deprecated_macos_version then
 	            -- Preserve command-not-found status despite the parent shell's set -e.
-	            set detach_dmg to "( set +e; if /usr/sbin/diskutil eject force \"$dmg_mount\" >/dev/null; then exit 0; else detach_status=$?; fi; command_not_found=127; if [ \"$detach_status\" -eq \"$command_not_found\" ] && [ ! -e /usr/sbin/diskutil ]; then echo 'UPDATE_DMG_DETACH_FALLBACK'; " & detach_dmg & "; else exit \"$detach_status\"; fi )"
+	            set detach_dmg to "( set +e; if /usr/sbin/diskutil eject force \"$dmg_mount\" >/dev/null; then exit 0; else detach_status=$?; fi; command_not_found=127; if [ \"$detach_status\" -eq \"$command_not_found\" ] && [ ! -e /usr/sbin/diskutil ]; then echo 'UPDATE_DMG_FALLBACK'; " & detach_dmg & "; else exit \"$detach_status\"; fi )"
+	            set attach_dmg to "( set +e; if /usr/sbin/diskutil image attach --readOnly --nobrowse --mountPoint \"$dmg_mount\" \"$verified_dmg\" >/dev/null; then exit 0; else attach_status=$?; fi; command_not_found=127; if [ \"$attach_status\" -eq \"$command_not_found\" ] && [ ! -e /usr/sbin/diskutil ]; then echo 'UPDATE_DMG_FALLBACK'; " & attach_dmg & "; else exit \"$attach_status\"; fi )"
 	        end if
 	    end if
 
 	    set check_source to "if [ -n " & expected_sha256_q & " ]; then test -f " & source_path_q & "; else test -d " & source_path_q & "; fi;"
 	    set kill_others to "pids=$(pgrep -x '" & app_name & "' | grep -vx " & cur_pid & " || true); if [ -n \"$pids\" ]; then echo \"$pids\" | xargs kill -9 || true; fi;"
 	    -- Rehash the root-owned copy in a clean environment before staging bytes.
-	    set prepare_verified to "verified_dir=$(/usr/bin/mktemp -d /tmp/.rustdeskupdate-verified.XXXXXX); /bin/chmod 0700 \"$verified_dir\"; verified_app=\"$verified_dir/" & app_name & ".app\"; dmg_attached=0; if [ -n " & expected_sha256_q & " ]; then verified_dmg=\"$verified_dir/update.dmg\"; /bin/cp " & source_path_q & " \"$verified_dmg\"; /usr/sbin/chown root:wheel \"$verified_dmg\"; /bin/chmod 0400 \"$verified_dmg\"; actual_sha256=$(/usr/bin/env -i /usr/bin/shasum -a 256 \"$verified_dmg\"); actual_sha256=${actual_sha256%% *}; if [ \"$actual_sha256\" != " & expected_sha256_q & " ]; then echo 'Update DMG SHA256 mismatch' >&2; exit 1; fi; dmg_mount=\"$verified_dir/mount\"; /bin/mkdir \"$dmg_mount\"; dmg_attached=1; /usr/bin/hdiutil attach -readonly -nobrowse -mountpoint \"$dmg_mount\" \"$verified_dmg\" >/dev/null; /usr/bin/ditto \"$dmg_mount/" & app_name & ".app\" \"$verified_app\"; " & detach_dmg & "; dmg_attached=0; /bin/rm -f \"$verified_dmg\"; else /usr/bin/ditto " & source_path_q & " \"$verified_app\"; fi; /usr/sbin/chown -R root:wheel \"$verified_app\"; /bin/chmod -R go-w \"$verified_app\";"
+	    set prepare_verified to "verified_dir=$(/usr/bin/mktemp -d /tmp/.rustdeskupdate-verified.XXXXXX); /bin/chmod 0700 \"$verified_dir\"; verified_app=\"$verified_dir/" & app_name & ".app\"; dmg_attached=0; if [ -n " & expected_sha256_q & " ]; then verified_dmg=\"$verified_dir/update.dmg\"; /bin/cp " & source_path_q & " \"$verified_dmg\"; /usr/sbin/chown root:wheel \"$verified_dmg\"; /bin/chmod 0400 \"$verified_dmg\"; actual_sha256=$(/usr/bin/env -i /usr/bin/shasum -a 256 \"$verified_dmg\"); actual_sha256=${actual_sha256%% *}; if [ \"$actual_sha256\" != " & expected_sha256_q & " ]; then echo 'Update DMG SHA256 mismatch' >&2; exit 1; fi; dmg_mount=\"$verified_dir/mount\"; /bin/mkdir \"$dmg_mount\"; dmg_attached=1; " & attach_dmg & "; /usr/bin/ditto \"$dmg_mount/" & app_name & ".app\" \"$verified_app\"; " & detach_dmg & "; dmg_attached=0; /bin/rm -f \"$verified_dmg\"; else /usr/bin/ditto " & source_path_q & " \"$verified_app\"; fi; /usr/sbin/chown -R root:wheel \"$verified_app\"; /bin/chmod -R go-w \"$verified_app\";"
 	    set validate_verified_app to "candidate_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \"$verified_app/Contents/Info.plist\"); if [ -z " & expected_bundle_id_q & " ] || [ \"$candidate_bundle_id\" != " & expected_bundle_id_q & " ]; then echo 'Update app bundle identifier mismatch' >&2; exit 1; fi; if [ -e " & app_bundle_q & " ]; then installed_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' " & installed_info_q & "); if [ \"$installed_bundle_id\" != " & expected_bundle_id_q & " ]; then echo 'Installed app bundle identifier mismatch' >&2; exit 1; fi; fi;"
 	    set prepare_swap_paths to "temp_bundle=" & app_bundle_q & ".new.$$; old_bundle=" & app_bundle_q & ".old.$$;"
 	    set cleanup_swap_paths to "rm -rf \"$temp_bundle\" \"$old_bundle\";"
@@ -312,8 +314,8 @@ fn log_update_cleanup_warning(output: &std::process::Output) {
     if String::from_utf8_lossy(&output.stdout).contains(UPDATE_CLEANUP_FAILED_AFTER_COMMIT) {
         log::warn!("Update committed, but temporary update cleanup failed");
     }
-    if String::from_utf8_lossy(&output.stdout).contains(UPDATE_DMG_DETACH_FALLBACK) {
-        log::warn!("/usr/sbin/diskutil not found; fell back to hdiutil for DMG cleanup");
+    if String::from_utf8_lossy(&output.stdout).contains(UPDATE_DMG_FALLBACK) {
+        log::warn!("/usr/sbin/diskutil not found; fell back to hdiutil for DMG operations");
     }
 }
 
