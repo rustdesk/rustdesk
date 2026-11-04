@@ -295,6 +295,9 @@ jobs:
           if [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]]; then
             git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
           fi
+          cd -
+          # Get Flutter packages using default lockfile
+          python3 flutter/flutter_pub_get.py get-packages
 
       - name: Patch RustDesk sources for Flutter 3.44 (arm64)
         # arm64 is on Flutter 3.44 (as is macOS arm64); apply its source/pubspec deltas on the fly
@@ -303,7 +306,10 @@ jobs:
         # `flutter/flutter_pub_get.py` then runs `pub get` with enforced lockfile
         if: ${{ matrix.job.arch == 'aarch64' }}
         shell: bash
-        run: bash .github/patches/apply_flutter_3.44_source_patches.sh
+        run: |
+          bash .github/patches/apply_flutter_3.44_source_patches.sh
+          # Get Flutter packages using arm64 bridge lockfile
+          python3 flutter/flutter_pub_get.py get-packages "flutter/pubspec-bridge-${FLUTTER_BRIDGE_ARM64_VERSION}.lock"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -354,7 +360,7 @@ jobs:
         run: |
           # Windows: build RustDesk
           # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix
-          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}
+          python3 .\build.py --ci --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}
           mv ./flutter/build/windows/${{ matrix.job.flutter-arch }}/runner/Release ./rustdesk
 
           # Download usbmmidd_v2.zip and extract it to ./rustdesk
@@ -397,7 +403,7 @@ jobs:
         shell: bash
         run: |
           # The build's own features, so the tests see the code that ships.
-          FEATURES=$(python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }} --print-features)
+          FEATURES=$(python3 ./build.py --ci --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }} --print-features)
           cargo test --locked --release --lib --features "$FEATURES"
           # Its Windows tests run nowhere else.
           cargo test --locked --release -p clipboard
@@ -901,12 +907,18 @@ jobs:
         run: |
           rustup target add ${{ matrix.job.target }}
           cargo build --locked --features flutter,hwcodec --release --target aarch64-apple-ios --lib
-          
+
       - name: Upload liblibrustdesk.a Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: liblibrustdesk.a
           path: target/aarch64-apple-ios/release/liblibrustdesk.a
+
+      - name: Download Rustdesk Flutter dependencies using lockfile
+        shell: bash
+        run: |
+          # Get Flutter packages using default lockfile
+          python3 flutter/flutter_pub_get.py get-packages
 
       - name: Build rustdesk
         shell: bash
@@ -1045,6 +1057,9 @@ jobs:
           if [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]]; then
             git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
           fi
+          cd -
+          # Get Flutter packages using default lockfile
+          python3 flutter/flutter_pub_get.py get-packages
 
       - name: Workaround for flutter issue
         shell: bash
@@ -1062,6 +1077,8 @@ jobs:
           brew install gnu-sed
           export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
           bash .github/patches/apply_flutter_3.44_source_patches.sh
+          # Get Flutter packages using arm64 bridge lockfile
+          python3 flutter/flutter_pub_get.py get-packages "flutter/pubspec-bridge-${FLUTTER_BRIDGE_ARM64_VERSION}.lock"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -1129,7 +1146,7 @@ jobs:
             sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
             echo "MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}" >> "$GITHUB_ENV"
           fi
-          ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
+          ./build.py --ci --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
 
       - name: Test verified updates
         if: env.PUBLISH_UPDATE_METADATA == 'true'
@@ -1144,7 +1161,7 @@ jobs:
         run: |
           # The build's own features, so the tests see the code that ships. MACOSX_DEPLOYMENT_TARGET
           # comes from the build step's export.
-          FEATURES=$(./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }} --print-features)
+          FEATURES=$(./build.py --ci --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }} --print-features)
           cargo test --locked --release --lib --features "$FEATURES"
           # Opt-in, and its macOS tests run nowhere else.
           cargo test --locked --release -p clipboard --features unix-file-copy-paste
@@ -1637,6 +1654,12 @@ jobs:
           name: librustdesk.so.${{ matrix.job.target }}
           path: ./target/${{ matrix.job.target }}/release/liblibrustdesk.so
 
+      - name: Download Rustdesk Flutter dependencies using lockfile
+        shell: bash
+        run: |
+          # Get Flutter packages using default lockfile
+          python3 flutter/flutter_pub_get.py get-packages
+
       - name: Build rustdesk
         shell: bash
         env:
@@ -1846,6 +1869,12 @@ jobs:
         with:
           name: librustdesk.so.i686-linux-android
           path: ./flutter/android/app/src/main/jniLibs/x86
+
+      - name: Download Rustdesk Flutter dependencies using lockfile
+        shell: bash
+        run: |
+          # Get Flutter packages using default lockfile
+          python3 flutter/flutter_pub_get.py get-packages
 
       - name: Build rustdesk
         shell: bash
@@ -2143,6 +2172,7 @@ jobs:
                 export PATH=/opt/flutter-elinux/bin:$PATH
                 sed -i "s/flutter build linux --release/flutter-elinux build linux --verbose/g" ./build.py
                 sed -i "s/x64\/release/arm64\/release/g" ./build.py
+                sed -i 's/"flutter"/"flutter-elinux"/g' ./flutter/flutter_pub_get.py
               ;;
               x86_64)
                 export PATH=/opt/flutter/bin:$PATH
@@ -2183,14 +2213,20 @@ jobs:
               popd
             fi
 
-            # build flutter
             pushd /workspace
+
+            # Get Flutter packages using default lockfile
+            python3 flutter/flutter_pub_get.py get-packages
+
+            # build flutter
             export CARGO_INCREMENTAL=0
             export DEB_ARCH=${{ matrix.job.deb_arch }}
-            python3 ./build.py --flutter --skip-cargo
+            python3 ./build.py --ci --flutter --skip-cargo
             for name in rustdesk*??.deb; do
               mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
             done
+
+            popd
 
             # rpm package
             echo -e "start packaging fedora package"
@@ -2448,7 +2484,7 @@ jobs:
             # use the .so built on the runner; build.py checks it is the pinned checkout
             export DRMTAP_PREBUILT_DIR=/workspace/third_party/libdrmtap/build-pkg
             # ask build.py for the features so this line and the packaging line cannot drift
-            FEATURES=$(python3 ./build.py --flutter --drm --hwcodec --unix-file-copy-paste --print-features)
+            FEATURES=$(python3 ./build.py --ci --flutter --drm --hwcodec --unix-file-copy-paste --print-features)
             # an empty or error-shaped value would silently build a stock binary
             for want in drm drm-wake; do
               case ",$FEATURES," in
@@ -2530,11 +2566,15 @@ jobs:
               popd
             fi
 
-            # build flutter
             pushd /workspace
+
+            # Get Flutter packages using default lockfile
+            python3 flutter/flutter_pub_get.py get-packages
+
+            # build flutter
             export CARGO_INCREMENTAL=0
             export DEB_ARCH=amd64
-            python3 ./build.py --flutter --drm --hwcodec --unix-file-copy-paste --skip-cargo
+            python3 ./build.py --ci --flutter --drm --hwcodec --unix-file-copy-paste --skip-cargo
             for name in rustdesk*??.deb; do
               mv "$name" "${name%%.deb}-x86_64.deb"
             done
@@ -2806,7 +2846,7 @@ jobs:
             mv ./target/release/rustdesk ./Release/rustdesk
             wget -O ./Release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/${{ matrix.job.sciter_arch }}/libsciter-gtk.so
             export DEB_ARCH=${{ matrix.job.deb_arch }}
-            ./build.py --package ./Release
+            ./build.py --ci --package ./Release
 
       - name: Rename rustdesk
         shell: bash
@@ -3012,9 +3052,8 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ env.FLUTTER_VERSION }}" == 3.44.* ]]; then
-            python3 flutter/flutter_pub_get.py check-local-pubspec-changes
             bash .github/patches/apply_flutter_3.44_source_patches.sh
-            python3 flutter/flutter_pub_get.py get-packages "flutter/pubspec-bridge-3.44.8.lock"
+            python3 flutter/flutter_pub_get.py get-packages "flutter/pubspec-bridge-${FLUTTER_BRIDGE_ARM64_VERSION}.lock"
             bash .github/patches/apply_flutter_3.44_web_patches.sh
           fi
 
