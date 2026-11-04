@@ -298,7 +298,9 @@ mod pa_impl {
                                     Some(r) => match r.process(&ohos_mic_data) {
                                         Ok(v) => v,
                                         Err(e) => {
-                                            log::error!(
+                                            hbb_common::throttled_log!(
+                                                std::time::Duration::from_secs(5),
+                                                error,
                                                 "Failed to resample the ohos call mic stream: {e}"
                                             );
                                             Vec::new()
