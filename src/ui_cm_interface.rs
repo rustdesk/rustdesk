@@ -182,10 +182,22 @@ static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 /// Safety net for #15698: on Linux the CM process only exits when its Flutter
 /// window is destroyed (GtkApplication hold/release). If the Dart side fails
 /// to close the window after the last client leaves (e.g. a frozen isolate),
-/// the process and its window linger forever. While `CM_IDLE_EXIT_ARMED` is
-/// set, the CM exits via `quit_cm()` if it stays empty for
-/// `CM_IDLE_EXIT_TIMEOUT`. A healthy UI closes the window in ~6s, well before
-/// this fires, so the watchdog only kicks in when the UI has already failed.
+/// the process and its window linger forever.
+///
+/// The watchdog is armed as early as possible, in the `--cm` entry point
+/// (`core_main.rs`), i.e. before the Flutter engine / Dart isolate starts.
+/// This matters because the failure mode observed in #15698 is a Dart UI
+/// thread stuck at 100% CPU: the `cmInit()` FFI call (which creates the
+/// `_cm` ipc listener and schedules the 6s zero-client close timer) is never
+/// reached, so arming from `start_ipc()` alone would never happen.
+///
+/// While `CM_IDLE_EXIT_ARMED` is set, the CM exits via `quit_cm()` if it
+/// stays empty for `CM_IDLE_EXIT_TIMEOUT`. Arming at process start is safe:
+/// the server gives up connecting to the `_cm` endpoint after ~6.5s (20 x
+/// 0.3s retries in `server/connection.rs`), so a CM that has no client
+/// registered after 10s is already useless. A healthy UI registers the
+/// client within seconds (disarming the watchdog) and closes the window in
+/// ~6s after the last client leaves, well before this fires.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 static CM_IDLE_EXIT_ARMED: AtomicBool = AtomicBool::new(false);
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1842,17 +1854,23 @@ pub fn close_voice_call(id: i32) {
 
 /// Spawns a one-shot watchdog that exits the CM via `quit_cm()` if no client
 /// is connected within `CM_IDLE_EXIT_TIMEOUT`. See `CM_IDLE_EXIT_ARMED`.
+/// `pub` so it can be armed from the `--cm` entry point before the
+/// Flutter/Dart UI starts.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn arm_idle_exit_watchdog() {
+pub fn arm_idle_exit_watchdog() {
     if CM_IDLE_EXIT_ARMED
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
     {
         return;
     }
-    std::thread::Builder::new()
+    if std::thread::Builder::new()
         .name("cm-idle-exit".into())
         .spawn(|| {
+            log::info!(
+                "cm: idle-exit watchdog started ({}s)",
+                CM_IDLE_EXIT_TIMEOUT.as_secs()
+            );
             let deadline = std::time::Instant::now() + CM_IDLE_EXIT_TIMEOUT;
             while std::time::Instant::now() < deadline {
                 if !CLIENTS.read().unwrap().is_empty() {
@@ -1870,7 +1888,11 @@ fn arm_idle_exit_watchdog() {
             }
             CM_IDLE_EXIT_ARMED.store(false, Ordering::SeqCst);
         })
-        .ok();
+        .is_err()
+    {
+        // Thread creation failed: allow a later call to retry.
+        CM_IDLE_EXIT_ARMED.store(false, Ordering::SeqCst);
+    }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

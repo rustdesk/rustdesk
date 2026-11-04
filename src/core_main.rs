@@ -701,6 +701,12 @@ pub fn core_main() -> Option<CoreMainAction> {
         } else if args[0] == "--cm" {
             // call connection manager to establish connections
             // meanwhile, return true to call flutter window to show control panel
+            // Arm the idle-exit watchdog before the Flutter/Dart UI starts:
+            // in #15698 the Dart UI thread can be stuck at 100% CPU, in which
+            // case cmInit() (and the `_cm` ipc listener) is never created and
+            // the process would linger forever without this safety net.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            crate::ui_cm_interface::arm_idle_exit_watchdog();
             crate::ui_interface::start_option_status_sync();
         } else if args[0] == "--whiteboard" {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
