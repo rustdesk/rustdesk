@@ -4,13 +4,13 @@ use std::{
     io::{self, Write},
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
-    process::{Command, ExitStatus},
+    process::{Command, ExitStatus, Output},
 };
 
 const UPDATE_DMG_MOUNT_TEMPLATE: &str = "/tmp/.rustdeskmount-XXXXXX";
-// macOS 27.0 deprecates hdiutil; this is not diskutil eject force's minimum version.
+// macOS 27.0 deprecates hdiutil; this is not diskutil's minimum supported version.
 // Source: hdiutil(1), WHAT'S NEW: https://keith.github.io/xcode-man-pages/hdiutil.1.html
-const HDIUTIL_DETACH_DEPRECATED_MACOS_VERSION: u32 = 27;
+pub(super) const HDIUTIL_DEPRECATED_MACOS_VERSION: u32 = 27;
 
 #[derive(Debug)]
 pub(super) struct VerifiedDmg {
@@ -120,7 +120,7 @@ impl Drop for DmgGuard {
 }
 
 fn detach_dmg(mount_point: &str) -> io::Result<ExitStatus> {
-    if super::major_version() >= HDIUTIL_DETACH_DEPRECATED_MACOS_VERSION {
+    if super::major_version() >= HDIUTIL_DEPRECATED_MACOS_VERSION {
         match Command::new("/usr/sbin/diskutil")
             .args(["eject", "force", mount_point])
             .status()
@@ -142,17 +142,7 @@ fn detach_dmg(mount_point: &str) -> io::Result<ExitStatus> {
 pub(super) fn attach_dmg(dmg_path: &str) -> ResultType<DmgGuard> {
     let mount_point = create_dmg_mount_point()?;
     // Update images are input only, so never mount them writable.
-    let output = match Command::new("/usr/bin/hdiutil")
-        .args([
-            "attach",
-            "-readonly",
-            "-nobrowse",
-            "-mountpoint",
-            mount_point.as_str(),
-            dmg_path,
-        ])
-        .output()
-    {
+    let output = match attach_dmg_readonly(dmg_path, &mount_point) {
         Ok(output) => output,
         Err(err) => {
             remove_dmg_mount_point(&mount_point);
@@ -168,6 +158,41 @@ pub(super) fn attach_dmg(dmg_path: &str) -> ResultType<DmgGuard> {
         );
     }
     Ok(DmgGuard(mount_point))
+}
+
+fn attach_dmg_readonly(dmg_path: &str, mount_point: &str) -> io::Result<Output> {
+    if super::major_version() >= HDIUTIL_DEPRECATED_MACOS_VERSION {
+        match Command::new("/usr/sbin/diskutil")
+            .args([
+                "image",
+                "attach",
+                "--readOnly",
+                "--nobrowse",
+                "--mountPoint",
+                mount_point,
+                dmg_path,
+            ])
+            .output()
+        {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                log::warn!(
+                    "/usr/sbin/diskutil not found; falling back to hdiutil: {}",
+                    err
+                );
+            }
+            result => return result,
+        }
+    }
+    Command::new("/usr/bin/hdiutil")
+        .args([
+            "attach",
+            "-readonly",
+            "-nobrowse",
+            "-mountpoint",
+            mount_point,
+            dmg_path,
+        ])
+        .output()
 }
 
 pub(super) fn create_dmg_mount_point() -> ResultType<String> {

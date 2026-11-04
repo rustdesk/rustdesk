@@ -1,7 +1,7 @@
 use super::{
     verified_dmg::{
         copy_and_verify_dmg_file, extract_dmg_inner, verified_dmg_path, verify_stored_dmg,
-        VerifiedDmg,
+        VerifiedDmg, HDIUTIL_DEPRECATED_MACOS_VERSION,
     },
     verified_dmg_update_source, ResultType,
 };
@@ -20,8 +20,20 @@ fn create_test_dmg(test_dir: &Path) -> PathBuf {
     std::fs::create_dir_all(&app_dir).unwrap();
     std::fs::write(app_dir.join("marker"), TEST_DMG_MARKER).unwrap();
     let dmg_path = test_dir.join("update.dmg");
-    let output = Command::new("/usr/bin/hdiutil")
-        .args(["create", "-quiet", "-format", "UDZO", "-srcfolder"])
+    let (program, args): (&str, &[&str]) =
+        if super::major_version() >= HDIUTIL_DEPRECATED_MACOS_VERSION {
+            (
+                "/usr/sbin/diskutil",
+                &["image", "create", "from", "--format", "UDZO"],
+            )
+        } else {
+            (
+                "/usr/bin/hdiutil",
+                &["create", "-quiet", "-format", "UDZO", "-srcfolder"],
+            )
+        };
+    let output = Command::new(program)
+        .args(args)
         .arg(&source_dir)
         .arg(&dmg_path)
         .output()
