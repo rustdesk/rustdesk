@@ -4,9 +4,15 @@ use std::{os::windows::process::CommandExt, process::Command};
 use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 
 #[test]
-fn nonredirected_installer_parent_is_preserved() {
+fn installer_path_uses_windows_temp_unless_redirected() {
     let system = get_system_executable("").unwrap();
-    assert_eq!(temporary_parent(&system).unwrap(), system);
+    let temporary = system.parent().unwrap().join("Temp");
+    let expected = if has_reparse_parent(&temporary).unwrap() {
+        get_known_folder(&FOLDERID_ProgramData).unwrap()
+    } else {
+        temporary
+    };
+    assert_eq!(path().unwrap().parent(), Some(expected.as_path()));
 }
 
 #[test]
