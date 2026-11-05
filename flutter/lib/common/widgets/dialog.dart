@@ -253,8 +253,11 @@ void changeWhiteList({Function()? callback}) async {
               if (newWhiteListField.isEmpty) {
                 // pass
               } else {
-                final ips =
-                    newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
+                final ips = newWhiteListField
+                    .trim()
+                    .split(RegExp(r"[\s,;\n]+"))
+                    .where((e) => e.isNotEmpty)
+                    .toList();
                 // test ip
                 final ipMatch = RegExp(
                     r"^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)(\/([1-9]|[1-2][0-9]|3[0-2])){0,1}$");
