@@ -189,9 +189,9 @@ void changeIdDialog() {
 
 void changeWhiteList({Function()? callback}) async {
   final curWhiteList = await bind.mainGetOption(key: kOptionWhitelist);
-  var newWhiteListField = curWhiteList == defaultOptionWhitelist
-      ? ''
-      : curWhiteList.split(',').join('\n');
+  final shownWhiteList =
+      whitelistDialogText(curWhiteList, defaultOptionWhitelist);
+  var newWhiteListField = shownWhiteList;
   var controller = TextEditingController(text: newWhiteListField);
   var msg = "";
   var isInProgress = false;
@@ -245,6 +245,12 @@ void changeWhiteList({Function()? callback}) async {
           dialogButton(
             "OK",
             onPressed: () async {
+              if (keepsStoredWhitelist(
+                  curWhiteList, shownWhiteList, controller.text)) {
+                // Unchanged: a whitelist that lets no one in stays as it is.
+                close();
+                return;
+              }
               setState(() {
                 msg = "";
                 isInProgress = true;
@@ -296,9 +302,9 @@ void changeWhiteList({Function()? callback}) async {
 
 void changeIdWhiteList({Function()? callback}) async {
   final curIdWhiteList = await bind.mainGetOption(key: kOptionIdWhitelist);
-  var newIdWhiteListField = curIdWhiteList == defaultOptionWhitelist
-      ? ''
-      : curIdWhiteList.split(',').join('\n');
+  final shownIdWhiteList =
+      whitelistDialogText(curIdWhiteList, defaultOptionWhitelist);
+  var newIdWhiteListField = shownIdWhiteList;
   var controller = TextEditingController(text: newIdWhiteListField);
   var msg = "";
   var isInProgress = false;
@@ -356,6 +362,12 @@ void changeIdWhiteList({Function()? callback}) async {
           dialogButton(
             "OK",
             onPressed: () async {
+              if (keepsStoredWhitelist(
+                  curIdWhiteList, shownIdWhiteList, controller.text)) {
+                // Unchanged: a whitelist that lets no one in stays as it is.
+                close();
+                return;
+              }
               setState(() {
                 msg = "";
                 isInProgress = true;
