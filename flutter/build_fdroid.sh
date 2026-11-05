@@ -154,8 +154,8 @@ prebuild)
 		.github/workflows/bridge.yml)"
 
 	FLUTTER_BRIDGE_VERSION="$(yq -r \
-		'.jobs.generate_bridge.strategy.matrix.job[] | select(.["artifact-name"] == "bridge-artifact") | .["flutter-version"]' \
-		.github/workflows/bridge.yml)"
+		.env.FLUTTER_BRIDGE_DEFAULT_VERSION \
+		.github/workflows/flutter-build.yml)"
 
 	FLUTTER_RUST_BRIDGE_VERSION="$(yq -r \
 		.env.FLUTTER_RUST_BRIDGE_VERSION \
@@ -302,6 +302,11 @@ prebuild)
 		fi
 	fi
 
+	# Ensure working tree contains no uncommitted changes
+	# to Flutter pubspec files
+
+	python3 flutter/flutter_pub_get.py check-local-pubspec-changes
+
 	# Patch the RustDesk sources
 
 	git apply res/fdroid/patches/*.patch
@@ -337,14 +342,9 @@ prebuild)
 		-e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
 		flutter/pubspec.yaml
 
-	# Download Flutter dependencies
+	# Download Flutter packages using bridge lockfile
 
-	pushd flutter
-
-	flutter clean
-	flutter packages pub get
-
-	popd # flutter
+	python3 flutter/flutter_pub_get.py get-packages "flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock"
 
 	# Generate FFI bindings
 
@@ -356,6 +356,10 @@ prebuild)
 	# Add bridge files to save-list
 
 	git add -f ./flutter/lib/generated_bridge.* ./src/bridge_generated.*
+
+	# Restore Flutter lockfile modifications and package config freeze
+
+	python3 flutter/flutter_pub_get.py revert-local-pubspec-changes
 
 	# Restore everything
 
@@ -445,14 +449,9 @@ build)
 		. "${HOME}/.cargo/env"
 	fi
 
-	# Download Flutter dependencies
+	# Download Flutter packages using default lockfile
 
-	pushd flutter
-
-	flutter clean
-	flutter packages pub get
-
-	popd # flutter
+	python3 flutter/flutter_pub_get.py get-packages
 
 	# Build host android deps
 
@@ -617,6 +616,12 @@ build)
 	fi
 
 	popd # flutter
+
+	# Restore Flutter lockfile modifications and package config freeze
+
+	python3 flutter/flutter_pub_get.py revert-local-pubspec-changes
+
+	# Remove Flutter SDK from x86 build
 
 	rm -rf flutter-sdk
 
