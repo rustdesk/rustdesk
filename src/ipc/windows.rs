@@ -23,10 +23,7 @@ use windows::{
         Storage::FileSystem::{
             FILE_FLAG_OVERLAPPED, FILE_GENERIC_READ, FILE_WRITE_DATA, SECURITY_IDENTIFICATION,
         },
-        System::{
-            Pipes::{GetNamedPipeServerProcessId, GetNamedPipeServerSessionId},
-            SystemServices::ACCESS_ALLOWED_ACE_TYPE,
-        },
+        System::Pipes::{GetNamedPipeServerProcessId, GetNamedPipeServerSessionId},
     },
 };
 
@@ -36,6 +33,7 @@ const CLIENT_ACCESS: u32 = FILE_GENERIC_READ.0 | FILE_WRITE_DATA.0;
 const PIPE_BUSY_RETRY: Duration = Duration::from_millis(50);
 const AUTH_LOG_INTERVAL: Duration = Duration::from_secs(5);
 const SYSTEM_SID: &str = "S-1-5-18";
+const ACCESS_ALLOWED_ACE_TYPE_U8: u8 = 0;
 
 struct LocalAllocation(*mut c_void);
 
@@ -174,7 +172,7 @@ fn ensure_restricted_dacl(dacl: *const ACL, owner: PSID) -> ResultType<()> {
         unsafe { GetAce(dacl, index.into(), &mut ace) }
             .context("Failed to read IPC server access rule")?;
         let header = unsafe { &*(ace as *const ACE_HEADER) };
-        if header.AceType != (ACCESS_ALLOWED_ACE_TYPE as u8)
+        if header.AceType != ACCESS_ALLOWED_ACE_TYPE_U8
             || usize::from(header.AceSize) < std::mem::size_of::<ACCESS_ALLOWED_ACE>()
         {
             bail!("Unsupported IPC server access rule");
