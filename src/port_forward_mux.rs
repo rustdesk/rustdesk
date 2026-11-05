@@ -768,8 +768,10 @@ mod tunnel {
     ///
     /// The send is bounded too: KCP's stream has no send timeout, so on a dead
     /// link with a full window it would hold the teardown until KCP itself gave
-    /// up. Bounded, the whole close stays inside the wait the window gives it
-    /// (`port_forward::wait_for_tunnel_close_reasons`).
+    /// up. Bounded, this part of the close fits inside the wait the window
+    /// gives it (`port_forward::wait_for_tunnel_close_reasons`); a data send
+    /// already in flight in another arm is not bounded here, and holds this
+    /// arm until it returns.
     async fn send_kcp_close_reason(stream: &mut Stream) {
         let mut misc = Misc::new();
         misc.set_close_reason("kcp".to_owned());
