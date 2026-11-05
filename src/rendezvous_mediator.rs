@@ -699,7 +699,7 @@ impl RendezvousMediator {
     }
 
     async fn handle_request_relay(&self, rr: RequestRelay, server: ServerPtr) -> ResultType<()> {
-        if let Err(err) = self.check_relay_request(&rr) {
+        if let Err(err) = self.check_relay_request(&rr, Instant::now()) {
             hbb_common::throttled_log!(PUNCH_LOG_INTERVAL, warn, "Ignored relay request: {}", err);
             return Ok(());
         }
@@ -1375,13 +1375,16 @@ impl RendezvousMediator {
         relay_server
     }
 
-    fn check_relay_request(&self, rr: &RequestRelay) -> ResultType<()> {
+    fn check_relay_request(&self, rr: &RequestRelay, now: Instant) -> ResultType<()> {
         crate::common::check_relay_uuid(&rr.uuid)?;
-        if !is_reported_relay(&rr.relay_server, Instant::now())
+        if !is_reported_relay(&rr.relay_server, now)
             && check_port(&rr.relay_server, config::RELAY_PORT)
                 != check_port(self.get_relay_server(String::new()), config::RELAY_PORT)
         {
-            bail!("relay server {:?} was not offered by this peer", rr.relay_server);
+            bail!(
+                "relay server {:?} was not offered by this peer",
+                rr.relay_server
+            );
         }
         Ok(())
     }
@@ -1897,7 +1900,8 @@ mod tests {
             host_prefix: String::new(),
             keep_alive: 0,
         };
-        super::remember_reported_relay("reported-relay.example", Instant::now());
+        let now = Instant::now();
+        super::remember_reported_relay("reported-relay.example", now);
         let request = |relay_server: &str, uuid: &str| super::RequestRelay {
             relay_server: relay_server.to_owned(),
             uuid: uuid.to_owned(),
@@ -1905,13 +1909,21 @@ mod tests {
         };
         let uuid = "e4c181d0-41c7-4ae6-8ef0-36581b6b2b12";
         let reported = request("reported-relay.example:21117", uuid);
-        assert!(mediator.check_relay_request(&reported).is_ok());
+        assert!(mediator.check_relay_request(&reported, now).is_ok());
         let unknown = request("other-host.example:21117", uuid);
-        assert!(mediator.check_relay_request(&unknown).is_err());
+        assert!(mediator.check_relay_request(&unknown, now).is_err());
         let bad_uuid = request("reported-relay.example", "a\r\nb");
-        assert!(mediator.check_relay_request(&bad_uuid).is_err());
+        assert!(mediator.check_relay_request(&bad_uuid, now).is_err());
         let fallback = request(&mediator.get_relay_server(String::new()), uuid);
-        assert!(mediator.check_relay_request(&fallback).is_ok());
+        assert!(mediator.check_relay_request(&fallback, now).is_ok());
+        let expired = now + super::REPORTED_RELAY_TTL;
+        assert!(mediator.check_relay_request(&reported, expired).is_err());
+        // Not at `expired`: an insert that late would purge what parallel tests just reported.
+        super::remember_reported_relay(
+            "reported-relay.example",
+            now + super::REPORTED_RELAY_TTL / 2,
+        );
+        assert!(mediator.check_relay_request(&reported, expired).is_ok());
     }
 
     #[test]
@@ -1919,9 +1931,15 @@ mod tests {
         let reported_at = Instant::now();
         super::remember_reported_relay("expiring-relay.example", reported_at);
         let just_before = reported_at + super::REPORTED_RELAY_TTL - Duration::from_secs(1);
-        assert!(super::is_reported_relay("expiring-relay.example:21117", just_before));
+        assert!(super::is_reported_relay(
+            "expiring-relay.example:21117",
+            just_before
+        ));
         let expired = reported_at + super::REPORTED_RELAY_TTL;
-        assert!(!super::is_reported_relay("expiring-relay.example:21117", expired));
+        assert!(!super::is_reported_relay(
+            "expiring-relay.example:21117",
+            expired
+        ));
     }
 
     #[test]
@@ -1931,8 +1949,14 @@ mod tests {
         super::remember_reported_relay("refreshed-relay.example", first);
         super::remember_reported_relay("refreshed-relay.example", again);
         let past_first = first + super::REPORTED_RELAY_TTL;
-        assert!(super::is_reported_relay("refreshed-relay.example", past_first));
+        assert!(super::is_reported_relay(
+            "refreshed-relay.example",
+            past_first
+        ));
         let past_again = again + super::REPORTED_RELAY_TTL;
-        assert!(!super::is_reported_relay("refreshed-relay.example", past_again));
+        assert!(!super::is_reported_relay(
+            "refreshed-relay.example",
+            past_again
+        ));
     }
 }
