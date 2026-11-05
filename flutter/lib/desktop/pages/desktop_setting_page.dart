@@ -1043,10 +1043,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 _Card(title: '2FA', children: [tfa()]),
                 if (!isChangeIdDisabled())
                   _Card(title: 'ID', children: [changeId()]),
-                if (!isWeb &&
-                    (isWindows ||
-                        isMacOS ||
-                        (isLinux && !bind.mainCurrentIsWayland())))
+                if (!isWeb && (isWindows || isMacOS || isLinux))
                   privacy(context),
                 more(context),
               ]),
@@ -1458,12 +1455,15 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   }
 
   Widget privacy(BuildContext context) {
-    return _Card(title: 'Privacy', children: [
+    final card = _Card(title: 'Privacy', children: [
       _OptionCheckBox(context, 'Enable screen frame', kOptionAllowScreenFrame,
           enabled: !locked, update: (_) => setState(() {})),
       ScreenFrameStyleSettings(
           enabled: !locked && mainGetBoolOptionSync(kOptionAllowScreenFrame)),
     ]);
+    return bind.mainCurrentIsWayland()
+        ? WaylandScreenFrameSettings(child: card)
+        : card;
   }
 
   Widget more(BuildContext context) {

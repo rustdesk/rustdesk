@@ -834,6 +834,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Viewed", "被查看"),
         ("Unviewed", "未被查看"),
         ("Privacy", "隱私"),
+        ("Frame color", ""),
         ("Viewed display frame color", ""),
         ("Unviewed display frame color", ""),
     ].iter().cloned().collect();

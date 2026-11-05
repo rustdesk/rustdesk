@@ -5,6 +5,29 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 
+class WaylandScreenFrameSettings extends StatefulWidget {
+  final Widget child;
+
+  const WaylandScreenFrameSettings({super.key, required this.child});
+
+  @override
+  State<WaylandScreenFrameSettings> createState() =>
+      _WaylandScreenFrameSettingsState();
+}
+
+class _WaylandScreenFrameSettingsState
+    extends State<WaylandScreenFrameSettings> {
+  // Probe once per settings page; a slider rebuild must not reconnect to XWayland.
+  late final supported = bind.mainIsScreenFrameSupported();
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<bool>(
+        future: supported,
+        builder: (_, snapshot) =>
+            snapshot.data == true ? widget.child : const SizedBox.shrink(),
+      );
+}
+
 class ScreenFrameStyleSettings extends StatelessWidget {
   final bool enabled;
 
@@ -30,13 +53,23 @@ class ScreenFrameStyleSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     // Share the slider value so both color swatches preview opacity while dragging.
     final opacity = _readOpacity().obs;
+    final wayland = bind.mainCurrentIsWayland();
     return Padding(
       padding: const EdgeInsets.only(left: 48, right: 15, bottom: 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _colorPicker(context, 'Viewed display frame color',
-            kOptionScreenFrameColor, MyTheme.accent, opacity),
-        _colorPicker(context, 'Unviewed display frame color',
-            kOptionScreenFrameInactiveColor, const Color(0xFF808080), opacity),
+        _colorPicker(
+            context,
+            wayland ? 'Frame color' : 'Viewed display frame color',
+            kOptionScreenFrameColor,
+            MyTheme.accent,
+            opacity),
+        if (!wayland)
+          _colorPicker(
+              context,
+              'Unviewed display frame color',
+              kOptionScreenFrameInactiveColor,
+              const Color(0xFF808080),
+              opacity),
         const SizedBox(height: 12),
         _slider('Width', kOptionScreenFrameWidth,
             min: 2, max: 20, fallback: 4, unit: isMacOS ? 'pt' : 'px'),

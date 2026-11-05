@@ -9,6 +9,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 class _Binding extends Fake implements RustdeskImpl {
   final options = <String, String>{};
+  bool wayland = false;
+  bool screenFrameSupported = true;
+
+  @override
+  bool mainCurrentIsWayland({dynamic hint}) => wayland;
+
+  @override
+  Future<bool> mainIsScreenFrameSupported({dynamic hint}) async =>
+      screenFrameSupported;
+
   @override
   String translate(
           {required String name, required String locale, dynamic hint}) =>
@@ -74,6 +84,45 @@ void main() {
     expect(widthSlider.right, opacitySlider.right);
     expect(tester.getCenter(find.text('Width:')).dy, widthSlider.center.dy);
     expect(tester.getCenter(find.text('Opacity:')).dy, opacitySlider.center.dy);
+  });
+
+  testWidgets('Wayland shows one frame color using the saved active color',
+      (tester) async {
+    binding.wayland = true;
+    binding.options[kOptionScreenFrameColor] = '#12AB34';
+    binding.options[kOptionScreenFrameInactiveColor] = '#ABCDEF';
+    await open(tester);
+    expect(find.text('Frame color:'), findsOneWidget);
+    expect(find.text('Viewed display frame color:'), findsNothing);
+    expect(find.text('Unviewed display frame color:'), findsNothing);
+    expect(find.byType(OutlinedButton), findsOneWidget);
+    expect(swatch(tester, 0), const Color(0xFF12AB34).withOpacity(0.8));
+    expect(binding.options[kOptionScreenFrameInactiveColor], '#ABCDEF');
+  });
+
+  testWidgets('unavailable XWayland hides the entire screen frame settings',
+      (tester) async {
+    binding.wayland = true;
+    for (final supported in [false, true]) {
+      binding.screenFrameSupported = supported;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: WaylandScreenFrameSettings(
+            key: UniqueKey(),
+            child: const Column(children: [
+              Text('Enable screen frame'),
+              ScreenFrameStyleSettings(enabled: true),
+            ]),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      final expected = supported ? findsOneWidget : findsNothing;
+      expect(find.text('Enable screen frame'), expected);
+      expect(find.text('Frame color:'), expected);
+      expect(find.text('Width:'), expected);
+      expect(find.text('Opacity:'), expected);
+    }
   });
 
   testWidgets('saved transparency reads as opacity without altering settings',

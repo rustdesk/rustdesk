@@ -2505,6 +2505,18 @@ pub fn main_current_is_wayland() -> SyncReturn<bool> {
     SyncReturn(current_is_wayland())
 }
 
+pub fn main_is_screen_frame_supported() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::platform::linux::is_x11_or_headless()
+            || crate::platform::linux::is_wayland_screen_frame_available()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        cfg!(any(target_os = "macos", target_os = "windows"))
+    }
+}
+
 pub fn main_is_login_wayland() -> SyncReturn<bool> {
     SyncReturn(is_login_wayland())
 }
