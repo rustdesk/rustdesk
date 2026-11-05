@@ -14,7 +14,6 @@ List<String>? whitelistInputEntries(String input) {
   return entries.isEmpty ? null : entries;
 }
 
-
 /// The text the IP or ID whitelist dialog shows for the stored option
 /// [stored], one entry per line; [cleared] is the stored value of a cleared
 /// whitelist, which shows as an empty field.
