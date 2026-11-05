@@ -199,3 +199,40 @@ String _applyTerminalCtrlModifier(String data) {
   }
   return data;
 }
+
+enum ModifierKind { alt, ctrl, shift, command }
+
+/// Which modifier a key event belongs to, or null if it is not a modifier.
+///
+/// The physical key is checked too: with an XKB layout-switch option such as
+/// `grp:alts_toggle`, releasing Alt reports a group-switch logical key, so the
+/// logical key alone never matches and the cached modifier would stay set.
+ModifierKind? releasedModifier(
+    LogicalKeyboardKey logical, PhysicalKeyboardKey physical) {
+  if (logical == LogicalKeyboardKey.altLeft ||
+      logical == LogicalKeyboardKey.altRight ||
+      physical == PhysicalKeyboardKey.altLeft ||
+      physical == PhysicalKeyboardKey.altRight) {
+    return ModifierKind.alt;
+  }
+  if (logical == LogicalKeyboardKey.controlLeft ||
+      logical == LogicalKeyboardKey.controlRight ||
+      physical == PhysicalKeyboardKey.controlLeft ||
+      physical == PhysicalKeyboardKey.controlRight) {
+    return ModifierKind.ctrl;
+  }
+  if (logical == LogicalKeyboardKey.shiftLeft ||
+      logical == LogicalKeyboardKey.shiftRight ||
+      physical == PhysicalKeyboardKey.shiftLeft ||
+      physical == PhysicalKeyboardKey.shiftRight) {
+    return ModifierKind.shift;
+  }
+  if (logical == LogicalKeyboardKey.metaLeft ||
+      logical == LogicalKeyboardKey.metaRight ||
+      logical == LogicalKeyboardKey.superKey ||
+      physical == PhysicalKeyboardKey.metaLeft ||
+      physical == PhysicalKeyboardKey.metaRight) {
+    return ModifierKind.command;
+  }
+  return null;
+}

@@ -789,19 +789,21 @@ class InputModel {
       toReleaseRawKeys.updateKeyDown(key, e);
     }
     if (e is RawKeyUpEvent) {
-      if (key == LogicalKeyboardKey.altLeft ||
-          key == LogicalKeyboardKey.altRight) {
-        alt = false;
-      } else if (key == LogicalKeyboardKey.controlLeft ||
-          key == LogicalKeyboardKey.controlRight) {
-        ctrl = false;
-      } else if (key == LogicalKeyboardKey.shiftRight ||
-          key == LogicalKeyboardKey.shiftLeft) {
-        shift = false;
-      } else if (key == LogicalKeyboardKey.metaLeft ||
-          key == LogicalKeyboardKey.metaRight ||
-          key == LogicalKeyboardKey.superKey) {
-        command = false;
+      switch (releasedModifier(key, e.physicalKey)) {
+        case ModifierKind.alt:
+          alt = false;
+          break;
+        case ModifierKind.ctrl:
+          ctrl = false;
+          break;
+        case ModifierKind.shift:
+          shift = false;
+          break;
+        case ModifierKind.command:
+          command = false;
+          break;
+        case null:
+          break;
       }
 
       toReleaseRawKeys.updateKeyUp(key, e);
