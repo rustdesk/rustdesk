@@ -659,9 +659,12 @@ async fn probe_existing_listener(postfix: &str) -> bool {
     if stream.send(&Data::SyncConfig(None)).await.is_err() {
         return false;
     }
+    // A configuration error still confirms that the service is alive.
     matches!(
         stream.next_timeout(1000).await,
-        Ok(Some(Data::SyncConfig(Some(_))))
+        Ok(Some(
+            Data::SyncConfig(Some(_)) | Data::SecurityConfigError(_)
+        ))
     )
 }
 

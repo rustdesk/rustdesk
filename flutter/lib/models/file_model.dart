@@ -12,6 +12,7 @@ import 'package:flutter_hbb/web/dummy.dart'
     if (dart.library.html) 'package:flutter_hbb/web/web_unique.dart';
 
 import '../consts.dart';
+import '../utils/android_documents.dart';
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -384,6 +385,7 @@ class FileController {
 
   bool _isPathAllowed(String candidate) {
     if (!isAndroid || !isLocal) return true;
+    if (AndroidDocuments.isPath(candidate)) return true;
     if (homePath.isEmpty || candidate.isEmpty) return false;
     final home = PathUtil.posixContext.normalize(homePath);
     final target = PathUtil.posixContext.normalize(candidate);
@@ -409,6 +411,15 @@ class FileController {
     return DirectoryData(directory.value, options.value);
   }
 
+  Future<void> _restoreWorkspaceHome(String savedDir) async {
+    if (savedDir.isEmpty || AndroidDocuments.isPath(savedDir)) return;
+    final workspace = await AndroidDocuments.workspace();
+    if (PathUtil.posixContext.equals(workspace, savedDir) ||
+        PathUtil.posixContext.isWithin(workspace, savedDir)) {
+      homePath = workspace;
+    }
+  }
+
   Future<void> onReady() async {
     if (isLocal) {
       options.value.home = await bind.mainGetHomeDir();
@@ -425,6 +436,7 @@ class FileController {
 
     var savedDir = (await bind.sessionGetPeerOption(
         sessionId: sessionId, name: isLocal ? "local_dir" : "remote_dir"));
+    if (isAndroid && isLocal) await _restoreWorkspaceHome(savedDir);
     if (savedDir.isNotEmpty && !_isPathAllowed(savedDir)) {
       savedDir = options.value.home;
       await bind.sessionPeerOption(
@@ -437,7 +449,13 @@ class FileController {
         options.value.home,
       };
       for (final dir in dirs) {
+        if (isAndroid && isLocal) await _restoreWorkspaceHome(dir);
         if (await _openDirectoryPath(dir, isBack: true)) {
+          final documentRoot = RegExp(r'^/@rustdesk/tree/[^/]+/[^/]+')
+              .stringMatch(directory.value.path);
+          if (isLocal && documentRoot != null) {
+            homePath = documentRoot;
+          }
           return true;
         }
       }
@@ -529,6 +547,9 @@ class FileController {
         return true;
       }
       debugPrint("Failed to openDirectory $path: $e");
+      if (isAndroid && isLocal && AndroidDocuments.isPath(path)) {
+        showToast(e.toString());
+      }
       return false;
     }
   }
@@ -565,6 +586,9 @@ class FileController {
   }
 
   Future<bool> _goToParentDirectory({bool isBack = false}) async {
+    if (AndroidDocuments.isRoot(directory.value.path)) {
+      return false;
+    }
     final isWindows = options.value.isWindows;
     final dirPath = directory.value.path;
     var parent = PathUtil.dirname(dirPath, isWindows);
@@ -742,7 +766,7 @@ class FileController {
       return;
     }
     final isWindows = options.value.isWindows;
-    await Future.forEach(items.items, (Entry item) async {
+    await Future.forEach(items.items.toList(), (Entry item) async {
       final jobID = JobController.jobID.next();
       var title = "";
       var content = "";
@@ -1154,7 +1178,8 @@ class JobController {
   }
 
   Future<bool> jobDone(Map<String, dynamic> evt) async {
-    if (jobResultListener.isListening) {
+    final waitingForResult = jobResultListener.isListening;
+    if (waitingForResult) {
       jobResultListener.complete(evt);
       // return;
     }
@@ -1205,7 +1230,8 @@ class JobController {
     if (job.type == JobType.deleteDir) {
       return job.state == JobState.done;
     } else {
-      return true;
+      // An awaiting file-deletion batch refreshes when removeAction finishes.
+      return job.type != JobType.deleteFile || !waitingForResult;
     }
   }
 
@@ -1503,6 +1529,12 @@ class FileFetcher {
       if (!_removeRemoteReadTask(entry.key, task)) continue;
       task.completer.completeError(StateError(_kRemoteSessionChangedError));
     }
+    for (final path in remoteEmptyDirsTasks.keys.toList()) {
+      if (!AndroidDocuments.isPath(path)) continue;
+      remoteEmptyDirsTasks
+          .remove(path)
+          ?.completeError(StateError(_kRemoteSessionChangedError));
+    }
   }
 
   _RemoteReadTask _registerRemoteReadTask(String path, bool includeHidden) {
@@ -1543,15 +1575,18 @@ class FileFetcher {
     final c = Completer<List<FileDirectory>>();
     tasks[path] = c;
 
-    Timer(Duration(seconds: 2), () {
+    final timeout = AndroidDocuments.isPath(path)
+        ? _kRemoteReadDirTimeout
+        : const Duration(seconds: 2);
+    Timer(timeout, () {
+      if (!identical(tasks[path], c)) return;
       tasks.remove(path);
-      if (c.isCompleted) return;
       c.completeError("Failed to read empty dirs, timeout");
     });
     return c.future;
   }
 
-  Future<FileDirectory> registerReadRecursiveTask(int actID) {
+  Future<FileDirectory> registerReadRecursiveTask(int actID, String path) {
     final tasks = readRecursiveTasks;
     if (tasks.containsKey(actID)) {
       throw "Failed to registerRemoveTask, already have same ReadRecursive job";
@@ -1559,7 +1594,10 @@ class FileFetcher {
     final c = Completer<FileDirectory>();
     tasks[actID] = c;
 
-    Timer(Duration(seconds: 2), () {
+    final timeout = AndroidDocuments.isPath(path)
+        ? _kRemoteReadDirTimeout
+        : const Duration(seconds: 2);
+    Timer(timeout, () {
       tasks.remove(actID);
       if (c.isCompleted) return;
       c.completeError("Failed to read dir, timeout");
@@ -1641,8 +1679,13 @@ class FileFetcher {
             fdJsons.map((fdJson) => FileDirectory.fromJson(fdJson)).toList();
         return fds;
       } else {
+        final generation = _remoteSessionGeneration;
         await bind.sessionReadRemoteEmptyDirsRecursiveSync(
             sessionId: sessionId, path: path, includeHidden: showHidden);
+        if (AndroidDocuments.isPath(path) &&
+            generation != _remoteSessionGeneration) {
+          throw StateError(_kRemoteSessionChangedError);
+        }
         return registerReadEmptyDirsTask(isLocal, path);
       }
     } catch (e) {
@@ -1656,6 +1699,11 @@ class FileFetcher {
       if (isLocal) {
         final res = await bind.sessionReadLocalDirSync(
             sessionId: sessionId, path: path, showHidden: showHidden);
+        if (isAndroid && AndroidDocuments.isPath(path)) {
+          final data = jsonDecode(res);
+          if (data['error'] != null) throw StateError(data['error'] as String);
+          return FileDirectory.fromJson(data);
+        }
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
@@ -1695,7 +1743,7 @@ class FileFetcher {
           path: path,
           isRemote: !isLocal,
           showHidden: showHidden);
-      return registerReadRecursiveTask(actID);
+      return registerReadRecursiveTask(actID, path);
     } catch (e) {
       return Future.error(e);
     }

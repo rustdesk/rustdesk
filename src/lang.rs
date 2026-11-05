@@ -396,4 +396,18 @@ mod test {
         assert_eq!(f("", "zh_MO", false), "zh-tw");
         assert_eq!(f("", "zh-Hans-HK", false), "zh-cn");
     }
+
+    #[test]
+    fn test_translations_keep_the_placeholder_of_their_key() {
+        use super::*;
+
+        // translate() puts the caller's value where `{}` is, so a translation without `{}` drops it.
+        for table in [&*ru::T, &*sc::T, &*vi::T] {
+            for (key, value) in table.iter() {
+                if key.contains("{}") && !value.is_empty() {
+                    assert!(value.contains("{}"), "{key:?} => {value:?}");
+                }
+            }
+        }
+    }
 }

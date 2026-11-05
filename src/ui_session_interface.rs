@@ -12,6 +12,7 @@ use base::config::keys;
 #[cfg(not(feature = "flutter"))]
 use base::fs;
 use base::message_proto::*;
+#[cfg(feature = "flutter")]
 use bytes::Bytes;
 use hbb_common::{
     allow_err,
@@ -1408,18 +1409,9 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn send2fa(&self, code: String, trust_this_device: bool) {
         let mut msg_out = Message::new();
-        let hwid = if trust_this_device {
-            crate::get_hwid()
-        } else {
-            Bytes::new()
-        };
-        self.lc.write().unwrap().set_option(
-            "trust-this-device".to_string(),
-            if trust_this_device { "Y" } else { "" }.to_string(),
-        );
         msg_out.set_auth_2fa(Auth2FA {
             code,
-            hwid,
+            trust_this_device,
             ..Default::default()
         });
         self.send(Data::Message(msg_out));
@@ -1907,8 +1899,8 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         }
     }
 
-    async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) -> bool {
-        handle_hash(self.lc.clone(), pass, hash, self, peer).await
+    async fn handle_hash(&self, pass: &str, hash: Hash, trust: &mut crate::trusted_devices::client::Session, peer: &mut Stream) -> bool {
+        handle_hash(self.lc.clone(), pass, hash, self, trust, peer).await
     }
 
     async fn handle_login_from_ui(
@@ -1917,17 +1909,21 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         os_password: String,
         password: String,
         remember: bool,
+        trust: &mut crate::trusted_devices::client::Session,
         peer: &mut Stream,
     ) {
-        handle_login_from_ui(
+        if let Err(error) = handle_login_from_ui(
             self.lc.clone(),
             os_username,
             os_password,
             password,
             remember,
+            trust,
             peer,
         )
-        .await;
+        .await {
+            self.on_error(&error.to_string());
+        }
     }
 
     async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream) {
