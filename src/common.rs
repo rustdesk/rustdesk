@@ -1015,6 +1015,20 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
     hbb_common::socket_client::increase_port(host, offset)
 }
 
+/// A relay uuid arrives from the network and is sent on to the relay address, so bound what it
+/// may carry; it is an opaque pairing key, so do not pin today's UUID format.
+pub fn check_relay_uuid(uuid: &str) -> ResultType<()> {
+    if uuid.is_empty()
+        || uuid.len() > 128
+        || !uuid
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        bail!("invalid relay uuid (length {})", uuid.len());
+    }
+    Ok(())
+}
+
 pub const POSTFIX_SERVICE: &'static str = "_service";
 
 #[inline]
@@ -3087,6 +3101,22 @@ mod tests {
         self,
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
+
+    #[test]
+    fn relay_uuid_rejects_control_bytes_but_not_other_id_formats() {
+        for uuid in [
+            "e4c181d0-41c7-4ae6-8ef0-36581b6b2b12",
+            "E4C181D0-41C7-4AE6-8EF0-36581B6B2B12",
+            "01890a5d-ac96-774b-bcce-b302099a8057",
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        ] {
+            assert!(check_relay_uuid(uuid).is_ok(), "rejected {uuid:?}");
+        }
+        let too_long = "a".repeat(129);
+        for uuid in ["", "\r\nPING\r\n", "a b", "a\0", too_long.as_str()] {
+            assert!(check_relay_uuid(uuid).is_err(), "accepted {uuid:?}");
+        }
+    }
 
     #[test]
     fn parses_stable_rustdesk_release_url() {
