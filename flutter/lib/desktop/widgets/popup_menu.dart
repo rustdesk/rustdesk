@@ -855,15 +855,15 @@ class _PopupSubMenuItemState<T> extends State<_PopupSubMenuItem<T>> {
             onPressed: widget.enabled.value ? _openSubmenu : null,
             style: ButtonStyle(
               shape: const MaterialStatePropertyAll(RoundedRectangleBorder()),
-              backgroundColor: MaterialStatePropertyAll(
-                  _submenuOpen ? highlight : Colors.transparent),
-              overlayColor: MaterialStateProperty.resolveWith((states) =>
-                  !_submenuOpen &&
-                          (states.contains(MaterialState.hovered) ||
+              backgroundColor: MaterialStateProperty.resolveWith((states) =>
+                  !states.contains(MaterialState.disabled) &&
+                          (_submenuOpen ||
+                              states.contains(MaterialState.hovered) ||
                               states.contains(MaterialState.focused) ||
                               states.contains(MaterialState.pressed))
                       ? highlight
                       : Colors.transparent),
+              overlayColor: const MaterialStatePropertyAll(Colors.transparent),
             ),
             // Retain the old spacing, with one focus stop and one hover highlight.
             child: ExcludeFocus(
@@ -935,12 +935,32 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
     return [
-      mod_menu.PopupMenuItem(
+      _MenuEntryButtonItem<T>(
         padding: EdgeInsets.zero,
         height: conf.height,
         child: _buildChild(context, conf),
       )
     ];
+  }
+}
+
+class _MenuEntryButtonItem<T> extends mod_menu.PopupMenuItem<T> {
+  const _MenuEntryButtonItem({super.padding, super.height, required super.child});
+
+  @override
+  _MenuEntryButtonItemState<T> createState() => _MenuEntryButtonItemState<T>();
+}
+
+class _MenuEntryButtonItemState<T>
+    extends mod_menu.PopupMenuItemState<T, _MenuEntryButtonItem<T>> {
+  // The inner button already handles keyboard activation.
+  @override
+  final FocusNode focusNode = FocusNode(skipTraversal: true);
+
+  @override
+  void dispose() {
+    focusNode.dispose();
+    super.dispose();
   }
 }
 

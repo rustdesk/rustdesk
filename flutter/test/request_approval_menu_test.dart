@@ -214,7 +214,8 @@ void main() {
     await tester.pumpAndSettle();
     final submenu = tester.getRect(find.ancestor(
         of: find.text('Connect').last,
-        matching: find.byType(mod_menu.PopupMenuItem<String>)));
+        matching: find.byWidgetPredicate(
+            (widget) => widget is mod_menu.PopupMenuItem<String>)));
     expect(submenu.left, closeTo(0, 0.01));
     expect(submenu.right, lessThanOrEqualTo(500));
     await tester.tapAt(const Offset(2, 2));
@@ -236,7 +237,8 @@ void main() {
       await tester.pumpAndSettle();
       final submenu = tester.getRect(find.ancestor(
           of: find.text('Connect').last,
-          matching: find.byType(mod_menu.PopupMenuItem<String>)));
+          matching: find.byWidgetPredicate(
+              (widget) => widget is mod_menu.PopupMenuItem<String>)));
       if (atRight) {
         expect(submenu.right, lessThanOrEqualTo(parent.left));
       } else {

@@ -323,6 +323,9 @@ class PopupMenuItem<T> extends PopupMenuEntry<T> {
 /// [PopupMenuItem]. The first, `T`, must match the type argument of that widget
 /// class, and is the type of values returned from this menu.
 class PopupMenuItemState<T, W extends PopupMenuItem<T>> extends State<W> {
+  @protected
+  FocusNode? get focusNode => null;
+
   /// The menu item contents.
   ///
   /// Used by the [build] method.
@@ -388,6 +391,7 @@ class PopupMenuItemState<T, W extends PopupMenuItem<T>> extends State<W> {
         //   child: item,
         // ),
         child: TextButton(
+          focusNode: focusNode,
           onPressed: widget.enabled ? handleTap : null,
           style: ButtonStyle(
             shape: const MaterialStatePropertyAll(RoundedRectangleBorder()),
