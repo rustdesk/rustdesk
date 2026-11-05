@@ -3874,7 +3874,7 @@ Widget loadIcon(double size) {
 }
 
 var imcomingOnlyHomeSize =
-    isTefwayClient() ? const Size(440, 700) : const Size(280, 300);
+    isTefwayClient() ? const Size(440, 724) : const Size(280, 300);
 Size getIncomingOnlyHomeSize() {
   final magicWidth = isWindows ? 11.0 : 2.0;
   final magicHeight = 10.0;

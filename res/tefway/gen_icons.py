@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Derive every Tefway icon from the owner-supplied assets.
 
-`assets/favicon.ico` is the official square mark; `assets/logo.svg` is the
-wordmark used in the UI and is copied verbatim, never rewritten. Neither source
-file is modified by this script.
+`assets/tefway-mark-512.png` is the official square mark as published on
+tefway.com.br (transparent, 512px) and is preferred when present;
+`assets/favicon.ico` is the same mark at 128px and is the fallback.
+`assets/logo.svg` is the wordmark used in the UI and is copied verbatim, never
+rewritten. No source file is modified by this script.
 
 Windows needs a multi-size ICO: the supplied ICO carries a single 128x128 frame,
 which Windows would stretch for the title bar, taskbar and Alt+Tab. The ICOs
@@ -34,6 +36,11 @@ DARK_THEME_FILLS = {
 
 
 def load_master():
+    official = os.path.join(ASSETS, "tefway-mark-512.png")
+    if os.path.exists(official):
+        # Kept untrimmed so the 512px frame stays native: the icon sizes below
+        # are all <= 512 and never need interpolation upward.
+        return Image.open(official).convert("RGBA")
     source = os.path.join(ASSETS, "favicon.ico")
     image = Image.open(source)
     sizes = image.info.get("sizes") or {image.size}
@@ -49,7 +56,7 @@ def resize(master, size):
 def main():
     os.makedirs(OUT, exist_ok=True)
     master = load_master()
-    print(f"source: assets/favicon.ico, best frame {master.size}")
+    print(f"master: {master.size}")
 
     for size in LINUX_SIZES:
         path = os.path.join(OUT, f"icon-{size}.png")
@@ -76,6 +83,15 @@ def main():
     with open(os.path.join(flutter_assets, "tefway_logo_dark.svg"), "w", encoding="utf-8") as fh:
         fh.write(svg)
     print("-> flutter/assets/tefway_logo.svg, flutter/assets/tefway_logo_dark.svg")
+    # Square mark shown in the Master header, the Client hero and the consent
+    # card. The transparent margin is cropped so the mark fills its box; 256px
+    # covers the largest size the UI renders (44dp at 3x).
+    mark = master
+    bbox = mark.getbbox()
+    if bbox:
+        mark = mark.crop(bbox)
+    resize(mark, 256).save(os.path.join(flutter_assets, "tefway_mark.png"))
+    print("-> flutter/assets/tefway_mark.png")
 
     targets = {
         # Rust binary resource (build.rs winres) and MSI/installer resources.

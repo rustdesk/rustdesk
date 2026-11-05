@@ -5,6 +5,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 /// Official Tefway wordmark, integrated at build time from `assets/logo.svg`.
 const String kTefwayLogoAsset = 'assets/tefway_logo.svg';
 
+/// Official Tefway square mark, generated from `assets/tefway-mark-512.png` by
+/// `res/tefway/gen_icons.py`. Used wherever the brand is shown as a symbol.
+const String kTefwayMarkAsset = 'assets/tefway_mark.png';
+
 const String _kMasterProfile = 'master';
 const String _kClientProfile = 'client';
 

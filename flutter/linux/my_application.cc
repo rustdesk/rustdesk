@@ -121,6 +121,26 @@ static void my_application_activate(GApplication* application) {
       gtk_window_set_icon(window, icon);
     }
   }
+  // Tefway packages install their mark under the package name (and in the
+  // AppDir hicolor theme). Looked up after rustdesk so it wins when both are
+  // installed, and skipped entirely when the package ships no themed icon.
+  const char* tefway_icons[3] = {"tefway-remote-client", "tefway-remote-master",
+                                 "tefway"};
+  bool tefway_icon_set = false;
+  for (int n = 0; n < 3 && !tefway_icon_set; n++) {
+    // load_icon() falls back to the "image-missing" pixbuf instead of
+    // returning NULL, so the name has to be checked first.
+    if (!gtk_icon_theme_has_icon(theme, tefway_icons[n])) continue;
+    for (int i = 0; i < 4; i++) {
+      GdkPixbuf* icon = gtk_icon_theme_load_icon(
+          theme, tefway_icons[n], icons[i], GTK_ICON_LOOKUP_NO_SVG, NULL);
+      if (icon != nullptr) {
+        gtk_window_set_icon(window, icon);
+        tefway_icon_set = true;
+        break;
+      }
+    }
+  }
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
   // desktop).

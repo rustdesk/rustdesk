@@ -29,7 +29,12 @@ class TefwayClientHomePage extends StatefulWidget {
 }
 
 class _TefwayClientHomePageState extends State<TefwayClientHomePage> {
-  static const _windowSize = Size(440, 720);
+  // The core sizes this window itself; the layout below is built to fit these
+  // 744px without scrolling, and scrolls if the user's text scale grows.
+  static const _windowSize = Size(440, 744);
+  // Keeps the whole window inside a 1280x720 screen once the title bar and the
+  // desktop panel take their share.
+  static const _screenMargin = 48.0;
 
   Timer? _timer;
   SvcStatus _svcStatus = SvcStatus.notReady;
@@ -46,11 +51,29 @@ class _TefwayClientHomePageState extends State<TefwayClientHomePage> {
     _timer = periodic_immediate(const Duration(seconds: 1), _refresh);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
-        await windowManager.setSize(_windowSize);
+        await windowManager.setSize(_fitToScreen());
       } catch (e) {
         debugPrint('Tefway: failed to size the client window: $e');
       }
     });
+  }
+
+  Size _fitToScreen() {
+    try {
+      final displays = jsonDecode(bind.mainGetDisplays()) as List<dynamic>;
+      var tallest = 0.0;
+      for (final display in displays) {
+        final h = (display['h'] as num).toDouble();
+        if (h > tallest) tallest = h;
+      }
+      final available = tallest - _screenMargin;
+      if (available > 0 && available < _windowSize.height) {
+        return Size(_windowSize.width, available);
+      }
+    } catch (e) {
+      debugPrint('Tefway: failed to read the display size: $e');
+    }
+    return _windowSize;
   }
 
   @override
@@ -141,14 +164,14 @@ class _TefwayClientHomePageState extends State<TefwayClientHomePage> {
   Widget build(BuildContext context) {
     return TefwayAppShell(
       maxWidth: 420,
-      padding: const EdgeInsets.all(TefwaySpacing.lg),
+      padding: const EdgeInsets.all(TefwaySpacing.md),
       child: TefwaySurfaceCard(
-        padding: const EdgeInsets.all(TefwaySpacing.xl),
+        padding: const EdgeInsets.all(TefwaySpacing.md),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Center(child: TefwayBrandMark(size: 44)),
+            const Center(child: TefwayBrandMark(size: 40)),
             const SizedBox(height: TefwaySpacing.md),
             const Text(
               TefwayStrings.productName,
@@ -165,15 +188,15 @@ class _TefwayClientHomePageState extends State<TefwayClientHomePage> {
               textAlign: TextAlign.center,
               style: TefwayTextStyles.label,
             ),
-            const SizedBox(height: TefwaySpacing.lg),
+            const SizedBox(height: TefwaySpacing.md),
             const Divider(height: 1, color: TefwayColors.border),
-            const SizedBox(height: TefwaySpacing.xl),
+            const SizedBox(height: TefwaySpacing.lg),
             TefwayDeviceIdCard(
               label: TefwayStrings.clientIdLabel,
               id: formatID(trimID(_id)),
               onCopy: _copyId,
             ),
-            const SizedBox(height: TefwaySpacing.xl),
+            const SizedBox(height: TefwaySpacing.lg),
             Container(
               padding: const EdgeInsets.all(TefwaySpacing.md),
               decoration: BoxDecoration(
@@ -188,7 +211,7 @@ class _TefwayClientHomePageState extends State<TefwayClientHomePage> {
               Text(TefwayStrings.clientSessionsHint,
                   style: TefwayTextStyles.caption),
             ],
-            const SizedBox(height: TefwaySpacing.lg),
+            const SizedBox(height: TefwaySpacing.md),
             const Text(
               TefwayStrings.clientGuidance,
               textAlign: TextAlign.center,
@@ -205,7 +228,7 @@ class _TefwayClientHomePageState extends State<TefwayClientHomePage> {
               TefwayCoreErrorNotice(message: _coreError, onRetry: _refresh),
             ],
             ..._notices(),
-            const SizedBox(height: TefwaySpacing.xl),
+            const SizedBox(height: TefwaySpacing.md),
             TefwaySupportFooter(version: _version),
           ],
         ),

@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'branding.dart';
 import 'design.dart';
 import 'strings.dart';
 
@@ -69,7 +70,8 @@ class TefwaySurfaceCard extends StatelessWidget {
   }
 }
 
-/// The Tefway service mark: the brand blue square with the support headset.
+/// The official Tefway mark. The asset is the square symbol published by the
+/// company; it is never redrawn in code.
 class TefwayBrandMark extends StatelessWidget {
   const TefwayBrandMark({super.key, this.size = 40});
 
@@ -79,18 +81,44 @@ class TefwayBrandMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       label: TefwayStrings.productName,
-      child: Container(
+      image: true,
+      child: SizedBox(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          color: TefwayColors.brandBlue,
-          borderRadius: BorderRadius.all(Radius.circular(size * 0.28)),
-          border: Border.all(color: TefwayColors.actionBlue, width: 1),
+        child: Image.asset(
+          kTefwayMarkAsset,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (context, error, stack) => _BrandMarkPlaceholder(size: size),
         ),
-        child: Icon(
-          Icons.headset_mic_rounded,
-          size: size * 0.56,
-          color: TefwayColors.textPrimary,
+      ),
+    );
+  }
+}
+
+/// Shown only if the asset is missing from the bundle. It is deliberately not a
+/// drawing of the mark: a product surface must never pass a placeholder off as
+/// the company logo.
+class _BrandMarkPlaceholder extends StatelessWidget {
+  const _BrandMarkPlaceholder({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: TefwayColors.surfaceElevated,
+        borderRadius: BorderRadius.all(Radius.circular(size * 0.28)),
+        border: Border.all(color: TefwayColors.border, width: 1),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        'T',
+        style: TextStyle(
+          fontSize: size * 0.5,
+          fontWeight: FontWeight.w700,
+          color: TefwayColors.textSecondary,
         ),
       ),
     );

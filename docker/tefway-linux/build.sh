@@ -303,7 +303,7 @@ Terminal=false
 StartupNotify=true
 Categories=Network;RemoteAccess;
 Keywords=tefway;remote;desktop;support;
-StartupWMClass=${pkg}
+StartupWMClass=${exe}
 EOF
 
   cat > "$appdir/AppRun" <<EOF
