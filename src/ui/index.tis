@@ -434,11 +434,7 @@ function open_whitelist_dialog() {
             ", "", function(res=null, show_progress) {
                 if (!res) return;
                 if (typeof show_progress === 'function') show_progress();
-                var submitted = res.text || "";
-                // Unchanged: a whitelist that lets no one in shows as blank lines, and trimmed they
-                // would clear it
-                if (submitted == old_value) return;
-                var value = submitted.trim();
+                var value = (res.text || "").trim();
                 if (value) {
                     var values = value.split(/[\s,;\n]+/g);
                     for (var ip in values) {
