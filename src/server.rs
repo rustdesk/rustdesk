@@ -1003,6 +1003,8 @@ mod windows_gui_startup_tests {
 
     const CHILD_TEST: &str = "RUSTDESK_TEST_GUI_IPC_CHILD";
     const CHILD_TIMEOUT_MS: u32 = 10_000;
+    // An unmatched test filter exits with zero without running the child assertions.
+    const CHILD_SUCCESS_EXIT_CODE: i32 = 42;
 
     #[test]
     fn windows_gui_survives_ipc_bind_failure() {
@@ -1021,7 +1023,7 @@ mod windows_gui_startup_tests {
             });
             start_server(true, false);
             assert!(!crate::common::is_server_running());
-            return;
+            std::process::exit(CHILD_SUCCESS_EXIT_CODE);
         }
 
         let mut child = Command::new(std::env::current_exe().unwrap())
@@ -1040,9 +1042,10 @@ mod windows_gui_startup_tests {
             child.wait().unwrap();
             panic!("GUI IPC startup test timed out or failed to wait: {result:?}");
         }
-        assert!(
-            child.wait().unwrap().success(),
-            "GUI process did not survive"
+        assert_eq!(
+            child.wait().unwrap().code(),
+            Some(CHILD_SUCCESS_EXIT_CODE),
+            "GUI subprocess did not complete the startup assertions"
         );
     }
 }
