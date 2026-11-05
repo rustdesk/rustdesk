@@ -5,6 +5,7 @@ import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
+import 'package:flutter_hbb/common/whitelist_input.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
@@ -253,11 +254,15 @@ void changeWhiteList({Function()? callback}) async {
               if (newWhiteListField.isEmpty) {
                 // pass
               } else {
-                final ips = newWhiteListField
-                    .trim()
-                    .split(RegExp(r"[\s,;\n]+"))
-                    .where((e) => e.isNotEmpty)
-                    .toList();
+                final ips = whitelistInputEntries(newWhiteListField);
+                if (ips == null) {
+                  // Separators only: saving that would clear the whitelist.
+                  msg = "${translate("Invalid IP")} $newWhiteListField";
+                  setState(() {
+                    isInProgress = false;
+                  });
+                  return;
+                }
                 // test ip
                 final ipMatch = RegExp(
                     r"^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]?|0)(\/([1-9]|[1-2][0-9]|3[0-2])){0,1}$");
@@ -360,11 +365,15 @@ void changeIdWhiteList({Function()? callback}) async {
               if (newIdWhiteListField.isEmpty) {
                 // pass
               } else {
-                final ids = newIdWhiteListField
-                    .trim()
-                    .split(RegExp(r"[\s,;\n]+"))
-                    .where((e) => e.isNotEmpty)
-                    .toList();
+                final ids = whitelistInputEntries(newIdWhiteListField);
+                if (ids == null) {
+                  // Separators only: saving that would clear the whitelist.
+                  msg = "${translate("Invalid ID")} $newIdWhiteListField";
+                  setState(() {
+                    isInProgress = false;
+                  });
+                  return;
+                }
                 // Separators are handled above; allow all other Unicode characters.
                 for (final id in ids) {
                   final hasControlCharacters = id.runes.any(
