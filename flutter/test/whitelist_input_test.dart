@@ -30,7 +30,9 @@ void main() {
     // The stored values of a cleared whitelist: ',' for a custom client, else ''.
     const clearedValues = [',', ''];
 
-    test('an unchanged OK keeps a stored whitelist that lets no one in', () {
+    test(
+        'keepsStoredWhitelist keeps an unchanged whitelist that lets no one in',
+        () {
       for (final cleared in clearedValues) {
         for (final stored in [' , ', ';', ' ', ' ;\n, ', ',,;']) {
           final shown = whitelistDialogText(stored, cleared);
