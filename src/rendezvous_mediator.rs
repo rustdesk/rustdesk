@@ -49,6 +49,35 @@ fn connection_meta(
     }
 }
 
+// Relays this peer put in its punch replies, from its `relay-server` option or a rendezvous
+// server. A genuine RequestRelay echoes one back; this bounds where a request can send this peer,
+// it does not authenticate the request.
+static REPORTED_RELAYS: std::sync::Mutex<VecDeque<(String, Instant)>> =
+    std::sync::Mutex::new(VecDeque::new());
+const MAX_REPORTED_RELAYS: usize = 32;
+// Far longer than a controller's direct attempts before it asks for the relay, yet a relay
+// dropped from the configuration stops being accepted.
+const REPORTED_RELAY_TTL: Duration = Duration::from_secs(600);
+
+fn remember_reported_relay(relay_server: &str, now: Instant) {
+    let relay_server = check_port(relay_server, config::RELAY_PORT);
+    let mut relays = REPORTED_RELAYS.lock().unwrap();
+    relays.retain(|(r, at)| {
+        *r != relay_server && now.saturating_duration_since(*at) < REPORTED_RELAY_TTL
+    });
+    if relays.len() >= MAX_REPORTED_RELAYS {
+        relays.pop_front();
+    }
+    relays.push_back((relay_server, now));
+}
+
+fn is_reported_relay(relay_server: &str, now: Instant) -> bool {
+    let relay_server = check_port(relay_server, config::RELAY_PORT);
+    REPORTED_RELAYS.lock().unwrap().iter().any(|(r, at)| {
+        *r == relay_server && now.saturating_duration_since(*at) < REPORTED_RELAY_TTL
+    })
+}
+
 lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Mutex<String> = Default::default();
     static ref LAST_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
@@ -670,6 +699,10 @@ impl RendezvousMediator {
     }
 
     async fn handle_request_relay(&self, rr: RequestRelay, server: ServerPtr) -> ResultType<()> {
+        if let Err(err) = self.check_relay_request(&rr, Instant::now()) {
+            hbb_common::throttled_log!(PUNCH_LOG_INTERVAL, warn, "Ignored relay request: {}", err);
+            return Ok(());
+        }
         let addr = AddrMangle::decode(&rr.socket_addr);
         let last = *LAST_RELAY_MSG.lock().await;
         *LAST_RELAY_MSG.lock().await = (addr, Instant::now());
@@ -771,6 +804,7 @@ impl RendezvousMediator {
         }
         let peer_addr_v6 = hbb_common::AddrMangle::decode(&fla.socket_addr_v6);
         let relay_server = self.get_relay_server(fla.relay_server.clone());
+        remember_reported_relay(&relay_server, Instant::now());
         let relay = use_ws() || Config::is_proxy();
         let mut socket_addr_v6 = Default::default();
         let meta = connection_meta(
@@ -1119,6 +1153,7 @@ impl RendezvousMediator {
             .await;
         }
         let relay_server = self.get_relay_server(ph.relay_server);
+        remember_reported_relay(&relay_server, Instant::now());
         // for ensure, websocket go relay directly
         // A symmetric NAT relays the legacy transports but deliberately not WebRTC: the answer
         // built above rides along on the relay request, and ICE probes the candidate pairs rather
@@ -1338,6 +1373,20 @@ impl RendezvousMediator {
             relay_server = crate::increase_port(&self.host, 1);
         }
         relay_server
+    }
+
+    fn check_relay_request(&self, rr: &RequestRelay, now: Instant) -> ResultType<()> {
+        crate::common::check_relay_uuid(&rr.uuid)?;
+        if !is_reported_relay(&rr.relay_server, now)
+            && check_port(&rr.relay_server, config::RELAY_PORT)
+                != check_port(self.get_relay_server(String::new()), config::RELAY_PORT)
+        {
+            bail!(
+                "relay server {:?} was not offered by this peer",
+                rr.relay_server
+            );
+        }
+        Ok(())
     }
 }
 
@@ -1731,7 +1780,7 @@ impl Drop for CheckIfResendPk {
 mod tests {
     use super::{
         connection_meta, mpsc, tokio, wait_for_retry, AnswererSlot, Duration, IceRoute,
-        IntoTargetAddr, Ordering, PunchHoleSent, RendezvousMediator, RendezvousMessage,
+        Instant, IntoTargetAddr, Ordering, PunchHoleSent, RendezvousMediator, RendezvousMessage,
         CONNECT_TIMEOUT, MANUAL_RESTARTED, MANUAL_RESTART_NOTIFY, MAX_WEBRTC_ANSWERERS,
         SHOULD_EXIT, TCP_PUNCHES, UDP_PUNCHES,
     };
@@ -1840,5 +1889,74 @@ mod tests {
         assert!(AnswererSlot::take().is_none());
         drop(held);
         assert!(AnswererSlot::take().is_some());
+    }
+
+    #[test]
+    fn relay_request_must_name_a_relay_this_peer_offered() {
+        let host: std::net::SocketAddr = "127.0.0.1:21116".parse().unwrap();
+        let mediator = RendezvousMediator {
+            addr: host.into_target_addr().unwrap(),
+            host: host.to_string(),
+            host_prefix: String::new(),
+            keep_alive: 0,
+        };
+        let now = Instant::now();
+        super::remember_reported_relay("reported-relay.example", now);
+        let request = |relay_server: &str, uuid: &str| super::RequestRelay {
+            relay_server: relay_server.to_owned(),
+            uuid: uuid.to_owned(),
+            ..Default::default()
+        };
+        let uuid = "e4c181d0-41c7-4ae6-8ef0-36581b6b2b12";
+        let reported = request("reported-relay.example:21117", uuid);
+        assert!(mediator.check_relay_request(&reported, now).is_ok());
+        let unknown = request("other-host.example:21117", uuid);
+        assert!(mediator.check_relay_request(&unknown, now).is_err());
+        let bad_uuid = request("reported-relay.example", "a\r\nb");
+        assert!(mediator.check_relay_request(&bad_uuid, now).is_err());
+        let fallback = request(&mediator.get_relay_server(String::new()), uuid);
+        assert!(mediator.check_relay_request(&fallback, now).is_ok());
+        let expired = now + super::REPORTED_RELAY_TTL;
+        assert!(mediator.check_relay_request(&reported, expired).is_err());
+        // Not at `expired`: an insert that late would purge what parallel tests just reported.
+        super::remember_reported_relay(
+            "reported-relay.example",
+            now + super::REPORTED_RELAY_TTL / 2,
+        );
+        assert!(mediator.check_relay_request(&reported, expired).is_ok());
+    }
+
+    #[test]
+    fn reported_relay_is_refused_once_it_expires() {
+        let reported_at = Instant::now();
+        super::remember_reported_relay("expiring-relay.example", reported_at);
+        let just_before = reported_at + super::REPORTED_RELAY_TTL - Duration::from_secs(1);
+        assert!(super::is_reported_relay(
+            "expiring-relay.example:21117",
+            just_before
+        ));
+        let expired = reported_at + super::REPORTED_RELAY_TTL;
+        assert!(!super::is_reported_relay(
+            "expiring-relay.example:21117",
+            expired
+        ));
+    }
+
+    #[test]
+    fn reporting_a_relay_again_restarts_its_expiry() {
+        let first = Instant::now();
+        let again = first + super::REPORTED_RELAY_TTL / 2;
+        super::remember_reported_relay("refreshed-relay.example", first);
+        super::remember_reported_relay("refreshed-relay.example", again);
+        let past_first = first + super::REPORTED_RELAY_TTL;
+        assert!(super::is_reported_relay(
+            "refreshed-relay.example",
+            past_first
+        ));
+        let past_again = again + super::REPORTED_RELAY_TTL;
+        assert!(!super::is_reported_relay(
+            "refreshed-relay.example",
+            past_again
+        ));
     }
 }

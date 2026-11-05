@@ -121,9 +121,10 @@ pub async fn listen(
                 let mut forward = Framed::new(forward, BytesCodec::new());
                 let mut close_port_forward = false;
                 match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward, &remote_host, remote_port).await {
-                    Ok(Some(stream)) => {
+                    Ok(Some((stream, kcp))) => {
                         let interface = interface.clone();
                         tokio::spawn(async move {
+                            let _kcp = kcp;
                             if let Err(err) = run_forward(forward, stream).await {
                                 interface.msgbox("error", "Error", &err.to_string(), "");
                             }
@@ -168,13 +169,13 @@ async fn connect_and_login(
     close_port_forward: &mut bool,
     remote_host: &str,
     remote_port: i32,
-) -> ResultType<Option<Stream>> {
+) -> ResultType<Option<(Stream, Option<crate::kcp_stream::KcpStream>)>> {
     let conn_type = if is_rdp {
         ConnType::RDP
     } else {
         ConnType::PORT_FORWARD
     };
-    let ((mut stream, direct, pk, _kcp, _stream_type), (feedback, rendezvous_server)) =
+    let ((mut stream, direct, pk, kcp, _stream_type), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
     let mut trust = crate::trusted_devices::client::Session::new(
         &interface.get_lch().read().unwrap(), stream.is_secured(), pk.as_deref())?;
@@ -242,6 +243,12 @@ async fn connect_and_login(
                         Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, false, &mut trust, &mut stream).await,
                         None => pending_login = Some(login),
                     },
+                    // The Close is the listener's, which never sees it once the login has
+                    // taken it: end the login and have the listener stop.
+                    Some(Data::Close) => {
+                        *close_port_forward = true;
+                        return Ok(None);
+                    }
                     Some(Data::Message(msg)) => {
                         let msg = trust.outgoing(msg);
                         allow_err!(stream.send(&msg).await);
@@ -262,7 +269,7 @@ async fn connect_and_login(
     if !buffer.is_empty() {
         allow_err!(stream.send_bytes(buffer.into()).await);
     }
-    Ok(Some(stream))
+    Ok(Some((stream, kcp)))
 }
 
 
@@ -368,7 +375,7 @@ async fn establish_tunnel(
     let mut close_port_forward = false;
     match connect_and_login_mux(id, password, ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward, remote_host, remote_port).await {
         Ok(Some(outcome)) if outcome.mux => {
-            let handle = tunnel.set_muxed(outcome.stream, interface.clone());
+            let handle = tunnel.set_muxed(outcome.stream, outcome.kcp, interface.clone());
             if !outcome.local_eof {
                 let (socket, prebuf) = take_socket(forward, outcome.prebuf);
                 if let Err(e) = handle.open(remote_host, remote_port, socket, prebuf) {
@@ -421,7 +428,7 @@ async fn connect_and_login_mux(
     } else {
         ConnType::PORT_FORWARD
     };
-    let ((mut stream, direct, pk, _kcp, _stream_type), (feedback, rendezvous_server)) =
+    let ((mut stream, direct, pk, kcp, _stream_type), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
     let mut trust = crate::trusted_devices::client::Session::new(
         &interface.get_lch().read().unwrap(), stream.is_secured(), pk.as_deref())?;
@@ -492,6 +499,12 @@ async fn connect_and_login_mux(
                         Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, true, &mut trust, &mut stream).await,
                         None => pending_login = Some(login),
                     },
+                    // The Close is the listener's, which never sees it once the login has
+                    // taken it: end the login and have the listener stop.
+                    Some(Data::Close) => {
+                        *close_port_forward = true;
+                        return Ok(None);
+                    }
                     Some(Data::Message(msg)) => {
                         let msg = trust.outgoing(msg);
                         allow_err!(stream.send(&msg).await);
@@ -513,6 +526,7 @@ async fn connect_and_login_mux(
     }
     Ok(Some(LoginOutcome {
         stream,
+        kcp,
         mux,
         prebuf: buffer,
         local_eof,
@@ -528,7 +542,9 @@ fn run_legacy(
 ) {
     let mut stream = outcome.stream;
     let prebuf = outcome.prebuf;
+    let kcp = outcome.kcp;
     tokio::spawn(async move {
+        let _kcp = kcp;
         stream.set_raw();
         if !prebuf.is_empty() {
             allow_err!(stream.send_bytes(prebuf.into()).await);
@@ -542,6 +558,8 @@ fn run_legacy(
 
 struct LoginOutcome {
     stream: Stream,
+    // Drives a KCP stream's UDP I/O; dropping it kills the stream.
+    kcp: Option<crate::kcp_stream::KcpStream>,
     mux: bool,
     prebuf: Vec<u8>,
     local_eof: bool,
@@ -566,6 +584,25 @@ pub fn mux_enabled() -> bool {
         keys::OPTION_ENABLE_PORT_FORWARD_MUX,
         &LocalConfig::get_option(keys::OPTION_ENABLE_PORT_FORWARD_MUX),
     )
+}
+
+/// The port-forward window's last step, called right before its io_loop
+/// returns (`ui_session_interface.rs`).
+///
+/// Why wait 100ms: that io_loop runs on a current_thread runtime that is
+/// dropped the moment it returns, and every task still on it (the mappings,
+/// their tunnels) is dropped with it, never polled again. A KCP tunnel tells
+/// its peer it is closing from its own task,
+/// `port_forward_mux::send_kcp_close_reason`: a send bounded by 30ms, then a
+/// 30ms flush, because KCP only queues the message and its FIN dies with the
+/// KCP handle. Without this wait that never runs, and the peer holds the
+/// connection until its own timeout. 100ms is those 60ms plus room for the
+/// listeners to act on the Close; it is a bound, not a measurement, and
+/// missing it is no worse than not waiting. Which mappings ran over KCP is
+/// not known there, so every port-forward window waits; waiting on the tasks
+/// themselves instead would mean keeping all their handles.
+pub async fn wait_for_tunnel_close_reasons() {
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 }
 
 async fn run_forward(forward: Framed<TcpStream, BytesCodec>, stream: Stream) -> ResultType<()> {
