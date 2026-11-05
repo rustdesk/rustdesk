@@ -88,6 +88,7 @@ pub const OPTION_ENABLE_DIRECTX_CAPTURE: &str = "enable-directx-capture";
 pub const OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE: &str =
     "enable-android-software-encoding-half-scale";
 pub const OPTION_ENABLE_TRUSTED_DEVICES: &str = "enable-trusted-devices";
+pub const OPTION_TRUSTED_DEVICE_EXPIRATION: &str = "trusted-device-expiration-days";
 pub const OPTION_AV1_TEST: &str = "av1-test";
 /// Maximum number of files allowed during a single file transfer request.
 ///
@@ -323,6 +324,7 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_ENABLE_DIRECTX_CAPTURE,
     OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE,
     OPTION_ENABLE_TRUSTED_DEVICES,
+    OPTION_TRUSTED_DEVICE_EXPIRATION,
     OPTION_RELAY_SERVER,
     OPTION_ICE_SERVERS,
     OPTION_DISABLE_UDP,

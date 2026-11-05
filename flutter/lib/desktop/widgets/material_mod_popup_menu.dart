@@ -656,11 +656,13 @@ class _PopupMenuRouteLayout extends SingleChildLayoutDelegate {
     this.selectedItemIndex,
     this.textDirection,
     this.padding,
-    this.avoidBounds,
-  );
+    this.avoidBounds, {
+    this.submenuAnchor,
+  });
 
   // Rectangle of underlying button, relative to the overlay's dimensions.
   final RelativeRect position;
+  final Rect? submenuAnchor;
 
   // The sizes of each item are computed when the menu is laid out, and before
   // the route is laid out.
@@ -735,6 +737,14 @@ class _PopupMenuRouteLayout extends SingleChildLayoutDelegate {
         DisplayFeatureSubScreen.subScreensInBounds(
             Offset.zero & size, avoidBounds);
     final Rect subScreen = _closestScreen(subScreens, originCenter);
+    final anchor = submenuAnchor;
+    if (anchor != null) {
+      final left = anchor.left - childSize.width;
+      if (wantedPosition.dx + childSize.width >
+          subScreen.right - _kMenuScreenPadding - padding.right) {
+        return _fitInsideScreen(subScreen, childSize, Offset(left, y));
+      }
+    }
     return _fitInsideScreen(subScreen, childSize, wantedPosition);
   }
 
@@ -781,6 +791,7 @@ class _PopupMenuRouteLayout extends SingleChildLayoutDelegate {
     assert(itemSizes.length == oldDelegate.itemSizes.length);
 
     return position != oldDelegate.position ||
+        submenuAnchor != oldDelegate.submenuAnchor ||
         selectedItemIndex != oldDelegate.selectedItemIndex ||
         textDirection != oldDelegate.textDirection ||
         !listEquals(itemSizes, oldDelegate.itemSizes) ||
@@ -792,6 +803,7 @@ class _PopupMenuRouteLayout extends SingleChildLayoutDelegate {
 class _PopupMenuRoute<T> extends PopupRoute<T> {
   _PopupMenuRoute({
     required this.position,
+    this.submenuAnchor,
     required this.items,
     this.menuWrapper,
     this.initialValue,
@@ -805,6 +817,7 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
   }) : itemSizes = List<Size?>.filled(items.length, null);
 
   final RelativeRect position;
+  final Rect? submenuAnchor;
   final List<PopupMenuEntry<T>> items;
   final MenuWrapper? menuWrapper;
   final List<Size?> itemSizes;
@@ -874,6 +887,7 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
               Directionality.of(context),
               mediaQuery.padding,
               _avoidBounds(mediaQuery),
+              submenuAnchor: submenuAnchor,
             ),
             child: capturedThemes.wrap(menu),
           );
@@ -1042,6 +1056,7 @@ class PopupMenu<T> extends StatelessWidget {
 Future<T?> showMenu<T>({
   required BuildContext context,
   required RelativeRect position,
+  Rect? submenuAnchor,
   required List<PopupMenuEntry<T>> items,
   MenuWrapper? menuWrapper,
   T? initialValue,
@@ -1070,6 +1085,7 @@ Future<T?> showMenu<T>({
       Navigator.of(context, rootNavigator: useRootNavigator);
   return navigator.push(_PopupMenuRoute<T>(
     position: position,
+    submenuAnchor: submenuAnchor,
     items: items,
     menuWrapper: menuWrapper,
     initialValue: initialValue,
@@ -1352,6 +1368,9 @@ class PopupMenuButtonState<T> extends State<PopupMenuButton<T>> {
         menuWrapper: widget.menuWrapper,
         initialValue: widget.initialValue,
         position: position,
+        submenuAnchor: widget.position == PopupMenuPosition.overSide
+            ? button.localToGlobal(Offset.zero, ancestor: overlay) & button.size
+            : null,
         shape: widget.shape ?? popupMenuTheme.shape,
         color: widget.color ?? popupMenuTheme.color,
         constraints: widget.constraints,
