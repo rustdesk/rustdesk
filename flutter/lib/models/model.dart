@@ -2336,7 +2336,11 @@ class CanvasModel with ChangeNotifier {
   static double get bottomToEdge =>
       isDesktop ? windowBorderWidth + kDragToResizeAreaPadding.bottom : 0;
 
+  // Set only by the foldable mobile session; all other paths size as before.
+  Size? mobileViewportSize;
+
   Size getSize() {
+    if (isMobile && mobileViewportSize != null) return mobileViewportSize!;
     final mediaData = MediaQueryData.fromView(ui.window);
     final size = mediaData.size;
     // If minimized, w or h may be negative here.
@@ -2375,6 +2379,7 @@ class CanvasModel with ChangeNotifier {
 
   // mobile only
   double getAdjustY() {
+    if (isMobile && mobileViewportSize != null) return 0;
     final bottom =
         parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ?? 0;
     return max(bottom - MediaQueryData.fromView(ui.window).padding.top, 0);

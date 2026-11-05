@@ -25,6 +25,12 @@ import '../../models/shortcut_model.dart';
 import '../../utils/image.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
+import '../services/foldable_layout.dart';
+import '../widgets/session_toolbar.dart';
+import '../widgets/session_control_panel.dart';
+import '../widgets/session_palette.dart';
+import '../widgets/session_overlay.dart';
+import '../widgets/session_key_menu.dart';
 
 final initText = '1' * 1024;
 
@@ -93,6 +99,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   bool _showGestureHelp = false;
   String _value = '';
   Orientation? _currentOrientation;
+  final _foldableSessionLayout = FoldableSessionLayout();
+  FoldableLayout get _foldableLayout => _foldableSessionLayout.current;
+  StreamSubscription<FoldableLayout>? _foldableSubscription;
   final _uniqueKey = UniqueKey();
   Timer? _iosKeyboardWorkaroundTimer;
 
@@ -168,6 +177,16 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       }
     });
     WidgetsBinding.instance.addObserver(this);
+    if (isIOS) {
+      _foldableSubscription = FoldableLayout.changes.listen((layout) {
+        if (mounted) setState(() => _foldableSessionLayout.update(layout));
+      }, onError: (Object error) {
+        // Older runners may not provide fold geometry.
+        if (mounted) {
+          setState(() => _foldableSessionLayout.update(const FoldableLayout()));
+        }
+      });
+    }
 
     inputModel.keyboardInputAllowed = true;
 
@@ -186,6 +205,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   Future<void> dispose() async {
+    _foldableSubscription?.cancel();
+    gFFI.canvasModel.mobileViewportSize = null;
     HardwareKeyboard.instance.removeHandler(_handleLocalKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
@@ -228,6 +249,17 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       trySyncClipboard();
     }
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!_foldableLayout.supported) return;
+    // Folding and Split View can resize a session without changing orientation.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      gFFI.canvasModel.updateViewStyle();
+      gFFI.dialogManager.resetMobileActionsOverlay(ffi: gFFI);
+    });
   }
 
   // For client side
@@ -494,6 +526,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         keyboardVisibilityController.isVisible && _showEdit;
     final showActionButton = !_showBar || keyboardIsVisible || _showGestureHelp;
 
+    if (isIOS && !_foldableSessionLayout.ready) {
+      return ColoredBox(color: MyTheme.canvasColor);
+    }
+    if (isIOS && _foldableLayout.supported) {
+      return _buildFoldableSession(context);
+    }
+    _setMobileViewportSize(null);
     return WillPopScope(
       onWillPop: () async {
         clientClose(sessionId, gFFI);
@@ -580,6 +619,119 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               ],
             )),
           )),
+    );
+  }
+
+  void _setMobileViewportSize(Size? size) {
+    if (gFFI.canvasModel.mobileViewportSize == size) return;
+    gFFI.canvasModel.mobileViewportSize = size;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) gFFI.canvasModel.updateViewStyle();
+    });
+  }
+
+  bool get _foldableInputAllowed =>
+      !inputModel.isViewOnly && inputModel.keyboardPerm;
+
+  Widget _buildFoldableSession(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final geometry = FoldableSessionGeometry.resolve(
+      size: media.size,
+      padding: media.padding,
+      viewInsets: media.viewInsets,
+      layout: _foldableLayout,
+      showControls: _showBar,
+    );
+    _setMobileViewportSize(geometry.canvas.size);
+    return WillPopScope(
+      onWillPop: () async {
+        clientClose(sessionId, gFFI);
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: MyTheme.canvasColor,
+        resizeToAvoidBottomInset: false,
+        body: SessionOverlay(
+            overlayKey: _blockableOverlayState.key,
+            child: Stack(children: [
+              Positioned.fromRect(
+                rect: geometry.canvas,
+                child: ClipRect(
+                    child: Obx(() => getRawPointerAndKeyBody(
+                          inputModel.isPhysicalMouse.value
+                              ? getBodyForMobile()
+                              : RawTouchGestureDetectorRegion(
+                                  child: getBodyForMobile(), ffi: gFFI),
+                        ))),
+              ),
+              if (geometry.controls != null)
+                Positioned.fromRect(
+                  rect: geometry.controls!,
+                  child: Obx(() {
+                    if (!gFFI.ffiModel.pi.isSet.isTrue ||
+                        gFFI.ffiModel.waitForFirstImage.isTrue) {
+                      return ColoredBox(color: MyTheme.canvasColor);
+                    }
+                    gFFI.ffiModel.tryShowAndroidActionsOverlay();
+                    if (!geometry.divided) {
+                      return getSessionToolbar(
+                          geometry.controls!.width > geometry.controls!.height
+                              ? Axis.horizontal
+                              : Axis.vertical,
+                          includeKeys: true);
+                    }
+                    final enabled = _foldableInputAllowed;
+                    return SessionControlPanel(
+                      toolbar: getSessionToolbar(Axis.horizontal),
+                      enabled: enabled,
+                      isMac: gFFI.ffiModel.pi.platform == kPeerPlatformMacOS,
+                      modifiers: _sessionModifiers,
+                      onModifier: _toggleSessionModifier,
+                      onShortcut: _sendSessionShortcut,
+                      keyboardEnabled: inputModel.keyboardInputAllowed,
+                      keyboardLabel: translate('Keyboard'),
+                      mouseLabel: translate('Mouse mode'),
+                      leftClickLabel: translate('Left click'),
+                      rightClickLabel: translate('Right click'),
+                      spaceLabel: translate('Space'),
+                      onKey: _sendSessionKey,
+                      onMove: (delta) {
+                        if (_foldableInputAllowed) {
+                          if (inputModel.relativeMouseMode.value) {
+                            inputModel.sendMobileRelativeMouseMove(
+                                delta.dx, delta.dy);
+                          } else {
+                            gFFI.cursorModel
+                                .updatePan(delta, Offset.zero, false);
+                          }
+                        }
+                      },
+                      onClick: (left) {
+                        if (_foldableInputAllowed) {
+                          inputModel.tap(
+                              left ? MouseButtons.left : MouseButtons.right);
+                        }
+                      },
+                    );
+                  }),
+                ),
+              if (geometry.controls == null)
+                SessionToolbarReveal(
+                  canvas: geometry.canvas,
+                  tooltip: translate('Show Toolbar'),
+                  onPressed: () => setState(() => _showBar = true),
+                ),
+              Positioned.fill(
+                  child: Obx(() => Listener(
+                        onPointerDown: (_) =>
+                            _blockableOverlayState.onMiddleBlockedClick?.call(),
+                        child: Container(
+                            color: _blockableOverlayState.middleBlocked.value
+                                ? Colors.transparent
+                                : null),
+                      ))),
+            ])),
+      ),
     );
   }
 
@@ -701,6 +853,145 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
   }
 
+  Set<SessionModifier> get _sessionModifiers => {
+        if (inputModel.ctrl) SessionModifier.control,
+        if (inputModel.alt) SessionModifier.option,
+        if (inputModel.shift) SessionModifier.shift,
+        if (inputModel.command) SessionModifier.command,
+      };
+
+  void _toggleSessionModifier(SessionModifier modifier) {
+    if (!_foldableInputAllowed || !inputModel.keyboardInputAllowed) return;
+    setState(() {
+      switch (modifier) {
+        case SessionModifier.control:
+          inputModel.ctrl = !inputModel.ctrl;
+          break;
+        case SessionModifier.option:
+          inputModel.alt = !inputModel.alt;
+          break;
+        case SessionModifier.shift:
+          inputModel.shift = !inputModel.shift;
+          break;
+        case SessionModifier.command:
+          inputModel.command = !inputModel.command;
+          break;
+      }
+    });
+  }
+
+  void _sendSessionKey(String key) {
+    if (_foldableInputAllowed && inputModel.keyboardInputAllowed) {
+      inputModel.inputKey(key);
+    }
+  }
+
+  void _sendSessionShortcut(String key) {
+    if (_foldableInputAllowed && inputModel.keyboardInputAllowed) {
+      sendPrompt(gFFI.ffiModel.pi.platform == kPeerPlatformMacOS, key);
+    }
+  }
+
+  Widget getSessionToolbar(Axis axis, {bool includeKeys = false}) {
+    final ffiModel = Provider.of<FfiModel>(context);
+    final palette = SessionPalette.of(context);
+    return SessionToolbar(color: MyTheme.accent, axis: axis, actions: [
+      IconButton(
+        tooltip: translate('Close'),
+        color: palette.foreground,
+        iconSize: 20,
+        icon: const Icon(Icons.clear),
+        onPressed: () => clientClose(sessionId, gFFI),
+      ),
+      IconButton(
+        tooltip: translate('Display'),
+        color: palette.foreground,
+        iconSize: 20,
+        icon: const Icon(Icons.tv),
+        onPressed: () {
+          setState(() => _showEdit = false);
+          showOptions(context, widget.id, gFFI.dialogManager);
+        },
+      ),
+      if (!ffiModel.viewOnly && ffiModel.keyboard) ...[
+        IconButton(
+          tooltip: translate('Keyboard'),
+          color: palette.foreground,
+          iconSize: 20,
+          icon: const Icon(Icons.keyboard),
+          onPressed: () {
+            if (_showEdit && keyboardVisibilityController.isVisible) {
+              setState(() => _showEdit = false);
+              _mobileFocusNode.unfocus();
+              _physicalFocusNode.requestFocus();
+            } else {
+              openKeyboard();
+            }
+          },
+        ),
+        IconButton(
+          tooltip: translate(
+              gFFI.ffiModel.isPeerAndroid ? 'Mobile Actions' : 'Mouse mode'),
+          color: palette.foreground,
+          iconSize: 20,
+          icon: Icon(gFFI.ffiModel.isPeerAndroid
+              ? Icons.build
+              : (gFFI.ffiModel.touchMode ? Icons.touch_app : Icons.mouse)),
+          onPressed: () {
+            if (gFFI.ffiModel.isPeerAndroid) {
+              gFFI.dialogManager.toggleMobileActionsOverlay(ffi: gFFI);
+            } else {
+              showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                useSafeArea: true,
+                builder: (sheetContext) => SizedBox(
+                  height: MediaQuery.of(sheetContext).size.height * .75,
+                  child: getGestureHelp(),
+                ),
+              );
+            }
+          },
+        ),
+      ],
+      if (includeKeys && !ffiModel.viewOnly && ffiModel.keyboard)
+        SessionKeyMenu(
+          enabled: _foldableInputAllowed && inputModel.keyboardInputAllowed,
+          isMac: gFFI.ffiModel.pi.platform == kPeerPlatformMacOS,
+          modifiers: _sessionModifiers,
+          onModifier: _toggleSessionModifier,
+          onKey: _sendSessionKey,
+          onShortcut: _sendSessionShortcut,
+        ),
+      IconButton(
+        tooltip: translate('Chat'),
+        color: palette.foreground,
+        iconSize: 20,
+        icon: const Icon(Icons.message),
+        onPressed: () => onPressedTextChat(widget.id),
+      ),
+      IconButton(
+        tooltip: translate('Control Actions'),
+        color: palette.foreground,
+        iconSize: 20,
+        icon: const Icon(Icons.more_vert),
+        onPressed: () {
+          setState(() => _showEdit = false);
+          showActions(widget.id);
+        },
+      ),
+      IconButton(
+        tooltip: translate('Hide Toolbar'),
+        color: palette.foreground,
+        iconSize: 20,
+        icon: const Icon(Icons.expand_more),
+        onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
+            ? null
+            : () => setState(() => _showBar = !_showBar),
+      ),
+    ]);
+  }
+
   bool get showCursorPaint =>
       !gFFI.ffiModel.isPeerAndroid &&
       !gFFI.canvasModel.cursorEmbedded &&
@@ -720,6 +1011,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
             Obx(() {
               final chatKeyboardRequested =
                   gFFI.chatModel.softKeyboardRequested.value;
+              if (gFFI.canvasModel.mobileViewportSize != null) {
+                return const SizedBox.shrink();
+              }
               return KeyHelpTools(
                   keyboardIsVisible: keyboardVisibilityController.isVisible &&
                       (_showEdit || chatKeyboardRequested),

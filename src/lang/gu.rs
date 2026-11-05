@@ -825,5 +825,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "વિશ્વાસ નવીકરણ કરો"),
         ("install-directory-not-empty-tip", "પસંદ કરેલ ફોલ્ડર ખાલી નથી. ઇન્સ્ટોલેશન હાલનો ડેટા કાઢી નાખી શકે છે. બીજું ફોલ્ડર પસંદ કરવાનું વિચારો."),
         ("Request approval", "મંજૂરીની વિનંતી કરો"),
+        ("Left click", ""),
+        ("Right click", ""),
     ].iter().cloned().collect();
 }

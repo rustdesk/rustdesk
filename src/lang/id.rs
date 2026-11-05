@@ -825,5 +825,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Perbarui kepercayaan"),
         ("install-directory-not-empty-tip", "Folder yang dipilih tidak kosong. Instalasi dapat menghapus data yang ada. Pertimbangkan untuk memilih folder lain."),
         ("Request approval", "Minta persetujuan"),
+        ("Left click", ""),
+        ("Right click", ""),
     ].iter().cloned().collect();
 }

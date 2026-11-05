@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dash_chat_2/dash_chat_2.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/common.dart' show SessionID;
 import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/shortcut_constants.dart';
 import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/mobile/widgets/session_control_panel.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/local_flutter_shortcuts.dart';
@@ -88,6 +90,30 @@ class _LegacyBinding extends _ChatBinding {
   Future<void> sessionSendMouse(
       {required SessionID sessionId, required String msg, dynamic hint}) async {
     expect(jsonDecode(msg)['relative_mouse_mode'], '0');
+  }
+}
+
+class _FoldingBinding extends _ChatBinding {
+  final keys = <(String, bool)>[];
+
+  @override
+  Future<void> sessionSendMouse(
+      {required SessionID sessionId, required String msg, dynamic hint}) async {
+    expect(jsonDecode(msg)['relative_mouse_mode'], '0');
+  }
+
+  @override
+  Future<void> sessionInputKey(
+      {required SessionID sessionId,
+      required String name,
+      required bool down,
+      required bool press,
+      required bool alt,
+      required bool ctrl,
+      required bool shift,
+      required bool command,
+      dynamic hint}) async {
+    keys.add((name, shift));
   }
 }
 
@@ -188,6 +214,44 @@ void main() {
       });
     }
   }
+
+  testWidgets('folding keyboard sends one-shot Shift through InputModel',
+      (tester) async {
+    final binding = _FoldingBinding();
+    platformFFI.setBindingForTesting(binding);
+    final input = InputModel(WeakReference(session));
+    addTearDown(() {
+      session.closed = true;
+      input.disposeRelativeMouseMode();
+      session.ffiModel.dispose();
+    });
+    await tester.binding.setSurfaceSize(const Size(669, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+        home: StatefulBuilder(
+            builder: (context, setState) => SessionControlPanel(
+                  toolbar: const SizedBox(),
+                  enabled: true,
+                  isMac: true,
+                  modifiers: {if (input.shift) SessionModifier.shift},
+                  onModifier: (_) => setState(() => input.shift = !input.shift),
+                  onKey: input.inputKey,
+                  onMove: (_) {},
+                  onClick: (_) {},
+                  keyboardLabel: 'Keyboard',
+                  mouseLabel: 'Mouse mode',
+                  leftClickLabel: 'Left click',
+                  rightClickLabel: 'Right click',
+                ))));
+    final letterPosition = tester.getCenter(find.text('a'));
+    await tester.tap(find.byTooltip('Shift'));
+    await tester.pump();
+    await tester.tap(find.text('!'));
+    await tester.pump();
+    await tester.tapAt(letterPosition);
+    expect(binding.keys, [('!', true), ('a', false)]);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   test('fresh Chat shortcut sends through its outgoing session', () async {
     final binding = _ChatBinding();

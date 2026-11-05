@@ -825,5 +825,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Atjaunot uzticēšanos"),
         ("install-directory-not-empty-tip", "Izvēlētā mape nav tukša. Instalēšana var izdzēst esošos datus. Apsveriet iespēju izvēlēties citu mapi."),
         ("Request approval", "Pieprasīt apstiprinājumu"),
+        ("Left click", ""),
+        ("Right click", ""),
     ].iter().cloned().collect();
 }

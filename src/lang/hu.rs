@@ -825,5 +825,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Megbízhatóság megújítása"),
         ("install-directory-not-empty-tip", "A kiválasztott mappa nem üres. A telepítés törölheti a meglévő adatokat. Fontolja meg egy másik mappa kiválasztását."),
         ("Request approval", "Jóváhagyás kérése"),
+        ("Left click", ""),
+        ("Right click", ""),
     ].iter().cloned().collect();
 }

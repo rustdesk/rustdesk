@@ -825,5 +825,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Renova la confiança"),
         ("install-directory-not-empty-tip", "La carpeta seleccionada no és buida. La instal·lació pot suprimir les dades existents. Considereu triar una altra carpeta."),
         ("Request approval", "Sol·licita aprovació"),
+        ("Left click", ""),
+        ("Right click", ""),
     ].iter().cloned().collect();
 }

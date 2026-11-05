@@ -825,5 +825,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Сенімді жаңарту"),
         ("install-directory-not-empty-tip", "Таңдалған бума бос емес. Орнату бар деректерді жоюы мүмкін. Басқа буманы таңдаған жөн."),
         ("Request approval", "Мақұлдауды сұрау"),
+        ("Left click", ""),
+        ("Right click", ""),
     ].iter().cloned().collect();
 }
