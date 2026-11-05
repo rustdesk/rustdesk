@@ -177,8 +177,7 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
         } else if lang == "ka" {
             lang = "ge".to_owned();
         }
-        // Android's Locale reports Hebrew and Indonesian with their legacy codes (iw_IL, in_ID)
-        // unless both the device and the app's target SDK are Android 15 or later.
+        // Android 14 and older report Hebrew and Indonesian with their legacy codes (iw_IL, in_ID).
         if lang == "iw" {
             lang = "he".to_owned();
         } else if lang == "in" {
