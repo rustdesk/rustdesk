@@ -692,7 +692,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The user is not an administrator.", "Pengguna bukanlah administrator."),
         ("Failed to check if the user is an administrator.", "Gagal memeriksa apakah pengguna adalah administrator."),
         ("Supported only in the installed version.", "Hanya didukung pada versi yang terinstal."),
-        ("elevation_username_tip", "panduan_elevasi_nama_pengguna"),
+        ("elevation_username_tip", "Masukkan nama pengguna atau domain\\nama pengguna"),
         ("Preparing for installation ...", "Mempersiapkan instalasi ..."),
         ("Show my cursor", "Tampilkan kursor saya"),
         ("Scale custom", "Skala kustom"),
