@@ -93,10 +93,16 @@ fn install_android_deps() {
 fn main() {
     hbb_common::gen_version();
     install_android_deps();
+    // Build scripts are compiled for the HOST: gate native-code helpers on the
+    // TARGET OS, or a windows host cross-building another target would try to
+    // compile windows.cc.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();
     #[cfg(windows)]
-    build_windows();
+    if target_os == "windows" {
+        build_windows();
+    }
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "macos" {
         #[cfg(target_os = "macos")]

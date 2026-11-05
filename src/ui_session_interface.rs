@@ -52,7 +52,12 @@ use crate::common::GrabState;
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
 
-#[cfg(any(target_os = "android", target_os = "ios", test))]
+#[cfg(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    test
+))]
 #[path = "platform/mobile_wheel.rs"]
 mod mobile_wheel;
 
@@ -877,13 +882,13 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn enter(&self, keyboard_mode: String) {
         let session_id = self.lc.read().unwrap().session_id as u128;
         keyboard::client::change_grab_status(GrabState::Run, &keyboard_mode, session_id);
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn leave(&self, keyboard_mode: String) {
         let session_id = self.lc.read().unwrap().session_id as u128;
         keyboard::client::change_grab_status(GrabState::Wait, &keyboard_mode, session_id);
@@ -1616,7 +1621,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[inline]
     pub fn request_voice_call(&self) {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         std::thread::spawn(crate::ipc::start_pa);
         self.send(Data::NewVoiceCall);
     }
@@ -1624,6 +1629,12 @@ impl<T: InvokeUiSession> Session<T> {
     #[inline]
     pub fn close_voice_call(&self) {
         self.send(Data::CloseVoiceCall);
+    }
+
+    // Answer a voice call the controlled side offered.
+    #[inline]
+    pub fn answer_voice_call(&self, accepted: bool) {
+        self.send(Data::AnswerVoiceCall(accepted));
     }
 
     pub fn send_selected_session_id(&self, sid: String) {
@@ -1702,6 +1713,10 @@ impl<T: InvokeUiSession> Session<T> {
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
+    #[cfg(target_env = "ohos")]
+    fn ohos_session_id(&self) -> SessionID {
+        Default::default()
+    }
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
     fn set_cursor_position(&self, cp: CursorPosition);
@@ -1745,8 +1760,20 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn adapt_size(&self);
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     fn clipboard(&self, content: String);
+    // A remote PNG image clipboard payload, for UIs that can write it to the
+    // system pasteboard (OpenHarmony controller).
+    #[cfg(target_env = "ohos")]
+    fn clipboard_image_png(&self, content: Vec<u8>) {}
+    // A remote HTML clipboard payload (OpenHarmony controller).
+    #[cfg(target_env = "ohos")]
+    fn clipboard_html(&self, _html: String) {}
+    // The session is over (network drop or terminal error). Only the
+    // OpenHarmony controller consumes it: its page has no other close signal
+    // and would otherwise keep showing a connecting spinner.
+    #[cfg(target_env = "ohos")]
+    fn on_connection_closed(&self) {}
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
     fn portable_service_running(&self, running: bool);
@@ -1979,7 +2006,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     *handler.sender.write().unwrap() = Some(sender.clone());
     let token = LocalConfig::get_option("access_token");
     let key = crate::get_key(false).await;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     if handler.is_port_forward() {
         handler.lc.write().unwrap().port_forward_mux = crate::port_forward::mux_enabled();
         if handler.is_rdp() {
@@ -2071,7 +2098,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let _ = remote.sync_jobs_status_to_local().await;
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 async fn start_one_port_forward<T: InvokeUiSession>(
     handler: Session<T>,
     port: i32,

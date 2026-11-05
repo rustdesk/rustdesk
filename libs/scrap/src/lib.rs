@@ -23,4 +23,7 @@ pub mod dxgi;
 #[cfg(target_os = "android")]
 pub mod android;
 
+#[cfg(target_env = "ohos")]
+pub mod ohos;
+
 mod common;

@@ -1,22 +1,22 @@
 #[path = "ipc/auth.rs"]
 mod ipc_auth;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 #[path = "ipc/fs.rs"]
 mod ipc_fs;
 // The DRM/KMS capture producer, the `_drm` channel and its SCM_RIGHTS framing live in their own
 // module, declared the same way as the other pieces of this file, so the opt-in feature adds a
 // bounded, self-contained surface here instead of ~1800 lines in the middle of the shared IPC.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 #[path = "ipc/drm.rs"]
 mod ipc_drm;
 // Re-exported so the paths callers already use (`crate::ipc::start_drm`, `crate::ipc::connect_drm`,
 // `crate::ipc::DrmDisplayInfo`) keep working, and so the `Data` variants can name the two
 // payload types.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub use ipc_drm::{start_drm, DmabufDesc, DrmDisplayInfo};
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(crate) use ipc_drm::DrmConn;
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(crate) use ipc_drm::connect_drm;
 
 use crate::{
@@ -28,9 +28,9 @@ use crate::{
     ui_interface::{get_local_option, set_local_option},
 };
 use bytes::Bytes;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub use clipboard::ClipboardFile;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use hbb_common::anyhow;
 use hbb_common::{
     allow_err, bail, bytes,
@@ -53,7 +53,7 @@ pub(crate) use ipc_auth::authorize_windows_portable_service_ipc_connection;
 pub(crate) use ipc_auth::ensure_peer_executable_matches_current_by_pid_opt;
 #[cfg(windows)]
 pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 use ipc_auth::{active_uid, authorize_service_scoped_ipc_connection};
 #[cfg(target_os = "macos")]
 use ipc_auth::authorize_user_server_process;
@@ -62,28 +62,28 @@ use ipc_auth::{
     authorize_windows_main_ipc_connection, portable_service_listener_security_attributes,
     should_allow_everyone_create_on_windows,
 };
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub(crate) use ipc_auth::{
     ensure_peer_executable_matches_current_by_fd, is_allowed_service_peer_uid,
     log_rejected_uinput_connection, peer_uid_from_fd,
 };
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use ipc_fs::terminal_count_candidate_uids;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 use ipc_fs::{
     check_pid, ensure_secure_ipc_parent_dir, scrub_secure_ipc_parent_dir,
     should_scrub_parent_entries_after_check_pid, write_pid,
 };
 // Gated with the module that uses it, so a `drm`-less build does not carry an unused import.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 use ipc_fs::remove_ipc_entry_via_secure_parent_fd;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
 use serde_derive::{Deserialize, Serialize};
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 use std::cell::Cell;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 use std::os::unix::fs::PermissionsExt;
 use std::{
     collections::HashMap,
@@ -102,19 +102,19 @@ const IPC_TOKEN_RANDOM_BYTES: usize = IPC_TOKEN_LEN / 2;
 const _: () = assert!(IPC_TOKEN_LEN % 2 == 0);
 pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 thread_local! {
     static USE_USER_MAIN_IPC: Cell<bool> = Cell::new(false);
 }
 
 #[must_use = "bind this guard to a local variable to keep the IPC scope active"]
 /// Thread-local guard for routing root main IPC to the active user on Linux/macOS.
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 pub(crate) struct UserMainIpcScope {
     previous: bool,
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 impl UserMainIpcScope {
     pub(crate) fn new() -> Self {
         let previous = USE_USER_MAIN_IPC.with(|use_user_main| {
@@ -126,7 +126,7 @@ impl UserMainIpcScope {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 impl Drop for UserMainIpcScope {
     fn drop(&mut self) {
         USE_USER_MAIN_IPC.with(|use_user_main| use_user_main.set(self.previous));
@@ -145,6 +145,9 @@ pub(crate) async fn connect_trusted_device_service(
     let connection = connect_service(ms_timeout)
         .await
         .map_err(crate::trusted_devices::authority::Unavailable)?;
+    // The root-service uid check only applies where the installed service
+    // exists; on ohos connect_service fails anyway (no service socket).
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     if connection.peer_uid() != Some(0) {
         bail!("Trusted-device system service is not an authenticated root peer");
     }
@@ -266,7 +269,7 @@ pub struct ClipboardNonFile {
     pub special_name: String,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum DataKeyboard {
@@ -281,11 +284,11 @@ pub enum DataKeyboard {
 #[serde(tag = "t", content = "c")]
 pub enum DataKeyboardResponse {
     GetKeyState(bool),
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     GetKeyStateError(String),
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum DataMouse {
@@ -327,7 +330,7 @@ pub enum DataPortableService {
 }
 
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum SwitchSidesUuidAction {
     Check,
@@ -367,7 +370,7 @@ pub enum Data {
     },
     SystemInfo(Option<String>),
     ClickTime(i64),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     MouseMoveTime(i64),
     Authorize,
     Close,
@@ -392,11 +395,11 @@ pub enum Data {
     PrivacyModeState((i32, PrivacyModeState, String)),
     TestRendezvousServer,
     Deployed,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     Keyboard(DataKeyboard),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     KeyboardResponse(DataKeyboardResponse),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     Mouse(DataMouse),
     Control(DataControl),
     Theme(String),
@@ -405,19 +408,20 @@ pub enum Data {
     Disconnected,
     DataPortableService(DataPortableService),
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     SwitchSidesRequest(String),
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     SwitchSidesUuid(String, String, SwitchSidesUuidAction, Option<bool>),
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     SwitchSidesBack,
     UrlLink(String),
     VoiceCallIncoming,
     StartVoiceCall,
     VoiceCallResponse(bool),
     CloseVoiceCall(String),
+    NewVoiceCall,
     #[cfg(windows)]
     SyncWinCpuUsage(Option<f64>),
     FileTransferLog((String, String)),
@@ -507,14 +511,14 @@ pub enum Data {
         not(any(target_os = "android", target_os = "ios"))
     ))]
     ControllingSessionCount(usize),
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     TerminalSessionCount(usize),
     #[cfg(target_os = "windows")]
     PortForwardSessionCount(Option<usize>),
     SocksWs(Option<Box<(Option<config::Socks5Server>, String)>>),
     #[cfg(target_os = "macos")]
     HasNoActiveConns(Option<bool>),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     Whiteboard((String, crate::whiteboard::CustomEvent)),
     ControlPermissionsRemoteModify(Option<bool>),
     #[cfg(target_os = "windows")]
@@ -526,7 +530,7 @@ pub enum Data {
     /// session active. So the ambiguous case ends the session WITHOUT the no-retry reason and
     /// the peer is allowed to reconnect (landing on the greeter after a logout), while the
     /// explicit Disconnect button keeps sending `Close` and kicking for good.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     CmWindowClosed,
     // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
     // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
@@ -539,28 +543,28 @@ pub enum Data {
     // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
     /// Client -> service, first on `_drm`: whether the service may wake sleeping displays before
     /// it answers. The cache warm at every `--server` start says no: no peer is waiting for it.
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
     DrmHello { wake: bool },
     /// Client -> service: begin streaming the chosen display.
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
     // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context
     // (drmtap_open_render failed, e.g. no /dev/dri/renderD* access). The service then streams the
     // CPU-converted `DrmFrame` path for this connection instead of a dma-buf fd the consumer cannot
     // detile, so a render-node-less seat still captures instead of losing the stream.
     DrmStart { display: i32, need_cpu: bool },
     /// Service -> client: the enumerated DRM displays (sent once, before frames).
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
     DrmDisplayList(Vec<DrmDisplayInfo>),
     /// Service -> client: the connector topology changed mid-stream (a monitor hotplug/unplug/modeset,
     /// observed by the service's udev DRM-uevent listener). Carries the freshly-enumerated list so the
     /// consumer can swap its sticky positive availability cache off the hot path, WITHOUT re-probing
     /// `_drm` (which would trip the enumeration restart loop). Interleaved with frames on the same
     /// stream; carries no `send_raw()` body and no fd.
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
     DrmDisplaysChanged(Vec<DrmDisplayInfo>),
     /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
     /// CPU-fallback path (no render node, or no transferable dma-buf): pixels cross the wire.
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
     DrmFrame {
         width: u32,
         height: u32,
@@ -576,10 +580,10 @@ pub enum Data {
     /// `desc.has_fd` it rides an SCM_RIGHTS ancillary message on the same `DrmConn::send_msg`, and
     /// there is NO trailing `send_raw()` body. The unprivileged `--server` imports the fd and does
     /// the EGL detile/convert itself (see `DmabufDesc`).
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
     DrmFrameDmabuf(DmabufDesc),
     /// Service -> client: a hardware-cursor header; the RGBA pixels follow via `send_raw()`.
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
     DrmCursor {
         id: u64,
         width: u32,
@@ -604,7 +608,7 @@ pub enum Data {
 }
 
 /// The default for a `hot_measured` that is not on the wire at all; see the field's docs.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 fn legacy_hot_measured() -> bool {
     true
 }
@@ -618,7 +622,7 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                 Ok(stream) => {
                     let mut stream = Connection::new(stream);
                     let postfix = postfix.to_owned();
-                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
                     if config::is_service_ipc_postfix(&postfix) {
                         if !authorize_service_scoped_ipc_connection(&stream, &postfix) {
                             continue;
@@ -653,7 +657,7 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     //
                                     // Keep this explicit branch to avoid policy drift between `_service` and
                                     // uinput IPC paths while still minimizing exposed message surface here.
-                                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                                    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
                                     if postfix == crate::POSTFIX_SERVICE {
                                         if matches!(&data, Data::SyncConfig(_)) {
                                             handle(data, &mut stream).await;
@@ -677,7 +681,7 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                                     // deserialize into `Data`. Peer close/reset is returned as
                                     // `Err` by `ConnectionTmpl::next()`. Keep the historical
                                     // ignore behavior except on the protected `_service` channel.
-                                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                                    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
                                     {
                                         if postfix == crate::POSTFIX_SERVICE {
                                             break;
@@ -698,11 +702,11 @@ pub async fn start(postfix: &str) -> ResultType<()> {
 
 pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
     let path = Config::ipc_path(postfix);
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     let should_scrub_parent_entries = ensure_secure_ipc_parent_dir(&path, postfix)?;
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     let existing_listener_alive = check_pid(postfix).await;
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     if should_scrub_parent_entries_after_check_pid(
         should_scrub_parent_entries,
         existing_listener_alive,
@@ -745,7 +749,7 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
             } else {
                 log::info!("Started ipc{} server at path: {}", postfix, &path);
             }
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
             {
                 // NOTE: On Linux/macOS, some IPC sockets are intentionally world-connectable
                 // (0666) so the active (non-root) user process can connect. Authorization is
@@ -858,7 +862,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             let t = crate::server::CLICK_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::ClickTime(t)).await);
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         Data::MouseMoveTime(_) => {
             let t = crate::server::MOUSE_MOVE_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::MouseMoveTime(t)).await);
@@ -866,17 +870,17 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::Close => {
             log::info!("Receive close message");
             if EXIT_RECV_CLOSE.load(Ordering::SeqCst) {
-                #[cfg(not(target_os = "android"))]
+                #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 crate::server::input_service::fix_key_down_timeout_at_exit();
                 if is_server() {
                     let _ = privacy_mode::turn_off_privacy(0, Some(PrivacyModeState::OffByPeer));
                 }
-                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                #[cfg(any(target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))]
                 if crate::is_main() {
                     // below part is for main windows can be reopen during rustdesk installation and installing service from UI
                     // this make new ipc server (domain socket) can be created.
                     std::fs::remove_file(&Config::ipc_path("")).ok();
-                    #[cfg(target_os = "linux")]
+                    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                     {
                         hbb_common::sleep((crate::platform::SERVICE_INTERVAL * 2) as f32 / 1000.0)
                             .await;
@@ -1162,7 +1166,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             crate::rendezvous_mediator::RendezvousMediator::restart();
         }
         #[cfg(feature = "flutter")]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         Data::SwitchSidesRequest(id) => {
             let uuid = uuid::Uuid::new_v4();
             crate::server::insert_switch_sides_uuid(id, uuid.clone());
@@ -1174,7 +1178,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             );
         }
         #[cfg(feature = "flutter")]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         Data::SwitchSidesUuid(uuid, id, action, None) => {
             let allowed = uuid
                 .parse::<uuid::Uuid>()
@@ -1220,18 +1224,18 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::ControllingSessionCount(count) => {
             crate::updater::update_controlling_session_count(count);
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         Data::TerminalSessionCount(_) => {
             let count = crate::terminal_service::get_terminal_session_count(true);
             allow_err!(stream.send(&Data::TerminalSessionCount(count)).await);
         }
         #[cfg(feature = "hwcodec")]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         Data::CheckHwcodec => {
             scrap::hwcodec::start_check_process();
         }
         #[cfg(feature = "hwcodec")]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         Data::HwCodecConfig(c) => {
             match c {
                 None => {
@@ -1250,11 +1254,11 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::WaylandScreencastRestoreToken((key, value)) => {
             let v = if value == "get" {
                 let opt = get_local_option(key.clone());
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(any(not(target_os = "linux"), target_env = "ohos"))]
                 {
                     Some(opt)
                 }
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 {
                     let v = if opt.is_empty() {
                         if scrap::wayland::pipewire::is_rdp_session_hold() {
@@ -1272,7 +1276,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 // The session slot is held while a portal request waits for the user, and this ipc
                 // listener runs on one thread: wait for the slot off it, then close what the
                 // request brings back.
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 allow_err!(
                     hbb_common::tokio::task::spawn_blocking(
                         scrap::wayland::pipewire::close_session
@@ -1458,7 +1462,7 @@ async fn connect_with_path(ms_timeout: u64, path: &str) -> ResultType<Connection
     Ok(ConnectionTmpl::new(client))
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 #[inline]
 fn select_server_uid_for_user_main_ipc(
     server_uids: &[u32],
@@ -1492,7 +1496,7 @@ fn select_server_uid_for_user_main_ipc(
     bail!("Multiple --server processes found for user main IPC");
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 fn running_server_uids_for_current_exe() -> ResultType<Vec<u32>> {
     let current_exe = std::env::current_exe()?;
     let current_exe_path = std::fs::canonicalize(&current_exe)?;
@@ -1524,10 +1528,10 @@ fn running_server_uids_for_current_exe() -> ResultType<Vec<u32>> {
     Ok(server_uids)
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 fn user_main_ipc_server_uid() -> ResultType<u32> {
     let server_uids = running_server_uids_for_current_exe()?;
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let prefer_root = crate::platform::linux::is_login_screen_wayland();
     #[cfg(target_os = "macos")]
     let prefer_root = false;
@@ -1535,7 +1539,7 @@ fn user_main_ipc_server_uid() -> ResultType<u32> {
 }
 
 pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmpl<ConnClient>> {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     {
         let use_user_main_ipc = USE_USER_MAIN_IPC.with(|use_user_main| use_user_main.get());
         let is_root_main_ipc =
@@ -1548,14 +1552,14 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
         let path = Config::ipc_path(postfix);
         return connect_with_path(ms_timeout, &path).await;
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(any(not(any(target_os = "linux", target_os = "macos")), target_env = "ohos"))]
     {
         let path = Config::ipc_path(postfix);
         connect_with_path(ms_timeout, &path).await
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 pub async fn connect_for_uid(
     ms_timeout: u64,
     uid: u32,
@@ -1572,7 +1576,7 @@ pub async fn connect_for_uid(
     Ok(conn)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_pa() {
     use crate::audio_service::AUDIO_DATA_SIZE_U8;
@@ -1865,7 +1869,7 @@ async fn set_permanent_password_with_ack_async(v: String) -> ResultType<bool> {
 }
 
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn set_unlock_pin(v: String, translate: bool) -> ResultType<()> {
     let v = v.trim().to_owned();
     let min_len = 4;
@@ -1892,7 +1896,7 @@ pub fn set_unlock_pin(v: String, translate: bool) -> ResultType<()> {
 }
 
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_unlock_pin() -> String {
     if let Ok(Some(v)) = get_config("unlock-pin") {
         Config::set_unlock_pin(&v);
@@ -2197,7 +2201,7 @@ pub async fn get_port_forward_session_count(ms_timeout: u64) -> ResultType<usize
 }
 
 #[cfg(feature = "hwcodec")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn get_hwcodec_config_from_server() -> ResultType<()> {
     if !scrap::codec::enable_hwcodec_option() || scrap::hwcodec::HwCodecConfig::already_set() {
@@ -2220,7 +2224,7 @@ pub async fn get_hwcodec_config_from_server() -> ResultType<()> {
 }
 
 #[cfg(feature = "hwcodec")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn client_get_hwcodec_config_thread(wait_sec: u64) {
     static ONCE: std::sync::Once = std::sync::Once::new();
     if !crate::platform::is_installed()
@@ -2298,7 +2302,7 @@ pub async fn update_controlling_session_count(count: usize) -> ResultType<()> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn get_terminal_session_count() -> ResultType<usize> {
     let timeout_ms = 1_000;
@@ -2400,10 +2404,10 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 
 #[cfg(test)]
 mod test {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     use super::*;
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     #[test]
     fn test_select_server_uid_uses_active_uid_when_no_server_found() {
         assert_eq!(
@@ -2412,7 +2416,7 @@ mod test {
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     #[test]
     fn test_select_server_uid_uses_single_server_uid() {
         assert_eq!(
@@ -2421,7 +2425,7 @@ mod test {
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     #[test]
     fn test_select_server_uid_prefers_active_uid_with_multiple_servers() {
         assert_eq!(
@@ -2430,7 +2434,7 @@ mod test {
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     #[test]
     fn test_select_server_uid_prefers_root_on_wayland_login_screen() {
         assert_eq!(
@@ -2439,7 +2443,7 @@ mod test {
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
     #[test]
     fn test_select_server_uid_fails_when_multiple_servers_are_ambiguous() {
         assert!(select_server_uid_for_user_main_ipc(&[501, 502], None, false).is_err());
