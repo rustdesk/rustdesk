@@ -5,7 +5,7 @@ pub(crate) struct Style {
 }
 
 impl Style {
-    #[cfg(any(windows, target_os = "macos"))]
+    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
     pub fn for_display(name: &str) -> Self {
         let mut style = Self::load();
         if !crate::ui_cm_interface::is_screen_frame_display_viewed(name) {
@@ -19,7 +19,7 @@ impl Style {
         style
     }
 
-    #[cfg(any(windows, target_os = "macos"))]
+    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
     pub fn load() -> Self {
         use crate::ui_interface::get_option;
         use base::config::keys::{

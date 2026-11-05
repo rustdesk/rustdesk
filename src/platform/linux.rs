@@ -2,6 +2,12 @@ use super::{gtk_sudo, CursorData, ResultType};
 use desktop::Desktop;
 pub use base::platform::linux::*;
 
+mod screen_frame;
+pub(crate) use screen_frame::{
+    refresh as refresh_screen_frame, refresh_colors as refresh_screen_frame_colors,
+    set_visible as set_screen_frame_visible,
+};
+
 #[cfg(feature = "drm")]
 pub fn dispatch_wayland_display_probe() {
     use std::ffi::OsStr;

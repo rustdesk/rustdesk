@@ -131,7 +131,7 @@ pub struct Client {
     pub id: i32,
     pub authorized: bool,
     pub disconnected: bool,
-    #[cfg(any(target_os = "macos", target_os = "windows", test))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux", test))]
     #[serde(skip)]
     screen_frame_displays: Option<Vec<String>>,
     pub is_file_transfer: bool,
@@ -244,7 +244,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             id,
             authorized,
             disconnected: false,
-            #[cfg(any(target_os = "macos", target_os = "windows", test))]
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux", test))]
             screen_frame_displays: None,
             is_file_transfer,
             is_view_camera,
@@ -273,7 +273,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             .retain(|_, c| !(c.disconnected && c.peer_id == client.peer_id));
         CLIENTS.write().unwrap().insert(id, client.clone());
         self.ui_handler.add_connection(&client);
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
         update_screen_frame();
     }
 
@@ -321,7 +321,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
 
         self.ui_handler.remove_connection(id, close);
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
         update_screen_frame();
     }
 
@@ -390,7 +390,7 @@ pub fn authorize(id: i32) {
         client.authorized = true;
         allow_err!(client.tx.send(Data::Authorize));
     };
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     update_screen_frame();
 }
 
@@ -414,11 +414,11 @@ pub fn close_window(id: i32) {
 #[inline]
 pub fn remove(id: i32) {
     CLIENTS.write().unwrap().remove(&id);
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     update_screen_frame();
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 pub(crate) fn update_screen_frame() {
     #[cfg(target_os = "macos")]
     if unsafe { hbb_common::libc::pthread_main_np() } == 0 {
@@ -452,7 +452,7 @@ pub(crate) fn screen_frame_window_ids_changed(window_ids: Vec<u32>) {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows", test))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux", test))]
 fn should_show_screen_frame(clients: &HashMap<i32, Client>, enabled: bool) -> bool {
     if !enabled {
         return false;
@@ -467,12 +467,12 @@ fn should_show_screen_frame(clients: &HashMap<i32, Client>, enabled: bool) -> bo
     })
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 pub(crate) fn is_screen_frame_display_viewed(name: &str) -> bool {
     screen_frame_display_viewed(&CLIENTS.read().unwrap(), name)
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows", test))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux", test))]
 fn screen_frame_display_viewed(clients: &HashMap<i32, Client>, name: &str) -> bool {
     clients.values().any(|client| {
         client.authorized
@@ -488,7 +488,7 @@ fn screen_frame_display_viewed(clients: &HashMap<i32, Client>, name: &str) -> bo
     })
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn update_screen_frame_displays(id: i32, displays: Option<Vec<String>>) {
     let changed = {
         let mut clients = CLIENTS.write().unwrap();
@@ -696,7 +696,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 Data::ClickTime(ms) => {
                                     CLICK_TIME.store(ms, Ordering::SeqCst);
                                 }
-                                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                                #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                                 Data::ScreenFrameDisplays(displays) => {
                                     update_screen_frame_displays(self.conn_id, displays);
                                 }
@@ -1940,7 +1940,7 @@ pub fn quit_cm() {
     // in case of std::process::exit not work
     log::info!("quit cm");
     CLIENTS.write().unwrap().clear();
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     crate::platform::set_screen_frame_visible(false);
     // `quit_gui()` ends the process on Windows and macOS, but on Linux it calls
     // `gtk_main_quit()`, which has no effect in the Flutter connection manager:

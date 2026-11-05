@@ -1427,12 +1427,12 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                 UI_STATUS.lock().unwrap().mouse_time = v;
                             }
                             Ok(Some(ipc::Data::Options(Some(v)))) => {
-                                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                                #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                                 let screen_frame_changed = is_cm
                                     && get_option(keys::OPTION_ALLOW_SCREEN_FRAME)
                                         != v.get(keys::OPTION_ALLOW_SCREEN_FRAME)
                                             .map(String::as_str).unwrap_or("");
-                                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                                #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                                 let screen_frame_style_changed = is_cm
                                     && [
                                         keys::OPTION_SCREEN_FRAME_COLOR,
@@ -1444,11 +1444,11 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                                 *OPTIONS.lock().unwrap() = v;
                                 *OPTION_SYNCED.lock().unwrap() = true;
                                 // Settings and CM run separately; apply the synced option to active sessions.
-                                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                                #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                                 if screen_frame_changed {
                                     crate::ui_cm_interface::update_screen_frame();
                                 }
-                                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                                #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                                 if screen_frame_style_changed && !screen_frame_changed {
                                     crate::platform::refresh_screen_frame();
                                 }

@@ -14,7 +14,7 @@ pub mod win_device;
 #[cfg(target_os = "macos")]
 pub mod macos;
 
-#[cfg(any(windows, target_os = "macos", test))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux", test))]
 pub(crate) mod screen_frame;
 
 #[cfg(target_os = "macos")]

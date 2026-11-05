@@ -375,7 +375,7 @@ pub enum Data {
     Authorize,
     #[cfg(target_os = "macos")]
     ScreenFrameWindowIds(Vec<u32>),
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     ScreenFrameDisplays(Option<Vec<String>>),
     Close,
     #[cfg(windows)]
