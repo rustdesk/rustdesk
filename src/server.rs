@@ -676,17 +676,26 @@ pub async fn start_server(is_server: bool, no_server: bool) {
     });
 
     if is_server {
-        crate::common::set_server_running(true);
-        std::thread::spawn(move || {
-            if let Err(err) = crate::ipc::start("") {
-                log::error!("Failed to start ipc: {}", err);
-                if crate::is_server() {
-                    log::error!("ipc is occupied by another process, try kill it");
-                    std::thread::spawn(stop_main_window_process).join().ok();
-                }
-                std::process::exit(-1);
+        #[cfg(windows)]
+        if !crate::is_server() {
+            if let Err(err) = start_gui_ipc().await {
+                log::error!("Local hosting unavailable: failed to start GUI IPC listener: {err:#}");
+                return;
             }
-        });
+        }
+        crate::common::set_server_running(true);
+        if !cfg!(windows) || crate::is_server() {
+            std::thread::spawn(move || {
+                if let Err(err) = crate::ipc::start("") {
+                    log::error!("Failed to start ipc: {}", err);
+                    if crate::is_server() {
+                        log::error!("ipc is occupied by another process, try kill it");
+                        std::thread::spawn(stop_main_window_process).join().ok();
+                    }
+                    std::process::exit(-1);
+                }
+            });
+        }
         // Warm the DRM availability cache before any client connects, so the first connection does
         // not race a cold `_drm` probe and ship an empty display list ("No displays" + retry).
         // X11 is skipped -- probing there makes the root service open DRM readers for a path this
@@ -764,6 +773,13 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             }
         }
     }
+}
+
+#[cfg(windows)]
+async fn start_gui_ipc() -> ResultType<()> {
+    let incoming = crate::ipc::new_listener("").await?;
+    tokio::spawn(crate::ipc::start_with_listener("", incoming));
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -972,5 +988,61 @@ pub async fn stop_main_window_process() {
         if let Err(e) = crate::platform::try_kill_rustdesk_main_window_process() {
             log::error!("kill failed: {}", e);
         }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_gui_startup_tests {
+    use super::*;
+    use parity_tokio_ipc::{Endpoint, SecurityAttributes};
+    use std::{os::windows::io::AsRawHandle, process::Command};
+    use windows::Win32::{
+        Foundation::{HANDLE, WAIT_OBJECT_0},
+        System::Threading::WaitForSingleObject,
+    };
+
+    const CHILD_TEST: &str = "RUSTDESK_TEST_GUI_IPC_CHILD";
+    const CHILD_TIMEOUT_MS: u32 = 10_000;
+
+    #[test]
+    fn windows_gui_survives_ipc_bind_failure() {
+        if std::env::var_os(CHILD_TEST).is_some() {
+            *hbb_common::config::APP_NAME.write().unwrap() =
+                format!("RustDesk-ipc-test-{}", std::process::id());
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let _incoming = runtime.block_on(async {
+                let mut endpoint = Endpoint::new(Config::ipc_path(""));
+                endpoint
+                    .set_security_attributes(SecurityAttributes::allow_everyone_create().unwrap());
+                endpoint.incoming().unwrap()
+            });
+            start_server(true, false);
+            assert!(!crate::common::is_server_running());
+            return;
+        }
+
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "server::windows_gui_startup_tests::windows_gui_survives_ipc_bind_failure",
+                "--nocapture",
+            ])
+            .env(CHILD_TEST, "1")
+            .spawn()
+            .unwrap();
+        let result =
+            unsafe { WaitForSingleObject(HANDLE(child.as_raw_handle()), CHILD_TIMEOUT_MS) };
+        if result != WAIT_OBJECT_0 {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("GUI IPC startup test timed out or failed to wait: {result:?}");
+        }
+        assert!(
+            child.wait().unwrap().success(),
+            "GUI process did not survive"
+        );
     }
 }
