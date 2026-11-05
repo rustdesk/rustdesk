@@ -1421,24 +1421,10 @@ impl Connection {
     }
 
     async fn check_whitelist(&mut self, addr: &SocketAddr) -> bool {
-        let whitelist: Vec<String> = Config::get_option("whitelist")
-            .split(",")
-            .filter(|x| !x.is_empty())
-            .map(str::trim)
-            .map(|x| x.to_owned())
-            .collect();
-        if !whitelist.is_empty()
-            && whitelist
-                .iter()
-                .filter(|x| x == &"0.0.0.0")
-                .next()
-                .is_none()
-            && whitelist
-                .iter()
-                .filter(|x| IpCidr::from_str(x).map_or(false, |y| y.contains(addr.ip())))
-                .next()
-                .is_none()
-        {
+        let Some(whitelist) = parse_whitelist(&Config::get_option("whitelist")) else {
+            return true;
+        };
+        if !ip_whitelist_allows(&whitelist, addr.ip()) {
             self.send_login_error("Your ip is blocked by the peer")
                 .await;
             self.post_alarm_audit(
@@ -1451,14 +1437,10 @@ impl Connection {
     }
 
     async fn check_id_whitelist(&mut self) -> bool {
-        let id_whitelist: Vec<String> = Config::get_option(keys::OPTION_ID_WHITELIST)
-            .split(',')
-            .map(|x| x.trim().to_owned())
-            .filter(|x| !x.is_empty())
-            .collect();
-        if id_whitelist.is_empty() {
+        let Some(id_whitelist) = parse_whitelist(&Config::get_option(keys::OPTION_ID_WHITELIST))
+        else {
             return true;
-        }
+        };
         // Limit before matching, or a match returning early would never touch the counter and
         // leave enumeration unthrottled. Not cleared here: `my_id` is self-reported, so that
         // would let anyone holding one allowed id reset the budget between probes.
@@ -7146,16 +7128,39 @@ mod raii {
     }
 }
 
-// An empty whitelist allows everyone.
+// The entries of a whitelist option. The settings dialogs accept commas, semicolons and
+// whitespace between entries, so a value from any other source (custom client settings, a
+// strategy, the command line) is split the same way. `None` means the list is off: the option
+// is empty or holds only commas, which is how the dialogs store a cleared list. Any other value
+// is a list, even one without entries such as a lone space, so it restricts access instead of
+// lifting the restriction.
+fn parse_whitelist(option: &str) -> Option<Vec<String>> {
+    if option.chars().all(|c| c == ',') {
+        return None;
+    }
+    Some(
+        option
+            .split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+            .filter(|x| !x.is_empty())
+            .map(|x| x.to_owned())
+            .collect(),
+    )
+}
+
+// `0.0.0.0` lets every address in; any other entry is an address or a CIDR range.
+fn ip_whitelist_allows(whitelist: &[String], ip: IpAddr) -> bool {
+    whitelist
+        .iter()
+        .any(|x| x == "0.0.0.0" || IpCidr::from_str(x).map_or(false, |y| y.contains(ip)))
+}
+
+// A list without entries allows no one; `parse_whitelist` decides when the list is off.
 //
 // A peer connecting across servers reports `<its id>@<its own server>` (see
 // `create_login_msg`), so the bare id is matched as well. That suffix is self-asserted and
 // unsigned, so matching only the full form would reject the honest cross-server peer while
 // an attacker just reports the bare id: it can produce false rejects but no true ones.
 fn id_whitelist_allows(id_whitelist: &[String], my_id: &str) -> bool {
-    if id_whitelist.is_empty() {
-        return true;
-    }
     let bare_id = my_id.split('@').next().unwrap_or(my_id);
     id_whitelist
         .iter()
@@ -7464,11 +7469,59 @@ mod test {
     }
 
     #[test]
+    fn test_parse_whitelist() {
+        let list = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+
+        // Empty or only commas: the list is off, as the dialogs store a cleared list.
+        assert_eq!(parse_whitelist(""), None);
+        assert_eq!(parse_whitelist(","), None);
+
+        // The separators the dialogs accept, with spaces around the entries.
+        assert_eq!(
+            parse_whitelist(" 10.0.0.1, 10.0.0.2;10.0.0.0/24\n192.168.1.1 "),
+            Some(list(&[
+                "10.0.0.1",
+                "10.0.0.2",
+                "10.0.0.0/24",
+                "192.168.1.1"
+            ]))
+        );
+        assert_eq!(
+            parse_whitelist("123456789, 98765*"),
+            Some(list(&["123456789", "98765*"]))
+        );
+
+        // A value without entries is still a list, so it lets no one in.
+        for value in [" ", " , ", ";", "\n"] {
+            assert_eq!(parse_whitelist(value), Some(vec![]), "{value:?}");
+        }
+    }
+
+    #[test]
+    fn test_ip_whitelist_allows() {
+        let allows = |option: &str, ip: &str| {
+            parse_whitelist(option).map_or(true, |list| {
+                ip_whitelist_allows(&list, ip.parse::<IpAddr>().unwrap())
+            })
+        };
+
+        assert!(allows("192.168.1.0/24, 10.0.0.1", "10.0.0.1"));
+        assert!(allows("192.168.1.0/24, 10.0.0.1", "192.168.1.7"));
+        assert!(allows("10.0.0.1;10.0.0.2", "10.0.0.2"));
+        assert!(!allows("10.0.0.1, 10.0.0.2", "10.0.0.3"));
+        assert!(allows(",", "10.0.0.3"));
+        assert!(allows("0.0.0.0", "10.0.0.3"));
+
+        // A whitespace-only value blocks every address, as before.
+        assert!(!allows(" ", "10.0.0.1"));
+    }
+
+    #[test]
     fn test_id_whitelist_allows() {
         let list = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
 
-        // An empty whitelist allows everyone.
-        assert!(id_whitelist_allows(&[], "123456789"));
+        // A list without entries allows no one.
+        assert!(!id_whitelist_allows(&[], "123456789"));
 
         // Same server: the peer reports a bare id.
         assert!(id_whitelist_allows(&list(&["123456789"]), "123456789"));
