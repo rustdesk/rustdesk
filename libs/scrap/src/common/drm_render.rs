@@ -23,20 +23,14 @@ pub struct RenderConverter {
 }
 
 impl RenderConverter {
-    /// Convert into a recycled consumer buffer when supported; mapped pixels and older libraries
-    /// retain the copy path. The library's borrowed destination is cleared before returning.
+    /// Convert into a recycled consumer buffer, clearing the borrowed destination before returning.
     pub fn convert_into(
         &mut self,
         desc: &mut drmtap_dmabuf_desc,
         received_fd: RawFd,
         buf: &mut Vec<u8>,
     ) -> io::Result<(u32, u32, Pixfmt)> {
-        let Some(set_output) = self.lib.set_output_buffer else {
-            let (data, w, h, fmt) = self.convert(desc, received_fd)?;
-            buf.clear();
-            buf.extend_from_slice(data);
-            return Ok((w, h, fmt));
-        };
+        let set_output = self.lib.set_output_buffer;
         // CPU conversions can preserve the source pitch; EGL returns tightly packed RGBA.
         let needed = (desc.pitches[0] as usize)
             .max((desc.width as usize).saturating_mul(4))
@@ -88,7 +82,8 @@ impl RenderConverter {
                         Ok((w, h, fmt))
                     }
                 } else {
-                    // Linear scanouts can be returned mapped, without using the destination.
+                    // Defensive fallback if the library returns storage other than
+                    // the configured destination.
                     buf.clear();
                     buf.extend_from_slice(data);
                     Ok((w, h, fmt))
@@ -267,9 +262,10 @@ mod output_buffer_tests {
     struct Context {
         dst: *mut u8,
         len: usize,
-        mapped: [u8; 24],
-        fail: bool,
-        use_mapped: bool,
+        pixels: Vec<u8>,
+        output_stride: u32,
+        error: i32,
+        use_non_destination: bool,
     }
 
     unsafe extern "C" fn set_output(ctx: *mut drmtap_ctx, dst: *mut c_void, len: usize) -> i32 {
@@ -279,35 +275,35 @@ mod output_buffer_tests {
         0
     }
 
-    /// Model pitch-preserving conversion that needs caller storage, or a separately mapped frame.
+    /// Model caller-owned output; the defensive test deliberately returns nonconforming storage.
     unsafe extern "C" fn convert(
         ctx: *mut drmtap_ctx,
-        _: *const drmtap_dmabuf_desc,
+        desc: *const drmtap_dmabuf_desc,
         frame: *mut drmtap_frame_info,
     ) -> i32 {
         let ctx = &mut *ctx.cast::<Context>();
-        if ctx.fail {
-            return -hbb_common::libc::EAGAIN;
+        if ctx.error != 0 {
+            return -ctx.error;
         }
-        let data = if !ctx.use_mapped {
-            if ctx.dst.is_null() || ctx.len < ctx.mapped.len() {
+        let data = if !ctx.use_non_destination {
+            if ctx.dst.is_null() || ctx.len < ctx.pixels.len() {
                 return -hbb_common::libc::ENOSPC;
             }
-            std::ptr::copy_nonoverlapping(ctx.mapped.as_ptr(), ctx.dst, ctx.mapped.len());
+            std::ptr::copy_nonoverlapping(ctx.pixels.as_ptr(), ctx.dst, ctx.pixels.len());
             ctx.dst
         } else {
-            ctx.mapped.as_mut_ptr()
+            ctx.pixels.as_mut_ptr()
         };
         *frame = std::mem::zeroed();
         (*frame).data = data.cast();
-        (*frame).width = 2;
-        (*frame).height = 2;
-        (*frame).stride = 12;
+        (*frame).width = (*desc).width;
+        (*frame).height = (*desc).height;
+        (*frame).stride = ctx.output_stride;
         (*frame).format = DRM_FORMAT_ABGR8888;
         0
     }
 
-    fn library(direct: bool) -> &'static DrmtapLib {
+    fn library() -> &'static DrmtapLib {
         unsafe extern "C" fn grab(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) -> i32 {
             -1
         }
@@ -324,7 +320,7 @@ mod output_buffer_tests {
         }
         let mut lib = DrmtapLib::fake(grab, release, desc, rotation);
         lib.convert_dmabuf = convert;
-        lib.set_output_buffer = direct.then_some(set_output);
+        lib.set_output_buffer = set_output;
         Box::leak(Box::new(lib))
     }
 
@@ -341,9 +337,10 @@ mod output_buffer_tests {
         Context {
             dst: std::ptr::null_mut(),
             len: 0,
-            mapped: [37; 24],
-            fail: false,
-            use_mapped: false,
+            pixels: vec![37; 24],
+            output_stride: 12,
+            error: 0,
+            use_non_destination: false,
         }
     }
 
@@ -351,7 +348,7 @@ mod output_buffer_tests {
     fn converts_into_reusable_destination() {
         let mut ctx = context();
         let mut conv = RenderConverter {
-            lib: library(true),
+            lib: library(),
             ctx: (&mut ctx as *mut Context).cast(),
         };
         let mut buf = vec![0; 24];
@@ -363,26 +360,51 @@ mod output_buffer_tests {
         assert_eq!(buf.as_ptr(), allocation);
         // The C API must not retain a borrow of a buffer the consumer now owns.
         assert!(ctx.dst.is_null());
-        ctx.mapped.fill(83);
+        ctx.pixels.fill(83);
         conv.convert_into(&mut descriptor(), -1, &mut buf).unwrap();
         assert_eq!(buf, [83; 24]);
     }
 
-    /// Mapped pixels stay consumer-owned after the mapping changes, even without the optional API.
+    /// A nonconforming mock exercises the defensive copy; supported libraries use the destination.
     #[test]
-    fn copies_mapped_frames_and_supports_older_libraries() {
-        for direct in [false, true] {
-            let mut ctx = context();
-            ctx.use_mapped = true;
-            let mut conv = RenderConverter {
-                lib: library(direct),
-                ctx: (&mut ctx as *mut Context).cast(),
-            };
-            let mut buf = Vec::new();
-            conv.convert_into(&mut descriptor(), -1, &mut buf).unwrap();
-            assert_eq!(buf, [37; 24]);
-            ctx.mapped.fill(0);
-            assert_eq!(buf, [37; 24]);
+    fn copies_non_destination_frames() {
+        let mut ctx = context();
+        ctx.use_non_destination = true;
+        let mut conv = RenderConverter {
+            lib: library(),
+            ctx: (&mut ctx as *mut Context).cast(),
+        };
+        let mut buf = Vec::new();
+        conv.convert_into(&mut descriptor(), -1, &mut buf).unwrap();
+        assert_eq!(buf, [37; 24]);
+        ctx.pixels.fill(0);
+        assert_eq!(buf, [37; 24]);
+        assert!(ctx.dst.is_null());
+    }
+
+    #[test]
+    fn packed_output_reuses_destination_across_resolution_changes() {
+        let mut ctx = context();
+        let mut conv = RenderConverter {
+            lib: library(),
+            ctx: (&mut ctx as *mut Context).cast(),
+        };
+        let mut buf = vec![0; 24];
+        let mut allocation = buf.as_ptr();
+        for width in [2, 4, 2, 2] {
+            let mut desc = descriptor();
+            desc.width = width;
+            desc.pitches[0] = width * 4 + 4;
+            ctx.output_stride = width * 4;
+            ctx.pixels = (0..width * 4 * desc.height).map(|n| n as u8).collect();
+            let (w, h, _) = conv.convert_into(&mut desc, -1, &mut buf).unwrap();
+            assert_eq!((w, h), (width, 2));
+            assert_eq!(buf, ctx.pixels);
+            assert_eq!(buf.len(), (width * 8) as usize);
+            if width == 2 {
+                assert_eq!(buf.as_ptr(), allocation);
+            }
+            allocation = buf.as_ptr();
             assert!(ctx.dst.is_null());
         }
     }
@@ -390,21 +412,30 @@ mod output_buffer_tests {
     #[test]
     fn releases_destination_on_failed_conversion() {
         let mut ctx = context();
-        ctx.fail = true;
         let mut conv = RenderConverter {
-            lib: library(true),
+            lib: library(),
             ctx: (&mut ctx as *mut Context).cast(),
         };
-        let mut buf = Vec::new();
-        let err = conv
-            .convert_into(&mut descriptor(), -1, &mut buf)
-            .unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
-        assert!(ctx.dst.is_null());
-        drop(buf);
-        ctx.fail = false;
-        let mut next = Vec::new();
-        conv.convert_into(&mut descriptor(), -1, &mut next).unwrap();
-        assert_eq!(next, [37; 24]);
+        for error in [hbb_common::libc::EAGAIN, hbb_common::libc::EIO] {
+            ctx.error = error;
+            let mut buf = Vec::new();
+            let err = conv
+                .convert_into(&mut descriptor(), -1, &mut buf)
+                .unwrap_err();
+            assert_eq!(
+                err.kind(),
+                if error == hbb_common::libc::EAGAIN {
+                    io::ErrorKind::WouldBlock
+                } else {
+                    io::ErrorKind::Other
+                }
+            );
+            assert!(ctx.dst.is_null());
+            drop(buf);
+            ctx.error = 0;
+            let mut next = Vec::new();
+            conv.convert_into(&mut descriptor(), -1, &mut next).unwrap();
+            assert_eq!(next, [37; 24]);
+        }
     }
 }
