@@ -12,7 +12,7 @@ BRANDING_PASS         yes (official mark + regenerated icons; runtime verified o
 BUILD_LINUX_PASS      yes (both AppImages built from this tree)
 BUILD_WINDOWS_PASS    NOT_TESTED (no Windows host available)
 VISUAL_QA_PASS        partial (Master + Client on Xvfb at 1280x720 / 1440x900 / 1920x1080; 125% and 150% not runnable here)
-FUNCTIONAL_E2E_PASS   NOT_TESTED (incoming-session consent never reaches the GUI, see §8)
+FUNCTIONAL_E2E_PASS   consent: PASS (real request between two identities, see §8); remote session: NOT_TESTED (capture backend of this environment)
 ```
 
 ## 1. Brand source
@@ -42,6 +42,7 @@ raster icon in the tree is derived from that script; no icon is hand-edited.
 | `flutter/lib/tefway/widgets.dart` | `TefwayBrandMark` renders `assets/tefway_mark.png` (`BoxFit.contain`, square box); the old blue square + `Icons.headset_mic_rounded` is gone; a neutral "T" placeholder replaces a missing asset | the headset glyph was an invented symbol, i.e. exactly what the gate forbids |
 | `flutter/lib/tefway/branding.dart` | new `kTefwayMarkAsset` constant | single import path for the asset, matching `kTefwayLogoAsset` |
 | `flutter/lib/tefway/pages/client_home_page.dart` | tighter spacing, window 440x744, `_fitToScreen()` clamps the height to the tallest display minus 48 px | the footer sat ~10 px below the fold at 440x720; the clamp keeps the window on a 1280x720 desktop and lets the existing scroll view take over |
+| `flutter/lib/tefway/consent.dart` | decision pinned in a footer outside the scroll view; the two actions stack while the core window is narrow | found by the real E2E in §8: at the 300 px core width the two labels could not share a row and `Permitir acesso` was clipped, with both buttons below the fold |
 | `flutter/lib/common.dart` | `imcomingOnlyHomeSize` for the Tefway Client: 440x724 (was 440x700) | the incoming-only core sizes that window from this constant |
 | `res/tefway/gen_icons.py` | 512 px master, no upscaling, emits `flutter/assets/tefway_mark.png` | reproducible icon pipeline |
 | `res/tefway/icon-*.png`, `res/tefway/tefway.ico` | regenerated | Linux hicolor set, AppImage `.DirIcon`, Windows `.ico` |
@@ -103,6 +104,9 @@ All captures come from the AppImages below, `GDK_BACKEND=x11`, a dedicated
 | `client-home-1440.png` | Client home, full footer visible | 1440x900 | 440x744 | `93b9f9ea` |
 | `client-home-1920-context.png` | Client window on a 1920x1080 desktop | 1920x1080 | 440x744 | `18f88ee8` |
 | `client-home-server-unavailable.png` | Client, core-reported "Servidor indisponível" | 1920x1080 | 440x744 | — |
+| `consent-request.png` | Incoming session consent card, real request, decision visible | 1280x800 desktop | 300x490 | `53b4bf6f` |
+| `consent-request-before.png` | Same card before the fix (action clipped, below the fold) | 1280x800 desktop | 300x490 | `a27612f1` |
+| `consent-approved-peer-error.png` | Peer window right after the approval crossed the wire | 1280x800 desktop | 1300x740 | `cd4e91a4` |
 
 `master-home.png` and `master-home-1920.png` are pixel-identical because the
 Master window has a fixed 800x600 size and Flutter renders at the same device
@@ -134,7 +138,7 @@ UX-02; none is introduced by this gate. No new lint suppression was added.
 
 | Artifact | Exit | sha256 |
 | --- | --- | --- |
-| `build/tefway/client/TefwayRemoteClient-Linux-x86_64.AppImage` | 0 | `4f5841930edfd144e096bab315de2775d4145829fc1d60fc92dbf98d84e8bda2` |
+| `build/tefway/client/TefwayRemoteClient-Linux-x86_64.AppImage` | 0 | `dd1458c1e98e9d72965bd95c280af45ba99ec30a9dd76188f2e54e5295b06ce2` |
 | `build/tefway/master/TefwayRemoteMaster-Linux-x86_64.AppImage` | 0 | `8abba8c092c772bf5f13abb132b6c861cbfbb5c136b7aeb0d0f36379f778b383` |
 
 Both were built from this tree with `docker/tefway-linux/build.sh --profile
@@ -159,36 +163,63 @@ Both were built from this tree with `docker/tefway-linux/build.sh --profile
   order and the `has_icon` guard were needed.
 - AGPL attribution is intact in the UI and in the repository.
 
-## 8. Not verified — incoming-session consent (FUNCTIONAL_E2E)
+## 8. Incoming-session consent (FUNCTIONAL_E2E)
 
-The gate asks for a real consent screenshot between two different computers.
-That was attempted with two isolated identities on one host (separate `HOME`
-plus a bind-mounted `/etc/machine-id`, which produced IDs `525 313 762` and
-`1 041 751 091`).
+Two identities were run at once on separate X displays, each with its own
+profile directory and its own machine id, so the rendezvous server sees two
+distinct peers:
 
-Result: the request reaches the target — the Client log shows `Connection
-opened` and the input thread starting — but **no approval window is ever
-created**, and the session dies with `Timeout` after ~30 s. In the isolated
-Client the log reports `ipc to connection manager exit: Failed to connect to
-connection manager`, i.e. the session cannot hand the request to the GUI that
-must render the consent card.
+| Role | Build | Display | ID |
+| --- | --- | --- | --- |
+| Target (receives the request) | Client AppImage | `:93` 1280x800 | `1 385 052 287` |
+| Technician (dials) | Master AppImage | `:94` 1280x800 | `1 594 100 883` |
 
-This is a functional defect of the portable Linux build, independent of the
-branding work, and it predates this gate (UX-02 shipped the consent card
-compiled but never exercised). Consequences:
+The Master typed the target's ID and pressed `Conectar`. The target opened its
+connection-manager window `1594100883 - Tefway Remote Client` and rendered the
+branded consent card: peer name and ID, the six capability switches, the notice
+that nothing is granted before the click, and the decision.
 
-- `TefwayConsentCard` is still **not** verified at runtime; the branding inside
-  it is only verified statically.
-- Nothing in the consent path was modified by this gate, so no regression is
-  introduced — but no security claim can be made about it either.
-- A dedicated gate is required to fix the connection-manager IPC on the
-  portable build before consent can be considered delivered.
+**The first run exposed a real defect.** The core sizes that window at
+300x490 (`kConnectionManagerWindowSizeClosedChat`) and the card laid the two
+actions out on one row, so `Permitir acesso` was clipped at the right edge and
+both buttons sat below the 490 px fold — the approval was literally unreachable
+without scrolling, and the primary label was cut. `consent-request-before.png`
+shows it; `consent-request.png` shows the fix.
+
+Fix (`flutter/lib/tefway/consent.dart`, presentation only): the decision moved
+into a footer pinned outside the scroll view, and the actions stack while the
+window is narrower than 300 px, sitting side by side once the chat panel widens
+the window. No accept/refuse call, no permission handling and no window size
+was touched.
+
+After the fix, `Permitir acesso` was pressed and the decision crossed the wire:
+the technician window switched from the password prompt to
+`A solicitação de compartilhamento de tela no dispositivo remoto foi encerrada
+sem ser concluída` (`consent-approved-peer-error.png`). The session does not
+start because the target's capture backend is the Wayland/PipeWire portal, which
+this test display cannot satisfy — an environment limit, not a consent defect.
+
+Status split:
+
+- Consent surface: **PASS** with a real request from another peer, including the
+  fix for the defect the run uncovered.
+- Full remote session (screen streaming) after approval: **NOT_TESTED** here; it
+  needs a machine whose capture backend matches the session type.
+
+Test harness notes (no product change): the two identities come from an
+`LD_PRELOAD` shim that redirects `/etc/machine-id` and `/var/lib/dbus/machine-id`
+to per-instance files — the client reads the second path, which is why a
+`/etc/machine-id`-only override produced the same ID twice. Each instance also
+runs inside its own `dbus-run-session`, because the app resolves the login
+session through logind and otherwise opens the desktop ScreenCast portal on the
+real session.
 
 ## 9. Risks and remaining work
 
 | Item | Severity | Note |
 | --- | --- | --- |
-| Consent window never opens on the portable Linux build | high (functional) | blocks G6 evidence; needs its own gate |
+| Remote session after approval cannot start in this test environment | medium (environment) | the target capture insists on the Wayland/PipeWire portal; consent itself is verified end to end |
+| Real-machine consent still owed for the release checklist | low | evidence above uses two identities on one host (separate machine ids, separate profiles); a two-machine run should confirm it before shipping |
 | `_fitToScreen()` path not exercised | low | under Xvfb `mainGetDisplays()` returns an empty list, so the fallback 440x744 was used; the clamp is verified only by code review, while the resulting scroll behaviour was verified by resizing the window to 440x672 |
 | Windows binaries not built | medium | `BUILD_WINDOWS_PASS` stays NOT_TESTED; only the `.ico` resources were regenerated and hashed |
 | High-DPI scaling not captured | low | see §5 |
