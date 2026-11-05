@@ -508,6 +508,7 @@ impl RendezvousMediator {
                         }
                     }
                     if timeout || (last_register_sent.is_none() && expired) {
+                        seal.on_round(timeout);
                         if timeout {
                             fails += 1;
                             if fails >= MAX_FAILS2 {
@@ -529,7 +530,6 @@ impl RendezvousMediator {
                                 old_latency = 0;
                             }
                         }
-                        seal.on_round(timeout);
                         rz.register_peer(seal.round_sink(&mut socket, &addr)).await?;
                         last_register_sent = now;
                     }
@@ -1499,7 +1499,7 @@ impl Sink<'_> {
             Sink::Framed(socket, addr) => socket.send(msg, addr.to_owned()).await,
             Sink::Stream(stream) => stream.send(msg).await,
             Sink::Sealed(socket, addr, seal) => {
-                let bytes = seal_state::seal_message(seal, msg)?;
+                let bytes = seal_state::seal_message(seal, msg, seal_state::device_key)?;
                 socket.send_bytes(bytes.into(), addr.to_owned()).await
             }
         }
