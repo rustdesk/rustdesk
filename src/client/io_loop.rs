@@ -2901,6 +2901,12 @@ impl<T: InvokeUiSession> Remote<T> {
             discard_queue: discard_queue.clone(),
         };
         let handler = self.handler.ui_handler.clone();
+        // How many decoded GPU frames the render path refused back to back. A few
+        // at session start are normal (the texture is registered after the first
+        // frame arrives); a streak means nobody will ever present them, and every
+        // one of those frames already lost its software pixels.
+        #[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
+        let mut gpu_refused_streak = 0usize;
         crate::client::start_video_thread(
             self.handler.clone(),
             display,
@@ -2912,8 +2918,37 @@ impl<T: InvokeUiSession> Remote<T> {
             move |display: usize,
                   data: &mut scrap::ImageRgb,
                   _texture: *mut c_void,
-                  pixelbuffer: bool| {
+                  pixelbuffer: bool,
+                  pixelbuffer_output: scrap::PixelBufferOutput| {
                 *frame_count.write().unwrap() += 1;
+                // A GPU frame is presented as-is; when nobody can take it the
+                // frame is dropped, because the decoder already skipped its
+                // software transfer for it.
+                #[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
+                if let Some(gpu_frame) = &pixelbuffer_output {
+                    if handler.on_pixelbuffer(display, gpu_frame) {
+                        gpu_refused_streak = 0;
+                        return;
+                    }
+                    // Nobody can present it (texture not registered yet, display
+                    // not in the map, plugin refused). The decoder already
+                    // skipped the software transfer for this frame, so the pixels
+                    // in `data` belong to an earlier frame -- pushing them would
+                    // flash the previous picture backwards. Drop this one and
+                    // make the refusal countable instead.
+                    count_gpu_frame_refused(display);
+                    let (streak, self_heal) =
+                        next_refuse_streak(gpu_refused_streak, GPU_FRAME_REFUSE_LIMIT);
+                    gpu_refused_streak = streak;
+                    if self_heal {
+                        // Self-heal instead of freezing: stop asking this
+                        // session's decoder for GPU frames, which puts it back on
+                        // the software path for the next frame with no restart.
+                        handler.disable_gpu_frames();
+                    }
+                    return;
+                }
+                let _ = &pixelbuffer_output;
                 if pixelbuffer {
                     handler.on_rgba(display, data);
                 } else {
@@ -3321,5 +3356,110 @@ mod kept_cursor_tests {
         let mut bomb = compressed(4, 4);
         bomb.colors = hbb_common::compress::compress(&vec![0u8; 1 << 20]).into();
         assert!(kept_cursor_rgba(bomb).is_err(), "more pixels than its size");
+    }
+}
+
+/// How many decoded GPU frames the render path may refuse in a row before this
+/// session gives up on the direct path.
+///
+/// At 30-60 fps this is roughly one to two seconds. Long enough that the first
+/// frames of a session (the texture is registered after the first one arrives) do
+/// not trip it, short enough that a renderer that genuinely cannot present them
+/// is repaired inside the same second the picture would otherwise freeze.
+#[cfg(any(
+    all(target_os = "macos", feature = "flutter", feature = "hwcodec"),
+    test
+))]
+const GPU_FRAME_REFUSE_LIMIT: usize = 60;
+
+/// Count a decoded GPU frame that no UI session could present.
+///
+/// The decoder skips the software transfer for a frame it hands out, so when the
+/// render layer refuses one the pixels in the handler belong to an earlier frame:
+/// the frame is dropped instead of being replaced by stale pixels. The counter
+/// exists so a measurement can show the refusals are zero in normal operation.
+///
+/// The warning is time-throttled rather than count-throttled: this site is driven
+/// by the incoming frame rate, and `AGENTS.md` requires a frame-driven log call to
+/// go through `throttled_log!` (a "every Nth frame" rule still grows with load).
+/// The running total stays in the line.
+#[cfg(all(target_os = "macos", feature = "flutter", feature = "hwcodec"))]
+fn count_gpu_frame_refused(display: usize) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static REFUSED: AtomicU64 = AtomicU64::new(0);
+    let total = REFUSED.fetch_add(1, Ordering::Relaxed) + 1;
+    hbb_common::throttled_log!(
+        std::time::Duration::from_secs(5),
+        warn,
+        "display #{display}: decoded GPU frame refused by the render path ({total} so far), dropping it instead of pushing stale pixels"
+    );
+}
+
+/// One refused GPU frame as a count: the streak to keep, and whether the self-heal
+/// threshold was just reached. Reaching it restarts the streak, so the next run of
+/// refusals needs the full limit again.
+#[cfg(any(
+    all(target_os = "macos", feature = "flutter", feature = "hwcodec"),
+    test
+))]
+fn next_refuse_streak(streak: usize, limit: usize) -> (usize, bool) {
+    let next = streak + 1;
+    if next >= limit {
+        (0, true)
+    } else {
+        (next, false)
+    }
+}
+
+/// Arithmetic only, so these run on every platform instead of only where the call
+/// site is gated; AGENTS.md asks for a pure helper to keep its tests everywhere.
+#[cfg(test)]
+mod gpu_refuse_streak_tests {
+    use super::*;
+
+    /// The published bound is "at most 60 frames when nothing accepts": change the constant and this test
+    /// goes red, so the number in the PR thread cannot drift away from the code.
+    #[test]
+    fn gpu_refuse_streak_limit_is_the_published_bound() {
+        assert_eq!(GPU_FRAME_REFUSE_LIMIT, 60);
+    }
+
+    /// A regression that fires the fallback early (freezing the picture sooner than needed) or never
+    /// (freezing for good) both show up here.
+    #[test]
+    fn gpu_refuse_streak_self_heals_at_the_limit_then_restarts() {
+        let mut streak = 0;
+        let mut healed_at = None;
+        for frame in 1..=GPU_FRAME_REFUSE_LIMIT {
+            let (next, healed) = next_refuse_streak(streak, GPU_FRAME_REFUSE_LIMIT);
+            streak = next;
+            if healed {
+                healed_at = Some(frame);
+            }
+        }
+        assert_eq!(
+            healed_at,
+            Some(GPU_FRAME_REFUSE_LIMIT),
+            "the software fallback must fire once, at the limit"
+        );
+        assert_eq!(
+            streak, 0,
+            "the streak restarts after self-healing, so the next run needs the full limit again"
+        );
+    }
+
+    /// One accepted frame resets the streak at the call site; this is the other half of that contract, so a
+    /// renderer that accepts occasionally can never trip the fallback.
+    #[test]
+    fn gpu_refuse_streak_partial_never_heals() {
+        let mut streak = 0;
+        for _ in 1..GPU_FRAME_REFUSE_LIMIT {
+            let (next, healed) = next_refuse_streak(streak, GPU_FRAME_REFUSE_LIMIT);
+            assert!(!healed);
+            streak = next;
+        }
+        assert_eq!(streak, GPU_FRAME_REFUSE_LIMIT - 1);
+        let (reset_streak, healed) = next_refuse_streak(streak, GPU_FRAME_REFUSE_LIMIT);
+        assert_eq!((reset_streak, healed), (0, true));
     }
 }
