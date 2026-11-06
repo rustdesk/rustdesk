@@ -1754,6 +1754,20 @@ fn parse_listening_unix_socket_paths(text: &str) -> Option<std::collections::Has
     Some(paths)
 }
 
+fn read_listening_unix_socket_paths() -> Option<std::collections::HashSet<String>> {
+    let listening = std::fs::read_to_string("/proc/net/unix")
+        .ok()
+        .and_then(|text| parse_listening_unix_socket_paths(&text));
+    if listening.is_none() {
+        hbb_common::throttled_log!(
+            std::time::Duration::from_secs(60),
+            info,
+            "Could not read the listener table in /proc/net/unix; no session env is refused for a dead DISPLAY"
+        );
+    }
+    listening
+}
+
 /// `filesystem_socket_visible` is whether this display's derived path is a socket node the caller
 /// can see. A stale node left behind by a dead server is not enough on its own, so it counts only
 /// together with a listener of that name.
@@ -1790,18 +1804,22 @@ fn has_usable_wayland_session(envs: &std::collections::HashMap<&str, String>) ->
 fn dead_local_display_filter<'a>(
     process_pat: &'a str,
 ) -> impl FnMut(u32, &std::collections::HashMap<&str, String>) -> bool + 'a {
-    let listening = std::fs::read_to_string("/proc/net/unix")
-        .ok()
-        .and_then(|text| parse_listening_unix_socket_paths(&text));
+    // Read only once a candidate has to be judged: this runs on every pass of the 500 ms service
+    // loop, and on a healthy session the first match carries a compositor and a bus.
+    let mut listening: Option<Option<std::collections::HashSet<String>>> = None;
     move |pid, envs| {
         if has_usable_wayland_session(envs) {
             return true;
         }
         let display = envs.get("DISPLAY").map_or("", |v| v.as_str());
-        let visible = local_x11_socket_name(display).is_some_and(|path| {
+        let Some(socket) = local_x11_socket_name(display) else {
+            return true;
+        };
+        let listening = listening.get_or_insert_with(read_listening_unix_socket_paths);
+        let visible = {
             use std::os::unix::fs::FileTypeExt;
-            std::fs::metadata(path).is_ok_and(|meta| meta.file_type().is_socket())
-        });
+            std::fs::metadata(&socket).is_ok_and(|meta| meta.file_type().is_socket())
+        };
         if local_display_status(display, listening.as_ref(), visible) != LocalDisplayStatus::Dead {
             return true;
         }
@@ -1923,8 +1941,8 @@ mod local_display_tests {
     }
 }
 
-/// `get_envs` for the Wayland paths, refusing a candidate whose `DISPLAY` is a local one with no X
-/// server behind it.
+/// The first process carrying every one of `names`, else the best ranked, refusing a candidate
+/// whose `DISPLAY` is a local one with no X server behind it.
 fn get_wayland_envs<'a>(
     uid: &str,
     process_pat: &str,
@@ -1941,7 +1959,9 @@ fn get_wayland_envs<'a>(
     )
 }
 
-/// `get_envs_of_newest` for the Wayland paths, with the same refusal.
+/// `get_envs_of_newest` for the Wayland paths, with the same refusal. Unlike `get_envs_of_newest`,
+/// a refused process does not end the scan: the next older match is judged in its place, since the
+/// newest one is exactly where a later orphan sits.
 fn get_wayland_envs_of_newest<'a>(
     uid: &str,
     process_pat: &str,
@@ -1958,29 +1978,6 @@ fn get_wayland_envs_of_newest<'a>(
     )
 }
 
-/// Get multiple environment variables from a process matching the given criteria.
-/// This version reads /proc directly instead of spawning shell commands.
-///
-/// # Arguments
-/// * `uid` - User ID to filter processes
-/// * `process_pat` - Regex pattern to match process cmdline
-/// * `names` - Environment variable names to retrieve. **Must be <= 64 elements** due to
-///   the internal bitmask used for tie-breaking.
-///
-/// # Panics (debug builds)
-/// Panics if `names.len() > 64`.
-///
-/// # Implementation notes
-/// - Returns values from a *single* best-matching process_pat (for consistency).
-/// - Avoids repeated scanning by parsing `environ` once per process.
-fn get_envs<'a>(
-    uid: &str,
-    process_pat: &str,
-    names: &[&'a str],
-) -> std::collections::HashMap<&'a str, String> {
-    get_envs_where(uid, process_pat, names, false, |count| count == names.len())
-}
-
 /// The newest process matching `process_pat`, whatever it happens to carry: the semantics of the
 /// `ps -u <uid> -f | grep <pat> | tail -1` pipeline the callers below used before. A variable this
 /// process does not have means moving on to the next pattern, never on to an older process that
@@ -1993,8 +1990,8 @@ fn get_envs_of_newest<'a>(
     get_envs_where(uid, process_pat, names, true, |_| true)
 }
 
-/// `get_envs` with the caller's own process order and its own notion of a complete answer, told
-/// how many of `names` the process carries: the first process `accept` takes wins outright, and
+/// The `/proc` scan with the caller's own process order and its own notion of a complete answer,
+/// told how many of `names` the process carries: the first process `accept` takes wins outright, and
 /// the count-based ranking is only the fallback for when no process is accepted at all.
 fn get_envs_where<'a, F>(
     uid: &str,
@@ -2063,7 +2060,7 @@ where
 
     // Iterate /proc to find matching processes. `newest_first` is only for `get_envs_of_newest`,
     // whose callers need the last PID-ordered match their `ps ... | tail -1` pipelines took;
-    // without it the order is whatever readdir returns, which is what `get_envs` has always used.
+    // without it the order is whatever readdir returns, which is what `get_wayland_envs` uses.
     // Neither order identifies the active session -- a user with two live graphical sessions has
     // one of each, and picking by PID guesses. See `Desktop::refresh` for who owns that question.
     let Ok(entries) = std::fs::read_dir("/proc") else {
