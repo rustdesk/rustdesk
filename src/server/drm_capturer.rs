@@ -201,6 +201,8 @@ pub struct IpcDrmCapturer {
     returned_at: Instant,
     // Repeats sent since the last new picture; see MAX_REPEATS.
     repeats: u8,
+    #[cfg(feature = "drm-vaapi")]
+    gpu_detector: Option<scrap::drm_gpu::DmaBufDetector>,
 }
 
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
@@ -548,6 +550,8 @@ impl IpcDrmCapturer {
                 spare: Vec::new(),
                 returned_at: Instant::now(),
                 repeats: 0,
+                #[cfg(feature = "drm-vaapi")]
+                gpu_detector: None,
             },
             displays,
             wire_idx,
@@ -653,6 +657,38 @@ impl TraitCapturer for IpcDrmCapturer {
                             h.fallback_rejected = false;
                         }
                     }
+                }
+                // Disable only for matched A/B measurements of the experimental GPU path.
+                if std::env::var("RUSTDESK_DRM_GPU_IDLE").as_deref() != Ok("0") {
+                    let changed = (|| {
+                        if self.gpu_detector.is_none() {
+                            self.gpu_detector =
+                                Some(scrap::drm_gpu::DmaBufDetector::new(&frame.render_node)?);
+                        }
+                        match self.gpu_detector.as_mut() {
+                            Some(detector) => detector.changed(&frame),
+                            None => Err(-38),
+                        }
+                    })();
+                    let repeat = match changed {
+                        Ok(changed) => !changed,
+                        Err(error) => {
+                            scrap::drm_gpu::disable(&format!(
+                                "GPU idle comparison failed: {error}"
+                            ));
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                "GPU idle comparison failed; rebuilding CPU capture",
+                            ));
+                        }
+                    };
+                    if repeat
+                        && (self.returned_at.elapsed() < REPEAT_EVERY
+                            || self.repeats >= MAX_REPEATS)
+                    {
+                        return Err(io::ErrorKind::WouldBlock.into());
+                    }
+                    self.repeats = if repeat { self.repeats + 1 } else { 0 };
                 }
                 self.returned_at = Instant::now();
                 return Ok(Frame::DmaBuf(frame));
@@ -2631,6 +2667,8 @@ mod drm_capturer_tests {
             spare: Vec::new(),
             returned_at: Instant::now(),
             repeats: 0,
+            #[cfg(feature = "drm-vaapi")]
+            gpu_detector: None,
         }
     }
 

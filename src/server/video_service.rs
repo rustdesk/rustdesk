@@ -912,15 +912,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
-                // A still screen may never reach handle_one_frame, which is where a subscriber
-                // added without a refresh (mobile display switch) is otherwise noticed.
-                sp.snapshot(|sps| {
-                    if sps.has_subscribes() {
-                        log::info!("switch due to new subscriber");
-                        bail!("SWITCH");
-                    }
-                    Ok(())
-                })?;
+                switch_on_new_subscriber(&sp)?;
                 #[cfg(windows)]
                 if dxgi_recovery_started
                     .map(|started| started.elapsed() >= DXGI_RECOVERY_FRAME_GRACE)
@@ -1294,6 +1286,18 @@ fn refresh_allowed(unfed: bool, warmed_up: bool, latency_free: bool) -> bool {
     !cfg!(target_os = "macos") || unfed || warmed_up || latency_free
 }
 
+// A still DRM stream may exhaust both repeat budgets. Check new subscribers
+// on every WouldBlock, before either budget can prevent the stream rebuilding.
+fn switch_on_new_subscriber(sp: &GenericService) -> ResultType<()> {
+    sp.snapshot(|sps| {
+        if sps.has_subscribes() {
+            log::info!("switch due to new subscriber");
+            bail!("SWITCH");
+        }
+        Ok(())
+    })
+}
+
 #[inline]
 fn handle_one_frame(
     display: usize,
@@ -1609,5 +1613,25 @@ mod tests {
         assert!(refresh_allowed(false, false, true));
         // Nothing fed yet: no warm-up to lose, and a refresh can restart a stalled capturer.
         assert!(refresh_allowed(true, false, false));
+    }
+}
+
+#[cfg(test)]
+mod idle_viewer_tests {
+    use super::*;
+    use crate::server::{connection::ConnInner, service::Service};
+
+    #[test]
+    fn a_new_viewer_requests_rebuilding_an_existing_idle_stream() {
+        let sp = GenericService::new("idle-viewer-test".to_owned(), true);
+        sp.on_subscribe(ConnInner::new(1, None, None));
+        switch_on_new_subscriber(&sp).unwrap();
+        // A second viewer needs a new first frame even after capture stops returning frames.
+        sp.on_subscribe(ConnInner::new(2, None, None));
+        assert_eq!(
+            switch_on_new_subscriber(&sp).unwrap_err().to_string(),
+            "SWITCH"
+        );
+        switch_on_new_subscriber(&sp).unwrap();
     }
 }

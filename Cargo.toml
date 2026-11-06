@@ -296,4 +296,4 @@ rpath = true
 debug = 1
 
 [patch."https://github.com/rustdesk-org/hwcodec"]
-hwcodec = { git = "https://github.com/jensvonbulow/hwcodec", rev = "d0e0e8d523c032915832e13cfa62795560972d64" }
+hwcodec = { path = "../rustdesk-hwcodec-idle" }

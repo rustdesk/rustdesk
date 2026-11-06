@@ -10,7 +10,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-pub use ::hwcodec::ffmpeg_ram::encode::DmaBufFrame;
+pub use ::hwcodec::ffmpeg_ram::encode::{DmaBufDetector, DmaBufFrame};
 static FAILED: AtomicBool = AtomicBool::new(false);
 
 pub fn enabled() -> bool {
