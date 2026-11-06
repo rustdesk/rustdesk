@@ -4,10 +4,10 @@
 //! server is taken for one without the seal: registrations go plaintext, and every fourth one
 //! is sealed to notice an upgrade. A sealed datagram that opens makes the socket sealed, where
 //! nothing goes plaintext and a plaintext answer to a registration is dropped as forged. A
-//! missed answer while sealed is retried under the session, then by turns with a hello, since a
-//! server restart retires every session; the session stays for pushes until a welcome replaces
-//! it. Such a socket never falls back: its server seals. Only a new socket, which may reach
-//! another server, probes afresh.
+//! missed answer while sealed is retried both under the session and with a hello, since a server
+//! restart retires every session; the session stays for pushes until a welcome replaces it. Such
+//! a socket never falls back: its server seals. Only a new socket, which may reach another
+//! server, probes afresh.
 
 use super::{Sink, TargetAddr};
 use hbb_common::{
@@ -35,8 +35,7 @@ enum Mode {
     Probing(u8),
     Fallback(u8),
     Sealed,
-    /// Whether this round's registration goes as a hello rather than under the session.
-    Resealing(bool),
+    Resealing,
 }
 
 pub(super) struct SealState {
@@ -81,8 +80,7 @@ impl SealState {
         let mode = match self.mode {
             Mode::Probing(n) if timed_out && n + 1 >= PROBE_TRIES => Mode::Fallback(0),
             Mode::Probing(n) if timed_out => Mode::Probing(n + 1),
-            Mode::Sealed if timed_out => Mode::Resealing(false),
-            Mode::Resealing(hello) if timed_out => Mode::Resealing(!hello),
+            Mode::Sealed if timed_out => Mode::Resealing,
             Mode::Fallback(r) => Mode::Fallback((r + 1) % PROBE_EVERY),
             mode => mode,
         };
@@ -104,9 +102,7 @@ impl SealState {
     ) -> Sink<'a> {
         let sealed = !matches!(self.mode, Mode::Fallback(r) if r != PROBE_EVERY - 1);
         match self.seal.as_mut() {
-            Some(seal) if sealed => {
-                Sink::Sealed(socket, addr, seal, self.mode == Mode::Resealing(true))
-            }
+            Some(seal) if sealed => Sink::Sealed(socket, addr, seal, self.mode == Mode::Resealing),
             _ => Sink::Framed(socket, addr),
         }
     }
@@ -164,7 +160,7 @@ impl SealState {
                 | Some(rendezvous_message::Union::RegisterPkResponse(_)),
             ) => false,
             (Mode::Probing(_), _) => true,
-            (Mode::Sealed | Mode::Resealing(_), _) => !seal.pushes_sealed(),
+            (Mode::Sealed | Mode::Resealing, _) => !seal.pushes_sealed(),
         }
     }
 
@@ -209,11 +205,11 @@ impl Drop for SealState {
 /// `hello` asks for one even under a session, as after a missed answer. A RegisterPk with a key
 /// other than the one hellos are signed by means the key pair changed: `device` loads the new
 /// one, and is called for nothing else.
-pub(super) fn seal_message(
+fn seal_message(
     seal: &mut ClientSeal,
     msg: &RendezvousMessage,
     hello: bool,
-    device: impl FnOnce() -> Option<sign::SecretKey>,
+    device: impl Fn() -> Option<sign::SecretKey>,
 ) -> ResultType<Vec<u8>> {
     let pk = &msg.register_pk().pk;
     if !pk.is_empty() && !seal.signs_as(pk) {
@@ -234,6 +230,21 @@ pub(super) fn seal_message(
         Some(bytes) => Ok(bytes),
         None => bail!("failed to seal a datagram to the rendezvous server"),
     }
+}
+
+/// The datagrams a round's registration goes out as: under the session, and with `rehello` a
+/// hello too, which a server that restarted needs and one that only lost an answer does not.
+pub(super) fn seal_round(
+    seal: &mut ClientSeal,
+    msg: &RendezvousMessage,
+    rehello: bool,
+    device: impl Fn() -> Option<sign::SecretKey>,
+) -> ResultType<Vec<Vec<u8>>> {
+    let mut datagrams = vec![seal_message(seal, msg, false, &device)?];
+    if rehello && !udp_seal::is_hello(&datagrams[0]) {
+        datagrams.push(seal_message(seal, msg, true, &device)?);
+    }
+    Ok(datagrams)
 }
 
 /// A one-off datagram to `host`, the PunchHoleSent of a UDP punch, goes sealed only while that
@@ -382,7 +393,7 @@ mod tests {
         assert!(opened.signed_by(new_pk.as_ref()).is_some());
     }
 
-    async fn registration(state: &mut SealState, msg: &RendezvousMessage) -> Vec<u8> {
+    async fn registration(state: &mut SealState, msg: &RendezvousMessage) -> Vec<Vec<u8>> {
         let mut socket = FramedSocket::new("127.0.0.1:0").await.unwrap();
         let server = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
         let addr = TargetAddr::Ip(server.local_addr().unwrap());
@@ -392,30 +403,35 @@ mod tests {
             .await
             .unwrap();
         let mut buf = [0u8; 2048];
-        let n = server.recv(&mut buf).await.unwrap();
-        buf[..n].to_vec()
+        let mut datagrams = Vec::new();
+        let wait = std::time::Duration::from_millis(100);
+        while let Ok(Ok(n)) = tokio::time::timeout(wait, server.recv(&mut buf)).await {
+            datagrams.push(buf[..n].to_vec());
+        }
+        datagrams
     }
 
     #[tokio::test]
-    async fn a_missed_answer_while_sealed_retries_under_the_session_then_with_a_hello() {
+    async fn a_missed_answer_while_sealed_retries_under_the_session_and_with_a_hello() {
         let (mut state, server) = state("missed");
         let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
         let hello = registration(&mut state, &register_peer).await;
-        let (_, mut reply) = server.open(&hello, || 1).unwrap();
+        let (_, mut reply) = server.open(&hello[0], || 1).unwrap();
         let welcome = server
             .seal(&mut reply, CAP_PUSHES_SEALED, b"", || 0)
             .unwrap();
         assert!(state.open(BytesMut::from(&welcome[..])).unwrap().1);
+        assert_eq!(registration(&mut state, &register_peer).await.len(), 1);
         state.on_round(true);
         let retry = registration(&mut state, &register_peer).await;
+        assert_eq!(retry.len(), 2);
         assert!(
-            server.open(&retry, || 2).unwrap().0.pn.is_some(),
-            "a server that only lost an answer takes it, hellos or not"
+            server.open(&retry[0], || 2).unwrap().0.pn.is_some(),
+            "a server that only lost an answer takes it without the hello budget"
         );
-        state.on_round(true);
         assert!(
-            udp_seal::is_hello(&registration(&mut state, &register_peer).await),
-            "a restarted one needs a hello"
+            udp_seal::is_hello(&retry[1]),
+            "a restarted one takes the hello"
         );
         let punch = Some(rendezvous_message::Union::PunchHole(Default::default()));
         assert!(
