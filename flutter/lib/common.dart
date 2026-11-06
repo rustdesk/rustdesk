@@ -2744,6 +2744,17 @@ connect(BuildContext context, String id,
           ),
         );
       } else {
+        // A second page would reset the shared FFI while the first is mounted.
+        if (isIOS &&
+            !stateGlobal.isInMainPage &&
+            !gFFI.closed &&
+            gFFI.connType == ConnType.defaultConn &&
+            gFFI.id == id &&
+            gFFI.ffiModel.pi.isSet.isTrue &&
+            gFFI.ffiModel.waitForFirstImage.isFalse &&
+            gFFI.dialogManager._dialogs.isEmpty) {
+          return;
+        }
         Navigator.push(
           context,
           MaterialPageRoute(
