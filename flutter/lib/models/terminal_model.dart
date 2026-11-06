@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -70,6 +71,12 @@ class TerminalModel with ChangeNotifier {
 
   final _inputBuffer = <String>[];
 
+  // Only the Linux GTK backend resends an IME commit several times, before
+  // xterm's state reset reaches the platform.
+  late final _imeCommitFilter = TerminalImeCommitFilter(
+    enabled: !kIsWeb && defaultTargetPlatform == TargetPlatform.linux,
+  );
+
   // Buffer for output data received before terminal view has valid dimensions.
   // This prevents NaN errors when writing to terminal before layout is complete.
   final _pendingOutputChunks = <String>[];
@@ -95,6 +102,12 @@ class TerminalModel with ChangeNotifier {
     // xterm can complete asynchronous input after the Flutter page has gone
     // away. Stop before reading or clearing widget-owned modifier state.
     if (_disposed) return;
+
+    if (_imeCommitFilter.isRepeatedCommit(data)) {
+      debugPrint(
+          '[TerminalModel] Dropped repeated IME commit (${data.length} chars)');
+      return;
+    }
 
     // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
     // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.

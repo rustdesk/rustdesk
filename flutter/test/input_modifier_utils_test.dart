@@ -220,6 +220,72 @@ void main() {
     });
   });
 
+  group('TerminalImeCommitFilter', () {
+    test('keeps one copy of a commit the backend resends', () {
+      // A wide window keeps the assertion independent of scheduler jitter.
+      final filter = TerminalImeCommitFilter(
+        enabled: true,
+        window: const Duration(seconds: 1),
+      );
+
+      expect(filter.isRepeatedCommit('你好'), isFalse);
+      expect(filter.isRepeatedCommit('你好'), isTrue);
+      expect(filter.isRepeatedCommit('你好'), isTrue);
+    });
+
+    test('keeps a different commit and hardware input', () {
+      final filter = TerminalImeCommitFilter(enabled: true);
+
+      expect(filter.isRepeatedCommit('你好'), isFalse);
+      expect(filter.isRepeatedCommit('世界'), isFalse);
+      // Hardware keys arrive one character at a time, even when held down.
+      expect(filter.isRepeatedCommit('l'), isFalse);
+      expect(filter.isRepeatedCommit('l'), isFalse);
+      expect(filter.isRepeatedCommit('s'), isFalse);
+    });
+
+    test('keeps one copy of an English word a Chinese IME commits', () {
+      final filter = TerminalImeCommitFilter(
+        enabled: true,
+        window: const Duration(seconds: 1),
+      );
+
+      expect(filter.isRepeatedCommit('hello'), isFalse);
+      expect(filter.isRepeatedCommit('hello'), isTrue);
+      expect(filter.isRepeatedCommit('hello'), isTrue);
+    });
+
+    test('keeps a commit the user repeats after the resend window', () async {
+      final filter = TerminalImeCommitFilter(
+        enabled: true,
+        window: const Duration(milliseconds: 10),
+      );
+
+      expect(filter.isRepeatedCommit('。'), isFalse);
+      await Future.delayed(const Duration(milliseconds: 30));
+      expect(filter.isRepeatedCommit('。'), isFalse);
+    });
+
+    test('keeps every repeated mouse report', () {
+      final filter = TerminalImeCommitFilter(enabled: true);
+      // Normal-encoding report for column 100, where the encoded coordinate is
+      // no longer ASCII. Scrolling sends one such report per line.
+      final report = '\x1B[M${String.fromCharCode(32)}'
+          '${String.fromCharCode(132)}${String.fromCharCode(42)}';
+
+      expect(filter.isRepeatedCommit(report), isFalse);
+      expect(filter.isRepeatedCommit(report), isFalse);
+      expect(filter.isRepeatedCommit(report), isFalse);
+    });
+
+    test('does not filter when the platform is not affected', () {
+      final filter = TerminalImeCommitFilter(enabled: false);
+
+      expect(filter.isRepeatedCommit('你好'), isFalse);
+      expect(filter.isRepeatedCommit('你好'), isFalse);
+    });
+  });
+
   group('shouldClearTerminalModifiersWhenRow3Collapses', () {
     test('clears visible modifier state when expanded row is collapsed', () {
       expect(

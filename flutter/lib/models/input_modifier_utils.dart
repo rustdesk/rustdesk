@@ -115,6 +115,64 @@ String prepareTerminalInputPayload(
   return result;
 }
 
+/// Suppresses the duplicate IME commits produced by Flutter's GTK backend.
+///
+/// That backend reports a commit by resending the whole text model, and the
+/// `preedit-changed` / `preedit-end` signals that follow the commit resend the
+/// same text before the framework's state reset reaches the platform. xterm
+/// treats every update as fresh input, so one IME commit reaches `onOutput`
+/// two or three times. Hardware keys do not take this path: each one arrives
+/// as a single character, so single-character ASCII payloads are never filtered.
+/// A commit whose preedit collapses repeats the same way whatever its content
+/// is, which is why text longer than one character is filtered even when it is
+/// pure ASCII (an English word committed by a Chinese IME).
+///
+/// Escape-prefixed payloads are never IME text: they are key sequences, mouse
+/// reports, bracketed pastes or terminal query answers. Mouse reports repeat
+/// identically on purpose (one report per scrolled line) and their coordinates
+/// can be non-ASCII in the normal/UTF-8 encodings, so they must not be merged.
+///
+/// The resends are posted back to back from the same GTK event, so [window]
+/// only has to cover the gap between platform messages. It must stay below the
+/// key repeat interval, otherwise a held-down IME key (full-width punctuation,
+/// for example) would be read as a resend and its repeats dropped.
+class TerminalImeCommitFilter {
+  TerminalImeCommitFilter({
+    required this.enabled,
+    this.window = const Duration(milliseconds: 20),
+  });
+
+  final bool enabled;
+  final Duration window;
+
+  // Monotonic, so a system clock adjustment cannot turn a later commit into a
+  // negative elapsed time that looks like a resend.
+  final _clock = Stopwatch()..start();
+  String? _lastCommit;
+  Duration? _lastCommitAt;
+
+  /// Returns true when [data] repeats the previous IME commit within [window].
+  bool isRepeatedCommit(String data) {
+    if (!enabled) return false;
+    if (data.startsWith('\x1B')) return false;
+    // A single ASCII character is a hardware key, which repeats at the key
+    // repeat interval. Text can only be longer, or non-ASCII, when an IME or a
+    // paste produced it.
+    if (data.length < 2 && data.codeUnits.every((unit) => unit < 0x80)) {
+      return false;
+    }
+
+    final now = _clock.elapsed;
+    final previousAt = _lastCommitAt;
+    final repeated = data == _lastCommit &&
+        previousAt != null &&
+        now - previousAt < window;
+    _lastCommit = data;
+    _lastCommitAt = now;
+    return repeated;
+  }
+}
+
 /// Returns true when a hardware paste shortcut must bypass keyboard modifiers.
 ///
 /// xterm already handles each platform's paste shortcut in the common case.
