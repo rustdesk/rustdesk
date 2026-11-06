@@ -825,5 +825,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Jatka luottamusta"),
         ("install-directory-not-empty-tip", "Valittu kansio ei ole tyhjä. Asennus voi poistaa olemassa olevia tietoja. Harkitse toisen kansion valitsemista."),
         ("Request approval", "Pyydä hyväksyntää"),
+        ("Forever", "Ikuisesti"),
     ].iter().cloned().collect();
 }

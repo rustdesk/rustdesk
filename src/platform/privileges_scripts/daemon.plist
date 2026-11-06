@@ -14,8 +14,6 @@
         <integer>1</integer>
         <key>ProgramArguments</key>
         <array>
-        <string>/bin/sh</string>
-        <string>-c</string>
         <string>/Applications/RustDesk.app/Contents/MacOS/service</string>
         </array>
         <key>RunAtLoad</key>

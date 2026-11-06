@@ -825,5 +825,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Renovar a confianza"),
         ("install-directory-not-empty-tip", "O cartafol seleccionado non está baleiro. A instalación pode eliminar os datos existentes. Considera escoller outro cartafol."),
         ("Request approval", "Solicitar aprobación"),
+        ("Forever", "Para sempre"),
     ].iter().cloned().collect();
 }

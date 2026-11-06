@@ -2898,7 +2898,7 @@ Widget trustedDeviceExpiration({
           height: dropdownHeight,
           child: ComboBox(
             keys: periods,
-            values: ['1', '7', '30', '90', translate('Never')],
+            values: ['1', '7', '30', '90', translate('Forever')],
             initialKey: periods.contains(period) ? period : '90',
             enabled: enabled && !isOptionFixed(kOptionTrustedDeviceExpiration),
             onChanged: (value) async {
@@ -2936,7 +2936,7 @@ class TrustedDevice {
   }
 
   String daysRemaining() {
-    if (expiresAt == 0) return translate('Never');
+    if (expiresAt == 0) return translate('Forever');
     final remaining = expiresAt - DateTime.now().millisecondsSinceEpoch;
     if (remaining < 0) {
       return '0';
