@@ -2824,14 +2824,13 @@ pub fn send_message_to_hnwd(
         }
         // The shortcut launcher must let the existing UI activate its session window.
         let mut process_id = 0;
-        if GetWindowThreadProcessId(window, &mut process_id) == 0
-            || AllowSetForegroundWindow(process_id) == FALSE
-        {
-            log::debug!(
-                "Failed to pass foreground permission: {}",
-                io::Error::last_os_error()
-            );
+        if GetWindowThreadProcessId(window, &mut process_id) == 0 {
+            // The window closed after it was found: start our own UI, as with no window.
+            return false;
         }
+        // A refused grant still sends the URI. It cannot be logged: this path runs before
+        // `init_log`.
+        AllowSetForegroundWindow(process_id);
         let mut data_struct = COPYDATASTRUCT::default();
         data_struct.dwData = dw_data;
         let mut data_zero: String = data.chars().chain(Some('\0').into_iter()).collect();
