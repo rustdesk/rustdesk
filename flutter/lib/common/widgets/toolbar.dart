@@ -1145,6 +1145,10 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
             ? (value) {
                 if (value == null) return;
                 bind.sessionToggleOption(sessionId: sessionId, value: option);
+                if (!value) {
+                  bind.sessionPeerOption(
+                      sessionId: sessionId, name: 'auto-login', value: '');
+                }
               }
             : null,
         child: Text(translate('Lock after session end'))));
