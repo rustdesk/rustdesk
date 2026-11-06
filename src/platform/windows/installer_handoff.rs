@@ -183,7 +183,7 @@ mod tests {
             };
             let mut script = write_install_script(commands, &source).unwrap();
             let runner = script.file.path().with_extension("bat.dir");
-            fs::create_dir(&runner).unwrap();
+            directory::create(&runner).unwrap();
             let output = run_script(&mut script);
             let copied = fs::read(&marker).unwrap();
             let cleaned = !runner.exists()
