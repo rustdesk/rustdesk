@@ -1,3 +1,5 @@
+mod staging;
+
 use super::{installer_handoff::directory, wide_string};
 use hbb_common::{anyhow::anyhow, log, ResultType};
 use std::{
@@ -29,6 +31,7 @@ use windows::{
 pub(super) struct ProtectedInstallFile {
     path: PathBuf,
     cleanup_handle: Option<Owned<HANDLE>>,
+    _directory: staging::StagingDirectory,
 }
 
 impl ProtectedInstallFile {
@@ -47,7 +50,12 @@ impl ProtectedInstallFile {
         source: &mut impl Read,
         expected_sha256: Option<&str>,
     ) -> ResultType<Self> {
-        let mut file = create_protected_file(path)?;
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow!("Protected installer path has no filename"))?;
+        let directory = staging::StagingDirectory::new(&path.with_extension(""))?;
+        let path = directory.path().join(filename);
+        let mut file = create_protected_file(&path)?;
         let result = (|| -> ResultType<Owned<HANDLE>> {
             io::copy(source, &mut file)?;
             file.sync_all()?;
@@ -72,8 +80,9 @@ impl ProtectedInstallFile {
             error
         })?;
         Ok(Self {
-            path: path.to_owned(),
+            path,
             cleanup_handle: Some(cleanup_handle),
+            _directory: directory,
         })
     }
 
@@ -212,6 +221,8 @@ mod tests {
         fs::create_dir(&root).unwrap();
         let path = root.join("package.tmp");
         let file = ProtectedInstallFile::new(&path, b"cancelled update").unwrap();
+        let staged_path = file.path().to_owned();
+        let staged_directory = staged_path.parent().unwrap().to_owned();
         // Omit DELETE_CHILD as in Windows Temp, but retain fixture ACL control.
         set_parent_acl(&root, w!("D:P(A;;0x1600af;;;OW)"));
         unsafe {
@@ -221,11 +232,16 @@ mod tests {
             RevertToSelf().unwrap();
         }
         set_parent_acl(&root, w!("D:P(A;;FA;;;OW)"));
-        let remaining = fs::symlink_metadata(&path);
+        let remaining = fs::symlink_metadata(&staged_path);
+        let directory_remaining = staged_directory.exists();
         fs::remove_dir_all(&root).unwrap();
         assert!(
             matches!(remaining, Err(error) if error.kind() == io::ErrorKind::NotFound),
             "Cancelled staging must remove the protected package"
+        );
+        assert!(
+            !directory_remaining,
+            "Cancelled staging must remove its directory"
         );
     }
 
@@ -273,7 +289,7 @@ mod tests {
             Some(HASH)
         )
         .is_err());
-        assert!(!rejected.exists());
+        assert!(!rejected.with_extension("").exists());
         drop(file);
         fs::remove_dir(root).unwrap();
     }
@@ -369,5 +385,58 @@ mod tests {
             DuplicateToken(*restricted, SecurityImpersonation, &mut impersonation).unwrap();
         }
         unsafe { Owned::new(impersonation) }
+    }
+
+    #[test]
+    fn released_staged_inputs_reject_owner_replacement() {
+        use windows::Win32::Security::{ImpersonateLoggedOnUser, RevertToSelf};
+        let root =
+            std::env::temp_dir().join(format!("rustdesk-replacement-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let mut results = Vec::new();
+        for extension in ["bat", "lnk", "tmp"] {
+            let requested = root.join(format!("input-{extension}.{extension}"));
+            let mut staged = ProtectedInstallFile::new(&requested, b"verified input").unwrap();
+            staged.release();
+            let token = ordinary_owner_token();
+            unsafe { ImpersonateLoggedOnUser(*token).unwrap() };
+            let rejected = replacement_attempts(&staged, &root);
+            unsafe { RevertToSelf().unwrap() };
+            let intact = fs::read(staged.path()).is_ok_and(|bytes| bytes == b"verified input");
+            results.push((extension, rejected, intact));
+        }
+        if let Err(error) = fs::remove_dir_all(&root) {
+            eprintln!(
+                "Protected test fixtures require elevated cleanup at {}: {error}",
+                root.display()
+            );
+        }
+        for (extension, rejected, intact) in results {
+            assert!(
+                rejected.iter().all(|denied| *denied) && intact,
+                "Released {extension}: rejected replacement operations={rejected:?}, contents intact={intact}"
+            );
+        }
+    }
+
+    fn replacement_attempts(staged: &ProtectedInstallFile, root: &Path) -> [bool; 5] {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows::Win32::Storage::FileSystem::{
+            FILE_ADD_FILE, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+            FILE_SHARE_DELETE, FILE_SHARE_WRITE,
+        };
+        let directory = staged.path().parent().unwrap();
+        let directory_write = fs::OpenOptions::new()
+            .access_mode(FILE_ADD_FILE.0)
+            .share_mode((FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE).0)
+            .custom_flags((FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT).0)
+            .open(directory);
+        [
+            fs::write(staged.path(), b"replacement").is_err(),
+            fs::rename(staged.path(), root.join("renamed-input")).is_err(),
+            fs::remove_file(staged.path()).is_err(),
+            fs::rename(directory, root.join("renamed-directory")).is_err(),
+            directory_write.is_err(),
+        ]
     }
 }

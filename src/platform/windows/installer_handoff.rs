@@ -93,16 +93,16 @@ fn protected_install_parameters(script: &InstallCommandScript) -> ResultType<Str
 pub(super) fn run_cmds(cmds: impl Into<InstallCommands>, show: bool, tip: &str) -> ResultType<()> {
     validate_install_app_name(&crate::get_app_name())?;
     let path = directory::path()?.with_extension("bat");
-    let directory = path.with_extension("bat.dir");
     let mut script = write_install_script(cmds.into(), &path)?;
+    let directory = script.file.path().with_extension("bat.dir");
     let cmd_path = get_system_executable(CMD_RELATIVE_PATH)?;
     let parameters = protected_install_parameters(&script)?;
     directory::create(&directory)?;
     // cmd cannot open the BAT or copy its inputs while a DELETE-capable handle is open, so
     // close them before launching it; a cancelled UAC prompt then leaves the files behind.
     // Holding them until cmd read a release signal from a named pipe failed under F-Secure's
-    // behavior detection, which closed cmd's end first (#16840, #16842). The file DACLs and
-    // the parent directory's permissions still keep unelevated users from changing them.
+    // behavior detection, which closed cmd's end first (#16840, #16842). The directory guards
+    // prevent path replacement while this process remains alive.
     script.release_files();
     let process = launch_elevated(&cmd_path, &parameters, show).map_err(|err| {
         log::debug!("Failed to launch elevated installer: {err:#}");
@@ -154,8 +154,7 @@ mod tests {
             let root =
                 std::env::temp_dir().join(format!("rustdesk-handoff-{}", uuid::Uuid::new_v4()));
             let source = root.join("source !&^@().bat");
-            let runner = source.with_extension("bat.dir");
-            fs::create_dir_all(&runner).unwrap();
+            fs::create_dir(&root).unwrap();
             let bytes = shortcut_bytes(r"C:\RustDesk.exe", Some("--tray"), None).unwrap();
             let shortcut =
                 ProtectedInstallFile::new(&root.join("shortcut !&^@().tmp"), &bytes).unwrap();
@@ -169,25 +168,47 @@ mod tests {
                 files: vec![shortcut],
             };
             let mut script = write_install_script(commands, &source).unwrap();
-            // The DACL, not a held handle, keeps the unelevated owner from editing the BAT.
-            script.release_files();
-            if !super::super::is_elevated(None).unwrap() {
-                assert!(fs::write(script.file.path(), "exit /b 0\r\n").is_err());
-            }
+            let runner = script.file.path().with_extension("bat.dir");
+            fs::create_dir(&runner).unwrap();
             let output = run_script(&mut script);
             let copied = fs::read(&marker).unwrap();
             let cleaned = !runner.exists()
                 && !script.file.path().exists()
                 && script._files.iter().all(|file| !file.path().exists());
-            fs::remove_dir_all(&root).unwrap();
+            let protected = script.file.path().exists()
+                && script._files.iter().all(|file| file.path().exists());
+            let directories_cleaned = finish_fixture(script, &root);
             assert_eq!(
                 output.status.code().map(|code| code as u32),
                 Some(exit_code),
                 "{output:?}"
             );
             assert_eq!(copied, bytes);
-            assert!(cleaned, "The runner and protected inputs must be removed");
+            if super::super::is_elevated(None).unwrap() {
+                assert!(
+                    cleaned && directories_cleaned,
+                    "The runner and staged inputs must be removed"
+                );
+            } else {
+                assert!(protected, "Unelevated CMD must not remove protected inputs");
+            }
         }
+    }
+
+    fn finish_fixture(script: InstallCommandScript, root: &Path) -> bool {
+        let directories = std::iter::once(&script.file)
+            .chain(&script._files)
+            .map(|file| file.path().parent().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        drop(script);
+        let cleaned = directories.iter().all(|path| !path.exists());
+        if let Err(error) = fs::remove_dir_all(root) {
+            eprintln!(
+                "Protected test fixtures remain at {}: {error}",
+                root.display()
+            );
+        }
+        cleaned
     }
 
     // Mirrors run_cmds without UAC: the files are released before cmd starts and nothing
