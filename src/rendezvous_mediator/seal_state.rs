@@ -4,9 +4,10 @@
 //! server is taken for one without the seal: registrations go plaintext, and every fourth one
 //! is sealed to notice an upgrade. A sealed datagram that opens makes the socket sealed, where
 //! nothing goes plaintext and a plaintext answer to a registration is dropped as forged. A
-//! missed answer while sealed sends hellos again, since a server restart retires every session,
-//! but keeps the session for pushes until a welcome replaces it. Such a socket never falls back:
-//! its server seals. Only a new socket, which may reach another server, probes afresh.
+//! missed answer while sealed is retried under the session, then by turns with a hello, since a
+//! server restart retires every session; the session stays for pushes until a welcome replaces
+//! it. Such a socket never falls back: its server seals. Only a new socket, which may reach
+//! another server, probes afresh.
 
 use super::{Sink, TargetAddr};
 use hbb_common::{
@@ -34,7 +35,8 @@ enum Mode {
     Probing(u8),
     Fallback(u8),
     Sealed,
-    Resealing,
+    /// Whether this round's registration goes as a hello rather than under the session.
+    Resealing(bool),
 }
 
 pub(super) struct SealState {
@@ -79,7 +81,8 @@ impl SealState {
         let mode = match self.mode {
             Mode::Probing(n) if timed_out && n + 1 >= PROBE_TRIES => Mode::Fallback(0),
             Mode::Probing(n) if timed_out => Mode::Probing(n + 1),
-            Mode::Sealed if timed_out => Mode::Resealing,
+            Mode::Sealed if timed_out => Mode::Resealing(false),
+            Mode::Resealing(hello) if timed_out => Mode::Resealing(!hello),
             Mode::Fallback(r) => Mode::Fallback((r + 1) % PROBE_EVERY),
             mode => mode,
         };
@@ -101,7 +104,9 @@ impl SealState {
     ) -> Sink<'a> {
         let sealed = !matches!(self.mode, Mode::Fallback(r) if r != PROBE_EVERY - 1);
         match self.seal.as_mut() {
-            Some(seal) if sealed => Sink::Sealed(socket, addr, seal, self.mode == Mode::Resealing),
+            Some(seal) if sealed => {
+                Sink::Sealed(socket, addr, seal, self.mode == Mode::Resealing(true))
+            }
             _ => Sink::Framed(socket, addr),
         }
     }
@@ -159,7 +164,7 @@ impl SealState {
                 | Some(rendezvous_message::Union::RegisterPkResponse(_)),
             ) => false,
             (Mode::Probing(_), _) => true,
-            (Mode::Sealed | Mode::Resealing, _) => !seal.pushes_sealed(),
+            (Mode::Sealed | Mode::Resealing(_), _) => !seal.pushes_sealed(),
         }
     }
 
@@ -392,7 +397,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_missed_answer_while_sealed_sends_a_hello_and_keeps_the_session() {
+    async fn a_missed_answer_while_sealed_retries_under_the_session_then_with_a_hello() {
         let (mut state, server) = state("missed");
         let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
         let hello = registration(&mut state, &register_peer).await;
@@ -401,13 +406,17 @@ mod tests {
             .seal(&mut reply, CAP_PUSHES_SEALED, b"", || 0)
             .unwrap();
         assert!(state.open(BytesMut::from(&welcome[..])).unwrap().1);
-        assert!(!udp_seal::is_hello(
-            &registration(&mut state, &register_peer).await
-        ));
         state.on_round(true);
-        assert!(udp_seal::is_hello(
-            &registration(&mut state, &register_peer).await
-        ));
+        let retry = registration(&mut state, &register_peer).await;
+        assert!(
+            server.open(&retry, || 2).unwrap().0.pn.is_some(),
+            "a server that only lost an answer takes it, hellos or not"
+        );
+        state.on_round(true);
+        assert!(
+            udp_seal::is_hello(&registration(&mut state, &register_peer).await),
+            "a restarted one needs a hello"
+        );
         let punch = Some(rendezvous_message::Union::PunchHole(Default::default()));
         assert!(
             !state.on_message(false, &punch),
