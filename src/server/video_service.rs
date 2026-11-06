@@ -901,13 +901,11 @@ fn run(vs: VideoService) -> ResultType<()> {
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
                 // A still screen may never reach handle_one_frame, which is where a subscriber
-                // added without a refresh (mobile display switch) is otherwise noticed.
-                sp.snapshot(|sps| {
-                    if sps.has_subscribes() {
-                        log::info!("switch due to new subscriber");
-                        bail!("SWITCH");
-                    }
-                    Ok(())
+                // added without a refresh (mobile display switch) is otherwise noticed. Nothing
+                // is sent here, so switch even when the old subscribers are gone.
+                sp.snapshot(|_| {
+                    log::trace!("switch due to new subscriber");
+                    bail!("SWITCH");
                 })?;
                 #[cfg(windows)]
                 if dxgi_recovery_started
