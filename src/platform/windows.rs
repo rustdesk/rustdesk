@@ -2822,6 +2822,16 @@ pub fn send_message_to_hnwd(
             log::warn!("no such window {}:{}", class_name, window_name);
             return false;
         }
+        // The shortcut launcher must let the existing UI activate its session window.
+        let mut process_id = 0;
+        if GetWindowThreadProcessId(window, &mut process_id) == 0
+            || AllowSetForegroundWindow(process_id) == FALSE
+        {
+            log::debug!(
+                "Failed to pass foreground permission: {}",
+                io::Error::last_os_error()
+            );
+        }
         let mut data_struct = COPYDATASTRUCT::default();
         data_struct.dwData = dw_data;
         let mut data_zero: String = data.chars().chain(Some('\0').into_iter()).collect();
