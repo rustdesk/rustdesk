@@ -4,6 +4,15 @@ name: Build flutter-rust-bridge
 
 on:
   workflow_call:
+    inputs:
+      flutter_bridge_default_version:
+        description: "Default Flutter version to generate bridge with (like '3.22.3')"
+        type: string
+        required: true
+      flutter_bridge_arm64_version:
+        description: "Flutter version to generate ARM64 bridge with (like '3.44.9')"
+        type: string
+        required: true
 
 env:
   CARGO_EXPAND_VERSION: "1.0.95"
@@ -11,28 +20,46 @@ env:
   RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
 
 jobs:
+  generate_bridge_matrix:
+    runs-on: ubuntu-22.04
+    outputs:
+      job: ${{ steps.define-matrix.outputs.job }}
+    env:
+      FLUTTER_BRIDGE_DEFAULT_VERSION: ${{ inputs.flutter_bridge_default_version }}
+      FLUTTER_BRIDGE_ARM64_VERSION: ${{ inputs.flutter_bridge_arm64_version }}
+    steps:
+      - name: Generate bridge matrix
+        id: define-matrix
+        shell: bash
+        run: |
+          MATRIX_JSON="[
+            {
+              \"desc\": \"Default bridge for every platform still on Flutter 3.24.5 (generated with 3.22.3).\",
+              \"target\": \"x86_64-unknown-linux-gnu\",
+              \"os\": \"ubuntu-22.04\",
+              \"extra-build-args\": \"\",
+              \"flutter-version\": \"${FLUTTER_BRIDGE_DEFAULT_VERSION}\",
+              \"artifact-name\": \"bridge-artifact\"
+            },
+            {
+              \"desc\": \"Dedicated bridge for the Windows arm64 build (Flutter 3.44); runs in parallel.\",
+              \"target\": \"x86_64-unknown-linux-gnu\",
+              \"os\": \"ubuntu-22.04\",
+              \"extra-build-args\": \"\",
+              \"flutter-version\": \"${FLUTTER_BRIDGE_ARM64_VERSION}\",
+              \"artifact-name\": \"bridge-artifact-flutter-3.44\"
+            }
+          ]"
+          MATRIX_JSON_COMPACT="$(echo "${MATRIX_JSON}" | jq -r 'tojson')"
+          echo "job=${MATRIX_JSON_COMPACT}" >> "${GITHUB_OUTPUT}"
+
   generate_bridge:
+    needs: [generate_bridge_matrix]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
-        job:
-          # Default bridge for every platform still on Flutter 3.24.5 (generated with 3.22.3).
-          - {
-              target: x86_64-unknown-linux-gnu,
-              os: ubuntu-22.04,
-              extra-build-args: "",
-              flutter-version: "3.22.3",
-              artifact-name: "bridge-artifact",
-            }
-          # Dedicated bridge for the Windows and macOS arm64 builds (Flutter 3.44); runs in parallel.
-          - {
-              target: x86_64-unknown-linux-gnu,
-              os: ubuntu-22.04,
-              extra-build-args: "",
-              flutter-version: "3.44.8",
-              artifact-name: "bridge-artifact-flutter-3.44",
-            }
+        job: ${{ fromJSON(needs.generate_bridge_matrix.outputs.job) }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -85,18 +112,35 @@ jobs:
 
       - name: Install flutter rust bridge deps
         shell: bash
+        env:
+          FLUTTER_BRIDGE_VERSION: ${{ matrix.job.flutter-version }}
         run: |
-          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
-          if [[ "${{ matrix.job.flutter-version }}" == "3.22.3" ]]; then
+          cargo install cargo-expand --version "${CARGO_EXPAND_VERSION}" --locked
+          cargo install flutter_rust_bridge_codegen --version "${FLUTTER_RUST_BRIDGE_VERSION}" --features "uuid" --locked
+          case "${FLUTTER_BRIDGE_VERSION}" in
+          3.22.*)
             # Default Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.
             sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
-          else
-            # Flutter 3.44 bridge for Windows/macOS arm64: match those builds' source/pubspec state so
-            # the generated *.freezed.dart compiles against the same Flutter/freezed they resolve.
+            ;;
+          3.44.*)
+            # Flutter 3.44 bridge for Windows arm64: match that build's source/pubspec state so the
+            # generated *.freezed.dart compiles against the same Flutter/freezed it resolves.
             bash .github/patches/apply_flutter_3.44_source_patches.sh
-          fi
-          pushd flutter && flutter pub get && popd
+            ;;
+          *)
+            # basilgello: Bail out as we dont know which version of flutter to use
+            # This requires devs to add the correct Flutter version into
+            # the matrix above and regenerate lockfile if it is not there yet
+            # or if it is outdated
+            echo "ERROR: Unknown Flutter version to build the bridge!"
+            echo ""
+            echo "Please see bridge.yml for instructions!"
+            echo ""
+            exit 1
+            ;;
+          esac
+          # Set proper bridge lockfile in place and try to get packages locked
+          python3 flutter/flutter_pub_get.py get-packages "flutter/pubspec-bridge-${FLUTTER_BRIDGE_VERSION}.lock"
 
       - name: Run flutter rust bridge
         run: |
