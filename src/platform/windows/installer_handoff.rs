@@ -9,7 +9,7 @@ use super::{
     },
     validate_install_app_name, ResultType,
 };
-use hbb_common::{bail, log};
+use hbb_common::{anyhow::anyhow, bail, log};
 use std::{fs, io, path::Path};
 
 const CHCP_RELATIVE_PATH: &str = "chcp.com";
@@ -54,15 +54,29 @@ fn prepare_install_commands(cmds: &InstallCommands) -> ResultType<String> {
         .map(|file| path_for_cmd_environment(file.path()).map(|path| format!("\"{path}\"")))
         .collect::<ResultType<Vec<_>>>()?
         .join(" ");
+    let directories = cmds
+        .files
+        .iter()
+        .map(|file| {
+            let parent = file
+                .path()
+                .parent()
+                .ok_or_else(|| anyhow!("Staged installer file has no parent directory"))?;
+            let path = path_for_cmd_environment(parent)?;
+            Ok(format!(" & rd \"{path}\" > nul 2>&1"))
+        })
+        .collect::<ResultType<Vec<_>>>()?
+        .join("");
     // Call a fixed label so early EXIT /B still reaches cleanup, without reparsing a path.
     // Exit the dedicated cmd after self-deletion; EXIT /B would reopen the missing BAT.
+    // CMD removes empty staging directories if uninstall has terminated their Rust owner.
     Ok(format!(
         "@echo off\r\nsetlocal EnableExtensions DisableDelayedExpansion\r\n\
          set \"ERRORLEVEL=\"\r\n\
          call :rustdesk_install\r\n\
          set \"RUSTDESK_INSTALL_EXIT_CODE=%ERRORLEVEL%\"\r\n\
          rd /s /q \"%~f0.dir\" > nul 2>&1\r\n\
-         (del /q \"%~f0\" {files} > nul 2>&1 & exit %RUSTDESK_INSTALL_EXIT_CODE%)\r\n\
+         (del /q \"%~f0\" {files} > nul 2>&1{directories} & rd \"%~dp0\" > nul 2>&1 & exit %RUSTDESK_INSTALL_EXIT_CODE%)\r\n\
          :rustdesk_install\r\n\
          \"{chcp}\" {UTF8_CODE_PAGE} > nul || exit /b \
          {BATCH_CODE_PAGE_FAILURE_EXIT_CODE}\r\n\
@@ -193,6 +207,28 @@ mod tests {
                 assert!(protected, "Unelevated CMD must not remove protected inputs");
             }
         }
+    }
+
+    #[test]
+    fn completed_batch_removes_its_own_staging_directory() {
+        const COMMAND_FAILURE: i32 = 77;
+        let root =
+            std::env::temp_dir().join(format!("rustdesk-batch-cleanup-{}", uuid::Uuid::new_v4()));
+        let source = root.join("stage !&^@()").join("cleanup.bat");
+        fs::create_dir_all(source.with_extension("bat.dir")).unwrap();
+        let commands =
+            prepare_install_commands(&format!("exit /b {COMMAND_FAILURE}").into()).unwrap();
+        fs::write(&source, commands).unwrap();
+        let output = std::process::Command::new(get_system_executable(CMD_RELATIVE_PATH).unwrap())
+            .raw_arg(format!("/D /E:ON /V:OFF /C \"\"{}\"\"", source.display()))
+            .creation_flags(::windows::Win32::System::Threading::CREATE_NO_WINDOW.0)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        let removed = !source.parent().unwrap().exists();
+        fs::remove_dir_all(root).unwrap();
+        assert_eq!(output.status.code(), Some(COMMAND_FAILURE), "{output:?}");
+        assert!(removed, "The completed batch left its staging directory");
     }
 
     fn finish_fixture(script: InstallCommandScript, root: &Path) -> bool {
