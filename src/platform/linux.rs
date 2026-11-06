@@ -413,11 +413,22 @@ fn is_tty_greeter_session(sid: &str) -> bool {
     if sid.is_empty() {
         return false;
     }
-    Command::new(CMD_LOGINCTL.as_str())
+    let failure = match Command::new(CMD_LOGINCTL.as_str())
         .args(["show-session", "-p", "Class", "-p", "Type", sid])
         .output()
-        .map(|output| is_tty_greeter_props(&String::from_utf8_lossy(&output.stdout)))
-        .unwrap_or(false)
+    {
+        Ok(output) if output.status.success() => {
+            return is_tty_greeter_props(&String::from_utf8_lossy(&output.stdout));
+        }
+        Ok(output) => output.status.to_string(),
+        Err(err) => err.to_string(),
+    };
+    hbb_common::throttled_log!(
+        Duration::from_secs(60),
+        info,
+        "loginctl show-session {sid} failed ({failure}); not taken for a greetd greeter"
+    );
+    false
 }
 
 #[cfg(any(feature = "drm", test))]
@@ -2291,13 +2302,22 @@ mod desktop {
 
         /// The greeter's compositor creates its socket after logind has registered the session,
         /// so a greeter first seen without one is asked again on every refresh until it has one.
-        /// The x11 values guessed in the meantime are dropped: a login-Wayland desktop has none.
+        /// Every compositor variable is dropped, not only the x11 values guessed meanwhile: going
+        /// straight from a user session to the greeter keeps that session's WAYLAND_DISPLAY and
+        /// bus here, and an endpoint the greeter `--server` is handed is never searched past.
+        /// A forced display server is the operator's answer, so it is left alone, as `IS_X11` does.
         #[cfg(feature = "drm")]
         fn adopt_wayland_tty_greeter(&mut self) {
-            if self.tty_greeter && !self.is_wayland() && super::has_wayland_socket(&self.uid) {
+            if self.tty_greeter
+                && !self.is_wayland()
+                && !super::display_server_forced()
+                && super::has_wayland_socket(&self.uid)
+            {
                 self.protocol = DISPLAY_SERVER_WAYLAND.to_owned();
                 self.display.clear();
                 self.xauth.clear();
+                self.wl_display.clear();
+                self.dbus.clear();
             }
         }
 
