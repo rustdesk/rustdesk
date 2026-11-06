@@ -315,6 +315,7 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
     peers.iter_mut().for_each(|peer| {
         peer.online = false;
     });
+    remove_hostname_only_duplicates(&mut peers);
 
     let mut response_set = HashSet::new();
     let mut last_write_time: Option<Instant> = None;
@@ -322,6 +323,7 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
         tokio::select! {
             data = rx.recv() => match data {
                 Some(mut peer) => {
+                    merge_hostname_only_peer(&mut peers, &mut peer);
                     let in_response_set = !response_set.insert(peer.id.clone());
                     if let Some(pos) = peers.iter().position(|x| x.is_same_peer(&peer) ) {
                         let peer1 = peers.remove(pos);
@@ -349,4 +351,99 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
     #[cfg(feature = "flutter")]
     crate::flutter_ffi::main_load_lan_peers();
     Ok(())
+}
+
+// A device at its login screen reports no username (or the GDM greeter's user,
+// e.g. "gdm" or "Debian-gdm", on Linux), which `is_same_peer` treats as a
+// different peer, so the same id would be listed twice.
+fn is_login_screen_username(username: &str) -> bool {
+    username.is_empty() || username.contains("gdm")
+}
+
+fn merge_hostname_only_peer(
+    peers: &mut Vec<config::DiscoveryPeer>,
+    peer: &mut config::DiscoveryPeer,
+) {
+    if is_login_screen_username(&peer.username) {
+        if let Some(x) = peers
+            .iter()
+            .find(|x| x.id == peer.id && !is_login_screen_username(&x.username))
+        {
+            peer.username = x.username.clone();
+        }
+    }
+    if !is_login_screen_username(&peer.username) {
+        peers.retain(|x| x.id != peer.id || !is_login_screen_username(&x.username));
+    }
+}
+
+// Entries saved before a device stopped answering are never merged by
+// `merge_hostname_only_peer`, so clean the stored list as well.
+fn remove_hostname_only_duplicates(peers: &mut Vec<config::DiscoveryPeer>) {
+    let named: HashSet<String> = peers
+        .iter()
+        .filter(|x| !is_login_screen_username(&x.username))
+        .map(|x| x.id.clone())
+        .collect();
+    peers.retain(|x| !is_login_screen_username(&x.username) || !named.contains(&x.id));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn discovery_peer(id: &str, username: &str) -> config::DiscoveryPeer {
+        config::DiscoveryPeer {
+            id: id.to_owned(),
+            username: username.to_owned(),
+            hostname: "host".to_owned(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_named_peer_replaces_hostname_only_entry() {
+        let mut peers = vec![discovery_peer("1", ""), discovery_peer("2", "")];
+        let mut peer = discovery_peer("1", "alice");
+        merge_hostname_only_peer(&mut peers, &mut peer);
+        assert_eq!(peer.username, "alice");
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].id, "2");
+    }
+
+    #[test]
+    fn test_hostname_only_peer_keeps_known_username() {
+        let mut peers = vec![discovery_peer("1", "alice"), discovery_peer("1", "")];
+        let mut peer = discovery_peer("1", "");
+        merge_hostname_only_peer(&mut peers, &mut peer);
+        assert_eq!(peer.username, "alice");
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].username, "alice");
+    }
+
+    #[test]
+    fn test_stored_gdm_duplicate_removed() {
+        let mut peers = vec![
+            discovery_peer("1", "gdm-greeter"),
+            discovery_peer("1", "chuyenlh"),
+            discovery_peer("2", "gdm-greeter"),
+        ];
+        remove_hostname_only_duplicates(&mut peers);
+        assert_eq!(peers.len(), 2);
+        assert_eq!(peers[0].username, "chuyenlh");
+        assert_eq!(peers[1].id, "2");
+    }
+
+    #[test]
+    fn test_gdm_entry_merged_with_named_peer() {
+        let mut peers = vec![discovery_peer("1", "Debian-gdm")];
+        let mut peer = discovery_peer("1", "alice");
+        merge_hostname_only_peer(&mut peers, &mut peer);
+        assert!(peers.is_empty());
+
+        let mut peers = vec![discovery_peer("1", "alice")];
+        let mut peer = discovery_peer("1", "gdm");
+        merge_hostname_only_peer(&mut peers, &mut peer);
+        assert_eq!(peer.username, "alice");
+    }
 }
