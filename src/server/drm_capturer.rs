@@ -203,6 +203,8 @@ pub struct IpcDrmCapturer {
     repeats: u8,
     #[cfg(feature = "drm-vaapi")]
     gpu_detector: Option<scrap::drm_gpu::DmaBufDetector>,
+    #[cfg(feature = "drm-vaapi")]
+    gpu_compare_after: Instant,
 }
 
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
@@ -552,6 +554,8 @@ impl IpcDrmCapturer {
                 repeats: 0,
                 #[cfg(feature = "drm-vaapi")]
                 gpu_detector: None,
+                #[cfg(feature = "drm-vaapi")]
+                gpu_compare_after: Instant::now(),
             },
             displays,
             wire_idx,
@@ -660,16 +664,27 @@ impl TraitCapturer for IpcDrmCapturer {
                 }
                 // Disable only for matched A/B measurements of the experimental GPU path.
                 if std::env::var("RUSTDESK_DRM_GPU_IDLE").as_deref() != Ok("0") {
-                    let changed = (|| {
-                        if self.gpu_detector.is_none() {
-                            self.gpu_detector =
-                                Some(scrap::drm_gpu::DmaBufDetector::new(&frame.render_node)?);
-                        }
-                        match self.gpu_detector.as_mut() {
-                            Some(detector) => detector.changed(&frame),
-                            None => Err(-38),
-                        }
-                    })();
+                    // Forward every intervening frame during motion. Once equal, compare
+                    // each frame again so a small update or new motion is noticed promptly.
+                    let compare =
+                        self.gpu_detector.is_none() || Instant::now() >= self.gpu_compare_after;
+                    let changed = if compare {
+                        (|| {
+                            if self.gpu_detector.is_none() {
+                                self.gpu_detector =
+                                    Some(scrap::drm_gpu::DmaBufDetector::new(&frame.render_node)?);
+                            }
+                            match self.gpu_detector.as_mut() {
+                                Some(detector) => detector.changed(&frame),
+                                None => Err(-38),
+                            }
+                        })()
+                    } else {
+                        Ok(true)
+                    };
+                    if compare && matches!(changed, Ok(true)) {
+                        self.gpu_compare_after = Instant::now() + Duration::from_millis(250);
+                    }
                     let repeat = match changed {
                         Ok(changed) => !changed,
                         Err(error) => {
@@ -2669,6 +2684,8 @@ mod drm_capturer_tests {
             repeats: 0,
             #[cfg(feature = "drm-vaapi")]
             gpu_detector: None,
+            #[cfg(feature = "drm-vaapi")]
+            gpu_compare_after: Instant::now(),
         }
     }
 
