@@ -210,27 +210,39 @@ enum ModifierKind { alt, ctrl, shift, command }
 ModifierKind? releasedModifier(
     LogicalKeyboardKey logical, PhysicalKeyboardKey physical) {
   if (logical == LogicalKeyboardKey.altLeft ||
-      logical == LogicalKeyboardKey.altRight ||
-      physical == PhysicalKeyboardKey.altLeft ||
-      physical == PhysicalKeyboardKey.altRight) {
+      logical == LogicalKeyboardKey.altRight) {
     return ModifierKind.alt;
   }
   if (logical == LogicalKeyboardKey.controlLeft ||
-      logical == LogicalKeyboardKey.controlRight ||
-      physical == PhysicalKeyboardKey.controlLeft ||
-      physical == PhysicalKeyboardKey.controlRight) {
+      logical == LogicalKeyboardKey.controlRight) {
     return ModifierKind.ctrl;
   }
   if (logical == LogicalKeyboardKey.shiftLeft ||
-      logical == LogicalKeyboardKey.shiftRight ||
-      physical == PhysicalKeyboardKey.shiftLeft ||
-      physical == PhysicalKeyboardKey.shiftRight) {
+      logical == LogicalKeyboardKey.shiftRight) {
     return ModifierKind.shift;
   }
   if (logical == LogicalKeyboardKey.metaLeft ||
       logical == LogicalKeyboardKey.metaRight ||
-      logical == LogicalKeyboardKey.superKey ||
-      physical == PhysicalKeyboardKey.metaLeft ||
+      logical == LogicalKeyboardKey.superKey) {
+    return ModifierKind.command;
+  }
+  return _releasedPhysicalModifier(physical);
+}
+
+ModifierKind? _releasedPhysicalModifier(PhysicalKeyboardKey physical) {
+  if (physical == PhysicalKeyboardKey.altLeft ||
+      physical == PhysicalKeyboardKey.altRight) {
+    return ModifierKind.alt;
+  }
+  if (physical == PhysicalKeyboardKey.controlLeft ||
+      physical == PhysicalKeyboardKey.controlRight) {
+    return ModifierKind.ctrl;
+  }
+  if (physical == PhysicalKeyboardKey.shiftLeft ||
+      physical == PhysicalKeyboardKey.shiftRight) {
+    return ModifierKind.shift;
+  }
+  if (physical == PhysicalKeyboardKey.metaLeft ||
       physical == PhysicalKeyboardKey.metaRight) {
     return ModifierKind.command;
   }
