@@ -100,6 +100,7 @@ mod acl;
 pub(crate) mod installer_files;
 mod installer_handoff;
 mod installer_shell;
+pub(crate) mod keyboard;
 mod verified_update;
 mod msi_registry;
 pub(crate) use acl::current_process_user_sid_string;
