@@ -43,10 +43,9 @@ fn junction_installer_parent_uses_program_data_for_staging() {
         assert_eq!(parent, get_known_folder(&FOLDERID_ProgramData).unwrap());
         let path = parent.join(format!("rustdesk-fallback-{}.tmp", uuid::Uuid::new_v4()));
         let staged = ProtectedInstallFile::new(&path, b"installer").unwrap();
-        let staged_path = staged.path().to_owned();
         let contents = fs::read(staged.path()).unwrap();
         drop(staged);
         assert_eq!(contents, b"installer");
-        assert!(!staged_path.exists());
+        assert!(!path.exists());
     }
 }

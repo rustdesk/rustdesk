@@ -1,5 +1,3 @@
-mod staging;
-
 use super::{installer_handoff::directory, wide_string};
 use hbb_common::{anyhow::anyhow, log, ResultType};
 use std::{
@@ -31,7 +29,6 @@ use windows::{
 pub(super) struct ProtectedInstallFile {
     path: PathBuf,
     cleanup_handle: Option<Owned<HANDLE>>,
-    _directory: staging::StagingDirectory,
 }
 
 impl ProtectedInstallFile {
@@ -50,12 +47,7 @@ impl ProtectedInstallFile {
         source: &mut impl Read,
         expected_sha256: Option<&str>,
     ) -> ResultType<Self> {
-        let filename = path
-            .file_name()
-            .ok_or_else(|| anyhow!("Protected installer path has no filename"))?;
-        let directory = staging::StagingDirectory::new(&path.with_extension(""))?;
-        let path = directory.path().join(filename);
-        let mut file = create_protected_file(&path)?;
+        let mut file = create_protected_file(path)?;
         let result = (|| -> ResultType<Owned<HANDLE>> {
             io::copy(source, &mut file)?;
             file.sync_all()?;
@@ -80,9 +72,8 @@ impl ProtectedInstallFile {
             error
         })?;
         Ok(Self {
-            path,
+            path: path.to_owned(),
             cleanup_handle: Some(cleanup_handle),
-            _directory: directory,
         })
     }
 
@@ -221,8 +212,6 @@ mod tests {
         fs::create_dir(&root).unwrap();
         let path = root.join("package.tmp");
         let file = ProtectedInstallFile::new(&path, b"cancelled update").unwrap();
-        let staged_path = file.path().to_owned();
-        let staged_directory = staged_path.parent().unwrap().to_owned();
         // Omit DELETE_CHILD as in Windows Temp, but retain fixture ACL control.
         set_parent_acl(&root, w!("D:P(A;;0x1600af;;;OW)"));
         unsafe {
@@ -232,16 +221,11 @@ mod tests {
             RevertToSelf().unwrap();
         }
         set_parent_acl(&root, w!("D:P(A;;FA;;;OW)"));
-        let remaining = fs::symlink_metadata(&staged_path);
-        let directory_remaining = staged_directory.exists();
+        let remaining = fs::symlink_metadata(&path);
         fs::remove_dir_all(&root).unwrap();
         assert!(
             matches!(remaining, Err(error) if error.kind() == io::ErrorKind::NotFound),
             "Cancelled staging must remove the protected package"
-        );
-        assert!(
-            !directory_remaining,
-            "Cancelled staging must remove its directory"
         );
     }
 
@@ -289,7 +273,7 @@ mod tests {
             Some(HASH)
         )
         .is_err());
-        assert!(!rejected.with_extension("").exists());
+        assert!(!rejected.exists());
         drop(file);
         fs::remove_dir(root).unwrap();
     }

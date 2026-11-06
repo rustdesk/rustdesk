@@ -157,12 +157,8 @@ mod tests {
     use winapi::um::winnt::MAXIMUM_ALLOWED;
     use windows::{
         core::{Owned, BOOL},
-        Wdk::{
-            Foundation::OBJECT_ATTRIBUTES,
-            Storage::FileSystem::{NtDeleteFile, RtlDosPathNameToNtPathName_U_WithStatus},
-        },
         Win32::{
-            Foundation::{HANDLE, UNICODE_STRING},
+            Foundation::HANDLE,
             Security::{
                 AccessCheck,
                 Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT},
@@ -174,10 +170,7 @@ mod tests {
                 FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
                 READ_CONTROL,
             },
-            System::{
-                Threading::{GetCurrentProcess, OpenProcessToken},
-                WindowsProgramming::RtlFreeUnicodeString,
-            },
+            System::Threading::{GetCurrentProcess, OpenProcessToken},
         },
     };
 
@@ -193,7 +186,7 @@ mod tests {
         ));
         create(&directory).expect("production directory creation should succeed");
         let access = creator_directory_access(&directory);
-        remove_protected_directory(&directory);
+        fs::remove_dir(&directory).expect("test directory should be removed");
         let expected = if elevated {
             FILE_ALL_ACCESS
         } else {
@@ -204,26 +197,6 @@ mod tests {
             (true, expected.0),
             "only elevated administrators may modify the protected directory"
         );
-    }
-
-    fn remove_protected_directory(path: &Path) {
-        let wide_path = wide_string(path.to_str().unwrap());
-        let path = PCWSTR(wide_path.as_ptr());
-        let mut name = UNICODE_STRING::default();
-        unsafe {
-            RtlDosPathNameToNtPathName_U_WithStatus(path, &mut name, None, None)
-                .ok()
-                .unwrap();
-        }
-        let attributes = OBJECT_ATTRIBUTES {
-            Length: mem::size_of::<OBJECT_ATTRIBUTES>() as u32,
-            ObjectName: &name,
-            ..Default::default()
-        };
-        // Native deletion can clean this READ_CONTROL-only child through its parent's DELETE_CHILD.
-        let result = unsafe { NtDeleteFile(&attributes) };
-        unsafe { RtlFreeUnicodeString(&mut name) };
-        result.ok().expect("test directory should be removed");
     }
 
     fn creator_directory_access(path: &Path) -> ResultType<(bool, u32)> {
