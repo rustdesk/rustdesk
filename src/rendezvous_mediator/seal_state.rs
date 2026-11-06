@@ -4,8 +4,9 @@
 //! server is taken for one without the seal: registrations go plaintext, and every fourth one
 //! is sealed to notice an upgrade. A sealed datagram that opens makes the socket sealed, where
 //! nothing goes plaintext and a plaintext answer to a registration is dropped as forged. A
-//! missed answer while sealed starts the probe over, since a server restart retires every
-//! session.
+//! missed answer while sealed sends hellos again, since a server restart retires every session,
+//! but keeps the session for pushes until a welcome replaces it. Such a socket never falls back:
+//! its server seals. Only a new socket, which may reach another server, probes afresh.
 
 use super::{Sink, TargetAddr};
 use hbb_common::{
@@ -33,6 +34,7 @@ enum Mode {
     Probing(u8),
     Fallback(u8),
     Sealed,
+    Resealing,
 }
 
 pub(super) struct SealState {
@@ -71,16 +73,13 @@ impl SealState {
 
     /// Before a register round sends; `timed_out` is whether the previous one went unanswered.
     pub(super) fn on_round(&mut self, timed_out: bool) {
-        let Some(seal) = self.seal.as_mut() else {
+        if self.seal.is_none() {
             return;
-        };
+        }
         let mode = match self.mode {
             Mode::Probing(n) if timed_out && n + 1 >= PROBE_TRIES => Mode::Fallback(0),
             Mode::Probing(n) if timed_out => Mode::Probing(n + 1),
-            Mode::Sealed if timed_out => {
-                seal.reset();
-                Mode::Probing(0)
-            }
+            Mode::Sealed if timed_out => Mode::Resealing,
             Mode::Fallback(r) => Mode::Fallback((r + 1) % PROBE_EVERY),
             mode => mode,
         };
@@ -101,7 +100,10 @@ impl SealState {
         addr: &'a TargetAddr<'a>,
     ) -> Sink<'a> {
         let sealed = !matches!(self.mode, Mode::Fallback(r) if r != PROBE_EVERY - 1);
-        self.reply_sink(socket, addr, sealed)
+        match self.seal.as_mut() {
+            Some(seal) if sealed => Sink::Sealed(socket, addr, seal, self.mode == Mode::Resealing),
+            _ => Sink::Framed(socket, addr),
+        }
     }
 
     /// A reply goes the way the datagram it answers came.
@@ -112,7 +114,7 @@ impl SealState {
         sealed: bool,
     ) -> Sink<'a> {
         match self.seal.as_mut() {
-            Some(seal) if sealed => Sink::Sealed(socket, addr, seal),
+            Some(seal) if sealed => Sink::Sealed(socket, addr, seal, false),
             _ => Sink::Framed(socket, addr),
         }
     }
@@ -157,7 +159,7 @@ impl SealState {
                 | Some(rendezvous_message::Union::RegisterPkResponse(_)),
             ) => false,
             (Mode::Probing(_), _) => true,
-            (Mode::Sealed, _) => !seal.pushes_sealed(),
+            (Mode::Sealed | Mode::Resealing, _) => !seal.pushes_sealed(),
         }
     }
 
@@ -199,23 +201,26 @@ impl Drop for SealState {
 /// a RegisterPeer or nothing, and anything else waits for the session. A session from an empty
 /// hello is replaced at the next RegisterPeer by a signed hello, which ties it to this device;
 /// pushes still come under it until the welcome.
-/// A RegisterPk with a key other than the one hellos are signed by means the key pair changed:
-/// `device` loads the new one, and is called for nothing else.
+/// `hello` asks for one even under a session, as after a missed answer. A RegisterPk with a key
+/// other than the one hellos are signed by means the key pair changed: `device` loads the new
+/// one, and is called for nothing else.
 pub(super) fn seal_message(
     seal: &mut ClientSeal,
     msg: &RendezvousMessage,
+    hello: bool,
     device: impl FnOnce() -> Option<sign::SecretKey>,
 ) -> ResultType<Vec<u8>> {
     let pk = &msg.register_pk().pk;
     if !pk.is_empty() && !seal.signs_as(pk) {
         seal.set_device(device().filter(|sk| sk.0[32..] == pk[..]));
     }
-    let payload = if seal.has_session() || msg.has_register_peer() {
+    let hello = hello || (msg.has_register_peer() && seal.needs_signed_hello());
+    let payload = if msg.has_register_peer() || (seal.has_session() && !hello) {
         msg.write_to_bytes()?
     } else {
         Vec::new()
     };
-    let sealed = if msg.has_register_peer() && seal.needs_signed_hello() {
+    let sealed = if hello {
         seal.hello(&payload)
     } else {
         seal.seal(&payload)
@@ -355,7 +360,7 @@ mod tests {
         let mut seal = ClientSeal::new(&pk, Some(sign::gen_keypair().1)).unwrap();
         let (new_pk, new_sk) = sign::gen_keypair();
         let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
-        let hello = seal_message(&mut seal, &register_peer, || unreachable!()).unwrap();
+        let hello = seal_message(&mut seal, &register_peer, false, || unreachable!()).unwrap();
         let (_, mut reply) = server.open(&hello, || 1).unwrap();
         seal.open(&server.seal(&mut reply, 0, b"", || 0).unwrap())
             .unwrap();
@@ -365,25 +370,76 @@ mod tests {
                 ..Default::default()
             })
         });
-        seal_message(&mut seal, &register_pk, || Some(new_sk.clone())).unwrap();
+        seal_message(&mut seal, &register_pk, false, || Some(new_sk.clone())).unwrap();
         seal.require_signed_hello();
-        let again = seal_message(&mut seal, &register_peer, || unreachable!()).unwrap();
+        let again = seal_message(&mut seal, &register_peer, false, || unreachable!()).unwrap();
         let (opened, _) = server.open(&again, || 2).unwrap();
         assert!(opened.signed_by(new_pk.as_ref()).is_some());
     }
 
+    async fn registration(state: &mut SealState, msg: &RendezvousMessage) -> Vec<u8> {
+        let mut socket = FramedSocket::new("127.0.0.1:0").await.unwrap();
+        let server = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = TargetAddr::Ip(server.local_addr().unwrap());
+        state
+            .round_sink(&mut socket, &addr)
+            .send(msg)
+            .await
+            .unwrap();
+        let mut buf = [0u8; 2048];
+        let n = server.recv(&mut buf).await.unwrap();
+        buf[..n].to_vec()
+    }
+
     #[tokio::test]
-    async fn a_missed_answer_while_sealed_sends_a_hello_again() {
+    async fn a_missed_answer_while_sealed_sends_a_hello_and_keeps_the_session() {
         let (mut state, server) = state("missed");
-        welcomed(&mut state, &server, CAP_PUSHES_SEALED);
-        let seal = state.seal.as_mut().unwrap();
-        assert!(!udp_seal::is_hello(&seal.seal(b"").unwrap()));
-        assert_eq!(rounds(&mut state, &[true]).await, [true]);
-        let seal = state.seal.as_mut().unwrap();
-        assert!(udp_seal::is_hello(&seal.seal(b"").unwrap()));
+        let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
+        let hello = registration(&mut state, &register_peer).await;
+        let (_, mut reply) = server.open(&hello, || 1).unwrap();
+        let welcome = server
+            .seal(&mut reply, CAP_PUSHES_SEALED, b"", || 0)
+            .unwrap();
+        assert!(state.open(BytesMut::from(&welcome[..])).unwrap().1);
+        assert!(!udp_seal::is_hello(
+            &registration(&mut state, &register_peer).await
+        ));
+        state.on_round(true);
+        assert!(udp_seal::is_hello(
+            &registration(&mut state, &register_peer).await
+        ));
+        let punch = Some(rendezvous_message::Union::PunchHole(Default::default()));
         assert!(
-            state.on_message(false, &None),
-            "probing again, plaintext is taken"
+            !state.on_message(false, &punch),
+            "a plaintext push is still forged"
+        );
+        let push = server.seal(&mut Reply::push(1), 0, b"", || 7).unwrap();
+        assert!(
+            state.open(BytesMut::from(&push[..])).is_some(),
+            "a push under the session still opens"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_socket_that_sealed_does_not_fall_back_until_it_rebinds() {
+        let (mut state, server) = state("no-fall-back");
+        welcomed(&mut state, &server, 0);
+        let answer = Some(rendezvous_message::Union::RegisterPkResponse(
+            Default::default(),
+        ));
+        assert_eq!(rounds(&mut state, &[true; 6]).await, [true; 6]);
+        assert!(
+            !state.on_message(false, &answer),
+            "its server seals, so a plaintext answer is forged"
+        );
+        state.on_rebind();
+        assert_eq!(
+            rounds(&mut state, &[false, true, true]).await,
+            [true, true, false]
+        );
+        assert!(
+            state.on_message(false, &answer),
+            "a new socket may reach an older server"
         );
     }
 
@@ -394,7 +450,7 @@ mod tests {
         let (device_pk, device_sk) = sign::gen_keypair();
         let mut seal = ClientSeal::new(&pk, Some(device_sk)).unwrap();
         let register_pk = message(|m| m.set_register_pk(RegisterPk::default()));
-        let hello = seal_message(&mut seal, &register_pk, || None).unwrap();
+        let hello = seal_message(&mut seal, &register_pk, false, || None).unwrap();
         let (opened, mut reply) = server.open(&hello, || 1).unwrap();
         assert!(
             opened.payload.is_empty(),
@@ -402,13 +458,13 @@ mod tests {
         );
         let welcome = server.seal(&mut reply, 0, b"", || 0).unwrap();
         seal.open(&welcome).unwrap();
-        let data = seal_message(&mut seal, &register_pk, || None).unwrap();
+        let data = seal_message(&mut seal, &register_pk, false, || None).unwrap();
         let (opened, _) = server.open(&data, || 2).unwrap();
         assert!(opened.pn.is_some());
         let parsed = RendezvousMessage::parse_from_bytes(&opened.payload).unwrap();
         assert!(parsed.has_register_pk());
         let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
-        let again = seal_message(&mut seal, &register_peer, || None).unwrap();
+        let again = seal_message(&mut seal, &register_peer, false, || None).unwrap();
         assert!(udp_seal::is_hello(&again));
         let (opened, _) = server.open(&again, || 3).unwrap();
         assert!(opened.signed_by(device_pk.as_ref()).is_some());
@@ -421,13 +477,14 @@ mod tests {
     fn a_register_pk_answered_under_a_signed_session_brings_a_signed_hello() {
         let (mut state, server) = state("after-pk");
         let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
-        let hello = seal_message(state.seal.as_mut().unwrap(), &register_peer, || None).unwrap();
+        let hello =
+            seal_message(state.seal.as_mut().unwrap(), &register_peer, false, || None).unwrap();
         let (_, mut reply) = server.open(&hello, || 1).unwrap();
         let welcome = server.seal(&mut reply, 0, b"", || 0).unwrap();
         state.open(BytesMut::from(&welcome[..])).unwrap();
         let seal = state.seal.as_mut().unwrap();
         assert!(!udp_seal::is_hello(
-            &seal_message(seal, &register_peer, || None).unwrap()
+            &seal_message(seal, &register_peer, false, || None).unwrap()
         ));
         let answer = Some(rendezvous_message::Union::RegisterPkResponse(
             Default::default(),
@@ -435,7 +492,7 @@ mod tests {
         assert!(state.on_message(true, &answer));
         let seal = state.seal.as_mut().unwrap();
         assert!(udp_seal::is_hello(
-            &seal_message(seal, &register_peer, || None).unwrap()
+            &seal_message(seal, &register_peer, false, || None).unwrap()
         ));
     }
 
@@ -444,7 +501,8 @@ mod tests {
         let (mut state, server) = state("re-hello");
         welcomed(&mut state, &server, CAP_PUSHES_SEALED);
         let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
-        let hello = seal_message(state.seal.as_mut().unwrap(), &register_peer, || None).unwrap();
+        let hello =
+            seal_message(state.seal.as_mut().unwrap(), &register_peer, false, || None).unwrap();
         assert!(udp_seal::is_hello(&hello));
         let push = server.seal(&mut Reply::push(1), 0, b"", || 7).unwrap();
         assert!(
