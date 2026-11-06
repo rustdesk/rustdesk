@@ -293,7 +293,7 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
       setOption(opt.value);
     }
 
-    return mod_menu.PopupMenuItem(
+    return _MenuEntryButtonItem<T>(
       padding: EdgeInsets.zero,
       height: conf.height,
       child: Container(
@@ -357,7 +357,7 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
 
   mod_menu.PopupMenuEntry<T> _buildSecondMenu(
       BuildContext context, MenuConfig conf, MenuEntryRadioOption opt) {
-    return mod_menu.PopupMenuItem(
+    return _MenuEntryButtonItem<T>(
       padding: EdgeInsets.zero,
       height: conf.height,
       child: Container(
@@ -492,7 +492,7 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
             fontWeight: FontWeight.normal)
         .obs;
     return [
-      mod_menu.PopupMenuItem(
+      _MenuEntryButtonItem<T>(
         padding: EdgeInsets.zero,
         height: conf.height,
         child: Container(

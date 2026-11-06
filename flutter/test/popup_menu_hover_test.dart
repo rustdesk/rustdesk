@@ -100,6 +100,105 @@ void main() {
     }
   });
 
+  testWidgets('Enter on the first switch row focus toggles the option',
+      (tester) async {
+    for (final switchType in SwitchType.values) {
+      for (final dismiss in [false, true]) {
+        final actions = <String>[];
+        await menu.openMenu(tester, actions, extraEntries: [
+          MenuEntrySwitchSync<String>(
+            switchType: switchType,
+            text: 'Keep session',
+            currentValue: false,
+            setter: (value) async => actions.add('keep:$value'),
+            dismissOnClicked: dismiss,
+          ),
+        ]);
+        final text = find.text('Keep session');
+        final button =
+            find.ancestor(of: text, matching: find.byType(TextButton)).first;
+        final rowFocus = Focus.of(tester.element(button));
+        for (var i = 0; i < 30 && !rowFocus.hasFocus; i++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+        }
+        expect(rowFocus.hasFocus, isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(actions, ['keep:true']);
+        expect(text, dismiss ? findsNothing : findsOneWidget);
+        if (!dismiss) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.space);
+          await tester.pumpAndSettle();
+          expect(actions, ['keep:true', 'keep:false']);
+          expect(text, findsOneWidget);
+          await tester.tap(find.text('Rename'));
+          await tester.pumpAndSettle();
+        }
+      }
+    }
+  });
+
+  for (final submenu in [false, true]) {
+    final name = submenu ? 'radio submenu' : 'radio menu';
+    testWidgets('Enter on the first $name row focus selects the option',
+        (tester) async {
+      var selected = 'one';
+      final changes = <String>[];
+      List<MenuEntryRadioOption> options() => [
+            MenuEntryRadioOption(text: 'First option', value: 'one'),
+            MenuEntryRadioOption(text: 'Second option', value: 'two'),
+          ];
+      Future<String> current() async => selected;
+      Future<void> select(String oldValue, String value) async {
+        selected = value;
+        changes.add(value);
+      }
+
+      await menu.openMenu(tester, [], extraEntries: [
+        if (submenu)
+          MenuEntrySubRadios<String>(
+            text: 'Radio options',
+            optionsGetter: options,
+            curOptionGetter: current,
+            optionSetter: select,
+          )
+        else
+          MenuEntryRadios<String>(
+            text: 'Radio options',
+            optionsGetter: options,
+            curOptionGetter: current,
+            optionSetter: select,
+          ),
+      ]);
+      if (submenu) {
+        await tester.tap(find.text('Radio options'));
+        await tester.pumpAndSettle();
+      }
+      final text = find.text('Second option');
+      final buttons = find.ancestor(of: text, matching: find.byType(TextButton));
+      final rowFocus = Focus.of(tester.element(buttons.first));
+      for (var i = 0; i < 30 && !rowFocus.hasFocus; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      expect(rowFocus.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(changes, ['two']);
+      expect(find.descendant(of: buttons.last, matching: find.byIcon(Icons.check)),
+          findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      if (submenu) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+      }
+    });
+  }
+
   testWidgets('checkbox and row toggle once without closing the menu',
       (tester) async {
     for (final checkbox in [false, true]) {
