@@ -825,5 +825,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Annoa sa fidùtzia"),
         ("install-directory-not-empty-tip", "Sa cartella seletzionada non est bòida. S'installatzione diat pòdere iscantzellare sos datos chi bi sunt. Ti cussigiamus de isseberare un'àtera cartella."),
         ("Request approval", "Pedi s'aprovatzione"),
+        ("Forever", "Pro semper"),
     ].iter().cloned().collect();
 }
