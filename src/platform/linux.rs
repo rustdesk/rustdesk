@@ -448,17 +448,27 @@ fn has_wayland_socket(uid: &str) -> bool {
 #[cfg(any(feature = "drm", test))]
 fn dir_has_wayland_socket(dir: &Path) -> bool {
     use std::os::unix::fs::FileTypeExt;
-    std::fs::read_dir(dir)
-        .map(|entries| {
-            entries.flatten().any(|entry| {
-                let name = entry.file_name();
-                let name = name.to_string_lossy();
-                name.starts_with("wayland-")
-                    && !name.ends_with(".lock")
-                    && entry.file_type().map_or(false, |t| t.is_socket())
-            })
-        })
-        .unwrap_or(false)
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        // Expected until logind has created the runtime directory.
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return false,
+        Err(err) => {
+            hbb_common::throttled_log!(
+                Duration::from_secs(60),
+                info,
+                "Could not read {}: {err}; not taken for a greetd greeter",
+                dir.display()
+            );
+            return false;
+        }
+    };
+    entries.flatten().any(|entry| {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        name.starts_with("wayland-")
+            && !name.ends_with(".lock")
+            && entry.file_type().map_or(false, |t| t.is_socket())
+    })
 }
 
 #[cfg(test)]
@@ -2693,6 +2703,11 @@ mod desktop {
             #[cfg(feature = "drm")]
             {
                 self.tty_greeter = super::is_tty_greeter_session(&self.sid);
+                if self.tty_greeter {
+                    // `Type=tty` names no display server, and the fallback above read this
+                    // service's own environment: only a compositor socket makes it Wayland.
+                    self.protocol = DISPLAY_SERVER_X11.to_owned();
+                }
                 self.adopt_wayland_tty_greeter();
             }
             if self.is_login_wayland() {
