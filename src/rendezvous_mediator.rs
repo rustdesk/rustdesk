@@ -1450,9 +1450,11 @@ impl Sink<'_> {
         match self {
             Sink::Framed(socket, addr) => socket.send(msg, addr.to_owned()).await,
             Sink::Stream(stream) => stream.send(msg).await,
-            Sink::Sealed(socket, addr, seal, hello) => {
-                let bytes = seal_state::seal_message(seal, msg, hello, seal_state::device_key)?;
-                socket.send_bytes(bytes.into(), addr.to_owned()).await
+            Sink::Sealed(socket, addr, seal, rehello) => {
+                for bytes in seal_state::seal_round(seal, msg, rehello, seal_state::device_key)? {
+                    socket.send_bytes(bytes.into(), addr.to_owned()).await?;
+                }
+                Ok(())
             }
         }
     }
