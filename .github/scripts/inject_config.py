@@ -13,7 +13,7 @@ def main():
     # App name
     text = re.sub(
         r'pub static ref APP_NAME: RwLock<String> = RwLock::new\(".*?"\.to_owned\(\)\);',
-        'pub static ref APP_NAME: RwLock<String> = RwLock::new("yuleLink".to_owned());',
+        'pub static ref APP_NAME: RwLock<String> = RwLock::new("YuleLink".to_owned());',
         text
     )
 
@@ -35,13 +35,13 @@ def main():
     if 'pub const RELAY_SERVER:' in text:
         text = re.sub(
             r'pub const RELAY_SERVER: &str = ".*?";',
-            'pub const RELAY_SERVER: &str = "x9ragj8s4ydxv89f7m-rustdesk.yulelink.com";',
+            'pub const RELAY_SERVER: &str = "";',
             text
         )
     else:
         text = text.replace(
             'pub const RS_PUB_KEY:',
-            'pub const RELAY_SERVER: &str = "x9ragj8s4ydxv89f7m-rustdesk.yulelink.com";\npub const RS_PUB_KEY:'
+            'pub const RELAY_SERVER: &str = "";\npub const RS_PUB_KEY:'
         )
 
     # API server
