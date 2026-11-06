@@ -38,6 +38,13 @@ enum Mode {
     Resealing,
 }
 
+impl Mode {
+    /// A missed answer is no sign the server stopped sealing.
+    fn seals(self) -> bool {
+        matches!(self, Mode::Sealed | Mode::Resealing)
+    }
+}
+
 pub(super) struct SealState {
     host: String,
     server: Option<sign::PublicKey>,
@@ -168,7 +175,7 @@ impl SealState {
         if self.mode == mode {
             return;
         }
-        let was_sealed = self.mode == Mode::Sealed;
+        let was_sealed = self.mode.seals();
         self.mode = mode;
         match self.server {
             Some(server) if mode == Mode::Sealed => {
@@ -176,7 +183,7 @@ impl SealState {
                 sealed.retain(|(host, _)| *host != self.host);
                 sealed.push((self.host.clone(), server));
             }
-            _ if was_sealed => self.forget_sealed(),
+            _ if was_sealed && !mode.seals() => self.forget_sealed(),
             _ => {}
         }
     }
@@ -191,7 +198,7 @@ impl SealState {
 
 impl Drop for SealState {
     fn drop(&mut self) {
-        if self.mode == Mode::Sealed {
+        if self.mode.seals() {
             self.forget_sealed();
         }
     }
@@ -555,8 +562,14 @@ mod tests {
         assert_eq!(opened.payload, data);
         assert_eq!(seal_one_shot("another-host", data.clone()), data);
         state.on_round(true);
+        assert!(
+            udp_seal::is_hello(&seal_one_shot("punch", data.clone())),
+            "a missed answer is no sign the server stopped sealing"
+        );
+        state.on_rebind();
         assert_eq!(seal_one_shot("punch", data.clone()), data);
         welcomed(&mut state, &server, 0);
+        state.on_round(true);
         drop(state);
         assert_eq!(seal_one_shot("punch", data.clone()), data);
     }
