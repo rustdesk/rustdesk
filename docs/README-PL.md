@@ -45,8 +45,21 @@ Wersje desktopowe korzystają z biblioteki [sciter](https://sciter.com/) jako si
 
 - Zainstaluj [vcpkg](https://github.com/microsoft/vcpkg), i ustaw prawidłowo zmienną `VCPKG_ROOT`
 
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-  - Linux/MacOS: vcpkg install libvpx libyuv opus aom
+- Z katalogu głównego repozytorium zainstaluj zależności zadeklarowane w `vcpkg.json` (manifest mode).
+
+  Linux/macOS:
+
+  ```sh
+  $VCPKG_ROOT/vcpkg install --x-install-root="$PWD/vcpkg_installed"
+  export VCPKG_INSTALLED_ROOT="$PWD/vcpkg_installed"
+  ```
+
+  Windows (Git Bash, x64; use `arm64-windows-static` on ARM64):
+
+  ```sh
+  $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$PWD/vcpkg_installed"
+  export VCPKG_INSTALLED_ROOT="$PWD/vcpkg_installed"
+  ```
 
 - uruchom `cargo run`
 
@@ -55,37 +68,44 @@ Wersje desktopowe korzystają z biblioteki [sciter](https://sciter.com/) jako si
 ### Ubuntu 18 (Debian 10)
 
 ```sh
-sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
+sudo apt install -y g++ gcc git curl wget nasm yasm autoconf automake libtool libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev libva-dev cmake
 ```
 
 ### openSUSE Tumbleweed 
 
 ```sh
-sudo zypper install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libXfixes-devel cmake alsa-lib-devel gstreamer-devel gstreamer-plugins-base-devel xdotool-devel
+sudo zypper install gcc-c++ git curl wget nasm yasm autoconf automake libtool gcc gtk3-devel clang libxcb-devel libXfixes-devel libva-devel cmake alsa-lib-devel gstreamer-devel gstreamer-plugins-base-devel xdotool-devel
 ```
 
 ### Fedora 28 (CentOS 8)
 
 ```sh
-sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
+sudo yum -y install gcc-c++ git curl wget nasm yasm autoconf automake libtool gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel libva-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
 ### Arch (Manjaro)
 
 ```sh
-sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
+sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip autoconf automake libtool make pkg-config clang gtk3 xdotool libxcb libxfixes libva alsa-lib pipewire
 ```
 
 ### Zainstaluj vcpkg
 
 ```sh
+cd "$HOME"
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
-git checkout 2023.04.15
+git checkout 9e593bb18ea69cc5095e012465dcd675a822ed0d  # vcpkg 2026.07.29, matches VCPKG_COMMIT_ID in CI
 cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus aom
+git clone --depth 1 --recurse-submodules https://github.com/rustdesk/rustdesk
+cd rustdesk
+# install into a project-local tree instead of $VCPKG_ROOT/installed;
+# manifest mode reconciles its install root and would otherwise remove
+# other projects' packages
+$VCPKG_ROOT/vcpkg install --x-install-root="$PWD/vcpkg_installed"
+cd
 ```
 
 ### Popraw libvpx (Dla Fedora)
@@ -97,7 +117,7 @@ cd *
 sed -i 's/CFLAGS+=-I/CFLAGS+=-fPIC -I/g' Makefile
 sed -i 's/CXXFLAGS+=-I/CXXFLAGS+=-fPIC -I/g' Makefile
 make
-cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
+cp libvpx.a $HOME/rustdesk/vcpkg_installed/x64-linux/lib/
 cd
 ```
 
@@ -106,12 +126,12 @@ cd
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
+cd ~/rustdesk
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
-cargo run
+export VCPKG_INSTALLED_ROOT="$PWD/vcpkg_installed"
+VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
 ## Jak kompilować za pomocą Dockera
