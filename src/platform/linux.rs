@@ -2315,12 +2315,14 @@ mod desktop {
         /// Every compositor variable is dropped, not only the x11 values guessed meanwhile: going
         /// straight from a user session to the greeter keeps that session's WAYLAND_DISPLAY and
         /// bus here, and an endpoint the greeter `--server` is handed is never searched past.
-        /// A forced display server is the operator's answer, so it is left alone, as `IS_X11` does.
+        /// A display server forced to x11 is the operator's answer, so it is left alone, as
+        /// `IS_X11` does; one forced to Wayland agrees with the socket and is adopted.
         #[cfg(feature = "drm")]
         fn adopt_wayland_tty_greeter(&mut self) {
             if self.tty_greeter
                 && !self.is_wayland()
-                && !super::display_server_forced()
+                && std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER").as_deref()
+                    != Ok(DISPLAY_SERVER_X11)
                 && super::has_wayland_socket(&self.uid)
             {
                 self.protocol = DISPLAY_SERVER_WAYLAND.to_owned();
