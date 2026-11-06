@@ -151,7 +151,7 @@ fn create_protected_file(path: &Path) -> ResultType<File> {
 
 fn duplicate_cleanup_handle(file: &File) -> ResultType<Owned<HANDLE>> {
     let mut handle = HANDLE::default();
-    // Retain deletion capability, not a writable handle, while waiting for UAC.
+    // Retain deletion capability, not a writable handle, until the files are released to cmd.
     unsafe {
         let process = GetCurrentProcess();
         DuplicateHandle(

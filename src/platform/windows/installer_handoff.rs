@@ -100,8 +100,9 @@ pub(super) fn run_cmds(cmds: impl Into<InstallCommands>, show: bool, tip: &str) 
     directory::create(&directory)?;
     // cmd cannot open the BAT or copy its inputs while a DELETE-capable handle is open, so
     // close them before launching it; a cancelled UAC prompt then leaves the files behind.
-    // Holding them until cmd read a release signal from a named pipe made F-Secure's
-    // behavior detection end the elevated cmd (#16840, #16842). The DACL still protects them.
+    // Holding them until cmd read a release signal from a named pipe failed under F-Secure's
+    // behavior detection, which closed cmd's end first (#16840, #16842). The file DACLs and
+    // the parent directory's permissions still keep unelevated users from changing them.
     script.release_files();
     let process = launch_elevated(&cmd_path, &parameters, show).map_err(|err| {
         log::debug!("Failed to launch elevated installer: {err:#}");
