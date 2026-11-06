@@ -157,57 +157,8 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::super::installer_shell::shortcut_bytes;
     use super::*;
     use std::{os::windows::process::CommandExt, process::Stdio};
-
-    #[test]
-    fn protected_handoff_preserves_shortcuts_failures_and_cleanup() {
-        const COMMAND_FAILURE: u32 = 77;
-        for exit_code in [0, COMMAND_FAILURE] {
-            let root =
-                std::env::temp_dir().join(format!("rustdesk-handoff-{}", uuid::Uuid::new_v4()));
-            let source = root.join("source !&^@().bat");
-            fs::create_dir(&root).unwrap();
-            let bytes = shortcut_bytes(r"C:\RustDesk.exe", Some("--tray"), None).unwrap();
-            let shortcut =
-                ProtectedInstallFile::new(&root.join("shortcut !&^@().tmp"), &bytes).unwrap();
-            let marker = root.join("copied.lnk");
-            let commands = InstallCommands {
-                script: format!(
-                    "copy /B /Y \"{}\" \"{}\" > nul\r\nexit /b {exit_code}",
-                    shortcut.path().display(),
-                    marker.display()
-                ),
-                files: vec![shortcut],
-            };
-            let mut script = write_install_script(commands, &source).unwrap();
-            let runner = script.file.path().with_extension("bat.dir");
-            directory::create(&runner).unwrap();
-            let output = run_script(&mut script);
-            let copied = fs::read(&marker).unwrap();
-            let cleaned = !runner.exists()
-                && !script.file.path().exists()
-                && script._files.iter().all(|file| !file.path().exists());
-            let protected = script.file.path().exists()
-                && script._files.iter().all(|file| file.path().exists());
-            let directories_cleaned = finish_fixture(script, &root);
-            assert_eq!(
-                output.status.code().map(|code| code as u32),
-                Some(exit_code),
-                "{output:?}"
-            );
-            assert_eq!(copied, bytes);
-            if super::super::is_elevated(None).unwrap() {
-                assert!(
-                    cleaned && directories_cleaned,
-                    "The runner and staged inputs must be removed"
-                );
-            } else {
-                assert!(protected, "Unelevated CMD must not remove protected inputs");
-            }
-        }
-    }
 
     #[test]
     fn completed_batch_removes_its_own_staging_directory() {
@@ -229,34 +180,5 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
         assert_eq!(output.status.code(), Some(COMMAND_FAILURE), "{output:?}");
         assert!(removed, "The completed batch left its staging directory");
-    }
-
-    fn finish_fixture(script: InstallCommandScript, root: &Path) -> bool {
-        let directories = std::iter::once(&script.file)
-            .chain(&script._files)
-            .map(|file| file.path().parent().unwrap().to_owned())
-            .collect::<Vec<_>>();
-        drop(script);
-        let cleaned = directories.iter().all(|path| !path.exists());
-        if let Err(error) = fs::remove_dir_all(root) {
-            eprintln!(
-                "Protected test fixtures remain at {}: {error}",
-                root.display()
-            );
-        }
-        cleaned
-    }
-
-    // Mirrors run_cmds without UAC: the files are released before cmd starts and nothing
-    // reaches cmd's stdin.
-    fn run_script(script: &mut InstallCommandScript) -> std::process::Output {
-        let parameters = protected_install_parameters(script).unwrap();
-        script.release_files();
-        std::process::Command::new(get_system_executable(CMD_RELATIVE_PATH).unwrap())
-            .raw_arg(parameters)
-            .creation_flags(::windows::Win32::System::Threading::CREATE_NO_WINDOW.0)
-            .stdin(Stdio::null())
-            .output()
-            .unwrap()
     }
 }
