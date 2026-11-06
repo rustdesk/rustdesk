@@ -82,8 +82,8 @@ impl ProtectedInstallFile {
     }
 
     pub(super) fn release(&mut self) {
-        // cmd.exe cannot read/copy these files while a DELETE handle is open.
-        // The handoff gate keeps it waiting until every staged handle is closed.
+        // cmd.exe cannot read/copy these files while a DELETE handle is open, so every
+        // staged handle is closed before the elevated cmd starts.
         drop(self.cleanup_handle.take());
     }
 }
@@ -151,7 +151,7 @@ fn create_protected_file(path: &Path) -> ResultType<File> {
 
 fn duplicate_cleanup_handle(file: &File) -> ResultType<Owned<HANDLE>> {
     let mut handle = HANDLE::default();
-    // Retain deletion capability, not a writable handle, while waiting for UAC.
+    // Retain deletion capability, not a writable handle, until the files are released to cmd.
     unsafe {
         let process = GetCurrentProcess();
         DuplicateHandle(
