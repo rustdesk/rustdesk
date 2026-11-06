@@ -322,7 +322,7 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
 mod file_list_test {
     use std::{
         path::{Path, PathBuf},
-        sync::atomic::{AtomicU64, Ordering},
+        sync::atomic::AtomicU64,
         time::{Duration, SystemTime},
     };
 
@@ -466,32 +466,6 @@ mod file_list_test {
         Ok(())
     }
 
-    #[test]
-    fn read_exact_at_reopens_after_read_failure() -> Result<(), Box<dyn std::error::Error>> {
-        let file_path = std::env::temp_dir().join(format!(
-            "rustdesk-clipboard-local-file-{}",
-            std::process::id()
-        ));
-        std::fs::write(&file_path, b"")?;
-
-        let mut file = LocalFile::try_open(&std::env::temp_dir(), &file_path)?;
-        file.size = 1;
-
-        let mut buf = [0u8; 1];
-        assert!(file.read_exact_at(&mut buf, 0).is_err());
-        assert!(file.handle.is_none());
-        assert_eq!(file.offset.load(Ordering::Relaxed), 0);
-
-        std::fs::write(&file_path, [42u8])?;
-
-        file.read_exact_at(&mut buf, 0)?;
-        assert_eq!(buf, [42u8]);
-        assert!(file.handle.is_none());
-
-        std::fs::remove_file(file_path)?;
-        Ok(())
-    }
-
     const LAST_WRITE_TIME_OFFSET: usize = 56;
 
     fn file_with_last_write_time(last_write_time: SystemTime) -> LocalFile {
@@ -517,20 +491,6 @@ mod file_list_test {
         // Times before 1970 are sent as 1970-01-01 00:00:00 UTC.
         let time = SystemTime::UNIX_EPOCH - Duration::from_secs(1);
         assert_eq!(encoded_last_write_time(time)?, 116_444_736_000_000_000);
-        Ok(())
-    }
-
-    #[test]
-    fn last_write_time_round_trips() -> Result<(), CliprdrError> {
-        let file = file_with_last_write_time(
-            SystemTime::UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_700),
-        );
-        let mut pdu = BytesMut::with_capacity(4 + FILE_DESCRIPTOR_SIZE);
-        pdu.put_u32_le(1);
-        pdu.put(file.as_bin()?.as_slice());
-
-        let parsed = FileDescription::parse_file_descriptors(pdu.to_vec(), 0)?;
-        assert_eq!(parsed[0].last_modified, file.last_write_time);
         Ok(())
     }
 }

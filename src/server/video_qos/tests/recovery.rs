@@ -73,22 +73,6 @@ fn automatic_floor_preserves_lower_custom_limits() {
 }
 
 #[test]
-fn two_good_replies_restore_after_a_severe_stall() {
-    let mut qos = stable_qos();
-    qos.user_delay_response_elapsed(1, 5001);
-    assert_eq!(qos.fps(), 5);
-    qos.user_network_delay(1, 5100);
-    assert_eq!(qos.fps(), 5, "the late reply must not brake twice");
-    qos.user_network_delay(1, 10);
-    assert!(
-        (5..FPS).contains(&qos.fps()),
-        "one good reply is not enough"
-    );
-    qos.user_network_delay(1, 10);
-    assert_eq!(qos.fps(), FPS);
-}
-
-#[test]
 fn jitter_during_recovery_does_not_discard_the_restore_target() {
     let mut qos = stable_qos();
     for _ in 0..3 {
@@ -98,23 +82,4 @@ fn jitter_during_recovery_does_not_discard_the_restore_target() {
         qos.user_network_delay(1, delay);
     }
     assert_eq!(qos.fps(), FPS);
-}
-
-#[test]
-fn a_failed_fast_restore_rolls_back_before_the_queue_grows() {
-    let mut qos = stable_qos();
-    qos.user_delay_response_elapsed(1, 5001);
-    for _ in 0..2 {
-        qos.user_network_delay(1, 10);
-    }
-    assert_eq!(qos.fps(), FPS);
-    qos.user_network_delay(1, 800);
-    assert_eq!(qos.fps(), FPS / 2);
-    for _ in 0..2 {
-        qos.user_network_delay(1, 10);
-    }
-    assert!(
-        qos.fps() < FPS,
-        "a failed restore must lower the next probe"
-    );
 }

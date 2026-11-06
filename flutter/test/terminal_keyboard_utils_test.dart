@@ -17,24 +17,5 @@ void main() {
         ['Ctrl', 'Alt', '-', 'PgUp', 'PgDn'],
       );
     });
-
-    test('keeps two trailing Row3 placeholders for row alignment', () {
-      expect(terminalKeyboardRow3TrailingPlaceholderCount, 2);
-    });
-
-    test('keeps every expanded row aligned at 348dp', () {
-      final rowWidths = [
-        terminalKeyboardRowWidth(terminalKeyboardRow1Keys.length),
-        terminalKeyboardRowWidth(terminalKeyboardRow2Keys.length + 1),
-        terminalKeyboardRowWidth(
-          terminalKeyboardRow3Keys.length +
-              terminalKeyboardRow3TrailingPlaceholderCount,
-        ),
-      ];
-
-      expect(terminalKeyboardKeyWidth, 48);
-      expect(terminalKeyboardKeySpacing, 2);
-      expect(rowWidths, everyElement(348));
-    });
   });
 }

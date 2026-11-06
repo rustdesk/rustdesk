@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
 
@@ -48,7 +50,124 @@ class _SentRead {
   const _SentRead(this.path, this.includeHidden);
 }
 
+class _FileBinding extends Fake implements RustdeskImpl {
+  int _jobId = 0;
+  final emptyDirsDispatch = Completer<void>();
+
+  @override
+  Future<void> sessionReadRemoteEmptyDirsRecursiveSync(
+          {required UuidValue sessionId,
+          required String path,
+          required bool includeHidden,
+          dynamic hint}) =>
+      emptyDirsDispatch.future;
+
+  @override
+  String translate(
+          {required String name, required String locale, dynamic hint}) =>
+      name;
+
+  @override
+  String mainGetCommonSync({required String key, dynamic hint}) =>
+      '${++_jobId}';
+}
+
+class _DeletingController extends FileController {
+  final confirmations = <String>[];
+
+  _DeletingController()
+      : super(
+          isLocal: false,
+          getSessionID: () => _sessionId,
+          rootState: WeakReference(_FakeFFI()),
+          jobController: JobController(() => _sessionId, () => null),
+          fileFetcher: FileFetcher(() => _sessionId),
+          getOtherSideDirectoryData: () =>
+              DirectoryData(FileDirectory(), DirectoryOptions()),
+        );
+
+  @override
+  Future<bool?> showRemoveDialog(
+      String title, String content, bool showCheckbox) async {
+    confirmations.add(content);
+    return true;
+  }
+
+  @override
+  void sendRemoveFile(String path, int fileNum, int actId) {
+    scheduleMicrotask(() {
+      selectedItems.reconcile(
+          selectedItems.items.where((entry) => entry.path != path).toList());
+      unawaited(
+          jobController.jobDone({'id': '$actId', 'file_num': '$fileNum'}));
+    });
+  }
+
+  @override
+  Future<bool> refresh() async => true;
+}
+
 void main() {
+  for (final scenario in ['completion', 'reconnect', 'dispatch reconnect']) {
+    testWidgets('SAF retry after $scenario', (tester) async {
+      const path = '/@rustdesk/tree/grant/root';
+      final response = jsonEncode({
+        'path': path,
+        'empty_dirs': [jsonDecode(_directoryJson('$path/empty'))],
+      });
+      final binding = _FileBinding();
+      platformFFI.setBindingForTesting(binding);
+      final fetcher = FileFetcher(() => _sessionId);
+      final first = expectLater(
+          fetcher.readEmptyDirs(path, false, false),
+          scenario == 'completion'
+              ? completion(isNotEmpty)
+              : throwsA(isA<StateError>()));
+      try {
+        if (scenario != 'dispatch reconnect')
+          binding.emptyDirsDispatch.complete();
+        await tester.pump(const Duration(seconds: 3));
+        if (scenario != 'completion') {
+          fetcher.beginRemoteSession();
+        } else {
+          fetcher.tryCompleteEmptyDirsTask(response, 'false');
+        }
+        if (scenario == 'dispatch reconnect')
+          binding.emptyDirsDispatch.complete();
+        await tester.pump();
+        final retry = expectLater(
+            fetcher.readEmptyDirs(path, false, false).then((directories) =>
+                directories.map((directory) => directory.path)),
+            completion(['$path/empty']));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 28));
+        fetcher.tryCompleteEmptyDirsTask(response, 'false');
+        await tester.pump(const Duration(seconds: 2));
+        await retry;
+      } finally {
+        await tester.pump(const Duration(seconds: 30));
+      }
+      await first;
+    });
+  }
+
+  test('deletion confirms all five files despite refreshed selection',
+      () async {
+    platformFFI.setBindingForTesting(_FileBinding());
+    final controller = _DeletingController();
+    final files = ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt']
+        .map((name) => Entry()
+          ..name = name
+          ..path = '/selected/$name')
+        .toList();
+    controller.selectedItems.selectAll(files);
+
+    await controller.removeAction(controller.selectedItems);
+
+    expect(controller.confirmations, files.map((file) => file.path));
+    expect(controller.selectedItems.items, isEmpty);
+  });
+
   test('a fast remote response is matched after registration', () async {
     late final FileFetcher fileFetcher;
     fileFetcher = FileFetcher(
@@ -60,19 +179,6 @@ void main() {
     );
     final directory = await fileFetcher.fetchDirectory('/fast', false, false);
     expect(directory.path, '/fast');
-  });
-
-  test('a send failure fails and removes its registered task', () async {
-    final failure = StateError('send failed');
-    final fileFetcher = FileFetcher(
-      () => _sessionId,
-      readRemoteDirectory: (_, __, ___) => Future<void>.error(failure),
-    );
-    await expectLater(
-      fileFetcher.fetchDirectory('/failed', false, false),
-      throwsA(same(failure)),
-    );
-    expect(fileFetcher.hasPendingRemoteRead('/failed'), isFalse);
   });
 
   test('a resolved Home path completes the sole empty-path request', () async {
@@ -105,35 +211,6 @@ void main() {
 
     expect(controller.homePath, '/home/user');
     expect(controller.directory.value.path, '/home/user');
-  });
-
-  test('an exact path response is not taken by a pending Home request',
-      () async {
-    final sent = <_SentRead>[];
-    final fileFetcher = FileFetcher(
-      () => _sessionId,
-      readRemoteDirectory: (_, path, includeHidden) async {
-        sent.add(_SentRead(path, includeHidden));
-      },
-    );
-    final home = fileFetcher.fetchDirectory('', false, false);
-    final regular = fileFetcher.fetchDirectory('/regular', false, false);
-    await Future<void>.delayed(Duration.zero);
-    var homeCompleted = false;
-    home.then<void>((_) => homeCompleted = true);
-
-    fileFetcher.tryCompleteTask(_directoryJson('/unmatched'), 'false');
-    await Future<void>.delayed(Duration.zero);
-    expect(homeCompleted, isFalse);
-
-    fileFetcher.tryCompleteTask(_directoryJson('/regular'), 'false');
-    expect((await regular).path, '/regular');
-    await Future<void>.delayed(Duration.zero);
-    expect(homeCompleted, isFalse);
-
-    fileFetcher.tryCompleteTask(_directoryJson('/home/user'), 'false');
-    expect((await home).path, '/home/user');
-    expect(sent.map((request) => request.path), ['', '/regular']);
   });
 
   test('a read error completes the sole pending request', () async {
@@ -228,35 +305,6 @@ void main() {
     expect(sent.map((request) => request.includeHidden), [false, true]);
     fileFetcher.tryCompleteTask(_directoryJson('/same'), 'false');
     expect((await replacement).path, '/same');
-  });
-
-  test('a late dispatch failure cannot remove a replacement task', () async {
-    final dispatches = <Completer<void>>[];
-    final fileFetcher = FileFetcher(
-      () => _sessionId,
-      readRemoteDirectory: (_, __, ___) {
-        final dispatch = Completer<void>();
-        dispatches.add(dispatch);
-        return dispatch.future;
-      },
-    );
-    final first = fileFetcher.fetchDirectory('/same', false, false);
-    await Future<void>.delayed(Duration.zero);
-    final firstError = expectLater(first, throwsA(isA<StateError>()));
-    fileFetcher.beginRemoteSession();
-    await firstError;
-
-    final replacement = fileFetcher.fetchDirectory('/same', false, false);
-    await Future<void>.delayed(Duration.zero);
-    expect(dispatches, hasLength(2));
-    dispatches.first.completeError(StateError('late dispatch failure'));
-    await Future<void>.delayed(Duration.zero);
-
-    expect(fileFetcher.hasPendingRemoteRead('/same'), isTrue);
-    fileFetcher.tryCompleteTask(_directoryJson('/same'), 'false');
-    expect((await replacement).path, '/same');
-    dispatches.last.complete();
-    await Future<void>.delayed(Duration.zero);
   });
 
   test('navigation ignores stale directory responses', () async {

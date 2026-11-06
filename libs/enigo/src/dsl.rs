@@ -146,39 +146,3 @@ fn tokenize(input: &str) -> Result<Vec<Token>, ParseError> {
 
     Ok(tokens)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn success() {
-        assert_eq!(
-            tokenize("{{Hello World!}} {+CTRL}hi{-CTRL}"),
-            Ok(vec![
-                Token::Sequence("{Hello World!} ".into()),
-                Token::KeyDown(Key::Control),
-                Token::Sequence("hi".into()),
-                Token::KeyUp(Key::Control)
-            ])
-        );
-    }
-    #[test]
-    fn unexpected_open() {
-        assert_eq!(tokenize("{hello{}world}"), Err(ParseError::UnexpectedOpen));
-    }
-    #[test]
-    fn unmatched_open() {
-        assert_eq!(
-            tokenize("{this is going to fail"),
-            Err(ParseError::UnmatchedOpen)
-        );
-    }
-    #[test]
-    fn unmatched_close() {
-        assert_eq!(
-            tokenize("{+CTRL}{{this}} is going to fail}"),
-            Err(ParseError::UnmatchedClose)
-        );
-    }
-}

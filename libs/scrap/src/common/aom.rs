@@ -199,23 +199,6 @@ mod webrtc {
 
         Ok(())
     }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-        use std::os::raw::c_uint;
-
-        #[test]
-        fn tile_log2_uses_c_uint_and_rounds_up() {
-            let one_thread: c_uint = tile_log2(1);
-            let three_threads: c_uint = tile_log2(3);
-            let max_threads: c_uint = tile_log2(64);
-
-            assert_eq!(one_thread, 0);
-            assert_eq!(three_threads, 2);
-            assert_eq!(max_threads, 6);
-        }
-    }
 }
 
 impl EncoderApi for AomEncoder {

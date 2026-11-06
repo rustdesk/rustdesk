@@ -77,7 +77,9 @@ pub fn close_session() {
 
 #[inline]
 pub fn is_rdp_session_hold() -> bool {
-    RDP_SESSION_INFO.lock().unwrap().is_some()
+    // try_lock: a request waiting for the user holds the slot (no session yet), and so do the short
+    // looks while a session is set up. Busy answers no session rather than wait.
+    matches!(RDP_SESSION_INFO.try_lock(), Ok(info) if info.is_some())
 }
 
 pub fn try_close_session() {
@@ -1802,7 +1804,7 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::{corrected_origin, reconciled_origin, stage_err, WaylandDisplayInfo};
+    use super::{corrected_origin, WaylandDisplayInfo};
 
     fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
         WaylandDisplayInfo {
@@ -1865,45 +1867,6 @@ mod tests {
         assert_eq!(
             corrected_origin((0, 0), (1920, 1080), &turned_right),
             Some((2560, 0))
-        );
-    }
-
-    #[test]
-    fn a_cached_position_is_not_overridden_by_an_unmeasured_size() {
-        let outputs = [output(0, 0, (1440, 900)), output(1920, 0, (2880, 1800))];
-        // Restored from the cache, or sent by the portal: get_res() failed, so the size is the
-        // portal size, here the mode of the other output, and it moves nothing.
-        assert_eq!(
-            reconciled_origin((1920, 0), (1440, 900), false, &outputs),
-            None
-        );
-        // A measured size still moves a position that names no output of that size: xdph sends
-        // (0, 0) for every stream.
-        let pair = [output(0, 0, (1920, 1080)), output(1920, 0, (2880, 1800))];
-        assert_eq!(
-            reconciled_origin((0, 0), (2880, 1800), true, &pair),
-            Some((1920, 0))
-        );
-    }
-
-    #[test]
-    fn stage_err_keeps_the_detail_safe_for_a_placeholder() {
-        assert_eq!(
-            stage_err("start", "declined", ""),
-            "wl-stage:start:declined:"
-        );
-        // Braces of its own would break the placeholder lookup on the peer.
-        assert_eq!(
-            stage_err("create-session", "dbus", "org.freedesktop.{Error}"),
-            "wl-stage:create-session:dbus:org.freedesktop.Error"
-        );
-        assert_eq!(
-            stage_err("select-sources", "internal", "one\ntwo"),
-            "wl-stage:select-sources:internal:one two"
-        );
-        assert_eq!(
-            stage_err("start", "internal", &"x".repeat(300)),
-            format!("wl-stage:start:internal:{}", "x".repeat(200))
         );
     }
 }

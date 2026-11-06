@@ -11,10 +11,3 @@ const terminalKeyboardKeySpacing = 2.0;
 
 /// Empty 48dp slots keep expanded Row3 aligned with the two rows above it.
 const terminalKeyboardRow3TrailingPlaceholderCount = 2;
-
-/// Returns the fixed width occupied by a row of equally sized key slots.
-double terminalKeyboardRowWidth(int slotCount) {
-  if (slotCount <= 0) return 0;
-  return slotCount * terminalKeyboardKeyWidth +
-      (slotCount - 1) * terminalKeyboardKeySpacing;
-}

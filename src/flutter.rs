@@ -37,6 +37,11 @@ pub(crate) const APP_TYPE_CM: &str = "cm";
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) const APP_TYPE_CM: &str = "main";
 
+#[cfg(target_os = "macos")]
+const CORE_MAIN_EXIT_SUCCESS: i32 = 0;
+#[cfg(target_os = "macos")]
+const CORE_MAIN_EXIT_FAILURE: i32 = 1;
+
 // Do not remove the following constants.
 // Uncomment them when they are used.
 // pub(crate) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
@@ -102,6 +107,8 @@ fn load_plugin_in_app_path(dll_name: &str) -> Result<Library, LibError> {
 
 /// FFI for rustdesk core's main entry.
 /// Return true if the app should continue running with UI(possibly Flutter), false if the app should exit.
+/// On macOS, command-only paths exit here because the Swift caller ignores
+/// the return value; update failures must therefore use a non-zero exit status.
 #[cfg(not(windows))]
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main() -> bool {
@@ -116,11 +123,18 @@ pub extern "C" fn rustdesk_core_main() -> bool {
         }
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if crate::core_main::core_main().is_some() {
-        return true;
-    } else {
-        #[cfg(target_os = "macos")]
-        std::process::exit(0);
+    match crate::core_main::core_main() {
+        Some(crate::core_main::CoreMainAction::StartUi(_)) => return true,
+        Some(crate::core_main::CoreMainAction::ExitFailure(err)) => {
+            eprintln!("Command failed: {err}");
+            log::error!("Command failed: {err}");
+            #[cfg(target_os = "macos")]
+            std::process::exit(CORE_MAIN_EXIT_FAILURE);
+        }
+        None => {
+            #[cfg(target_os = "macos")]
+            std::process::exit(CORE_MAIN_EXIT_SUCCESS);
+        }
     }
     #[cfg(not(target_os = "macos"))]
     false
@@ -138,8 +152,14 @@ pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_c
     unsafe { std::ptr::write(args_len, 0) };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        if let Some(args) = crate::core_main::core_main() {
-            return rust_args_to_c_args(args, args_len);
+        match crate::core_main::core_main() {
+            Some(crate::core_main::CoreMainAction::StartUi(args)) => {
+                return rust_args_to_c_args(args, args_len);
+            }
+            Some(crate::core_main::CoreMainAction::ExitFailure(err)) => {
+                log::error!("Command failed: {err}");
+            }
+            None => {}
         }
         return std::ptr::null_mut() as _;
     }
@@ -973,6 +993,19 @@ impl InvokeUiSession for FlutterHandler {
     fn on_connected(&self, _conn_type: ConnType) {}
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
+        if msgtype == "custom-error-trusted-device" {
+            const ERROR_DURATION_MS: u32 = 10_000;
+            self.push_event(
+                "toast",
+                &[
+                    ("type", json!("error")),
+                    ("text", json!(text)),
+                    ("dur_msec", json!(ERROR_DURATION_MS)),
+                ],
+                &[],
+            );
+            return;
+        }
         let has_retry = if retry { "true" } else { "" };
         self.push_event(
             "msgbox",
@@ -1283,6 +1316,7 @@ pub fn session_add(
     password: String,
     is_shared_password: bool,
     conn_token: Option<String>,
+    login_method: &str,
 ) -> ResultType<FlutterSession> {
     let conn_type = if is_file_transfer {
         ConnType::FILE_TRANSFER
@@ -1343,6 +1377,7 @@ pub fn session_add(
         get_adapter_luid(),
         shared_password,
         conn_token,
+        login_method,
     );
 
     let session = Arc::new(session.clone());
@@ -1651,8 +1686,10 @@ pub fn get_cur_peer_id() -> String {
 }
 
 pub fn set_cur_session_id(session_id: SessionID) {
-    if get_cur_session_id() != session_id {
-        *CUR_SESSION_ID.write().unwrap() = session_id;
+    let mut current = CUR_SESSION_ID.write().unwrap();
+    if *current != session_id {
+        crate::keyboard::shortcuts::transfer_released_modifiers(&current, &session_id);
+        *current = session_id;
     }
 }
 

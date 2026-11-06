@@ -5,7 +5,7 @@ use winapi::{
     shared::{
         minwindef::{BOOL, DWORD, FALSE, LPBYTE, LPDWORD},
         ntdef::HANDLE,
-        winerror::ERROR_INVALID_PRINTER_NAME,
+        winerror::{ERROR_INSUFFICIENT_BUFFER, ERROR_INVALID_PRINTER_NAME},
     },
     um::winspool::{
         AddPrinterW, ClosePrinter, DeletePrinter, EnumPrintersW, OpenPrinterW, SetPrinterW,
@@ -42,20 +42,49 @@ fn enum_local_printer(
 
 #[inline]
 pub fn is_printer_added(name: &PCWSTR) -> ResultType<bool> {
-    let r = common_enum(
-        "EnumPrintersW",
-        enum_local_printer,
-        1,
-        |info: &PRINTER_INFO_1W| {
-            if is_name_equal(name, info.pName) {
-                Some(true)
-            } else {
-                None
-            }
-        },
-        || None,
-    )?;
-    Ok(r.unwrap_or(false))
+    const PRINTER_INFO_LEVEL: DWORD = 1;
+    let mut needed = 0;
+    let mut returned = 0;
+    if enum_local_printer(
+        PRINTER_INFO_LEVEL,
+        null_mut(),
+        0,
+        &mut needed,
+        &mut returned,
+    ) == FALSE
+    {
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() != Some(ERROR_INSUFFICIENT_BUFFER as i32) || needed == 0 {
+            bail!("Failed to query EnumPrintersW buffer size: {error}");
+        }
+    }
+    if needed == 0 {
+        return Ok(false);
+    }
+
+    let mut buffer = vec![0u8; needed as usize];
+    if enum_local_printer(
+        PRINTER_INFO_LEVEL,
+        buffer.as_mut_ptr(),
+        needed,
+        &mut needed,
+        &mut returned,
+    ) == FALSE
+    {
+        bail!(
+            "Failed to call EnumPrintersW, error: {}",
+            io::Error::last_os_error()
+        );
+    }
+
+    let printers = buffer.as_ptr() as *const PRINTER_INFO_1W;
+    for index in 0..returned {
+        let printer = unsafe { &*printers.add(index as usize) };
+        if is_name_equal(name, printer.pName) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 // Only return the first matched printer

@@ -29,6 +29,10 @@ pub mod ipc;
     feature = "flutter"
 )))]
 pub mod ui;
+pub(crate) mod update_metadata;
+pub(crate) mod update_hash;
+#[cfg(target_os = "macos")]
+mod manual_update;
 mod version;
 pub use version::*;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
@@ -39,6 +43,7 @@ pub mod flutter;
 pub mod flutter_ffi;
 use common::*;
 mod auth_2fa;
+mod trusted_devices;
 #[cfg(not(target_os = "ios"))]
 mod clipboard;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

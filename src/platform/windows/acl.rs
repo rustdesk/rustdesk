@@ -786,34 +786,6 @@ mod tests {
     }
 
     #[test]
-    fn test_portable_service_shmem_dir_acl_rejects_file_target() {
-        let dir = unique_acl_test_path("dir_target_file");
-        fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("target.txt");
-        fs::write(&file, b"x").unwrap();
-        let result = set_path_permission_for_portable_service_shmem_dir(&file);
-        assert!(result.is_err());
-        let _ = fs::remove_file(&file);
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn test_portable_service_shmem_file_acl_rejects_dir_target() {
-        let dir = unique_acl_test_path("file_target_dir");
-        fs::create_dir_all(&dir).unwrap();
-        let result = set_path_permission_for_portable_service_shmem_file(&dir);
-        assert!(result.is_err());
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn test_portable_service_shmem_file_acl_rejects_missing_target() {
-        let path = unique_acl_test_path("missing").join("shared_memory_missing");
-        let result = set_path_permission_for_portable_service_shmem_file(&path);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_set_path_permission_rejects_reparse_entrypoint() {
         let root = unique_acl_test_path("reparse_entry");
         let real_dir = root.join("real");

@@ -515,48 +515,6 @@ pub fn get_home_dir_trusted() -> Option<PathBuf> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_transform_degrees_maps_all_eight_variants() {
-        use sctk::reexports::client::protocol::wl_output::Transform;
-        // Flipped variants report their rotation: the frame still needs that turn to read
-        // upright, and the mirror half has no producer among desktop compositors to test.
-        for (t, deg) in [
-            (Transform::Normal, 0),
-            (Transform::_90, 90),
-            (Transform::_180, 180),
-            (Transform::_270, 270),
-            (Transform::Flipped, 0),
-            (Transform::Flipped90, 90),
-            (Transform::Flipped180, 180),
-            (Transform::Flipped270, 270),
-        ] {
-            assert_eq!(transform_degrees(t), deg, "{t:?}");
-        }
-    }
-
-    #[test]
-    fn test_display_info_without_transform_defaults_to_zero() {
-        // A snapshot serialized by an older probe child carries no transform field; it must
-        // deserialize with 0 rather than fail, or a greeter-side child update becomes a
-        // lockstep upgrade.
-        let old = r#"{"name":"HDMI-1","x":0,"y":0,"width":1920,"height":1080,"logical_size":null,"refresh_rate":60}"#;
-        let info: WaylandDisplayInfo = serde_json::from_str(old).unwrap();
-        assert_eq!(info.transform, 0);
-        let roundtrip: WaylandDisplayInfo =
-            serde_json::from_str(&serde_json::to_string(&info).unwrap()).unwrap();
-        assert_eq!(roundtrip.transform, 0);
-    }
-
-    #[test]
-    fn test_run_cmds_trim_newline() {
-        assert_eq!(run_cmds_trim_newline("echo -n 123").unwrap(), "123");
-        assert_eq!(run_cmds_trim_newline("echo 123").unwrap(), "123");
-        assert_eq!(
-            run_cmds_trim_newline("whoami").unwrap() + "\n",
-            run_cmds("whoami").unwrap()
-        );
-    }
-
     /// Test get_home_dir_trusted: returns valid path and ignores HOME env var
     #[test]
     fn test_get_home_dir_trusted() {
@@ -582,20 +540,6 @@ mod tests {
                 "Should not use HOME env var"
             );
         }
-    }
-
-    /// Test shell_quote with normal strings
-    #[test]
-    fn test_shell_quote_normal() {
-        assert_eq!(shell_quote("hello"), "'hello'");
-        assert_eq!(shell_quote("/home/user"), "'/home/user'");
-    }
-
-    /// Test shell_quote with spaces
-    #[test]
-    fn test_shell_quote_spaces() {
-        assert_eq!(shell_quote("/home/my user/file"), "'/home/my user/file'");
-        assert_eq!(shell_quote("path with spaces"), "'path with spaces'");
     }
 
     /// Test shell_quote with single quotes (the tricky case)

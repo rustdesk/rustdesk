@@ -17,6 +17,7 @@ import '../../common/widgets/toolbar.dart';
 import '../../models/model.dart';
 import '../../models/input_model.dart';
 import '../../models/platform_model.dart';
+import '../../models/shortcut_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
@@ -40,6 +41,7 @@ class RemotePage extends StatefulWidget {
     this.sessionId,
     this.tabWindowId,
     this.password,
+    this.loginMethod = '',
     this.display,
     this.displays,
     this.tabController,
@@ -56,6 +58,7 @@ class RemotePage extends StatefulWidget {
   final int? display;
   final List<int>? displays;
   final String? password;
+  final String loginMethod;
   final ToolbarState toolbarState;
   final String? switchUuid;
   final bool? forceRelay;
@@ -162,11 +165,24 @@ class _RemotePageState extends State<RemotePage>
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);
       _ffi.recordingModel
           .updateStatus(bind.sessionGetIsRecording(sessionId: _ffi.sessionId));
+      // Seed shortcut action callbacks once the session is ready, so that
+      // global keyboard shortcuts work even if the user never opens the
+      // toolbar menu. The returned list is intentionally discarded — the
+      // side effect of registering callbacks (inside toolbarControls) is
+      // what we want here.
+      if (mounted) {
+        toolbarControls(context, widget.id, _ffi);
+        registerSessionShortcutActions(_ffi,
+            tabController: widget.tabController,
+            toolbarState: widget.toolbarState);
+        registerToolbarShortcuts(context, widget.id, _ffi);
+      }
     });
     _ffi.canvasModel.initializeEdgeScrollFallback(this);
     _ffi.start(
       widget.id,
       password: widget.password,
+      loginMethod: widget.loginMethod,
       isSharedPassword: widget.isSharedPassword,
       switchUuid: widget.switchUuid,
       forceRelay: widget.forceRelay,

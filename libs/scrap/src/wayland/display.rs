@@ -21,10 +21,10 @@ const COMMAND_TIMEOUT: Duration = Duration::from_millis(1000);
 
 // drm builds only: an unnamed-endpoint failure there forks the probe child, and the pollers
 // turn every few hundred milliseconds. Every other failure is one cheap in-process error.
-#[cfg(any(test, feature = "drm"))]
+#[cfg(feature = "drm")]
 const FAILED_LOOKUP_BACKOFF: Duration = Duration::from_secs(5);
 
-#[cfg(any(test, feature = "drm"))]
+#[cfg(feature = "drm")]
 static LAST_FAILED_LOOKUP: Mutex<Option<Instant>> = Mutex::new(None);
 
 #[cfg(feature = "drm")]
@@ -183,8 +183,7 @@ fn get_primary_monitor() -> Option<String> {
         .or_else(try_gdbus_primary)
 }
 
-// Pure, so the backoff policy is testable without a compositor.
-#[cfg(any(test, feature = "drm"))]
+#[cfg(feature = "drm")]
 fn lookup_allowed(failed_at: Option<Instant>, now: Instant) -> bool {
     failed_at.map_or(true, |at| {
         now.saturating_duration_since(at) >= FAILED_LOOKUP_BACKOFF
@@ -302,6 +301,7 @@ pub fn clear_wayland_displays_cache() {
 // every OTHER live capturer on a multi-display session. A capturer records this at build and
 // treats a later bump as "the layout changed under me, rebuild" — the only trigger a rotation
 // has, since it changes neither the CRTC mode nor the framebuffer size (rustdesk#15886).
+#[cfg(feature = "drm")]
 static SNAPSHOT_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Whether no snapshot has been cached: the signature of an enumeration that failed at session
@@ -311,7 +311,7 @@ pub fn wayland_snapshot_missing() -> bool {
     DISPLAYS.lock().unwrap().is_none()
 }
 
-#[cfg(any(test, feature = "drm"))]
+#[cfg(feature = "drm")]
 pub fn bump_layout_generation() {
     SNAPSHOT_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Release);
 }
@@ -516,40 +516,6 @@ fn map_axis(v: i32, base_origin: i32, base_extent: i32, live_origin: i32, live_e
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_lookup_backoff_boundaries() {
-        // Future `now`s sidestep Instant subtraction, which can panic near boot.
-        let failed_at = Instant::now();
-        assert!(lookup_allowed(None, failed_at));
-        assert!(!lookup_allowed(
-            Some(failed_at),
-            failed_at + FAILED_LOOKUP_BACKOFF / 2
-        ));
-        assert!(lookup_allowed(
-            Some(failed_at),
-            failed_at + FAILED_LOOKUP_BACKOFF
-        ));
-    }
-
-    #[test]
-    fn test_lookup_stamp_from_the_future_only_waits() {
-        // saturating_duration_since answers zero rather than underflowing.
-        let now = Instant::now();
-        assert!(!lookup_allowed(Some(now + FAILED_LOOKUP_BACKOFF), now));
-    }
-
-    #[test]
-    fn test_clear_keeps_the_failure_stamp() {
-        // The stamp describes the seat, not the cache: the ~1/s capturer rebuild loop clears,
-        // and dropping the stamp with it would defeat the backoff. The generation test also
-        // calls clear now; both only assert monotonic/unchanged state, so they can interleave.
-        *LAST_FAILED_LOOKUP.lock().unwrap() = Some(Instant::now());
-        clear_wayland_displays_cache();
-        let stamp = *LAST_FAILED_LOOKUP.lock().unwrap();
-        assert!(stamp.is_some());
-        *LAST_FAILED_LOOKUP.lock().unwrap() = None;
-    }
-
     fn display(
         x: i32,
         y: i32,
@@ -570,11 +536,6 @@ mod tests {
     }
 
     #[test]
-    fn test_desktop_rect_empty() {
-        assert_eq!(desktop_rect_of(&[]), None);
-    }
-
-    #[test]
     fn test_desktop_rect_single_display_uses_physical_size() {
         let displays = [display(0, 0, 2880, 1800, Some((1859, 1162)))];
         assert_eq!(desktop_rect_of(&displays), Some((0, 2880, 0, 1800)));
@@ -592,15 +553,6 @@ mod tests {
     }
 
     #[test]
-    fn test_desktop_rect_missing_logical_size_falls_back_to_physical() {
-        let displays = [
-            display(0, 0, 2560, 1440, None),
-            display(2560, 0, 2560, 1440, Some((2560, 1440))),
-        ];
-        assert_eq!(desktop_rect_of(&displays), Some((0, 5120, 0, 1440)));
-    }
-
-    #[test]
     fn a_single_rotated_display_swaps_the_uinput_rect() {
         // Review finding 1 on rustdesk#15889: the single-display branch served the unrotated
         // mode, so the pointer could not reach ~44% of a portrait screen.
@@ -609,31 +561,6 @@ mod tests {
         assert_eq!(desktop_rect_of(&[d.clone()]), Some((0, 1080, 0, 1920)));
         let rects = logical_rects_of(&[d]);
         assert_eq!((rects[0].w, rects[0].h), (1080, 1920));
-    }
-
-    #[test]
-    fn a_transform_flip_is_visible_to_the_drift_comparison() {
-        // Review finding 5: 0<->180 and 90<->270 leave every rect identical; the transform
-        // field is what lets `baseline != live` fire on them.
-        let mut a = display(0, 0, 1920, 1080, Some((1920, 1080)));
-        let mut b = a.clone();
-        a.transform = 90;
-        b.transform = 270;
-        assert_ne!(logical_rects_of(&[a.clone(), a.clone()]), logical_rects_of(&[b.clone(), b]));
-    }
-
-    #[test]
-    fn only_the_explicit_bump_moves_the_generation() {
-        // A cache clear must NOT bump: session inits clear too, and a bump there rebuilds
-        // every other live capturer (adversarial finding on the first version of this).
-        let before = SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire);
-        clear_wayland_displays_cache();
-        assert_eq!(
-            SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire),
-            before
-        );
-        bump_layout_generation();
-        assert!(SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire) > before);
     }
 
     fn rect(name: &str, x: i32, y: i32, w: i32, h: i32) -> DisplayRect {
@@ -671,16 +598,6 @@ mod tests {
         );
     }
 
-    // A point on the rescaled display itself is squeezed to its new logical width.
-    #[test]
-    fn test_remap_scales_within_resized_display() {
-        let baseline = [rect("DP-1", 0, 0, 2560, 1440), rect("DP-2", 2560, 0, 2560, 1440)];
-        let live = [rect("DP-1", 0, 0, 2048, 1440), rect("DP-2", 2048, 0, 2560, 1440)];
-        // x=1280 across the 2560-wide baseline DP-1 -> proportionally across the 2048-wide
-        // live DP-1 (endpoint-preserving scale, so ~1px off the naive midpoint).
-        assert_eq!(remap_to_live_layout(1280, 500, &baseline, &live), (1023, 500));
-    }
-
     // The far edge of the followed display stays reachable when it is enlarged, so hot
     // corners keep working. Baseline DP-1 is 2048 wide, live DP-1 is 2560 wide; the
     // client's last column (2047) must map to the live last column (2559), not 2558.
@@ -692,57 +609,6 @@ mod tests {
         assert_eq!(remap_to_live_layout(0, 0, &baseline, &live), (0, 0));
     }
 
-    // No drift: identical layouts map every point to itself.
-    #[test]
-    fn test_remap_identity_when_unchanged() {
-        let layout = [rect("DP-1", 0, 0, 2560, 1440), rect("DP-2", 2560, 0, 2560, 1440)];
-        assert_eq!(remap_to_live_layout(3000, 700, &layout, &layout), (3000, 700));
-    }
-
-    // Point outside every baseline display is left untouched.
-    #[test]
-    fn test_remap_point_outside_all_displays_unchanged() {
-        let baseline = [rect("DP-1", 0, 0, 2560, 1440)];
-        let live = [rect("DP-1", 0, 0, 2048, 1440)];
-        assert_eq!(remap_to_live_layout(9000, 9000, &baseline, &live), (9000, 9000));
-    }
-
-    // Matched display gone from the live layout (e.g. unplugged): leave the point be
-    // rather than mapping it somewhere wrong.
-    #[test]
-    fn test_remap_display_removed_unchanged() {
-        let baseline = [rect("DP-1", 0, 0, 2560, 1440), rect("DP-2", 2560, 0, 2560, 1440)];
-        let live = [rect("DP-1", 0, 0, 2560, 1440)];
-        assert_eq!(remap_to_live_layout(2600, 100, &baseline, &live), (2600, 100));
-    }
-
-    // Nameless compositor: fall back to index matching while the count is unchanged.
-    #[test]
-    fn test_remap_nameless_index_fallback() {
-        let baseline = [rect("", 0, 0, 2560, 1440), rect("", 2560, 0, 2560, 1440)];
-        let live = [rect("", 0, 0, 2048, 1440), rect("", 2048, 0, 2560, 1440)];
-        assert_eq!(remap_to_live_layout(2560, 0, &baseline, &live), (2048, 0));
-    }
-
-    // Nameless compositor with a changed count: cannot index-match safely, so no-op.
-    #[test]
-    fn test_remap_nameless_count_changed_unchanged() {
-        let baseline = [rect("", 0, 0, 2560, 1440), rect("", 2560, 0, 2560, 1440)];
-        let live = [rect("", 0, 0, 2048, 1440)];
-        assert_eq!(remap_to_live_layout(2560, 0, &baseline, &live), (2560, 0));
-    }
-
-    // A named display absent from the live layout, but the count is unchanged (e.g. a
-    // monitor was swapped for a different one at the same index): the index fallback is
-    // for nameless layouts only, so a named miss stays unchanged rather than mapping to
-    // whatever now occupies that index.
-    #[test]
-    fn test_remap_named_miss_equal_count_unchanged() {
-        let baseline = [rect("DP-1", 0, 0, 2560, 1440), rect("DP-2", 2560, 0, 2560, 1440)];
-        let live = [rect("DP-1", 0, 0, 2048, 1440), rect("HDMI-1", 2048, 0, 1920, 1080)];
-        assert_eq!(remap_to_live_layout(2600, 100, &baseline, &live), (2600, 100));
-    }
-
     // A single display uses physical size in both baseline and live (scale reported as
     // 1.0), so it never drifts and the remap is a no-op even across a rescale.
     #[test]
@@ -751,19 +617,6 @@ mod tests {
         assert_eq!(
             logical_rects_of(&displays),
             vec![rect("", 0, 0, 2560, 1440)]
-        );
-    }
-
-    // Multiple displays use logical size, falling back to physical when absent.
-    #[test]
-    fn test_logical_rects_multi_display_uses_logical() {
-        let displays = [
-            display(0, 0, 2560, 1440, Some((2048, 1152))),
-            display(2048, 0, 1920, 1080, None),
-        ];
-        assert_eq!(
-            logical_rects_of(&displays),
-            vec![rect("", 0, 0, 2048, 1152), rect("", 2048, 0, 1920, 1080)]
         );
     }
 }

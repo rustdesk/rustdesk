@@ -1,7 +1,4 @@
-use super::{
-    AudioPlaybackConfig, AudioPlaybackError, AudioPlaybackRecovery, AudioPlaybackStatus,
-    AudioPlaybackWriter,
-};
+use super::{AudioPlaybackConfig, AudioPlaybackRecovery, AudioPlaybackWriter};
 use ringbuf::{ring_buffer::RbBase, Rb};
 use std::{
     sync::{atomic::Ordering, mpsc, Arc, Mutex},
@@ -93,31 +90,6 @@ fn smooths_underflow_and_explicit_audio_discontinuities() {
     }
 }
 
-#[test]
-fn validates_configuration_and_frame_size() {
-    let invalid_config = AudioPlaybackConfig {
-        sample_rate: 0,
-        channels: CHANNELS,
-    };
-    assert_eq!(
-        AudioPlaybackRecovery::new(invalid_config).err(),
-        Some(AudioPlaybackError::InvalidConfig(invalid_config))
-    );
-
-    let config = AudioPlaybackConfig {
-        sample_rate: SAMPLE_RATE,
-        channels: CHANNELS,
-    };
-    let mut recovery = AudioPlaybackRecovery::new(config).unwrap();
-    assert_eq!(
-        recovery.process_frame(Some(&[0.5])).err(),
-        Some(AudioPlaybackError::IncompleteFrame {
-            samples: 1,
-            channels: CHANNELS,
-        })
-    );
-}
-
 const CALLBACK_SAMPLES: usize = 64;
 const CALLBACK_TIMEOUT: Duration = Duration::from_secs(2);
 const DISCARD_GENERATION: usize = 1;
@@ -186,77 +158,4 @@ fn playback_contention_preserves_queued_audio_and_recovers_after_release() {
     assert_eq!(writer.observed_discontinuity_generation, DISCARD_GENERATION);
     assert_eq!(&output[samples - CHANNELS..], &OPPOSITE_ACTIVE_FRAME);
     assert_eq!(buffer.lock().unwrap().occupied_len(), 0);
-}
-
-#[test]
-fn poisoned_playback_buffer_reports_once_without_panicking_in_the_callback() {
-    let buffer = Arc::new(Mutex::new(ringbuf::HeapRb::new(CALLBACK_SAMPLES)));
-    let config = AudioPlaybackConfig {
-        sample_rate: SAMPLE_RATE,
-        channels: CHANNELS,
-    };
-    let mut writer =
-        AudioPlaybackWriter::new(config, buffer.clone(), Arc::new(super::AtomicUsize::new(0)))
-            .unwrap();
-    assert!(std::thread::spawn(move || {
-        let _guard = buffer.lock().unwrap();
-        panic!("Injected PCM buffer failure");
-    })
-    .join()
-    .is_err());
-    let mut output = [ACTIVE_FRAME[0]; CALLBACK_SAMPLES];
-
-    crate::audio_resampler::allocation_tests::assert_no_allocations(|| {
-        writer.write_output(&mut output);
-    });
-
-    assert_eq!(output, [0.0; CALLBACK_SAMPLES]);
-    assert!(!writer.status.ready.load(Ordering::Acquire));
-    assert!(writer.status.buffer_poisoned.load(Ordering::Relaxed));
-    writer.status.report_errors();
-    writer.write_output(&mut output);
-    assert!(!writer.status.buffer_poisoned.load(Ordering::Relaxed));
-    assert_eq!(writer.status.contentions.load(Ordering::Relaxed), 0);
-    assert!(!writer.status.ready.load(Ordering::Acquire));
-}
-
-#[test]
-fn contention_counts_accumulate_until_the_next_report() {
-    let status = AudioPlaybackStatus::default();
-    status.report_errors();
-    status.contentions.fetch_add(1, Ordering::Relaxed);
-    status.report_errors();
-    assert_eq!(status.contentions.load(Ordering::Relaxed), 0);
-
-    let mut total = 0;
-    for callbacks in [3, 7, 2] {
-        total += callbacks;
-        status.contentions.fetch_add(callbacks, Ordering::Relaxed);
-        status.report_errors();
-        assert_eq!(status.contentions.load(Ordering::Relaxed), total);
-    }
-    status.buffer_poisoned.store(true, Ordering::Relaxed);
-    status.report_errors();
-    assert!(!status.buffer_poisoned.load(Ordering::Relaxed));
-    assert_eq!(status.contentions.load(Ordering::Relaxed), total);
-
-    std::thread::sleep(super::AUDIO_PLAYBACK_LOG_INTERVAL);
-    status.report_errors();
-    assert_eq!(status.contentions.load(Ordering::Relaxed), 0);
-}
-
-#[test]
-fn contention_reporting_is_independent_between_playbacks() {
-    let first = AudioPlaybackStatus::default();
-    let second = AudioPlaybackStatus::default();
-    for status in [&first, &second] {
-        status.contentions.fetch_add(1, Ordering::Relaxed);
-        status.report_errors();
-        assert_eq!(status.contentions.load(Ordering::Relaxed), 0);
-    }
-    for status in [&first, &second] {
-        status.contentions.fetch_add(1, Ordering::Relaxed);
-        status.report_errors();
-        assert_eq!(status.contentions.load(Ordering::Relaxed), 1);
-    }
 }

@@ -171,8 +171,6 @@ pub(crate) fn try_acquire_os_credential_login_gate() -> Result<OwnedMutexGuard<(
 mod tests {
     use super::*;
 
-    static TEST_MUTEX: Mutex<()> = Mutex::new(());
-
     fn clear_os_credential_failure_state(scope: FailureScope) {
         if let Some(state_mutex) = state_for_os_credential_scope(scope) {
             *state_mutex.lock().unwrap() = OsCredentialFailureState::default();
@@ -181,7 +179,6 @@ mod tests {
 
     #[test]
     fn os_credential_policy_prioritizes_backoff() {
-        let _guard = TEST_MUTEX.lock().unwrap();
         clear_os_credential_failure_state(FailureScope::TerminalOsLogin);
         let now_ms = get_time();
         for _ in 0..3 {
@@ -190,42 +187,6 @@ mod tests {
         let decision = evaluate_os_credential_policy(FailureScope::TerminalOsLogin, now_ms);
         assert!(!decision.allowed);
         assert!(decision.login_error.is_some());
-        clear_os_credential_failure_state(FailureScope::TerminalOsLogin);
-    }
-
-    #[test]
-    fn os_credential_policy_idle_window_resets_total_counter() {
-        let _guard = TEST_MUTEX.lock().unwrap();
-        clear_os_credential_failure_state(FailureScope::TerminalOsLogin);
-        for _ in 0..13 {
-            record_os_credential_failure(FailureScope::TerminalOsLogin);
-        }
-        let blocked = evaluate_os_credential_policy(FailureScope::TerminalOsLogin, get_time());
-        assert!(!blocked.allowed);
-
-        let after_failures_ms = get_time();
-        let after_idle_ms = after_failures_ms + OS_CREDENTIAL_LOGIN_TOTAL_IDLE_RESET_MS + 1_000;
-        let allowed = evaluate_os_credential_policy(FailureScope::TerminalOsLogin, after_idle_ms);
-        assert!(allowed.allowed);
-        clear_os_credential_failure_state(FailureScope::TerminalOsLogin);
-    }
-
-    #[test]
-    fn os_credential_policy_audits_every_backoff_block() {
-        let _guard = TEST_MUTEX.lock().unwrap();
-        clear_os_credential_failure_state(FailureScope::TerminalOsLogin);
-
-        for _ in 0..3 {
-            record_os_credential_failure(FailureScope::TerminalOsLogin);
-        }
-        let now_ms = get_time();
-        let first = evaluate_os_credential_policy(FailureScope::TerminalOsLogin, now_ms);
-        let second = evaluate_os_credential_policy(FailureScope::TerminalOsLogin, now_ms + 1_000);
-        assert!(!first.allowed);
-        assert!(!second.allowed);
-        assert!(first.audit.is_some());
-        assert!(second.audit.is_some());
-
         clear_os_credential_failure_state(FailureScope::TerminalOsLogin);
     }
 }

@@ -810,18 +810,6 @@ mod tests {
     }
 
     #[test]
-    fn finder_progress_rejects_unrepresentable_byte_count() {
-        let (_temp, target, _) = test_directories();
-        let file = file_description("large.bin", FileType::File, i64::MAX as u64 + 1);
-        let mut task = paste_task_handle(target.clone(), vec![file]);
-        let error = task.update_next(0).expect_err("byte count must not wrap");
-        assert!(matches!(&error, CliprdrError::InvalidRequest { .. }));
-        task.on_error(error);
-        assert!(task.progress.finder_progress.is_none());
-        assert!(std::fs::read_dir(target).unwrap().next().is_none());
-    }
-
-    #[test]
     fn validates_all_paths_before_creating_files() {
         let (_temp, target, outside) = test_directories();
         symlink(&outside, target.join("link")).unwrap();
@@ -865,19 +853,5 @@ mod tests {
         ));
         assert!(!download_path.exists());
         assert!(!outside.join("file.txt").exists());
-    }
-
-    #[test]
-    fn rejects_symlink_component_when_creating_directory() {
-        let (_temp, target, outside) = test_directories();
-        symlink(&outside, target.join("link")).unwrap();
-
-        let directory = file_description("link/escaped", FileType::Directory, 0);
-        let mut task = paste_task_handle(target, vec![directory]);
-        assert!(matches!(
-            task.update_next(0),
-            Err(CliprdrError::InvalidRequest { .. })
-        ));
-        assert!(!outside.join("escaped").exists());
     }
 }

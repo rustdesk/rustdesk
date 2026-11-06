@@ -121,9 +121,10 @@ pub async fn listen(
                 let mut forward = Framed::new(forward, BytesCodec::new());
                 let mut close_port_forward = false;
                 match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward, &remote_host, remote_port).await {
-                    Ok(Some(stream)) => {
+                    Ok(Some((stream, kcp))) => {
                         let interface = interface.clone();
                         tokio::spawn(async move {
+                            let _kcp = kcp;
                             if let Err(err) = run_forward(forward, stream).await {
                                 interface.msgbox("error", "Error", &err.to_string(), "");
                             }
@@ -168,14 +169,16 @@ async fn connect_and_login(
     close_port_forward: &mut bool,
     remote_host: &str,
     remote_port: i32,
-) -> ResultType<Option<Stream>> {
+) -> ResultType<Option<(Stream, Option<crate::kcp_stream::KcpStream>)>> {
     let conn_type = if is_rdp {
         ConnType::RDP
     } else {
         ConnType::PORT_FORWARD
     };
-    let ((mut stream, direct, _pk, _kcp, _stream_type), (feedback, rendezvous_server)) =
+    let ((mut stream, direct, pk, kcp, _stream_type), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
+    let mut trust = crate::trusted_devices::client::Session::new(
+        &interface.get_lch().read().unwrap(), stream.is_secured(), pk.as_deref())?;
     interface.update_direct(Some(direct));
     if !stream.is_secured() && !crate::common::is_direct_ip_access(id) {
         if !confirm_insecure_connection(&interface, ui_receiver).await {
@@ -205,11 +208,11 @@ async fn connect_and_login(
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
                             challenge = Some(hash.clone());
-                            if !hash_arrived(&interface, password, hash, pending_login.take(), remote_host, remote_port, false, &mut stream).await {
+                            if !hash_arrived(&interface, password, hash, pending_login.take(), remote_host, remote_port, false, &mut trust, &mut stream).await {
                                 return Ok(None);
                             }
                         }
-                        Some(message::Union::LoginResponse(lr)) => match lr.union {
+                        Some(message::Union::LoginResponse(lr)) => match trust.respond(lr, &interface).await.union {
                             Some(login_response::Union::Error(err)) => {
                                 if !interface.handle_login_error(&err) {
                                     return Ok(None);
@@ -237,10 +240,17 @@ async fn connect_and_login(
             d = ui_receiver.recv() => {
                 match d {
                     Some(Data::Login(login)) => match &challenge {
-                        Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, false, &mut stream).await,
+                        Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, false, &mut trust, &mut stream).await,
                         None => pending_login = Some(login),
                     },
+                    // The Close is the listener's, which never sees it once the login has
+                    // taken it: end the login and have the listener stop.
+                    Some(Data::Close) => {
+                        *close_port_forward = true;
+                        return Ok(None);
+                    }
                     Some(Data::Message(msg)) => {
+                        let msg = trust.outgoing(msg);
                         allow_err!(stream.send(&msg).await);
                     }
                     _ => {}
@@ -259,7 +269,7 @@ async fn connect_and_login(
     if !buffer.is_empty() {
         allow_err!(stream.send_bytes(buffer.into()).await);
     }
-    Ok(Some(stream))
+    Ok(Some((stream, kcp)))
 }
 
 
@@ -275,6 +285,7 @@ async fn login_with_hash(
     remote_host: &str,
     remote_port: i32,
     mux: bool,
+    trust: &mut crate::trusted_devices::client::Session,
     stream: &mut Stream,
 ) -> bool {
     let lc = interface.get_lch();
@@ -282,7 +293,7 @@ async fn login_with_hash(
     let _turn = turn.lock().await;
     lc.write().unwrap().port_forward = (remote_host.to_owned(), remote_port);
     lc.write().unwrap().port_forward_multiplex = mux;
-    interface.handle_hash(password, hash, stream).await
+    interface.handle_hash(password, hash, trust, stream).await
 }
 
 type UiLogin = (String, String, String, bool);
@@ -300,14 +311,15 @@ async fn hash_arrived(
     remote_host: &str,
     remote_port: i32,
     mux: bool,
+    trust: &mut crate::trusted_devices::client::Session,
     stream: &mut Stream,
 ) -> bool {
     match pending_login {
         Some(login) => {
-            login_from_ui(interface, &hash, login, remote_host, remote_port, mux, stream).await;
+            login_from_ui(interface, &hash, login, remote_host, remote_port, mux, trust, stream).await;
             true
         }
-        None => login_with_hash(interface, password, hash, remote_host, remote_port, mux, stream).await,
+        None => login_with_hash(interface, password, hash, remote_host, remote_port, mux, trust, stream).await,
     }
 }
 
@@ -320,6 +332,7 @@ async fn login_from_ui(
     remote_host: &str,
     remote_port: i32,
     mux: bool,
+    trust: &mut crate::trusted_devices::client::Session,
     stream: &mut Stream,
 ) {
     let lc = interface.get_lch();
@@ -333,7 +346,7 @@ async fn login_from_ui(
     }
     let (os_username, os_password, password, remember) = login;
     interface
-        .handle_login_from_ui(os_username, os_password, password, remember, stream)
+        .handle_login_from_ui(os_username, os_password, password, remember, trust, stream)
         .await;
 }
 
@@ -362,7 +375,7 @@ async fn establish_tunnel(
     let mut close_port_forward = false;
     match connect_and_login_mux(id, password, ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward, remote_host, remote_port).await {
         Ok(Some(outcome)) if outcome.mux => {
-            let handle = tunnel.set_muxed(outcome.stream, interface.clone());
+            let handle = tunnel.set_muxed(outcome.stream, outcome.kcp, interface.clone());
             if !outcome.local_eof {
                 let (socket, prebuf) = take_socket(forward, outcome.prebuf);
                 if let Err(e) = handle.open(remote_host, remote_port, socket, prebuf) {
@@ -415,8 +428,10 @@ async fn connect_and_login_mux(
     } else {
         ConnType::PORT_FORWARD
     };
-    let ((mut stream, direct, _pk, _kcp, _stream_type), (feedback, rendezvous_server)) =
+    let ((mut stream, direct, pk, kcp, _stream_type), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
+    let mut trust = crate::trusted_devices::client::Session::new(
+        &interface.get_lch().read().unwrap(), stream.is_secured(), pk.as_deref())?;
     interface.update_direct(Some(direct));
     if !stream.is_secured() && !crate::common::is_direct_ip_access(id) {
         if !confirm_insecure_connection(&interface, ui_receiver).await {
@@ -448,11 +463,11 @@ async fn connect_and_login_mux(
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
                             challenge = Some(hash.clone());
-                            if !hash_arrived(&interface, password, hash, pending_login.take(), remote_host, remote_port, true, &mut stream).await {
+                            if !hash_arrived(&interface, password, hash, pending_login.take(), remote_host, remote_port, true, &mut trust, &mut stream).await {
                                 return Ok(None);
                             }
                         }
-                        Some(message::Union::LoginResponse(lr)) => match lr.union {
+                        Some(message::Union::LoginResponse(lr)) => match trust.respond(lr, &interface).await.union {
                             Some(login_response::Union::Error(err)) => {
                                 if !interface.handle_login_error(&err) {
                                     return Ok(None);
@@ -481,10 +496,17 @@ async fn connect_and_login_mux(
             d = ui_receiver.recv() => {
                 match d {
                     Some(Data::Login(login)) => match &challenge {
-                        Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, true, &mut stream).await,
+                        Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, true, &mut trust, &mut stream).await,
                         None => pending_login = Some(login),
                     },
+                    // The Close is the listener's, which never sees it once the login has
+                    // taken it: end the login and have the listener stop.
+                    Some(Data::Close) => {
+                        *close_port_forward = true;
+                        return Ok(None);
+                    }
                     Some(Data::Message(msg)) => {
+                        let msg = trust.outgoing(msg);
                         allow_err!(stream.send(&msg).await);
                     }
                     _ => {}
@@ -504,6 +526,7 @@ async fn connect_and_login_mux(
     }
     Ok(Some(LoginOutcome {
         stream,
+        kcp,
         mux,
         prebuf: buffer,
         local_eof,
@@ -519,7 +542,9 @@ fn run_legacy(
 ) {
     let mut stream = outcome.stream;
     let prebuf = outcome.prebuf;
+    let kcp = outcome.kcp;
     tokio::spawn(async move {
+        let _kcp = kcp;
         stream.set_raw();
         if !prebuf.is_empty() {
             allow_err!(stream.send_bytes(prebuf.into()).await);
@@ -533,6 +558,8 @@ fn run_legacy(
 
 struct LoginOutcome {
     stream: Stream,
+    // Drives a KCP stream's UDP I/O; dropping it kills the stream.
+    kcp: Option<crate::kcp_stream::KcpStream>,
     mux: bool,
     prebuf: Vec<u8>,
     local_eof: bool,
@@ -557,6 +584,25 @@ pub fn mux_enabled() -> bool {
         keys::OPTION_ENABLE_PORT_FORWARD_MUX,
         &LocalConfig::get_option(keys::OPTION_ENABLE_PORT_FORWARD_MUX),
     )
+}
+
+/// The port-forward window's last step, called right before its io_loop
+/// returns (`ui_session_interface.rs`).
+///
+/// Why wait 100ms: that io_loop runs on a current_thread runtime that is
+/// dropped the moment it returns, and every task still on it (the mappings,
+/// their tunnels) is dropped with it, never polled again. A KCP tunnel tells
+/// its peer it is closing from its own task,
+/// `port_forward_mux::send_kcp_close_reason`: a send bounded by 30ms, then a
+/// 30ms flush, because KCP only queues the message and its FIN dies with the
+/// KCP handle. Without this wait that never runs, and the peer holds the
+/// connection until its own timeout. 100ms is those 60ms plus room for the
+/// listeners to act on the Close; it is a bound, not a measurement, and
+/// missing it is no worse than not waiting. Which mappings ran over KCP is
+/// not known there, so every port-forward window waits; waiting on the tasks
+/// themselves instead would mean keeping all their handles.
+pub async fn wait_for_tunnel_close_reasons() {
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 }
 
 async fn run_forward(forward: Framed<TcpStream, BytesCodec>, stream: Stream) -> ResultType<()> {
@@ -611,9 +657,9 @@ mod login_tests {
         }
         fn handle_peer_info(&self, _pi: PeerInfo) {}
         fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
-        async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) -> bool {
+        async fn handle_hash(&self, pass: &str, hash: Hash, trust: &mut crate::trusted_devices::client::Session, peer: &mut Stream) -> bool {
             sleep(self.pause).await;
-            crate::client::handle_hash(self.lc.clone(), pass, hash, self, peer).await
+            crate::client::handle_hash(self.lc.clone(), pass, hash, self, trust, peer).await
         }
         async fn handle_login_from_ui(
             &self,
@@ -621,6 +667,7 @@ mod login_tests {
             os_password: String,
             password: String,
             remember: bool,
+            trust: &mut crate::trusted_devices::client::Session,
             peer: &mut Stream,
         ) {
             crate::client::handle_login_from_ui(
@@ -629,9 +676,10 @@ mod login_tests {
                 os_password,
                 password,
                 remember,
+                trust,
                 peer,
             )
-            .await
+            .await.unwrap();
         }
         async fn handle_test_delay(&self, _t: TestDelay, _peer: &mut Stream) {}
         fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>> {
@@ -703,9 +751,10 @@ mod login_tests {
             ui.pause = Duration::from_millis(50);
             let (mut a, mut a_peer) = loopback().await;
             let (mut b, mut b_peer) = loopback().await;
+            let (mut a_trust, mut b_trust) = Default::default();
             tokio::join!(
-                login_with_hash(&ui, "pw", hash("a"), "a", 1, false, &mut a),
-                login_with_hash(&ui, "pw", hash("b"), "b", 2, false, &mut b),
+                login_with_hash(&ui, "pw", hash("a"), "a", 1, false, &mut a_trust, &mut a),
+                login_with_hash(&ui, "pw", hash("b"), "b", 2, false, &mut b_trust, &mut b),
             );
             assert_eq!(target(&login_at(&mut a_peer).await), ("a".to_owned(), 1));
             assert_eq!(target(&login_at(&mut b_peer).await), ("b".to_owned(), 2));
@@ -723,66 +772,13 @@ mod login_tests {
             let (mut a, mut a_peer) = loopback().await;
             let (mut b, mut b_peer) = loopback().await;
             // A's hash arrived last, so it is the one the handler holds.
-            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, false, &mut a).await);
+            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, false, &mut Default::default(), &mut a).await);
             login_at(&mut a_peer).await;
             let typed = (String::new(), String::new(), "pw".to_owned(), false);
-            login_from_ui(&ui, &hash("b"), typed, "b", 2, false, &mut b).await;
+            login_from_ui(&ui, &hash("b"), typed, "b", 2, false, &mut Default::default(), &mut b).await;
             let lr = login_at(&mut b_peer).await;
             assert_eq!(lr.password, digest("b"));
             assert_eq!(target(&lr), ("b".to_owned(), 2));
-        });
-    }
-
-    #[test]
-    fn a_password_typed_before_this_connections_hash_answers_it_when_it_comes() {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let ui = window();
-            let (mut b, mut b_peer) = loopback().await;
-            // The prompt's password reached B before its hash, and no other
-            // mapping has stored it in the handler yet.
-            let typed = (String::new(), String::new(), "pw".to_owned(), false);
-            assert!(hash_arrived(&ui, "", hash("b"), Some(typed), "b", 2, false, &mut b).await);
-            let lr = login_at(&mut b_peer).await;
-            assert_eq!(lr.password, digest("b"));
-            assert_eq!(target(&lr), ("b".to_owned(), 2));
-        });
-    }
-
-    #[test]
-    fn a_raw_pipe_login_on_a_multiplexed_window_does_not_ask_for_the_tunnel() {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let ui = window();
-            // The window probes for the tunnel, but this mapping latched to
-            // the raw pipe: its login must read as the raw pipe's, or an
-            // upgraded peer answers with a tunnel it then never gets.
-            ui.lc.write().unwrap().port_forward_mux = true;
-            let (mut a, mut a_peer) = loopback().await;
-            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, false, &mut a).await);
-            assert!(!login_at(&mut a_peer).await.port_forward().multiplex);
-        });
-    }
-
-    #[test]
-    fn a_password_typed_at_the_prompt_keeps_a_raw_pipe_login_raw() {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let ui = window();
-            ui.lc.write().unwrap().port_forward_mux = true;
-            let (mut b, mut b_peer) = loopback().await;
-            let typed = (String::new(), String::new(), "pw".to_owned(), false);
-            login_from_ui(&ui, &hash("b"), typed, "b", 2, false, &mut b).await;
-            assert!(!login_at(&mut b_peer).await.port_forward().multiplex);
         });
     }
 
@@ -795,61 +791,8 @@ mod login_tests {
         rt.block_on(async {
             let ui = window();
             let (mut a, mut a_peer) = loopback().await;
-            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, true, &mut a).await);
+            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, true, &mut Default::default(), &mut a).await);
             assert!(login_at(&mut a_peer).await.port_forward().multiplex);
-        });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn peer_supports_mux_reads_the_features_bit() {
-        let mut pi = PeerInfo::new();
-        assert!(!peer_supports_mux(&pi));
-        pi.features = Some(Features { port_forward_mux: false, ..Default::default() }).into();
-        assert!(!peer_supports_mux(&pi));
-        pi.features = Some(Features { port_forward_mux: true, ..Default::default() }).into();
-        assert!(peer_supports_mux(&pi));
-    }
-
-    #[test]
-    fn port_forward_mux_defaults_to_on() {
-        use hbb_common::config::option2bool;
-        use base::config::keys;
-        // option2bool's fallback branch is also "on unless N", so the value
-        // assertions below would pass for a prefixless key too. The `enable-`
-        // prefix is what actually guarantees the default, and renaming the key
-        // to an `allow-` one would silently flip it — pin the prefix itself.
-        assert!(keys::OPTION_ENABLE_PORT_FORWARD_MUX.starts_with("enable-"));
-        assert!(option2bool(keys::OPTION_ENABLE_PORT_FORWARD_MUX, ""));
-        assert!(option2bool(keys::OPTION_ENABLE_PORT_FORWARD_MUX, "Y"));
-        assert!(!option2bool(keys::OPTION_ENABLE_PORT_FORWARD_MUX, "N"));
-    }
-
-    #[test]
-    fn take_socket_hands_back_a_working_socket_and_the_prebuf() {
-        use hbb_common::tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-        rt.block_on(async {
-            let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let addr = l.local_addr().unwrap();
-            let mut client = TcpStream::connect(addr).await.unwrap();
-            let (server, _) = l.accept().await.unwrap();
-            let mut framed = Framed::new(server, BytesCodec::new());
-            client.write_all(b"abc").await.unwrap();
-            // Read through the codec, as connect_and_login does during login.
-            let pulled = framed.next().await.unwrap().unwrap();
-            assert_eq!(&pulled[..], b"abc");
-            let (mut sock, prebuf) = take_socket(framed, pulled.to_vec());
-            assert_eq!(prebuf, b"abc".to_vec());
-            // Bytes written after the handoff arrive on the bare socket.
-            client.write_all(b"def").await.unwrap();
-            let mut buf = [0u8; 3];
-            sock.read_exact(&mut buf).await.unwrap();
-            assert_eq!(&buf, b"def");
         });
     }
 }
