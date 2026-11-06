@@ -303,6 +303,7 @@ const BLOCKED_CONFIG_OPTIONS: &[&str] = &[
     // Transport security.
     keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK,
     keys::OPTION_ALLOW_WEBSOCKET,
+    keys::OPTION_WEBSOCKET_PORT,
     // Authentication and credentials.
     "2fa",
     "bot",
@@ -540,6 +541,7 @@ mod strategy_tests {
                 "ice-servers",
                 "allow-insecure-tls-fallback",
                 "allow-websocket",
+                "websocket-port",
                 "2fa",
                 "bot",
                 "preset-address-book-password",
