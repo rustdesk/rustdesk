@@ -7211,14 +7211,14 @@ fn wildcard_match(pattern: &str, text: &str) -> bool {
     pi == p.len()
 }
 
-// The entries of the IP whitelist option. A space around an entry ("10.0.0.1, 10.0.0.2") is
-// ignored: `IpCidr` rejects " 10.0.0.2", so that address was blocked.
+// A space around an entry ("10.0.0.1, 10.0.0.2") is ignored: `IpCidr` rejects " 10.0.0.2", so
+// that address was blocked. Entries that are empty after the trim are dropped, so a
+// whitespace-only value turns the list off, as in `check_id_whitelist` and the dialogs.
 fn ip_whitelist_entries(option: &str) -> Vec<String> {
     option
-        .split(",")
+        .split(',')
+        .map(|x| x.trim().to_owned())
         .filter(|x| !x.is_empty())
-        .map(str::trim)
-        .map(|x| x.to_owned())
         .collect()
 }
 
@@ -7243,6 +7243,14 @@ mod test {
         assert!(entries
             .iter()
             .any(|x| IpCidr::from_str(x).map_or(false, |y| y.contains(ip))));
+    }
+
+    #[test]
+    fn test_ip_whitelist_entries_whitespace_only_is_off() {
+        for option in ["", ",", " ", " , "] {
+            assert!(ip_whitelist_entries(option).is_empty(), "{option:?}");
+        }
+        assert_eq!(ip_whitelist_entries("10.0.0.1, "), vec!["10.0.0.1"]);
     }
 
     #[test]
