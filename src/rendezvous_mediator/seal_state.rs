@@ -197,7 +197,8 @@ impl Drop for SealState {
 /// The datagram a registration goes out as. A hello can be replayed from any address, and a
 /// RegisterPk in one, its uuid and key unchanged, would move the route there; so a hello carries
 /// a RegisterPeer or nothing, and anything else waits for the session. A session from an empty
-/// hello is replaced at the next RegisterPeer by a signed hello, which ties it to this device.
+/// hello is replaced at the next RegisterPeer by a signed hello, which ties it to this device;
+/// pushes still come under it until the welcome.
 /// A RegisterPk with a key other than the one hellos are signed by means the key pair changed:
 /// `device` loads the new one, and is called for nothing else.
 pub(super) fn seal_message(
@@ -209,15 +210,17 @@ pub(super) fn seal_message(
     if !pk.is_empty() && !seal.signs_as(pk) {
         seal.set_device(device().filter(|sk| sk.0[32..] == pk[..]));
     }
-    if msg.has_register_peer() && seal.needs_signed_hello() {
-        seal.reset();
-    }
     let payload = if seal.has_session() || msg.has_register_peer() {
         msg.write_to_bytes()?
     } else {
         Vec::new()
     };
-    match seal.seal(&payload) {
+    let sealed = if msg.has_register_peer() && seal.needs_signed_hello() {
+        seal.hello(&payload)
+    } else {
+        seal.seal(&payload)
+    };
+    match sealed {
         Some(bytes) => Ok(bytes),
         None => bail!("failed to seal a datagram to the rendezvous server"),
     }
@@ -247,7 +250,7 @@ mod tests {
     use hbb_common::{
         rendezvous_proto::{RegisterPeer, RegisterPk},
         tokio,
-        udp_seal::{ServerKey, CAP_PUSHES_SEALED},
+        udp_seal::{Reply, ServerKey, CAP_PUSHES_SEALED},
     };
 
     // Each test names its own host: the sealed host is process-wide and tests run in parallel.
@@ -434,6 +437,25 @@ mod tests {
         assert!(udp_seal::is_hello(
             &seal_message(seal, &register_peer, || None).unwrap()
         ));
+    }
+
+    #[test]
+    fn a_signed_hello_keeps_the_session_it_replaces_until_welcomed() {
+        let (mut state, server) = state("re-hello");
+        welcomed(&mut state, &server, CAP_PUSHES_SEALED);
+        let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
+        let hello = seal_message(state.seal.as_mut().unwrap(), &register_peer, || None).unwrap();
+        assert!(udp_seal::is_hello(&hello));
+        let push = server.seal(&mut Reply::push(1), 0, b"", || 7).unwrap();
+        assert!(
+            state.open(BytesMut::from(&push[..])).is_some(),
+            "a push under the old session still opens"
+        );
+        let punch = Some(rendezvous_message::Union::PunchHole(Default::default()));
+        assert!(
+            !state.on_message(false, &punch),
+            "a plaintext push is still forged"
+        );
     }
 
     #[test]
