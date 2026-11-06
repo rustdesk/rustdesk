@@ -356,9 +356,6 @@ class _ConnectionPageState extends State<ConnectionPage>
               isTcpTunneling: isTcpTunneling),
           padding: EdgeInsets.symmetric(horizontal: kDesktopMenuPadding.left),
           dismissOnClicked: true,
-          dismissCallback: () {
-            if (Navigator.canPop(context)) Navigator.pop(context);
-          },
         );
 
     return MenuEntrySubMenu<String>(

@@ -655,10 +655,7 @@ abstract class BasePeerCard extends StatelessWidget {
           isTerminal: isTerminal,
           isTerminalRunAsAdmin: isTerminalRunAsAdmin,
           loginMethod: 'request-approval',
-        )
-          ..dismissCallback = () {
-            if (Navigator.canPop(context)) Navigator.pop(context);
-          };
+        );
 
     return MenuEntrySubMenu<String>(
       text: translate('Request approval'),

@@ -73,8 +73,7 @@ Future<void> openMenu(WidgetTester tester, List<String> actions,
                 padding: padding,
                 entries: [
                   for (final title in connectionTypes)
-                    entry(title, requestApproval: true)
-                      ..dismissCallback = () => Navigator.pop(context),
+                    entry(title, requestApproval: true),
                 ],
               ),
               if (includeRelay)
@@ -160,7 +159,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('approval closes over another parent item but stays open outside',
+  testWidgets('approval delays closing over parent items and cancels on leaving',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1;
@@ -189,9 +188,26 @@ void main() {
     expect(find.text('Terminal'), findsOneWidget);
     expect(find.text('Request approval'), findsOneWidget);
     expect(actions, isEmpty);
+    for (final destination in [
+      tester.getCenter(find.text('Terminal')),
+      trigger,
+      const Offset(2, 2),
+    ]) {
+      await mouse.moveTo(tester.getCenter(find.text('Rename')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Terminal'), findsOneWidget);
+      await mouse.moveTo(destination);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Terminal'), findsOneWidget);
+    }
     await mouse.moveTo(trigger);
     await tester.pumpAndSettle();
-    await mouse.moveTo(tester.getCenter(find.text('Connect').first));
+    final connect = tester.getCenter(find.text('Connect').first);
+    await mouse.moveTo(connect);
+    await tester.pump(const Duration(milliseconds: 399));
+    expect(find.text('Terminal'), findsOneWidget);
+    await mouse.moveTo(connect + const Offset(1, 0));
+    await tester.pump(const Duration(milliseconds: 1));
     await tester.pumpAndSettle();
     expect(find.text('Terminal'), findsNothing);
     expect(find.text('Request approval'), findsOneWidget);
@@ -251,7 +267,8 @@ void main() {
 
   testWidgets('approval trigger has one Tab stop and opens with Enter',
       (tester) async {
-    await openMenu(tester, []);
+    final actions = <String>[];
+    await openMenu(tester, actions);
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(2, 2));
     addTearDown(mouse.removePointer);
@@ -287,6 +304,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     expect(find.text('Terminal (Run as administrator)'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(actions, ['Connect:request-approval']);
+    expect(find.text('Request approval'), findsNothing);
+    await tester.tap(find.text('Open menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Request approval'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(actions, ['Connect:request-approval']);
+    expect(find.text('Request approval'), findsNothing);
   });
 
   testWidgets('tapping outside the approval submenu closes both menus',

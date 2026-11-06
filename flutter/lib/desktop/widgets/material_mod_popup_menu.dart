@@ -830,13 +830,68 @@ class _PopupMenuRouteLayout extends SingleChildLayoutDelegate {
   }
 }
 
+class PopupMenuOverlay<T> extends StatelessWidget {
+  const PopupMenuOverlay({
+    required this.anchor,
+    required this.items,
+    super.key,
+  });
+
+  final Rect anchor;
+  final List<PopupMenuEntry<T>> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final theme = PopupMenuTheme.of(context);
+    return MediaQuery.removePadding(
+      context: context,
+      removeTop: true,
+      removeBottom: true,
+      removeLeft: true,
+      removeRight: true,
+      child: LayoutBuilder(builder: (context, constraints) {
+        return CustomSingleChildLayout(
+          delegate: _PopupMenuRouteLayout(
+            RelativeRect.fromRect(anchor.shift(Offset(anchor.width, 0)),
+                Offset.zero & constraints.biggest),
+            const [],
+            null,
+            Directionality.of(context),
+            mediaQuery.padding,
+            DisplayFeatureSubScreen.avoidBounds(mediaQuery).toSet(),
+            submenuAnchor: anchor,
+          ),
+          child: Material(
+            shape: theme.shape,
+            color: theme.color,
+            type: MaterialType.card,
+            elevation: theme.elevation ?? 8.0,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                  minWidth: _kMenuMinWidth, maxWidth: _kMenuMaxWidth),
+              child: IntrinsicWidth(
+                stepWidth: _kMenuWidthStep,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: _kMenuVerticalPadding),
+                  child: ListBody(children: items),
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
 class _PopupMenuRoute<T> extends PopupRoute<T> {
   _PopupMenuRoute({
     required this.position,
     this.submenuAnchor,
     required this.items,
     this.menuWrapper,
-    this.barrierWrapper,
     this.initialValue,
     this.elevation,
     required this.barrierLabel,
@@ -851,7 +906,6 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
   final Rect? submenuAnchor;
   final List<PopupMenuEntry<T>> items;
   final MenuWrapper? menuWrapper;
-  final MenuWrapper? barrierWrapper;
   final List<Size?> itemSizes;
   final T? initialValue;
   final double? elevation;
@@ -881,12 +935,6 @@ class _PopupMenuRoute<T> extends PopupRoute<T> {
 
   @override
   final String barrierLabel;
-
-  @override
-  Widget buildModalBarrier() {
-    final barrier = super.buildModalBarrier();
-    return barrierWrapper?.call(barrier) ?? barrier;
-  }
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation,
@@ -1097,7 +1145,6 @@ Future<T?> showMenu<T>({
   Rect? submenuAnchor,
   required List<PopupMenuEntry<T>> items,
   MenuWrapper? menuWrapper,
-  MenuWrapper? barrierWrapper,
   T? initialValue,
   double? elevation,
   String? semanticLabel,
@@ -1127,7 +1174,6 @@ Future<T?> showMenu<T>({
     submenuAnchor: submenuAnchor,
     items: items,
     menuWrapper: menuWrapper,
-    barrierWrapper: barrierWrapper,
     initialValue: initialValue,
     elevation: elevation,
     semanticLabel: semanticLabel,

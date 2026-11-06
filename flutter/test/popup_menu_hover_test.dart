@@ -100,6 +100,100 @@ void main() {
     }
   });
 
+  testWidgets('parent actions remain clickable while the submenu is open',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final delay in [Duration.zero, const Duration(milliseconds: 100)]) {
+      for (final action in ['Connect', 'Edit RDP', 'Keep session']) {
+        final actions = <String>[];
+        await menu.openMenu(tester, actions, extraEntries: [
+          MenuEntrySwitchSync<String>(
+            switchType: SwitchType.scheckbox,
+            text: 'Keep session',
+            currentValue: false,
+            setter: (value) async => actions.add('keep:$value'),
+          ),
+        ]);
+        await tester.tap(find.text('Request approval'));
+        await tester.pumpAndSettle();
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        await mouse.addPointer(location: const Offset(2, 2));
+        final target = action == 'Edit RDP'
+            ? find.byIcon(Icons.edit)
+            : find.text(action).first;
+        final position = tester.getCenter(target);
+        await mouse.moveTo(position);
+        if (delay != Duration.zero) await tester.pump(delay);
+        await mouse.down(position);
+        await mouse.up();
+        await tester.pumpAndSettle();
+        expect(actions, [action == 'Keep session' ? 'keep:true' : action]);
+        expect(find.text('Terminal'), findsNothing);
+        expect(find.text('Request approval'),
+            action == 'Keep session' ? findsOneWidget : findsNothing);
+        if (action == 'Keep session') {
+          await tester.tap(find.text('Rename'));
+          await tester.pumpAndSettle();
+        }
+        await mouse.removePointer();
+      }
+    }
+  });
+
+  testWidgets('parent hover and dialog action work during the close delay',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final actions = <String>[];
+    await menu.openMenu(tester, actions, extraEntries: [
+      MenuEntryButton<String>(
+        childBuilder: (style) => Text('Open dialog', style: style),
+        dismissOnClicked: true,
+        proc: () {
+          actions.add('dialog');
+          showDialog<void>(
+            context: tester.element(find.text('Open menu')),
+            builder: (_) =>
+                const AlertDialog(content: Text('Dialog stays open')),
+          );
+        },
+      ),
+    ]);
+    await tester.tap(find.text('Request approval'));
+    await tester.pumpAndSettle();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(2, 2));
+    addTearDown(mouse.removePointer);
+    final target = find.text('Open dialog');
+    await mouse.moveTo(tester.getCenter(target));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final button =
+        find.ancestor(of: target, matching: find.byType(TextButton)).first;
+    final context = tester.element(button);
+    expect(
+        Material.of(context) as RenderObject,
+        paints
+          ..rect(
+              color:
+                  Theme.of(context).colorScheme.onSurface.withOpacity(0.08)));
+    await tester.tap(target);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(actions, ['dialog']);
+    expect(find.text('Request approval'), findsNothing);
+    expect(find.text('Terminal'), findsNothing);
+    expect(find.text('Dialog stays open'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Open menu'), findsOneWidget);
+  });
+
   testWidgets('Enter on the first switch row focus toggles the option',
       (tester) async {
     for (final switchType in SwitchType.values) {
