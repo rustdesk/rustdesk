@@ -900,15 +900,6 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
-                // Nothing is sent here: a subscriber added without a refresh needs the switch once
-                // the encoder has run, even if its old subscribers left; a fresh encoder needs none.
-                sp.snapshot(|_| {
-                    if !first_frame {
-                        log::trace!("switch due to new subscriber");
-                        bail!("SWITCH");
-                    }
-                    Ok(())
-                })?;
                 #[cfg(windows)]
                 if dxgi_recovery_started
                     .map(|started| started.elapsed() >= DXGI_RECOVERY_FRAME_GRACE)
