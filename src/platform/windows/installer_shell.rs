@@ -195,10 +195,6 @@ fn initialize_shell_com() -> ResultType<Option<ShellComGuard>> {
 
 pub(super) struct ProcessHandle(HANDLE);
 impl ProcessHandle {
-    pub(super) fn handle(&self) -> HANDLE {
-        self.0
-    }
-
     pub(super) fn wait(self) -> ResultType<u32> {
         let wait_result = unsafe { Threading::WaitForSingleObject(self.0, Threading::INFINITE) };
         if wait_result == Foundation::WAIT_FAILED {
