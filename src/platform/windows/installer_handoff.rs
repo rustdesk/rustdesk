@@ -59,7 +59,7 @@ fn prepare_install_commands(cmds: &InstallCommands) -> ResultType<String> {
         .iter()
         .map(|file| {
             path_for_cmd_environment(file.directory())
-                .map(|path| format!(" & rd /q \"{path}\" > nul 2>&1"))
+                .map(|path| format!(" & rd \"{path}\" > nul 2>&1"))
         })
         .collect::<ResultType<Vec<_>>>()?
         .join("");
@@ -71,7 +71,7 @@ fn prepare_install_commands(cmds: &InstallCommands) -> ResultType<String> {
          call :rustdesk_install\r\n\
          set \"RUSTDESK_INSTALL_EXIT_CODE=%ERRORLEVEL%\"\r\n\
          rd /s /q \"%~f0.dir\" > nul 2>&1\r\n\
-         (del /q \"%~f0\" {files} > nul 2>&1{directories} & rd /q \"%~dp0\" > nul 2>&1 & exit %RUSTDESK_INSTALL_EXIT_CODE%)\r\n\
+         (del /q \"%~f0\" {files} > nul 2>&1{directories} & rd \"%~dp0\" > nul 2>&1 & exit %RUSTDESK_INSTALL_EXIT_CODE%)\r\n\
          :rustdesk_install\r\n\
          \"{chcp}\" {UTF8_CODE_PAGE} > nul || exit /b \
          {BATCH_CODE_PAGE_FAILURE_EXIT_CODE}\r\n\
