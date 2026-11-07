@@ -912,12 +912,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
-                #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
-                if scrap::drm_gpu::enabled()
-                    && matches!(&encoder_cfg, EncoderCfg::HWRAM(cfg) if cfg.name == "h264_vaapi")
-                {
-                    switch_on_new_subscriber(&sp, first_frame)?;
-                }
+                switch_on_new_subscriber(&sp, first_frame)?;
                 #[cfg(windows)]
                 if dxgi_recovery_started
                     .map(|started| started.elapsed() >= DXGI_RECOVERY_FRAME_GRACE)
@@ -1291,13 +1286,12 @@ fn refresh_allowed(unfed: bool, warmed_up: bool, latency_free: bool) -> bool {
     !cfg!(target_os = "macos") || unfed || warmed_up || latency_free
 }
 
-// A still DRM stream may exhaust both repeat budgets. Check new subscribers
+// A still stream may exhaust both repeat budgets. Check new subscribers
 // on every WouldBlock, before either budget can prevent the stream rebuilding.
-#[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
 fn switch_on_new_subscriber(sp: &GenericService, first_frame: bool) -> ResultType<()> {
     sp.snapshot(|_| {
         if !first_frame {
-            log::info!("switch due to new subscriber");
+            log::trace!("switch due to new subscriber");
             bail!("SWITCH");
         }
         Ok(())
@@ -1622,7 +1616,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test, target_os = "linux", feature = "drm-vaapi"))]
+#[cfg(test)]
 mod idle_viewer_tests {
     use super::*;
     use crate::server::{connection::ConnInner, service::Service};
