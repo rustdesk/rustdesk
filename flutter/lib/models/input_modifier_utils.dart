@@ -209,17 +209,24 @@ ModifierKind? releasedModifier(
     RawKeyEventData? releaseData}) {
   // Mod2-Mod5 and virtual Super/Hyper/Meta can identify genuine Meta mappings.
   const gtkNonAltModifiers = 0xf0 | (7 << 26);
-  final altMask = releaseData is RawKeyEventDataLinux &&
-      releaseData.keyHelper is GtkKeyHelper &&
-      releaseData.modifiers & GtkKeyHelper.modifierMod1 != 0 &&
-      releaseData.modifiers & gtkNonAltModifiers == 0;
+  bool hasGtkMask(RawKeyEventData? data, int mask) =>
+      data is RawKeyEventDataLinux &&
+      data.keyHelper is GtkKeyHelper &&
+      data.modifiers & (gtkNonAltModifiers | mask) == mask;
+  final altMask = hasGtkMask(releaseData, GtkKeyHelper.modifierMod1);
   final down = pressedKeys.where((event) => event.physicalKey == physical);
+  // GTK recognizes Super down from its keysym, before Mod4 enters the mask.
+  final superWithAlt = down.isNotEmpty &&
+      hasGtkMask(down.first.data, GtkKeyHelper.modifierMod1) &&
+      down.first.data.isMetaPressed;
   final kind = down.isEmpty
       ? _modifierKind(logical, physical)
       : _rawModifierKind(down.first, logical, altMask);
   final stillPressed = pressedKeys.any((event) =>
       event.physicalKey != physical &&
-      _rawModifierKind(event, event.logicalKey, altMask) == kind);
+      _rawModifierKind(event, event.logicalKey,
+              altMask || (superWithAlt && hasGtkMask(event.data, 0))) ==
+          kind);
   return stillPressed ? null : kind;
 }
 

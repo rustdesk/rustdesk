@@ -360,6 +360,33 @@ void main() {
     }
   });
 
+  test('remapped shifted Alt does not retain a released Super modifier',
+      () async {
+    final input = _modifierInput(session);
+    const alt = GtkKeyHelper.modifierMod1;
+    const shift = GtkKeyHelper.modifierShift;
+    for (final superMask in [1 << 6, (1 << 6) | GtkKeyHelper.modifierMeta]) {
+      await _rawKey(input, scan: 50, key: 0xffe1, modifiers: 0);
+      await _rawKey(input, scan: 37, key: 0xffe7, modifiers: shift);
+      for (final down in [true, false]) {
+        await _rawKey(input,
+            scan: 41, key: 0x46, down: down, modifiers: shift | alt);
+      }
+      await _rawKey(input, scan: 134, key: 0xffec, modifiers: shift | alt);
+      await _rawKey(input,
+          scan: 134,
+          key: 0xffec,
+          down: false,
+          modifiers: shift | alt | superMask);
+      expect(input.modify({}), {'shift': 'true', 'alt': 'true'});
+      await _rawKey(input,
+          scan: 50, key: 0xffe1, down: false, modifiers: shift | alt);
+      await _rawKey(input, scan: 37, key: 0xffe9, down: false, modifiers: alt);
+      expect(input.modify({}), isEmpty);
+      _expectNoRawReleases(input);
+    }
+  });
+
   test('a held GTK Meta mapping does not keep Alt pressed', () async {
     final input = _modifierInput(session);
     const gtkMeta = 1 << 28;
@@ -369,12 +396,16 @@ void main() {
     // Wayland omits the virtual Meta bit while Mod1 is active.
     for (final meta in [gtkMeta | gtkMod4, gtkMod4]) {
       await _rawKey(input, scan: 64, key: 0xffe9, modifiers: 0);
+      await _rawKey(input, scan: 108, key: 0xffea, modifiers: alt);
       await _rawKey(input, scan: 50, key: 0xffe1, modifiers: alt);
       await _rawKey(input, scan: 133, key: 0xffe7, modifiers: alt | shift);
       await _rawKey(input,
           scan: 50, key: 0xffe1, down: false, modifiers: alt | shift | meta);
       await _rawKey(input,
           scan: 64, key: 0xffe9, down: false, modifiers: alt | meta);
+      expect(input.modify({}), {'alt': 'true'});
+      await _rawKey(input,
+          scan: 108, key: 0xffea, down: false, modifiers: alt | meta);
       expect(input.modify({}), isEmpty);
       await _rawKey(input,
           scan: 133, key: 0xffe7, down: false, modifiers: meta);
