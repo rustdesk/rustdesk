@@ -690,6 +690,11 @@ fn run(vs: VideoService) -> ResultType<()> {
             )?
         }
     };
+    #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+    c.set_output_dmabuf(
+        matches!(&encoder_cfg, EncoderCfg::HWRAM(cfg) if cfg.name == "h264_vaapi")
+            && scrap::drm_gpu::enabled(),
+    );
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
     #[cfg(target_os = "android")]
@@ -824,6 +829,13 @@ fn run(vs: VideoService) -> ResultType<()> {
                     if let Some(mut screenshot) = screenshot {
                         let restore_vram = screenshot.restore_vram;
                         let (msg, w, h, data) = match &frame {
+                            #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
+                            scrap::Frame::DmaBuf(f) => match scrap::drm_gpu::rgba(f) {
+                                Ok(rgba) => {
+                                    (String::new(), f.width as usize, f.height as usize, rgba)
+                                }
+                                Err(e) => (format!("DRM screenshot: {e}"), 0, 0, vec![]),
+                            },
                             scrap::Frame::PixelBuffer(f) => match get_rgba_from_pixelbuf(f) {
                                 Ok(rgba) => ("".to_owned(), f.width(), f.height(), rgba),
                                 Err(e) => {
@@ -900,6 +912,8 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
+                #[cfg(target_os = "linux")]
+                switch_on_new_subscriber(&sp, first_frame)?;
                 #[cfg(windows)]
                 if dxgi_recovery_started
                     .map(|started| started.elapsed() >= DXGI_RECOVERY_FRAME_GRACE)
@@ -1273,6 +1287,15 @@ fn refresh_allowed(unfed: bool, warmed_up: bool, latency_free: bool) -> bool {
     !cfg!(target_os = "macos") || unfed || warmed_up || latency_free
 }
 
+// A still stream can exhaust both repeat budgets before another viewer joins.
+#[cfg(any(target_os = "linux", test))]
+fn switch_on_new_subscriber(sp: &GenericService, first_frame: bool) -> ResultType<()> {
+    if first_frame {
+        return Ok(());
+    }
+    sp.snapshot(|_| bail!("SWITCH"))
+}
+
 #[inline]
 fn handle_one_frame(
     display: usize,
@@ -1588,5 +1611,26 @@ mod tests {
         assert!(refresh_allowed(false, false, true));
         // Nothing fed yet: no warm-up to lose, and a refresh can restart a stalled capturer.
         assert!(refresh_allowed(true, false, false));
+    }
+}
+
+#[cfg(test)]
+mod idle_viewer_tests {
+    use super::*;
+    use crate::server::{connection::ConnInner, service::Service};
+
+    #[test]
+    fn a_new_viewer_requests_rebuilding_an_existing_idle_stream() {
+        let sp = GenericService::new("idle-viewer-test".to_owned(), true);
+        sp.on_subscribe(ConnInner::new(1, None, None));
+        switch_on_new_subscriber(&sp, true).unwrap();
+        sp.snapshot(|sps| {
+            assert!(!sps.has_subscribes(), "the first viewer must wait for a frame");
+            Ok(())
+        })
+        .unwrap();
+        sp.on_subscribe(ConnInner::new(2, None, None));
+        assert!(switch_on_new_subscriber(&sp, false).is_err());
+        switch_on_new_subscriber(&sp, false).unwrap();
     }
 }

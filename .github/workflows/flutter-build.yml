@@ -2315,7 +2315,7 @@ jobs:
       - name: Build libdrmtap
         run: |
           sudo apt-get install -y meson ninja-build pkg-config \
-            libdrm-dev libegl1-mesa-dev libgles2-mesa-dev
+            libdrm-dev libegl1-mesa-dev libgles2-mesa-dev libgbm-dev
           python3 - <<'PY'
           import importlib.util, sys
           spec = importlib.util.spec_from_file_location("b", "build.py")
@@ -2324,6 +2324,33 @@ jobs:
           spec.loader.exec_module(b)
           print(f"::notice::built {b.build_libdrmtap_so()}")
           PY
+        shell: bash
+
+      # hwcodec test binaries cannot link on the Ubuntu 18.04 packaging container
+      # (fcntl64). Test this optional feature on the modern host instead, using a
+      # separate target directory so no host-glibc object enters the release build.
+      - name: Test optional DRM VAAPI input
+        run: |
+          sudo apt-get install -y clang libclang-dev libasound2-dev libdbus-1-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-plugins-base libpulse-dev \
+            libudev-dev libv4l-dev libgtk-3-dev libayatana-appindicator3-dev \
+            libxdo-dev libxfixes-dev libxrandr-dev libxtst-dev libssl-dev \
+            libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          export VCPKG_ROOT=/opt/artifacts/vcpkg
+          export CARGO_TARGET_DIR="${RUNNER_TEMP}/rustdesk-drm-vaapi-tests"
+          export CARGO_BUILD_JOBS=2
+          trap 'rm -rf "$CARGO_TARGET_DIR"' EXIT
+          run_drm_tests() {
+            local out ran
+            out=$("$@" 2>&1) || { echo "$out"; exit 1; }
+            echo "$out"
+            ran=$(echo "$out" | awk '/^running [0-9]+ tests?$/ { n += $2 } END { print n+0 }')
+            test "$ran" -ge 1
+          }
+          run_drm_tests cargo test --locked -p scrap --features drm-vaapi drm_gpu_tests
+          run_drm_tests cargo test --locked --lib --features drm-vaapi drm_capturer_tests
+          run_drm_tests cargo test --locked --lib --features drm-vaapi idle_viewer_tests
         shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8 # no release tag; commit 2026-05-26
@@ -2356,6 +2383,7 @@ jobs:
                libclang-10-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
+               gstreamer1.0-plugins-base \
                libgtk-3-dev \
                libpulse-dev \
                libva-dev \
@@ -2441,6 +2469,10 @@ jobs:
                 exit 1
               fi
             }
+            run_drm_tests "scrap pipewire_refresh" \
+              cargo test --locked -p scrap --features drm a_refreshed_recorder_delivers_an_unchanged_sample
+            run_drm_tests "rustdesk idle_viewer_tests" \
+              cargo test --locked --lib --features drm idle_viewer_tests
             run_drm_tests "rustdesk drm_capturer_tests" \
               cargo test --locked --lib --features drm drm_capturer_tests
             run_drm_tests "rustdesk ipc::test" \
@@ -2463,6 +2495,8 @@ jobs:
               cargo test --locked -p scrap --features drm plane_rotation_tests
             run_drm_tests "scrap drmtap_dl::tests" \
               cargo test --locked -p scrap --features drm drmtap_dl::tests
+            run_drm_tests "scrap output_buffer_tests" \
+              cargo test --locked -p scrap --features drm output_buffer_tests
             # Opt-in like drm, and this container already builds with it.
             run_drm_tests "clipboard unix-file-copy-paste" \
               cargo test --locked -p clipboard --features unix-file-copy-paste

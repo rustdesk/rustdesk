@@ -30,6 +30,10 @@ impl Capturer {
         Ok(Capturer(display, r, Default::default()))
     }
 
+    pub fn refresh(&mut self) {
+        self.1.refresh();
+    }
+
     pub fn width(&self) -> usize {
         self.0.width()
     }

@@ -25,15 +25,33 @@ const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + DISPLAY_LIST_TIMEOUT_MS 
     /// `next_raw_into`'s own cap.
 const BODY_READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// A repeat of the frame returned last goes out anyway once this much time has passed since
-/// then: a frame whose encode failed reaches the encoder again, even if nothing moves.
+/// then: a frame whose encode failed reaches the encoder again, even if nothing moves. At most
+/// MAX_REPEATS in a row: a hardware encoder gives up (switches) after 3 failed encodes, and every frame
+/// that reaches it restarts static_refresh, so an endless beat would re-encode a still screen for ever.
 const REPEAT_EVERY: Duration = Duration::from_secs(1);
+const MAX_REPEATS: u8 = 3;
 /// After this long without a new frame the screen reads as still, and the producer is asked for at
 /// most STILL_FPS, its old 33 ms tick: grabbing a still screen faster only feeds frame() repeats to
 /// drop. Three of those ticks, so a producer paced at STILL_FPS in motion never reads as still.
 const STILL_AFTER: Duration = Duration::from_millis(100);
 const STILL_FPS: u8 = 30;
 
+#[cfg(feature = "drm-vaapi")]
+fn gpu_comparison_needs_delivery(
+    compare_after: &mut Option<Instant>,
+    changed: bool,
+    now: Instant,
+) -> bool {
+    // Motion frames bypass the snapshot comparison. The first equal comparison
+    // can be a reversion to the old snapshot, so deliver it before going idle.
+    let may_have_forwarded_motion = compare_after.is_some();
+    *compare_after = changed.then_some(now + Duration::from_millis(250));
+    changed || may_have_forwarded_motion
+}
+
 struct FrameSlot {
+    #[cfg(feature = "drm-vaapi")]
+    latest_dmabuf: Option<scrap::drm_gpu::DmaBufFrame>,
     // Row stride is `pixels.len() / height`, possibly padded; the format and the plane rotation
     // the producer read for this frame (`DmabufDesc::plane_rotation`) are per frame.
     latest: Option<(usize, usize, Pixfmt, Option<u32>, Vec<u8>)>,
@@ -52,6 +70,10 @@ impl FrameSlot {
         plane_rotation: Option<u32>,
         buf: Vec<u8>,
     ) {
+        #[cfg(feature = "drm-vaapi")]
+        {
+            self.latest_dmabuf = None;
+        }
         if let Some((.., old)) = self.latest.take() {
             self.recycle(old);
         }
@@ -75,6 +97,8 @@ impl FrameSlot {
 const TRANSFORM_PENDING: i32 = i32::MIN;
 
 struct Shared {
+    #[cfg(feature = "drm-vaapi")]
+    output_dmabuf: AtomicBool,
     slot: Mutex<FrameSlot>,
     cv: Condvar,
     // The output's real transform, TRANSFORM_PENDING until new() stores it post-handshake. Only
@@ -188,6 +212,12 @@ pub struct IpcDrmCapturer {
     spare: Vec<u8>,
     // When frame() last returned a frame; see REPEAT_EVERY.
     returned_at: Instant,
+    // Repeats sent since the last new picture; see MAX_REPEATS.
+    repeats: u8,
+    #[cfg(feature = "drm-vaapi")]
+    gpu_detector: Option<scrap::drm_gpu::DmaBufDetector>,
+    #[cfg(feature = "drm-vaapi")]
+    gpu_compare_after: Option<Instant>,
 }
 
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
@@ -460,7 +490,11 @@ impl IpcDrmCapturer {
         expected: Option<DrmDisplayInfo>,
     ) -> ResultType<(IpcDrmCapturer, Vec<DrmDisplayInfo>, usize, Option<(i32, i32)>)> {
         let shared = Arc::new(Shared {
+            #[cfg(feature = "drm-vaapi")]
+            output_dmabuf: AtomicBool::new(false),
             slot: Mutex::new(FrameSlot {
+                #[cfg(feature = "drm-vaapi")]
+                latest_dmabuf: None,
                 latest: None,
                 free: [None, None],
                 ended: None,
@@ -530,6 +564,11 @@ impl IpcDrmCapturer {
                 got_frame: false,
                 spare: Vec::new(),
                 returned_at: Instant::now(),
+                repeats: 0,
+                #[cfg(feature = "drm-vaapi")]
+                gpu_detector: None,
+                #[cfg(feature = "drm-vaapi")]
+                gpu_compare_after: None,
             },
             displays,
             wire_idx,
@@ -573,6 +612,11 @@ impl Drop for IpcDrmCapturer {
 }
 
 impl TraitCapturer for IpcDrmCapturer {
+    #[cfg(feature = "drm-vaapi")]
+    fn set_output_dmabuf(&mut self, enabled: bool) {
+        self.shared.output_dmabuf.store(enabled, Ordering::Relaxed);
+    }
+
     fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         // video_service passes its spf as the timeout: that, and how busy it is between calls, is
         // the rate the producer is asked for.
@@ -588,6 +632,10 @@ impl TraitCapturer for IpcDrmCapturer {
             let waited = WaitStamp(&self.shared.pace, Instant::now());
             let mut slot = self.shared.slot.lock().unwrap();
             loop {
+                #[cfg(feature = "drm-vaapi")]
+                if slot.latest_dmabuf.is_some() {
+                    break;
+                }
                 if slot.latest.is_some() || slot.ended.is_some() {
                     break;
                 }
@@ -598,6 +646,83 @@ impl TraitCapturer for IpcDrmCapturer {
                 let (guard, _timed_out) =
                     self.shared.cv.wait_timeout(slot, deadline - now).unwrap();
                 slot = guard;
+            }
+            #[cfg(feature = "drm-vaapi")]
+            if let Some(frame) = slot.latest_dmabuf.take() {
+                drop(slot);
+                drop(waited);
+                let snapshot_changed =
+                    scrap::wayland::display::wayland_snapshot_generation() != self.snapshot_gen;
+                let size_mismatch = self
+                    .session_size
+                    .is_some_and(|size| size != (frame.width as usize, frame.height as usize));
+                if size_mismatch && !snapshot_changed && !self.got_frame {
+                    self.note_session_without_frame();
+                }
+                if snapshot_changed || size_mismatch {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "DRM GPU frame layout changed; rebuilding",
+                    ));
+                }
+                if !self.got_frame {
+                    self.got_frame = true;
+                    if let Some(key) = &self.connector {
+                        if let Some(h) = DRM_DISPLAY_HEALTH.lock().unwrap().get_mut(key) {
+                            h.zero_frame_streak = 0;
+                            h.demotes = 0;
+                            h.fallback_rejected = false;
+                        }
+                    }
+                }
+                // Disable only for matched A/B measurements of the experimental GPU path.
+                if std::env::var("RUSTDESK_DRM_GPU_IDLE").as_deref() != Ok("0") {
+                    // Forward every intervening frame during motion. Once equal, compare
+                    // each frame again so a small update or new motion is noticed promptly.
+                    let compare =
+                        self.gpu_detector.is_none()
+                            || self.gpu_compare_after.map_or(true, |at| Instant::now() >= at);
+                    let changed = if compare {
+                        (|| {
+                            if self.gpu_detector.is_none() {
+                                self.gpu_detector =
+                                    Some(scrap::drm_gpu::DmaBufDetector::new(&frame.render_node)?);
+                            }
+                            match self.gpu_detector.as_mut() {
+                                Some(detector) => detector.changed(&frame),
+                                None => Err(-38),
+                            }
+                        })()
+                    } else {
+                        Ok(true)
+                    };
+                    let repeat = match changed {
+                        Ok(changed) if compare => !gpu_comparison_needs_delivery(
+                            &mut self.gpu_compare_after,
+                            changed,
+                            Instant::now(),
+                        ),
+                        Ok(changed) => !changed,
+                        Err(error) => {
+                            scrap::drm_gpu::disable(&format!(
+                                "GPU idle comparison failed: {error}"
+                            ));
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                "GPU idle comparison failed; rebuilding CPU capture",
+                            ));
+                        }
+                    };
+                    if repeat
+                        && (self.returned_at.elapsed() < REPEAT_EVERY
+                            || self.repeats >= MAX_REPEATS)
+                    {
+                        return Err(io::ErrorKind::WouldBlock.into());
+                    }
+                    self.repeats = if repeat { self.repeats + 1 } else { 0 };
+                }
+                self.returned_at = Instant::now();
+                return Ok(Frame::DmaBuf(frame));
             }
             if let Some((w, h, fmt, plane_rotation, buf)) = slot.latest.take() {
                 drop(slot);
@@ -699,9 +824,10 @@ impl TraitCapturer for IpcDrmCapturer {
                 return Err(io::Error::new(io::ErrorKind::Other, err));
             }
         };
-        if repeat && self.returned_at.elapsed() < REPEAT_EVERY {
+        if repeat && (self.returned_at.elapsed() < REPEAT_EVERY || self.repeats >= MAX_REPEATS) {
             return Err(io::ErrorKind::WouldBlock.into());
         }
+        self.repeats = if repeat { self.repeats + 1 } else { 0 };
         self.returned_at = Instant::now();
         Ok(Frame::PixelBuffer(PixelBuffer::new(
             &self.cur,
@@ -825,6 +951,10 @@ async fn recv_thread(
 
     // A cursor that arrived before new() stored the session transform, held for replay. Only the
     // newest matters; the 200 ms recv timeout guarantees this is retried even on an idle wire.
+    #[cfg(feature = "drm-vaapi")]
+    let gpu_render_node = if !force_cpu && render_node_count() == 1 {
+        scrap::drm_gpu::render_node(&render_node).and_then(|p| p.to_str().map(str::to_owned))
+    } else { None };
     let mut pending_cursor: Option<(u64, u32, u32, i32, i32, bool, Vec<u8>)> = None;
     // The shape being measured, or None: hidden, kernel-measured, or no context for this stream.
     let mut cal: Option<CursorCal> = None;
@@ -843,7 +973,7 @@ async fn recv_thread(
                 }
             }
         }
-        let (msg, recv_fd) = match conn.recv_msg_timeout2(200).await {
+        let (msg, mut recv_fd) = match conn.recv_msg_timeout2(200).await {
             None => continue, // timeout: re-check stop at the loop top
             Some(Ok(pair)) => pair,
             Some(Err(err)) => break format!("recv: {err}"),
@@ -862,6 +992,54 @@ async fn recv_thread(
                         display,
                         cursor_epoch,
                     );
+                }
+                #[cfg(feature = "drm-vaapi")]
+                if let Some(node) = gpu_render_node.as_ref().filter(|_| {
+                    shared.output_dmabuf.load(Ordering::Relaxed) && scrap::drm_gpu::enabled()
+                        && shared.cursor_transform.load(Ordering::Acquire) == 0
+                        && desc.plane_rotation == Some(PLANE_ROTATE_0)
+                        && desc.width > 0 && desc.height > 0 && desc.width <= 16384 && desc.height <= 16384
+                        && desc.width % 2 == 0 && desc.height % 2 == 0 && desc.num_planes <= 4
+                        && scrap::drm_gpu::supports_format(desc.format, desc.hdr_eotf)
+                }) {
+                    // Current producers attach an fd on every frame. An older producer
+                    // that elides it must rebuild with the CPU import cache populated.
+                    let fd = match recv_fd.take().filter(|_| desc.has_fd) {
+                        Some(fd) => fd,
+                        None => {
+                            scrap::drm_gpu::disable(
+                                "producer did not supply a per-frame DMA-BUF fd",
+                            );
+                            break "GPU capture needs a fresh fd; rebuilding the CPU path"
+                                .to_owned();
+                        }
+                    };
+                    let frame = scrap::drm_gpu::DmaBufFrame {
+                        fd,
+                        render_node: node.clone(),
+                        width: desc.width,
+                        height: desc.height,
+                        format: desc.format,
+                        modifier: desc.modifier,
+                        num_planes: desc.num_planes.max(1),
+                        offsets: desc.offsets,
+                        pitches: desc.pitches,
+                    };
+                    {
+                        let mut slot = shared.slot.lock().unwrap();
+                        if let Some((.., pixels)) = slot.latest.take() {
+                            slot.recycle(pixels);
+                        }
+                        slot.latest_dmabuf = Some(frame);
+                        shared.cv.notify_one();
+                    }
+                    if let Err(err) = conn
+                        .send_frame_ack(shared.demand_fps.load(Ordering::Relaxed))
+                        .await
+                    {
+                        break format!("GPU frame ack: {err}");
+                    }
+                    continue;
                 }
                 let conv = match converter.as_mut() {
                     Some(c) => c,
@@ -893,19 +1071,16 @@ async fn recv_thread(
                     hdr_eotf: desc.hdr_eotf,
                     hdr_max_nits: desc.hdr_max_nits,
                 };
-                match conv.convert(&mut ddesc, received_fd) {
-                    Ok((data, w, h, fmt)) => {
-                        // Borrowed from the render context, valid only until the next convert.
-                        // Copy into a recycled buffer, and OUTSIDE the slot lock, so a
-                        // multi-megabyte memcpy never holds the encoder off the slot.
-                        let mut buf = shared.slot.lock().unwrap().take_free().unwrap_or_default();
-                        buf.clear();
-                        buf.extend_from_slice(data);
+                let mut buf = shared.slot.lock().unwrap().take_free().unwrap_or_default();
+                match conv.convert_into(&mut ddesc, received_fd, &mut buf) {
+                    Ok((w, h, fmt)) => {
                         let mut slot = shared.slot.lock().unwrap();
                         slot.publish(w as usize, h as usize, fmt, desc.plane_rotation, buf);
                         shared.cv.notify_one();
                     }
-                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                        shared.slot.lock().unwrap().recycle(buf);
+                    }
                     Err(err) => {
                         drm_set_prefer_cpu(&our_key);
                         break format!("convert: {err}");
@@ -2494,7 +2669,11 @@ mod drm_capturer_tests {
         let connector = key.map(|k| k.to_owned());
         IpcDrmCapturer {
             shared: Arc::new(Shared {
+                #[cfg(feature = "drm-vaapi")]
+                output_dmabuf: AtomicBool::new(false),
                 slot: Mutex::new(FrameSlot {
+                    #[cfg(feature = "drm-vaapi")]
+                    latest_dmabuf: None,
                     latest: None,
                     free: [None, None],
                     ended: None,
@@ -2518,6 +2697,11 @@ mod drm_capturer_tests {
             got_frame: false,
             spare: Vec::new(),
             returned_at: Instant::now(),
+            repeats: 0,
+            #[cfg(feature = "drm-vaapi")]
+            gpu_detector: None,
+            #[cfg(feature = "drm-vaapi")]
+            gpu_compare_after: None,
         }
     }
 
@@ -2779,8 +2963,29 @@ mod drm_capturer_tests {
         }
     }
 
+    #[cfg(feature = "drm-vaapi")]
     #[test]
-    fn a_frame_equal_to_the_last_one_goes_out_once_a_second() {
+    fn gpu_idle_delivers_a_reversion_after_uncompared_motion() {
+        let now = Instant::now();
+        let mut compare_after = None;
+        // Snapshot A is encoded, then intervening motion B is forwarded without comparison.
+        assert!(gpu_comparison_needs_delivery(&mut compare_after, true, now));
+        // A reappears at the next comparison. It equals the snapshot but differs from B.
+        assert!(gpu_comparison_needs_delivery(
+            &mut compare_after,
+            false,
+            now + Duration::from_millis(250),
+        ));
+        // Only the following unchanged frame can be suppressed.
+        assert!(!gpu_comparison_needs_delivery(
+            &mut compare_after,
+            false,
+            now + Duration::from_millis(300),
+        ));
+    }
+
+    #[test]
+    fn a_frame_equal_to_the_last_one_goes_out_once_a_second_three_times() {
         let (still, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
         let (moved, _, _) = px_frame(&[&[1, 2, 3], &[4, 5, 7]], 0);
         let mut c = capturer_with(Some((w, h)));
@@ -2791,15 +2996,28 @@ mod drm_capturer_tests {
             c.frame(Duration::from_millis(50)),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock
         ));
-        // A second later it goes out again, in case its encode failed, and the second starts over.
+        // A second later it goes out again, in case its encode failed, and the second starts over,
+        // MAX_REPEATS times; then a still screen stays quiet until it changes.
+        for _ in 0..MAX_REPEATS {
+            std::thread::sleep(REPEAT_EVERY);
+            put_frame_with(&c, w, h, None, &still);
+            assert!(c.frame(Duration::from_millis(50)).is_ok());
+            put_frame_with(&c, w, h, None, &still);
+            assert!(matches!(
+                c.frame(Duration::from_millis(50)),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock
+            ));
+        }
         std::thread::sleep(REPEAT_EVERY);
-        put_frame_with(&c, w, h, None, &still);
-        assert!(c.frame(Duration::from_millis(50)).is_ok());
         put_frame_with(&c, w, h, None, &still);
         assert!(matches!(
             c.frame(Duration::from_millis(50)),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock
         ));
+        put_frame_with(&c, w, h, None, &moved);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+        // A new picture starts the count over: its own repeat goes out again.
+        std::thread::sleep(REPEAT_EVERY);
         put_frame_with(&c, w, h, None, &moved);
         assert!(c.frame(Duration::from_millis(50)).is_ok());
     }
@@ -2933,6 +3151,37 @@ mod drm_capturer_tests {
             0,
             "a session that streamed must not be counted as one that produced nothing"
         );
+    }
+
+    #[cfg(feature = "drm-vaapi")]
+    #[test]
+    fn mismatched_first_gpu_frame_counts_toward_cpu_capture_fallback() {
+        let key = "test:gpu-first-frame-mismatch";
+        for _ in 0..DRM_GRAB_MAX_FAILURES {
+            assert!(!DRM_DISPLAY_HEALTH
+                .lock()
+                .unwrap()
+                .get(key)
+                .is_some_and(DisplayHealth::demoted));
+            let mut c = capturer_named(Some((4, 4)), Some(key));
+            c.shared.slot.lock().unwrap().latest_dmabuf = Some(scrap::drm_gpu::DmaBufFrame {
+                fd: std::fs::File::open("/dev/null").unwrap().into(),
+                render_node: "/dev/dri/renderD128".into(),
+                width: 2,
+                height: 2,
+                format: 0x3432_5258,
+                modifier: 0,
+                num_planes: 1,
+                offsets: [0; 4],
+                pitches: [8, 0, 0, 0],
+            });
+            assert!(c.frame(Duration::from_millis(50)).is_err());
+        }
+        assert!(DRM_DISPLAY_HEALTH
+            .lock()
+            .unwrap()
+            .get(key)
+            .is_some_and(DisplayHealth::demoted));
     }
 
     // ---- cursor hotspot calibration ----
