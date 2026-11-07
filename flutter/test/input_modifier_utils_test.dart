@@ -271,7 +271,7 @@ void main() {
         () {
       // With XKB `grp:alts_toggle` the Alt release arrives as ISO_Prev_Group,
       // so only the physical key still identifies Alt.
-      final groupSwitch = LogicalKeyboardKey(0x100000fe0a);
+      final groupSwitch = LogicalKeyboardKey.groupPrevious;
       expect(releasedModifier(groupSwitch, PhysicalKeyboardKey.altLeft),
           ModifierKind.alt);
       expect(releasedModifier(groupSwitch, PhysicalKeyboardKey.altRight),

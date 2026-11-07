@@ -202,12 +202,20 @@ String _applyTerminalCtrlModifier(String data) {
 
 enum ModifierKind { alt, ctrl, shift, command }
 
-/// Which modifier a key event belongs to, or null if it is not a modifier.
-///
-/// The physical key is checked too: with an XKB layout-switch option such as
-/// `grp:alts_toggle`, releasing Alt reports a group-switch logical key, so the
-/// logical key alone never matches and the cached modifier would stay set.
+/// Resolve a release using its down event, keeping modifiers held by other keys.
 ModifierKind? releasedModifier(
+    LogicalKeyboardKey logical, PhysicalKeyboardKey physical,
+    {Iterable<RawKeyEvent> pressedKeys = const []}) {
+  final down = pressedKeys.where((event) => event.physicalKey == physical);
+  final kind =
+      _modifierKind(down.isEmpty ? logical : down.first.logicalKey, physical);
+  final stillPressed = pressedKeys.any((event) =>
+      event.physicalKey != physical &&
+      _modifierKind(event.logicalKey, event.physicalKey) == kind);
+  return stillPressed ? null : kind;
+}
+
+ModifierKind? _modifierKind(
     LogicalKeyboardKey logical, PhysicalKeyboardKey physical) {
   if (logical == LogicalKeyboardKey.altLeft ||
       logical == LogicalKeyboardKey.altRight) {
@@ -226,8 +234,14 @@ ModifierKind? releasedModifier(
       logical == LogicalKeyboardKey.superKey) {
     return ModifierKind.command;
   }
-  return _releasedPhysicalModifier(physical);
+  return _isGroupSwitch(logical) ? _releasedPhysicalModifier(physical) : null;
 }
+
+bool _isGroupSwitch(LogicalKeyboardKey logical) =>
+    logical == LogicalKeyboardKey.groupPrevious ||
+    logical == LogicalKeyboardKey.groupNext ||
+    logical == LogicalKeyboardKey.groupFirst ||
+    logical == LogicalKeyboardKey.groupLast;
 
 ModifierKind? _releasedPhysicalModifier(PhysicalKeyboardKey physical) {
   if (physical == PhysicalKeyboardKey.altLeft ||
