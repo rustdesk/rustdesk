@@ -146,6 +146,18 @@ pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
     crate::platform::macos::handle_application_should_open_untitled_file();
 }
 
+#[cfg(target_os = "macos")]
+#[no_mangle]
+pub extern "C" fn rustdesk_check_start_tray() {
+    crate::platform::macos::check_start_tray();
+}
+
+#[cfg(target_os = "macos")]
+#[no_mangle]
+pub extern "C" fn rustdesk_kill_tray() {
+    crate::platform::macos::kill_tray();
+}
+
 #[cfg(windows)]
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_char {

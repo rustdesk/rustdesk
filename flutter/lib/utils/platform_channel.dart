@@ -42,4 +42,10 @@ class RdPlatformChannel {
     assert(isMacOS);
     return _hostMethodChannel.invokeMethod("terminate");
   }
+
+  /// Notify native macOS that a window has closed/hidden.
+  Future<void> onWindowClose() {
+    assert(isMacOS);
+    return _hostMethodChannel.invokeMethod("onWindowClose");
+  }
 }
