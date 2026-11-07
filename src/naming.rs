@@ -4,7 +4,10 @@ use custom_server::*;
 
 fn gen_name(lic: &CustomServer) -> ResultType<String> {
     let tmp = URL_SAFE_NO_PAD.encode(&serde_json::to_vec(lic)?);
-    Ok(tmp.chars().rev().collect())
+    Ok(format!(
+        "rustdesk-licensed-{}.exe",
+        tmp.chars().rev().collect::<String>()
+    ))
 }
 
 fn main() {
@@ -18,11 +21,27 @@ fn main() {
             api,
             relay,
         }) {
-            Ok(name) => println!("rustdesk-licensed-{}.exe", name),
+            Ok(name) => println!("{}", name),
             Err(e) => println!("{:?}", e),
         }
     }
     if args.len() == 1 {
         println!("{:?}", get_custom_server_from_string(&args[0]));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gen_name_parses_back() {
+        let lic = CustomServer {
+            key: "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=".to_owned(),
+            host: "rs.example.com".to_owned(),
+            ..Default::default()
+        };
+        let name = gen_name(&lic).unwrap();
+        assert_eq!(get_custom_server_from_string(&name).unwrap(), lic);
     }
 }
