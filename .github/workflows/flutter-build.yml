@@ -2463,6 +2463,8 @@ jobs:
               cargo test --locked -p scrap --features drm plane_rotation_tests
             run_drm_tests "scrap drmtap_dl::tests" \
               cargo test --locked -p scrap --features drm drmtap_dl::tests
+            run_drm_tests "scrap output_buffer_tests" \
+              cargo test --locked -p scrap --features drm output_buffer_tests
             # Opt-in like drm, and this container already builds with it.
             run_drm_tests "clipboard unix-file-copy-paste" \
               cargo test --locked -p clipboard --features unix-file-copy-paste
