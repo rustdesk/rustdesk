@@ -861,6 +861,10 @@ pub(super) fn get_capturer_for_display(
                     }
                 }
             }
+            // A retained recorder must deliver its next unchanged sample to the new encoder.
+            if let Capturer::WAYLAND(capturer) = &mut *cap_display_info.capturer.0 {
+                capturer.refresh();
+            }
             Ok(super::video_service::CapturerInfo {
                 origin: rect.0,
                 width: rect.1,

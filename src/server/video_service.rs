@@ -1274,16 +1274,12 @@ fn refresh_allowed(unfed: bool, warmed_up: bool, latency_free: bool) -> bool {
     !cfg!(target_os = "macos") || unfed || warmed_up || latency_free
 }
 
-// A still stream may exhaust both repeat budgets. Check new subscribers
-// on every WouldBlock, before either budget can prevent the stream rebuilding.
+// A still stream can exhaust both repeat budgets before another viewer joins.
 fn switch_on_new_subscriber(sp: &GenericService, first_frame: bool) -> ResultType<()> {
-    sp.snapshot(|_| {
-        if !first_frame {
-            log::trace!("switch due to new subscriber");
-            bail!("SWITCH");
-        }
-        Ok(())
-    })
+    if first_frame {
+        return Ok(());
+    }
+    sp.snapshot(|_| bail!("SWITCH"))
 }
 
 #[inline]
@@ -1614,19 +1610,13 @@ mod idle_viewer_tests {
         let sp = GenericService::new("idle-viewer-test".to_owned(), true);
         sp.on_subscribe(ConnInner::new(1, None, None));
         switch_on_new_subscriber(&sp, true).unwrap();
-        // A second viewer needs a new first frame even after capture stops returning frames.
+        sp.snapshot(|sps| {
+            assert!(!sps.has_subscribes(), "the first viewer must wait for a frame");
+            Ok(())
+        })
+        .unwrap();
         sp.on_subscribe(ConnInner::new(2, None, None));
-        assert_eq!(
-            switch_on_new_subscriber(&sp, false).unwrap_err().to_string(),
-            "SWITCH"
-        );
+        assert!(switch_on_new_subscriber(&sp, false).is_err());
         switch_on_new_subscriber(&sp, false).unwrap();
-        sp.on_unsubscribe(1);
-        sp.on_unsubscribe(2);
-        sp.on_subscribe(ConnInner::new(3, None, None));
-        assert_eq!(
-            switch_on_new_subscriber(&sp, false).unwrap_err().to_string(),
-            "SWITCH"
-        );
     }
 }

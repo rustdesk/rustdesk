@@ -376,6 +376,11 @@ impl PipeWireRecorder {
 }
 
 impl Recorder for PipeWireRecorder {
+    fn refresh(&mut self) {
+        // The existing pipewiresrc keepalive will deliver the still frame again.
+        self.saved_raw_data.clear();
+    }
+
     fn capture(&mut self, timeout_ms: u64) -> Result<PixelProvider<'_>, Box<dyn Error>> {
         if let Some(sample) = self
             .appsink
@@ -1804,7 +1809,40 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::{corrected_origin, WaylandDisplayInfo};
+    use super::{corrected_origin, gst, PipeWireRecorder, PixelProvider, Recorder, WaylandDisplayInfo};
+    use gst::prelude::*;
+
+    #[test]
+    fn a_refreshed_recorder_delivers_an_unchanged_sample() {
+        gst::init().unwrap();
+        let pipeline = gst::parse_launch(
+            "videotestsrc num-buffers=3 pattern=black ! video/x-raw,format=BGRx,width=2,height=2 ! appsink name=frames",
+        )
+        .unwrap()
+        .dynamic_cast::<gst::Pipeline>()
+        .unwrap();
+        let appsink = pipeline
+            .get_by_name("frames")
+            .unwrap()
+            .dynamic_cast()
+            .unwrap();
+        let mut rec = PipeWireRecorder {
+            buffer: None,
+            buffer_cropped: Vec::new(),
+            pix_fmt: String::new(),
+            is_cropped: false,
+            pipeline,
+            appsink,
+            width: 0,
+            height: 0,
+            saved_raw_data: Vec::new(),
+        };
+        rec.pipeline.set_state(gst::State::Playing).unwrap();
+        assert!(matches!(rec.capture(1_000).unwrap(), PixelProvider::BGR0(..)));
+        assert!(matches!(rec.capture(1_000).unwrap(), PixelProvider::NONE));
+        rec.refresh();
+        assert!(matches!(rec.capture(1_000).unwrap(), PixelProvider::BGR0(..)));
+    }
 
     fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
         WaylandDisplayInfo {
