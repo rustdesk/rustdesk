@@ -1,3 +1,5 @@
+mod staging;
+
 use super::{installer_handoff::directory, wide_string};
 use hbb_common::{anyhow::anyhow, log, ResultType};
 use std::{
@@ -29,6 +31,7 @@ use windows::{
 pub(super) struct ProtectedInstallFile {
     path: PathBuf,
     cleanup_handle: Option<Owned<HANDLE>>,
+    _directory: staging::StagingDirectory,
 }
 
 impl ProtectedInstallFile {
@@ -47,7 +50,12 @@ impl ProtectedInstallFile {
         source: &mut impl Read,
         expected_sha256: Option<&str>,
     ) -> ResultType<Self> {
-        let mut file = create_protected_file(path)?;
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow!("Protected installer path has no filename"))?;
+        let directory = staging::StagingDirectory::new(&path.with_extension("stage"))?;
+        let path = directory.path().join(filename);
+        let mut file = create_protected_file(&path)?;
         let result = (|| -> ResultType<Owned<HANDLE>> {
             io::copy(source, &mut file)?;
             file.sync_all()?;
@@ -72,13 +80,18 @@ impl ProtectedInstallFile {
             error
         })?;
         Ok(Self {
-            path: path.to_owned(),
+            path,
             cleanup_handle: Some(cleanup_handle),
+            _directory: directory,
         })
     }
 
     pub(super) fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub(super) fn directory(&self) -> &Path {
+        self._directory.path()
     }
 
     pub(super) fn release(&mut self) {
@@ -183,191 +196,4 @@ fn delete_staged_file(handle: HANDLE) -> ResultType<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use windows::{
-        core::BOOL,
-        Win32::{
-            Foundation::HANDLE,
-            Security::{
-                AccessCheck,
-                Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT},
-                CreateRestrictedToken, CreateWellKnownSid, DuplicateToken, SecurityImpersonation,
-                WinBuiltinAdministratorsSid, DACL_SECURITY_INFORMATION, DISABLE_MAX_PRIVILEGE,
-                GENERIC_MAPPING, GROUP_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
-                PRIVILEGE_SET, PSID, SECURITY_MAX_SID_SIZE, SID_AND_ATTRIBUTES, TOKEN_DUPLICATE,
-                TOKEN_QUERY,
-            },
-            Storage::FileSystem::{
-                FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
-            },
-            System::Threading::{GetCurrentProcess, OpenProcessToken},
-        },
-    };
-
-    #[test]
-    fn cancelled_staging_removes_files_without_parent_delete_permission() {
-        use windows::Win32::Security::{ImpersonateLoggedOnUser, RevertToSelf};
-        let root = std::env::temp_dir().join(format!("rustdesk-cancel-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&root).unwrap();
-        let path = root.join("package.tmp");
-        let file = ProtectedInstallFile::new(&path, b"cancelled update").unwrap();
-        // Omit DELETE_CHILD as in Windows Temp, but retain fixture ACL control.
-        set_parent_acl(&root, w!("D:P(A;;0x1600af;;;OW)"));
-        unsafe {
-            let token = ordinary_owner_token();
-            ImpersonateLoggedOnUser(*token).unwrap();
-            drop(file);
-            RevertToSelf().unwrap();
-        }
-        set_parent_acl(&root, w!("D:P(A;;FA;;;OW)"));
-        let remaining = fs::symlink_metadata(&path);
-        fs::remove_dir_all(&root).unwrap();
-        assert!(
-            matches!(remaining, Err(error) if error.kind() == io::ErrorKind::NotFound),
-            "Cancelled staging must remove the protected package"
-        );
-    }
-
-    fn set_parent_acl(path: &Path, sddl: PCWSTR) {
-        use windows::Win32::Security::{SetFileSecurityW, PROTECTED_DACL_SECURITY_INFORMATION};
-        let path = wide_string(path.to_str().unwrap());
-        let mut descriptor = PSECURITY_DESCRIPTOR::default();
-        unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                sddl,
-                SDDL_REVISION_1,
-                &mut descriptor,
-                None,
-            )
-            .unwrap();
-            let _descriptor = Owned::new(HLOCAL(descriptor.0));
-            assert!(SetFileSecurityW(
-                PCWSTR(path.as_ptr()),
-                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-                descriptor
-            )
-            .as_bool());
-        }
-    }
-
-    #[test]
-    fn staged_files_protect_contents_and_remove_unverified_data() {
-        const HASH: &str = "304ca1638c5effa6832e0e15b958a8f74847efe4df9c3f3187216e921c168fed";
-        let root = std::env::temp_dir().join(format!("rustdesk-staging-{}", uuid::Uuid::new_v4()));
-        fs::create_dir(&root).unwrap();
-        let path = root.join("input.tmp");
-        let file =
-            ProtectedInstallFile::create(&path, &mut io::Cursor::new(b"rustdesk"), Some(HASH))
-                .unwrap();
-        assert_eq!(
-            ordinary_owner_access(file.path()),
-            (FILE_GENERIC_READ | FILE_GENERIC_EXECUTE).0
-        );
-        assert_eq!(fs::read(file.path()).unwrap(), b"rustdesk");
-        assert!(ProtectedInstallFile::new(&path, b"replacement").is_err());
-        let rejected = root.join("rejected.tmp");
-        assert!(ProtectedInstallFile::create(
-            &rejected,
-            &mut io::Cursor::new(b"changed"),
-            Some(HASH)
-        )
-        .is_err());
-        assert!(!rejected.exists());
-        drop(file);
-        fs::remove_dir(root).unwrap();
-    }
-
-    fn ordinary_owner_access(path: &Path) -> u32 {
-        let path = wide_string(path.to_str().unwrap());
-        let mut descriptor = PSECURITY_DESCRIPTOR::default();
-        unsafe {
-            GetNamedSecurityInfoW(
-                PCWSTR(path.as_ptr()),
-                SE_FILE_OBJECT,
-                OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
-                None,
-                None,
-                None,
-                None,
-                &mut descriptor,
-            )
-            .ok()
-            .unwrap();
-        }
-        let _descriptor = unsafe { Owned::new(HLOCAL(descriptor.0)) };
-        let token = ordinary_owner_token();
-        let mapping = GENERIC_MAPPING {
-            GenericRead: FILE_GENERIC_READ.0,
-            GenericWrite: FILE_GENERIC_WRITE.0,
-            GenericExecute: FILE_GENERIC_EXECUTE.0,
-            GenericAll: FILE_ALL_ACCESS.0,
-        };
-        let mut privileges = PRIVILEGE_SET::default();
-        let mut size = std::mem::size_of::<PRIVILEGE_SET>() as u32;
-        let mut granted = 0;
-        let mut allowed = BOOL::default();
-        unsafe {
-            AccessCheck(
-                descriptor,
-                *token,
-                winapi::um::winnt::MAXIMUM_ALLOWED,
-                &mapping,
-                Some(&mut privileges),
-                &mut size,
-                &mut granted,
-                &mut allowed,
-            )
-            .unwrap();
-        }
-        assert!(allowed.as_bool());
-        granted
-    }
-
-    fn ordinary_owner_token() -> Owned<HANDLE> {
-        let mut original = HANDLE::default();
-        unsafe {
-            OpenProcessToken(
-                GetCurrentProcess(),
-                TOKEN_QUERY | TOKEN_DUPLICATE,
-                &mut original,
-            )
-            .unwrap();
-        }
-        let original = unsafe { Owned::new(original) };
-        let mut sid = [0; SECURITY_MAX_SID_SIZE as usize];
-        let sid_pointer = PSID(sid.as_mut_ptr().cast());
-        let mut size = sid.len() as u32;
-        unsafe {
-            CreateWellKnownSid(
-                WinBuiltinAdministratorsSid,
-                None,
-                Some(sid_pointer),
-                &mut size,
-            )
-            .unwrap();
-        }
-        let disabled = [SID_AND_ATTRIBUTES {
-            Sid: sid_pointer,
-            Attributes: 0,
-        }];
-        let mut restricted = HANDLE::default();
-        unsafe {
-            CreateRestrictedToken(
-                *original,
-                DISABLE_MAX_PRIVILEGE,
-                Some(&disabled),
-                None,
-                None,
-                &mut restricted,
-            )
-            .unwrap();
-        }
-        let restricted = unsafe { Owned::new(restricted) };
-        let mut impersonation = HANDLE::default();
-        unsafe {
-            DuplicateToken(*restricted, SecurityImpersonation, &mut impersonation).unwrap();
-        }
-        unsafe { Owned::new(impersonation) }
-    }
-}
+pub(super) mod tests;

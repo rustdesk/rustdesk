@@ -127,6 +127,8 @@ winapi = { version = "0.3", features = [
     "winspool",
 ] }
 windows = { version = "0.61", features = [
+    "Wdk_Foundation",
+    "Wdk_Storage_FileSystem",
     "Win32",
     "Win32_Foundation",
     "Win32_Security",
@@ -143,6 +145,7 @@ windows = { version = "0.61", features = [
     "Win32_System_Registry",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
