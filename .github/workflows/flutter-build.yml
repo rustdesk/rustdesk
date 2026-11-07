@@ -2356,6 +2356,7 @@ jobs:
                libclang-10-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
+               gstreamer1.0-plugins-base \
                libgtk-3-dev \
                libpulse-dev \
                libva-dev \
@@ -2441,6 +2442,10 @@ jobs:
                 exit 1
               fi
             }
+            run_drm_tests "scrap pipewire_refresh" \
+              cargo test --locked -p scrap --features drm a_refreshed_recorder_delivers_an_unchanged_sample
+            run_drm_tests "rustdesk idle_viewer_tests" \
+              cargo test --locked --lib --features drm idle_viewer_tests
             run_drm_tests "rustdesk drm_capturer_tests" \
               cargo test --locked --lib --features drm drm_capturer_tests
             run_drm_tests "rustdesk ipc::test" \
