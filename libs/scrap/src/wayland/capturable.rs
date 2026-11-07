@@ -24,6 +24,8 @@ impl<'a> PixelProvider<'a> {
 }
 
 pub trait Recorder {
+    /// Let the next unchanged sample through after an encoder rebuild.
+    fn refresh(&mut self);
     fn capture(&mut self, timeout_ms: u64) -> Result<PixelProvider<'_>, Box<dyn Error>>;
 }
 
