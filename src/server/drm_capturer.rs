@@ -36,6 +36,19 @@ const MAX_REPEATS: u8 = 3;
 const STILL_AFTER: Duration = Duration::from_millis(100);
 const STILL_FPS: u8 = 30;
 
+#[cfg(feature = "drm-vaapi")]
+fn gpu_comparison_needs_delivery(
+    compare_after: &mut Option<Instant>,
+    changed: bool,
+    now: Instant,
+) -> bool {
+    // Motion frames bypass the snapshot comparison. The first equal comparison
+    // can be a reversion to the old snapshot, so deliver it before going idle.
+    let may_have_forwarded_motion = compare_after.is_some();
+    *compare_after = changed.then_some(now + Duration::from_millis(250));
+    changed || may_have_forwarded_motion
+}
+
 struct FrameSlot {
     #[cfg(feature = "drm-vaapi")]
     latest_dmabuf: Option<scrap::drm_gpu::DmaBufFrame>,
@@ -204,7 +217,7 @@ pub struct IpcDrmCapturer {
     #[cfg(feature = "drm-vaapi")]
     gpu_detector: Option<scrap::drm_gpu::DmaBufDetector>,
     #[cfg(feature = "drm-vaapi")]
-    gpu_compare_after: Instant,
+    gpu_compare_after: Option<Instant>,
 }
 
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
@@ -555,7 +568,7 @@ impl IpcDrmCapturer {
                 #[cfg(feature = "drm-vaapi")]
                 gpu_detector: None,
                 #[cfg(feature = "drm-vaapi")]
-                gpu_compare_after: Instant::now(),
+                gpu_compare_after: None,
             },
             displays,
             wire_idx,
@@ -667,7 +680,8 @@ impl TraitCapturer for IpcDrmCapturer {
                     // Forward every intervening frame during motion. Once equal, compare
                     // each frame again so a small update or new motion is noticed promptly.
                     let compare =
-                        self.gpu_detector.is_none() || Instant::now() >= self.gpu_compare_after;
+                        self.gpu_detector.is_none()
+                            || self.gpu_compare_after.map_or(true, |at| Instant::now() >= at);
                     let changed = if compare {
                         (|| {
                             if self.gpu_detector.is_none() {
@@ -682,10 +696,12 @@ impl TraitCapturer for IpcDrmCapturer {
                     } else {
                         Ok(true)
                     };
-                    if compare && matches!(changed, Ok(true)) {
-                        self.gpu_compare_after = Instant::now() + Duration::from_millis(250);
-                    }
                     let repeat = match changed {
+                        Ok(changed) if compare => !gpu_comparison_needs_delivery(
+                            &mut self.gpu_compare_after,
+                            changed,
+                            Instant::now(),
+                        ),
                         Ok(changed) => !changed,
                         Err(error) => {
                             scrap::drm_gpu::disable(&format!(
@@ -2685,7 +2701,7 @@ mod drm_capturer_tests {
             #[cfg(feature = "drm-vaapi")]
             gpu_detector: None,
             #[cfg(feature = "drm-vaapi")]
-            gpu_compare_after: Instant::now(),
+            gpu_compare_after: None,
         }
     }
 
@@ -2945,6 +2961,27 @@ mod drm_capturer_tests {
             Ok(_) => panic!("expected a pixel-buffer frame"),
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
+    }
+
+    #[cfg(feature = "drm-vaapi")]
+    #[test]
+    fn gpu_idle_delivers_a_reversion_after_uncompared_motion() {
+        let now = Instant::now();
+        let mut compare_after = None;
+        // Snapshot A is encoded, then intervening motion B is forwarded without comparison.
+        assert!(gpu_comparison_needs_delivery(&mut compare_after, true, now));
+        // A reappears at the next comparison. It equals the snapshot but differs from B.
+        assert!(gpu_comparison_needs_delivery(
+            &mut compare_after,
+            false,
+            now + Duration::from_millis(250),
+        ));
+        // Only the following unchanged frame can be suppressed.
+        assert!(!gpu_comparison_needs_delivery(
+            &mut compare_after,
+            false,
+            now + Duration::from_millis(300),
+        ));
     }
 
     #[test]

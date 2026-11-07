@@ -20,11 +20,24 @@ server process, reads back the current frame, and continues with ordinary
 CPU capture plus VAAPI encoding. Reconnect/restart can retry the experiment.
 Screenshots explicitly read back only the frame requested.
 
-This is an experiment, not a replacement for every capture path. It currently
-encodes repeated scanouts at the requested capture rate instead of comparing
-CPU pixels to suppress identical frames. Assess GPU load, network traffic,
-static-screen quality and latency as well as CPU use before enabling it widely.
-Other GPU vendors and multiple GPUs have not been validated.
+GPU idle detection compares every quantized 8-bit RGB pixel with an owned GPU
+snapshot. Only an occlusion-query bit crosses to the CPU. During motion the
+comparison runs at most every 250 ms and intervening frames are forwarded. The
+first equal comparison after those intervening frames is also forwarded, so a
+final reversion to an older snapshot cannot leave the viewer showing stale motion.
+Once quiet, every captured frame is checked; unchanged output has three bounded
+one-second repeats and then stops encoding. A new viewer joining an idle stream
+rebuilds it so the viewer receives an initial frame. Import/comparison failure
+rebuilds the existing CPU-visible capture path.
+
+`RUSTDESK_DRM_GPU_IDLE=0` disables only this idle detector for matched A/B checks.
+It is forwarded with the explicit GPU opt-in to the unprivileged server. The
+feature remains experimental: assess GPU load, traffic, static quality and
+latency. Other GPU vendors and multiple GPUs have not been validated.
+
+A separate cursor-readback optimization is proposed in
+[libdrmtap #72](https://github.com/fxd0h/libdrmtap/pull/72). It does not cache cursor
+pixels and is independent of GPU encoder eligibility.
 
 ## Validation
 

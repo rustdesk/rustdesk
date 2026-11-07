@@ -2350,6 +2350,7 @@ jobs:
           }
           run_drm_tests cargo test --locked -p scrap --features drm-vaapi drm_gpu_tests
           run_drm_tests cargo test --locked --lib --features drm-vaapi drm_capturer_tests
+          run_drm_tests cargo test --locked --lib --features drm-vaapi idle_viewer_tests
         shell: bash
 
       - uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8 # no release tag; commit 2026-05-26
