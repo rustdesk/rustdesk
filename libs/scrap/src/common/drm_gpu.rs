@@ -153,7 +153,7 @@ mod drm_gpu_tests {
             }
             _ => panic!("GPU-capable encoder did not receive its DMA-BUF"),
         }
-        assert_eq!(yuv, [9]);
+        assert!(yuv.is_empty(), "idle repeats must not replay the old CPU frame");
     }
     #[test]
     fn screenshots_return_packed_rgba_for_padded_scanouts() {

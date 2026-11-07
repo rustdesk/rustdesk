@@ -208,7 +208,11 @@ impl Frame<'_> {
     ) -> ResultType<EncodeInput<'a>> {
         match self {
             #[cfg(all(target_os = "linux", feature = "drm-vaapi"))]
-            Frame::DmaBuf(frame) => Ok(EncodeInput::DmaBuf(frame)),
+            Frame::DmaBuf(frame) => {
+                // Both idle repeat paths use nonempty YUV as their cached CPU input.
+                yuv.clear();
+                Ok(EncodeInput::DmaBuf(frame))
+            }
             Frame::PixelBuffer(pixelbuffer) => {
                 convert_to_yuv(&pixelbuffer, yuvfmt, yuv, mid_data)?;
                 Ok(EncodeInput::YUV(yuv))
