@@ -18,7 +18,7 @@ fn main() {
             api,
             relay,
         }) {
-            Ok(name) => println!("rustdesk-custom_serverd-{}.exe", name),
+            Ok(name) => println!("rustdesk-licensed-{}.exe", name),
             Err(e) => println!("{:?}", e),
         }
     }
