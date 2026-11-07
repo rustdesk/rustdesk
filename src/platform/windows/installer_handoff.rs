@@ -54,6 +54,8 @@ fn prepare_install_commands(cmds: &InstallCommands) -> ResultType<String> {
         .map(|file| path_for_cmd_environment(file.path()).map(|path| format!("\"{path}\"")))
         .collect::<ResultType<Vec<_>>>()?
         .join(" ");
+    // While the owner is alive, guards defer directory removal to Rust's Drop.
+    // CMD removes them if uninstall has already terminated the owner.
     let directories = cmds
         .files
         .iter()
@@ -109,7 +111,9 @@ pub(super) fn run_cmds(cmds: impl Into<InstallCommands>, show: bool, tip: &str) 
     directory::create(&directory)?;
     // Close file DELETE handles before cmd opens the BAT or copies its inputs.
     // Waiting on a named pipe failed under F-Secure (#16840, #16842).
-    // Directory guards survive this release but terminate with their owning process.
+    // Directory guards protect paths only while their handles remain open.
+    // They survive this release, but cannot protect against an attacker who can
+    // control or terminate this process.
     // A cancelled UAC prompt can leave the protected inputs behind.
     script.release_files();
     let process = launch_elevated(&cmd_path, &parameters, show).map_err(|err| {

@@ -212,7 +212,8 @@ pub(super) mod tests {
                 TOKEN_QUERY,
             },
             Storage::FileSystem::{
-                FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+                FILE_ADD_FILE, FILE_ADD_SUBDIRECTORY, FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE,
+                FILE_GENERIC_READ, FILE_GENERIC_WRITE,
             },
             System::Threading::{GetCurrentProcess, OpenProcessToken},
         },
@@ -283,6 +284,10 @@ pub(super) mod tests {
         assert_eq!(
             ordinary_owner_access(file.path()),
             (FILE_GENERIC_READ | FILE_GENERIC_EXECUTE).0
+        );
+        assert_eq!(
+            ordinary_owner_access(file.directory()),
+            (FILE_GENERIC_READ | FILE_GENERIC_EXECUTE | FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY).0
         );
         assert_eq!(fs::read(file.path()).unwrap(), b"rustdesk");
         assert!(ProtectedInstallFile::new(&path, b"replacement").is_err());
