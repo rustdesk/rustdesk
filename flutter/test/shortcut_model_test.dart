@@ -315,6 +315,73 @@ void main() {
     }
   });
 
+  test('shifted Alt releases retain another held Alt, including remapped keys',
+      () async {
+    final input = _modifierInput(session);
+    const alt = GtkKeyHelper.modifierMod1;
+    const shift = GtkKeyHelper.modifierShift;
+    for (final keys in [
+      (left: 64, right: null, releaseLeft: true),
+      (left: 64, right: 108, releaseLeft: true),
+      (left: 64, right: 108, releaseLeft: false),
+      (left: 37, right: 108, releaseLeft: true),
+      (left: 37, right: 108, releaseLeft: false),
+      (left: 133, right: 134, releaseLeft: true),
+      (left: 133, right: 134, releaseLeft: false),
+    ]) {
+      await _rawKey(input, scan: 50, key: 0xffe1, modifiers: 0);
+      await _rawKey(input, scan: keys.left, key: 0xffe7, modifiers: shift);
+      if (keys.right != null) {
+        await _rawKey(input,
+            scan: keys.right!, key: 0xffe8, modifiers: shift | alt);
+      }
+      for (final down in [true, false]) {
+        await _rawKey(input,
+            scan: 41, key: 0x46, down: down, modifiers: shift | alt);
+      }
+      await _rawKey(input,
+          scan: 50, key: 0xffe1, down: false, modifiers: shift | alt);
+      await _rawKey(input,
+          scan: keys.releaseLeft ? keys.left : keys.right!,
+          key: keys.releaseLeft ? 0xffe9 : 0xffea,
+          down: false,
+          modifiers: alt);
+      expect(input.modify({}), keys.right == null ? {} : {'alt': 'true'},
+          reason: '$keys');
+      if (keys.right != null) {
+        await _rawKey(input,
+            scan: keys.releaseLeft ? keys.right! : keys.left,
+            key: keys.releaseLeft ? 0xffea : 0xffe9,
+            down: false,
+            modifiers: alt);
+      }
+      expect(input.modify({}), isEmpty);
+      _expectNoRawReleases(input);
+    }
+  });
+
+  test('a held GTK Meta mapping does not keep Alt pressed', () async {
+    final input = _modifierInput(session);
+    const gtkMeta = 1 << 28;
+    const gtkMod4 = 1 << 6;
+    const alt = GtkKeyHelper.modifierMod1;
+    const shift = GtkKeyHelper.modifierShift;
+    // Wayland omits the virtual Meta bit while Mod1 is active.
+    for (final meta in [gtkMeta | gtkMod4, gtkMod4]) {
+      await _rawKey(input, scan: 64, key: 0xffe9, modifiers: 0);
+      await _rawKey(input, scan: 50, key: 0xffe1, modifiers: alt);
+      await _rawKey(input, scan: 133, key: 0xffe7, modifiers: alt | shift);
+      await _rawKey(input,
+          scan: 50, key: 0xffe1, down: false, modifiers: alt | shift | meta);
+      await _rawKey(input,
+          scan: 64, key: 0xffe9, down: false, modifiers: alt | meta);
+      expect(input.modify({}), isEmpty);
+      await _rawKey(input,
+          scan: 133, key: 0xffe7, down: false, modifiers: meta);
+      _expectNoRawReleases(input);
+    }
+  });
+
   test('raw group releases retain only modifiers held by logical modifier keys',
       () async {
     final input = _modifierInput(session);

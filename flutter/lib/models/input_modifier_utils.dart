@@ -205,14 +205,43 @@ enum ModifierKind { alt, ctrl, shift, command }
 /// Resolve a release using its down event, keeping modifiers held by other keys.
 ModifierKind? releasedModifier(
     LogicalKeyboardKey logical, PhysicalKeyboardKey physical,
-    {Iterable<RawKeyEvent> pressedKeys = const []}) {
+    {Iterable<RawKeyEvent> pressedKeys = const [],
+    RawKeyEventData? releaseData}) {
+  // Mod2-Mod5 and virtual Super/Hyper/Meta can identify genuine Meta mappings.
+  const gtkNonAltModifiers = 0xf0 | (7 << 26);
+  final altMask = releaseData is RawKeyEventDataLinux &&
+      releaseData.keyHelper is GtkKeyHelper &&
+      releaseData.modifiers & GtkKeyHelper.modifierMod1 != 0 &&
+      releaseData.modifiers & gtkNonAltModifiers == 0;
   final down = pressedKeys.where((event) => event.physicalKey == physical);
-  final kind =
-      _modifierKind(down.isEmpty ? logical : down.first.logicalKey, physical);
+  final kind = down.isEmpty
+      ? _modifierKind(logical, physical)
+      : _rawModifierKind(down.first, logical, altMask);
   final stillPressed = pressedKeys.any((event) =>
       event.physicalKey != physical &&
-      _modifierKind(event.logicalKey, event.physicalKey) == kind);
+      _rawModifierKind(event, event.logicalKey, altMask) == kind);
   return stillPressed ? null : kind;
+}
+
+ModifierKind? _rawModifierKind(
+    RawKeyEvent event, LogicalKeyboardKey logical, bool altMask) {
+  const gtkMetaLeft = 0xffe7;
+  const gtkMetaRight = 0xffe8;
+  final data = event.data;
+  // Use the saved Shift mask: RawKeyEvent modifier getters read current state.
+  // GTK reports shifted Alt as Meta, including Alt at remapped positions.
+  if ((logical == LogicalKeyboardKey.altLeft ||
+          logical == LogicalKeyboardKey.altRight ||
+          (data.isShiftPressed &&
+              (altMask ||
+                  _releasedPhysicalModifier(event.physicalKey) ==
+                      ModifierKind.alt))) &&
+      data is RawKeyEventDataLinux &&
+      data.keyHelper is GtkKeyHelper &&
+      (data.keyCode == gtkMetaLeft || data.keyCode == gtkMetaRight)) {
+    return ModifierKind.alt;
+  }
+  return _modifierKind(event.logicalKey, event.physicalKey);
 }
 
 ModifierKind? _modifierKind(

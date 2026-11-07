@@ -244,8 +244,12 @@ class ToReleaseRawKeys {
   }
 
   updateKeyUp(RawKeyUpEvent e) {
-    if (lastLAltKeyEvent?.physicalKey == e.physicalKey) lastLAltKeyEvent = null;
-    if (lastRAltKeyEvent?.physicalKey == e.physicalKey) lastRAltKeyEvent = null;
+    if (lastLAltKeyEvent?.physicalKey == e.physicalKey) {
+      lastLAltKeyEvent = null;
+    }
+    if (lastRAltKeyEvent?.physicalKey == e.physicalKey) {
+      lastRAltKeyEvent = null;
+    }
     if (lastLCtrlKeyEvent?.physicalKey == e.physicalKey) {
       lastLCtrlKeyEvent = null;
     }
@@ -781,7 +785,7 @@ class InputModel {
     }
     if (e is RawKeyUpEvent) {
       switch (releasedModifier(key, e.physicalKey,
-          pressedKeys: toReleaseRawKeys.pressedKeys)) {
+          pressedKeys: toReleaseRawKeys.pressedKeys, releaseData: e.data)) {
         case ModifierKind.alt:
           alt = false;
           break;
