@@ -912,6 +912,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
+                #[cfg(target_os = "linux")]
                 switch_on_new_subscriber(&sp, first_frame)?;
                 #[cfg(windows)]
                 if dxgi_recovery_started
@@ -1287,6 +1288,7 @@ fn refresh_allowed(unfed: bool, warmed_up: bool, latency_free: bool) -> bool {
 }
 
 // A still stream can exhaust both repeat budgets before another viewer joins.
+#[cfg(any(target_os = "linux", test))]
 fn switch_on_new_subscriber(sp: &GenericService, first_frame: bool) -> ResultType<()> {
     if first_frame {
         return Ok(());
