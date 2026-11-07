@@ -443,6 +443,34 @@ pub fn core_main() -> Option<CoreMainAction> {
                 }
             }
             return None;
+        } else if args[0] == "--password-stdin" {
+            // Same as --password, but the value is read from stdin so it never
+            // appears in the process command line (process creation auditing, Sysmon, EDR).
+            if is_cli_setting_change_disabled() {
+                println!("Settings are disabled!");
+                return None;
+            }
+            if config::Config::is_disable_change_permanent_password() {
+                println!("Changing permanent password is disabled!");
+                return None;
+            }
+            if args.len() == 1 {
+                if crate::platform::is_installed() && is_root() {
+                    match read_password_from_stdin() {
+                        Some(password) => {
+                            if let Err(err) = crate::ipc::set_permanent_password(password) {
+                                println!("{err}");
+                            } else {
+                                println!("Done!");
+                            }
+                        }
+                        None => println!("Invalid password on standard input!"),
+                    }
+                } else {
+                    println!("Installation and administrative privileges required!");
+                }
+            }
+            return None;
         } else if args[0] == "--set-unlock-pin" {
             if config::Config::is_disable_unlock_pin() {
                 println!("Unlock PIN is disabled!");
@@ -869,6 +897,7 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
     matches!(
         args.first().map(String::as_str),
         Some("--password")
+            | Some("--password-stdin")
             | Some("--set-unlock-pin")
             | Some("--get-id")
             | Some("--set-id")
@@ -877,6 +906,23 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
             | Some("--assign")
             | Some("--deploy")
     )
+}
+
+/// Reads one line (at most 128 bytes, trailing CR/LF removed) from stdin.
+fn read_password_from_stdin() -> Option<String> {
+    use std::io::Read;
+    const MAX_LEN: u64 = 128;
+    let mut buf = Vec::new();
+    std::io::stdin()
+        .take(MAX_LEN + 2)
+        .read_to_end(&mut buf)
+        .ok()?;
+    let line = String::from_utf8(buf).ok()?;
+    let line = line.lines().next().unwrap_or_default();
+    if line.is_empty() || line.len() as u64 > MAX_LEN {
+        return None;
+    }
+    Some(line.to_owned())
 }
 
 #[inline]
