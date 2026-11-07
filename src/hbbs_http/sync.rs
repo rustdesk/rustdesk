@@ -310,9 +310,6 @@ const BLOCKED_CONFIG_OPTIONS: &[&str] = &[
     keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD,
     keys::OPTION_ENABLE_TRUSTED_DEVICES,
     keys::OPTION_TRUSTED_DEVICE_EXPIRATION,
-    keys::OPTION_ALLOW_ONLY_CONN_WINDOW_OPEN,
-    keys::OPTION_ALLOW_SCOPE_VIOLATION_CLOSE,
-    keys::OPTION_ALLOW_SCOPE_VIOLATION_ALARM,
     // Deployment and address book metadata.
     keys::OPTION_PRESET_ADDRESS_BOOK_NAME,
     keys::OPTION_PRESET_ADDRESS_BOOK_TAG,
@@ -531,7 +528,7 @@ mod strategy_tests {
 
     #[test]
     fn strategy_cannot_replace_or_clear_server_trust_and_credentials() {
-        for value in ["attacker", ""] {
+        for value in ["attacker", "Y", "N", ""] {
             let mut options = [
                 "custom-rendezvous-server",
                 "rendezvous-servers",
@@ -547,9 +544,6 @@ mod strategy_tests {
                 "preset-address-book-password",
                 "enable-trusted-devices",
                 "trusted-device-expiration-days",
-                "allow-only-conn-window-open",
-                "allow-scope-violation-close",
-                "allow-scope-violation-alarm",
                 "preset-address-book-name",
                 "preset-address-book-tag",
                 "preset-address-book-alias",
@@ -608,10 +602,14 @@ mod strategy_tests {
             "allow-auto-disconnect",
             "auto-disconnect-timeout",
             "allow-remove-wallpaper",
+            // Security policy controls.
+            "allow-only-conn-window-open",
+            "allow-scope-violation-close",
+            "allow-scope-violation-alarm",
             // Future strategy option.
             "future-stategy-option",
         ];
-        for value in ["Y", ""] {
+        for value in ["Y", "N", ""] {
             let mut options: HashMap<_, _> = policy_keys
                 .into_iter()
                 .map(|key| (key.to_owned(), value.to_owned()))
