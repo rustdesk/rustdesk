@@ -785,6 +785,13 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
                     param_array.push(format!("switch_uuid={switch_uuid}"));
                 }
             }
+            "--display" => {
+                if let Some(display_str) = args.next() {
+                    if let Ok(val) = display_str.parse::<i32>() {
+                        param_array.push(format!("display={val}"));
+                    }
+                }
+            }
             _ => {}
         }
     }

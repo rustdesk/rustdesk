@@ -160,6 +160,18 @@ class _RemotePageState extends State<RemotePage>
     }
     Get.put<FFI>(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
+      final availableDisplays = _ffi.ffiModel.pi.displays;
+      if (widget.display != null) {
+        int zeroIndexedTarget = widget.display! - 1;
+        if (zeroIndexedTarget >= 0 && zeroIndexedTarget < availableDisplays.length) {
+          _ffi.ffiModel.switchToNewDisplay(zeroIndexedTarget, _ffi.sessionId, peerId);
+          try {
+            CurrentDisplayState.find(peerId).value = zeroIndexedTarget;
+          } catch (e) {
+            //
+          }
+        }
+      }
       _ffi.canvasModel.activateLocalCursor();
       showKBLayoutTypeChooserIfNeeded(
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);

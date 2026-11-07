@@ -2287,6 +2287,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   String? switchUuid;
   bool? forceRelay;
   var loginMethod = '';
+  int? targetDisplay;
   for (int i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--connect':
@@ -2340,6 +2341,12 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
       case '--relay':
         forceRelay = true;
         break;
+      case '--display':
+        if (i + 1 < args.length) {
+          targetDisplay = int.tryParse(args[i + 1]);
+          i++;
+        }
+        break;
       default:
         break;
     }
@@ -2355,7 +2362,8 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
               loginMethod: loginMethod,
               password: password,
               switchUuid: switchUuid,
-              forceRelay: forceRelay);
+              forceRelay: forceRelay,
+              display: targetDisplay);
         });
         break;
       case UriLinkType.fileTransfer:
@@ -2540,6 +2548,8 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     String? switch_uuid = param["switch_uuid"];
     if (switch_uuid != null) args.addAll(['--switch_uuid', switch_uuid]);
     if (param["relay"] != null) args.add("--relay");
+    String? display = param["display"];
+    if (display != null) args.addAll(['--display', display]);
     return args;
   }
 
@@ -2556,7 +2566,8 @@ connectMainDesktop(String id,
     String? password,
     String? connToken,
     bool? isSharedPassword,
-    String loginMethod = ''}) async {
+    String loginMethod,
+    int? display}) async {
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id,
         loginMethod: loginMethod,
@@ -2590,7 +2601,8 @@ connectMainDesktop(String id,
         loginMethod: loginMethod,
         password: password,
         isSharedPassword: isSharedPassword,
-        forceRelay: forceRelay);
+        forceRelay: forceRelay,
+        display: display);
   }
 }
 
@@ -2609,7 +2621,8 @@ connect(BuildContext context, String id,
     String? password,
     String? connToken,
     bool? isSharedPassword,
-    String loginMethod = ''}) async {
+    String loginMethod,
+    int? display}) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
@@ -2643,6 +2656,7 @@ connect(BuildContext context, String id,
         password: password,
         isSharedPassword: isSharedPassword,
         forceRelay: forceRelay,
+        display: display,
       );
     } else {
       await rustDeskWinManager.call(WindowType.Main, kWindowConnect, {
@@ -2657,6 +2671,7 @@ connect(BuildContext context, String id,
         'forceRelay': forceRelay,
         'connToken': connToken,
         'loginMethod': loginMethod,
+        'display': display,
       });
     }
   } else {
