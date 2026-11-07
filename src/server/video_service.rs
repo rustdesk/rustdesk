@@ -900,6 +900,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
+                switch_on_new_subscriber(&sp, first_frame)?;
                 #[cfg(windows)]
                 if dxgi_recovery_started
                     .map(|started| started.elapsed() >= DXGI_RECOVERY_FRAME_GRACE)
@@ -1273,6 +1274,18 @@ fn refresh_allowed(unfed: bool, warmed_up: bool, latency_free: bool) -> bool {
     !cfg!(target_os = "macos") || unfed || warmed_up || latency_free
 }
 
+// A still stream may exhaust both repeat budgets. Check new subscribers
+// on every WouldBlock, before either budget can prevent the stream rebuilding.
+fn switch_on_new_subscriber(sp: &GenericService, first_frame: bool) -> ResultType<()> {
+    sp.snapshot(|_| {
+        if !first_frame {
+            log::trace!("switch due to new subscriber");
+            bail!("SWITCH");
+        }
+        Ok(())
+    })
+}
+
 #[inline]
 fn handle_one_frame(
     display: usize,
@@ -1588,5 +1601,32 @@ mod tests {
         assert!(refresh_allowed(false, false, true));
         // Nothing fed yet: no warm-up to lose, and a refresh can restart a stalled capturer.
         assert!(refresh_allowed(true, false, false));
+    }
+}
+
+#[cfg(test)]
+mod idle_viewer_tests {
+    use super::*;
+    use crate::server::{connection::ConnInner, service::Service};
+
+    #[test]
+    fn a_new_viewer_requests_rebuilding_an_existing_idle_stream() {
+        let sp = GenericService::new("idle-viewer-test".to_owned(), true);
+        sp.on_subscribe(ConnInner::new(1, None, None));
+        switch_on_new_subscriber(&sp, true).unwrap();
+        // A second viewer needs a new first frame even after capture stops returning frames.
+        sp.on_subscribe(ConnInner::new(2, None, None));
+        assert_eq!(
+            switch_on_new_subscriber(&sp, false).unwrap_err().to_string(),
+            "SWITCH"
+        );
+        switch_on_new_subscriber(&sp, false).unwrap();
+        sp.on_unsubscribe(1);
+        sp.on_unsubscribe(2);
+        sp.on_subscribe(ConnInner::new(3, None, None));
+        assert_eq!(
+            switch_on_new_subscriber(&sp, false).unwrap_err().to_string(),
+            "SWITCH"
+        );
     }
 }

@@ -2441,6 +2441,8 @@ jobs:
                 exit 1
               fi
             }
+            run_drm_tests "rustdesk idle_viewer_tests" \
+              cargo test --locked --lib --features drm idle_viewer_tests
             run_drm_tests "rustdesk drm_capturer_tests" \
               cargo test --locked --lib --features drm drm_capturer_tests
             run_drm_tests "rustdesk ipc::test" \
