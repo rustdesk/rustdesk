@@ -2333,7 +2333,8 @@ jobs:
       - name: Test optional DRM VAAPI input
         run: |
           sudo apt-get install -y clang libclang-dev libasound2-dev libdbus-1-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libpulse-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-plugins-base libpulse-dev \
             libudev-dev libv4l-dev libgtk-3-dev libayatana-appindicator3-dev \
             libxdo-dev libxfixes-dev libxrandr-dev libxtst-dev libssl-dev \
             libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev
@@ -2383,6 +2384,7 @@ jobs:
                libclang-10-dev \
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
+               gstreamer1.0-plugins-base \
                libgtk-3-dev \
                libpulse-dev \
                libva-dev \
