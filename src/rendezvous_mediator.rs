@@ -439,6 +439,7 @@ impl RendezvousMediator {
                 n = socket.next() => {
                     match n {
                         Some(Ok((bytes, _))) => {
+                            if seal.on_cookie(&bytes, &mut socket, &addr).await? { continue; }
                             let Some((bytes, sealed)) = seal.open(bytes) else { continue };
                             if let Ok(msg) = Message::parse_from_bytes(&bytes) {
                                 if sealed && bytes.is_empty() {

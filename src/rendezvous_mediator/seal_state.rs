@@ -7,7 +7,8 @@
 //! missed answer while sealed is retried both under the session and with a hello, since a server
 //! restart retires every session; the session stays for pushes until a welcome replaces it. Such
 //! a socket never falls back: its server seals. Only a new socket, which may reach another
-//! server, probes afresh.
+//! server, probes afresh. A server past its hello budget answers with a cookie, which only a
+//! server that seals sends: the hello goes again with it and the socket is sealed.
 
 use super::{Sink, TargetAddr};
 use hbb_common::{
@@ -18,7 +19,7 @@ use hbb_common::{
     rendezvous_proto::{rendezvous_message, RendezvousMessage},
     sodiumoxide::crypto::sign,
     udp::FramedSocket,
-    udp_seal::{self, ClientSeal},
+    udp_seal::{self, ClientSeal, Cookie},
     ResultType,
 };
 use std::sync::Mutex;
@@ -26,9 +27,10 @@ use std::sync::Mutex;
 const PROBE_TRIES: u8 = 2;
 const PROBE_EVERY: u8 = 4;
 
-// The hosts whose registration is sealed now, and their keys: a one-off datagram to one of them
-// may go sealed too. Only a socket with a session adds its host, so an older server never gets one.
-static SEALED: Mutex<Vec<(String, sign::PublicKey)>> = Mutex::new(Vec::new());
+// The hosts whose registration is sealed now, their keys and cookies: a one-off datagram to one
+// of them may go sealed too. Only a socket with a session or a cookie adds its host, so an older
+// server never gets one.
+static SEALED: Mutex<Vec<(String, sign::PublicKey, Option<Cookie>)>> = Mutex::new(Vec::new());
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Mode {
@@ -138,6 +140,27 @@ impl SealState {
         Some((BytesMut::from(&payload[..]), true))
     }
 
+    /// Whether `bytes` was a cookie reply; one to the latest hello sends that hello again with it.
+    pub(super) async fn on_cookie(
+        &mut self,
+        bytes: &[u8],
+        socket: &mut FramedSocket,
+        addr: &TargetAddr<'_>,
+    ) -> ResultType<bool> {
+        let Some(seal) = self.seal.as_mut().filter(|_| udp_seal::is_cookie(bytes)) else {
+            return Ok(false);
+        };
+        if let Some(again) = seal.on_cookie(bytes) {
+            let cookie = seal.cookie();
+            socket.send_bytes(again.into(), addr.to_owned()).await?;
+            self.set_mode(Mode::Sealed);
+            if let Some(entry) = SEALED.lock().unwrap().iter_mut().find(|e| e.0 == self.host) {
+                entry.2 = cookie;
+            }
+        }
+        Ok(true)
+    }
+
     /// Whether to act on a parsed message. Unless the socket fell back, every registration went
     /// sealed, so a plaintext answer to one is forged; once sealed, so is a plaintext push from a
     /// server that seals every push. A sealed answer
@@ -180,8 +203,9 @@ impl SealState {
         match self.server {
             Some(server) if mode == Mode::Sealed => {
                 let mut sealed = SEALED.lock().unwrap();
-                sealed.retain(|(host, _)| *host != self.host);
-                sealed.push((self.host.clone(), server));
+                sealed.retain(|e| e.0 != self.host);
+                let cookie = self.seal.as_ref().and_then(|s| s.cookie());
+                sealed.push((self.host.clone(), server, cookie));
             }
             _ if was_sealed && !mode.seals() => self.forget_sealed(),
             _ => {}
@@ -189,10 +213,7 @@ impl SealState {
     }
 
     fn forget_sealed(&self) {
-        SEALED
-            .lock()
-            .unwrap()
-            .retain(|(host, _)| *host != self.host);
+        SEALED.lock().unwrap().retain(|e| e.0 != self.host);
     }
 }
 
@@ -261,12 +282,14 @@ pub(super) fn seal_one_shot(host: &str, data: Vec<u8>) -> Vec<u8> {
         .lock()
         .unwrap()
         .iter()
-        .find(|(h, _)| h == host)
-        .map(|(_, pk)| *pk);
-    match server
-        .and_then(|pk| ClientSeal::new(&pk, None))
-        .and_then(|mut seal| seal.seal(&data))
-    {
+        .find(|e| e.0 == host)
+        .map(|e| (e.1, e.2));
+    let seal = server.and_then(|(pk, cookie)| {
+        let mut seal = ClientSeal::new(&pk, None)?;
+        seal.set_cookie(cookie);
+        Some(seal)
+    });
+    match seal.and_then(|mut seal| seal.seal(&data)) {
         Some(sealed) => sealed,
         None => data,
     }
@@ -450,6 +473,33 @@ mod tests {
             state.open(BytesMut::from(&push[..])).is_some(),
             "a push under the session still opens"
         );
+    }
+
+    #[tokio::test]
+    async fn a_cookie_sends_the_hello_again_and_the_socket_stays_sealed() {
+        let (mut state, server) = state("cookie");
+        let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
+        let hello = registration(&mut state, &register_peer).await;
+        let reply = udp_seal::cookie_reply(&hello[0], [5u8; 16]).unwrap();
+        let mut socket = FramedSocket::new("127.0.0.1:0").await.unwrap();
+        let peer = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let addr = TargetAddr::Ip(peer.local_addr().unwrap());
+        assert!(state.on_cookie(&reply, &mut socket, &addr).await.unwrap());
+        let mut buf = [0u8; 2048];
+        let wait = std::time::Duration::from_millis(500);
+        let n = tokio::time::timeout(wait, peer.recv(&mut buf))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(udp_seal::hello_cookie(&buf[..n]), Some([5u8; 16]));
+        assert!(server.open(&buf[..n], || 1).is_some());
+        assert_eq!(
+            rounds(&mut state, &[true; 4]).await,
+            [true; 4],
+            "only a server that seals sends a cookie"
+        );
+        let punch = seal_one_shot("cookie", b"\x0a\x00".to_vec());
+        assert_eq!(udp_seal::hello_cookie(&punch), Some([5u8; 16]));
     }
 
     #[tokio::test]
