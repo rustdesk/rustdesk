@@ -272,8 +272,9 @@ pub(super) enum FrameTaken {
 /// Whether a decoded GPU frame may be presented into its display session.
 ///
 /// Mirrors the size check `on_rgba` does for software frames: a session whose
-/// size is still unset adopts the first frame, but once a size is known a frame
-/// of any other size must be refused. The session size comes from the
+/// size is still unset accepts the frame as it is — `(0, 0)` means the size is
+/// not known yet, not that it is zero — and once a size is known a frame of any
+/// other size must be refused. The session size comes from the
 /// asynchronous peer info, so it lags a resolution change; presenting the
 /// mismatched frame anyway lets the plugin rebuild its texture at the frame size
 /// while the widget still lays out at the old one, i.e. sheared rows that keep
@@ -720,18 +721,12 @@ impl VideoRenderer {
         if !accepted {
             return FrameTaken::No;
         }
-        // This path never touches `size`, so a session that missed the
-        // asynchronous `session_set_size` would keep mapping the local
-        // cursor against (0,0). Adopt the frame size the same way on_rgba
-        // does.
-        if info.size == (0, 0) {
-            log::info!(
-                "display #{display}: adopting frame size ({},{}) as the session size (direct path)",
-                pixelbuffer.width(),
-                pixelbuffer.height()
-            );
-            info.size = (pixelbuffer.width() as usize, pixelbuffer.height() as usize);
-        }
+        // Deliberately does NOT adopt the frame size into `info.size`, matching
+        // `on_rgba`, which lets a `(0, 0)` session through without writing it.
+        // Adopting would turn a size that is merely late into a size that is
+        // wrong: after one frame it is no longer `(0, 0)`, so a resolution change
+        // that Flutter never reports (`session_set_size` does not fire) would be
+        // refused for the rest of the session instead of tolerated.
         if info.notify_render_type == Some(RenderType::PixelBuffer) {
             return FrameTaken::Yes;
         }
@@ -2747,8 +2742,9 @@ mod tests {
     use super::pixelbuffer_fits_session;
 
     #[test]
-    fn unset_session_adopts_the_first_frame() {
-        // The session size arrives out of band; the first frame is what sets it.
+    fn unset_session_accepts_the_first_frame() {
+        // The session size arrives out of band; while it is unknown a frame of any
+        // size is accepted, and nothing is written back into the session.
         assert!(pixelbuffer_fits_session((0, 0), 2944, 1656));
     }
 
