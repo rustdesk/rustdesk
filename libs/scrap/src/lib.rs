@@ -38,7 +38,7 @@ pub type PixelBufferOutput = Option<::hwcodec::ffmpeg_ram::pixelbuffer::PixelBuf
 #[cfg(not(all(target_os = "macos", feature = "hwcodec")))]
 pub type PixelBufferOutput = Option<std::convert::Infallible>;
 
-/// A decoder-side hand-off switch: "can the renderer take decoded GPU frames?".
+/// A session-side answer to "can the renderer take decoded GPU frames?".
 ///
 /// One of these belongs to **one** decoder owner -- a session, or a display's
 /// video handler -- never to the process. Two sessions can render differently
@@ -47,9 +47,10 @@ pub type PixelBufferOutput = Option<std::convert::Infallible>;
 /// software session's decoder skip its software transfer and stall, while turning
 /// it off for the software session would disable the optimisation everywhere.
 ///
-/// The handle is shared by reference with the decoder
-/// (`hwcodec::ffmpeg_ram::decode::Decoder::set_pixelbuffer_wanted`), so the answer
-/// can change between frames without restarting the decoder.
+/// The handle is read once per received frame and handed to the decoder as the
+/// `want_gpu` argument of that decode call, so the answer can change between
+/// frames without restarting the decoder. It is an input, never evidence: what a
+/// call produced is read back from its return value.
 ///
 /// It starts `false`. Every owner that has not asked for GPU surfaces -- a build
 /// without the plugin entry point, texture rendering off, a UI that never opts in
@@ -57,9 +58,3 @@ pub type PixelBufferOutput = Option<std::convert::Infallible>;
 /// before the direct path existed.
 #[cfg(all(target_os = "macos", feature = "hwcodec"))]
 pub type GpuFramesWanted = std::sync::Arc<std::sync::atomic::AtomicBool>;
-
-/// Create a fresh hand-off switch. Each decoder owner gets its own.
-#[cfg(all(target_os = "macos", feature = "hwcodec"))]
-pub fn gpu_frames_wanted_flag(wanted: bool) -> GpuFramesWanted {
-    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(wanted))
-}

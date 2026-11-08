@@ -310,10 +310,6 @@ impl HwRamEncoder {
 pub struct HwRamDecoder {
     decoder: Decoder,
     pub info: CodecInfo,
-    /// The same switch the inner decoder consults, kept here so the decode loop
-    /// can read it without a second handle.
-    #[cfg(target_os = "macos")]
-    pixelbuffer_wanted: crate::GpuFramesWanted,
 }
 
 impl HwRamDecoder {
@@ -364,73 +360,78 @@ impl HwRamDecoder {
             thread_count: codec_thread_num(16) as _,
         };
         match Decoder::new(ctx) {
-            Ok(mut decoder) => {
-                // Reject by default: a decoder nobody configured must keep
-                // producing software frames. The owner installs its own switch
-                // with `set_pixelbuffer_wanted` when its renderer can present
-                // GPU frames.
-                #[cfg(target_os = "macos")]
-                let pixelbuffer_wanted = crate::gpu_frames_wanted_flag(false);
-                #[cfg(target_os = "macos")]
-                decoder.set_pixelbuffer_wanted(pixelbuffer_wanted.clone());
-                Ok(HwRamDecoder {
-                    decoder,
-                    info,
-                    #[cfg(target_os = "macos")]
-                    pixelbuffer_wanted,
-                })
-            }
+            Ok(decoder) => Ok(HwRamDecoder { decoder, info }),
             Err(_) => {
                 HwCodecConfig::clear(false, false);
                 Err(anyhow!(format!("Failed to create decoder")))
             }
         }
     }
-    pub fn decode<'a>(&'a mut self, data: &[u8]) -> ResultType<Vec<HwRamDecoderImage<'a>>> {
-        match self.decoder.decode(data) {
-            Ok(v) => Ok(v.iter().map(|f| HwRamDecoderImage { frame: f }).collect()),
-            Err(e) => Err(anyhow!(e)),
+
+    /// Decode one packet.
+    ///
+    /// `want_gpu` answers "can the caller present a decoded GPU frame?" for this
+    /// packet. It has to arrive with the packet: the decoder decides *during*
+    /// the call whether to skip its software transfer, so a switch it consulted
+    /// beforehand would be answering a different question. What the call
+    /// actually produced is read back from the return value, never from the
+    /// argument.
+    ///
+    /// On platforms without a GPU-frame path the argument is ignored and the
+    /// software frames are the whole output.
+    pub fn decode<'a>(&'a mut self, data: &[u8], want_gpu: bool) -> ResultType<HwRamDecoded<'a>> {
+        #[cfg(target_os = "macos")]
+        {
+            let decoded = self
+                .decoder
+                .decode_gpu(data, want_gpu)
+                .map_err(|e| anyhow!(e))?;
+            // Both halves come from this one call: the GPU frame is moved out of
+            // the decoder, the software frames are borrowed from it and cannot
+            // outlive the next `decode`.
+            let frames: &'a mut Vec<DecodeFrame> = decoded.frames;
+            Ok(HwRamDecoded {
+                images: frames
+                    .iter()
+                    .map(|f| HwRamDecoderImage { frame: f })
+                    .collect(),
+                pixelbuffer: decoded.pixelbuffer,
+            })
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = want_gpu;
+            let frames = self.decoder.decode(data).map_err(|e| anyhow!(e))?;
+            Ok(HwRamDecoded {
+                images: frames
+                    .iter()
+                    .map(|f| HwRamDecoderImage { frame: f })
+                    .collect(),
+                pixelbuffer: None,
+            })
         }
     }
+}
 
-    /// Whether this decoder may hand out a GPU frame right now.
+/// What one [`HwRamDecoder::decode`] call produced.
+///
+/// Both halves belong to that call and are handed over together, so a caller
+/// never has to ask the decoder twice nor keep a frame from an earlier call:
+/// `pixelbuffer` was moved out of the decoder, while `images` borrow it and are
+/// therefore unusable after the next `decode`.
+pub struct HwRamDecoded<'a> {
+    /// Software frames this call produced, in decode order.
+    pub images: Vec<HwRamDecoderImage<'a>>,
+    /// The GPU frame this call delivered, if the caller asked for one and the
+    /// decoder handed one over.
     ///
-    /// Read by the decode loop to decide between the two-step form (needed to
-    /// take the surface before the software images are borrowed) and the single
-    /// allocation that the software-only path has always used.
-    #[cfg(target_os = "macos")]
-    pub fn pixelbuffer_wanted(&self) -> bool {
-        self.pixelbuffer_wanted
-            .load(std::sync::atomic::Ordering::Relaxed)
-    }
-
-    /// Install the owner's "can the renderer present GPU frames" handle.
-    ///
-    /// Called once per decoder owner (session / display video handler), so two
-    /// sessions with different render paths do not share one switch.
-    #[cfg(target_os = "macos")]
-    pub fn set_pixelbuffer_wanted(&mut self, wanted: crate::GpuFramesWanted) {
-        self.pixelbuffer_wanted = wanted.clone();
-        self.decoder.set_pixelbuffer_wanted(wanted);
-    }
-
-    /// Take the GPU frame produced by the last `decode` call, if any.
-    ///
-    /// `decode` hands out a mutable borrow, so callers read the GPU frame first
-    /// and then the software frames through [`Self::last_frame_images`].
-    #[cfg(target_os = "macos")]
-    pub fn take_pixelbuffer(&mut self) -> crate::PixelBufferOutput {
-        self.decoder.take_pixelbuffer()
-    }
-
-    /// Software frames of the last `decode` call, behind a shared borrow.
-    pub fn last_frame_images(&self) -> Vec<HwRamDecoderImage<'_>> {
-        self.decoder
-            .last_frames()
-            .iter()
-            .map(|f| HwRamDecoderImage { frame: f })
-            .collect()
-    }
+    /// `Some` means the decoder skipped its software transfer for this packet,
+    /// so `images` is empty and this frame is the output. `None` means the
+    /// images above are: the caller did not ask, the format is not directly
+    /// deliverable, or a software frame won the same transaction. On targets
+    /// without a GPU-frame path the type is `Option<Infallible>`, so it is
+    /// always `None` and costs nothing.
+    pub pixelbuffer: crate::PixelBufferOutput,
 }
 
 pub struct HwRamDecoderImage<'a> {
