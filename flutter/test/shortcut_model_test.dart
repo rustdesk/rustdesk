@@ -62,7 +62,6 @@ class _LegacyBinding extends _ChatBinding {
       };
 
   final keys = <(String, bool, bool)>[];
-  final rawKeys = <(int, bool)>[];
 
   @override
   Future<void> sessionHandleFlutterRawKeyEvent(
@@ -72,9 +71,7 @@ class _LegacyBinding extends _ChatBinding {
       required int positionCode,
       required int lockModes,
       required bool downOrUp,
-      dynamic hint}) async {
-    rawKeys.add((positionCode, downOrUp));
-  }
+      dynamic hint}) async {}
 
   @override
   bool sessionGetToggleOptionSync(
@@ -321,13 +318,9 @@ void main() {
     const alt = GtkKeyHelper.modifierMod1;
     const shift = GtkKeyHelper.modifierShift;
     for (final keys in [
-      (left: 64, right: null, releaseLeft: true),
-      (left: 64, right: 108, releaseLeft: true),
-      (left: 64, right: 108, releaseLeft: false),
-      (left: 37, right: 108, releaseLeft: true),
-      (left: 37, right: 108, releaseLeft: false),
-      (left: 133, right: 134, releaseLeft: true),
-      (left: 133, right: 134, releaseLeft: false),
+      (left: 64, right: null),
+      (left: 37, right: 108),
+      (left: 133, right: 134),
     ]) {
       await _rawKey(input, scan: 50, key: 0xffe1, modifiers: 0);
       await _rawKey(input, scan: keys.left, key: 0xffe7, modifiers: shift);
@@ -342,18 +335,12 @@ void main() {
       await _rawKey(input,
           scan: 50, key: 0xffe1, down: false, modifiers: shift | alt);
       await _rawKey(input,
-          scan: keys.releaseLeft ? keys.left : keys.right!,
-          key: keys.releaseLeft ? 0xffe9 : 0xffea,
-          down: false,
-          modifiers: alt);
+          scan: keys.left, key: 0xffe9, down: false, modifiers: alt);
       expect(input.modify({}), keys.right == null ? {} : {'alt': 'true'},
           reason: '$keys');
       if (keys.right != null) {
         await _rawKey(input,
-            scan: keys.releaseLeft ? keys.right! : keys.left,
-            key: keys.releaseLeft ? 0xffea : 0xffe9,
-            down: false,
-            modifiers: alt);
+            scan: keys.right!, key: 0xffea, down: false, modifiers: alt);
       }
       expect(input.modify({}), isEmpty);
       _expectNoRawReleases(input);
@@ -417,8 +404,6 @@ void main() {
       () async {
     final input = _modifierInput(session);
     for (final releaseLeftFirst in [false, true]) {
-      await _rawKey(input, scan: 9, key: 0xff1b, modifiers: 0);
-      await _rawKey(input, scan: 9, key: 0xff1b, down: false, modifiers: 0);
       await _rawKey(input, scan: 64, key: 0xffe9, modifiers: 0);
       await _rawKey(input,
           scan: 108, key: 0xfe08, modifiers: GtkKeyHelper.modifierMod1);

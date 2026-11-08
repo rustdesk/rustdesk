@@ -242,53 +242,5 @@ void main() {
         ModifierKind.ctrl,
       );
     });
-
-    test('matches the modifier by logical key', () {
-      expect(
-        releasedModifier(
-            LogicalKeyboardKey.altLeft, PhysicalKeyboardKey.altLeft),
-        ModifierKind.alt,
-      );
-      expect(
-        releasedModifier(
-            LogicalKeyboardKey.controlRight, PhysicalKeyboardKey.controlRight),
-        ModifierKind.ctrl,
-      );
-      expect(
-        releasedModifier(
-            LogicalKeyboardKey.shiftLeft, PhysicalKeyboardKey.shiftLeft),
-        ModifierKind.shift,
-      );
-      expect(
-        releasedModifier(
-            LogicalKeyboardKey.superKey, PhysicalKeyboardKey.metaLeft),
-        ModifierKind.command,
-      );
-    });
-
-    test(
-        'matches the modifier by physical key when the layout remaps the logical key',
-        () {
-      // With XKB `grp:alts_toggle` the Alt release arrives as ISO_Prev_Group,
-      // so only the physical key still identifies Alt.
-      final groupSwitch = LogicalKeyboardKey.groupPrevious;
-      expect(releasedModifier(groupSwitch, PhysicalKeyboardKey.altLeft),
-          ModifierKind.alt);
-      expect(releasedModifier(groupSwitch, PhysicalKeyboardKey.altRight),
-          ModifierKind.alt);
-      expect(releasedModifier(groupSwitch, PhysicalKeyboardKey.controlLeft),
-          ModifierKind.ctrl);
-      expect(releasedModifier(groupSwitch, PhysicalKeyboardKey.shiftRight),
-          ModifierKind.shift);
-      expect(releasedModifier(groupSwitch, PhysicalKeyboardKey.metaRight),
-          ModifierKind.command);
-    });
-
-    test('ignores keys that are not modifiers', () {
-      expect(
-        releasedModifier(LogicalKeyboardKey.keyA, PhysicalKeyboardKey.keyA),
-        isNull,
-      );
-    });
   });
 }

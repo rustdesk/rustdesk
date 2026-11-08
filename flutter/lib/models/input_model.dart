@@ -222,6 +222,7 @@ class ToReleaseRawKeys {
       ].whereType<RawKeyEvent>();
 
   updateKeyDown(LogicalKeyboardKey logicKey, RawKeyDownEvent e) {
+    // Track the mapped modifier itself; other held modifiers must not hide it.
     if (logicKey == LogicalKeyboardKey.altLeft) {
       lastLAltKeyEvent = e;
     } else if (logicKey == LogicalKeyboardKey.altRight) {
@@ -244,6 +245,7 @@ class ToReleaseRawKeys {
   }
 
   updateKeyUp(RawKeyUpEvent e) {
+    // Layout switches and shifted Alt can change the logical key on release.
     if (lastLAltKeyEvent?.physicalKey == e.physicalKey) {
       lastLAltKeyEvent = null;
     }
@@ -784,6 +786,7 @@ class InputModel {
       toReleaseRawKeys.updateKeyDown(key, e);
     }
     if (e is RawKeyUpEvent) {
+      // Resolve against the saved down event before updateKeyUp removes it.
       switch (releasedModifier(key, e.physicalKey,
           pressedKeys: toReleaseRawKeys.pressedKeys, releaseData: e.data)) {
         case ModifierKind.alt:
