@@ -33,15 +33,15 @@ appimage/*.xz
 flutter/linux/build/**
 flutter/linux/cmake-build-debug/**
 # flatpak
-flatpak/.flatpak-builder/**
-flatpak/ccache/**
-flatpak/.flatpak-builder/build/**
-flatpak/.flatpak-builder/shared-modules/**
-flatpak/.flatpak-builder/shared-modules/*.tar.xz
-flatpak/.flatpak-builder/debian-binary
-flatpak/build/**
-flatpak/repo/**
-flatpak/*.flatpak
+com.rustdesk.RustDesk/.flatpak-builder/**
+com.rustdesk.RustDesk/ccache/**
+com.rustdesk.RustDesk/.flatpak-builder/build/**
+com.rustdesk.RustDesk/.flatpak-builder/shared-modules/**
+com.rustdesk.RustDesk/.flatpak-builder/shared-modules/*.tar.xz
+com.rustdesk.RustDesk/.flatpak-builder/debian-binary
+com.rustdesk.RustDesk/build/**
+com.rustdesk.RustDesk/repo/**
+com.rustdesk.RustDesk/*.flatpak
 # bridge file
 lib/generated_bridge.dart
 # vscode devcontainer
