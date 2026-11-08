@@ -961,56 +961,21 @@ impl Decoder {
     }
 }
 
-/// Which frame of a packet the caller must present.
+/// Clear the surface slot when this packet produced a software picture.
 ///
-/// The decode loop next door is driven by a real hardware decoder, so the ordering
-/// rule -- "the last decoded frame of a batch is the one presented" -- is factored
-/// out of it rather than tested through the FFI.
-#[cfg(feature = "hwcodec")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Presented {
-    /// The decoder handed out a surface for this packet.
-    Surface,
-    /// The packet converted to a software picture.
-    Software,
-    /// Neither happened: present nothing and leave the slot as it was.
-    Nothing,
-}
-
-#[cfg(feature = "hwcodec")]
-impl Presented {
-    /// Only a software picture evicts whatever an earlier packet of the same batch
-    /// left in the surface slot. Leaving it there would make the callback present
-    /// that older surface and skip the newer picture, and with the direct path off
-    /// the caller drops such a frame instead of painting stale pixels.
-    fn evicts_surface(self) -> bool {
-        matches!(self, Presented::Software)
-    }
-}
-
-/// `surface` -- a surface was taken for this packet; `software_ok` -- a software
-/// conversion of this packet's output succeeded.
-#[cfg(feature = "hwcodec")]
-fn presented(surface: bool, software_ok: bool) -> Presented {
-    if surface {
-        Presented::Surface
-    } else if software_ok {
-        Presented::Software
-    } else {
-        Presented::Nothing
-    }
-}
-
-/// Present a software picture, and make it the only thing the caller can present.
+/// Both software branches of `handle_hwram_video_frame` end here, so the rule lives
+/// in one place: a surface that an earlier packet of the same batch put in the slot
+/// must not be presented over the software picture decoded after it, because the
+/// callback would then present that older surface and skip the newer picture. With
+/// the direct path off the caller drops such a frame instead of painting stale
+/// pixels.
 ///
-/// Both software branches of `handle_hwram_video_frame` end here, so the decision
-/// and the clearing live in one place: a surface that an earlier packet of the same
-/// batch put in the slot must not be presented over the software picture decoded
-/// after it. Generic over the slot's contents so the transition itself is testable
-/// without a hardware decoder.
-#[cfg(feature = "hwcodec")]
+/// Generic over the slot's contents, and compiled without the `hwcodec` feature,
+/// so the transition is testable by a plain `cargo test` -- no hardware decoder and
+/// no FFmpeg involved.
+#[cfg(any(feature = "hwcodec", test))]
 fn present_software<T>(pixelbuffer: &mut Option<T>, software_ok: bool) -> bool {
-    if presented(false, software_ok).evicts_surface() {
+    if software_ok {
         *pixelbuffer = None;
     }
     software_ok
@@ -1325,38 +1290,16 @@ pub fn test_av1() {
     });
 }
 
-#[cfg(all(test, feature = "hwcodec"))]
+/// The ordering rule the two software branches of `handle_hwram_video_frame` share.
+///
+/// They do not share a body (one decodes, the other reads back images), so the rule
+/// is factored into `present_software` and asserted here. Gated on `test` only --
+/// no `hwcodec` feature, no FFmpeg, no hardware decoder -- so a plain `cargo test`
+/// collects and runs these instead of skipping them.
+#[cfg(test)]
 mod presentation_tests {
     use super::*;
 
-    // The two software branches of `handle_hwram_video_frame` do not share a body
-    // (one decodes, the other reads back images), so the rule they must agree on
-    // lives in `presented` / `Presented::evicts_surface` and is asserted here.
-    #[test]
-    fn a_surface_is_presented_and_stays_in_the_slot() {
-        let p = presented(true, false);
-        assert_eq!(p, Presented::Surface);
-        assert!(
-            !p.evicts_surface(),
-            "a surface is what the callback presents"
-        );
-    }
-
-    #[test]
-    fn a_software_picture_after_a_surface_evicts_it() {
-        // Batch in which the decoder handed out a surface for an earlier packet and
-        // then produced a software picture: the newer picture must win.
-        let p = presented(false, true);
-        assert_eq!(p, Presented::Software);
-        assert!(
-            p.evicts_surface(),
-            "the slot must not keep the older surface"
-        );
-    }
-
-    // The rule above says *what* should happen; these two drive the production
-    // helper that actually clears the slot, starting from a populated one, so a
-    // regression that drops the clearing cannot pass on classification alone.
     #[test]
     fn a_software_picture_clears_the_surface_in_the_slot() {
         let mut slot = Some(7u8);
@@ -1379,16 +1322,14 @@ mod presentation_tests {
     }
 
     #[test]
-    fn nothing_available_leaves_the_slot_untouched() {
-        let p = presented(false, false);
-        assert_eq!(p, Presented::Nothing);
-        assert!(!p.evicts_surface());
-    }
-
-    #[test]
-    fn a_surface_beats_a_software_conversion_of_the_same_packet() {
-        // Both can happen for one packet; the surface branch runs first and
-        // `continue`s, so the surface is what the caller presents.
-        assert_eq!(presented(true, true), Presented::Surface);
+    fn a_later_software_picture_still_wins_after_an_earlier_one() {
+        // Both software branches call the helper per packet, so the rule has to hold
+        // across a batch: the newest picture owns the slot, and a packet that
+        // presents nothing afterwards must not resurrect anything.
+        let mut slot = Some(7u8);
+        assert!(present_software(&mut slot, true));
+        assert!(slot.is_none());
+        assert!(!present_software(&mut slot, false));
+        assert!(slot.is_none());
     }
 }
