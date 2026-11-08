@@ -611,6 +611,14 @@ impl Drop for IpcDrmCapturer {
     }
 }
 
+#[cfg(feature = "drm-vaapi")]
+impl IpcDrmCapturer {
+    fn record_gpu_delivery(&mut self) {
+        self.cur.clear();
+        self.returned_at = Instant::now();
+    }
+}
+
 impl TraitCapturer for IpcDrmCapturer {
     #[cfg(feature = "drm-vaapi")]
     fn set_output_dmabuf(&mut self, enabled: bool) {
@@ -679,9 +687,10 @@ impl TraitCapturer for IpcDrmCapturer {
                 if std::env::var("RUSTDESK_DRM_GPU_IDLE").as_deref() != Ok("0") {
                     // Forward every intervening frame during motion. Once equal, compare
                     // each frame again so a small update or new motion is noticed promptly.
-                    let compare =
-                        self.gpu_detector.is_none()
-                            || self.gpu_compare_after.map_or(true, |at| Instant::now() >= at);
+                    let after_cpu = !self.cur.is_empty();
+                    let compare = after_cpu
+                        || self.gpu_detector.is_none()
+                        || self.gpu_compare_after.map_or(true, |at| Instant::now() >= at);
                     let changed = if compare {
                         (|| {
                             if self.gpu_detector.is_none() {
@@ -699,7 +708,7 @@ impl TraitCapturer for IpcDrmCapturer {
                     let repeat = match changed {
                         Ok(changed) if compare => !gpu_comparison_needs_delivery(
                             &mut self.gpu_compare_after,
-                            changed,
+                            changed || after_cpu,
                             Instant::now(),
                         ),
                         Ok(changed) => !changed,
@@ -721,7 +730,7 @@ impl TraitCapturer for IpcDrmCapturer {
                     }
                     self.repeats = if repeat { self.repeats + 1 } else { 0 };
                 }
-                self.returned_at = Instant::now();
+                self.record_gpu_delivery();
                 return Ok(Frame::DmaBuf(frame));
             }
             if let Some((w, h, fmt, plane_rotation, buf)) = slot.latest.take() {
@@ -2961,6 +2970,20 @@ mod drm_capturer_tests {
             Ok(_) => panic!("expected a pixel-buffer frame"),
             Err(err) => panic!("expected a delivered frame, got {err}"),
         }
+    }
+
+    #[cfg(feature = "drm-vaapi")]
+    #[test]
+    fn cpu_fallback_delivers_a_picture_seen_before_gpu_capture() {
+        let mut c = capturer_with(Some((2, 2)));
+        let timeout = Duration::from_millis(50);
+        put_frame_with(&c, 2, 2, None, &[0; 16]);
+        assert!(matches!(c.frame(timeout), Ok(Frame::PixelBuffer(_))));
+
+        c.record_gpu_delivery();
+        c.repeats = MAX_REPEATS;
+        put_frame_with(&c, 2, 2, None, &[0; 16]);
+        assert!(matches!(c.frame(timeout), Ok(Frame::PixelBuffer(_))));
     }
 
     #[cfg(feature = "drm-vaapi")]
