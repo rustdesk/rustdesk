@@ -15,6 +15,7 @@ on:
       - "README.md"
       - "res/**"
       - "appimage/**"
+      - "com.rustdesk.RustDesk"
       - "com.rustdesk.RustDesk/**"
 
 jobs:
