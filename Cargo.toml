@@ -295,3 +295,8 @@ rpath = true
 
 [profile.dev]
 debug = 1
+
+# sciter-rs transmutes OR'ed flags into fieldless enums; rustc's debug-build
+# enum check aborts on them (release builds never had the check).
+[profile.dev.package.sciter-rs]
+debug-assertions = false
