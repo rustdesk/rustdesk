@@ -544,6 +544,15 @@ class _GeneralState extends State<_General> {
       if (!isWeb && !outgoingOnly)
         _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
       if (!isWeb) wallpaper(),
+      if (isWindows && !outgoingOnly)
+        Tooltip(
+          message: translate('physical_key_text_input_tip'),
+          child: _OptionCheckBox(
+            context,
+            'Send text as key presses (for VMs and admin windows)',
+            kOptionAllowPhysicalKeyTextInput,
+          ),
+        ),
       if (!isWeb && !incomingOnly) ...[
         _OptionCheckBox(
           context,

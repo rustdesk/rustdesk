@@ -4889,6 +4889,271 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
         .unwrap_or_default()
 }
 
+/// Keyboard layout of the foreground window's thread. `None` without a foreground window:
+/// `GetKeyboardLayout(0)` would return the layout of the calling thread instead.
+fn foreground_keyboard_layout() -> Option<HKL> {
+    unsafe {
+        let thread_id = GetWindowThreadProcessId(GetForegroundWindow(), null_mut());
+        if thread_id == 0 {
+            return None;
+        }
+        let layout = GetKeyboardLayout(thread_id);
+        (!layout.is_null()).then_some(layout)
+    }
+}
+
+/// Windows 10 1607 (build 14393) or later, which `ToUnicodeEx` needs to leave the keyboard
+/// state untouched.
+fn is_win_10_1607_or_greater() -> bool {
+    static RESULT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *RESULT
+        .get_or_init(|| base::platform::windows::is_windows_version_or_greater(10, 0, 14393, 0, 0))
+}
+
+/// Layout to type text with key presses: the foreground window's, unless an IME could take
+/// the keys or `ToUnicodeEx` cannot leave the keyboard state untouched.
+fn key_press_text_layout() -> Option<HKL> {
+    use winapi::um::winnt::{LANG_CHINESE, LANG_JAPANESE, LANG_KOREAN, PRIMARYLANGID};
+    if !is_win_10_1607_or_greater() {
+        return None;
+    }
+    let layout = foreground_keyboard_layout()?;
+    // An IME would take the key presses as composition input instead of text.
+    if matches!(
+        PRIMARYLANGID(layout as usize as u16),
+        LANG_CHINESE | LANG_JAPANESE | LANG_KOREAN
+    ) {
+        return None;
+    }
+    Some(layout)
+}
+
+/// Types `chr` with the key presses the foreground keyboard layout needs, Shift and/or
+/// AltGr included, in a single `SendInput` call. A capital without a key of its own is typed
+/// with Caps Lock, as on a physical keyboard. Unicode input puts the UTF-16 value in the
+/// scan code field: windows run as administrator drop it and VMware consoles read '1' (0x31)
+/// as N. Returns `false` without typing anything when the layout cannot type `chr` this way,
+/// so the caller can fall back to Unicode input.
+///
+/// The caller must only use this when no modifier is held down or in the event: input_service
+/// has then turned Caps Lock off, and the `ToUnicodeEx` check assumes both.
+pub fn try_input_char_as_key_presses(chr: u32) -> bool {
+    let Ok(c) = char::try_from(chr) else {
+        return false;
+    };
+    // A line break is typed as Enter, as in `input_text_as_key_presses`.
+    let c = if c == '\n' { '\r' } else { c };
+    key_press_text_layout().is_some_and(|layout| input_char_as_key_presses(c, layout))
+}
+
+/// Types `text` like `try_input_char_as_key_presses`, with one layout for the whole text. A
+/// line break ("\r\n" or "\n") is typed as Enter and '\t' as Tab. `fallback` receives, in
+/// order, the parts that cannot be typed this way.
+pub fn input_text_as_key_presses(text: &str, mut fallback: impl FnMut(&str)) {
+    let Some(layout) = key_press_text_layout() else {
+        return fallback(text);
+    };
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        let (key, len) = match c {
+            '\r' if rest[1..].starts_with('\n') => ('\r', 2),
+            '\n' => ('\r', 1),
+            c => (c, c.len_utf8()),
+        };
+        let (part, tail) = rest.split_at(len);
+        if !input_char_as_key_presses(key, layout) {
+            fallback(part);
+        }
+        rest = tail;
+    }
+}
+
+fn input_char_as_key_presses(c: char, layout: HKL) -> bool {
+    const SCAN_LSHIFT: u16 = 0x2A;
+    // AltGr. Windows adds the implicit Left Ctrl itself, and a guest sees AltGr, not Ctrl+Alt.
+    const SCAN_RALT: u16 = 0xE038;
+    const SCAN_CAPSLOCK: u16 = 0x3A;
+
+    let mut utf16 = [0_u16; 2];
+    // Enter and Tab are the only control characters a key types as text.
+    if (c.is_control() && c != '\r' && c != '\t') || c.encode_utf16(&mut utf16).len() != 1 {
+        return false;
+    }
+    unsafe {
+        let keys = checked_key(utf16[0], VkKeyScanExW(utf16[0], layout), false, layout)
+            .map(|keys| (keys, false))
+            .or_else(|| caps_lock_key(c, utf16[0], layout).map(|keys| (keys, true)));
+        let Some(((scan, shift, altgr), caps)) = keys else {
+            return false;
+        };
+
+        let mut inputs: [INPUT; 6] = mem::zeroed();
+        let mut len = 0;
+        let mut key = |scan: u16, up: bool| {
+            inputs[len] = scan_code_input(scan, up);
+            len += 1;
+        };
+        if caps {
+            key(SCAN_CAPSLOCK, false);
+            key(SCAN_CAPSLOCK, true);
+        }
+        if shift {
+            key(SCAN_LSHIFT, false);
+        }
+        if altgr {
+            key(SCAN_RALT, false);
+        }
+        key(scan, false);
+        key(scan, true);
+        if altgr {
+            key(SCAN_RALT, true);
+        }
+        if shift {
+            key(SCAN_LSHIFT, true);
+        }
+        if caps {
+            key(SCAN_CAPSLOCK, false);
+            key(SCAN_CAPSLOCK, true);
+        }
+        let inputs = &mut inputs[..len];
+        let sent = SendInput(len as _, inputs.as_mut_ptr(), mem::size_of::<INPUT>() as _);
+        let sent = sent as usize;
+        if sent > 0 && sent < len {
+            undo_partial_key_presses(&inputs[..sent], SCAN_CAPSLOCK);
+        }
+        // `c` is typed once its key-down is sent. Otherwise the caller can try Unicode input.
+        let key_down = 2 * caps as usize + shift as usize + altgr as usize;
+        sent > key_down
+    }
+}
+
+/// Some capitals are typed with Caps Lock on and the key of the lowercase letter, e.g. 'Ě' on
+/// the Czech layout. VkKeyScanEx finds no key for them, or one that types the lowercase letter.
+unsafe fn caps_lock_key(c: char, c16: u16, layout: HKL) -> Option<(u16, bool, bool)> {
+    let mut lower = c.to_lowercase();
+    let (Some(l), None) = (lower.next(), lower.next()) else {
+        return None;
+    };
+    let mut l16 = [0_u16; 2];
+    if l == c || l.encode_utf16(&mut l16).len() != 1 {
+        return None;
+    }
+    let code = VkKeyScanExW(l16[0], layout);
+    // Only a key typed without modifiers, so Caps Lock is the only one toggled.
+    if code >> 8 != 0 {
+        return None;
+    }
+    checked_key(c16, code, true, layout)
+}
+
+/// Scan code, Shift and AltGr for `code` from `VkKeyScanExW`, if they type exactly `c16`, with
+/// Caps Lock on when `caps`.
+unsafe fn checked_key(c16: u16, code: i16, caps: bool, layout: HKL) -> Option<(u16, bool, bool)> {
+    const SHIFT: i16 = 1;
+    const CTRL_ALT: i16 = 6;
+    // Do not touch the keyboard state, so no dead key is left pending.
+    const TOUNICODE_KEEP_STATE: u32 = 4;
+
+    if code == -1 {
+        return None;
+    }
+    let vk = (code & 0xFF) as u32;
+    // VkKeyScanEx documents that it skips the numpad. Keep it out anyway: with Num Lock off, a
+    // numpad scan code types a navigation key instead.
+    if matches!(vk as i32, VK_NUMPAD0..=VK_DIVIDE) {
+        return None;
+    }
+    let shift = code >> 8 & SHIFT != 0;
+    let altgr = match code >> 8 & !SHIFT {
+        0 => false,
+        CTRL_ALT => true,
+        _ => return None,
+    };
+    let scan = MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC_EX, layout);
+    if scan == 0 || scan > 0xFFFF {
+        return None;
+    }
+    // A dead key returns -1: it would combine with the next character instead.
+    let mut state = [0_u8; 256];
+    if shift {
+        state[VK_SHIFT as usize] = 0x80;
+    }
+    if altgr {
+        state[VK_CONTROL as usize] = 0x80;
+        state[VK_MENU as usize] = 0x80;
+    }
+    if caps {
+        state[VK_CAPITAL as usize] = 0x01;
+    }
+    let mut typed = [0_u16; 4];
+    let len = ToUnicodeEx(
+        vk,
+        scan & 0xFF,
+        state.as_ptr(),
+        typed.as_mut_ptr(),
+        typed.len() as _,
+        TOUNICODE_KEEP_STATE,
+        layout,
+    );
+    (len == 1 && typed[0] == c16).then_some((scan as u16, shift, altgr))
+}
+
+fn scan_code_input(scan: u16, up: bool) -> INPUT {
+    let mut flags = KEYEVENTF_SCANCODE;
+    if scan >> 8 == 0xE0 {
+        flags |= KEYEVENTF_EXTENDEDKEY;
+    }
+    if up {
+        flags |= KEYEVENTF_KEYUP;
+    }
+    unsafe {
+        let mut input: INPUT = mem::zeroed();
+        input.type_ = INPUT_KEYBOARD;
+        let ki = input.u.ki_mut();
+        ki.wScan = scan;
+        ki.dwFlags = flags;
+        ki.dwExtraInfo = enigo::ENIGO_INPUT_EXTRA_VALUE;
+        input
+    }
+}
+
+/// After `SendInput` sent only `sent`, releases the keys left down and turns Caps Lock back
+/// if it was toggled an odd number of times.
+fn undo_partial_key_presses(sent: &[INPUT], scan_capslock: u16) {
+    let is_up = |input: &INPUT| unsafe { input.u.ki().dwFlags & KEYEVENTF_KEYUP != 0 };
+    let scan = |input: &INPUT| unsafe { input.u.ki().wScan };
+    let mut undo: [INPUT; 6] = unsafe { mem::zeroed() };
+    let mut len = 0;
+    for (i, input) in sent.iter().enumerate().rev() {
+        let released = sent[i + 1..]
+            .iter()
+            .any(|later| is_up(later) && scan(later) == scan(input));
+        if !is_up(input) && !released {
+            undo[len] = scan_code_input(scan(input), true);
+            len += 1;
+        }
+    }
+    let caps_toggles = sent
+        .iter()
+        .filter(|input| !is_up(input) && scan(input) == scan_capslock)
+        .count();
+    if caps_toggles % 2 == 1 {
+        undo[len] = scan_code_input(scan_capslock, false);
+        undo[len + 1] = scan_code_input(scan_capslock, true);
+        len += 2;
+    }
+    hbb_common::throttled_log!(
+        Duration::from_secs(60),
+        warn,
+        "SendInput sent {} key events of a character, undoing with {}",
+        sent.len(),
+        len
+    );
+    unsafe {
+        SendInput(len as _, undo.as_mut_ptr(), mem::size_of::<INPUT>() as _);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
