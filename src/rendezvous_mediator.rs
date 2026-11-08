@@ -443,7 +443,8 @@ impl RendezvousMediator {
                             let Some((bytes, sealed)) = seal.open(bytes) else { continue };
                             if let Ok(msg) = Message::parse_from_bytes(&bytes) {
                                 if sealed && bytes.is_empty() {
-                                    last_register_sent = None;
+                                    rz.register_peer(seal.round_sink(&mut socket, &addr)).await?;
+                                    last_register_sent = Some(Instant::now());
                                 } else if seal.on_message(sealed, &msg.union) {
                                     rz.handle_resp(msg.union, seal.reply_sink(&mut socket, &addr, sealed), &server, &mut update_latency).await?;
                                 }
