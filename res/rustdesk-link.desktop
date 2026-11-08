@@ -1,11 +1,11 @@
 [Desktop Entry]
-Name=RustDesk
+Name=Remote Focus
 NoDisplay=true
-MimeType=x-scheme-handler/rustdesk;
-TryExec=rustdesk
-Exec=rustdesk %u
-Icon=rustdesk
+MimeType=x-scheme-handler/remotefocus;
+TryExec=remotefocus
+Exec=remotefocus %u
+Icon=remotefocus
 Terminal=false
 Type=Application
 StartupNotify=false
-StartupWMClass=rustdesk
+StartupWMClass=remotefocus
