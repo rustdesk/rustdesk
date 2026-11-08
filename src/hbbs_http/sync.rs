@@ -607,7 +607,7 @@ mod strategy_tests {
             "allow-scope-violation-close",
             "allow-scope-violation-alarm",
             // Future strategy option.
-            "future-stategy-option",
+            "future-strategy-option",
         ];
         for value in ["Y", "N", ""] {
             let mut options: HashMap<_, _> = policy_keys
