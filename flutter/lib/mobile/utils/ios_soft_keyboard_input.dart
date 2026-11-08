@@ -12,32 +12,35 @@ class IosKeyboardEdit {
 }
 
 class IosSoftKeyboardInput {
+  static const _singleCharacterLength = 1;
+
   IosSoftKeyboardInput(this._initialText)
-      : _previousText = _initialText,
+      : _previousValue = TextEditingValue(text: _initialText),
         _prefixLength = _initialText.length;
 
   final String _initialText;
-  String _previousText;
+  TextEditingValue _previousValue;
   String _committedText = '';
   int _prefixLength;
 
   void reset() {
-    _previousText = _initialText;
+    _previousValue = TextEditingValue(text: _initialText);
     _committedText = '';
     _prefixLength = _initialText.length;
   }
 
   IosKeyboardEdit update(TextEditingValue value) {
     final localValue = _clampSelection(value);
+    final hadPrefix = _prefixLength != 0;
     final prefixBackspaces = _updatePrefix(value);
     final committed = _withoutComposingText(value);
-    _previousText = value.text;
+    _previousValue = value;
     if (committed == _committedText) {
       return IosKeyboardEdit(
           backspaces: prefixBackspaces +
               (prefixBackspaces == 0 ? 0 : committed.characters.length),
           text: prefixBackspaces == 0 ? '' : committed,
-          localValue: _replenishPrefix(value) ?? localValue);
+          localValue: _replenishPrefix(value, hadPrefix) ?? localValue);
     }
     final previous = _committedText.characters.toList();
     final current = committed.characters.toList();
@@ -51,21 +54,39 @@ class IosSoftKeyboardInput {
     return IosKeyboardEdit(
       backspaces: prefixBackspaces + previous.length - common,
       text: current.skip(common).join(),
-      localValue: _replenishPrefix(value) ?? localValue,
+      localValue: _replenishPrefix(value, hadPrefix) ?? localValue,
     );
   }
 
-  TextEditingValue? _replenishPrefix(TextEditingValue value) {
-    if (_prefixLength != 0 || value.text.isNotEmpty) return null;
-    reset();
-    return TextEditingValue(
-      text: _initialText,
-      selection: TextSelection.collapsed(offset: _prefixLength),
+  TextEditingValue? _replenishPrefix(TextEditingValue value, bool hadPrefix) {
+    if (_prefixLength != 0) return null;
+    // Rewriting a typed character resets unmarked Korean/Telex composition.
+    if (value.text.isNotEmpty &&
+        (!hadPrefix ||
+            (value.isComposingRangeValid && !value.composing.isCollapsed) ||
+            (value.text.characters.length == _singleCharacterLength &&
+                value.text != ' '))) {
+      return null;
+    }
+    _prefixLength = _initialText.length;
+    _previousValue = value.copyWith(
+      text: _initialText + value.text,
+      selection: value.selection.isValid
+          ? value.selection.copyWith(
+              baseOffset: value.selection.baseOffset + _prefixLength,
+              extentOffset: value.selection.extentOffset + _prefixLength)
+          : TextSelection.collapsed(offset: _prefixLength + value.text.length),
+      composing: value.isComposingRangeValid
+          ? TextRange(
+              start: value.composing.start + _prefixLength,
+              end: value.composing.end + _prefixLength)
+          : TextRange.empty,
     );
+    return _previousValue;
   }
 
   TextEditingValue? _clampSelection(TextEditingValue value) {
-    if (value.text != _previousText ||
+    if (value.text != _previousValue.text ||
         !value.selection.isValid ||
         (value.isComposingRangeValid && !value.composing.isCollapsed)) {
       return null;
@@ -86,6 +107,7 @@ class IosSoftKeyboardInput {
 
   int _updatePrefix(TextEditingValue value) {
     final text = value.text;
+    if (_updateReplacementPrefix(value)) return 0;
     final limit = math.min(_prefixLength, text.length);
     var prefix = 0;
     while (prefix < limit && text[prefix] == _initialText[prefix]) {
@@ -100,13 +122,30 @@ class IosSoftKeyboardInput {
     }
     // A deletion containing real input may temporarily remove padding too.
     // Keep its boundary so restoring that padding cannot type it remotely.
-    if (text.length < _previousText.length &&
-        _previousText.length <= _prefixLength) {
-      final backspaces = _previousText.length - text.length;
+    if (text.length < _previousValue.text.length &&
+        _previousValue.text.length <= _prefixLength) {
+      final backspaces = _previousValue.text.length - text.length;
       _prefixLength = text.length;
       return backspaces;
     }
     return 0;
+  }
+
+  bool _updateReplacementPrefix(TextEditingValue value) {
+    if (_prefixLength == 0 && value.text == _initialText) {
+      _prefixLength = _initialText.length;
+      return true;
+    }
+    final selection = _previousValue.selection;
+    // IMEs can select the last padding character together with recomposed text.
+    if (value.text != _previousValue.text &&
+        selection.start == 0 &&
+        selection.end == _previousValue.text.length &&
+        _prefixLength > _singleCharacterLength) {
+      _prefixLength = 0;
+      return true;
+    }
+    return false;
   }
 
   int _backspacesBeforeCommittedText(
@@ -117,7 +156,7 @@ class IosSoftKeyboardInput {
         prefix < 0 ||
         prefix > matchingPrefixLength ||
         (value.isComposingRangeValid && !value.composing.isCollapsed) ||
-        value.text.length + removed != _previousText.length ||
+        value.text.length + removed != _previousValue.text.length ||
         value.text.substring(prefix) != _committedText) {
       return 0;
     }
