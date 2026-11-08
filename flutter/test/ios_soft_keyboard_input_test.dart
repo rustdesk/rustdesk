@@ -14,13 +14,8 @@ TextEditingValue editing(String text, {bool composing = false}) =>
           : TextRange.empty,
     );
 
-String applyEdit(String text, IosKeyboardEdit edit) {
-  var result = text;
-  for (var i = 0; i < edit.backspaces && result.isNotEmpty; i++) {
-    result = result.characters.skipLast(1).toString();
-  }
-  return result + edit.text;
-}
+String applyEdit(String text, IosKeyboardEdit edit) =>
+    text.characters.skipLast(edit.backspaces).toString() + edit.text;
 
 void main() {
   test('IME replacement cannot delete host text or insert a sentinel',
@@ -50,20 +45,17 @@ void verifyDeletionBeforeCommittedText() {
     for (var i = 0; i < backspaceCount; i++) {
       final prefix = sentinel.substring(0, sentinelLength - i);
       final before = editing('$prefix$suffix');
-      remote = applyEdit(
-          remote,
-          input.update(before.copyWith(
-              selection: TextSelection.collapsed(offset: prefix.length))));
-      remote = applyEdit(
-          remote,
-          input.update(before.copyWith(
-              selection: TextSelection(
-                  baseOffset: prefix.length - 1,
-                  extentOffset: prefix.length))));
-      final after =
-          editing('${prefix.substring(0, prefix.length - 1)}$suffix').copyWith(
-              selection: TextSelection.collapsed(offset: prefix.length - 1));
-      remote = applyEdit(remote, input.update(after));
+      for (final value in [
+        before.copyWith(
+            selection: TextSelection.collapsed(offset: prefix.length)),
+        before.copyWith(
+            selection: TextSelection(
+                baseOffset: prefix.length - 1, extentOffset: prefix.length)),
+        editing('${prefix.substring(0, prefix.length - 1)}$suffix').copyWith(
+            selection: TextSelection.collapsed(offset: prefix.length - 1)),
+      ]) {
+        remote = applyEdit(remote, input.update(value));
+      }
       expect(remote, '${hostText.substring(0, hostText.length - i - 1)}$suffix');
     }
     final remaining = hostText.substring(0, hostText.length - backspaceCount);
@@ -241,11 +233,8 @@ void verifyEditingAndReset() {
   }
   remote = applyEdit(
       remote,
-      input.update(TextEditingValue(
-        text: '$sentinel家庭出身l',
-        selection: TextSelection.collapsed(offset: sentinelLength + 5),
-        composing:
-            TextRange(start: sentinelLength + 4, end: sentinelLength + 5),
+      input.update(editing('$sentinel家庭出身l').copyWith(
+        composing: TextRange(start: sentinelLength + 4, end: sentinelLength + 5),
       )));
   expect(remote, 'existing家庭出身', reason: 'Only confirmed candidates are sent');
   input.reset();
