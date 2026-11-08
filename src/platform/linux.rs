@@ -403,9 +403,13 @@ pub fn is_login_screen_wayland() -> bool {
 /// `Type=tty` whatever the greeter draws with, and the display server then reads as x11. A greeter
 /// whose user has a compositor socket is a Wayland login screen all the same (cosmic-greeter,
 /// gtkgreet, ReGreet, ...); a console greeter (tuigreet, agreety) has none and is left as it was.
+/// A display server forced to x11 keeps the greeter on the x11 path, as `adopt_wayland_tty_greeter`
+/// does, so the login gate does not refuse a greeter the service serves over X11.
 #[cfg(feature = "drm")]
 fn is_wayland_tty_greeter(sid: &str, uid: &str) -> bool {
-    has_wayland_socket(uid) && is_tty_greeter_session(sid)
+    std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER").as_deref() != Ok(DISPLAY_SERVER_X11)
+        && has_wayland_socket(uid)
+        && is_tty_greeter_session(sid)
 }
 
 #[cfg(feature = "drm")]
