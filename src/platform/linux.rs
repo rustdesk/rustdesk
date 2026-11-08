@@ -391,8 +391,113 @@ pub struct xcb_xfixes_get_cursor_image {
 
 #[inline]
 pub fn is_login_screen_wayland() -> bool {
-    let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
+    let values = get_values_of_seat0_with_gdm_wayland(&[0, 2, 1]);
+    #[cfg(feature = "drm")]
+    if is_wayland_tty_greeter(&values[0], &values[2]) {
+        return true;
+    }
     is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
+}
+
+/// greetd starts its greeter with no `XDG_SESSION_TYPE`, so logind records the session as
+/// `Type=tty` whatever the greeter draws with, and the display server then reads as x11. A greeter
+/// whose user has a compositor socket is a Wayland login screen all the same (cosmic-greeter,
+/// gtkgreet, ReGreet, ...); a console greeter (tuigreet, agreety) has none and is left as it was.
+/// A display server forced to x11 keeps the greeter on the x11 path, as `adopt_wayland_tty_greeter`
+/// does, so the login gate does not refuse a greeter the service serves over X11.
+#[cfg(feature = "drm")]
+fn is_wayland_tty_greeter(sid: &str, uid: &str) -> bool {
+    std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER").as_deref() != Ok(DISPLAY_SERVER_X11)
+        && has_wayland_socket(uid)
+        && is_tty_greeter_session(sid)
+}
+
+#[cfg(feature = "drm")]
+fn is_tty_greeter_session(sid: &str) -> bool {
+    if sid.is_empty() {
+        return false;
+    }
+    let failure = match Command::new(CMD_LOGINCTL.as_str())
+        .args(["show-session", "-p", "Class", "-p", "Type", sid])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            return is_tty_greeter_props(&String::from_utf8_lossy(&output.stdout));
+        }
+        Ok(output) => output.status.to_string(),
+        Err(err) => err.to_string(),
+    };
+    hbb_common::throttled_log!(
+        Duration::from_secs(60),
+        info,
+        "loginctl show-session {sid} failed ({failure}); not taken for a greetd greeter"
+    );
+    false
+}
+
+#[cfg(any(feature = "drm", test))]
+fn is_tty_greeter_props(props: &str) -> bool {
+    let has = |prop: &str| props.lines().any(|line| line.trim() == prop);
+    has("Class=greeter") && has("Type=tty")
+}
+
+/// Derived from the uid, not `XDG_RUNTIME_DIR`: the root service is given no such variable.
+#[cfg(feature = "drm")]
+fn has_wayland_socket(uid: &str) -> bool {
+    !uid.is_empty()
+        && uid.bytes().all(|b| b.is_ascii_digit())
+        && dir_has_wayland_socket(Path::new(&format!("/run/user/{uid}")))
+}
+
+#[cfg(any(feature = "drm", test))]
+fn dir_has_wayland_socket(dir: &Path) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        // Expected until logind has created the runtime directory.
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return false,
+        Err(err) => {
+            hbb_common::throttled_log!(
+                Duration::from_secs(60),
+                info,
+                "Could not read {}: {err}; not taken for a greetd greeter",
+                dir.display()
+            );
+            return false;
+        }
+    };
+    entries.flatten().any(|entry| {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        name.starts_with("wayland-")
+            && !name.ends_with(".lock")
+            && entry.file_type().map_or(false, |t| t.is_socket())
+    })
+}
+
+#[cfg(test)]
+mod tty_greeter_tests {
+    use super::*;
+
+    #[test]
+    fn a_greetd_greeter_running_a_compositor_is_a_wayland_login_screen() {
+        // What `loginctl show-session -p Class -p Type` prints for cosmic-greeter under greetd.
+        assert!(is_tty_greeter_props("Type=tty\nClass=greeter\n"));
+        assert!(!is_tty_greeter_props("Type=tty\nClass=user\n"));
+        assert!(!is_tty_greeter_props("Type=wayland\nClass=greeter\n"));
+
+        let dir = std::env::temp_dir().join(format!("rustdesk-tty-greeter-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("wayland-1.lock"), b"").unwrap();
+        assert!(
+            !dir_has_wayland_socket(&dir),
+            "a console greeter runs no compositor"
+        );
+        let _listener = std::os::unix::net::UnixListener::bind(dir.join("wayland-1")).unwrap();
+        assert!(dir_has_wayland_socket(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 /// An explicit `RUSTDESK_FORCED_DISPLAY_SERVER` is an operator override, and the root service
@@ -1192,10 +1297,10 @@ pub fn start_os_service() {
                 // Run the login-screen --server as the active seat0 session user (the greeter
                 // account) rather than root, so the DRM capture GPU/EGL convert never loads the
                 // vendor GPU userspace in a privileged process. is_login_wayland() matches a GDM or
-                // SDDM Wayland greeter (is_gdm_user covers both), and desktop.uid is that greeter's
-                // uid, so this drops to whichever greeter owns seat0. A greeter is_gdm_user does not
-                // recognize (e.g. LightDM) never reaches this branch -- it takes the unprivileged
-                // else-branch below already. A genuine root graphical session (username=="root")
+                // SDDM Wayland greeter (is_gdm_user covers both) or a greetd one (tty_greeter), and
+                // desktop.uid is that greeter's uid, so this drops to whichever greeter owns seat0.
+                // A greeter neither recognizes (e.g. LightDM) never reaches this branch -- it takes
+                // the unprivileged else-branch below already. A genuine root graphical session (username=="root")
                 // has no lower uid to drop to, so it stays root. The whole branch is gated on the drm
                 // feature, so the drm-off build is upstream's single `start_server(None, ..)` line.
                 #[cfg(not(feature = "drm"))]
@@ -2189,6 +2294,9 @@ mod desktop {
         pub home: String,
         pub dbus: String,
         pub wl_display: String,
+        /// `Class=greeter` with `Type=tty`, see `is_wayland_tty_greeter`.
+        #[cfg(feature = "drm")]
+        tty_greeter: bool,
     }
 
     impl Desktop {
@@ -2199,7 +2307,34 @@ mod desktop {
 
         #[inline]
         pub fn is_login_wayland(&self) -> bool {
+            #[cfg(feature = "drm")]
+            if self.tty_greeter && self.is_wayland() {
+                return true;
+            }
             super::is_gdm_user(&self.username) && self.protocol == DISPLAY_SERVER_WAYLAND
+        }
+
+        /// The greeter's compositor creates its socket after logind has registered the session,
+        /// so a greeter first seen without one is asked again on every refresh until it has one.
+        /// Every compositor variable is dropped, not only the x11 values guessed meanwhile: going
+        /// straight from a user session to the greeter keeps that session's WAYLAND_DISPLAY and
+        /// bus here, and an endpoint the greeter `--server` is handed is never searched past.
+        /// A display server forced to x11 is the operator's answer, so it is left alone, as
+        /// `IS_X11` does; one forced to Wayland agrees with the socket and is adopted.
+        #[cfg(feature = "drm")]
+        fn adopt_wayland_tty_greeter(&mut self) {
+            if self.tty_greeter
+                && !self.is_wayland()
+                && std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER").as_deref()
+                    != Ok(DISPLAY_SERVER_X11)
+                && super::has_wayland_socket(&self.uid)
+            {
+                self.protocol = DISPLAY_SERVER_WAYLAND.to_owned();
+                self.display.clear();
+                self.xauth.clear();
+                self.wl_display.clear();
+                self.dbus.clear();
+            }
         }
 
         fn get_display_xauth_wayland(&mut self) {
@@ -2542,6 +2677,11 @@ mod desktop {
         /// late Wayland display discovery instead of repeating the full seat lookup.
         pub fn refresh(&mut self) {
             if !self.sid.is_empty() && is_active_and_seat0(&self.sid) {
+                #[cfg(feature = "drm")]
+                if self.tty_greeter {
+                    self.adopt_wayland_tty_greeter();
+                    return;
+                }
                 // Xwayland display and xauth may not be available in a short time after login.
                 // Avoid scanning processes on X11, where Xwayland discovery cannot provide any
                 // useful session information.
@@ -2566,6 +2706,16 @@ mod desktop {
             self.uid = seat0_values[1].clone();
             self.username = seat0_values[2].clone();
             self.protocol = get_display_server_of_session(&self.sid).into();
+            #[cfg(feature = "drm")]
+            {
+                self.tty_greeter = super::is_tty_greeter_session(&self.sid);
+                if self.tty_greeter {
+                    // `Type=tty` names no display server, and the fallback above read this
+                    // service's own environment: only a compositor socket makes it Wayland.
+                    self.protocol = DISPLAY_SERVER_X11.to_owned();
+                }
+                self.adopt_wayland_tty_greeter();
+            }
             if self.is_login_wayland() {
                 self.display = "".to_owned();
                 self.xauth = "".to_owned();
@@ -2582,7 +2732,7 @@ mod desktop {
                 // greeter as `gdm-greeter`, which that helper does not match -- measured on the
                 // test host, where the greeter server therefore takes the branch below and gets a
                 // fully populated environment. This is for the display managers whose greeter user
-                // does match.
+                // does match, and for greetd's Wayland greeters (`adopt_wayland_tty_greeter`).
                 #[cfg(feature = "drm")]
                 self.get_home();
                 return;
