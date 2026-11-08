@@ -207,8 +207,9 @@ ModifierKind? releasedModifier(
     LogicalKeyboardKey logical, PhysicalKeyboardKey physical,
     {Iterable<RawKeyEvent> pressedKeys = const [],
     RawKeyEventData? releaseData}) {
-  // Mod2-Mod5 and virtual Super/Hyper/Meta can identify genuine Meta mappings.
-  const gtkNonAltModifiers = 0xf0 | (7 << 26);
+  // Mod3-Mod5 and virtual Super/Hyper/Meta can identify genuine Meta mappings.
+  // Mod2 is NumLock, which is on in many sessions.
+  const gtkNonAltModifiers = 0xe0 | (7 << 26);
   bool hasGtkMask(RawKeyEventData? data, int mask) =>
       data is RawKeyEventDataLinux &&
       data.keyHelper is GtkKeyHelper &&

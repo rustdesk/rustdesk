@@ -350,10 +350,14 @@ void main() {
   test('remapped shifted Alt does not retain a released Super modifier',
       () async {
     final input = _modifierInput(session);
-    const alt = GtkKeyHelper.modifierMod1;
-    const shift = GtkKeyHelper.modifierShift;
-    for (final superMask in [1 << 6, (1 << 6) | GtkKeyHelper.modifierMeta]) {
-      await _rawKey(input, scan: 50, key: 0xffe1, modifiers: 0);
+    for (final (superMask, numLock) in [
+      (1 << 6, 0),
+      ((1 << 6) | GtkKeyHelper.modifierMeta, 0),
+      (1 << 6, GtkKeyHelper.modifierMod2),
+    ]) {
+      final alt = GtkKeyHelper.modifierMod1 | numLock;
+      final shift = GtkKeyHelper.modifierShift | numLock;
+      await _rawKey(input, scan: 50, key: 0xffe1, modifiers: numLock);
       await _rawKey(input, scan: 37, key: 0xffe7, modifiers: shift);
       for (final down in [true, false]) {
         await _rawKey(input,
