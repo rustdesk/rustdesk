@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Hibás felhasználónév vagy jelszó"),
         ("The verification code is incorrect or has expired", "A hitelesítőkód érvénytelen vagy lejárt"),
         ("Edit Tag", "Címke szerkesztése"),
-        ("Forget Password", "Jelszó elfelejtése"),
+        ("Forget Password", "Mentett jelszó törlése"),
         ("Favorites", "Kedvencek"),
         ("Add to Favorites", "Hozzáadás a kedvencekhez"),
         ("Remove from Favorites", "Eltávolítás a kedvencekből"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Megbízhatóság időtartama (nap)"),
         ("Renew trust", "Megbízhatóság megújítása"),
         ("install-directory-not-empty-tip", "A kiválasztott mappa nem üres. A telepítés törölheti a meglévő adatokat. Fontolja meg egy másik mappa kiválasztását."),
+        ("Request approval", "Jóváhagyás kérése"),
+        ("Forever", "Örökre"),
     ].iter().cloned().collect();
 }

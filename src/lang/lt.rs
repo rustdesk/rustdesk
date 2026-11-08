@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Klaidingi kredencialai"),
         ("The verification code is incorrect or has expired", "Patvirtinimo kodas neteisingas arba nebegalioja"),
         ("Edit Tag", "Redaguoti žymą"),
-        ("Forget Password", "Nebeprisiminti slaptažodžio"),
+        ("Forget Password", "Ištrinti išsaugotą slaptažodį"),
         ("Favorites", "Parankiniai"),
         ("Add to Favorites", "Įtraukti į parankinius"),
         ("Remove from Favorites", "Pašalinti iš parankinių"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Pasitikėjimo trukmė (dienomis)"),
         ("Renew trust", "Atnaujinti pasitikėjimą"),
         ("install-directory-not-empty-tip", "Pasirinktas aplankas nėra tuščias. Diegimas gali ištrinti esamus duomenis. Apsvarstykite galimybę pasirinkti kitą aplanką."),
+        ("Request approval", "Prašyti patvirtinimo"),
+        ("Forever", "Visam laikui"),
     ].iter().cloned().collect();
 }

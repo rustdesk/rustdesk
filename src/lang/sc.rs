@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Credentziales isballiadas"),
         ("The verification code is incorrect or has expired", "Su còdighe de verìfica no est curretu o est iscadidu"),
         ("Edit Tag", "Modìfica eticheta"),
-        ("Forget Password", "Ismèntiga sa crae"),
+        ("Forget Password", "Boga sa crae sarvada"),
         ("Favorites", "Preferidos"),
         ("Add to Favorites", "Annanghe a sos preferidos"),
         ("Remove from Favorites", "Boga dae sos preferidos"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Durada de sa fidùtzia (dies)"),
         ("Renew trust", "Annoa sa fidùtzia"),
         ("install-directory-not-empty-tip", "Sa cartella seletzionada non est bòida. S'installatzione diat pòdere iscantzellare sos datos chi bi sunt. Ti cussigiamus de isseberare un'àtera cartella."),
+        ("Request approval", "Pedi s'aprovatzione"),
+        ("Forever", "Pro semper"),
     ].iter().cloned().collect();
 }

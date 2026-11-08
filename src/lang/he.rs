@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "פרטי התחברות שגויים"),
         ("The verification code is incorrect or has expired", "קוד האימות שגוי או שפג תוקפו"),
         ("Edit Tag", "ערוך תג"),
-        ("Forget Password", "שכחת סיסמה"),
+        ("Forget Password", "מחיקת הסיסמה השמורה"),
         ("Favorites", "מועדפים"),
         ("Add to Favorites", "הוסף למועדפים"),
         ("Remove from Favorites", "הסר מהמועדפים"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "משך האמון (ימים)"),
         ("Renew trust", "חידוש אמון"),
         ("install-directory-not-empty-tip", "התיקייה שנבחרה אינה ריקה. ההתקנה עלולה למחוק נתונים קיימים. מומלץ לבחור תיקייה אחרת."),
+        ("Request approval", "בקש אישור"),
+        ("Forever", "לתמיד"),
     ].iter().cloned().collect();
 }

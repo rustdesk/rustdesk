@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Credencials errònies"),
         ("The verification code is incorrect or has expired", "El codi de verificació no és vàlid o ha caducat"),
         ("Edit Tag", "Edita l'etiqueta"),
-        ("Forget Password", "Contrasenya oblidada"),
+        ("Forget Password", "Esborra la contrasenya desada"),
         ("Favorites", "Preferits"),
         ("Add to Favorites", "Afegeix als preferits"),
         ("Remove from Favorites", "Suprimeix dels preferits"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Durada de la confiança (dies)"),
         ("Renew trust", "Renova la confiança"),
         ("install-directory-not-empty-tip", "La carpeta seleccionada no és buida. La instal·lació pot suprimir les dades existents. Considereu triar una altra carpeta."),
+        ("Request approval", "Sol·licita aprovació"),
+        ("Forever", "Per sempre"),
     ].iter().cloned().collect();
 }

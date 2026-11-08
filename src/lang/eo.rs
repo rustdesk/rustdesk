@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Identigilo aŭ pasvorto erara"),
         ("The verification code is incorrect or has expired", "La konfirmkodo estas malĝusta aŭ eksvalidiĝis"),
         ("Edit Tag", "Redakti etikedo"),
-        ("Forget Password", "Forgesi pasvorton"),
+        ("Forget Password", "Forigi konservitan pasvorton"),
         ("Favorites", "Favorataj"),
         ("Add to Favorites", "Aldoni al la favorataj"),
         ("Remove from Favorites", "Forigi el la favorataj"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Daŭro de fido (tagoj)"),
         ("Renew trust", "Renovigi fidon"),
         ("install-directory-not-empty-tip", "La elektita dosierujo ne estas malplena. La instalado povas forigi ekzistantajn datumojn. Konsideru elekti alian dosierujon."),
+        ("Request approval", "Peti aprobon"),
+        ("Forever", "Por ĉiam"),
     ].iter().cloned().collect();
 }

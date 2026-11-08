@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Nepareizs lietotājvārds vai parole"),
         ("The verification code is incorrect or has expired", "Verifikācijas kods ir nepareizs vai tam ir beidzies derīguma termiņš"),
         ("Edit Tag", "Rediģēt tagu"),
-        ("Forget Password", "Neatcerēties paroli"),
+        ("Forget Password", "Dzēst saglabāto paroli"),
         ("Favorites", "Izlase"),
         ("Add to Favorites", "Pievienot pie izlases"),
         ("Remove from Favorites", "Noņemt no izlases"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Uzticēšanās ilgums (dienas)"),
         ("Renew trust", "Atjaunot uzticēšanos"),
         ("install-directory-not-empty-tip", "Izvēlētā mape nav tukša. Instalēšana var izdzēst esošos datus. Apsveriet iespēju izvēlēties citu mapi."),
+        ("Request approval", "Pieprasīt apstiprinājumu"),
+        ("Forever", "Uz visiem laikiem"),
     ].iter().cloned().collect();
 }

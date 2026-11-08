@@ -115,7 +115,7 @@ pub(super) fn get_system_executable(relative_path: &str) -> ResultType<PathBuf> 
     Ok(path)
 }
 
-fn get_known_folder(id: &windows::core::GUID) -> ResultType<PathBuf> {
+pub(super) fn get_known_folder(id: &windows::core::GUID) -> ResultType<PathBuf> {
     let value = unsafe { SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None) }?;
     let path = unsafe { value.to_string() };
     unsafe { Com::CoTaskMemFree(Some(value.0.cast())) };
@@ -195,10 +195,6 @@ fn initialize_shell_com() -> ResultType<Option<ShellComGuard>> {
 
 pub(super) struct ProcessHandle(HANDLE);
 impl ProcessHandle {
-    pub(super) fn handle(&self) -> HANDLE {
-        self.0
-    }
-
     pub(super) fn wait(self) -> ResultType<u32> {
         let wait_result = unsafe { Threading::WaitForSingleObject(self.0, Threading::INFINITE) };
         if wait_result == Foundation::WAIT_FAILED {

@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "잘못된 자격 증명"),
         ("The verification code is incorrect or has expired", "인증 코드가 올바르지 않거나 만료되었습니다."),
         ("Edit Tag", "태그 편집"),
-        ("Forget Password", "비밀번호 분실"),
+        ("Forget Password", "저장된 비밀번호 삭제"),
         ("Favorites", "즐겨찾기"),
         ("Add to Favorites", "즐겨찾기에 추가"),
         ("Remove from Favorites", "즐겨찾기에서 삭제"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "신뢰 유지 기간 (일)"),
         ("Renew trust", "신뢰 갱신"),
         ("install-directory-not-empty-tip", "선택한 폴더가 비어 있지 않습니다. 설치 시 기존 데이터가 삭제될 수 있습니다. 다른 폴더를 선택하는 것이 좋습니다."),
+        ("Request approval", "승인 요청"),
+        ("Forever", "영구"),
     ].iter().cloned().collect();
 }

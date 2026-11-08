@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "தவறான சான்றுகள்"),
         ("The verification code is incorrect or has expired", "சரிபார்ப்புக் குறியீடு தவறானது அல்லது காலாவதி"),
         ("Edit Tag", "குறிச்சொற்கள் மாற்று"),
-        ("Forget Password", "கடவுச்சொல்லை மறந்துவிடு"),
+        ("Forget Password", "சேமிக்கப்பட்ட கடவுச்சொல்லை நீக்கு"),
         ("Favorites", "விருப்பங்கள்"),
         ("Add to Favorites", "விருப்பங்களுக்கு சேர்"),
         ("Remove from Favorites", "விருப்பங்களுக்கு நீக்கு"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "நம்பிக்கைக் காலம் (நாட்கள்)"),
         ("Renew trust", "நம்பிக்கையைப் புதுப்பி"),
         ("install-directory-not-empty-tip", "தேர்ந்தெடுக்கப்பட்ட கோப்புறை காலியாக இல்லை. நிறுவல் ஏற்கனவே உள்ள தரவை நீக்கக்கூடும். வேறு கோப்புறையைத் தேர்ந்தெடுப்பது நல்லது."),
+        ("Request approval", "ஒப்புதல் கோரவும்"),
+        ("Forever", "என்றென்றும்"),
     ].iter().cloned().collect();
 }

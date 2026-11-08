@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Памылковае імя або пароль"),
         ("The verification code is incorrect or has expired", "Памылковы або пратэрмінаваны праверачны код"),
         ("Edit Tag", "Рэдагаваць цэтлік"),
-        ("Forget Password", "Не захоўваць пароль"),
+        ("Forget Password", "Выдаліць захаваны пароль"),
         ("Favorites", "Абранае"),
         ("Add to Favorites", "Дадаць у абранае"),
         ("Remove from Favorites", "Выдаліць з абранага"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Тэрмін даверу (у днях)"),
         ("Renew trust", "Падоўжыць давер"),
         ("install-directory-not-empty-tip", "Выбраная папка не пустая. Усталёўванне можа выдаліць наяўныя даныя. Лепш выберыце іншую папку."),
+        ("Request approval", "Запытаць дазвол"),
+        ("Forever", "Назаўсёды"),
     ].iter().cloned().collect();
 }

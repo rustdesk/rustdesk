@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Nesprávné přihlašovací údaje"),
         ("The verification code is incorrect or has expired", "Ověřovací kód je nesprávný, nebo jeho platnost vypršela"),
         ("Edit Tag", "Upravit štítek"),
-        ("Forget Password", "Přestat si pamatovat heslo"),
+        ("Forget Password", "Vymazat uložené heslo"),
         ("Favorites", "Oblíbené"),
         ("Add to Favorites", "Přidat do oblíbených"),
         ("Remove from Favorites", "Odebrat z oblíbených"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "Doba důvěry (dny)"),
         ("Renew trust", "Obnovit důvěru"),
         ("install-directory-not-empty-tip", "Vybraná složka není prázdná. Instalace může odstranit existující data. Zvažte výběr jiné složky."),
+        ("Request approval", "Požádat o schválení"),
+        ("Forever", "Navždy"),
     ].iter().cloned().collect();
 }

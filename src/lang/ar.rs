@@ -230,7 +230,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "اسم مستخدم او كلمة مرور خاطئة"),
         ("The verification code is incorrect or has expired", "رمز التحقق غير صحيح او منتهي"),
         ("Edit Tag", "تحرير علامة"),
-        ("Forget Password", "عدم تذكر كلمة المرور"),
+        ("Forget Password", "مسح كلمة المرور المحفوظة"),
         ("Favorites", "المفضلة"),
         ("Add to Favorites", "اضافة للمفضلة"),
         ("Remove from Favorites", "ازالة من المفضلة"),
@@ -824,5 +824,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Trust duration (days)", "مدة الثقة (بالأيام)"),
         ("Renew trust", "تجديد الثقة"),
         ("install-directory-not-empty-tip", "المجلد المحدد ليس فارغًا. قد يؤدي التثبيت إلى حذف البيانات الموجودة. يُنصح باختيار مجلد آخر."),
+        ("Request approval", "طلب الموافقة"),
+        ("Forever", "إلى الأبد"),
     ].iter().cloned().collect();
 }

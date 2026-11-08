@@ -1,3 +1,5 @@
+mod staging;
+
 use super::{installer_handoff::directory, wide_string};
 use hbb_common::{anyhow::anyhow, log, ResultType};
 use std::{
@@ -29,6 +31,7 @@ use windows::{
 pub(super) struct ProtectedInstallFile {
     path: PathBuf,
     cleanup_handle: Option<Owned<HANDLE>>,
+    _directory: staging::StagingDirectory,
 }
 
 impl ProtectedInstallFile {
@@ -47,7 +50,12 @@ impl ProtectedInstallFile {
         source: &mut impl Read,
         expected_sha256: Option<&str>,
     ) -> ResultType<Self> {
-        let mut file = create_protected_file(path)?;
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow!("Protected installer path has no filename"))?;
+        let directory = staging::StagingDirectory::new(&path.with_extension("stage"))?;
+        let path = directory.path().join(filename);
+        let mut file = create_protected_file(&path)?;
         let result = (|| -> ResultType<Owned<HANDLE>> {
             io::copy(source, &mut file)?;
             file.sync_all()?;
@@ -72,8 +80,9 @@ impl ProtectedInstallFile {
             error
         })?;
         Ok(Self {
-            path: path.to_owned(),
+            path,
             cleanup_handle: Some(cleanup_handle),
+            _directory: directory,
         })
     }
 
@@ -81,9 +90,13 @@ impl ProtectedInstallFile {
         &self.path
     }
 
+    pub(super) fn directory(&self) -> &Path {
+        self._directory.path()
+    }
+
     pub(super) fn release(&mut self) {
-        // cmd.exe cannot read/copy these files while a DELETE handle is open.
-        // The handoff gate keeps it waiting until every staged handle is closed.
+        // cmd.exe cannot read/copy these files while a DELETE handle is open, so every
+        // staged handle is closed before the elevated cmd starts.
         drop(self.cleanup_handle.take());
     }
 }
@@ -151,7 +164,7 @@ fn create_protected_file(path: &Path) -> ResultType<File> {
 
 fn duplicate_cleanup_handle(file: &File) -> ResultType<Owned<HANDLE>> {
     let mut handle = HANDLE::default();
-    // Retain deletion capability, not a writable handle, while waiting for UAC.
+    // Retain deletion capability, not a writable handle, until the files are released to cmd.
     unsafe {
         let process = GetCurrentProcess();
         DuplicateHandle(
@@ -183,7 +196,7 @@ fn delete_staged_file(handle: HANDLE) -> ResultType<()> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use windows::{
         core::BOOL,
@@ -199,7 +212,8 @@ mod tests {
                 TOKEN_QUERY,
             },
             Storage::FileSystem::{
-                FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+                FILE_ADD_FILE, FILE_ADD_SUBDIRECTORY, FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE,
+                FILE_GENERIC_READ, FILE_GENERIC_WRITE,
             },
             System::Threading::{GetCurrentProcess, OpenProcessToken},
         },
@@ -212,6 +226,8 @@ mod tests {
         fs::create_dir(&root).unwrap();
         let path = root.join("package.tmp");
         let file = ProtectedInstallFile::new(&path, b"cancelled update").unwrap();
+        let staged_path = file.path().to_owned();
+        let staged_directory = file.directory().to_owned();
         // Omit DELETE_CHILD as in Windows Temp, but retain fixture ACL control.
         set_parent_acl(&root, w!("D:P(A;;0x1600af;;;OW)"));
         unsafe {
@@ -221,11 +237,16 @@ mod tests {
             RevertToSelf().unwrap();
         }
         set_parent_acl(&root, w!("D:P(A;;FA;;;OW)"));
-        let remaining = fs::symlink_metadata(&path);
+        let remaining = fs::symlink_metadata(&staged_path);
+        let directory_remaining = staged_directory.exists();
         fs::remove_dir_all(&root).unwrap();
         assert!(
             matches!(remaining, Err(error) if error.kind() == io::ErrorKind::NotFound),
             "Cancelled staging must remove the protected package"
+        );
+        assert!(
+            !directory_remaining,
+            "Cancelled staging must remove its directory"
         );
     }
 
@@ -264,6 +285,10 @@ mod tests {
             ordinary_owner_access(file.path()),
             (FILE_GENERIC_READ | FILE_GENERIC_EXECUTE).0
         );
+        assert_eq!(
+            ordinary_owner_access(file.directory()),
+            (FILE_GENERIC_READ | FILE_GENERIC_EXECUTE | FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY).0
+        );
         assert_eq!(fs::read(file.path()).unwrap(), b"rustdesk");
         assert!(ProtectedInstallFile::new(&path, b"replacement").is_err());
         let rejected = root.join("rejected.tmp");
@@ -273,7 +298,7 @@ mod tests {
             Some(HASH)
         )
         .is_err());
-        assert!(!rejected.exists());
+        assert!(!rejected.with_extension("stage").exists());
         drop(file);
         fs::remove_dir(root).unwrap();
     }
@@ -369,5 +394,38 @@ mod tests {
             DuplicateToken(*restricted, SecurityImpersonation, &mut impersonation).unwrap();
         }
         unsafe { Owned::new(impersonation) }
+    }
+
+    pub(in crate::platform::windows) fn release_copy_fixture(file: &mut ProtectedInstallFile) {
+        let bytes = fs::read(file.path()).unwrap();
+        delete_staged_file(**file.cleanup_handle.as_ref().unwrap()).unwrap();
+        file.release();
+        // Copy/cleanup tests use deletable children; file ACLs have their own regression.
+        fs::write(file.path(), bytes).unwrap();
+    }
+
+    #[test]
+    fn released_input_directory_rejects_replacement() {
+        use windows::Win32::Security::{ImpersonateLoggedOnUser, RevertToSelf};
+
+        let root = std::env::temp_dir().join(format!("rustdesk-copy-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let requested = root.join("package 中文 !&^@().tmp");
+        let mut input = ProtectedInstallFile::new(&requested, b"verified installer").unwrap();
+        release_copy_fixture(&mut input);
+        let directory = input.path().parent().unwrap().to_owned();
+        let moved = root.with_extension("moved");
+        let token = ordinary_owner_token();
+        unsafe { ImpersonateLoggedOnUser(*token).unwrap() };
+        let renamed = fs::rename(&directory, &moved);
+        unsafe { RevertToSelf().unwrap() };
+        if renamed.is_ok() {
+            fs::rename(&moved, &directory).unwrap();
+        }
+        fs::remove_file(input.path()).unwrap();
+        drop(input);
+        fs::remove_dir(root).unwrap();
+
+        assert!(renamed.is_err(), "Released input directory was replaceable");
     }
 }
