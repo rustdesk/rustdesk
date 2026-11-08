@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.5.1"
+version = "1.5.3"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -297,6 +297,11 @@ rpath = true
 
 [profile.dev]
 debug = 1
+
+# sciter-rs transmutes OR'ed flags into fieldless enums; rustc's debug-build
+# enum check aborts on them (release builds never had the check).
+[profile.dev.package.sciter-rs]
+debug-assertions = false
 
 [patch."https://github.com/rustdesk-org/hwcodec"]
 hwcodec = { git = "https://github.com/jensvonbulow/hwcodec", rev = "ec78abcfdf2857df7ad132571962a36bcb8233ef" }
