@@ -689,6 +689,16 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                 if let Err(err) = crate::ipc::start("") {
                     log::error!("Failed to start ipc: {}", err);
                     if crate::is_server() {
+                        #[cfg(windows)]
+                        {
+                            const MAIN_IPC_STARTUP_GRACE: Duration = Duration::from_secs(1);
+                            // Give the GUI time to arrange its replacement before forced takeover.
+                            std::thread::sleep(MAIN_IPC_STARTUP_GRACE);
+                            match crate::ipc::start("") {
+                                Ok(()) => return,
+                                Err(err) => log::error!("Failed to retry ipc startup: {err}"),
+                            }
+                        }
                         log::error!("ipc is occupied by another process, try kill it");
                         std::thread::spawn(stop_main_window_process).join().ok();
                     }
