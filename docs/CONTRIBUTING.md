@@ -1,6 +1,6 @@
 # Contributing to RustDesk
 
-RustDesk welcomes contribution from everyone. Here are the guidelines if you are
+RustDesk welcomes contributions from everyone. Here are the guidelines if you are
 thinking of helping us:
 
 ## Contributions

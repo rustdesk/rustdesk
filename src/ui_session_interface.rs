@@ -7,23 +7,24 @@ use crate::{
     ui_interface::use_texture_render,
 };
 use async_trait::async_trait;
-use bytes::Bytes;
 #[cfg(all(target_os = "windows", not(feature = "flutter")))]
-use hbb_common::config::keys;
+use base::config::keys;
 #[cfg(not(feature = "flutter"))]
-use hbb_common::fs;
+use base::fs;
+use base::message_proto::*;
+#[cfg(feature = "flutter")]
+use bytes::Bytes;
 use hbb_common::{
     allow_err,
     config::{Config, LocalConfig, PeerConfig},
     get_version_number, log,
-    message_proto::*,
     rendezvous_proto::ConnType,
     tokio::{
         self,
         sync::mpsc,
         time::{Duration as TokioDuration, Instant},
     },
-    whoami, Stream,
+    whoami, SessionID, Stream,
 };
 use rdev::{Event, EventType::*, KeyCode};
 #[cfg(all(feature = "vram", feature = "flutter"))]
@@ -51,6 +52,10 @@ use crate::common::GrabState;
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
 
+#[cfg(any(target_os = "android", target_os = "ios", test))]
+#[path = "platform/mobile_wheel.rs"]
+mod mobile_wheel;
+
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Clone, Default)]
@@ -72,6 +77,10 @@ pub struct Session<T: InvokeUiSession> {
     pub reconnect_count: Arc<AtomicUsize>,
     pub last_audit_note: Arc<Mutex<String>>,
     pub audit_guid: Arc<Mutex<String>>,
+    // Every cursor shape as the peer sent it, compressed, by the id the UI knows it by. The
+    // peer sends a shape once, and a window asks for it whenever it has to draw it again.
+    #[cfg(feature = "flutter")]
+    pub cursor_shapes: Arc<RwLock<HashMap<u64, CursorData>>>,
 }
 
 #[derive(Clone)]
@@ -489,8 +498,8 @@ impl<T: InvokeUiSession> Session<T> {
             self.send(Data::Message(msg));
         }
         if value != "custom" {
-            let last_auto_fps = self.lc.read().unwrap().last_auto_fps;
-            if last_auto_fps.unwrap_or(usize::MAX) >= 30 {
+            let custom_fps = *self.lc.read().unwrap().custom_fps.lock().unwrap();
+            if custom_fps.unwrap_or(30) != 30 {
                 // non custom quality use 30 fps
                 let msg = self.lc.write().unwrap().set_custom_fps(30, false);
                 self.send(Data::Message(msg));
@@ -567,16 +576,6 @@ impl<T: InvokeUiSession> Session<T> {
         lc.mark_restarting_remote_device();
         let msg = lc.restart_remote_device();
         self.send(Data::Message(msg));
-    }
-
-    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn send_plugin_request(&self, request: PluginRequest) {
-        let mut misc = Misc::new();
-        misc.set_plugin_request(request);
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        self.send(Data::Message(msg_out));
     }
 
     pub fn get_audit_server(&self, typ: String) -> String {
@@ -923,6 +922,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(any(target_os = "ios"))]
     pub fn handle_flutter_raw_key_event(
         &self,
+        _session_id: SessionID,
         _keyboard_mode: &str,
         _name: &str,
         _platform_code: i32,
@@ -935,6 +935,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(any(target_os = "ios")))]
     pub fn handle_flutter_raw_key_event(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         name: &str,
         platform_code: i32,
@@ -946,6 +947,7 @@ impl<T: InvokeUiSession> Session<T> {
             self._handle_key_flutter_simulation(keyboard_mode, platform_code, down_or_up);
         } else {
             self._handle_raw_key_non_flutter_simulation(
+                session_id,
                 keyboard_mode,
                 platform_code,
                 position_code,
@@ -958,6 +960,7 @@ impl<T: InvokeUiSession> Session<T> {
     #[cfg(not(any(target_os = "ios")))]
     fn _handle_raw_key_non_flutter_simulation(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         platform_code: i32,
         position_code: i32,
@@ -991,11 +994,18 @@ impl<T: InvokeUiSession> Session<T> {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
         };
-        keyboard::client::process_event_with_session(keyboard_mode, &event, Some(lock_modes), self);
+        keyboard::client::process_event_with_session(
+            keyboard_mode,
+            &event,
+            Some(lock_modes),
+            self,
+            session_id,
+        );
     }
 
     pub fn handle_flutter_key_event(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         character: &str,
         usb_hid: i32,
@@ -1006,6 +1016,7 @@ impl<T: InvokeUiSession> Session<T> {
             self._handle_key_flutter_simulation(keyboard_mode, usb_hid, down_or_up);
         } else {
             self._handle_key_non_flutter_simulation(
+                session_id,
                 keyboard_mode,
                 character,
                 usb_hid,
@@ -1041,6 +1052,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     fn _handle_key_non_flutter_simulation(
         &self,
+        session_id: SessionID,
         keyboard_mode: &str,
         character: &str,
         usb_hid: i32,
@@ -1102,7 +1114,13 @@ impl<T: InvokeUiSession> Session<T> {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
         };
-        keyboard::client::process_event_with_session(keyboard_mode, &event, Some(lock_modes), self);
+        keyboard::client::process_event_with_session(
+            keyboard_mode,
+            &event,
+            Some(lock_modes),
+            self,
+            session_id,
+        );
     }
 
     // flutter only TODO new input
@@ -1244,6 +1262,12 @@ impl<T: InvokeUiSession> Session<T> {
         } else {
             (x, y)
         };
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let (x, y) = if event_type == MOUSE_TYPE_WHEEL || event_type == MOUSE_TYPE_TRACKPAD {
+            mobile_wheel::mobile_wheel_delta((x, y), &self.lc.read().unwrap().reverse_mouse_wheel)
+        } else {
+            (x, y)
+        };
 
         // #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (alt, ctrl, shift, command) =
@@ -1304,7 +1328,13 @@ impl<T: InvokeUiSession> Session<T> {
 
         // override only if true
         if true == force_relay {
-            self.lc.write().unwrap().force_relay = true;
+            let mut lc = self.lc.write().unwrap();
+            lc.force_relay = true;
+            // An explicit retry-via-relay is a decision about this peer, not transport
+            // necessity: Relay-only ICE for this round like any force-always-relay session,
+            // and it is the one kind of relay that belongs in the peer's saved config.
+            lc.policy_relay = true;
+            lc.peer_relay = true;
         }
         self.lc.write().unwrap().peer_info = None;
         self.reconnect_count.fetch_add(1, Ordering::SeqCst);
@@ -1379,18 +1409,9 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn send2fa(&self, code: String, trust_this_device: bool) {
         let mut msg_out = Message::new();
-        let hwid = if trust_this_device {
-            crate::get_hwid()
-        } else {
-            Bytes::new()
-        };
-        self.lc.write().unwrap().set_option(
-            "trust-this-device".to_string(),
-            if trust_this_device { "Y" } else { "" }.to_string(),
-        );
         msg_out.set_auth_2fa(Auth2FA {
             code,
-            hwid,
+            trust_this_device,
             ..Default::default()
         });
         self.send(Data::Message(msg_out));
@@ -1670,7 +1691,7 @@ impl<T: InvokeUiSession> Session<T> {
         let to = std::env::temp_dir().join(format!("rustdesk_printer_{id}"));
         self.send(Data::SendFiles((
             id,
-            hbb_common::fs::JobType::Printer,
+            base::fs::JobType::Printer,
             path,
             to.to_string_lossy().to_string(),
             0,
@@ -1822,7 +1843,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 self.try_change_init_resolution(pi.current_display);
                 let p = self.lc.read().unwrap().should_auto_login();
                 if !p.is_empty() {
-                    input_os_password(p, true, self.clone());
+                    crate::client::auto_login(p, &pi, self.clone());
                 }
             }
             let current = &pi.displays[pi.current_display as usize];
@@ -1878,8 +1899,8 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         }
     }
 
-    async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) {
-        handle_hash(self.lc.clone(), pass, hash, self, peer).await;
+    async fn handle_hash(&self, pass: &str, hash: Hash, trust: &mut crate::trusted_devices::client::Session, peer: &mut Stream) -> bool {
+        handle_hash(self.lc.clone(), pass, hash, self, trust, peer).await
     }
 
     async fn handle_login_from_ui(
@@ -1888,17 +1909,21 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         os_password: String,
         password: String,
         remember: bool,
+        trust: &mut crate::trusted_devices::client::Session,
         peer: &mut Stream,
     ) {
-        handle_login_from_ui(
+        if let Err(error) = handle_login_from_ui(
             self.lc.clone(),
             os_username,
             os_password,
             password,
             remember,
+            trust,
             peer,
         )
-        .await;
+        .await {
+            self.on_error(&error.to_string());
+        }
     }
 
     async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream) {
@@ -1912,7 +1937,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         }
     }
 
-    fn swap_modifier_mouse(&self, msg: &mut hbb_common::protos::message::MouseEvent) {
+    fn swap_modifier_mouse(&self, msg: &mut base::protos::message::MouseEvent) {
         let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
         if allow_swap_key {
             msg.modifiers = msg
@@ -1939,7 +1964,9 @@ impl<T: InvokeUiSession> Session<T> {
         self.send_key_event(&crate::keyboard::client::event_lock_screen());
     }
     pub fn ctrl_alt_del(&self) {
-        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
+        self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del(
+            &self.peer_platform(),
+        ));
     }
 }
 
@@ -1954,6 +1981,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let key = crate::get_key(false).await;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {
+        handler.lc.write().unwrap().port_forward_mux = crate::port_forward::mux_enabled();
         if handler.is_rdp() {
             let port = handler
                 .get_option("rdp_port".to_owned())
@@ -2005,6 +2033,12 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
                         }
                     }
                     Some(Data::Close) => {
+                        // Pass the close on before leaving: breaking alone drops the mappings
+                        // with this runtime before they ever see it, so no KCP tunnel could
+                        // tell its peer it is closing (see the wait below).
+                        for s in queues.values() {
+                            s.send(Data::Close).ok();
+                        }
                         break;
                     }
                     Some(d) => {
@@ -2036,6 +2070,8 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
             )
             .await;
         }
+        // Lets KCP tunnels tell their peers they are closing before this runtime is dropped.
+        crate::port_forward::wait_for_tunnel_close_reasons().await;
         return;
     }
     let mut remote = Remote::new(handler, receiver, sender);

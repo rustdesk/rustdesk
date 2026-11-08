@@ -15,6 +15,8 @@ import '../common/formatter/id_formatter.dart';
 import '../desktop/pages/server_page.dart' as desktop;
 import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
+import '../mobile/widgets/android_file_transfer_setup.dart';
+import '../utils/android_documents.dart';
 import 'model.dart';
 
 const kLoginDialogTag = "LOGIN";
@@ -210,15 +212,10 @@ class ServerModel with ChangeNotifier {
       _audioOk = audioOption != 'N';
     }
 
-    // file
-    if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
-      _fileOk = false;
-      bind.mainSetOption(key: kOptionEnableFileTransfer, value: "N");
-    } else {
-      final fileOption =
-          await bind.mainGetOption(key: kOptionEnableFileTransfer);
-      _fileOk = fileOption != 'N';
-    }
+    // Android file transfer is confined to app-specific storage. Files enter
+    // and leave the workspace through Android's system document picker.
+    final fileOption = await bind.mainGetOption(key: kOptionEnableFileTransfer);
+    _fileOk = fileOption != 'N';
 
     // clipboard
     final clipOption = await bind.mainGetOption(key: kOptionEnableClipboard);
@@ -319,16 +316,6 @@ class ServerModel with ChangeNotifier {
     if (clients.any((c) => !c.disconnected)) {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
-    if (!_fileOk &&
-        !await AndroidPermissionManager.check(kManageExternalStorage)) {
-      final res =
-          await AndroidPermissionManager.request(kManageExternalStorage);
-      if (!res) {
-        showToast(translate('Failed'));
-        return;
-      }
-    }
-
     _fileOk = !_fileOk;
     bind.mainSetOption(
         key: kOptionEnableFileTransfer,
@@ -414,12 +401,17 @@ class ServerModel with ChangeNotifier {
         stopService();
       }
     } else {
+      if (isAndroid) {
+        try {
+          await AndroidDocuments.requireLogFolder();
+          await showAndroidFileTransferSetup(gFFI);
+        } catch (_) {
+          debugPrint('Folder setup failed; continuing service startup');
+        }
+      }
       await checkRequestNotificationPermission();
       if (bind.mainGetLocalOption(key: kOptionDisableFloatingWindow) != 'Y') {
         await checkFloatingWindowPermission();
-      }
-      if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
-        await AndroidPermissionManager.request(kManageExternalStorage);
       }
       final res = await parent.target?.dialogManager
           .show<bool>((setState, close, context) {
@@ -738,9 +730,13 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  Future<void> closeAll() async {
-    await Future.wait(
-        _clients.map((client) => bind.cmCloseConnection(connId: client.id)));
+  /// `byOperator` false means the CM's window went away rather than a person asking for the
+  /// peers to go. The sessions end either way; only the close reason differs, and with it
+  /// whether the peer is allowed to reconnect. See `ipc::Data::CmWindowClosed`.
+  Future<void> closeAll({bool byOperator = true}) async {
+    await Future.wait(_clients.map((client) => byOperator
+        ? bind.cmCloseConnection(connId: client.id)
+        : bind.cmCloseConnectionWindow(connId: client.id)));
     _clients.clear();
     tabController.state.value.tabs.clear();
     if (isAndroid) androidUpdatekeepScreenOn();

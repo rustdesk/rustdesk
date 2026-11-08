@@ -5,12 +5,13 @@ use std::{
 };
 
 #[cfg(not(any(target_os = "ios")))]
-use crate::{ui_interface::get_builtin_option, Connection};
+use crate::{common::API_LOG_INTERVAL, ui_interface::get_builtin_option, Connection};
 use hbb_common::{
-    config::{self, keys, Config, LocalConfig},
+    config::{self, Config, LocalConfig},
     log,
     tokio::{self, sync::broadcast, time::Instant},
 };
+use base::config::keys;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -241,7 +242,11 @@ async fn start_hbbs_sync_async() {
                 }
                 let modified_at = LocalConfig::get_option("strategy_timestamp").parse::<i64>().unwrap_or(0);
                 v["modified_at"] = json!(modified_at);
-                if let Ok(s) = crate::post_request(url.clone(), v.to_string(), "").await {
+                let response = crate::post_request(url.clone(), v.to_string(), "").await;
+                if let Err(err) = &response {
+                    hbb_common::throttled_log!(API_LOG_INTERVAL, warn, "Heartbeat failed: {err:?}");
+                }
+                if let Ok(s) = response {
                     if let Ok(mut rsp) = serde_json::from_str::<HashMap::<&str, Value>>(&s) {
                         if rsp.remove("sysinfo").is_some() {
                             info_uploaded.uploaded = false;
@@ -253,17 +258,20 @@ async fn start_hbbs_sync_async() {
                                     SENDER.lock().unwrap().send(conns).ok();
                                 }
                         }
+                        if let Some(strategy) = rsp.remove("strategy") {
+                            if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
+                                if let Err(error) = handle_config_options(strategy.config_options).await {
+                                    hbb_common::throttled_log!(API_LOG_INTERVAL, error, "Strategy update rejected: {error}");
+                                    continue;
+                                }
+                                log::info!("strategy updated");
+                            }
+                        }
                         if let Some(rsp_modified_at) = rsp.remove("modified_at") {
                             if let Ok(rsp_modified_at) = serde_json::from_value::<i64>(rsp_modified_at) {
                                 if rsp_modified_at != modified_at {
                                     LocalConfig::set_option("strategy_timestamp".to_string(), rsp_modified_at.to_string());
                                 }
-                            }
-                        }
-                        if let Some(strategy) = rsp.remove("strategy") {
-                            if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
-                                log::info!("strategy updated");
-                                handle_config_options(strategy.config_options);
                             }
                         }
                     }
@@ -284,7 +292,58 @@ fn heartbeat_url() -> String {
     format!("{}/api/heartbeat", url)
 }
 
-fn handle_config_options(config_options: HashMap<String, String>) {
+const BLOCKED_CONFIG_OPTIONS: &[&str] = &[
+    // Server endpoints and trust.
+    keys::OPTION_CUSTOM_RENDEZVOUS_SERVER,
+    "rendezvous-servers",
+    keys::OPTION_API_SERVER,
+    keys::OPTION_RELAY_SERVER,
+    keys::OPTION_KEY,
+    keys::OPTION_ICE_SERVERS,
+    // Transport security.
+    keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK,
+    keys::OPTION_ALLOW_WEBSOCKET,
+    keys::OPTION_WEBSOCKET_PORT,
+    // Authentication and credentials.
+    "2fa",
+    "bot",
+    keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD,
+    keys::OPTION_ENABLE_TRUSTED_DEVICES,
+    keys::OPTION_TRUSTED_DEVICE_EXPIRATION,
+    // Deployment and address book metadata.
+    keys::OPTION_PRESET_ADDRESS_BOOK_NAME,
+    keys::OPTION_PRESET_ADDRESS_BOOK_TAG,
+    keys::OPTION_PRESET_ADDRESS_BOOK_ALIAS,
+    keys::OPTION_PRESET_ADDRESS_BOOK_NOTE,
+    keys::OPTION_PRESET_DEVICE_NAME,
+    keys::OPTION_PRESET_DEVICE_USERNAME,
+    keys::OPTION_PRESET_NOTE,
+    // Recording location and service state.
+    keys::OPTION_WINDOWS_SERVICE_VIDEO_SAVE_DIRECTORY,
+    "stop-service",
+    "reg_recovery",
+];
+
+fn filter_config_options(options: &mut HashMap<String, String>) {
+    let rejected: Vec<_> = BLOCKED_CONFIG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|key| options.contains_key(*key))
+        .collect();
+    if !rejected.is_empty() {
+        hbb_common::throttled_log!(
+            crate::common::API_LOG_INTERVAL,
+            warn,
+            "Rejected heartbeat strategy options: {rejected:?}"
+        );
+    }
+    options.retain(|key, _| !BLOCKED_CONFIG_OPTIONS.contains(&key.as_str()));
+}
+
+async fn handle_config_options(
+    mut config_options: HashMap<String, String>,
+) -> hbb_common::ResultType<()> {
+    filter_config_options(&mut config_options);
     let mut options = Config::get_options();
     let default_settings = config::DEFAULT_SETTINGS.read().unwrap().clone();
     config_options
@@ -300,11 +359,264 @@ fn handle_config_options(config_options: HashMap<String, String>) {
             }
         })
         .count();
+    if crate::trusted_devices::config::changes_authentication(&options) {
+        let current = Config::get_options();
+        let mut non_auth_options = options.clone();
+        for key in [
+            "2fa",
+            keys::OPTION_ENABLE_TRUSTED_DEVICES,
+            keys::OPTION_TRUSTED_DEVICE_EXPIRATION,
+        ] {
+            match current.get(key) {
+                Some(value) => {
+                    non_auth_options.insert(key.to_owned(), value.clone());
+                }
+                None => {
+                    non_auth_options.remove(key);
+                }
+            }
+        }
+        // Authentication update failures must not block unrelated strategy options.
+        Config::set_options(non_auth_options);
+        return crate::trusted_devices::config::update_options(options).await;
+    }
     Config::set_options(options);
+    Ok(())
 }
 
 #[allow(unused)]
 #[cfg(not(any(target_os = "ios")))]
 pub fn is_pro() -> bool {
     PRO.lock().unwrap().clone()
+}
+
+// Fire-and-forget by design: the switch flow must not block on this POST.
+// If the device clock is outside the server's accepted window, the server
+// returns its current Unix time and this task re-signs and retries once.
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn register_switch_grant(switch_uuid: String) {
+    tokio::spawn(async move {
+        let api_server = crate::ui_interface::get_api_server();
+        if api_server.is_empty() || crate::is_public(&api_server) {
+            return;
+        }
+        use hbb_common::sodiumoxide::crypto::{hash::sha256, sign};
+        let switch_code = crate::encode64(sha256::hash(switch_uuid.as_bytes()).0);
+        let switch_code_verifier = switch_code_verifier(&switch_code);
+        let timestamp = (hbb_common::get_time() / 1000).to_string();
+        let id = Config::get_id();
+        let kp = Config::get_key_pair();
+        let Some(sk) = sign::SecretKey::from_slice(&kp.0) else {
+            log::error!("Failed to register switch grant: no device key");
+            return;
+        };
+        let url = format!("{}/api/switch-grant", api_server);
+        let mut timestamp = timestamp;
+        for attempt in 0..2 {
+            let signature = sign::sign_detached(
+                &switch_grant_signed_msg(&id, &switch_code_verifier, &timestamp),
+                &sk,
+            );
+            let body = json!({
+                "id": &id,
+                "switch_code_verifier": &switch_code_verifier,
+                "timestamp": &timestamp,
+                "signature": crate::encode64(signature.to_bytes()),
+            })
+            .to_string();
+            let response = match crate::post_request(url.clone(), body, "").await {
+                Ok(response) => response,
+                Err(e) => {
+                    log::error!("Failed to register switch grant: {}", e);
+                    return;
+                }
+            };
+            let response = match serde_json::from_str::<Value>(&response) {
+                Ok(response) => response,
+                Err(e) => {
+                    log::error!("Failed to register switch grant: invalid response: {}", e);
+                    return;
+                }
+            };
+            match response.get("accepted").and_then(Value::as_bool) {
+                Some(true) => return,
+                Some(false) => {}
+                None => {
+                    log::error!("Failed to register switch grant: missing accepted response");
+                    return;
+                }
+            }
+            let Some(server_time) = response["server_time"].as_i64() else {
+                log::error!("Failed to register switch grant: rejected by server");
+                return;
+            };
+            if attempt == 0 {
+                log::warn!("Switch grant timestamp rejected, retrying with server time");
+                timestamp = server_time.to_string();
+            } else {
+                log::error!("Failed to register switch grant after retrying with server time");
+            }
+        }
+    });
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn switch_code_verifier(switch_code: &str) -> String {
+    use hbb_common::sodiumoxide::crypto::hash::sha256;
+
+    let prefix = b"switch-grant-verifier\0";
+    let mut msg = Vec::with_capacity(prefix.len() + switch_code.len());
+    msg.extend_from_slice(prefix);
+    msg.extend_from_slice(switch_code.as_bytes());
+    crate::encode64(sha256::hash(&msg).0)
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn switch_grant_signed_msg(id: &str, switch_code_verifier: &str, timestamp: &str) -> Vec<u8> {
+    let mut msg =
+        Vec::with_capacity(13 + id.len() + 1 + switch_code_verifier.len() + 1 + timestamp.len());
+    msg.extend_from_slice(b"switch-grant\0");
+    msg.extend_from_slice(id.as_bytes());
+    msg.push(0);
+    msg.extend_from_slice(switch_code_verifier.as_bytes());
+    msg.push(0);
+    msg.extend_from_slice(timestamp.as_bytes());
+    msg
+}
+
+#[cfg(all(
+    test,
+    feature = "flutter",
+    not(any(target_os = "android", target_os = "ios"))
+))]
+mod tests {
+    use super::{switch_code_verifier, switch_grant_signed_msg};
+
+    #[test]
+    fn test_switch_code_verifier_is_not_raw_switch_code() {
+        let switch_code = "code-abc";
+        let verifier = switch_code_verifier(switch_code);
+        assert_ne!(verifier, switch_code);
+        assert_eq!(verifier, switch_code_verifier(switch_code));
+        assert_eq!(
+            verifier,
+            "dMIn3uiPe77XodFB5IKi7PrKJ7l7+zVquNn0ObSaHQc="
+        );
+    }
+
+    #[test]
+    fn test_switch_grant_signed_msg_layout() {
+        let expected: Vec<u8> = [
+            &b"switch-grant\0"[..],
+            b"id1",
+            b"\0",
+            b"c1",
+            b"\0",
+            b"1700000000",
+        ]
+        .concat();
+        assert_eq!(switch_grant_signed_msg("id1", "c1", "1700000000"), expected);
+    }
+}
+
+#[cfg(test)]
+mod strategy_tests {
+    use super::{filter_config_options, HashMap};
+
+    #[test]
+    fn strategy_cannot_replace_or_clear_server_trust_and_credentials() {
+        for value in ["attacker", "Y", "N", ""] {
+            let mut options = [
+                "custom-rendezvous-server",
+                "rendezvous-servers",
+                "api-server",
+                "relay-server",
+                "key",
+                "ice-servers",
+                "allow-insecure-tls-fallback",
+                "allow-websocket",
+                "websocket-port",
+                "2fa",
+                "bot",
+                "preset-address-book-password",
+                "enable-trusted-devices",
+                "trusted-device-expiration-days",
+                "preset-address-book-name",
+                "preset-address-book-tag",
+                "preset-address-book-alias",
+                "preset-address-book-note",
+                "preset-device-name",
+                "preset-device-username",
+                "preset-note",
+                "windows-service-video-save-directory",
+                "stop-service",
+                "reg_recovery",
+            ]
+            .into_iter()
+            .map(|key| (key.to_owned(), value.to_owned()))
+            .collect::<HashMap<_, _>>();
+            options.insert("enable-clipboard".to_owned(), "N".to_owned());
+            options.insert("allow-auto-disconnect".to_owned(), String::new());
+            filter_config_options(&mut options);
+            assert_eq!(
+                options,
+                HashMap::from([
+                    ("enable-clipboard".to_owned(), "N".to_owned()),
+                    ("allow-auto-disconnect".to_owned(), String::new()),
+                ])
+            );
+        }
+    }
+
+    #[test]
+    fn existing_and_unknown_policy_options_are_preserved() {
+        let policy_keys = [
+            // Existing server strategy options.
+            "access-mode",
+            "enable-keyboard",
+            "enable-remote-printer",
+            "enable-clipboard",
+            "enable-file-transfer",
+            "enable-audio",
+            "enable-terminal",
+            "enable-tunnel",
+            "enable-remote-restart",
+            "enable-record-session",
+            "enable-block-input",
+            "enable-privacy-mode",
+            "enable-camera",
+            "allow-remote-config-modification",
+            "approve-mode",
+            "verification-method",
+            "temporary-password-length",
+            "allow-numeric-one-time-password",
+            "allow-hide-cm",
+            "enable-lan-discovery",
+            "direct-server",
+            "direct-access-port",
+            "whitelist",
+            "id-whitelist",
+            "allow-auto-disconnect",
+            "auto-disconnect-timeout",
+            "allow-remove-wallpaper",
+            // Security policy controls.
+            "allow-only-conn-window-open",
+            "allow-scope-violation-close",
+            "allow-scope-violation-alarm",
+            // Future strategy option.
+            "future-strategy-option",
+        ];
+        for value in ["Y", "N", ""] {
+            let mut options: HashMap<_, _> = policy_keys
+                .into_iter()
+                .map(|key| (key.to_owned(), value.to_owned()))
+                .collect();
+            let expected = options.clone();
+            filter_config_options(&mut options);
+            assert_eq!(options, expected);
+        }
+    }
 }

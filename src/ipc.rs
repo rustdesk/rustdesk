@@ -1,17 +1,33 @@
 #[path = "ipc/auth.rs"]
 mod ipc_auth;
+#[cfg(windows)]
+#[path = "ipc/windows.rs"]
+mod ipc_windows;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "ipc/fs.rs"]
 mod ipc_fs;
+// The DRM/KMS capture producer, the `_drm` channel and its SCM_RIGHTS framing live in their own
+// module, declared the same way as the other pieces of this file, so the opt-in feature adds a
+// bounded, self-contained surface here instead of ~1800 lines in the middle of the shared IPC.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[path = "ipc/drm.rs"]
+mod ipc_drm;
+// Re-exported so the paths callers already use (`crate::ipc::start_drm`, `crate::ipc::connect_drm`,
+// `crate::ipc::DrmDisplayInfo`) keep working, and so the `Data` variants can name the two
+// payload types.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub use ipc_drm::{start_drm, DmabufDesc, DrmDisplayInfo};
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) use ipc_drm::DrmConn;
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) use ipc_drm::connect_drm;
 
-#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::plugin::ipc::Plugin;
 use crate::{
     common::{is_server, CheckTestNatType},
     privacy_mode,
     privacy_mode::PrivacyModeState,
     rendezvous_mediator::RendezvousMediator,
+    trusted_devices::authority,
     ui_interface::{get_local_option, set_local_option},
 };
 use bytes::Bytes;
@@ -22,7 +38,7 @@ use hbb_common::anyhow;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
-    config::{self, keys::OPTION_ALLOW_WEBSOCKET, Config, Config2},
+    config::{self, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
     log, password_security as password, timeout,
@@ -33,6 +49,7 @@ use hbb_common::{
     tokio_util::codec::Framed,
     ResultType,
 };
+use base::config::keys::{self, OPTION_ALLOW_WEBSOCKET};
 #[cfg(windows)]
 pub(crate) use ipc_auth::authorize_windows_portable_service_ipc_connection;
 #[cfg(windows)]
@@ -41,10 +58,12 @@ pub(crate) use ipc_auth::ensure_peer_executable_matches_current_by_pid_opt;
 pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use ipc_auth::{active_uid, authorize_service_scoped_ipc_connection};
+#[cfg(target_os = "macos")]
+use ipc_auth::authorize_user_server_process;
 #[cfg(windows)]
 use ipc_auth::{
-    authorize_windows_main_ipc_connection, portable_service_listener_security_attributes,
-    should_allow_everyone_create_on_windows,
+    authorize_windows_main_ipc_connection, is_windows_main_or_service_ipc,
+    portable_service_listener_security_attributes,
 };
 #[cfg(target_os = "linux")]
 pub(crate) use ipc_auth::{
@@ -58,6 +77,9 @@ use ipc_fs::{
     check_pid, ensure_secure_ipc_parent_dir, scrub_secure_ipc_parent_dir,
     should_scrub_parent_entries_after_check_pid, write_pid,
 };
+// Gated with the module that uses it, so a `drm`-less build does not carry an unused import.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+use ipc_fs::remove_ipc_entry_via_secure_parent_fd;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
@@ -117,6 +139,19 @@ impl Drop for UserMainIpcScope {
 #[inline]
 pub async fn connect_service(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnClient>> {
     connect(ms_timeout, crate::POSTFIX_SERVICE).await
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) async fn connect_trusted_device_service(
+    ms_timeout: u64,
+) -> ResultType<ConnectionTmpl<ConnClient>> {
+    let connection = connect_service(ms_timeout)
+        .await
+        .map_err(crate::trusted_devices::authority::Unavailable)?;
+    if connection.peer_uid() != Some(0) {
+        bail!("Trusted-device system service is not an authenticated root peer");
+    }
+    Ok(connection)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -249,6 +284,8 @@ pub enum DataKeyboard {
 #[serde(tag = "t", content = "c")]
 pub enum DataKeyboardResponse {
     GetKeyState(bool),
+    #[cfg(target_os = "linux")]
+    GetKeyStateError(String),
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -290,6 +327,14 @@ pub enum DataPortableService {
     RequestStart,
     WillClose,
     CmShowElevation(bool),
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum SwitchSidesUuidAction {
+    Check,
+    Consume,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -367,7 +412,7 @@ pub enum Data {
     SwitchSidesRequest(String),
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    SwitchSidesUuid(String, String, Option<bool>),
+    SwitchSidesUuid(String, String, SwitchSidesUuidAction, Option<bool>),
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     SwitchSidesBack,
@@ -376,9 +421,6 @@ pub enum Data {
     StartVoiceCall,
     VoiceCallResponse(bool),
     CloseVoiceCall(String),
-    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    Plugin(Plugin),
     #[cfg(windows)]
     SyncWinCpuUsage(Option<f64>),
     FileTransferLog((String, String)),
@@ -457,8 +499,9 @@ pub enum Data {
     // Although the key is not necessary, it is used to avoid hardcoding the key.
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
-    RemoveTrustedDevices(Vec<Bytes>),
-    ClearTrustedDevices,
+    TrustedDeviceManagement(Box<authority::Request>),
+    TrustedDeviceResponse(Result<crate::trusted_devices::authority::Response, String>),
+    SecurityConfigError(String),
     #[cfg(all(target_os = "windows", feature = "flutter"))]
     PrinterData(Vec<u8>),
     InstallOption(Option<(String, String)>),
@@ -472,16 +515,111 @@ pub enum Data {
     #[cfg(target_os = "windows")]
     PortForwardSessionCount(Option<usize>),
     SocksWs(Option<Box<(Option<config::Socks5Server>, String)>>),
+    #[cfg(target_os = "macos")]
+    HasNoActiveConns(Option<bool>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Whiteboard((String, crate::whiteboard::CustomEvent)),
     ControlPermissionsRemoteModify(Option<bool>),
     #[cfg(target_os = "windows")]
     FileTransferEnabledState(Option<bool>),
+    /// CM -> server: the connection manager's WINDOW went away, which is not the same event
+    /// as the operator disconnecting a peer. Linux only, and deliberately: there a session
+    /// logout closes every window, and the close arrives at the CM indistinguishable from a
+    /// person clicking it - measured on KDE, the CM gets no signal and logind still reports the
+    /// session active. So the ambiguous case ends the session WITHOUT the no-retry reason and
+    /// the peer is allowed to reconnect (landing on the greeter after a logout), while the
+    /// explicit Disconnect button keeps sending `Close` and kicking for good.
+    #[cfg(target_os = "linux")]
+    CmWindowClosed,
+    // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
+    // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
+    // to upstream. `_drm` protocol: the client sends `DrmHello`, the service `DrmDisplayList`, the
+    // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
+    // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
+    // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
+    // the header extensible. The zero-copy `DrmFrameDmabuf(DmabufDesc)` sibling below carries only a
+    // small JSON metadata descriptor; the scanout dma-buf fd rides an SCM_RIGHTS ancillary message on
+    // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
+    /// Client -> service, first on `_drm`: whether the service may wake sleeping displays before
+    /// it answers. The cache warm at every `--server` start says no: no peer is waiting for it.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmHello { wake: bool },
+    /// Client -> service: begin streaming the chosen display.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context
+    // (drmtap_open_render failed, e.g. no /dev/dri/renderD* access). The service then streams the
+    // CPU-converted `DrmFrame` path for this connection instead of a dma-buf fd the consumer cannot
+    // detile, so a render-node-less seat still captures instead of losing the stream.
+    DrmStart { display: i32, need_cpu: bool },
+    /// Service -> client: the enumerated DRM displays (sent once, before frames).
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmDisplayList(Vec<DrmDisplayInfo>),
+    /// Service -> client: the connector topology changed mid-stream (a monitor hotplug/unplug/modeset,
+    /// observed by the service's udev DRM-uevent listener). Carries the freshly-enumerated list so the
+    /// consumer can swap its sticky positive availability cache off the hot path, WITHOUT re-probing
+    /// `_drm` (which would trip the enumeration restart loop). Interleaved with frames on the same
+    /// stream; carries no `send_raw()` body and no fd.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmDisplaysChanged(Vec<DrmDisplayInfo>),
+    /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
+    /// CPU-fallback path (no render node, or no transferable dma-buf): pixels cross the wire.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmFrame {
+        width: u32,
+        height: u32,
+        /// See `DmabufDesc::plane_rotation`; absent from a producer older than this field.
+        #[serde(default)]
+        plane_rotation: Option<u32>,
+        /// See `DmabufDesc::cursor_pos`: the cursor plane position read right after this frame,
+        /// or `None` when the cursor is hidden, the read failed or the producer predates the field.
+        #[serde(default)]
+        cursor_pos: Option<(i32, i32)>,
+    },
+    /// Service -> client: a zero-copy dma-buf frame descriptor. The scanout fd is NOT a field; when
+    /// `desc.has_fd` it rides an SCM_RIGHTS ancillary message on the same `DrmConn::send_msg`, and
+    /// there is NO trailing `send_raw()` body. The unprivileged `--server` imports the fd and does
+    /// the EGL detile/convert itself (see `DmabufDesc`).
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmFrameDmabuf(DmabufDesc),
+    /// Service -> client: a hardware-cursor header; the RGBA pixels follow via `send_raw()`.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmCursor {
+        id: u64,
+        width: u32,
+        height: u32,
+        hotx: i32,
+        hoty: i32,
+        /// Whether the hotspot came from the driver, or was inferred from the bitmap.
+        ///
+        /// Absent means the producer predates the field, and the default must then be TRUE, not
+        /// `bool::default()`. These messages are JSON over a unix socket between two processes
+        /// that are upgraded separately: an old root service can be streaming to a freshly
+        /// started `--server`, and its `{"hotx": 12, "hoty": 11}` carries no provenance. Read as
+        /// `false`, the new consumer would throw that hotspot away and re-infer one from the
+        /// upright bitmap, moving the cursor on a rotated display for the length of the upgrade.
+        /// Defaulting to true means "no provenance available, so behave as the old protocol did"
+        /// -- use the point the producer sent. It is not a claim that the value was measured; a
+        /// new producer that wants re-inference says `hot_measured: false` explicitly, which
+        /// serializes, so new-to-new is unaffected.
+        #[serde(default = "legacy_hot_measured")]
+        hot_measured: bool,
+    },
+}
+
+/// The default for a `hot_measured` that is not on the wire at all; see the field's docs.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn legacy_hot_measured() -> bool {
+    true
 }
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn start(postfix: &str) -> ResultType<()> {
-    let mut incoming = new_listener(postfix).await?;
+    let incoming = new_listener(postfix).await?;
+    start_with_listener(postfix, incoming).await;
+    Ok(())
+}
+
+pub(crate) async fn start_with_listener(postfix: &str, mut incoming: Incoming) {
     loop {
         if let Some(result) = incoming.next().await {
             match result {
@@ -585,8 +723,8 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
         {
             if postfix == "_portable_service" {
                 portable_service_listener_security_attributes()
-            } else if should_allow_everyone_create_on_windows(postfix) {
-                SecurityAttributes::allow_everyone_create()
+            } else if is_windows_main_or_service_ipc(postfix) {
+                ipc_windows::listener_security_attributes()
             } else {
                 Ok(SecurityAttributes::empty())
             }
@@ -601,9 +739,8 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
         Err(err) => {
             log::error!("Failed to set ipc{} security: {}", postfix, err);
             #[cfg(windows)]
-            if postfix == "_portable_service" {
-                // Fail closed for `_portable_service` when SDDL construction fails.
-                // This endpoint is security-critical and must not start with default ACLs.
+            if postfix == "_portable_service" || is_windows_main_or_service_ipc(postfix) {
+                // Protected endpoints must not start with default ACLs.
                 return Err(err.into());
             }
         }
@@ -674,9 +811,9 @@ impl CheckIfRestart {
             audio_input: Config::get_option("audio-input"),
             voice_call_input: Config::get_option("voice-call-input"),
             ws: Config::get_option(OPTION_ALLOW_WEBSOCKET),
-            disable_udp: Config::get_option(config::keys::OPTION_DISABLE_UDP),
+            disable_udp: Config::get_option(keys::OPTION_DISABLE_UDP),
             allow_insecure_tls_fallback: Config::get_option(
-                config::keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK,
+                keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK,
             ),
             api_server: Config::get_option("api-server"),
         }
@@ -688,12 +825,12 @@ impl Drop for CheckIfRestart {
         // No need to check if https proxy is used, because this option does not change frequently
         // and restarting mediator is safe even https proxy is not used.
         let allow_insecure_tls_fallback_changed = self.allow_insecure_tls_fallback
-            != Config::get_option(config::keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK);
+            != Config::get_option(keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK);
         if allow_insecure_tls_fallback_changed
             || self.stop_service != Config::get_option("stop-service")
             || self.rendezvous_servers != Config::get_rendezvous_servers()
             || self.ws != Config::get_option(OPTION_ALLOW_WEBSOCKET)
-            || self.disable_udp != Config::get_option(config::keys::OPTION_DISABLE_UDP)
+            || self.disable_udp != Config::get_option(keys::OPTION_DISABLE_UDP)
             || self.api_server != Config::get_option("api-server")
         {
             if allow_insecure_tls_fallback_changed {
@@ -871,8 +1008,6 @@ async fn handle(data: Data, stream: &mut Connection) {
                     value = crate::audio_service::get_voice_call_input_device();
                 } else if name == "unlock-pin" {
                     value = Some(Config::get_unlock_pin());
-                } else if name == "trusted-devices" {
-                    value = Some(Config::get_trusted_devices_json());
                 } else {
                     value = None;
                 }
@@ -881,8 +1016,14 @@ async fn handle(data: Data, stream: &mut Connection) {
             Some(value) => {
                 let mut updated = true;
                 if name == "id" {
-                    Config::set_key_confirmed(false);
-                    Config::set_id(&value);
+                    // An empty id would wipe the local id and unconfirm the key (cf. #15626).
+                    if value.is_empty() {
+                        log::warn!("Ignoring empty id write over IPC");
+                        updated = false;
+                    } else {
+                        Config::set_key_confirmed(false);
+                        Config::set_id(&value);
+                    }
                 } else if name == "temporary-password" {
                     password::update_temporary_password();
                 } else if name == "permanent-password" {
@@ -890,7 +1031,19 @@ async fn handle(data: Data, stream: &mut Connection) {
                         log::warn!("Changing permanent password is disabled");
                         updated = false;
                     } else {
-                        updated = Config::set_permanent_password(&value);
+                        let affected = crate::trusted_devices::config::changes_password(&value);
+                        updated =
+                            match crate::trusted_devices::config::update_auth(affected, move || {
+                                crate::trusted_devices::config::set_password(&value)
+                            })
+                            .await
+                            {
+                                Ok(updated) => updated,
+                                Err(error) => {
+                                    log::error!("Password change rejected: {error}");
+                                    false
+                                }
+                            };
                     }
                     // Explicitly ACK/NACK permanent-password writes. This allows UIs/FFI to
                     // distinguish "accepted by daemon" vs "IPC send succeeded" without
@@ -898,7 +1051,21 @@ async fn handle(data: Data, stream: &mut Connection) {
                     let ack = if updated { "Y" } else { "N" }.to_owned();
                     allow_err!(stream.send(&Data::Config((name.clone(), Some(ack)))).await);
                 } else if name == "salt" {
-                    Config::set_salt(&value);
+                    let affected =
+                        Config::get_local_permanent_password_storage_and_salt().1 != value;
+                    if let Err(error) =
+                        crate::trusted_devices::config::update_auth(affected, move || {
+                            crate::trusted_devices::config::set_salt(&value)
+                        })
+                        .await
+                    {
+                        allow_err!(
+                            stream
+                                .send(&Data::SecurityConfigError(error.to_string()))
+                                .await
+                        );
+                        return;
+                    }
                 } else if name == "voice-call-input" {
                     crate::audio_service::set_voice_call_input_device(Some(value), true);
                 } else if name == "unlock-pin" {
@@ -922,7 +1089,14 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if let Some(v) = value.get("privacy-mode-impl-key") {
                     crate::privacy_mode::switch(v);
                 }
-                Config::set_options(value);
+                if let Err(error) = crate::trusted_devices::config::update_options(value).await {
+                    allow_err!(
+                        stream
+                            .send(&Data::SecurityConfigError(error.to_string()))
+                            .await
+                    );
+                    return;
+                }
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
         },
@@ -933,16 +1107,47 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::SyncConfig(Some(configs)) => {
             let (config, config2) = *configs;
             let _chk = CheckIfRestart::new();
-            Config::set(config);
-            Config2::set(config2);
+            if let Err(error) = crate::trusted_devices::config::update(move || {
+                #[cfg(any(target_os = "linux", target_os = "macos"))]
+                {
+                    crate::trusted_devices::config::sync_config(config, config2)
+                }
+                #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+                {
+                    crate::trusted_devices::config::set_config(config)
+                        .and_then(|_| crate::trusted_devices::config::set_config2(config2))
+                }
+            })
+            .await
+            {
+                allow_err!(
+                    stream
+                        .send(&Data::SecurityConfigError(error.to_string()))
+                        .await
+                );
+                return;
+            }
             allow_err!(stream.send(&Data::SyncConfig(None)).await);
         }
         Data::SyncConfig(None) => {
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+            let config2 = match crate::trusted_devices::config::update(Config2::get_for_sync).await
+            {
+                Ok(config2) => config2,
+                Err(error) => {
+                    allow_err!(
+                        stream
+                            .send(&Data::SecurityConfigError(error.to_string()))
+                            .await
+                    );
+                    return;
+                }
+            };
+            #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+            let config2 = Config2::get();
             allow_err!(
                 stream
-                    .send(&Data::SyncConfig(Some(
-                        (Config::get(), Config2::get()).into()
-                    )))
+                    .send(&Data::SyncConfig(Some((Config::get(), config2).into())))
                     .await
             );
         }
@@ -951,7 +1156,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             allow_err!(
                 stream
                     .send(&Data::SyncWinCpuUsage(
-                        hbb_common::platform::windows::cpu_uage_one_minute()
+                        base::platform::windows::cpu_uage_one_minute()
                     ))
                     .await
             );
@@ -968,6 +1173,7 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::SwitchSidesRequest(id) => {
             let uuid = uuid::Uuid::new_v4();
             crate::server::insert_switch_sides_uuid(id, uuid.clone());
+            crate::hbbs_http::sync::register_switch_grant(uuid.to_string());
             allow_err!(
                 stream
                     .send(&Data::SwitchSidesRequest(uuid.to_string()))
@@ -976,20 +1182,24 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         #[cfg(feature = "flutter")]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        Data::SwitchSidesUuid(uuid, id, None) => {
+        Data::SwitchSidesUuid(uuid, id, action, None) => {
             let allowed = uuid
                 .parse::<uuid::Uuid>()
-                .map(|uuid| crate::server::remove_pending_switch_sides_uuid(&id, &uuid))
+                .map(|uuid| match action {
+                    SwitchSidesUuidAction::Check => {
+                        crate::server::has_pending_switch_sides_uuid(&id, &uuid)
+                    }
+                    SwitchSidesUuidAction::Consume => {
+                        crate::server::claim_pending_switch_sides_uuid(&id, &uuid)
+                    }
+                })
                 .unwrap_or(false);
             allow_err!(
                 stream
-                    .send(&Data::SwitchSidesUuid(uuid, id, Some(allowed)))
+                    .send(&Data::SwitchSidesUuid(uuid, id, action, Some(allowed)))
                     .await
             );
         }
-        #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        Data::Plugin(plugin) => crate::plugin::ipc::handle_plugin(plugin, stream).await,
         #[cfg(windows)]
         Data::ControlledSessionCount(_) => {
             allow_err!(
@@ -997,6 +1207,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .send(&Data::ControlledSessionCount(
                         crate::Connection::alive_conns().len()
                     ))
+                    .await
+            );
+        }
+        #[cfg(target_os = "macos")]
+        Data::HasNoActiveConns(None) => {
+            allow_err!(
+                stream
+                    .send(&Data::HasNoActiveConns(Some(
+                        crate::updater::has_no_active_conns()
+                    )))
                     .await
             );
         }
@@ -1056,8 +1276,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                 }
             } else if value == "clear" {
                 set_local_option(key.clone(), "".to_owned());
+                // The session slot is held while a portal request waits for the user, and this ipc
+                // listener runs on one thread: wait for the slot off it, then close what the
+                // request brings back.
                 #[cfg(target_os = "linux")]
-                scrap::wayland::pipewire::close_session();
+                allow_err!(
+                    hbb_common::tokio::task::spawn_blocking(
+                        scrap::wayland::pipewire::close_session
+                    )
+                    .await
+                );
                 Some("".to_owned())
             } else {
                 None
@@ -1070,11 +1298,11 @@ async fn handle(data: Data, stream: &mut Connection) {
                 );
             }
         }
-        Data::RemoveTrustedDevices(v) => {
-            Config::remove_trusted_devices(&v);
-        }
-        Data::ClearTrustedDevices => {
-            Config::clear_trusted_devices();
+        Data::TrustedDeviceManagement(request) => {
+            let result = authority::request(*request)
+                .await
+                .map_err(|error| error.to_string());
+            allow_err!(stream.send(&Data::TrustedDeviceResponse(result)).await);
         }
         Data::InstallOption(opt) => match opt {
             Some((_k, _v)) => {
@@ -1128,7 +1356,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             let state = crate::server::get_control_permission_state(Permission::file, false);
             let enabled = state.unwrap_or_else(|| {
                 crate::server::Connection::is_permission_enabled_locally(
-                    config::keys::OPTION_ENABLE_FILE_TRANSFER,
+                    keys::OPTION_ENABLE_FILE_TRANSFER,
                 )
             });
             allow_err!(
@@ -1314,6 +1542,16 @@ fn user_main_ipc_server_uid() -> ResultType<u32> {
 }
 
 pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmpl<ConnClient>> {
+    #[cfg(windows)]
+    if is_windows_main_or_service_ipc(postfix) {
+        return Ok(ConnectionTmpl::new(
+            timeout(
+                ms_timeout,
+                ipc_windows::connect(&Config::ipc_path(postfix), postfix),
+            )
+            .await??,
+        ));
+    }
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         let use_user_main_ipc = USE_USER_MAIN_IPC.with(|use_user_main| use_user_main.get());
@@ -1334,14 +1572,21 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub async fn connect_for_uid(
     ms_timeout: u64,
     uid: u32,
     postfix: &str,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
     let path = Config::ipc_path_for_uid(uid, postfix);
-    connect_with_path(ms_timeout, &path).await
+    let conn = connect_with_path(ms_timeout, &path).await?;
+    #[cfg(target_os = "macos")]
+    if postfix.is_empty()
+        && !authorize_user_server_process(conn.peer_uid(), conn.peer_pid(), uid)
+    {
+        bail!("Rejected user IPC peer for uid {}", uid);
+    }
+    Ok(conn)
 }
 
 #[cfg(target_os = "linux")]
@@ -1390,7 +1635,13 @@ pub async fn start_pa() {
                                 None, // Use default buffering attributes
                             ) {
                                 Ok(s) => loop {
-                                    if let Ok(_) = s.read(&mut buf) {
+                                    // A dead pulse handle fails every read at once, so ignoring the
+                                    // error left nothing pacing this loop and it burned a core.
+                                    if let Err(err) = s.read(&mut buf) {
+                                        log::error!("Failed to read audio data:{}", err);
+                                        break;
+                                    }
+                                    {
                                         let out =
                                             if buf.iter().filter(|x| **x != 0).next().is_none() {
                                                 vec![]
@@ -1551,6 +1802,7 @@ pub fn sync_permanent_password_storage_from_daemon() -> ResultType<()> {
     apply_permanent_password_storage_and_salt_payload(v.as_deref())
 }
 
+#[cfg(not(target_os = "windows"))]
 async fn sync_permanent_password_storage_from_daemon_async() -> ResultType<()> {
     let ms_timeout = 1_000;
     let v = get_config_async("permanent-password-storage-and-salt", ms_timeout).await?;
@@ -1614,8 +1866,11 @@ async fn set_permanent_password_with_ack_async(v: String) -> ResultType<bool> {
             let v = v.trim();
             let ok = v == "Y";
             if ok {
+                #[cfg(target_os = "windows")]
+                sync_security_config_from_server(&mut c).await?;
                 // Ensure the hashed permanent password storage is written to the user config file.
                 // This sync must not affect the daemon ACK outcome.
+                #[cfg(not(target_os = "windows"))]
                 if let Err(err) = sync_permanent_password_storage_from_daemon_async().await {
                     log::warn!("Failed to sync permanent password storage from daemon: {err}");
                 }
@@ -1666,42 +1921,75 @@ pub fn get_unlock_pin() -> String {
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn get_trusted_devices() -> String {
-    if let Ok(Some(v)) = get_config("trusted-devices") {
-        v
-    } else {
-        Config::get_trusted_devices_json()
+pub async fn trusted_devices(request: authority::Request) -> ResultType<String> {
+    const TIMEOUT_MS: u64 = 1000;
+    let list = matches!(request, authority::Request::List);
+    let mut connection = connect(TIMEOUT_MS, "").await?;
+    connection
+        .send(&Data::TrustedDeviceManagement(Box::new(request)))
+        .await?;
+    let response = match connection.next_timeout(TIMEOUT_MS).await? {
+        Some(Data::TrustedDeviceResponse(result)) => {
+            match result.map_err(|error| hbb_common::anyhow::anyhow!(error))? {
+                authority::Response::Devices(devices) if list => devices,
+                authority::Response::Done if !list => String::new(),
+                _ => bail!("Invalid trusted-device management response"),
+            }
+        }
+        _ => bail!("The host did not confirm the trusted-device operation"),
+    };
+    #[cfg(target_os = "windows")]
+    if !list {
+        sync_security_config_from_server(&mut connection).await?;
     }
+    Ok(response)
 }
 
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn remove_trusted_devices(hwids: Vec<Bytes>) {
-    Config::remove_trusted_devices(&hwids);
-    allow_err!(set_data(&Data::RemoveTrustedDevices(hwids)));
-}
+#[cfg(target_os = "windows")]
+async fn sync_security_config_from_server(
+    connection: &mut ConnectionTmpl<ConnClient>,
+) -> ResultType<()> {
+    use hbb_common::anyhow::Context;
 
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn clear_trusted_devices() {
-    Config::clear_trusted_devices();
-    allow_err!(set_data(&Data::ClearTrustedDevices));
+    const TIMEOUT_MS: u64 = 1000;
+    // MSI removal can reactivate this user copy without running our uninstall hooks.
+    async {
+        connection.send(&Data::SyncConfig(None)).await?;
+        match connection.next_timeout(TIMEOUT_MS).await? {
+            Some(Data::SyncConfig(Some(configs))) => {
+                let (config, config2) = *configs;
+                crate::trusted_devices::config::update(move || {
+                    crate::trusted_devices::config::sync_config(config, config2)
+                })
+                .await
+            }
+            Some(Data::SecurityConfigError(error)) => bail!(error),
+            _ => bail!("The host did not provide its current configuration"),
+        }
+    }
+    .await
+    .context("Host security update succeeded, but updating the local configuration failed")
 }
 
 pub fn get_id() -> String {
+    // An empty id may come from a process that took over the main IPC with a
+    // config scope that has no id yet (e.g. a user GUI that became the server
+    // while the installed service was restarting). Treat it as no answer,
+    // otherwise the empty id is adopted below and wipes the local one.
     if let Ok(Some(v)) = get_config("id") {
-        // update salt also, so that next time reinstallation not causing first-time auto-login failure
-        if let Ok(Some(v2)) = get_config("salt") {
-            Config::set_salt(&v2);
+        if !v.is_empty() {
+            // update salt also, so that next time reinstallation not causing first-time auto-login failure
+            if let Ok(Some(v2)) = get_config("salt") {
+                Config::set_salt(&v2);
+            }
+            if v != Config::get_id() {
+                Config::set_key_confirmed(false);
+                Config::set_id(&v);
+            }
+            return v;
         }
-        if v != Config::get_id() {
-            Config::set_key_confirmed(false);
-            Config::set_id(&v);
-        }
-        v
-    } else {
-        Config::get_id()
     }
+    Config::get_id()
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
@@ -1753,16 +2041,31 @@ pub fn set_option(key: &str, value: &str) {
     } else {
         options.insert(key.to_owned(), value.to_owned());
     }
-    set_options(options).ok();
+    allow_err!(set_options(options));
 }
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     let _nat = CheckTestNatType::new();
-    if let Ok(mut c) = connect(1000, "").await {
+    let affected = crate::trusted_devices::config::changes_authentication(&value);
+    let connection = connect(1000, "").await;
+    if affected && connection.is_err() {
+        bail!("The host is unavailable; authentication settings were not changed");
+    }
+    if let Ok(mut c) = connection {
         c.send(&Data::Options(Some(value.clone()))).await?;
         // do not put below before connect, because we need to check should_exit
-        c.next_timeout(1000).await.ok();
+        match c.next_timeout(1000).await {
+            #[cfg(target_os = "windows")]
+            Ok(Some(Data::Options(None))) if affected => {
+                sync_security_config_from_server(&mut c).await?;
+            }
+            Ok(Some(Data::Options(None))) => {}
+            Ok(Some(Data::SecurityConfigError(error))) => bail!(error),
+            Err(error) if affected => return Err(error),
+            _ if affected => bail!("The host did not confirm the configuration update"),
+            _ => {}
+        }
     }
     Config::set_options(value);
     Ok(())
@@ -2114,42 +2417,8 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 
 #[cfg(test)]
 mod test {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     use super::*;
-
-    #[test]
-    fn verify_ffi_enum_data_size() {
-        println!("{}", std::mem::size_of::<Data>());
-        assert!(std::mem::size_of::<Data>() <= 120);
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    #[test]
-    fn test_service_ipc_path_is_shared_across_uids() {
-        assert_eq!(
-            Config::ipc_path_for_uid(0, crate::POSTFIX_SERVICE),
-            Config::ipc_path_for_uid(501, crate::POSTFIX_SERVICE)
-        );
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    #[test]
-    fn test_ipc_path_differs_by_uid_for_cm() {
-        let effective_uid = unsafe { hbb_common::libc::geteuid() as u32 };
-        let other_uid = effective_uid.saturating_add(1);
-        let postfix = "_cm";
-
-        // Default connect path targets the current effective uid.
-        assert_eq!(
-            Config::ipc_path(postfix),
-            Config::ipc_path_for_uid(effective_uid, postfix)
-        );
-        // A different uid yields a different socket path - this is the root cause of the
-        // cross-user regression when root spawns a user process but still connects as uid 0.
-        assert_ne!(
-            Config::ipc_path(postfix),
-            Config::ipc_path_for_uid(other_uid, postfix)
-        );
-    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]

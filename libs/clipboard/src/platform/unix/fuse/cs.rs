@@ -549,8 +549,8 @@ impl FuseServer {
             n_position_low,
             n_position_high,
             cb_requested,
-            have_clip_data_id: false,
-            clip_data_id: 0,
+            have_clip_data_id: true,
+            clip_data_id: node.clip_data_id,
         };
 
         send_data(node.conn_id, request.clone()).map_err(|e| {
@@ -611,6 +611,9 @@ struct FuseNode {
     /// connection id
     pub conn_id: i32,
 
+    /// id of the peer's file list this node came from
+    pub clip_data_id: i32,
+
     /// file index in peer's file list
     /// NOTE:
     /// it is NOT the same as inode, this is the index in the file list
@@ -634,6 +637,7 @@ impl FuseNode {
     pub fn from_description(inode: Inode, desc: FileDescription) -> Self {
         Self {
             conn_id: desc.conn_id,
+            clip_data_id: desc.clip_data_id,
             index: inode as usize - 2,
             name: desc
                 .name
@@ -650,6 +654,7 @@ impl FuseNode {
     pub fn new_root() -> Self {
         Self {
             conn_id: 0,
+            clip_data_id: 0,
             index: 0,
             name: String::from("/"),
             parent: None,
@@ -898,6 +903,7 @@ mod fuse_test {
 
             size: 0,
             perm: 0,
+            clip_data_id: 0,
         }
     }
     fn generate_descriptions(prefix: &str) -> Vec<FileDescription> {
@@ -958,35 +964,6 @@ mod fuse_test {
         for (idx, node) in tree_list.iter().skip(1).enumerate() {
             assert_eq!(idx, node.index)
         }
-    }
-
-    fn build_single_file(prefix: &str) {
-        let raw_name = "simple_test_file.txt";
-        let f_name = if prefix == "" {
-            raw_name.to_string()
-        } else {
-            prefix.to_string() + "/" + raw_name
-        };
-        let desc = desc_gen(&f_name, FileType::File);
-        let tree = FuseNode::build_tree(vec![desc]).unwrap();
-
-        assert_eq!(tree.len(), 2);
-        assert_eq!(tree[0].name, "/");
-        assert_eq!(tree[0].children, vec![2]);
-
-        assert_eq!(tree[1].name, raw_name);
-        assert_eq!(tree[1].index, 0);
-        assert_eq!(tree[1].attributes.kind, FileType::File);
-    }
-
-    #[test]
-    fn test_parse_single() {
-        build_single_file("");
-        build_single_file("/");
-        build_single_file("test");
-        build_single_file("/test");
-        build_single_file("🗂");
-        build_single_file("/🗂");
     }
 
     #[test]

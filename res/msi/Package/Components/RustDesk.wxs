@@ -30,7 +30,14 @@
 		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
 		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
 		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER_INNER]" />
-		<CustomAction Id="InstallPrinter.SetParam" Return="check" Property="InstallPrinter" Value="[INSTALLFOLDER_INNER]" />
+		<!-- The app name comes first and is separated by '|', which cannot occur in a
+		     Windows path nor in a validated app name. wcautil's own delimiter is a
+		     literal wide char 128 that a Formatted value cannot carry, and [~] is
+		     MSI's NUL escape rather than that delimiter, so the action parses this
+		     itself. Passing the name keeps the dll free of it, so one build serves
+		     every custom client. -->
+		<CustomAction Id="InstallPrinter.SetParam" Return="check" Property="InstallPrinter" Value="[ProductName]|[INSTALLFOLDER_INNER]" />
+		<CustomAction Id="UninstallPrinter.SetParam" Return="check" Property="UninstallPrinter" Value="[ProductName]" />
 		<InstallExecuteSequence>
 
 			<Custom Action="SetPropertyIsServiceRunning" After="InstallInitialize" Condition="Installed" />
@@ -86,6 +93,7 @@
 			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFirewallRules"/>
 
 			<Custom Action="UninstallPrinter" Before="RemoveRuntimeGeneratedFiles" Condition="VersionNT &gt;= 603" />
+			<Custom Action="UninstallPrinter.SetParam" Before="UninstallPrinter" Condition="VersionNT &gt;= 603" />
 
 			<Custom Action="TerminateProcesses" Before="RemoveRuntimeGeneratedFiles"/>
 			<Custom Action="TerminateProcesses.SetParam" Before="TerminateProcesses"/>

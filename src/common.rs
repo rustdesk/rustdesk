@@ -1,13 +1,14 @@
 use std::{
     collections::HashMap,
     future::Future,
-    net::{SocketAddr, ToSocketAddrs},
+    net::SocketAddr,
     sync::{Arc, Mutex, RwLock},
     task::Poll,
 };
 
 use serde_json::{json, Map, Value};
 
+use base::{config::keys, message_proto::*};
 #[cfg(not(target_os = "ios"))]
 use hbb_common::whoami;
 use hbb_common::{
@@ -16,13 +17,10 @@ use hbb_common::{
     async_recursion::async_recursion,
     bail, base64,
     bytes::Bytes,
-    config::{
-        self, keys, use_ws, Config, LocalConfig, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT,
-    },
+    config::{self, use_ws, Config, LocalConfig, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT},
     futures::future::join_all,
     futures_util::future::poll_fn,
     get_version_number, log,
-    message_proto::*,
     protobuf::{Enum, Message as _},
     rendezvous_proto::*,
     socket_client,
@@ -39,7 +37,7 @@ use hbb_common::{
 
 use crate::{
     hbbs_http::{create_http_client_async, get_url_for_tls},
-    ui_interface::{get_api_server as ui_get_api_server, get_option, is_installed, set_option},
+    ui_interface::{get_api_server as ui_get_api_server, get_option, set_option},
 };
 
 #[derive(Debug, Eq, PartialEq)]
@@ -61,6 +59,7 @@ pub const PLATFORM_MACOS: &str = "Mac OS";
 pub const PLATFORM_ANDROID: &str = "Android";
 
 pub const TIMER_OUT: Duration = Duration::from_secs(1);
+pub(crate) const API_LOG_INTERVAL: Duration = Duration::from_secs(600);
 pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
 const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
@@ -105,7 +104,7 @@ lazy_static::lazy_static! {
     // Is server logic running. The server code can invoked to run by the main process if --server is not running.
     static ref SERVER_RUNNING: Arc<RwLock<bool>> = Default::default();
     static ref IS_MAIN: bool = std::env::args().nth(1).map_or(true, |arg| !arg.starts_with("--"));
-    static ref IS_CM: bool = std::env::args().nth(1) == Some("--cm".to_owned()) || std::env::args().nth(1) == Some("--cm-no-ui".to_owned());
+    static ref IS_CM: bool = std::env::args().nth(1) == Some("--cm".to_owned());
 }
 
 pub struct SimpleCallOnReturn {
@@ -122,6 +121,8 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(target_os = "linux")]
     {
         if !crate::platform::linux::is_x11() {
@@ -146,6 +147,24 @@ pub fn is_support_multi_ui_session(ver: &str) -> bool {
 #[inline]
 pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number(MIN_VER_MULTI_UI_SESSION)
+}
+
+/// Peers from the 1.5.0 release name a cursor by `cursor_content_id`; older ones by the
+/// platform handle, which apps mint anew for the same shape.
+#[inline]
+pub fn is_peer_naming_cursors_by_content(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.5.0")
+}
+
+/// One id per cursor look, however many handles a platform gives it. Held to 53 bits: the web
+/// client decodes a u64 into a JS number and drops the whole message when it does not fit.
+pub fn cursor_content_id(width: i32, height: i32, hotx: i32, hoty: i32, colors: &[u8]) -> u64 {
+    let mut hasher = xxhash_rust::xxh3::Xxh3::new();
+    for v in [width, height, hotx, hoty] {
+        hasher.update(&v.to_le_bytes());
+    }
+    hasher.update(colors);
+    hasher.digest() & ((1 << 53) - 1)
 }
 
 #[inline]
@@ -217,6 +236,94 @@ pub fn need_fs_cm_send_files() -> bool {
     #[cfg(not(windows))]
     {
         false
+    }
+}
+
+/// Android peers may access only the current shared file-transfer location.
+///
+/// Every peer supplied path must be validated with this before it reaches the
+/// filesystem, for reads, writes, renames, creations and deletions alike. The path is
+/// resolved to its canonical form (of the deepest existing ancestor, so paths that are
+/// about to be created are handled too) so symlinks cannot escape the workspace.
+///
+/// Only the `ReadDir` protocol action treats an empty path as the home directory.
+/// Callers must opt in to that protocol-specific behavior with `allow_empty`.
+#[cfg(target_os = "android")]
+pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
+    use std::path::{Component, Path, PathBuf};
+
+    if base::fs::android::is_path(Path::new(path)) {
+        return match base::fs::android::allowed(path) {
+            Ok(allowed) => allowed,
+            Err(error) => {
+                const ERROR_LOG_INTERVAL: Duration = Duration::from_secs(60);
+                hbb_common::throttled_log!(
+                    ERROR_LOG_INTERVAL,
+                    warn,
+                    "Document access denied: {}",
+                    error
+                );
+                false
+            }
+        };
+    }
+
+    // Canonicalize the deepest existing ancestor and re-append the missing tail.
+    fn resolve(path: &Path) -> Option<PathBuf> {
+        let mut tail: Vec<std::ffi::OsString> = Vec::new();
+        let mut base = path.to_path_buf();
+        loop {
+            if let Ok(mut resolved) = base.canonicalize() {
+                while let Some(component) = tail.pop() {
+                    resolved.push(component);
+                }
+                return Some(resolved);
+            }
+            tail.push(base.file_name()?.to_os_string());
+            if !base.pop() {
+                return None;
+            }
+        }
+    }
+
+    if path.is_empty() {
+        return allow_empty;
+    }
+    let path = Path::new(path);
+    // `..` is never needed by the protocol and would defeat the prefix check below.
+    if !path.is_absolute() || path.components().any(|c| c == Component::ParentDir) {
+        return false;
+    }
+    let home = base::fs::get_path(&base::fs::get_home_as_string());
+    let home = home.canonicalize().unwrap_or(home);
+    if home.as_os_str().is_empty() {
+        return false;
+    }
+    // `Path::starts_with` compares whole components, and is true for equal paths.
+    resolve(path).map_or(false, |target| target.starts_with(&home))
+}
+
+#[inline]
+#[cfg(not(target_os = "android"))]
+pub fn is_peer_path_allowed(_path: &str, _allow_empty: bool) -> bool {
+    true
+}
+
+#[cfg(target_os = "android")]
+pub async fn is_peer_path_allowed_async(path: &str, allow_empty: bool) -> bool {
+    let path = path.to_owned();
+    match tokio::task::spawn_blocking(move || is_peer_path_allowed(&path, allow_empty)).await {
+        Ok(allowed) => allowed,
+        Err(error) => {
+            const ERROR_LOG_INTERVAL: Duration = Duration::from_secs(60);
+            hbb_common::throttled_log!(
+                ERROR_LOG_INTERVAL,
+                error,
+                "File-transfer access check failed: {}",
+                error
+            );
+            false
+        }
     }
 }
 
@@ -353,6 +460,11 @@ pub fn resample_channels(
     }
 }
 
+#[cfg(all(feature = "use_dasp", feature = "use_samplerate"))]
+compile_error!(
+    "features `use_dasp` and `use_samplerate` are mutually exclusive; disable default features before selecting `use_samplerate`"
+);
+
 #[cfg(feature = "use_dasp")]
 pub fn audio_resample(
     data: &[f32],
@@ -389,7 +501,7 @@ pub fn audio_resample(
     }
 }
 
-#[cfg(feature = "use_samplerate")]
+#[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
 pub fn audio_resample(
     data: &[f32],
     sample_rate0: u32,
@@ -658,13 +770,6 @@ async fn test_nat_type_() -> ResultType<bool> {
                 } else {
                     port2 = tnr.port;
                 }
-                if let Some(cu) = tnr.cu.as_ref() {
-                    Config::set_option(
-                        "rendezvous-servers".to_owned(),
-                        cu.rendezvous_servers.join(","),
-                    );
-                    Config::set_serial(cu.serial);
-                }
             }
         } else {
             break;
@@ -865,7 +970,7 @@ pub fn get_sysinfo() -> serde_json::Value {
     let cpu_name = cpus.first().map(|x| x.brand()).unwrap_or_default();
     let cpu_name = cpu_name.trim_end();
     let cpu_freq = cpus.first().map(|x| x.frequency()).unwrap_or_default();
-    let cpu_freq = (cpu_freq as f64 / 1024. * 100.).round() / 100.;
+    let cpu_freq = (cpu_freq as f64 / 1000. * 100.).round() / 100.;
     let cpu = if cpu_freq > 0. {
         format!("{}, {}GHz, ", cpu_name, cpu_freq)
     } else {
@@ -910,6 +1015,20 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
     hbb_common::socket_client::increase_port(host, offset)
 }
 
+/// A relay uuid arrives from the network and is sent on to the relay address, so bound what it
+/// may carry; it is an opaque pairing key, so do not pin today's UUID format.
+pub fn check_relay_uuid(uuid: &str) -> ResultType<()> {
+    if uuid.is_empty()
+        || uuid.len() > 128
+        || !uuid
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        bail!("invalid relay uuid (length {})", uuid.len());
+    }
+    Ok(())
+}
+
 pub const POSTFIX_SERVICE: &'static str = "_service";
 
 #[inline]
@@ -948,39 +1067,94 @@ pub fn check_software_update() {
     }
 }
 
-// No need to check `danger_accept_invalid_cert` for now.
-// Because the url is always `https://api.rustdesk.com/version/latest`.
-#[tokio::main(flavor = "current_thread")]
-pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
-    let (request, url) =
-        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
-    let proxy_conf = Config::get_socks();
-    let tls_url = get_url_for_tls(&url, &proxy_conf);
-    let tls_type = get_cached_tls_type(tls_url);
-    let is_tls_not_cached = tls_type.is_none();
-    let tls_type = tls_type.unwrap_or(TlsType::Rustls);
-    let client = create_http_client_async(tls_type, false);
-    let latest_release_response = match client.post(&url).json(&request).send().await {
-        Ok(resp) => {
-            upsert_tls_cache(tls_url, tls_type, false);
-            resp
-        }
-        Err(err) => {
-            if is_tls_not_cached && err.is_request() {
-                let tls_type = TlsType::NativeTls;
-                let client = create_http_client_async(tls_type, false);
-                let resp = client.post(&url).json(&request).send().await?;
-                upsert_tls_cache(tls_url, tls_type, false);
-                resp
-            } else {
-                return Err(err.into());
-            }
-        }
+pub(crate) fn release_id_from_update_url(update_url: &str) -> ResultType<String> {
+    let url = url::Url::parse(update_url)?;
+    if url.scheme() != "https" || url.host_str() != Some("github.com") {
+        bail!(
+            "Update URL is not a GitHub HTTPS release URL: {}",
+            update_url
+        );
+    }
+    if url_has_explicit_port(update_url)
+        || url.port().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        bail!(
+            "Update URL must not contain credentials or an explicit port: {}",
+            update_url
+        );
+    }
+    if url.query().is_some() || url.fragment().is_some() {
+        bail!(
+            "Update URL must not contain query or fragment: {}",
+            update_url
+        );
+    }
+
+    let Some(segments) = url.path_segments() else {
+        bail!("Update URL has no path: {}", update_url);
     };
-    let bytes = latest_release_response.bytes().await?;
+    let segments = segments.collect::<Vec<_>>();
+    let release_id = match segments.as_slice() {
+        ["rustdesk", "rustdesk", "releases", "tag", release_id] => *release_id,
+        ["rustdesk", "rustdesk", "releases", "tag", release_id, ""] => *release_id,
+        _ => bail!(
+            "Update URL is not a RustDesk release tag URL: {}",
+            update_url
+        ),
+    };
+    if release_id.is_empty()
+        || release_id == "."
+        || release_id == ".."
+        || release_id.contains([' ', '/', '\\', '?', '#'])
+        || release_id.contains('%')
+    {
+        bail!("Update URL has no release id: {}", update_url);
+    }
+    Ok(release_id.to_owned())
+}
+
+pub(crate) fn url_has_explicit_port(raw_url: &str) -> bool {
+    let Some((_, rest)) = raw_url.split_once("://") else {
+        return false;
+    };
+    let authority = rest
+        .split(|c| matches!(c, '/' | '?' | '#'))
+        .next()
+        .unwrap_or_default();
+    let host_port = authority.rsplit('@').next().unwrap_or(authority);
+    host_port.rsplit_once(':').is_some()
+}
+
+pub(crate) fn display_version_from_release_id(release_id: &str) -> ResultType<String> {
+    let display_version = release_id.strip_prefix('v').unwrap_or(release_id);
+    let segments = display_version.split('.').collect::<Vec<_>>();
+    if segments.len() != 3
+        || segments.iter().any(|segment| {
+            segment.is_empty()
+                || !segment.chars().all(|c| c.is_ascii_digit())
+                || segment.parse::<u16>().is_err()
+        })
+    {
+        bail!("Release id is not a stable display version: {}", release_id);
+    }
+    if get_version_number(display_version) <= 0 {
+        bail!("Release id has invalid display version: {}", release_id);
+    }
+    Ok(display_version.to_owned())
+}
+
+fn clear_software_update_url() {
+    let mut update_url = SOFTWARE_UPDATE_URL.lock().unwrap();
+    *update_url = String::new();
+}
+
+fn process_software_update_check_response(bytes: Bytes) -> ResultType<()> {
     let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
     let response_url = resp.url;
-    let latest_release_version = response_url.rsplit('/').next().unwrap_or_default();
+    let release_id = release_id_from_update_url(&response_url)?;
+    let latest_release_version = display_version_from_release_id(&release_id)?;
 
     if get_version_number(&latest_release_version) > get_version_number(crate::VERSION) {
         #[cfg(feature = "flutter")]
@@ -994,9 +1168,58 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
         }
         *SOFTWARE_UPDATE_URL.lock().unwrap() = response_url;
     } else {
-        *SOFTWARE_UPDATE_URL.lock().unwrap() = "".to_string();
+        clear_software_update_url();
     }
     Ok(())
+}
+
+// No need to check `danger_accept_invalid_cert` for now.
+// Because the url is always `https://api.rustdesk.com/version/latest`.
+#[tokio::main(flavor = "current_thread")]
+pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
+    let (request, url) =
+        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+    let proxy_conf = Config::get_socks();
+    let tls_url = get_url_for_tls(&url, &proxy_conf);
+    let tls_type = get_cached_tls_type(tls_url);
+    let is_tls_not_cached = tls_type.is_none();
+    let tls_type = tls_type.unwrap_or(TlsType::Rustls);
+    let client = create_http_client_async(tls_type, false);
+    let latest_release_response: ResultType<_> = match client.post(&url).json(&request).send().await
+    {
+        Ok(resp) => Ok((tls_type, resp)),
+        Err(err) => {
+            if is_tls_not_cached && err.is_request() {
+                let tls_type = TlsType::NativeTls;
+                let client = create_http_client_async(tls_type, false);
+                match client.post(&url).json(&request).send().await {
+                    Ok(resp) => Ok((tls_type, resp)),
+                    Err(err) => Err(err.into()),
+                }
+            } else {
+                Err(err.into())
+            }
+        }
+    };
+    let response_bytes = match latest_release_response {
+        Ok((used_tls_type, response)) => {
+            upsert_tls_cache(tls_url, used_tls_type, false);
+            let status = response.status();
+            if !status.is_success() {
+                Err(anyhow!(
+                    "Software update check failed with HTTP status: {status}"
+                ))
+            } else {
+                response.bytes().await.map_err(|err| err.into())
+            }
+        }
+        Err(err) => Err(err),
+    };
+    let result = response_bytes.and_then(process_software_update_check_response);
+    if result.is_err() {
+        clear_software_update_url();
+    }
+    result
 }
 
 #[inline]
@@ -1024,7 +1247,7 @@ pub fn get_full_name() -> String {
 }
 
 pub fn is_setup(name: &str) -> bool {
-    name.to_lowercase().ends_with("install.exe")
+    !config::is_disable_installation() && name.to_lowercase().ends_with("install.exe")
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {
@@ -1075,6 +1298,11 @@ fn get_api_server_(api: String, custom: String) -> String {
     if !s0.is_empty() {
         let s = crate::increase_port(&s0, -2);
         if s == s0 {
+            let s = if hbb_common::is_ipv6_str(&s) && !s.starts_with('[') {
+                format!("[{s}]")
+            } else {
+                s
+            };
             return format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
         } else {
             return format!("http://{}", s);
@@ -1085,8 +1313,22 @@ fn get_api_server_(api: String, custom: String) -> String {
 
 #[inline]
 pub fn is_public(url: &str) -> bool {
-    let url = url.to_ascii_lowercase();
-    url.contains("rustdesk.com/") || url.ends_with("rustdesk.com")
+    let parsed = url::Url::parse(url)
+        .ok()
+        .filter(|parsed| parsed.has_host())
+        .or_else(|| url::Url::parse(&format!("http://{url}")).ok());
+    let Some(host) = parsed.as_ref().and_then(url::Url::host_str) else {
+        return false;
+    };
+    let host = host.strip_suffix('.').unwrap_or(host);
+    host == "rustdesk.com" || host.ends_with(".rustdesk.com")
+}
+
+pub fn get_tcp_punch_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_TCP_PUNCH,
+        &get_local_option(keys::OPTION_ENABLE_TCP_PUNCH),
+    )
 }
 
 pub fn get_udp_punch_enabled() -> bool {
@@ -1103,14 +1345,27 @@ pub fn get_ipv6_punch_enabled() -> bool {
     )
 }
 
+pub fn get_webrtc_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_WEBRTC,
+        &get_local_option(keys::OPTION_ENABLE_WEBRTC),
+    )
+}
+
 pub fn get_local_option(key: &str) -> String {
     let v = LocalConfig::get_option(key);
-    if key == keys::OPTION_ENABLE_UDP_PUNCH || key == keys::OPTION_ENABLE_IPV6_PUNCH {
+    if key == keys::OPTION_ENABLE_UDP_PUNCH
+        || key == keys::OPTION_ENABLE_IPV6_PUNCH
+        || key == keys::OPTION_ENABLE_WEBRTC
+    {
         if v.is_empty() {
             if !is_public(&Config::get_rendezvous_server()) {
                 return "N".to_owned();
             }
         }
+    }
+    if key == "lang" && (v == "pt" || v == "br") {
+        return "pt-br".to_owned();
     }
     v
 }
@@ -1158,6 +1413,23 @@ fn should_use_tcp_proxy_for_api_url(url: &str, api_url: &str) -> bool {
 #[inline]
 fn is_tcp_proxy_api_target(url: &str) -> bool {
     should_use_tcp_proxy_for_api_url(url, &ui_get_api_server())
+}
+
+#[inline]
+fn should_throttle_log(url: &str) -> bool {
+    url::Url::parse(url)
+        .map(|parsed| parsed.path().ends_with("/api/heartbeat"))
+        .unwrap_or(false)
+}
+
+macro_rules! api_log {
+    ($level:ident, $url:expr, $interval:expr, $($arg:tt)+) => {{
+        if should_throttle_log($url) {
+            hbb_common::throttled_log!($interval, $level, $($arg)+);
+        } else {
+            log::$level!($($arg)+);
+        }
+    }};
 }
 
 fn tcp_proxy_log_target(url: &str) -> String {
@@ -1209,7 +1481,10 @@ async fn tcp_proxy_request(
         parsed.path().to_string()
     };
 
-    log::debug!(
+    api_log!(
+        debug,
+        url,
+        API_LOG_INTERVAL,
         "Sending {} {} via TCP proxy to {}",
         method,
         parsed.path(),
@@ -1369,7 +1644,10 @@ where
     };
 
     if should_fallback && can_fallback_to_raw_tcp(url) {
-        log::warn!(
+        api_log!(
+            warn,
+            url,
+            API_LOG_INTERVAL,
             "HTTP {} to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
             method,
             tcp_proxy_log_target(url),
@@ -1381,7 +1659,13 @@ where
         match tcp_fn.await {
             Ok(resp) => return Ok(resp),
             Err(tcp_err) => {
-                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+                api_log!(
+                    warn,
+                    url,
+                    API_LOG_INTERVAL,
+                    "TCP proxy fallback also failed: {:?}",
+                    tcp_err
+                );
             }
         }
     }
@@ -1403,6 +1687,67 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
         post_request_via_tcp_proxy(&url, &body, header),
     )
     .await
+}
+
+/// POST request via TCP proxy, preserving the HTTP status code.
+async fn post_request_via_tcp_proxy_status(
+    url: &str,
+    body: &str,
+    header: &str,
+) -> ResultType<(u16, String)> {
+    let headers = parse_simple_header(header);
+    let resp = tcp_proxy_request("POST", url, body.as_bytes(), headers).await?;
+    if !resp.error.is_empty() {
+        bail!("TCP proxy error: {}", resp.error);
+    }
+    Ok((
+        resp.status as u16,
+        String::from_utf8_lossy(&resp.body).to_string(),
+    ))
+}
+
+/// Like `post_request`, but returns the HTTP status code so callers can tell
+/// a server-side failure from success. Same fallback rules: on connection
+/// failure or 5xx, retry once through the raw TCP proxy when eligible.
+pub async fn post_request_with_status(
+    url: String,
+    body: String,
+    header: &str,
+) -> ResultType<(u16, String)> {
+    if should_use_raw_tcp_for_api(&url) {
+        return post_request_via_tcp_proxy_status(&url, &body, header).await;
+    }
+    let http_result = post_request_http(&url, &body, header).await;
+    let should_fallback = match &http_result {
+        Err(_) => true,
+        Ok((status, _)) => *status >= 500,
+    };
+    if should_fallback && can_fallback_to_raw_tcp(&url) {
+        api_log!(
+            warn,
+            &url,
+            API_LOG_INTERVAL,
+            "HTTP POST to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
+            tcp_proxy_log_target(&url),
+            http_result
+                .as_ref()
+                .map(|(s, _)| *s)
+                .map_err(|e| e.to_string()),
+        );
+        match post_request_via_tcp_proxy_status(&url, &body, header).await {
+            Ok(resp) => return Ok(resp),
+            Err(tcp_err) => {
+                api_log!(
+                    warn,
+                    &url,
+                    API_LOG_INTERVAL,
+                    "TCP proxy fallback also failed: {:?}",
+                    tcp_err
+                );
+            }
+        }
+    }
+    http_result
 }
 
 #[async_recursion]
@@ -1455,7 +1800,10 @@ async fn post_request_(
             Err(e) => {
                 if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
                     if danger_accept_invalid_cert.is_none() {
-                        log::warn!(
+                        api_log!(
+                            warn,
+                            url,
+                            API_LOG_INTERVAL,
                             "HTTP request failed: {:?}, try again, danger accept invalid cert",
                             e
                         );
@@ -1470,7 +1818,13 @@ async fn post_request_(
                         )
                         .await
                     } else {
-                        log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
+                        api_log!(
+                            warn,
+                            url,
+                            API_LOG_INTERVAL,
+                            "HTTP request failed: {:?}, try again with native-tls",
+                            e
+                        );
                         post_request_(
                             url,
                             tls_url,
@@ -1943,6 +2297,13 @@ async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> 
     if use_ws() {
         return Ok(());
     }
+    key_exchange(conn, key, log_on_success).await.map(|_| ())
+}
+
+/// The server's key exchange on `conn`. `Ok(true)` once the stream is encrypted. `Ok(false)`
+/// when the server sent something else first, nothing parseable, or closed: `secure_tcp`
+/// tolerates that for servers from before the exchange, `secure_tcp_required` does not.
+async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> ResultType<bool> {
     let rs_pk = get_rs_pk(key);
     let Some(rs_pk) = rs_pk else {
         bail!("Handshake failed: invalid public key from rendezvous server");
@@ -1957,20 +2318,50 @@ async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> 
                         }
                         let their_pk_b = sign::verify(&ex.keys[0], &rs_pk)
                             .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
-                        let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(
-                            get_pk(&their_pk_b)
-                                .context("Wrong their public length in key exchange")?,
-                        );
+                        let their_pk_b = get_pk(&their_pk_b)
+                            .context("Wrong their public length in key exchange")?;
+                        // The signed X25519 high bit marks servers that sign their parameters.
+                        // X25519 ignores that bit, so old clients use the key unchanged; keep
+                        // the bytes as signed, since the transcript and KxParams carry them so.
+                        if their_pk_b[31] & 0x80 != 0 || !ex.signed_params.is_empty() {
+                            let params = sign::verify(&ex.signed_params, &rs_pk)
+                                .ok()
+                                .and_then(|signed| {
+                                    let params =
+                                        signed.strip_prefix(hbb_common::tcp::KX_PARAMS_DOMAIN)?;
+                                    KxParams::parse_from_bytes(params).ok()
+                                })
+                                .ok_or_else(|| {
+                                    anyhow!("Missing or invalid signed key exchange parameters")
+                                })?;
+                            if params.pk[..] != their_pk_b[..] || params.version != ex.version {
+                                bail!("Key exchange version or public key does not match its signature");
+                            }
+                        }
+                        let (asymmetric_value, symmetric_value, key) =
+                            create_symmetric_key_msg(their_pk_b);
+                        let picked = hbb_common::tcp::kx_version_for(ex.version);
                         let mut msg_out = RendezvousMessage::new();
                         msg_out.set_key_exchange(KeyExchange {
-                            keys: vec![asymmetric_value, symmetric_value],
+                            keys: vec![asymmetric_value.clone(), symmetric_value],
+                            version: picked,
                             ..Default::default()
                         });
                         timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                        conn.set_key(key);
+                        conn.set_negotiated_key(
+                            key,
+                            true,
+                            &hbb_common::tcp::KxTranscript {
+                                initiator_pk: &asymmetric_value,
+                                responder_pk: &their_pk_b,
+                                advertised: ex.version,
+                                picked,
+                            },
+                        )?;
                         if log_on_success {
                             log::info!("Connection secured");
                         }
+                        return Ok(true);
                     }
                     _ => {}
                 }
@@ -1978,7 +2369,7 @@ async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> 
         }
         _ => {}
     }
-    Ok(())
+    Ok(false)
 }
 
 pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
@@ -1987,6 +2378,22 @@ pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
 
 async fn secure_tcp_silent(conn: &mut Stream, key: &str) -> ResultType<()> {
     secure_tcp_impl(conn, key, false).await
+}
+
+/// Like [`secure_tcp`], but returns only once the server's key exchange has actually encrypted
+/// the stream; a server that answers with anything else, or with nothing, is an error, so the
+/// caller can withhold what it was about to send instead of sending it in the clear.
+/// `secure_tcp` keeps tolerating such a server, which the paths from before the exchange depend
+/// on. WebSocket is treated as `secure_tcp` treats it, as a transport that is encrypted already.
+pub async fn secure_tcp_required(conn: &mut Stream, key: &str) -> ResultType<()> {
+    if use_ws() {
+        return Ok(());
+    }
+    if key_exchange(conn, key, true).await? {
+        Ok(())
+    } else {
+        bail!("the rendezvous server did not complete the key exchange");
+    }
 }
 
 #[inline]
@@ -2010,14 +2417,33 @@ pub fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
 }
 
 pub fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8; 32])> {
+    let (id, pk, _, _) = decode_id_pk_dtls(signed, key)?;
+    Ok((id, pk))
+}
+
+/// Like [`decode_id_pk`] but also returns the signed DTLS certificate fingerprint (empty string
+/// for non-WebRTC peers), used to bind a WebRTC DTLS channel to the verified peer identity, and
+/// the newest key exchange version the peer speaks (0, the original scheme, for a peer from
+/// before versions).
+pub fn decode_id_pk_dtls(
+    signed: &[u8],
+    key: &sign::PublicKey,
+) -> ResultType<(String, [u8; 32], String, u32)> {
     let res = IdPk::parse_from_bytes(
         &sign::verify(signed, key).map_err(|_| anyhow!("Signature mismatch"))?,
     )?;
     if let Some(pk) = get_pk(&res.pk) {
-        Ok((res.id, pk))
+        Ok((res.id, pk, res.dtls_fingerprint, res.kx_version))
     } else {
         bail!("Wrong their public length");
     }
+}
+
+/// Whether the DTLS fingerprint a WebRTC peer signed into its identity is the one of the channel
+/// actually negotiated. An empty signed value binds nothing: on a WebRTC channel it is either a
+/// peer that could not sign one or a rendezvous/relay that stripped it, and both fail closed.
+pub fn dtls_fingerprint_bound(signed_fp: &str, actual_fp: &str) -> bool {
+    !signed_fp.is_empty() && signed_fp == actual_fp
 }
 
 pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbox::Key) {
@@ -2316,16 +2742,26 @@ pub fn is_udp_disabled() -> bool {
     Config::get_option(keys::OPTION_DISABLE_UDP) == "Y"
 }
 
+/// Run KCP with its congestion window (nc=0) instead of the turbo profile it has always shipped.
+///
+/// Opt-in: which profile wins depends on why packets are lost — nc=1 deepens real congestion,
+/// while nc=0 reads random loss as congestion and its RTO backoff drops cwnd to 1. Undecidable
+/// without a shaped link, so keep what users run today.
+#[inline]
+pub fn get_kcp_cc_enabled() -> bool {
+    let k = keys::OPTION_ALLOW_KCP_CC;
+    config::option2bool(k, &Config::get_option(k))
+}
+
 // this crate https://github.com/yoshd/stun-client supports nat type
-async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
-    use std::net::ToSocketAddrs;
+async fn stun_ipv6_test(stun_server: String) -> ResultType<(SocketAddr, String)> {
     use stunclient::StunClient;
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(&local_addr).await?;
-    let Some(stun_addr) = stun_server
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv6())
-        .next()
+    // Resolve via tokio so DNS never blocks the async runtime worker.
+    let Some(stun_addr) = tokio::net::lookup_host(&stun_server)
+        .await?
+        .find(|x| x.is_ipv6())
     else {
         bail!(
             "Failed to resolve STUN ipv6 server address: {}",
@@ -2335,96 +2771,48 @@ async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
     let client = StunClient::new(stun_addr);
     let addr = client.query_external_address_async(&socket).await?;
     Ok(if addr.ip().is_ipv6() {
-        (addr, stun_server.to_owned())
+        (addr, stun_server)
     } else {
         bail!("STUN server returned non-IPv6 address: {}", addr)
     })
 }
 
-async fn stun_ipv4_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
-    use std::net::ToSocketAddrs;
-    use stunclient::StunClient;
-    let local_addr = SocketAddr::from(([0u8; 4], 0));
-    let socket = UdpSocket::bind(&local_addr).await?;
-    let Some(stun_addr) = stun_server
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv4())
-        .next()
-    else {
-        bail!(
-            "Failed to resolve STUN ipv4 server address: {}",
-            stun_server
-        );
-    };
-    let client = StunClient::new(stun_addr);
-    let addr = client.query_external_address_async(&socket).await?;
-    Ok(if addr.ip().is_ipv4() {
-        (addr, stun_server.to_owned())
-    } else {
-        bail!("STUN server returned non-IPv6 address: {}", addr)
-    })
-}
-
-static STUNS_V4: [&str; 3] = [
-    "stun.l.google.com:19302",
-    "stun.cloudflare.com:3478",
-    "stun.nextcloud.com:3478",
-];
-
-static STUNS_V6: [&str; 3] = [
-    "stun.l.google.com:19302",
-    "stun.cloudflare.com:3478",
-    "stun.nextcloud.com:3478",
-];
-
-pub async fn test_nat_ipv4() -> ResultType<(SocketAddr, String)> {
-    use hbb_common::futures::future::{select_ok, FutureExt};
-    let tests = STUNS_V4
-        .iter()
-        .map(|&stun| stun_ipv4_test(stun).boxed())
-        .collect::<Vec<_>>();
-
-    match select_ok(tests).await {
-        Ok(res) => {
-            return Ok(res.0);
-        }
-        Err(e) => {
-            bail!(
-                "Failed to get public IPv4 address via public STUN servers: {}",
-                e
-            );
-        }
-    };
-}
+/// A global address to ask the kernel for a route to; libwebrtc's QueryDefaultLocalAddress asks
+/// for the same one. Nothing is ever sent to it.
+const IPV6_ROUTE_PROBE: std::net::Ipv6Addr =
+    std::net::Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888);
+/// The public IPv6 address the STUN servers report is looked for in the background, and for no
+/// longer than this: a probe that outlived the minute could write an earlier network's address
+/// over a later probe's.
+const STUN_IPV6_TIMEOUT_MS: u64 = 5_000;
 
 async fn test_bind_ipv6() -> ResultType<SocketAddr> {
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(local_addr).await?;
-    let addr = STUNS_V6[0]
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv6())
-        .next()
-        .ok_or_else(|| {
-            anyhow!(
-                "Failed to resolve STUN ipv6 server address: {}",
-                STUNS_V6[0]
-            )
-        })?;
-    socket.connect(addr).await?;
+    // Nothing is sent - `connect` only makes the kernel pick a route and a source address - so
+    // the target can be any global address, and given as a number it is: this is awaited on the
+    // connection path, and resolving a STUN host's name first was the one thing on it that
+    // could wait on the network - for as long as the resolver takes, when there is none.
+    socket
+        .connect(SocketAddr::from((IPV6_ROUTE_PROBE, 53)))
+        .await?;
     Ok(socket.local_addr()?)
 }
 
 pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
-    if PUBLIC_IPV6_ADDR
-        .lock()
-        .unwrap()
-        .1
-        .map(|x| x.elapsed().as_secs() < 60)
-        .unwrap_or(false)
     {
-        return None;
+        // One look and one claim of the minute, under one lock: two connections arriving
+        // together would otherwise both find it over and both probe.
+        let mut cached = PUBLIC_IPV6_ADDR.lock().unwrap();
+        if cached
+            .1
+            .map(|x| x.elapsed().as_secs() < 60)
+            .unwrap_or(false)
+        {
+            return None;
+        }
+        cached.1 = Some(Instant::now());
     }
-    PUBLIC_IPV6_ADDR.lock().unwrap().1 = Some(Instant::now());
 
     match test_bind_ipv6().await {
         Ok(mut addr) => {
@@ -2476,13 +2864,13 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
 
     Some(tokio::spawn(async {
         use hbb_common::futures::future::{select_ok, FutureExt};
-        let tests = STUNS_V6
-            .iter()
-            .map(|&stun| stun_ipv6_test(stun).boxed())
+        let tests = hbb_common::webrtc::WebRTCStream::default_stun_servers()
+            .into_iter()
+            .map(|stun| stun_ipv6_test(stun).boxed())
             .collect::<Vec<_>>();
 
-        match select_ok(tests).await {
-            Ok(res) => {
+        match hbb_common::timeout(STUN_IPV6_TIMEOUT_MS, select_ok(tests)).await {
+            Ok(Ok(res)) => {
                 let mut addr = res.0 .0;
                 addr.set_port(0); // Set port to 0 to avoid conflicts
                 PUBLIC_IPV6_ADDR.lock().unwrap().0 = Some(addr);
@@ -2492,58 +2880,127 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
                     addr
                 );
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 log::error!("Failed to get public IPv6 address: {}", e);
+            }
+            Err(_) => {
+                log::warn!("No STUN server answered for IPv6 within {STUN_IPV6_TIMEOUT_MS}ms");
             }
         };
     }))
 }
 
+// A punch packet carries a magic and a transaction id so a reply can be *proven* to answer this
+// probe. The punch it replaces sent a zero-length datagram and called the hole open on whatever
+// arrived next - which the rendezvous NAT test's own leftover replies satisfied instantly, so the
+// retry loop below never actually ran and its success meant nothing.
+const PUNCH_PROBE: [u8; 4] = *b"RDP?";
+const PUNCH_ACK: [u8; 4] = *b"RDP!";
+const PUNCH_PACKET_LEN: usize = 12;
+
+fn punch_packet(tag: &[u8; 4], tid: u64) -> [u8; PUNCH_PACKET_LEN] {
+    let mut packet = [0u8; PUNCH_PACKET_LEN];
+    packet[..4].copy_from_slice(tag);
+    packet[4..].copy_from_slice(&tid.to_le_bytes());
+    packet
+}
+
+fn punch_tid(packet: &[u8], tag: &[u8; 4]) -> Option<u64> {
+    if packet.len() != PUNCH_PACKET_LEN || packet[..4] != tag[..] {
+        return None;
+    }
+    packet[4..].try_into().ok().map(u64::from_le_bytes)
+}
+
+/// Punch until one of our own probes is acknowledged. Both ends run this identically - each
+/// probes, each answers the other's probes - and each returns only once a reply carrying its own
+/// transaction id comes back, the one thing that proves the pair carries traffic both ways.
+///
+/// Returning is therefore a fact rather than a guess, which is what lets the caller stop instead
+/// of handing a dead socket to a transport whose only way to discover the truth is to time out.
+///
+/// A datagram that is neither probe nor acknowledgement is returned rather than dropped: it means
+/// the peer finished first and is already speaking KCP, whose SYN is never retransmitted.
+///
+/// Only the connector stops on its own acknowledgement, because only it has something to send
+/// next. An acknowledgement proves our probe came back, not that the peer's probe was answered -
+/// and after this returns nothing answers probes any more, since KCP's io loop drops anything
+/// shorter than its header. A listener that stopped here would go mute while a peer whose own
+/// probe or answer was lost - the normal state of a hole that is still opening - kept probing an
+/// endpoint that works, until it timed out. So the listener stops on the peer's first real packet.
 pub async fn punch_udp(
     socket: Arc<UdpSocket>,
     listen: bool,
 ) -> ResultType<Option<bytes::BytesMut>> {
+    let tid = ((hbb_common::time_based_rand() as u64) << 32) | hbb_common::time_based_rand() as u64;
+    let probe = punch_packet(&PUNCH_PROBE, tid);
+    let mut data = [0u8; 1500];
+    // `connect` does not flush the receive queue, so the NAT test's extra replies are still in it.
+    while socket.try_recv(&mut data).is_ok() {}
+
     let mut retry_interval = Duration::from_millis(20);
     const MAX_INTERVAL: Duration = Duration::from_millis(200);
-    const MAX_TIME: Duration = Duration::from_secs(20);
-    let mut packets_sent = 0;
-    socket.send(&[]).await.ok();
-    packets_sent += 1;
-    let mut last_send_time = Instant::now();
+    // Both ends start within one rendezvous round trip of each other and the acknowledgement is
+    // one peer round trip, so a pair that has not answered in this long is not going to. The old
+    // 20s came from having no way to tell "not yet" from "never".
+    const MAX_TIME: Duration = Duration::from_secs(3);
+    let mut probes_sent = 0u32;
+    let mut probes_seen = 0u32;
+    let mut acked = false;
+    let mut recv_errors = 0u32;
+    socket.send(&probe).await.ok();
+    probes_sent += 1;
     let tm = Instant::now();
-    let mut data = [0u8; 1500];
+    // Absolute instants, not relative sleeps: `select!` rebuilds every arm each iteration, so a
+    // peer that keeps the receive side ready restarts a relative timer before it can fire. That
+    // both defeats MAX_TIME and starves the retransmit, and the peer decides the rate - an
+    // old-build peer's empty datagrams match no arm below and loop without even a pause.
+    let deadline = tm + MAX_TIME;
+    let mut next_probe = tm + retry_interval;
 
     loop {
         tokio::select! {
-            _ = hbb_common::sleep(retry_interval.as_secs_f32()) => {
-                if tm.elapsed() > MAX_TIME {
-                    bail!("UDP punch is timed out, stop sending packets after {:?} packets", packets_sent);
-                }
-                let elapsed = last_send_time.elapsed();
-
-                if elapsed >= retry_interval {
-                    socket.send(&[]).await.ok();
-                    packets_sent += 1;
-
-                    // Exponentially increase interval to reduce network pressure
-                    retry_interval = std::cmp::min(
-                        Duration::from_millis((retry_interval.as_millis() as f64 * 1.5) as u64),
-                        MAX_INTERVAL
-                    );
-                    last_send_time = Instant::now();
-                }
+            _ = tokio::time::sleep_until(deadline) => {
+                bail!("UDP punch is timed out, {probes_sent} probes sent, {probes_seen} probes received, acked: {acked}, {recv_errors} recv errors absorbed");
+            }
+            _ = tokio::time::sleep_until(next_probe) => {
+                socket.send(&probe).await.ok();
+                probes_sent += 1;
+                retry_interval = std::cmp::min(retry_interval.mul_f64(1.5), MAX_INTERVAL);
+                next_probe = Instant::now() + retry_interval;
             }
             res = socket.recv(&mut data) => match res {
-                Err(e) => bail!("UDP punch failed, {packets_sent} packets sent: {e}"),
+                Err(e) => {
+                    // ICMP unreachable from the peer's NAT is expected while the hole forms and
+                    // surfaces here as ConnectionReset/Refused; treat it as loss, MAX_TIME bounds
+                    // the attempt. Log only the first - this retries every 10ms.
+                    recv_errors += 1;
+                    if recv_errors == 1 {
+                        log::debug!("UDP punch recv error (treated as loss): {e}");
+                    }
+                    hbb_common::sleep(0.01).await;
+                }
                 Ok(n) => {
-                    // log::debug!("UDP punch succeeded after sending {} packets after {:?}", packets_sent, tm.elapsed());
-                    if listen {
-                        if n == 0 {
-                            continue;
+                    let ack = punch_tid(&data[..n], &PUNCH_ACK);
+                    if ack == Some(tid) {
+                        if !listen {
+                            log::debug!(
+                                "UDP punch confirmed in {:?}, {probes_sent} probes sent, {probes_seen} received",
+                                tm.elapsed()
+                            );
+                            return Ok(None);
                         }
+                        acked = true;
+                    } else if let Some(peer_tid) = punch_tid(&data[..n], &PUNCH_PROBE) {
+                        probes_seen += 1;
+                        socket.send(&punch_packet(&PUNCH_ACK, peer_tid)).await.ok();
+                    } else if ack.is_none() && n > 0 {
+                        log::debug!(
+                            "UDP punch confirmed by {n} bytes of peer data in {:?}, {probes_sent} probes sent",
+                            tm.elapsed()
+                        );
                         return Ok(Some(bytes::BytesMut::from(&data[..n])));
                     }
-                    return Ok(None);
                 }
             }
         }
@@ -2623,6 +3080,20 @@ pub fn is_direct_ip_access(peer: &str) -> bool {
     hbb_common::is_ip_str(peer) || hbb_common::is_domain_port_str(peer)
 }
 
+// Align the maximum length of the peer id to the maximum length of the peer id in the server.
+const MAX_UNTRUSTED_PEER_ID_LEN: usize = 253;
+const UNTRUSTED_PEER_ID_FORBIDDEN_CHARS: &[char] = &['"', '<', '>', '/', '\\', '|', '?', '*'];
+
+// Shared validation for peer/connect ids that cross untrusted boundaries before
+// they are stored or written into command/script contexts.
+pub fn is_valid_untrusted_peer_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_UNTRUSTED_PEER_ID_LEN
+        && !id.chars().any(|ch| {
+            ch.is_control() || ch.is_whitespace() || UNTRUSTED_PEER_ID_FORBIDDEN_CHARS.contains(&ch)
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2630,16 +3101,67 @@ mod tests {
         self,
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
-    use std::collections::HashSet;
 
-    #[inline]
-    fn get_timestamp_secs() -> u128 {
-        (std::time::SystemTime::UNIX_EPOCH
-            .elapsed()
-            .unwrap()
-            .as_millis()
-            + 500)
-            / 1000
+    #[test]
+    fn relay_uuid_rejects_control_bytes_but_not_other_id_formats() {
+        for uuid in [
+            "e4c181d0-41c7-4ae6-8ef0-36581b6b2b12",
+            "E4C181D0-41C7-4AE6-8EF0-36581B6B2B12",
+            "01890a5d-ac96-774b-bcce-b302099a8057",
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        ] {
+            assert!(check_relay_uuid(uuid).is_ok(), "rejected {uuid:?}");
+        }
+        let too_long = "a".repeat(129);
+        for uuid in ["", "\r\nPING\r\n", "a b", "a\0", too_long.as_str()] {
+            assert!(check_relay_uuid(uuid).is_err(), "accepted {uuid:?}");
+        }
+    }
+
+    #[test]
+    fn parses_stable_rustdesk_release_url() {
+        let update_url = "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6";
+
+        assert_eq!(release_id_from_update_url(update_url).unwrap(), "v1.4.6");
+        assert_eq!(display_version_from_release_id("v1.4.6").unwrap(), "1.4.6");
+        assert_eq!(
+            release_id_from_update_url(&format!("{update_url}/")).unwrap(),
+            "v1.4.6"
+        );
+    }
+
+    #[test]
+    fn rejects_untrusted_release_urls_and_unstable_versions() {
+        for update_url in [
+            "http://github.com/rustdesk/rustdesk/releases/tag/v1.4.6",
+            "https://github.com:8443/rustdesk/rustdesk/releases/tag/v1.4.6",
+            "https://github.com:443/rustdesk/rustdesk/releases/tag/v1.4.6",
+            "https://user@github.com/rustdesk/rustdesk/releases/tag/v1.4.6",
+            "https://example.com/rustdesk/rustdesk/releases/tag/v1.4.6",
+            "https://github.com/other/rustdesk/releases/tag/v1.4.6",
+            "https://github.com/rustdesk/other/releases/tag/v1.4.6",
+            "https://github.com/rustdesk/rustdesk/releases/download/v1.4.6/rustdesk.exe",
+            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6?x=1",
+            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6#asset",
+            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6/extra",
+            "https://github.com/rustdesk/rustdesk/releases/tag/v1%2F4%2F6",
+            "https://github.com/rustdesk/rustdesk/releases/tag/%2e%2e",
+        ] {
+            assert!(release_id_from_update_url(update_url).is_err());
+        }
+        for release_id in ["v1.4.6-rc1", "nightly", "v9223372036854775807.1.1"] {
+            assert!(display_version_from_release_id(release_id).is_err());
+        }
+    }
+
+    #[test]
+    fn a_cursor_content_id_fits_a_web_client_number() {
+        const MAX_SAFE_INTEGER: u64 = (1 << 53) - 1;
+        for colors in [&b"arrow"[..], b"beam", b"hand", b""] {
+            for hotx in 0..64 {
+                assert!(cursor_content_id(32, 32, hotx, 0, colors) <= MAX_SAFE_INTEGER);
+            }
+        }
     }
 
     fn interval_maker() -> Interval {
@@ -2653,58 +3175,65 @@ mod tests {
         )
     }
 
-    // ThrottledInterval tick at the same time as tokio interval, if no sleeps
-    #[allow(non_snake_case)]
+    // The deadline must hold against a peer that keeps the receive side ready. `select!` rebuilds
+    // its arms every iteration, so a relative sleep would be restarted by every datagram and the
+    // punch would run for as long as the peer keeps talking, with no outer timeout to stop it.
     #[tokio::test]
-    async fn test_RustDesk_interval() {
-        let base_intervals = [interval_maker, interval_at_maker];
-        for maker in base_intervals.into_iter() {
-            let mut tokio_timer = maker();
-            let mut tokio_times = Vec::new();
-            let mut timer = rustdesk_interval(maker());
-            let mut times = Vec::new();
-            loop {
-                tokio::select! {
-                    _ = timer.tick() => {
-                        if tokio_times.len() >= 10 && times.len() >= 10 {
-                            break;
-                        }
-                        times.push(get_timestamp_secs());
-                    }
-                    _ = tokio_timer.tick() => {
-                        if tokio_times.len() >= 10 && times.len() >= 10 {
-                            break;
-                        }
-                        tokio_times.push(get_timestamp_secs());
-                    }
+    async fn test_udp_punch_deadline_survives_a_talkative_peer() {
+        let a = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let b = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let (a_addr, b_addr) = (a.local_addr().unwrap(), b.local_addr().unwrap());
+        a.connect(b_addr).await.unwrap();
+        b.connect(a_addr).await.unwrap();
+        // Empty datagrams answer no probe and match no return branch, so they only feed the loop.
+        // Sent well past the punch deadline so a restarted timer would show up as a long run.
+        let flooder = tokio::spawn(async move {
+            let end = Instant::now() + Duration::from_secs(12);
+            while Instant::now() < end {
+                if b.send(&[]).await.is_err() {
+                    break;
                 }
+                sleep(Duration::from_millis(5)).await;
             }
-            assert_eq!(times, tokio_times);
+        });
+        let start = Instant::now();
+        let res = punch_udp(Arc::new(a), false).await;
+        let elapsed = start.elapsed();
+        flooder.abort();
+        assert!(res.is_err(), "the punch should have timed out");
+        assert!(
+            elapsed < Duration::from_secs(6),
+            "the punch ran for {elapsed:?}; its deadline did not hold"
+        );
+    }
+
+    #[test]
+    fn untrusted_peer_id_validation() {
+        let cases = [
+            ("123456789", true),
+            ("m\u{00FC}nchen-pc", true),
+            ("192.168.1.10:21118", true),
+            ("9123456234@public", true),
+            (
+                r#"1" & oWS.Run("cmd.exe /k whoami /priv",1,False) & ""#,
+                false,
+            ),
+            ("", false),
+            ("peer id", false),
+            ("peer\nid", false),
+            ("peer/id", false),
+            ("peer?id", false),
+        ];
+
+        for (id, expected) in cases {
+            assert_eq!(is_valid_untrusted_peer_id(id), expected, "{id:?}");
         }
     }
 
-    #[tokio::test]
-    async fn test_tokio_time_interval_sleep() {
-        let mut timer = interval_maker();
-        let mut times = Vec::new();
-        sleep(Duration::from_secs(3)).await;
-        loop {
-            tokio::select! {
-                _ = timer.tick() => {
-                    times.push(get_timestamp_secs());
-                    if times.len() == 5 {
-                        break;
-                    }
-                }
-            }
-        }
-        let times2: HashSet<u128> = HashSet::from_iter(times.clone());
-        assert_eq!(times.len(), times2.len() + 3);
-    }
-
-    // ThrottledInterval tick less times than tokio interval, if there're sleeps
+    // ThrottledInterval tick less times than tokio interval, if there're sleeps.
+    // The clock is paused, so a stalled runner cannot make two ticks look close together.
     #[allow(non_snake_case)]
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_RustDesk_interval_sleep() {
         let base_intervals = [interval_maker, interval_at_maker];
         for (i, maker) in base_intervals.into_iter().enumerate() {
@@ -2714,79 +3243,43 @@ mod tests {
             loop {
                 tokio::select! {
                     _ = timer.tick() => {
-                        times.push(get_timestamp_secs());
+                        times.push(Instant::now());
                         if times.len() == 5 {
                             break;
                         }
                     }
                 }
             }
-            // No multiple ticks in the `interval` time.
-            // Values in "times" are unique and are less than normal tokio interval.
-            // See previous test (test_tokio_time_interval_sleep) for comparison.
-            let times2: HashSet<u128> = HashSet::from_iter(times.clone());
-            assert_eq!(times.len(), times2.len(), "test: {}", i);
+            // No multiple ticks in the `interval` time: tokio's interval bursts the missed ticks
+            // with no gap, ThrottledInterval keeps them at least 0.9 * period apart.
+            for pair in times.windows(2) {
+                let gap = pair[1] - pair[0];
+                assert!(
+                    gap >= Duration::from_millis(900),
+                    "test: {}, gap: {:?}",
+                    i,
+                    gap
+                );
+            }
         }
     }
 
     #[test]
-    fn test_duration_multiplication() {
-        let dur = Duration::from_secs(1);
-
-        assert_eq!(dur * 2, Duration::from_secs(2));
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.9),
-            Duration::from_millis(900)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.923),
-            Duration::from_millis(923)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-3),
-            Duration::from_micros(923)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-6),
-            Duration::from_nanos(923)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.923 * 1e-9),
-            Duration::from_nanos(1)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.5 * 1e-9),
-            Duration::from_nanos(1)
-        );
-        assert_eq!(
-            Duration::from_secs_f64(dur.as_secs_f64() * 0.499 * 1e-9),
-            Duration::from_nanos(0)
-        );
+    fn test_is_public_matches_rustdesk_root_domain() {
+        assert!(is_public("rustdesk.com/"));
+        assert!(is_public("rustdesk.com:21117"));
+        assert!(is_public("api.rustdesk.com:21117"));
+        assert!(!is_public("hello-rustdesk.com"));
+        assert!(!is_public("api.rustdesk.com.evil.test"));
+        assert!(!is_public("https://rustdesk.com@evil.test"));
     }
 
     #[test]
-    fn test_is_public() {
-        // Test URLs containing "rustdesk.com/"
-        assert!(is_public("https://rustdesk.com/"));
-        assert!(is_public("https://www.rustdesk.com/"));
-        assert!(is_public("https://api.rustdesk.com/v1"));
-        assert!(is_public("https://API.RUSTDESK.COM/v1"));
-        assert!(is_public("https://rustdesk.com/path"));
-
-        // Test URLs ending with "rustdesk.com"
-        assert!(is_public("rustdesk.com"));
-        assert!(is_public("https://rustdesk.com"));
-        assert!(is_public("https://RustDesk.com"));
-        assert!(is_public("http://www.rustdesk.com"));
-        assert!(is_public("https://api.rustdesk.com"));
-
-        // Test non-public URLs
-        assert!(!is_public("https://example.com"));
-        assert!(!is_public("https://custom-server.com"));
-        assert!(!is_public("http://192.168.1.1"));
-        assert!(!is_public("localhost"));
-        assert!(!is_public("https://rustdesk.computer.com"));
-        assert!(!is_public("rustdesk.comhello.com"));
+    fn test_api_server_from_bare_ipv6_rendezvous_server() {
+        assert_eq!(
+            get_api_server_("".to_owned(), "2001:db8::1".to_owned()),
+            "http://[2001:db8::1]:21114"
+        );
     }
 
     #[test]
@@ -2818,97 +3311,6 @@ mod tests {
     }
 
     #[test]
-    fn test_get_tcp_proxy_addr_normalizes_bare_ipv6_host() {
-        struct RestoreCustomRendezvousServer(String);
-
-        impl Drop for RestoreCustomRendezvousServer {
-            fn drop(&mut self) {
-                Config::set_option(
-                    keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
-                    self.0.clone(),
-                );
-            }
-        }
-
-        let _restore = RestoreCustomRendezvousServer(Config::get_option(
-            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER,
-        ));
-        Config::set_option(
-            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_string(),
-            "1:2".to_string(),
-        );
-
-        assert_eq!(get_tcp_proxy_addr(), format!("[1:2]:{RENDEZVOUS_PORT}"));
-    }
-
-    #[tokio::test]
-    async fn test_http_request_via_tcp_proxy_rejects_invalid_header_json() {
-        let result = http_request_via_tcp_proxy("not a url", "get", None, "{").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_http_request_via_tcp_proxy_rejects_non_object_header_json() {
-        let err = http_request_via_tcp_proxy("not a url", "get", None, "[]")
-            .await
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("HTTP header information parsing failed!"));
-    }
-
-    #[test]
-    fn test_parse_json_header_entries_preserves_single_content_type() {
-        let headers = parse_json_header_entries(
-            r#"{"Content-Type":"text/plain","Authorization":"Bearer token"}"#,
-        )
-        .unwrap();
-
-        assert_eq!(
-            headers
-                .iter()
-                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
-                .count(),
-            1
-        );
-        assert_eq!(
-            headers
-                .iter()
-                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
-                .map(|entry| entry.value.as_str()),
-            Some("text/plain")
-        );
-    }
-
-    #[test]
-    fn test_parse_json_header_entries_does_not_add_default_content_type() {
-        let headers = parse_json_header_entries(r#"{"Authorization":"Bearer token"}"#).unwrap();
-
-        assert!(!headers
-            .iter()
-            .any(|entry| entry.name.eq_ignore_ascii_case("Content-Type")));
-    }
-
-    #[test]
-    fn test_parse_simple_header_respects_custom_content_type() {
-        let headers = parse_simple_header("Content-Type: text/plain");
-
-        assert_eq!(
-            headers
-                .iter()
-                .filter(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
-                .count(),
-            1
-        );
-        assert_eq!(
-            headers
-                .iter()
-                .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
-                .map(|entry| entry.value.as_str()),
-            Some("text/plain")
-        );
-    }
-
-    #[test]
     fn test_parse_simple_header_preserves_non_content_type_header() {
         let headers = parse_simple_header("Authorization: Bearer token");
 
@@ -2929,22 +3331,6 @@ mod tests {
                 .find(|entry| entry.name.eq_ignore_ascii_case("Content-Type"))
                 .map(|entry| entry.value.as_str()),
             Some("application/json")
-        );
-    }
-
-    #[test]
-    fn test_tcp_proxy_log_target_redacts_query_only() {
-        assert_eq!(
-            tcp_proxy_log_target("https://example.com/api/heartbeat?token=secret"),
-            "https://example.com/api/heartbeat"
-        );
-    }
-
-    #[test]
-    fn test_tcp_proxy_log_target_brackets_ipv6_host_with_port() {
-        assert_eq!(
-            tcp_proxy_log_target("https://[2001:db8::1]:21114/api/heartbeat?token=secret"),
-            "https://[2001:db8::1]:21114/api/heartbeat"
         );
     }
 
@@ -2976,35 +3362,288 @@ mod tests {
         assert!(err.contains("TCP proxy error: dial failed"));
     }
 
-    #[test]
-    fn test_mouse_event_constants_and_mask_layout() {
-        use super::input::*;
+    /// A stand-in rendezvous server on loopback: accepts one connection and hands it to `serve`.
+    async fn rendezvous_stub<F, Fut>(serve: F) -> String
+    where
+        F: FnOnce(hbb_common::tcp::FramedStream) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let listener = hbb_common::tcp::new_listener("127.0.0.1:0", false)
+            .await
+            .unwrap();
+        let host = listener.local_addr().unwrap().to_string();
+        tokio::spawn(async move {
+            if let Ok((stream, addr)) = listener.accept().await {
+                serve(hbb_common::tcp::FramedStream::from(stream, addr)).await;
+            }
+        });
+        host
+    }
 
-        // Verify MOUSE_TYPE constants are unique and within the mask range.
-        let types = [
-            MOUSE_TYPE_MOVE,
-            MOUSE_TYPE_DOWN,
-            MOUSE_TYPE_UP,
-            MOUSE_TYPE_WHEEL,
-            MOUSE_TYPE_TRACKPAD,
-            MOUSE_TYPE_MOVE_RELATIVE,
-        ];
+    fn server_key() -> (String, sign::SecretKey) {
+        let (pk, sk) = sign::gen_keypair();
+        (encode64(pk.0), sk)
+    }
 
-        let mut seen = std::collections::HashSet::new();
-        for t in types.iter() {
-            assert!(seen.insert(*t), "Duplicate mouse type: {}", t);
-            assert_eq!(
-                *t & MOUSE_TYPE_MASK,
-                *t,
-                "Mouse type {} exceeds mask {}",
-                t,
-                MOUSE_TYPE_MASK
-            );
+    fn signed_key_exchange(
+        pk: &box_::PublicKey,
+        sk: &sign::SecretKey,
+        version: u32,
+    ) -> KeyExchange {
+        let params = KxParams {
+            pk: pk.0.to_vec().into(),
+            version,
+            ..Default::default()
+        };
+        let mut payload = hbb_common::tcp::KX_PARAMS_DOMAIN.to_vec();
+        payload.extend_from_slice(&params.write_to_bytes().unwrap());
+        KeyExchange {
+            keys: vec![sign::sign(&pk.0, sk).into()],
+            version,
+            signed_params: sign::sign(&payload, sk).into(),
+            ..Default::default()
         }
+    }
 
-        // The mask layout is: lower 3 bits for type, upper bits for buttons (shifted by 3).
-        let combined_mask = MOUSE_TYPE_DOWN | ((MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT) << 3);
-        assert_eq!(combined_mask & MOUSE_TYPE_MASK, MOUSE_TYPE_DOWN);
-        assert_eq!(combined_mask >> 3, MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT);
+    async fn connect(host: &str) -> Stream {
+        hbb_common::socket_client::connect_tcp(host.to_owned(), 3000)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_required_refuses_a_server_without_the_exchange() {
+        let (key, _) = server_key();
+        // A server from before the exchange answers the first message with something else.
+        let serve = |mut s: hbb_common::tcp::FramedStream| async move {
+            let mut msg = RendezvousMessage::new();
+            msg.set_register_peer_response(RegisterPeerResponse::new());
+            s.send(&msg).await.unwrap();
+            sleep(Duration::from_secs(2)).await;
+        };
+        let host = rendezvous_stub(serve).await;
+        let mut conn = connect(&host).await;
+        assert!(secure_tcp_required(&mut conn, &key).await.is_err());
+        assert!(!conn.is_secured());
+        // The legacy call tolerates the same server, and the stream stays in the clear.
+        let host = rendezvous_stub(serve).await;
+        let mut conn = connect(&host).await;
+        secure_tcp(&mut conn, &key).await.unwrap();
+        assert!(!conn.is_secured());
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_legacy_and_signed_servers_exchange_application_data() {
+        for (advertised, signed) in [(0, false), (1, true), (3, true)] {
+            for required in [false, true] {
+                let (key, sk) = server_key();
+                let host = rendezvous_stub(move |mut s| async move {
+                    let (mut eph_pk, eph_sk) = box_::gen_keypair();
+                    let mut msg = RendezvousMessage::new();
+                    let ex = if signed {
+                        eph_pk.0[31] |= 0x80;
+                        signed_key_exchange(&eph_pk, &sk, advertised)
+                    } else {
+                        KeyExchange {
+                            keys: vec![sign::sign(&eph_pk.0, &sk).into()],
+                            ..Default::default()
+                        }
+                    };
+                    msg.set_key_exchange(ex);
+                    s.send(&msg).await.unwrap();
+                    let reply = s.next_timeout(3000).await.unwrap().unwrap();
+                    let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+                    let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
+                        panic!("expected the client's key exchange");
+                    };
+                    assert_eq!(ex.keys.len(), 2);
+                    assert_eq!(ex.version, hbb_common::tcp::kx_version_for(advertised));
+                    let shared =
+                        hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk)
+                            .unwrap();
+                    if ex.version >= 1 {
+                        s.set_key_split(
+                            shared,
+                            false,
+                            &hbb_common::tcp::KxTranscript {
+                                initiator_pk: &ex.keys[0],
+                                responder_pk: &eph_pk.0,
+                                advertised,
+                                picked: ex.version,
+                            },
+                        )
+                        .unwrap();
+                    } else {
+                        s.set_key(shared);
+                    }
+                    let request = s.next_timeout(3000).await.unwrap().unwrap();
+                    let request = RendezvousMessage::parse_from_bytes(&request).unwrap();
+                    let Some(rendezvous_message::Union::TestNatRequest(nat)) = request.union else {
+                        panic!("expected the client's nat request");
+                    };
+                    let mut msg = RendezvousMessage::new();
+                    msg.set_test_nat_response(TestNatResponse {
+                        port: nat.serial,
+                        ..Default::default()
+                    });
+                    s.send(&msg).await.unwrap();
+                })
+                .await;
+                let mut conn = connect(&host).await;
+                if required {
+                    secure_tcp_required(&mut conn, &key).await.unwrap();
+                } else {
+                    secure_tcp(&mut conn, &key).await.unwrap();
+                }
+                assert!(conn.is_secured());
+                let mut msg = RendezvousMessage::new();
+                msg.set_test_nat_request(TestNatRequest {
+                    serial: 7,
+                    ..Default::default()
+                });
+                conn.send(&msg).await.unwrap();
+                let reply = conn.next_timeout(3000).await.unwrap().unwrap();
+                let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+                let Some(rendezvous_message::Union::TestNatResponse(nat)) = reply.union else {
+                    panic!("expected the server's nat response");
+                };
+                assert_eq!(nat.port, 7);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_rejects_unverified_versions_before_reply() {
+        let (key, sk) = server_key();
+        let (mut eph_pk, _) = box_::gen_keypair();
+        eph_pk.0[31] |= 0x80;
+        let (other_pk, _) = box_::gen_keypair();
+        let (_, other_sk) = sign::gen_keypair();
+        for case in [
+            "missing_signature",
+            "stripped_version_and_signature",
+            "cleared_marker_and_stripped_fields",
+            "lowered_version",
+            "raised_version",
+            "replaced_public_key",
+            "invalid_signature",
+            "wrong_signer",
+            "unstructured_payload",
+            "undomained_params",
+            "signed_id_pk_as_params",
+        ] {
+            let mut ex = signed_key_exchange(&eph_pk, &sk, 1);
+            match case {
+                "missing_signature" => ex.signed_params = Bytes::new(),
+                "stripped_version_and_signature" => {
+                    ex.signed_params = Bytes::new();
+                    ex.version = 0;
+                }
+                "cleared_marker_and_stripped_fields" => {
+                    let mut signed_pk = ex.keys[0].to_vec();
+                    *signed_pk.last_mut().unwrap() &= 0x7f;
+                    ex.keys[0] = signed_pk.into();
+                    ex.signed_params = Bytes::new();
+                    ex.version = 0;
+                }
+                "lowered_version" => ex.version = 0,
+                "raised_version" => ex.version = 2,
+                "replaced_public_key" => ex.keys[0] = sign::sign(&other_pk.0, &sk).into(),
+                "invalid_signature" => {
+                    let mut signed = ex.signed_params.to_vec();
+                    signed[0] ^= 1;
+                    ex.signed_params = signed.into();
+                }
+                "wrong_signer" => {
+                    ex.signed_params = signed_key_exchange(&eph_pk, &other_sk, 1).signed_params;
+                }
+                "unstructured_payload" => {
+                    let mut payload = eph_pk.0.to_vec();
+                    payload.extend_from_slice(&1u32.to_le_bytes());
+                    ex.signed_params = sign::sign(&payload, &sk).into();
+                }
+                "undomained_params" => {
+                    let params = KxParams {
+                        pk: eph_pk.0.to_vec().into(),
+                        version: 1,
+                        ..Default::default()
+                    };
+                    ex.signed_params = sign::sign(&params.write_to_bytes().unwrap(), &sk).into();
+                }
+                "signed_id_pk_as_params" => {
+                    // The server signs IdPk with the same key; its `id` sits where `pk` does.
+                    let mut pk = [0x2au8; box_::PUBLICKEYBYTES];
+                    pk[30] = 0xc2;
+                    pk[31] = 0xaa;
+                    let id_pk = IdPk {
+                        id: String::from_utf8(pk.to_vec()).unwrap(),
+                        pk: vec![7u8; box_::PUBLICKEYBYTES].into(),
+                        ..Default::default()
+                    };
+                    ex.keys[0] = sign::sign(&pk, &sk).into();
+                    ex.version = 0;
+                    ex.signed_params = sign::sign(&id_pk.write_to_bytes().unwrap(), &sk).into();
+                }
+                _ => unreachable!(),
+            }
+            for required in [false, true] {
+                let mut msg = RendezvousMessage::new();
+                msg.set_key_exchange(ex.clone());
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                let host = rendezvous_stub(move |mut s| async move {
+                    s.send(&msg).await.unwrap();
+                    tx.send(s.next_timeout(3000).await.is_none()).unwrap();
+                })
+                .await;
+                let mut conn = connect(&host).await;
+                let result = if required {
+                    secure_tcp_required(&mut conn, &key).await
+                } else {
+                    secure_tcp(&mut conn, &key).await
+                };
+                assert!(result.is_err(), "accepted {case}, required={required}");
+                assert!(!conn.is_secured());
+                drop(conn);
+                assert!(rx.await.unwrap(), "replied to {case}, required={required}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_dtls_fingerprint_travels_signed_and_binds() {
+        let (pk, sk) = sign::gen_keypair();
+        let fp = "sha-256 0A:1B:2C";
+        let signed = sign::sign(
+            &IdPk {
+                id: "123456789".to_owned(),
+                pk: Bytes::from(vec![7u8; 32]),
+                dtls_fingerprint: fp.to_owned(),
+                ..Default::default()
+            }
+            .write_to_bytes()
+            .unwrap(),
+            &sk,
+        );
+
+        let (id, their_pk, signed_fp, _) = decode_id_pk_dtls(&signed, &pk).unwrap();
+        assert_eq!(id, "123456789");
+        assert_eq!(their_pk, [7u8; 32]);
+        assert_eq!(signed_fp, fp);
+        assert!(dtls_fingerprint_bound(&signed_fp, fp));
+        assert!(!dtls_fingerprint_bound(&signed_fp, "sha-256 0A:1B:2D"));
+        assert!(!dtls_fingerprint_bound("", ""));
+
+        // The fingerprint is under the signature: a blob verified with another key yields
+        // nothing, and one whose payload was edited in transit fails verification.
+        let (other_pk, _) = sign::gen_keypair();
+        assert!(decode_id_pk_dtls(&signed, &other_pk).is_err());
+        let mut tampered = signed.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 1;
+        assert!(decode_id_pk_dtls(&tampered, &pk).is_err());
+
+        // `decode_id_pk` is the same blob minus the fingerprint, so the field is invisible to
+        // non-WebRTC handshakes.
+        assert_eq!(decode_id_pk(&signed, &pk).unwrap(), (id, their_pk));
     }
 }

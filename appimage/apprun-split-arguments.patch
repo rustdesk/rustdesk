@@ -1,0 +1,55 @@
+--- a/src/common/shell_utils.c
++++ b/src/common/shell_utils.c
+@@ -201,7 +201,8 @@
+ 
+     const char *begin = str;
+     const char *end = str;
+-    char buffer[1024] = {0x0};
++    size_t buffer_size = strlen(str) + 1;
++    char *buffer = calloc(buffer_size, sizeof(char));
+ 
+     while (*begin != '\0') {
+         begin = apprun_string_consume_spaces(begin);
+@@ -209,7 +210,7 @@
+ 
+         if (*begin == '\\') {
+             strncat(buffer, begin + 1, 1);
+-            end = begin + 2;
++            end = begin[1] != '\0' ? begin + 2 : begin + 1;
+             consumed = true;
+         }
+ 
+@@ -218,7 +219,8 @@
+             strncat(buffer, begin + 1, end - begin - 1);
+             consumed = true;
+ 
+-            end++;
++            if (*end != '\0')
++                end++;
+         }
+ 
+         if (!consumed && *begin == '\"') {
+@@ -226,7 +228,8 @@
+             strncat(buffer, begin + 1, end - begin - 1);
+             consumed = true;
+ 
+-            end++;
++            if (*end != '\0')
++                end++;
+         }
+ 
+         if (!consumed && *begin != '\'' && *begin != '\"' && *begin != '\\') {
+@@ -240,11 +243,12 @@
+                 split_count++;
+             }
+ 
+-            memset(buffer, 0, 1024);
++            buffer[0] = '\0';
+         }
+ 
+         begin = end;
+     }
+ 
++    free(buffer);
+     return splits;
+ }

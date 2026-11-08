@@ -1,5 +1,8 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::keyboard::input_source::{change_input_source, get_cur_session_input_source};
+use crate::{
+    keyboard::input_source::{change_input_source, get_cur_session_input_source},
+    trusted_devices::authority,
+};
 #[cfg(target_os = "linux")]
 use crate::platform::linux::is_x11;
 use crate::{
@@ -12,23 +15,23 @@ use crate::{
     ui_interface::{self, *},
 };
 use flutter_rust_bridge::{StreamSink, SyncReturn};
-#[cfg(feature = "plugin_framework")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::allow_err;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
-    fs, lazy_static, log,
+    lazy_static, log,
     rendezvous_proto::ConnType,
     ResultType,
 };
+use base::{
+    config::keys,
+    fs,
+};
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::{
         atomic::{AtomicI32, Ordering},
         Arc,
     },
-    time::{Duration, SystemTime},
+    time::SystemTime,
 };
 
 pub type SessionID = uuid::Uuid;
@@ -60,7 +63,7 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
                 .with_tag("ffi"), // logs will show under mytag tag
         );
         #[cfg(not(debug_assertions))]
-        hbb_common::init_log(false, "");
+        crate::platform::android_log::initialize();
         #[cfg(feature = "mediacodec")]
         scrap::mediacodec::check_mediacodec();
         crate::common::test_rendezvous_server();
@@ -96,6 +99,16 @@ pub enum EventToUI {
     Event(String),
     Rgba(usize),
     Texture(usize, bool), // (display, gpu_texture)
+    // A shape's RGBA as bytes: as text it was four times the size and parsed on the UI thread.
+    // The id stays text, since the peer's ids can exceed Dart's int.
+    Cursor {
+        id: String,
+        hotx: i32,
+        hoty: i32,
+        width: i32,
+        height: i32,
+        colors: Vec<u8>,
+    },
 }
 
 pub fn host_stop_system_key_propagate(_stopped: bool) {
@@ -147,6 +160,7 @@ pub fn session_add_sync(
     password: String,
     is_shared_password: bool,
     conn_token: Option<String>,
+    login_method: String,
 ) -> SyncReturn<String> {
     let add_res = session_add(
         &session_id,
@@ -161,6 +175,7 @@ pub fn session_add_sync(
         password,
         is_shared_password,
         conn_token,
+        &login_method,
     );
     // We can't put the remove call together with `std::env::var("IS_TERMINAL_ADMIN")`.
     // Because there are some `bail!` in `session_add()`, we must make sure `IS_TERMINAL_ADMIN` is removed at last.
@@ -198,6 +213,34 @@ pub fn session_start_with_displays(
         }
     }
     Ok(())
+}
+
+// A cursor shape the core keeps, as RGBA, for a window that has to draw it again.
+pub struct CursorShape {
+    pub hotx: i32,
+    pub hoty: i32,
+    pub width: i32,
+    pub height: i32,
+    pub colors: Vec<u8>,
+}
+
+pub fn session_get_cursor_shape(session_id: SessionID, id: String) -> Option<CursorShape> {
+    let id = id.parse::<u64>().ok()?;
+    let session = sessions::get_session_by_session_id(&session_id)?;
+    let shape = session.cursor_shapes.read().unwrap().get(&id).cloned()?;
+    match crate::client::io_loop::kept_cursor_rgba(shape) {
+        Ok(cd) => Some(CursorShape {
+            hotx: cd.hotx,
+            hoty: cd.hoty,
+            width: cd.width,
+            height: cd.height,
+            colors: cd.colors.to_vec(),
+        }),
+        Err(err) => {
+            log::warn!("Kept cursor {id} failed to decode: {err}");
+            None
+        }
+    }
 }
 
 pub fn session_get_remember(session_id: SessionID) -> Option<bool> {
@@ -262,6 +305,7 @@ pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<boo
 
 pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
+        crate::keyboard::shortcuts::clear_session_state(&session_id);
         // `release_remote_keys` is not required for mobile platforms in common cases.
         // But we still call it to make the code more stable.
         #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -323,6 +367,9 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         log::warn!("toggle option {}", &value);
         session.toggle_option(value.clone());
+        if value == "view-only" && session.get_toggle_option(value.clone()) {
+            crate::keyboard::shortcuts::enter_view_only(&session_id);
+        }
         try_sync_peer_option(&session, &session_id, &value, None);
     }
     #[cfg(not(target_os = "ios"))]
@@ -333,7 +380,7 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
     }
     #[cfg(feature = "unix-file-copy-paste")]
     if sessions::get_session_by_session_id(&session_id).is_some()
-        && (value == config::keys::OPTION_ENABLE_FILE_COPY_PASTE || value == "view-only")
+        && (value == keys::OPTION_ENABLE_FILE_COPY_PASTE || value == "view-only")
     {
         crate::flutter::update_file_clipboard_required();
     }
@@ -577,6 +624,7 @@ pub fn session_handle_flutter_key_event(
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         let keyboard_mode = session.get_keyboard_mode();
         session.handle_flutter_key_event(
+            session_id,
             &keyboard_mode,
             &character,
             usb_hid,
@@ -597,6 +645,7 @@ pub fn session_handle_flutter_raw_key_event(
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         let keyboard_mode = session.get_keyboard_mode();
         session.handle_flutter_raw_key_event(
+            session_id,
             &keyboard_mode,
             &name,
             platform_code,
@@ -810,6 +859,13 @@ pub fn session_read_local_dir_sync(
     path: String,
     show_hidden: bool,
 ) -> String {
+    #[cfg(target_os = "android")]
+    if fs::android::is_path(&fs::get_path(&path)) {
+        return match fs::read_dir(&fs::get_path(&path), show_hidden) {
+            Ok(fd) => make_fd_to_json(fd.id, path, &fd.entries),
+            Err(error) => serde_json::json!({"error": error.to_string()}).to_string(),
+        };
+    }
     if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
         return make_fd_to_json(fd.id, path, &fd.entries);
     }
@@ -965,23 +1021,21 @@ pub fn main_get_error() -> String {
     get_error()
 }
 
-pub fn main_show_option(_key: String) -> SyncReturn<bool> {
-    #[cfg(target_os = "linux")]
-    if _key.eq(config::keys::OPTION_ALLOW_LINUX_HEADLESS) {
-        return SyncReturn(true);
+pub fn main_set_option(key: String, value: String) -> hbb_common::anyhow::Result<()> {
+    if key == "2fa"
+        || key == keys::OPTION_ENABLE_TRUSTED_DEVICES
+        || key == keys::OPTION_TRUSTED_DEVICE_EXPIRATION
+    {
+        return set_auth_option(key, value);
     }
-    SyncReturn(false)
-}
-
-pub fn main_set_option(key: String, value: String) {
     #[cfg(target_os = "android")]
     {
-        let is_permission_option = key.eq(config::keys::OPTION_ENABLE_CLIPBOARD)
-            || key.eq(config::keys::OPTION_ENABLE_FILE_TRANSFER)
-            || key.eq(config::keys::OPTION_ENABLE_AUDIO);
+        let is_permission_option = key.eq(keys::OPTION_ENABLE_CLIPBOARD)
+            || key.eq(keys::OPTION_ENABLE_FILE_TRANSFER)
+            || key.eq(keys::OPTION_ENABLE_AUDIO);
         let allow_perm_change_in_accept_window = config::option2bool(
-            config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
-            &crate::get_builtin_option(config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+            keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+            &crate::get_builtin_option(keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
         );
         if is_permission_option
             && !allow_perm_change_in_accept_window
@@ -992,18 +1046,18 @@ pub fn main_set_option(key: String, value: String) {
                 key,
                 value
             );
-            return;
+            return Ok(());
         }
     }
     #[cfg(target_os = "android")]
-    if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
+    if key.eq(keys::OPTION_ENABLE_KEYBOARD) {
         crate::ui_cm_interface::switch_permission_all(
             "keyboard".to_owned(),
             config::option2bool(&key, &value),
         );
     }
     #[cfg(target_os = "android")]
-    if key.eq(config::keys::OPTION_ENABLE_CLIPBOARD) {
+    if key.eq(keys::OPTION_ENABLE_CLIPBOARD) {
         crate::ui_cm_interface::switch_permission_all(
             "clipboard".to_owned(),
             config::option2bool(&key, &value),
@@ -1013,11 +1067,11 @@ pub fn main_set_option(key: String, value: String) {
     // If `is_allow_tls_fallback` and https proxy is used, we need to restart rendezvous mediator.
     // No need to check if https proxy is used, because this option does not change frequently
     // and restarting mediator is safe even https proxy is not used.
-    let is_allow_tls_fallback = key.eq(config::keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK);
+    let is_allow_tls_fallback = key.eq(keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK);
     if is_allow_tls_fallback
         || key.eq("custom-rendezvous-server")
-        || key.eq(config::keys::OPTION_ALLOW_WEBSOCKET)
-        || key.eq(config::keys::OPTION_DISABLE_UDP)
+        || key.eq(keys::OPTION_ALLOW_WEBSOCKET)
+        || key.eq(keys::OPTION_DISABLE_UDP)
         || key.eq("api-server")
     {
         if is_allow_tls_fallback {
@@ -1031,6 +1085,7 @@ pub fn main_set_option(key: String, value: String) {
     } else {
         set_option(key, value.clone());
     }
+    Ok(())
 }
 
 pub fn main_get_options() -> String {
@@ -1041,19 +1096,19 @@ pub fn main_get_options_sync() -> SyncReturn<String> {
     SyncReturn(get_options())
 }
 
-pub fn main_set_options(json: String) {
+pub fn main_set_options(json: String) -> hbb_common::anyhow::Result<()> {
     let mut map: HashMap<String, String> = serde_json::from_str(&json).unwrap_or(HashMap::new());
     #[cfg(target_os = "android")]
     {
         let allow_perm_change_in_accept_window = config::option2bool(
-            config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
-            &crate::get_builtin_option(config::keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+            keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+            &crate::get_builtin_option(keys::OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
         );
         if !allow_perm_change_in_accept_window && crate::ui_cm_interface::has_active_clients() {
             for key in [
-                config::keys::OPTION_ENABLE_CLIPBOARD,
-                config::keys::OPTION_ENABLE_FILE_TRANSFER,
-                config::keys::OPTION_ENABLE_AUDIO,
+                keys::OPTION_ENABLE_CLIPBOARD,
+                keys::OPTION_ENABLE_FILE_TRANSFER,
+                keys::OPTION_ENABLE_AUDIO,
             ] {
                 if let Some(value) = map.remove(key) {
                     log::info!(
@@ -1066,8 +1121,9 @@ pub fn main_set_options(json: String) {
         }
     }
     if !map.is_empty() {
-        set_options(map)
+        try_set_options(map)?;
     }
+    Ok(())
 }
 
 pub fn main_test_if_valid_server(server: String, test_with_proxy: bool) -> String {
@@ -1221,8 +1277,8 @@ pub fn main_set_env(key: String, value: Option<String>) -> SyncReturn<()> {
 }
 
 pub fn main_set_local_option(key: String, value: String) {
-    let is_texture_render_key = key.eq(config::keys::OPTION_TEXTURE_RENDER);
-    let is_d3d_render_key = key.eq(config::keys::OPTION_ALLOW_D3D_RENDER);
+    let is_texture_render_key = key.eq(keys::OPTION_TEXTURE_RENDER);
+    let is_d3d_render_key = key.eq(keys::OPTION_ALLOW_D3D_RENDER);
     set_local_option(key, value.clone());
     let is_render_target =
         |session: &crate::flutter::FlutterSession| session.is_default() || session.is_view_camera();
@@ -1418,6 +1474,17 @@ pub fn main_peer_exists(id: String) -> bool {
     peer_exists(&id)
 }
 
+// `Config::path` resolves through `APP_DIR` only on mobile, where loading peers before it is set
+// would read the wrong place. Elsewhere the peer path never consults it, so an unset `APP_DIR`
+// must not stop the peers from loading.
+fn peer_config_path_ready() -> bool {
+    if cfg!(any(target_os = "android", target_os = "ios")) {
+        !config::APP_DIR.read().unwrap().is_empty()
+    } else {
+        true
+    }
+}
+
 fn load_recent_peers(
     vec_id_modified_time_path: &Vec<(String, SystemTime, std::path::PathBuf)>,
     to_end: bool,
@@ -1449,7 +1516,7 @@ pub fn main_load_recent_peers() {
         );
     };
 
-    if !config::APP_DIR.read().unwrap().is_empty() {
+    if peer_config_path_ready() {
         let vec_id_modified_time_path = PeerConfig::get_vec_id_modified_time_path(&None);
         if vec_id_modified_time_path.is_empty() {
             push_to_flutter("".to_owned(), None);
@@ -1497,7 +1564,7 @@ pub fn main_load_recent_peers_for_ab(filter: String) -> String {
     } else {
         Some(id_filters)
     };
-    if !config::APP_DIR.read().unwrap().is_empty() {
+    if peer_config_path_ready() {
         let peers: Vec<HashMap<&str, String>> = PeerConfig::peers(id_filters)
             .drain(..)
             .map(|(id, _, p)| peer_to_map(id, p))
@@ -1515,7 +1582,7 @@ pub fn main_load_fav_peers() {
             serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
         );
     };
-    if !config::APP_DIR.read().unwrap().is_empty() {
+    if peer_config_path_ready() {
         let favs = get_fav();
         let mut recent = PeerConfig::peers(Some(favs.clone()));
         let mut lan = config::LanPeers::load()
@@ -1797,6 +1864,7 @@ pub fn cm_get_clients_length() -> usize {
 
 pub fn main_init(app_dir: String, custom_client_config: String) {
     initialize(&app_dir, &custom_client_config);
+    crate::keyboard::shortcuts::reload_from_config();
 }
 
 pub fn main_device_id(id: String) {
@@ -2208,6 +2276,15 @@ pub fn cm_close_connection(conn_id: i32) {
     crate::ui_cm_interface::close(conn_id);
 }
 
+/// The CM window closed. On Linux that is ambiguous - a logout closes it the same way a person
+/// does - so it ends the session without the no-retry reason; elsewhere it is a plain close.
+pub fn cm_close_connection_window(conn_id: i32) {
+    #[cfg(target_os = "linux")]
+    crate::ui_cm_interface::close_window(conn_id);
+    #[cfg(all(not(target_os = "linux"), not(target_os = "ios")))]
+    crate::ui_cm_interface::close(conn_id);
+}
+
 pub fn cm_remove_disconnected_connection(conn_id: i32) {
     #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::remove(conn_id);
@@ -2315,6 +2392,17 @@ pub fn main_init_input_source() -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::keyboard::input_source::init_input_source();
     SyncReturn(())
+}
+
+pub fn main_reload_keyboard_shortcuts() -> SyncReturn<()> {
+    crate::keyboard::shortcuts::reload_from_config();
+    SyncReturn(())
+}
+
+pub fn main_get_default_keyboard_shortcuts() -> SyncReturn<String> {
+    let bindings = crate::keyboard::shortcuts::default_bindings();
+    let json = serde_json::to_string(&bindings).unwrap_or_default();
+    SyncReturn(json)
 }
 
 pub fn main_is_installed_lower_version() -> SyncReturn<bool> {
@@ -2522,180 +2610,6 @@ pub fn send_url_scheme(_url: String) {
     std::thread::spawn(move || crate::handle_url_scheme(_url));
 }
 
-#[inline]
-pub fn plugin_event(_id: String, _peer: String, _event: Vec<u8>) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        allow_err!(crate::plugin::handle_ui_event(&_id, &_peer, &_event));
-    }
-}
-
-pub fn plugin_register_event_stream(_id: String, _event2ui: StreamSink<EventToUI>) {
-    #[cfg(feature = "plugin_framework")]
-    {
-        crate::plugin::native_handlers::session::session_register_event_stream(_id, _event2ui);
-    }
-}
-
-#[inline]
-pub fn plugin_get_session_option(
-    _id: String,
-    _peer: String,
-    _key: String,
-) -> SyncReturn<Option<String>> {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        SyncReturn(crate::plugin::PeerConfig::get(&_id, &_peer, &_key))
-    }
-    #[cfg(any(
-        not(feature = "plugin_framework"),
-        target_os = "android",
-        target_os = "ios"
-    ))]
-    {
-        SyncReturn(None)
-    }
-}
-
-#[inline]
-pub fn plugin_set_session_option(_id: String, _peer: String, _key: String, _value: String) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let _res = crate::plugin::PeerConfig::set(&_id, &_peer, &_key, &_value);
-    }
-}
-
-#[inline]
-pub fn plugin_get_shared_option(_id: String, _key: String) -> SyncReturn<Option<String>> {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        SyncReturn(crate::plugin::ipc::get_config(&_id, &_key).unwrap_or(None))
-    }
-    #[cfg(any(
-        not(feature = "plugin_framework"),
-        target_os = "android",
-        target_os = "ios"
-    ))]
-    {
-        SyncReturn(None)
-    }
-}
-
-#[inline]
-pub fn plugin_set_shared_option(_id: String, _key: String, _value: String) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        allow_err!(crate::plugin::ipc::set_config(&_id, &_key, _value));
-    }
-}
-
-#[inline]
-pub fn plugin_reload(_id: String) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        allow_err!(crate::plugin::ipc::reload_plugin(&_id,));
-        allow_err!(crate::plugin::reload_plugin(&_id));
-    }
-}
-
-#[inline]
-pub fn plugin_enable(_id: String, _v: bool) -> SyncReturn<()> {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        allow_err!(crate::plugin::ipc::set_manager_plugin_config(
-            &_id,
-            "enabled",
-            _v.to_string()
-        ));
-        if _v {
-            allow_err!(crate::plugin::load_plugin(&_id));
-        } else {
-            crate::plugin::unload_plugin(&_id);
-        }
-    }
-    SyncReturn(())
-}
-
-pub fn plugin_is_enabled(_id: String) -> SyncReturn<bool> {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        SyncReturn(
-            match crate::plugin::ipc::get_manager_plugin_config(&_id, "enabled") {
-                Ok(Some(enabled)) => bool::from_str(&enabled).unwrap_or(false),
-                _ => false,
-            },
-        )
-    }
-    #[cfg(any(
-        not(feature = "plugin_framework"),
-        target_os = "android",
-        target_os = "ios"
-    ))]
-    {
-        SyncReturn(false)
-    }
-}
-
-pub fn plugin_feature_is_enabled() -> SyncReturn<bool> {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        #[cfg(debug_assertions)]
-        let enabled = true;
-        #[cfg(not(debug_assertions))]
-        let enabled = is_installed();
-        SyncReturn(enabled)
-    }
-    #[cfg(any(
-        not(feature = "plugin_framework"),
-        target_os = "android",
-        target_os = "ios"
-    ))]
-    {
-        SyncReturn(false)
-    }
-}
-
-pub fn plugin_sync_ui(_sync_to: String) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        if plugin_feature_is_enabled().0 {
-            crate::plugin::sync_ui(_sync_to);
-        }
-    }
-}
-
-pub fn plugin_list_reload() {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        crate::plugin::load_plugin_list();
-    }
-}
-
-pub fn plugin_install(_id: String, _b: bool) {
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        if _b {
-            if let Err(e) = crate::plugin::install_plugin(&_id) {
-                log::error!("Failed to install plugin '{}': {}", _id, e);
-            }
-        } else {
-            crate::plugin::uninstall_plugin(&_id, true);
-        }
-    }
-}
-
 pub fn is_support_multi_ui_session(version: String) -> SyncReturn<bool> {
     SyncReturn(crate::common::is_support_multi_ui_session(&version))
 }
@@ -2768,16 +2682,54 @@ pub fn main_check_hwcodec() {
     check_hwcodec()
 }
 
-pub fn main_get_trusted_devices() -> String {
-    get_trusted_devices()
+// The bridge uses ordinary worker threads; desktop IPC needs a runtime at this boundary.
+pub fn main_get_trusted_devices() -> hbb_common::anyhow::Result<String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return crate::trusted_devices::devices();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hbb_common::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(crate::ipc::trusted_devices(authority::Request::List))
 }
 
-pub fn main_remove_trusted_devices(json: String) {
-    remove_trusted_devices(&json)
+pub fn main_remove_trusted_devices(json: String) -> hbb_common::anyhow::Result<()> {
+    let record_ids = serde_json::from_str::<Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>>(&json)?;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return crate::trusted_devices::remove(&record_ids);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hbb_common::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(crate::ipc::trusted_devices(authority::Request::Remove(
+            record_ids,
+        )))
+        .map(|_| ())
 }
 
-pub fn main_clear_trusted_devices() {
-    clear_trusted_devices()
+pub fn main_renew_trusted_devices(json: String) -> hbb_common::anyhow::Result<()> {
+    let record_ids = serde_json::from_str::<Vec<[u8; crate::trusted_devices::TOKEN_BYTES]>>(&json)?;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return crate::trusted_devices::renew(&record_ids);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hbb_common::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(crate::ipc::trusted_devices(authority::Request::Renew(
+            record_ids,
+        )))
+        .map(|_| ())
+}
+
+pub fn main_clear_trusted_devices() -> hbb_common::anyhow::Result<()> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return crate::trusted_devices::clear();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    hbb_common::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(crate::ipc::trusted_devices(authority::Request::Clear))
+        .map(|_| ())
 }
 
 pub fn main_max_encrypt_len() -> SyncReturn<usize> {
@@ -2827,7 +2779,7 @@ pub fn main_get_common(key: String) -> String {
         #[cfg(not(target_os = "windows"))]
         return false.to_string();
     } else if key == "transfer-job-id" {
-        return hbb_common::fs::get_next_job_id().to_string();
+        return base::fs::get_next_job_id().to_string();
     } else if key == "is-remote-modify-enabled-by-control-permissions" {
         return match is_remote_modify_enabled_by_control_permissions() {
             Some(true) => "true",
@@ -2840,6 +2792,14 @@ pub fn main_get_common(key: String) -> String {
         return crate::platform::linux::has_gnome_shortcuts_inhibitor_permission().to_string();
         #[cfg(not(target_os = "linux"))]
         return false.to_string();
+    } else if key == "gnome-monitor-layout-mode" {
+        #[cfg(target_os = "linux")]
+        return match crate::platform::linux::gnome_monitor_layout_mode() {
+            Some(mode) => mode.as_str().to_owned(),
+            None => String::new(),
+        };
+        #[cfg(not(target_os = "linux"))]
+        return String::new();
     } else if key == "permanent-password-set" {
         return ui_interface::is_permanent_password_set().to_string();
     } else if key == "local-permanent-password-set" {
@@ -2853,36 +2813,12 @@ pub fn main_get_common(key: String) -> String {
                     format!("error:{}", e)
                 }
             }
-        } else if key.starts_with("download-file-") {
-            let _version = key.replace("download-file-", "");
-            #[cfg(target_os = "windows")]
-            return match (
-                crate::platform::windows::is_msi_installed(),
-                crate::common::is_custom_client(),
-            ) {
-                (Ok(true), false) => match crate::platform::windows::release_arch_suffix() {
-                    Some(arch) => format!("rustdesk-{_version}-{arch}.msi"),
-                    None => "error:unsupported".to_owned(),
-                },
-                (Ok(true), true) | (Ok(false), _) => {
-                    match crate::platform::windows::release_arch_suffix() {
-                        Some(arch) => format!("rustdesk-{_version}-{arch}.exe"),
-                        None => "error:unsupported".to_owned(),
-                    }
-                }
-                (Err(e), _) => {
-                    log::error!("Failed to check if is msi: {}", e);
-                    format!("error:update-failed-check-msi-tip")
-                }
-            };
-            #[cfg(target_os = "macos")]
+        } else if let Some(release_page_url) = key.strip_prefix("verified-download-url-") {
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
             {
-                return if cfg!(target_arch = "x86_64") {
-                    format!("rustdesk-{_version}-x86_64.dmg")
-                } else if cfg!(target_arch = "aarch64") {
-                    format!("rustdesk-{_version}-aarch64.dmg")
-                } else {
-                    "error:unsupported".to_owned()
+                return match verified_update_artifact_for_release_page_url(release_page_url) {
+                    Ok(artifact) => artifact.url,
+                    Err(e) => format!("error:{}", e),
                 };
             }
             #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -2896,7 +2832,43 @@ pub fn main_get_common(key: String) -> String {
 }
 
 pub fn main_get_common_sync(key: String) -> SyncReturn<String> {
+    if let Some(args) = key.strip_prefix("resolve-api-server:") {
+        let response = match serde_json::from_str::<(String, String)>(args) {
+            Ok((api, custom)) => serde_json::json!({"url": crate::get_api_server(api, custom)}),
+            Err(err) => {
+                log::trace!("Invalid API server preview arguments: {err}");
+                serde_json::json!({"error": err.to_string()})
+            }
+        };
+        return SyncReturn(response.to_string());
+    }
+    // Metadata verification performs blocking network requests. Keep this key on
+    // the asynchronous FFI path to avoid blocking the calling Flutter isolate.
+    if key.starts_with("verified-download-url-") {
+        return SyncReturn("error:unsupported".to_owned());
+    }
     SyncReturn(main_get_common(key))
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn push_update_me_error(error: String) {
+    let data = HashMap::from([("name", "update-me".to_owned()), ("error", error)]);
+    let _res = flutter::push_global_event(
+        flutter::APP_TYPE_MAIN,
+        serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
+    );
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn verified_update_artifact_for_release_page_url(
+    release_page_url: &str,
+) -> ResultType<crate::update_metadata::VerifiedUpdateArtifact> {
+    #[cfg(target_os = "windows")]
+    let update_msi = crate::platform::windows::is_msi_installed()? && !crate::is_custom_client();
+    #[cfg(target_os = "macos")]
+    let update_msi = false;
+    let query = crate::updater::current_update_artifact_query(update_msi);
+    crate::updater::verified_update_artifact_for_release_page_url(release_page_url, query)
 }
 
 pub fn main_set_common(_key: String, _value: String) {
@@ -2934,65 +2906,94 @@ pub fn main_set_common(_key: String, _value: String) {
     }
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        use crate::updater::get_download_file_from_url;
+        use crate::updater::get_update_download_file_from_url;
         if _key == "download-new-version" {
             let download_url = _value.clone();
             let event_key = "download-new-version".to_owned();
-            let data = if let Some(download_file) = get_download_file_from_url(&download_url) {
-                std::fs::remove_file(&download_file).ok();
-                match crate::hbbs_http::downloader::download_file(
-                    download_url,
-                    Some(PathBuf::from(download_file)),
-                    Some(Duration::from_secs(3)),
-                ) {
-                    Ok(id) => HashMap::from([("name", event_key), ("id", id)]),
-                    Err(e) => HashMap::from([("name", event_key), ("error", e.to_string())]),
-                }
-            } else {
-                HashMap::from([
-                    ("name", event_key),
-                    ("error", "Invalid download url".to_string()),
-                ])
-            };
+            let data =
+                match crate::updater::verified_update_artifact_for_download_url(&download_url) {
+                    Ok(artifact) => {
+                        if let Some(download_file) =
+                            get_update_download_file_from_url(&artifact.url)
+                        {
+                            let options = crate::hbbs_http::downloader::DownloadOptions {
+                                expected_size: artifact.size,
+                                artifact_sha256: artifact.sha256,
+                            };
+                            match crate::hbbs_http::downloader::download_file(
+                                artifact.url,
+                                Some(download_file),
+                                options,
+                            ) {
+                                Ok(id) => HashMap::from([("name", event_key), ("id", id)]),
+                                Err(e) => {
+                                    HashMap::from([("name", event_key), ("error", e.to_string())])
+                                }
+                            }
+                        } else {
+                            HashMap::from([
+                                ("name", event_key),
+                                ("error", "Invalid download url".to_owned()),
+                            ])
+                        }
+                    }
+                    Err(e) => HashMap::from([
+                        ("name", event_key),
+                        ("error", format!("Failed to verify update metadata, {}", e)),
+                    ]),
+                };
             let _res = flutter::push_global_event(
                 flutter::APP_TYPE_MAIN,
                 serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
             );
         } else if _key == "update-me" {
-            if let Some(new_version_file) = get_download_file_from_url(&_value) {
-                log::debug!(
-                    "New version file is downloaded, update begin, {:?}",
-                    new_version_file.to_str()
-                );
-                if let Some(f) = new_version_file.to_str() {
-                    // 1.4.0 does not support "--update"
-                    // But we can assume that the new version supports it.
-
-                    #[cfg(any(target_os = "windows", target_os = "macos"))]
-                    match crate::platform::update_to(f) {
-                        Ok(_) => {
-                            log::info!("Update process is launched successfully!");
-                        }
-                        Err(e) => {
-                            log::error!("Failed to update to new version, {}", e);
-                            fs::remove_file(f).ok();
-                        }
-                    }
-                }
-            }
-        } else if _key == "extract-update-dmg" {
-            #[cfg(target_os = "macos")]
+            let artifact = match crate::updater::verified_update_artifact_for_download_url(&_value)
             {
-                if let Some(new_version_file) = get_download_file_from_url(&_value) {
-                    if let Some(f) = new_version_file.to_str() {
-                        crate::platform::macos::extract_update_dmg(f);
-                    } else {
-                        // unreachable!()
-                        log::error!("Failed to get the new version file path");
-                    }
-                } else {
-                    // unreachable!()
-                    log::error!("Failed to get the new version file from url: {}", _value);
+                Ok(artifact) => artifact,
+                Err(e) => {
+                    let error = format!("Failed to verify update metadata, {}", e);
+                    log::error!("{}", error);
+                    push_update_me_error(error);
+                    return;
+                }
+            };
+            let Some(new_version_file) = get_update_download_file_from_url(&artifact.url) else {
+                let error = "Failed to resolve downloaded update file path".to_owned();
+                log::error!("{}", error);
+                push_update_me_error(error);
+                return;
+            };
+            let Some(new_version_file_str) = new_version_file.to_str() else {
+                let error = "Invalid UTF-8 path for downloaded update file".to_owned();
+                log::error!("{}", error);
+                push_update_me_error(error);
+                return;
+            };
+            log::debug!(
+                "New version file is downloaded, update begin, {:?}",
+                new_version_file_str
+            );
+            #[cfg(target_os = "windows")]
+            let update_res = crate::platform::update_to_verified(
+                new_version_file_str,
+                &artifact.sha256,
+                artifact.size,
+            );
+            #[cfg(target_os = "macos")]
+            let update_res = crate::platform::macos::update_to_verified_dmg(
+                new_version_file_str,
+                &artifact.sha256,
+                Some(artifact.size),
+            );
+            if update_res.is_err() {
+                crate::updater::remove_update_file(&new_version_file);
+            }
+            match update_res {
+                Ok(_) => log::info!("Update process is launched successfully!"),
+                Err(e) => {
+                    let error = format!("Failed to update to new version, {}", e);
+                    log::error!("{}", error);
+                    push_update_me_error(error);
                 }
             }
         }
@@ -3054,6 +3055,8 @@ pub fn session_get_common(
     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
         let v = if key == "is_screenshot_supported" {
             s.is_screenshot_supported().to_string()
+        } else if key == "login_method" {
+            s.lc.read().unwrap().get_login_method().to_owned()
         } else {
             "".to_owned()
         };
@@ -3080,6 +3083,7 @@ pub mod server_side {
         env: JNIEnv,
         _class: JClass,
         app_dir: JString,
+        home_dir: JString,
         custom_client_config: JString,
     ) {
         log::debug!("startServer from jvm");
@@ -3087,6 +3091,11 @@ pub mod server_side {
         if let Ok(app_dir) = env.get_string(&app_dir) {
             *config::APP_DIR.write().unwrap() = app_dir.into();
         }
+        if let Ok(home_dir) = env.get_string(&home_dir) {
+            *config::APP_HOME_DIR.write().unwrap() = home_dir.into();
+        }
+        #[cfg(not(debug_assertions))]
+        crate::platform::android_log::initialize();
         if let Ok(custom_client_config) = env.get_string(&custom_client_config) {
             if !custom_client_config.is_empty() {
                 let custom_client_config: String = custom_client_config.into();
@@ -3126,6 +3135,16 @@ pub mod server_side {
     #[no_mangle]
     pub unsafe extern "system" fn Java_ffi_FFI_refreshScreen(_env: JNIEnv, _class: JClass) {
         crate::server::video_service::refresh()
+    }
+
+    /// Close outgoing sessions when the UI goes away but the process may not,
+    /// so a session cannot outlive the UI that is able to close it.
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_ffi_FFI_closeAllSessions(_env: JNIEnv, _class: JClass) {
+        let closed = crate::flutter::sessions::close_all_sessions();
+        if closed > 0 {
+            log::info!("closed {} outgoing session(s)", closed);
+        }
     }
 
     #[no_mangle]

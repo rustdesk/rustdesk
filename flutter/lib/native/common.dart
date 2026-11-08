@@ -10,8 +10,6 @@ final isWebDesktop_ = false;
 
 final isDesktop_ = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
-String get screenInfo_ => '';
-
 final isWebOnWindows_ = false;
 final isWebOnLinux_ = false;
 final isWebOnMacOS_ = false;

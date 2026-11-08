@@ -263,14 +263,3 @@ pub extern "system" fn privacy_mode_hook_mouse(
     }
     unsafe { CallNextHookEx(NULL as _, code, w_param, l_param) }
 }
-
-mod test {
-    #[test]
-    fn privacy_hook() {
-        //use super::*;
-
-        // privacy_hook::hook().unwrap();
-        // std::thread::sleep(std::time::Duration::from_millis(50));
-        // privacy_hook::unhook().unwrap();
-    }
-}

@@ -17,13 +17,15 @@ use hbb_common::{
     bail,
     config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
     log,
-    message_proto::*,
     protobuf::{Enum, Message as _},
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, sign},
-    timeout, tokio, ResultType, Stream,
+    timeout, tokio,
+    websocket::{check_ws, is_ws_endpoint},
+    ResultType, Stream,
 };
+use base::message_proto::*;
 use scrap::camera;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
@@ -44,6 +46,8 @@ mod clipboard_service;
 pub use clipboard_service::is_clipboard_service_ok;
 #[cfg(target_os = "linux")]
 pub(crate) mod wayland;
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) mod drm_capturer;
 #[cfg(target_os = "linux")]
 pub mod uinput;
 #[cfg(target_os = "linux")]
@@ -68,6 +72,7 @@ pub mod input_service {
 
 mod connection;
 mod login_failure_check;
+pub(crate) mod port_forward_mux;
 pub mod display_service;
 #[cfg(windows)]
 pub mod portable_service;
@@ -114,6 +119,15 @@ pub struct Server {
 
 pub type ServerPtr = Arc<RwLock<Server>>;
 pub type ServerPtrWeak = Weak<RwLock<Server>>;
+
+#[cfg(test)]
+pub fn new_for_test() -> ServerPtr {
+    Arc::new(RwLock::new(Server {
+        connections: HashMap::new(),
+        services: HashMap::new(),
+        id_count: 1000,
+    }))
+}
 
 pub fn new() -> ServerPtr {
     let mut server = Server {
@@ -170,6 +184,7 @@ async fn accept_connection_(
     socket: Stream,
     secure: bool,
     meta: ConnectionMeta,
+    slot: crate::rendezvous_mediator::PunchSlot,
 ) -> ResultType<()> {
     let local_addr = socket.local_addr();
     drop(socket);
@@ -179,6 +194,8 @@ async fn accept_connection_(
     let listener = new_listener(local_addr, true).await?;
     log::info!("Server listening on: {}", &listener.local_addr()?);
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
+        // The peer is in: the place goes back before the session runs, as every punch's does.
+        drop(slot);
         stream.set_nodelay(true).ok();
         let stream_addr = stream.local_addr()?;
         create_tcp_connection(
@@ -201,7 +218,50 @@ pub async fn create_tcp_connection(
     meta: ConnectionMeta,
 ) -> ResultType<()> {
     let mut stream = stream;
+    // The address the connection layer keys on, whitelist and admission alike.
+    let addr = hbb_common::try_into_v4(addr);
     let id = server.write().unwrap().get_new_id();
+    // Admitted before the identity handshake, so a peer that stalls in it, or after it without
+    // logging in, holds its place the whole time; an address over its share is turned away.
+    let Some(unauthorized) = admit_unauthorized(id, addr.ip()) else {
+        bail!("too many unauthenticated connections from {}", addr.ip());
+    };
+    // Before the handshake, so its read is bounded too; lifted again at authorization.
+    stream.set_max_packet_length(MAX_UNAUTHORIZED_MESSAGE);
+    tokio::select! {
+        handshake = identity_handshake(&mut stream, secure) => handshake?,
+        _ = unauthorized.evicted() => {
+            bail!("evicted to make room for a newer unauthenticated connection");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        if let Ok(task) = Command::new("/usr/bin/caffeinate")
+            .arg("-u")
+            .arg("-t 5")
+            .spawn()
+        {
+            super::CHILD_PROCESS.lock().unwrap().push(task);
+        }
+        log::info!("wake up macos");
+    }
+    Connection::start(
+        addr,
+        stream,
+        id,
+        Arc::downgrade(&server),
+        meta,
+        unauthorized,
+    )
+    .await;
+    Ok(())
+}
+
+/// Our signed identity goes out and, when `secure`, the controller's reply keys `stream`.
+/// Separate so it can be raced against the connection's eviction.
+async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()> {
     let (sk, pk) = Config::get_key_pair();
     if secure && pk.len() == sign::PUBLICKEYBYTES && sk.len() == sign::SECRETKEYBYTES {
         let mut sk_ = [0u8; sign::SECRETKEYBYTES];
@@ -209,11 +269,30 @@ pub async fn create_tcp_connection(
         let sk = sign::SecretKey(sk_);
         let mut msg_out = Message::new();
         let (our_pk_b, our_sk_b) = box_::gen_keypair();
+        // On a WebRTC transport, bind our DTLS certificate fingerprint to our signed identity so
+        // the controller can verify the DTLS channel it negotiated actually terminates at us
+        // (not a rendezvous/relay that swapped the SDP fingerprint). Empty on other transports.
+        // Fail immediately on WebRTC if the local fingerprint is unavailable: signing "" would
+        // only make the client fail-closed after a wasted round-trip.
+        let dtls_fingerprint = stream.dtls_fingerprint(true).await.unwrap_or_default();
+        if stream.is_webrtc() && dtls_fingerprint.is_empty() {
+            bail!("WebRTC local DTLS fingerprint unavailable");
+        }
+        // A WebRTC stream is encrypted by DTLS and takes no stream key of its own, split or
+        // not, so what it advertises is what it runs: 0. Saying 1 there would have a future
+        // controller that splits keys on WebRTC agree on a version this side never applies.
+        let advertised = if stream.is_webrtc() {
+            0
+        } else {
+            tcp::KX_VERSION_LATEST
+        };
         msg_out.set_signed_id(SignedId {
             id: sign::sign(
                 &IdPk {
                     id: Config::get_id(),
                     pk: Bytes::from(our_pk_b.0.to_vec()),
+                    dtls_fingerprint,
+                    kx_version: advertised,
                     ..Default::default()
                 }
                 .write_to_bytes()
@@ -230,11 +309,28 @@ pub async fn create_tcp_connection(
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::PublicKey(pk)) = msg_in.union {
                         if pk.asymmetric_value.len() == box_::PUBLICKEYBYTES {
-                            stream.set_key(tcp::Encrypt::decode(
+                            let key = tcp::Encrypt::decode(
                                 &pk.symmetric_value,
                                 &pk.asymmetric_value,
                                 &our_sk_b,
-                            )?);
+                            )?;
+                            if pk.kx_version > advertised {
+                                bail!(
+                                    "Handshake failed: key exchange version {} not offered, {} was",
+                                    pk.kx_version,
+                                    advertised
+                                );
+                            }
+                            stream.set_negotiated_key(
+                                key,
+                                false,
+                                &tcp::KxTranscript {
+                                    initiator_pk: &pk.asymmetric_value,
+                                    responder_pk: &our_pk_b.0,
+                                    advertised,
+                                    picked: pk.kx_version,
+                                },
+                            )?;
                         } else if pk.asymmetric_value.is_empty() {
                             Config::set_key_confirmed(false);
                             log::info!("Force to update pk");
@@ -254,30 +350,18 @@ pub async fn create_tcp_connection(
         }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        use std::process::Command;
-        if let Ok(task) = Command::new("/usr/bin/caffeinate")
-            .arg("-u")
-            .arg("-t 5")
-            .spawn()
-        {
-            super::CHILD_PROCESS.lock().unwrap().push(task);
-        }
-        log::info!("wake up macos");
-    }
-    Connection::start(addr, stream, id, Arc::downgrade(&server), meta).await;
     Ok(())
 }
 
-pub async fn accept_connection(
+pub(crate) async fn accept_connection(
     server: ServerPtr,
     socket: Stream,
     peer_addr: SocketAddr,
     secure: bool,
     meta: ConnectionMeta,
+    slot: crate::rendezvous_mediator::PunchSlot,
 ) {
-    if let Err(err) = accept_connection_(server, socket, secure, meta).await {
+    if let Err(err) = accept_connection_(server, socket, secure, meta, slot).await {
         log::warn!("Failed to accept connection from {}: {}", peer_addr, err);
     }
 }
@@ -320,8 +404,11 @@ async fn create_relay_connection_(
     ipv4: bool,
     meta: ConnectionMeta,
 ) -> ResultType<()> {
+    // The proxy's address family does not constrain the relay target.
+    let relay_server = crate::check_port(relay_server, RELAY_PORT);
+    let use_ws_proxy = Config::is_proxy() && is_ws_endpoint(&check_ws(&relay_server));
     let mut stream = socket_client::connect_tcp(
-        socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
+        socket_client::ipv4_to_ipv6(relay_server, ipv4 || use_ws_proxy),
         CONNECT_TIMEOUT,
     )
     .await?;
@@ -357,15 +444,13 @@ impl Server {
         }
     }
 
-    pub fn try_add_primay_video_service(&mut self) {
-        let primary_video_service_name = video_service::get_service_name(
-            VideoSource::Monitor,
-            *display_service::PRIMARY_DISPLAY_IDX,
-        );
-        if !self.contains(&primary_video_service_name) {
+    pub fn try_add_monitor_service(&mut self, display_idx: usize) {
+        let monitor_service_name =
+            video_service::get_service_name(VideoSource::Monitor, display_idx);
+        if !self.contains(&monitor_service_name) {
             self.add_service(Box::new(video_service::new(
                 VideoSource::Monitor,
-                *display_service::PRIMARY_DISPLAY_IDX,
+                display_idx,
             )));
         }
     }
@@ -381,14 +466,17 @@ impl Server {
         self.connections.insert(conn.id(), conn);
     }
 
-    pub fn add_connection(&mut self, conn: ConnInner, noperms: &Vec<&'static str>) {
-        let primary_video_service_name = video_service::get_service_name(
-            VideoSource::Monitor,
-            *display_service::PRIMARY_DISPLAY_IDX,
-        );
+    pub fn add_monitor_connection(
+        &mut self,
+        conn: ConnInner,
+        noperms: &Vec<&'static str>,
+        display_idx: usize,
+    ) {
+        let monitor_service_name =
+            video_service::get_service_name(VideoSource::Monitor, display_idx);
         for s in self.services.values() {
             let name = s.name();
-            if Self::is_video_service_name(&name) && name != primary_video_service_name {
+            if Self::is_video_service_name(&name) && name != monitor_service_name {
                 continue;
             }
             if !noperms.contains(&(&name as _)) {
@@ -560,6 +648,7 @@ pub fn check_zombie() {
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tokio::main]
 pub async fn start_server(_is_server: bool) {
+    allow_err!(crate::trusted_devices::initialize());
     crate::RendezvousMediator::start_all().await;
 }
 
@@ -583,21 +672,59 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
         }
         #[cfg(windows)]
-        hbb_common::platform::windows::start_cpu_performance_monitor();
+        base::platform::windows::start_cpu_performance_monitor();
     });
 
     if is_server {
-        crate::common::set_server_running(true);
-        std::thread::spawn(move || {
-            if let Err(err) = crate::ipc::start("") {
-                log::error!("Failed to start ipc: {}", err);
-                if crate::is_server() {
-                    log::error!("ipc is occupied by another process, try kill it");
-                    std::thread::spawn(stop_main_window_process).join().ok();
-                }
-                std::process::exit(-1);
+        #[cfg(windows)]
+        if !crate::is_server() {
+            if let Err(err) = start_gui_ipc().await {
+                log::error!("Local hosting unavailable: failed to start GUI IPC listener: {err:#}");
+                return;
             }
-        });
+        }
+        crate::common::set_server_running(true);
+        if !cfg!(windows) || crate::is_server() {
+            std::thread::spawn(move || {
+                if let Err(err) = crate::ipc::start("") {
+                    log::error!("Failed to start ipc: {}", err);
+                    if crate::is_server() {
+                        #[cfg(windows)]
+                        {
+                            const MAIN_IPC_STARTUP_GRACE: Duration = Duration::from_secs(1);
+                            // Give the GUI time to arrange its replacement before forced takeover.
+                            std::thread::sleep(MAIN_IPC_STARTUP_GRACE);
+                            match crate::ipc::start("") {
+                                Ok(()) => return,
+                                Err(err) => log::error!("Failed to retry ipc startup: {err}"),
+                            }
+                        }
+                        log::error!("ipc is occupied by another process, try kill it");
+                        std::thread::spawn(stop_main_window_process).join().ok();
+                    }
+                    std::process::exit(-1);
+                }
+            });
+        }
+        // Warm the DRM availability cache before any client connects, so the first connection does
+        // not race a cold `_drm` probe and ship an empty display list ("No displays" + retry).
+        // X11 is skipped -- probing there makes the root service open DRM readers for a path this
+        // session can never take -- but that decision belongs to `warm_availability`, which already
+        // makes it, and NOT to this call site. Deciding it here is the same one-shot-at-startup
+        // mistake the pre-warm had: `is_x11()` answers "x11" whenever loginctl cannot yet name the
+        // seat0 session, which during a boot is exactly when this runs, and nothing revisits it --
+        // so a Wayland host that came up slowly skipped the warm for the life of the process and
+        // got back the cold-probe "No displays" symptom the warm exists to remove.
+        #[cfg(all(target_os = "linux", feature = "drm"))]
+        if let Err(err) = std::thread::Builder::new()
+            .name("drm-warm".into())
+            .spawn(drm_capturer::warm_availability)
+        {
+            // Same reason as the root service's startup threads: `thread::spawn` panics on EAGAIN
+            // and that would abort `start_server`. Skipping the warm costs the first session the
+            // cold probe, which is what happened before the warm existed.
+            log::warn!("drm: could not spawn the availability warm ({err}); skipping it");
+        }
         input_service::fix_key_down_timeout_loop();
         #[cfg(target_os = "linux")]
         if input_service::wayland_use_uinput() {
@@ -605,6 +732,7 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         wait_initial_config_sync().await;
+        allow_err!(crate::trusted_devices::initialize());
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
         #[cfg(feature = "hwcodec")]
@@ -618,11 +746,21 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                         match data {
                             Data::SyncConfig(Some(configs)) => {
                                 let (config, config2) = *configs;
-                                if Config::set(config) {
-                                    log::info!("config synced");
-                                }
-                                if Config2::set(config2) {
-                                    log::info!("config2 synced");
+                                #[cfg(target_os = "windows")]
+                                allow_err!(
+                                    crate::trusted_devices::config::update(move || {
+                                        crate::trusted_devices::config::sync_config(config, config2)
+                                    })
+                                    .await
+                                );
+                                #[cfg(not(target_os = "windows"))]
+                                {
+                                    if Config::set(config) {
+                                        log::info!("config synced");
+                                    }
+                                    if Config2::set(config2) {
+                                        log::info!("config2 synced");
+                                    }
                                 }
                             }
                             _ => {}
@@ -645,6 +783,13 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             }
         }
     }
+}
+
+#[cfg(windows)]
+async fn start_gui_ipc() -> ResultType<()> {
+    let incoming = crate::ipc::new_listener("").await?;
+    tokio::spawn(crate::ipc::start_with_listener("", incoming));
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -731,7 +876,7 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
     use hbb_common::sleep;
     for i in 1..=tries {
         sleep(i as f32 * CONFIG_SYNC_INTERVAL_SECS).await;
-        match crate::ipc::connect_service(1000).await {
+        match crate::ipc::connect_trusted_device_service(1000).await {
             Ok(mut conn) => {
                 if !synced {
                     if conn.send(&Data::SyncConfig(None)).await.is_ok() {
@@ -743,16 +888,25 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                     #[cfg(target_os = "macos")]
                                     let _chk_pk = crate::CheckIfResendPk::new();
                                     if !config.is_empty() {
-                                        if cfg0.0 != config {
-                                            cfg0.0 = config.clone();
-                                            Config::set(config);
-                                            log::info!("sync config from root");
+                                        let result =
+                                            crate::trusted_devices::config::update(move || {
+                                                crate::trusted_devices::config::sync_config(
+                                                    config.clone(),
+                                                    config2.clone(),
+                                                )?;
+                                                Ok((config, config2))
+                                            })
+                                            .await;
+                                        match result {
+                                            Ok(configs) => cfg0 = configs,
+                                            Err(error) => {
+                                                crate::trusted_devices::config::log_sync_error(
+                                                    error,
+                                                );
+                                                continue;
+                                            }
                                         }
-                                        if cfg0.1 != config2 {
-                                            cfg0.1 = config2.clone();
-                                            Config2::set(config2);
-                                            log::info!("sync config2 from root");
-                                        }
+                                        log::info!("sync config from root");
                                     } else {
                                         // only on macos, because this issue was only reproduced on macos
                                         #[cfg(target_os = "macos")]
@@ -783,8 +937,7 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                 loop {
                     sleep(CONFIG_SYNC_INTERVAL_SECS).await;
                     let cfg = (Config::get(), Config2::get());
-                    let should_sync =
-                        cfg != cfg0 || (is_root_config_empty && !cfg.0.is_empty());
+                    let should_sync = cfg != cfg0 || (is_root_config_empty && !cfg.0.is_empty());
                     if should_sync {
                         if is_root_config_empty {
                             log::info!("root config is empty, sync our config to root");
@@ -794,7 +947,7 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                         match conn.send(&Data::SyncConfig(Some(cfg.clone().into()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
-                                match crate::ipc::connect_service(1000).await {
+                                match crate::ipc::connect_trusted_device_service(1000).await {
                                     Ok(mut _conn) => {
                                         conn = _conn;
                                         log::info!("reconnected to ipc_service");
@@ -803,9 +956,18 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                 }
                             }
                             _ => {
-                                cfg0 = cfg;
-                                conn.next_timeout(1000).await.ok();
-                                is_root_config_empty = false;
+                                match conn.next_timeout(1000).await {
+                                    Ok(Some(Data::SyncConfig(None))) => {
+                                        cfg0 = cfg;
+                                        is_root_config_empty = false;
+                                    }
+                                    Ok(Some(Data::SecurityConfigError(error))) => {
+                                        crate::trusted_devices::config::log_sync_error(error)
+                                    }
+                                    _ => crate::trusted_devices::config::log_sync_error(
+                                        "Host did not confirm configuration sync",
+                                    ),
+                                }
                             }
                         }
                     }
@@ -836,5 +998,64 @@ pub async fn stop_main_window_process() {
         if let Err(e) = crate::platform::try_kill_rustdesk_main_window_process() {
             log::error!("kill failed: {}", e);
         }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_gui_startup_tests {
+    use super::*;
+    use parity_tokio_ipc::{Endpoint, SecurityAttributes};
+    use std::{os::windows::io::AsRawHandle, process::Command};
+    use windows::Win32::{
+        Foundation::{HANDLE, WAIT_OBJECT_0},
+        System::Threading::WaitForSingleObject,
+    };
+
+    const CHILD_TEST: &str = "RUSTDESK_TEST_GUI_IPC_CHILD";
+    const CHILD_TIMEOUT_MS: u32 = 10_000;
+    // An unmatched test filter exits with zero without running the child assertions.
+    const CHILD_SUCCESS_EXIT_CODE: i32 = 42;
+
+    #[test]
+    fn windows_gui_survives_ipc_bind_failure() {
+        if std::env::var_os(CHILD_TEST).is_some() {
+            *hbb_common::config::APP_NAME.write().unwrap() =
+                format!("RustDesk-ipc-test-{}", std::process::id());
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let _incoming = runtime.block_on(async {
+                let mut endpoint = Endpoint::new(Config::ipc_path(""));
+                endpoint
+                    .set_security_attributes(SecurityAttributes::allow_everyone_create().unwrap());
+                endpoint.incoming().unwrap()
+            });
+            start_server(true, false);
+            assert!(!crate::common::is_server_running());
+            std::process::exit(CHILD_SUCCESS_EXIT_CODE);
+        }
+
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "server::windows_gui_startup_tests::windows_gui_survives_ipc_bind_failure",
+                "--nocapture",
+            ])
+            .env(CHILD_TEST, "1")
+            .spawn()
+            .unwrap();
+        let result =
+            unsafe { WaitForSingleObject(HANDLE(child.as_raw_handle()), CHILD_TIMEOUT_MS) };
+        if result != WAIT_OBJECT_0 {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("GUI IPC startup test timed out or failed to wait: {result:?}");
+        }
+        assert_eq!(
+            child.wait().unwrap().code(),
+            Some(CHILD_SUCCESS_EXIT_CODE),
+            "GUI subprocess did not complete the startup assertions"
+        );
     }
 }

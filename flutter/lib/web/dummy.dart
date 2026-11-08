@@ -12,3 +12,5 @@ Future<void> webSendLocalFiles(
     required bool isRemote}) {
   throw UnimplementedError("webSendLocalFiles");
 }
+
+Future<void> loadLocalTerminalFontIfNeeded() async {}

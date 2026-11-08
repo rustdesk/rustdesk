@@ -39,6 +39,17 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
     unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
 }
 
+// `v` comes from the remote peer unchecked, so scale in i64 to avoid overflow, and clamp to
+// the 0..=65535 range MOUSEEVENTF_ABSOLUTE takes.
+// `extent` is 0 when the virtual screen metrics are unavailable.
+fn to_absolute(v: i32, origin: i32, extent: i32) -> Option<i32> {
+    if extent <= 0 {
+        return None;
+    }
+    let abs = (v as i64 - origin as i64) * 65535 / extent as i64;
+    Some(abs.clamp(0, 65535) as i32)
+}
+
 fn keybd_event(mut flags: u32, vk: u16, scan: u16) -> DWORD {
     let mut scan = scan;
     unsafe {
@@ -126,13 +137,28 @@ impl MouseControllable for Enigo {
     }
 
     fn mouse_move_to(&mut self, x: i32, y: i32) {
+        let (left, top, width, height) = unsafe {
+            (
+                GetSystemMetrics(SM_XVIRTUALSCREEN),
+                GetSystemMetrics(SM_YVIRTUALSCREEN),
+                GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                GetSystemMetrics(SM_CYVIRTUALSCREEN),
+            )
+        };
+        let (Some(dx), Some(dy)) = (to_absolute(x, left, width), to_absolute(y, top, height))
+        else {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(60),
+                warn,
+                "mouse_move_to skipped: virtual screen size unavailable"
+            );
+            return;
+        };
         mouse_event(
             MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
             0,
-            (x - unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) }) * 65535
-                / unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) },
-            (y - unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) }) * 65535
-                / unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) },
+            dx,
+            dy,
         );
     }
 

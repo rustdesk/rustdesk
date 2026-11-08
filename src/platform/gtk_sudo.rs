@@ -2,12 +2,11 @@
 // Sometimes reboot is needed to refresh sudoers.
 
 use crate::lang::translate;
+use base::platform::linux::CMD_SH;
 use gtk::{glib, prelude::*};
 use hbb_common::{
     anyhow::{bail, Error},
-    log,
-    platform::linux::CMD_SH,
-    ResultType,
+    log, ResultType,
 };
 use nix::{
     libc::{fcntl, kill},
@@ -352,7 +351,10 @@ fn ui_parent(
                 let last_line = buf.lines().last().unwrap_or(&buf).trim().to_string();
                 log::info!("read from child: {}", buf);
 
-                if last_line.starts_with("sudo:") || last_line.starts_with("su:") {
+                // sudo-rs's notice for a rejected password, not an error: it asks again.
+                if (last_line.starts_with("sudo:") || last_line.starts_with("su:"))
+                    && last_line != "sudo: Authentication failed, try again."
+                {
                     if let Err(e) = tx_to_ui.send(Message::ErrorDialog(last_line)) {
                         log::error!("Channel error: {e:?}");
                         kill_child(child);
@@ -420,6 +422,7 @@ fn ui_parent(
                     if !last_line.is_empty() && initial_password.is_some() {
                         log::error!("received not empty line: {last_line}, clear initial password");
                         initial_password = None;
+                        first = true;
                     }
                 }
             }

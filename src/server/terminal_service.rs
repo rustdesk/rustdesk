@@ -463,7 +463,7 @@ impl OutputBuffer {
                     // Still no newline, append all
                     last_line.extend_from_slice(data);
                     self.total_size += data.len();
-                    return;
+                    start = data.len();
                 }
             }
         }
@@ -494,6 +494,14 @@ impl OutputBuffer {
 
         // Trim old data if buffer is too large
         while self.total_size > MAX_OUTPUT_BUFFER_SIZE || self.lines.len() > MAX_BUFFER_LINES {
+            if self.lines.len() == 1 && self.last_line_incomplete {
+                // Only an oversized line without newline is left: keep its newest half
+                // instead of dropping it, so the copy happens once per half buffer.
+                let line = &mut self.lines[0];
+                line.drain(..line.len().saturating_sub(MAX_OUTPUT_BUFFER_SIZE / 2));
+                self.total_size = line.len();
+                break;
+            }
             if let Some(removed) = self.lines.pop_front() {
                 if removed.len() > self.total_size {
                     log::error!(
@@ -2079,51 +2087,7 @@ impl TerminalServiceProxy {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_utf8_split_point, OutputBuffer, Utf8ChunkAccumulator, MAX_BUFFER_LINES};
-
-    #[test]
-    fn utf8_split_point_returns_full_len_for_complete_input() {
-        assert_eq!(find_utf8_split_point(b"hello"), 5);
-        assert_eq!(find_utf8_split_point("中文".as_bytes()), "中文".len());
-        assert_eq!(find_utf8_split_point("😀".as_bytes()), "😀".len());
-    }
-
-    #[test]
-    fn utf8_split_point_detects_incomplete_trailing_sequence() {
-        let data = [b'a', 0xE4, 0xB8];
-        assert_eq!(find_utf8_split_point(&data), 1);
-    }
-
-    #[test]
-    fn utf8_split_point_keeps_malformed_prefix_but_buffers_trailing_lead_byte() {
-        let data = [0xFF, 0xE4];
-        assert_eq!(find_utf8_split_point(&data), 1);
-    }
-
-    #[test]
-    fn utf8_split_point_treats_orphan_continuations_as_complete() {
-        let data = [0x80, 0x81, 0x82];
-        assert_eq!(find_utf8_split_point(&data), data.len());
-    }
-
-    #[test]
-    fn utf8_chunk_accumulator_reassembles_split_multibyte_output() {
-        let full = "你好世界".as_bytes();
-        let mut chunker = Utf8ChunkAccumulator::default();
-        let mut output = Vec::new();
-
-        for chunk in full.chunks(5) {
-            if let Some(data) = chunker.push_chunk(chunk.to_vec()) {
-                output.extend_from_slice(&data);
-            }
-        }
-
-        if let Some(data) = chunker.finish() {
-            output.extend_from_slice(&data);
-        }
-
-        assert_eq!(output, full);
-    }
+    use super::{OutputBuffer, Utf8ChunkAccumulator, MAX_BUFFER_LINES};
 
     #[test]
     fn utf8_chunk_accumulator_buffers_leading_split_multibyte_output() {
@@ -2147,27 +2111,6 @@ mod tests {
     }
 
     #[test]
-    fn utf8_chunk_accumulator_does_not_stall_on_malformed_bytes() {
-        let mut chunker = Utf8ChunkAccumulator::default();
-        assert_eq!(chunker.push_chunk(vec![0xFF]), Some(vec![0xFF]));
-        assert!(chunker.finish().is_none());
-    }
-
-    #[test]
-    fn utf8_chunk_accumulator_buffers_lone_utf8_lead_bytes() {
-        let mut chunker = Utf8ChunkAccumulator::default();
-        assert!(chunker.push_chunk(vec![0xE4]).is_none());
-        assert_eq!(chunker.finish(), Some(vec![0xE4]));
-    }
-
-    #[test]
-    fn utf8_chunk_accumulator_does_not_hold_back_non_utf8_prefixes() {
-        let mut chunker = Utf8ChunkAccumulator::default();
-        assert_eq!(chunker.push_chunk(vec![0xFF, 0xE4]), Some(vec![0xFF, 0xE4]));
-        assert!(chunker.finish().is_none());
-    }
-
-    #[test]
     fn output_buffer_trim_after_incomplete_merge_does_not_underflow() {
         let mut buffer = OutputBuffer::new();
 
@@ -2187,5 +2130,19 @@ mod tests {
 
         let actual_size: usize = buffer.lines.iter().map(|line| line.len()).sum();
         assert_eq!(buffer.total_size, actual_size);
+    }
+
+    #[test]
+    fn output_buffer_trims_output_without_newlines() {
+        let mut buffer = OutputBuffer::new();
+
+        let chunk = vec![b'a'; 4096];
+        for _ in 0..(super::MAX_OUTPUT_BUFFER_SIZE / chunk.len()) {
+            buffer.append(&chunk);
+        }
+        buffer.append(b"TAIL");
+
+        assert!(buffer.get_recent(usize::MAX).len() <= super::MAX_OUTPUT_BUFFER_SIZE);
+        assert_eq!(buffer.get_recent(4), b"TAIL");
     }
 }

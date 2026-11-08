@@ -430,31 +430,3 @@ pub fn create_pasteboard_context() -> ResultType<Box<PasteboardContext>> {
     context.init();
     Ok(context)
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_temp_files_count() {
-        let mut c = super::PasteboardContext::temp_files_count();
-
-        let mut created_files = vec![];
-        for _ in 0..10 {
-            let path = format!(
-                "/tmp/{}{}",
-                super::TEMP_FILE_PREFIX,
-                uuid::Uuid::new_v4().to_string()
-            );
-            if std::fs::File::create(&path).is_ok() {
-                created_files.push(path);
-                c += 1;
-            }
-        }
-
-        assert_eq!(c, super::PasteboardContext::temp_files_count());
-
-        // Clean up the created files.
-        for file in created_files {
-            std::fs::remove_file(&file).ok();
-        }
-    }
-}

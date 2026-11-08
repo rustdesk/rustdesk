@@ -97,6 +97,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           display: display,
           displays: displays?.cast<int>(),
           password: params['password'],
+          loginMethod: params['loginMethod'] ?? '',
           toolbarState: ToolbarState(),
           tabController: tabController,
           switchUuid: params['switch_uuid'],
@@ -470,6 +471,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           display: display,
           displays: displays?.cast<int>(),
           password: args['password'],
+          loginMethod: args['loginMethod'] ?? '',
           toolbarState: ToolbarState(),
           tabController: tabController,
           switchUuid: switchUuid,
@@ -513,15 +515,17 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       final args = jsonDecode(call.arguments);
       final id = args['id'];
       final close = args['close'];
+      RemotePage? remotePage;
       try {
-        final remotePage = tabController.state.value.tabs
+        remotePage = tabController.state.value.tabs
             .firstWhere((tab) => tab.key == id)
             .page as RemotePage;
         returnValue = remotePage.ffi.ffiModel.cachedPeerData.toString();
       } catch (e) {
         debugPrint('Failed to get cached session data: $e');
       }
-      if (close && returnValue != null) {
+      if (close && returnValue != null && remotePage != null) {
+        remotePage.releaseMacOSInputForTabTransfer();
         closeSessionOnDispose[id] = false;
         tabController.closeBy(id);
       }

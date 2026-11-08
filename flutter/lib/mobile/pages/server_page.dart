@@ -13,6 +13,7 @@ import '../../common/widgets/dialog.dart';
 import '../../consts.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
+import '../../utils/android_documents.dart';
 import 'home_page.dart';
 
 class ServerPage extends StatefulWidget implements PageShape {
@@ -225,12 +226,6 @@ class _ServerPageState extends State<ServerPage> {
 
 void checkService() async {
   gFFI.invokeMethod("check_service");
-  // for Android 10/11, request MANAGE_EXTERNAL_STORAGE permission from system setting page
-  if (AndroidPermissionManager.isWaitingFile() && !gFFI.serverModel.fileOk) {
-    AndroidPermissionManager.complete(kManageExternalStorage,
-        await AndroidPermissionManager.check(kManageExternalStorage));
-    debugPrint("file permission finished");
-  }
 }
 
 class ServiceNotRunningNotification extends StatelessWidget {
@@ -579,6 +574,44 @@ class PermissionChecker extends StatefulWidget {
 }
 
 class _PermissionCheckerState extends State<PermissionChecker> {
+  static const _folderOptionIndent = 16.0;
+
+  Future<void> _selectFolder() async {
+    try {
+      final workspace = await gFFI.dialogManager.show<bool>(
+          (_, close, __) => CustomAlertDialog(
+                title: Text(translate('Change Path')),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  ListTile(
+                    title: Text(translate('RustDesk storage')),
+                    onTap: () => close(true),
+                  ),
+                  ListTile(
+                    title: Text('${translate('Other folders')}…'),
+                    onTap: () => close(false),
+                  ),
+                ]),
+              ),
+          backDismiss: true,
+          clickMaskDismiss: true);
+      if (workspace == null) return;
+      if (workspace) {
+        showToast(await AndroidDocuments.workspace(share: true));
+        await bind.setLocalFlutterOption(
+            k: 'android-file-transfer-folder-setup', v: 'Y');
+        return;
+      }
+      final selected = await AndroidDocuments.selectFolder(share: true);
+      if (selected != null) {
+        await bind.setLocalFlutterOption(
+            k: 'android-file-transfer-folder-setup', v: 'Y');
+        showToast(AndroidDocuments.displayPath(selected['path'] as String));
+      }
+    } catch (error) {
+      showToast(error.toString());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
@@ -626,6 +659,19 @@ class _PermissionCheckerState extends State<PermissionChecker> {
             serverModel.toggleFile,
             enabled: !permissionChangeLocked,
           ),
+          if (isAndroid &&
+              !bind.isDisableSettings() &&
+              !bind.isOutgoingOnly() &&
+              bind.mainGetBuildinOption(key: kOptionHideSecuritySetting) != 'Y')
+            ListTile(
+              dense: true,
+              contentPadding:
+                  const EdgeInsetsDirectional.only(start: _folderOptionIndent),
+              title: Text(translate('Change Path')),
+              trailing: const Icon(Icons.chevron_right),
+              enabled: !permissionChangeLocked,
+              onTap: _selectFolder,
+            ),
           hasAudioPermission
               ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
                   serverModel.toggleAudio,

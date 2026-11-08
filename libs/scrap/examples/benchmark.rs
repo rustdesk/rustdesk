@@ -143,7 +143,7 @@ fn test_vpx(
     println!(
         "{:?} encode: {:?}, {} byte",
         codec_id,
-        time_sum / yuv_count as _,
+        time_sum / yuv_count as u32,
         size / yuv_count
     );
 
@@ -156,7 +156,7 @@ fn test_vpx(
     println!(
         "{:?} decode: {:?}",
         codec_id,
-        start.elapsed() / yuv_count as _
+        start.elapsed() / yuv_count as u32
     );
 }
 
@@ -212,7 +212,7 @@ fn test_av1(
     assert_eq!(av1s.len(), yuv_count);
     println!(
         "AV1 encode: {:?}, {} byte",
-        time_sum / yuv_count as _,
+        time_sum / yuv_count as u32,
         size / yuv_count
     );
     let mut decoder = AomDecoder::new().unwrap();
@@ -221,7 +221,7 @@ fn test_av1(
         let _ = decoder.decode(&av1);
         let _ = decoder.flush();
     }
-    println!("AV1 decode: {:?}", start.elapsed() / yuv_count as _);
+    println!("AV1 decode: {:?}", start.elapsed() / yuv_count as u32);
 }
 
 #[cfg(feature = "hwcodec")]

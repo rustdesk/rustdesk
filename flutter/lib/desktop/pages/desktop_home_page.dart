@@ -16,7 +16,6 @@ import 'package:flutter_hbb/desktop/widgets/update_progress.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
-import 'package:flutter_hbb/plugin/ui_manager.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
@@ -111,7 +110,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           }
         },
       ),
-      buildPluginEntry(),
     ];
     if (isIncomingOnly) {
       children.addAll([
@@ -482,6 +480,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         return buildInstallCard("Permissions", "config_screen", "Configure",
             () async {
           bind.mainIsCanScreenRecording(prompt: true);
+          // macOS shows the request prompt only once per app, so later
+          // presses would do nothing without opening the settings pane.
+          launchUrl(Uri.parse(
+              'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'));
           watchIsCanScreenRecording = true;
         }, help: 'Help', link: translate("doc_mac_permission"));
       } else if (!isOutgoingOnly && !bind.mainIsProcessTrusted(prompt: false)) {
@@ -782,13 +784,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         windowOnTop(null);
       } else if (call.method == kWindowRefreshCurrentUser) {
         gFFI.userModel.refreshCurrentUser();
-      } else if (call.method == kWindowGetWindowInfo) {
-        final screen = (await window_size.getWindowInfo()).screen;
-        if (screen == null) {
-          return '';
-        } else {
-          return jsonEncode(screenToMap(screen));
-        }
       } else if (call.method == kWindowGetScreenList) {
         return jsonEncode(
             (await window_size.getScreenList()).map(screenToMap).toList());
@@ -809,6 +804,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           password: call.arguments['password'],
           forceRelay: call.arguments['forceRelay'],
           connToken: call.arguments['connToken'],
+          loginMethod: call.arguments['loginMethod'] ?? '',
         );
       } else if (call.method == kWindowBumpMouse) {
         return RdPlatformChannel.instance.bumpMouse(
@@ -889,21 +885,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     if (state == AppLifecycleState.resumed) {
       shouldBeBlocked(_block, canBeBlocked);
     }
-  }
-
-  Widget buildPluginEntry() {
-    final entries = PluginUiManager.instance.entries.entries;
-    return Offstage(
-      offstage: entries.isEmpty,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ...entries.map((entry) {
-            return entry.value;
-          })
-        ],
-      ),
-    );
   }
 }
 

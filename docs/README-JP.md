@@ -166,7 +166,6 @@ target/release/rustdesk
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: [rustdesk-server](https://github.com/rustdesk/rustdesk-server)と通信し、リモートの直接接続(TCPホールパンチング)や中継接続を担う。
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: プラットフォーム固有のコード
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: デスクトップとモバイル向けのFlutterコード
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Flutterウェブクライアント向けのJavaScript
 
 > [!注意]
 > **:不正使用に関する免責事項** <br>

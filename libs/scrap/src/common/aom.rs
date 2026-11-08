@@ -13,10 +13,9 @@ use crate::{EncodeInput, EncodeYuvFormat, Pixfmt};
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
-    log,
-    message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
-    ResultType,
+    log, ResultType,
 };
+use base::message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use std::{ptr, slice};
 
 generate_call_macro!(call_aom, false);
@@ -199,23 +198,6 @@ mod webrtc {
         call_ctl!(ctx, AV1E_SET_MAX_REFERENCE_FRAMES, 3);
 
         Ok(())
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-        use std::os::raw::c_uint;
-
-        #[test]
-        fn tile_log2_uses_c_uint_and_rounds_up() {
-            let one_thread: c_uint = tile_log2(1);
-            let three_threads: c_uint = tile_log2(3);
-            let max_threads: c_uint = tile_log2(64);
-
-            assert_eq!(one_thread, 0);
-            assert_eq!(three_threads, 2);
-            assert_eq!(max_threads, 6);
-        }
     }
 }
 

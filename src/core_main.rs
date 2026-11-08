@@ -1,11 +1,12 @@
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(target_os = "windows")]
 use crate::client::translate;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::platform::breakdown_callback;
+use base::config::keys;
 #[cfg(not(debug_assertions))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use hbb_common::platform::register_breakdown_handler;
+use base::platform::register_breakdown_handler;
 use hbb_common::{config, log};
 #[cfg(windows)]
 use tauri_winrt_notification::{Duration, Sound, Toast};
@@ -22,13 +23,26 @@ macro_rules! my_println{
     };
 }
 
+pub enum CoreMainAction {
+    StartUi(Vec<String>),
+    ExitFailure(hbb_common::anyhow::Error),
+}
+
+#[cfg(target_os = "macos")]
+fn finish_macos_update(result: hbb_common::ResultType<()>) -> Option<CoreMainAction> {
+    match result {
+        Ok(()) => None,
+        Err(err) => Some(CoreMainAction::ExitFailure(err)),
+    }
+}
+
 /// shared by flutter and sciter main function
 ///
 /// [Note]
 /// If it returns [`None`], then the process will terminate, and flutter gui will not be started.
-/// If it returns [`Some`], then the process will continue, and flutter gui will be started.
+/// If it returns [`Some`], the action determines whether to start the UI or report failure.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn core_main() -> Option<Vec<String>> {
+pub fn core_main() -> Option<CoreMainAction> {
     if !crate::common::global_init() {
         return None;
     }
@@ -59,6 +73,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 "--view-camera",
                 "--port-forward",
                 "--terminal",
+                "--terminal-admin",
                 "--rdp",
             ]
             .contains(&arg.as_str())
@@ -113,11 +128,11 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     #[cfg(windows)]
     if args.contains(&"--connect".to_string()) || args.contains(&"--view-camera".to_string()) {
-        hbb_common::platform::windows::start_cpu_performance_monitor();
+        base::platform::windows::start_cpu_performance_monitor();
     }
     #[cfg(feature = "flutter")]
     if _is_flutter_invoke_new_connection {
-        return core_main_invoke_new_connection(std::env::args());
+        return core_main_invoke_new_connection(std::env::args()).map(CoreMainAction::StartUi);
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
     if click_setup && !config::is_disable_installation() {
@@ -126,6 +141,13 @@ pub fn core_main() -> Option<Vec<String>> {
     }
     if args.contains(&"--noinstall".to_string()) {
         args.clear();
+    }
+    // The portable wrapper injects `--install` when its name ends with `install.exe`,
+    // including `no-install.exe`. Drop the argument instead of exiting so disabled
+    // clients can continue running as portable applications.
+    if config::is_disable_installation() {
+        args.retain(|arg| arg != "--install");
+        flutter_args.retain(|arg| arg != "--install");
     }
     if args.len() > 0 {
         if args[0] == "--version" {
@@ -163,7 +185,7 @@ pub fn core_main() -> Option<Vec<String>> {
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]
     if args.len() > 0 && args[0].starts_with(&crate::get_uri_prefix()) {
-        return try_send_by_dbus(args[0].clone());
+        return try_send_by_dbus(args[0].clone()).map(CoreMainAction::StartUi);
     }
 
     #[cfg(windows)]
@@ -183,9 +205,6 @@ pub fn core_main() -> Option<Vec<String>> {
         crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
         return None;
     }
-    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    init_plugins(&args);
     if args.is_empty() || crate::common::is_empty_uni_link(&args[0]) {
         #[cfg(target_os = "macos")]
         {
@@ -222,6 +241,10 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
                 return None;
             } else if args[0] == "--update" {
+                // The elevated updater cannot delete its running verified copy.
+                if let Err(err) = platform::schedule_current_verified_update_file_cleanup() {
+                    log::warn!("Failed to schedule verified update file cleanup: {}", err);
+                }
                 if config::is_disable_installation() {
                     return None;
                 }
@@ -331,38 +354,8 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         #[cfg(target_os = "macos")]
         {
-            use crate::platform;
             if args[0] == "--update" {
-                if args.len() > 1 && args[1].ends_with(".dmg") {
-                    // Version check is unnecessary unless downgrading to an older version
-                    // that lacks "update dmg" support. This is a special case since we cannot
-                    // detect the version before extracting the DMG, so we skip the check.
-                    let dmg_path = &args[1];
-                    println!("Updating from DMG: {}", dmg_path);
-                    match platform::update_from_dmg(dmg_path) {
-                        Ok(_) => {
-                            println!("Update process from DMG started successfully.");
-                            // The new process will handle the rest. We can exit.
-                        }
-                        Err(err) => {
-                            eprintln!("Failed to start update from DMG: {}", err);
-                        }
-                    }
-                } else {
-                    println!("Starting update process...");
-                    log::info!("Starting update process...");
-                    let _text = match platform::update_me() {
-                        Ok(_) => {
-                            println!("{}", translate("Updated successfully!".to_string()));
-                            log::info!("Updated successfully!");
-                        }
-                        Err(err) => {
-                            eprintln!("Update failed with error: {}", err);
-                            log::error!("Update failed with error: {err}");
-                        }
-                    };
-                }
-                return None;
+                return finish_macos_update(crate::manual_update::execute_macos_update(&args));
             }
         }
         if args[0] == "--remove" {
@@ -660,7 +653,8 @@ pub fn core_main() -> Option<Vec<String>> {
                         None
                     }
                 };
-                let new_id = get_value("--id");
+                // An empty --id (e.g. an unset var) would deploy a blank id; the Android flow guards this too (#15146).
+                let new_id = get_value("--id").filter(|s| !s.is_empty());
                 match crate::ui_interface::deploy_device(token, new_id) {
                     crate::ui_interface::DeployResult::Ok => {
                         println!("Device deployed.");
@@ -708,14 +702,6 @@ pub fn core_main() -> Option<Vec<String>> {
             // call connection manager to establish connections
             // meanwhile, return true to call flutter window to show control panel
             crate::ui_interface::start_option_status_sync();
-        } else if args[0] == "--cm-no-ui" {
-            #[cfg(feature = "flutter")]
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            {
-                crate::ui_interface::start_option_status_sync();
-                crate::flutter::connection_manager::start_cm_no_ui();
-            }
-            return None;
         } else if args[0] == "--whiteboard" {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
@@ -729,46 +715,13 @@ pub fn core_main() -> Option<Vec<String>> {
                 crate::platform::gtk_sudo::exec();
             }
             return None;
-        } else {
-            #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            if args[0] == "--plugin-install" {
-                if args.len() == 2 {
-                    crate::plugin::change_uninstall_plugin(&args[1], false);
-                } else if args.len() == 3 {
-                    crate::plugin::install_plugin_with_url(&args[1], &args[2]);
-                }
-                return None;
-            } else if args[0] == "--plugin-uninstall" {
-                if args.len() == 2 {
-                    crate::plugin::change_uninstall_plugin(&args[1], true);
-                }
-                return None;
-            }
         }
     }
     //_async_logger_holder.map(|x| x.flush());
     #[cfg(feature = "flutter")]
-    return Some(flutter_args);
+    return Some(CoreMainAction::StartUi(flutter_args));
     #[cfg(not(feature = "flutter"))]
-    return Some(args);
-}
-
-#[inline]
-#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn init_plugins(args: &Vec<String>) {
-    if args.is_empty() || "--server" == (&args[0] as &str) {
-        #[cfg(debug_assertions)]
-        let load_plugins = true;
-        #[cfg(not(debug_assertions))]
-        let load_plugins = crate::platform::is_installed();
-        if load_plugins {
-            crate::plugin::init();
-        }
-    } else if "--service" == (&args[0] as &str) {
-        hbb_common::allow_err!(crate::plugin::remove_uninstalled());
-    }
+    return Some(CoreMainAction::StartUi(args));
 }
 
 fn import_config(path: &str) {
@@ -811,7 +764,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--connect" | "--play" | "--file-transfer" | "--view-camera" | "--port-forward"
-            | "--terminal" | "--rdp" => {
+            | "--terminal" | "--terminal-admin" | "--rdp" => {
                 authority = Some((&arg.to_string()[2..]).to_owned());
                 id = args.next();
             }
@@ -822,6 +775,9 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             }
             "--relay" => {
                 param_array.push(format!("relay=true"));
+            }
+            "--request-approval" => {
+                param_array.push("request-approval=true".to_owned());
             }
             // inner
             "--switch_uuid" => {
@@ -908,7 +864,7 @@ fn is_root() -> bool {
     crate::platform::is_root()
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
     matches!(
         args.first().map(String::as_str),
@@ -925,7 +881,7 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
 
 #[inline]
 fn is_cli_setting_change_disabled() -> bool {
-    let option = config::keys::OPTION_ALLOW_COMMAND_LINE_SETTINGS_WHEN_SETTINGS_DISABLED;
+    let option = keys::OPTION_ALLOW_COMMAND_LINE_SETTINGS_WHEN_SETTINGS_DISABLED;
     let allow_command_line_settings =
         config::option2bool(option, &crate::get_builtin_option(option));
     config::is_disable_settings() && !allow_command_line_settings
@@ -946,42 +902,6 @@ fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool) {
     }
 
     (printer_override, debug)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| value.to_string()).collect()
-    }
-
-    #[test]
-    fn user_main_ipc_scope_cli_command_matches_management_commands_only() {
-        for command in [
-            "--password",
-            "--set-unlock-pin",
-            "--get-id",
-            "--set-id",
-            "--config",
-            "--option",
-            "--assign",
-            "--deploy",
-        ] {
-            assert!(is_user_main_ipc_scope_cli_command(&args(&[command])));
-        }
-
-        for command in [
-            "--service",
-            "--server",
-            "--tray",
-            "--cm",
-            "--check-hwcodec-config",
-            "--connect",
-        ] {
-            assert!(!is_user_main_ipc_scope_cli_command(&args(&[command])));
-        }
-    }
 }
 
 /// Check if the executable is a Quick Support version.

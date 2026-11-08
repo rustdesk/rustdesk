@@ -160,7 +160,6 @@ RustDesk يرجى التأكد من أنك تنفذ هذه الأوامر من �
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: أو المنقول عن بُعد (TCP hole punching) انتظر الاتصال المباشر [rustdesk-server](https://github.com/rustdesk/rustdesk-server) الإتصال ب
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: رمز خاص بكل منصة
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: رمز الهاتف المحمول
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**:Flutter  لعميل الويب الخاص ب Javascript
 
 ## لقطات
 

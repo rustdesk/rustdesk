@@ -12,7 +12,12 @@ use super::{Display, Rect, Server};
 
 pub struct DisplayIter {
     outer: xcb_screen_iterator_t,
-    inner: Option<(xcb_randr_monitor_info_iterator_t, xcb_window_t)>,
+    // The monitor iterator points into the reply, so the reply is freed only when moving on.
+    inner: Option<(
+        xcb_randr_monitor_info_iterator_t,
+        xcb_window_t,
+        *mut xcb_randr_get_monitors_reply_t,
+    )>,
     server: Rc<Server>,
 }
 
@@ -30,7 +35,11 @@ impl DisplayIter {
     fn next_screen(
         outer: &mut xcb_screen_iterator_t,
         server: &Server,
-    ) -> Option<(xcb_randr_monitor_info_iterator_t, xcb_window_t)> {
+    ) -> Option<(
+        xcb_randr_monitor_info_iterator_t,
+        xcb_window_t,
+        *mut xcb_randr_get_monitors_reply_t,
+    )> {
         if outer.rem == 0 {
             return None;
         }
@@ -48,10 +57,17 @@ impl DisplayIter {
 
             let inner = xcb_randr_get_monitors_monitors_iterator(response);
 
-            libc::free(response as *mut _);
             xcb_screen_next(outer);
 
-            Some((inner, root))
+            Some((inner, root, response))
+        }
+    }
+
+    fn free_reply(&mut self) {
+        if let Some((_, _, response)) = self.inner.take() {
+            unsafe {
+                libc::free(response as *mut _);
+            }
         }
     }
 }
@@ -61,7 +77,7 @@ impl Iterator for DisplayIter {
 
     fn next(&mut self) -> Option<Display> {
         loop {
-            if let Some((ref mut inner, root)) = self.inner {
+            if let Some((ref mut inner, root, _)) = self.inner {
                 // If there is something in the current screen, return that.
                 if inner.rem != 0 {
                     unsafe {
@@ -92,8 +108,15 @@ impl Iterator for DisplayIter {
             }
 
             // The current screen was empty, so try the next screen.
+            self.free_reply();
             self.inner = Self::next_screen(&mut self.outer, &self.server);
         }
+    }
+}
+
+impl Drop for DisplayIter {
+    fn drop(&mut self) {
+        self.free_reply();
     }
 }
 

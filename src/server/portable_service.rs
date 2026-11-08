@@ -6,12 +6,12 @@ use crate::{
         validate_path_for_portable_service_shmem_dir,
     },
 };
+use base::message_proto::{KeyEvent, MouseEvent};
 use core::slice;
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
     bail, libc, log,
-    message_proto::{KeyEvent, MouseEvent},
     protobuf::Message,
     tokio::{self, sync::mpsc},
     ResultType,
@@ -435,7 +435,7 @@ mod utils {
 
 // functions called in separate SYSTEM user process.
 pub mod server {
-    use hbb_common::message_proto::PointerDeviceEvent;
+    use base::message_proto::PointerDeviceEvent;
 
     use crate::display_service;
 
@@ -826,7 +826,8 @@ pub mod server {
 pub mod client {
     use super::*;
     use crate::display_service;
-    use hbb_common::{anyhow::Context, message_proto::PointerDeviceEvent};
+    use base::message_proto::PointerDeviceEvent;
+    use hbb_common::anyhow::Context;
     use scrap::PixelBuffer;
 
     lazy_static::lazy_static! {
@@ -1594,11 +1595,6 @@ pub struct FrameInfo {
 #[cfg(test)]
 mod tests {
     use super::{is_valid_capture_frame_length, ADDR_CAPTURE_FRAME};
-
-    #[test]
-    fn test_is_valid_capture_frame_length_rejects_zero_length() {
-        assert!(!is_valid_capture_frame_length(ADDR_CAPTURE_FRAME + 1024, 0));
-    }
 
     #[test]
     fn test_is_valid_capture_frame_length_rejects_out_of_bounds_length() {

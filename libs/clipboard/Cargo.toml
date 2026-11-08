@@ -30,6 +30,7 @@ lazy_static = "1.4"
 serde = "1.0"
 serde_derive = "1.0"
 hbb_common = { path = "../hbb_common" }
+base = { path = "../base" }
 parking_lot = {version = "0.12"}
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
@@ -43,7 +44,7 @@ once_cell = {version = "1.18", optional = true}
 percent-encoding = {version  ="2.3", optional = true}
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
-fuser = {version = "0.15", default-features = false, optional = true}
+fuser = {git="https://github.com/rustdesk-org/fuser", branch = "refact/tag-0.16.0-cargo-1.75.0", default-features = false, optional = true}
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cacao = {git="https://github.com/clslaid/cacao", branch = "feat/set-file-urls", optional = true}
