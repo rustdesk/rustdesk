@@ -520,12 +520,6 @@ impl Decoder {
         self.gpu_frames_wanted = Some(wanted);
     }
 
-    /// The handle installed by [`Self::set_gpu_frames_wanted`], if any.
-    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
-    pub fn gpu_frames_wanted_handle(&self) -> Option<crate::GpuFramesWanted> {
-        self.gpu_frames_wanted.clone()
-    }
-
     /// Whether this session's renderer can present a decoded GPU frame.
     ///
     /// This is the question the decoder asks as `want_gpu` for one packet, not a
@@ -734,6 +728,11 @@ impl Decoder {
                 // decoded with the same `want_gpu`, and each call reports what
                 // it produced. Read before the decoder borrow: the switch lives
                 // on `self`.
+                //
+                // No local test covers this routing: it needs the `hwcodec`
+                // feature, which needs a matching FFmpeg, so the split between
+                // the surface branch and the software branch is exercised by the
+                // macOS CI build rather than by `cargo test`.
                 #[cfg(feature = "hwcodec")]
                 let want_gpu = self.gpu_frame_wanted();
                 #[cfg(feature = "hwcodec")]

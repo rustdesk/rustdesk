@@ -425,12 +425,15 @@ pub struct HwRamDecoded<'a> {
     /// The GPU frame this call delivered, if the caller asked for one and the
     /// decoder handed one over.
     ///
-    /// `Some` means the decoder skipped its software transfer for this packet,
-    /// so `images` is empty and this frame is the output. `None` means the
-    /// images above are: the caller did not ask, the format is not directly
-    /// deliverable, or a software frame won the same transaction. On targets
-    /// without a GPU-frame path the type is `Option<Infallible>`, so it is
-    /// always `None` and costs nothing.
+    /// `Some` means the decoder handed over the surface directly instead of
+    /// transferring it to RAM, so it is the output for this packet. `None` means
+    /// the caller did not ask, the format is not directly deliverable, or no
+    /// surface survived the transaction. `images` is normally empty when this is
+    /// `Some`, but not by construction: a software frame produced *later* in the
+    /// same transaction clears the surface, and then both can be populated --
+    /// "the last decoded frame wins", so a populated `images` takes precedence.
+    /// On targets without a GPU-frame path the type is `Option<Infallible>`, so
+    /// it is always `None` and costs nothing.
     pub pixelbuffer: crate::PixelBufferOutput,
 }
 
