@@ -262,9 +262,9 @@ async fn start_hbbs_sync_async() {
                             if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
                                 if let Err(error) = handle_config_options(strategy.config_options).await {
                                     hbb_common::throttled_log!(API_LOG_INTERVAL, error, "Strategy update rejected: {error}");
-                                    continue;
+                                } else {
+                                    log::info!("strategy updated");
                                 }
-                                log::info!("strategy updated");
                             }
                         }
                         if let Some(rsp_modified_at) = rsp.remove("modified_at") {
