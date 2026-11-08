@@ -3,9 +3,14 @@ import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
 Future<void> setWindowsCmWindowBounds(Size size) async {
-  final window = await window_size.getWindowInfo();
-  final screen = window.screen;
-  if (screen == null) {
+  window_size.PlatformWindow? window;
+  try {
+    window = await window_size.getWindowInfo();
+  } catch (e) {
+    debugPrint('Failed to get the CM window screen: $e');
+  }
+  final screen = window?.screen;
+  if (window == null || screen == null) {
     await windowManager.setSizeAlignment(size, Alignment.topRight);
     return;
   }
