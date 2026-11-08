@@ -63,7 +63,7 @@ SECRET_KEY = os.getenv("SECRET_KEY") or "worldpeace2024"
 # The headers for API requests
 HEADERS = {"Authorization": f"Bearer {SECRET_KEY}"}
 
-SIGN_TIMEOUT = int(os.getenv("SIGN_TIMEOUT") or "30")
+SIGN_TIMEOUT = int(os.getenv("SIGN_TIMEOUT") or "100")
 TIMEOUT = float(os.getenv("TIMEOUT") or "900")
 
 
@@ -195,10 +195,17 @@ def sign_one_file(file_path):
     logging.info(f"Uploaded {file_path}")
     task_id = res["id"]
     n = 0
+    status = {}
     while True:
         if n >= SIGN_TIMEOUT:
+            logging.error(
+                "Timed out waiting to sign %s after %s polls "
+                "(task_id=%s, state=%s, fetched_at=%s)",
+                file_path, n, task_id,
+                status.get("state") if status else None,
+                status.get("fetched_at") if status else None,
+            )
             delete_task(task_id)
-            logging.error(f"Failed to sign {file_path}")
             break
         time.sleep(6)
         n += 1
