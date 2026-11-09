@@ -8,9 +8,12 @@ class IosKeyboardEdit {
 
   final int backspaces;
   final String text;
+  // Local controller correction; this text must not be sent to the peer.
   final TextEditingValue? localValue;
 }
 
+/// Converts the hidden iOS field into Backspace/text edits at the remote caret.
+/// Padding and active composition are local; the field is not the remote document.
 class IosSoftKeyboardInput {
   static const _singleCharacterLength = 1;
 
@@ -21,6 +24,7 @@ class IosSoftKeyboardInput {
   final String _initialText;
   TextEditingValue _previousValue;
   String _committedText = '';
+  // UTF-16 padding boundary, retained across temporary IME padding removal.
   int _prefixLength;
 
   void reset() {
@@ -36,12 +40,15 @@ class IosSoftKeyboardInput {
     final committed = _withoutComposingText(value);
     _previousValue = value;
     if (committed == _committedText) {
+      // The remote caret stays after the suffix. Deleting before it requires
+      // removing the suffix, deleting preceding text, then replaying the suffix.
       return IosKeyboardEdit(
           backspaces: prefixBackspaces +
               (prefixBackspaces == 0 ? 0 : committed.characters.length),
           text: prefixBackspaces == 0 ? '' : committed,
           localValue: _replenishPrefix(value, hadPrefix) ?? localValue);
     }
+    // Count graphemes, not UTF-16 units, to avoid extra Backspaces for emoji.
     final previous = _committedText.characters.toList();
     final current = committed.characters.toList();
     var common = 0;
@@ -61,6 +68,8 @@ class IosSoftKeyboardInput {
   TextEditingValue? _replenishPrefix(TextEditingValue value, bool hadPrefix) {
     if (_prefixLength != 0) return null;
     // Rewriting a typed character resets unmarked Korean/Telex composition.
+    // Once the IME takes over the whole field, leave later keystrokes untouched
+    // until it is empty; a bulk replacement can be padded while ownership is known.
     if (value.text.isNotEmpty &&
         (!hadPrefix ||
             (value.isComposingRangeValid && !value.composing.isCollapsed) ||
@@ -69,6 +78,7 @@ class IosSoftKeyboardInput {
       return null;
     }
     _prefixLength = _initialText.length;
+    // Cache the refill before the controller assignment reenters update().
     _previousValue = value.copyWith(
       text: _initialText + value.text,
       selection: value.selection.isValid
@@ -86,6 +96,7 @@ class IosSoftKeyboardInput {
   }
 
   TextEditingValue? _clampSelection(TextEditingValue value) {
+    // Only constrain navigation; rewriting an IME edit can cancel composition.
     if (value.text != _previousValue.text ||
         !value.selection.isValid ||
         (value.isComposingRangeValid && !value.composing.isCollapsed)) {
@@ -108,6 +119,7 @@ class IosSoftKeyboardInput {
   int _updatePrefix(TextEditingValue value) {
     final text = value.text;
     if (_updateReplacementPrefix(value)) return 0;
+    // User-typed leading spaces must not become part of the owned padding.
     final limit = math.min(_prefixLength, text.length);
     var prefix = 0;
     while (prefix < limit && text[prefix] == _initialText[prefix]) {
@@ -120,8 +132,8 @@ class IosSoftKeyboardInput {
       _prefixLength = backspaces > 0 ? _prefixLength - backspaces : prefix;
       return backspaces;
     }
-    // A deletion containing real input may temporarily remove padding too.
-    // Keep its boundary so restoring that padding cannot type it remotely.
+    // Korean/Telex may remove padding with a letter, then restore it. Only count
+    // this length decrease for padding-only values, or recomposition deletes host text.
     if (text.length < _previousValue.text.length &&
         _previousValue.text.length <= _prefixLength) {
       final backspaces = _previousValue.text.length - text.length;
@@ -132,12 +144,14 @@ class IosSoftKeyboardInput {
   }
 
   bool _updateReplacementPrefix(TextEditingValue value) {
+    // Undo may restore the original local padding; it is not committed input.
     if (_prefixLength == 0 && value.text == _initialText) {
       _prefixLength = _initialText.length;
       return true;
     }
     final selection = _previousValue.selection;
-    // IMEs can select the last padding character together with recomposed text.
+    // Whole-field replacement owns its leading spaces as input, not padding.
+    // Exclude the last pad: IMEs may select it together with recomposed text.
     if (value.text != _previousValue.text &&
         selection.start == 0 &&
         selection.end == _previousValue.text.length &&
@@ -150,6 +164,8 @@ class IosSoftKeyboardInput {
 
   int _backspacesBeforeCommittedText(
       TextEditingValue value, int matchingPrefixLength) {
+    // The suffix may start with spaces, so locate the boundary using the caret.
+    // An unchanged suffix distinguishes this deletion from text replacement.
     final prefix = value.selection.extentOffset;
     final removed = _prefixLength - prefix;
     if (!value.selection.isCollapsed ||
@@ -168,6 +184,7 @@ class IosSoftKeyboardInput {
     if (!value.isComposingRangeValid || value.composing.isCollapsed) {
       return value.text.substring(start);
     }
+    // Partial candidate selection commits text while the rest still composes.
     final composingStart = math.max(start, value.composing.start);
     final composingEnd = math.max(start, value.composing.end);
     return value.text.substring(start, composingStart) +

@@ -27,7 +27,9 @@ import '../utils/ios_soft_keyboard_input.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
 
-// Whitespace preserves the iOS word boundary even after deleting into padding.
+// Keep deletable local text so Backspace can reach existing remote content.
+// iOS spaces separate the first word from padding; digits affect IME word
+// context, and a single separator would be lost when deleting into padding.
 final initText = (isIOS ? ' ' : '1') * 1024;
 
 // Workaround for Android (default input method, Microsoft SwiftKey keyboard) when using physical keyboard.
@@ -439,6 +441,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
+    // Reset first: assigning controller text can synchronously notify iOS.
     if (isIOS) _iosKeyboardInput.reset();
     _textController.text = _value;
     setState(() => _showEdit = false);

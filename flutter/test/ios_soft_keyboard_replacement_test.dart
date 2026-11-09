@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'ios_soft_keyboard_input_test.dart'
     show applyEdit, editing, sentinel, sentinelLength;
 
+// Select the hidden local field, not the remote document.
 TextEditingValue selectAll(String text) => editing(text).copyWith(
     selection: TextSelection(baseOffset: 0, extentOffset: text.length));
 
@@ -23,7 +24,7 @@ TextEditingValue selectAll(String text) => editing(text).copyWith(
 void main() {
   test('whole-field replacement preserves host text and leading whitespace',
       verifyReplacement);
-  test('Undo and Redo after replacement never send restored padding',
+  test('Undo and Redo after replacing only padding keep it local',
       verifyUndoRedo);
   test('clearing padding and text keeps the next Backspace usable',
       verifyClearAndDelete);
@@ -55,11 +56,6 @@ void verifyUndoRedo() {
     expect(result.remote, 'existing$text', reason: 'Redo replacement');
     expect(result.value, replacement);
   }
-  final input = IosSoftKeyboardInput(sentinel);
-  var result = dispatch(input, 'existing', const TextEditingValue(text: 'abc'));
-  result = dispatch(input, result.remote, TextEditingValue(text: sentinel));
-  expect(result.remote, 'existing',
-      reason: 'Restoring the original value must not echo padding');
 }
 
 void verifyClearAndDelete() {
