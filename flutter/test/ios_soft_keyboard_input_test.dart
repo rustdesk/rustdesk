@@ -27,77 +27,8 @@ void main() {
       verifyDeletion);
   test('replacement, partial composition and reset preserve committed text',
       verifyEditingAndReset);
-  test('native selection cannot enter the hidden padding', verifyPaddingCaret);
   test('prefix deletion replenishes the native field after exhaustion',
       verifyPaddingExhaustion);
-  test('native backspace selections are preserved before deletion',
-      verifyDeletionSelection);
-  test('backspace before committed text preserves the suffix',
-      verifyDeletionBeforeCommittedText);
-}
-
-void verifyDeletionBeforeCommittedText() {
-  const hostText = 'existing';
-  const backspaceCount = 3;
-  for (final suffix in ['abc', ' 你好']) {
-    final input = IosSoftKeyboardInput(sentinel);
-    var remote =
-        applyEdit(hostText, input.update(editing('$sentinel$suffix')));
-    for (var i = 0; i < backspaceCount; i++) {
-      final prefix = sentinel.substring(0, sentinelLength - i);
-      final before = editing('$prefix$suffix');
-      for (final value in [
-        before.copyWith(
-            selection: TextSelection.collapsed(offset: prefix.length)),
-        before.copyWith(
-            selection: TextSelection(
-                baseOffset: prefix.length - 1, extentOffset: prefix.length)),
-        editing('${prefix.substring(0, prefix.length - 1)}$suffix').copyWith(
-            selection: TextSelection.collapsed(offset: prefix.length - 1)),
-      ]) {
-        remote = applyEdit(remote, input.update(value));
-      }
-      expect(remote, '${hostText.substring(0, hostText.length - i - 1)}$suffix');
-    }
-  }
-}
-
-void verifyPaddingCaret() {
-  final input = IosSoftKeyboardInput(sentinel);
-  var remote =
-      applyEdit('existing', input.update(editing('${sentinel}abcdef')));
-  for (final selection in [
-    const TextSelection.collapsed(offset: 0),
-    const TextSelection(baseOffset: sentinelLength - 1, extentOffset: 0),
-  ]) {
-    final value = editing('${sentinel}abcdef').copyWith(selection: selection);
-    final edit = input.update(value);
-    remote = applyEdit(remote, edit);
-    final corrected = edit.localValue ?? value;
-    expect(corrected.selection.start, sentinelLength);
-    expect(corrected.selection.end, sentinelLength);
-    expect(remote, 'existingabcdef');
-  }
-  remote = applyEdit(remote, input.update(editing('${sentinel}xabcdef')));
-  expect(remote, 'existingxabcdef');
-}
-
-void verifyDeletionSelection() {
-  final input = IosSoftKeyboardInput(sentinel);
-  var remote = 'abc';
-  for (var i = 0; i < 3; i++) {
-    final length = sentinelLength - i;
-    final selected = editing(sentinel.substring(0, length)).copyWith(
-      selection: TextSelection(baseOffset: length - 1, extentOffset: length),
-    );
-    final edit = input.update(selected);
-    expect(edit.localValue, isNull,
-        reason: 'iOS selects the previous character before deleting it');
-    expect(applyEdit(remote, edit), remote);
-    remote = applyEdit(
-        remote, input.update(editing(sentinel.substring(0, length - 1))));
-    expect(remote, 'abc'.substring(0, 2 - i));
-  }
 }
 
 void verifyPaddingExhaustion() {
@@ -105,6 +36,14 @@ void verifyPaddingExhaustion() {
   var value = editing(sentinel);
   var remote = 'x' * (sentinelLength + 3);
   for (var i = 0; i < sentinelLength + 2; i++) {
+    final selected = value.copyWith(
+        selection: TextSelection(
+            baseOffset: value.text.length - 1,
+            extentOffset: value.text.length));
+    final selectionEdit = input.update(selected);
+    expect(selectionEdit.localValue, isNull,
+        reason: 'iOS selects the previous character before deleting it');
+    expect(applyEdit(remote, selectionEdit), remote);
     value = editing(value.text.substring(0, value.text.length - 1));
     final edit = input.update(value);
     remote = applyEdit(remote, edit);

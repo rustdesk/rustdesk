@@ -8,12 +8,13 @@ class IosKeyboardEdit {
 
   final int backspaces;
   final String text;
-  // Local controller correction; this text must not be sent to the peer.
+  // Local padding refill; this text must not be sent to the peer.
   final TextEditingValue? localValue;
 }
 
 /// Converts the hidden iOS field into Backspace/text edits at the remote caret.
 /// Padding and active composition are local; the field is not the remote document.
+/// Native cursor navigation is outside the supported input flow.
 class IosSoftKeyboardInput {
   static const _singleCharacterLength = 1;
 
@@ -34,19 +35,14 @@ class IosSoftKeyboardInput {
   }
 
   IosKeyboardEdit update(TextEditingValue value) {
-    final localValue = _clampSelection(value);
     final hadPrefix = _prefixLength != 0;
     final prefixBackspaces = _updatePrefix(value);
     final committed = _withoutComposingText(value);
     _previousValue = value;
     if (committed == _committedText) {
-      // The remote caret stays after the suffix. Deleting before it requires
-      // removing the suffix, deleting preceding text, then replaying the suffix.
       return IosKeyboardEdit(
-          backspaces: prefixBackspaces +
-              (prefixBackspaces == 0 ? 0 : committed.characters.length),
-          text: prefixBackspaces == 0 ? '' : committed,
-          localValue: _replenishPrefix(value, hadPrefix) ?? localValue);
+          backspaces: prefixBackspaces,
+          localValue: _replenishPrefix(value, hadPrefix));
     }
     // Count graphemes, not UTF-16 units, to avoid extra Backspaces for emoji.
     final previous = _committedText.characters.toList();
@@ -61,7 +57,7 @@ class IosSoftKeyboardInput {
     return IosKeyboardEdit(
       backspaces: prefixBackspaces + previous.length - common,
       text: current.skip(common).join(),
-      localValue: _replenishPrefix(value, hadPrefix) ?? localValue,
+      localValue: _replenishPrefix(value, hadPrefix),
     );
   }
 
@@ -95,27 +91,6 @@ class IosSoftKeyboardInput {
     return _previousValue;
   }
 
-  TextEditingValue? _clampSelection(TextEditingValue value) {
-    // Only constrain navigation; rewriting an IME edit can cancel composition.
-    if (value.text != _previousValue.text ||
-        !value.selection.isValid ||
-        (value.isComposingRangeValid && !value.composing.isCollapsed)) {
-      return null;
-    }
-    final boundary = math.min(_prefixLength, value.text.length);
-    if (value.selection.start >= boundary) return null;
-    // iOS selects the deletion range before removing text. Do not cancel it.
-    if (!value.selection.isCollapsed && value.selection.end >= boundary) {
-      return null;
-    }
-    return value.copyWith(
-      selection: value.selection.copyWith(
-        baseOffset: math.max(boundary, value.selection.baseOffset),
-        extentOffset: math.max(boundary, value.selection.extentOffset),
-      ),
-    );
-  }
-
   int _updatePrefix(TextEditingValue value) {
     final text = value.text;
     if (_updateReplacementPrefix(value)) return 0;
@@ -125,12 +100,9 @@ class IosSoftKeyboardInput {
     while (prefix < limit && text[prefix] == _initialText[prefix]) {
       prefix++;
     }
-    final backspaces = _committedText.isEmpty
-        ? 0
-        : _backspacesBeforeCommittedText(value, prefix);
-    if (prefix < limit || backspaces > 0) {
-      _prefixLength = backspaces > 0 ? _prefixLength - backspaces : prefix;
-      return backspaces;
+    if (prefix < limit) {
+      _prefixLength = prefix;
+      return 0;
     }
     // Korean/Telex may remove padding with a letter, then restore it. Only count
     // this length decrease for padding-only values, or recomposition deletes host text.
@@ -160,23 +132,6 @@ class IosSoftKeyboardInput {
       return true;
     }
     return false;
-  }
-
-  int _backspacesBeforeCommittedText(
-      TextEditingValue value, int matchingPrefixLength) {
-    // The suffix may start with spaces, so locate the boundary using the caret.
-    // An unchanged suffix distinguishes this deletion from text replacement.
-    final prefix = value.selection.extentOffset;
-    final removed = _prefixLength - prefix;
-    if (!value.selection.isCollapsed ||
-        prefix < 0 ||
-        prefix > matchingPrefixLength ||
-        (value.isComposingRangeValid && !value.composing.isCollapsed) ||
-        value.text.length + removed != _previousValue.text.length ||
-        value.text.substring(prefix) != _committedText) {
-      return 0;
-    }
-    return removed;
   }
 
   String _withoutComposingText(TextEditingValue value) {
