@@ -3020,8 +3020,12 @@ int versionCmp(String v1, String v2) {
   return bind.versionToNumber(v: v1) - bind.versionToNumber(v: v2);
 }
 
+// Lab build: name shown to users. The internal app name (install folder,
+// service, config paths, printer) stays "RustDesk".
+const String kLabDisplayName = 'LabDesk';
+
 String getWindowName({WindowType? overrideType}) {
-  final name = bind.mainGetAppNameSync();
+  const name = kLabDisplayName;
   switch (overrideType ?? kWindowType) {
     case WindowType.Main:
       return name;

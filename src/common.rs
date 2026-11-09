@@ -1208,6 +1208,10 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
     result
 }
 
+/// Lab build: product name shown to users. `get_app_name()` keeps returning
+/// the internal name ("RustDesk") used for paths, services and IPC.
+pub const LAB_DISPLAY_NAME: &str = "LabDesk";
+
 #[inline]
 pub fn get_app_name() -> String {
     hbb_common::config::APP_NAME.read().unwrap().clone()
