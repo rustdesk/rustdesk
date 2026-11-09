@@ -396,6 +396,8 @@ pub fn core_main() -> Option<CoreMainAction> {
             }
             #[cfg(windows)]
             crate::privacy_mode::restore_reg_connectivity(true, false);
+            #[cfg(target_os = "linux")]
+            crate::privacy_mode::linux_x11::recover();
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 crate::start_server(true, false);

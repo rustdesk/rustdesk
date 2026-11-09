@@ -1228,6 +1228,12 @@ impl Connection {
 
         if let Some(video_privacy_conn_id) = privacy_mode::get_privacy_mode_conn_id() {
             if video_privacy_conn_id == id {
+                #[cfg(target_os = "linux")]
+                privacy_mode::linux_x11::before_turn_off_on_close(
+                    id,
+                    conn.lock_after_session_end && conn.keyboard,
+                )
+                .await;
                 let _ = Self::turn_off_privacy_to_msg(id, String::new());
             }
         }
@@ -1993,7 +1999,7 @@ impl Connection {
                 json!(privacy_mode::get_supported_privacy_mode_impl()),
             );
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             platform_additions.insert(
                 "supported_privacy_mode_impl".into(),

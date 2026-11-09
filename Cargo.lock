@@ -7184,6 +7184,7 @@ dependencies = [
  "winres",
  "wol-rs",
  "x11-clipboard 0.8.1",
+ "x11_privacy",
  "x11rb 0.12.0",
  "xkbcommon-dl",
  "xxhash-rust",
@@ -10682,6 +10683,15 @@ dependencies = [
  "libc",
  "once_cell",
  "pkg-config",
+]
+
+[[package]]
+name = "x11_privacy"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "log",
+ "x11rb 0.12.0",
 ]
 
 [[package]]

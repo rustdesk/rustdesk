@@ -26,6 +26,9 @@ pub mod win_topmost_window;
 #[cfg(target_os = "macos")]
 pub mod macos;
 
+#[cfg(target_os = "linux")]
+pub mod linux_x11;
+
 #[cfg(windows)]
 mod win_virtual_display;
 #[cfg(windows)]
@@ -117,7 +120,16 @@ lazy_static::lazy_static! {
             {
                 macos::PRIVACY_MODE_IMPL.to_owned()
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(target_os = "linux")]
+            {
+                if linux_x11::is_supported() {
+                    linux_x11::PRIVACY_MODE_IMPL
+                } else {
+                    ""
+                }
+                .to_owned()
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             {
                 "".to_owned()
             }
@@ -147,6 +159,12 @@ lazy_static::lazy_static! {
         {
             map.insert(macos::PRIVACY_MODE_IMPL, |impl_key: &str| {
                 Box::new(macos::PrivacyModeImpl::new(impl_key))
+            });
+        }
+        #[cfg(target_os = "linux")]
+        {
+            map.insert(linux_x11::PRIVACY_MODE_IMPL, |impl_key: &str| {
+                Box::new(linux_x11::PrivacyModeImpl::new(impl_key))
             });
         }
         #[cfg(windows)]
@@ -384,7 +402,15 @@ pub fn get_supported_privacy_mode_impl() -> Vec<(&'static str, &'static str)> {
         // doesn't provide multiple modes like Windows does.
         vec![(macos::PRIVACY_MODE_IMPL, "privacy_mode_impl_macos_tip")]
     }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        if DEFAULT_PRIVACY_MODE_IMPL.as_str() == linux_x11::PRIVACY_MODE_IMPL {
+            vec![(linux_x11::PRIVACY_MODE_IMPL, "privacy_mode_impl_x11_tip")]
+        } else {
+            Vec::new()
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         Vec::new()
     }
