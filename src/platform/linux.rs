@@ -812,6 +812,9 @@ fn start_uinput_service() {
     std::thread::spawn(|| {
         service::start_service_mouse();
     });
+    std::thread::spawn(|| {
+        service::start_service_privacy_input();
+    });
 }
 
 /// Suggests the best terminal type based on the environment.

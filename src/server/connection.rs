@@ -2000,6 +2000,13 @@ impl Connection {
                 json!(privacy_mode::get_supported_privacy_mode_impl()),
             );
         }
+        #[cfg(target_os = "linux")]
+        if privacy_mode::is_privacy_mode_supported() {
+            platform_additions.insert(
+                "supported_privacy_mode_impl".into(),
+                json!(privacy_mode::get_supported_privacy_mode_impl()),
+            );
+        }
 
         #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
         {

@@ -1216,6 +1216,18 @@ pub mod service {
         start_service(IPC_POSTFIX_CONTROL, spawn_controller_handler).await;
     }
 
+    /// Start the privacy mode input grab service.
+    #[tokio::main(flavor = "current_thread")]
+    pub async fn start_service_privacy_input() {
+        use crate::privacy_mode::linux_wayland;
+        log::info!("start privacy mode input grab service");
+        start_service(
+            linux_wayland::IPC_POSTFIX_INPUT_GRAB,
+            linux_wayland::service::spawn_handler,
+        )
+        .await;
+    }
+
     pub fn stop_service_keyboard() {
         log::info!("stop uinput keyboard service");
     }
