@@ -170,6 +170,46 @@ impl RenderConverter {
             Ok((data, w, h, pixfmt))
         }
     }
+
+    /// `convert()` straight into `buf`, saving the copy out of the context; `buf` ends up holding
+    /// exactly the frame, row stride `len / height`.
+    pub fn convert_into(
+        &mut self,
+        desc: &mut drmtap_dmabuf_desc,
+        received_fd: RawFd,
+        buf: &mut Vec<u8>,
+    ) -> io::Result<(u32, u32, Pixfmt)> {
+        // The CPU deswizzle keeps the source pitch; every other path writes width * 4.
+        let need = (desc.pitches[0] as usize)
+            .max((desc.width as usize).saturating_mul(4))
+            .saturating_mul(desc.height as usize);
+        if need > MAX_FRAME_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "drm: refusing a {}x{} dma-buf with pitch {}",
+                    desc.width, desc.height, desc.pitches[0]
+                ),
+            ));
+        }
+        buf.resize(need, 0);
+        let (set_output, ctx) = (self.lib.set_output_buffer, self.ctx);
+        // SAFETY: `buf` is not touched until the destination is detached below. If libdrmtap
+        // refuses it, the frame lands in the context buffer and is copied out as before.
+        unsafe { set_output(ctx, buf.as_mut_ptr().cast(), buf.len()) };
+        let converted = self.convert(desc, received_fd);
+        // SAFETY: NULL only detaches the destination; libdrmtap never frees it.
+        unsafe { set_output(ctx, std::ptr::null_mut(), 0) };
+        let (data, w, h, fmt) = converted?;
+        if data.as_ptr() == buf.as_ptr() {
+            let len = data.len();
+            buf.truncate(len);
+        } else {
+            buf.clear();
+            buf.extend_from_slice(data);
+        }
+        Ok((w, h, fmt))
+    }
 }
 
 impl Drop for RenderConverter {
@@ -180,5 +220,105 @@ impl Drop for RenderConverter {
             unsafe { (self.lib.close)(self.ctx) };
             self.ctx = std::ptr::null_mut();
         }
+    }
+}
+
+#[cfg(test)]
+mod convert_into_tests {
+    use super::*;
+    use std::ffi::c_void;
+
+    struct Mock {
+        dst: *mut c_void,
+        given: *mut c_void,
+        own: Vec<u8>,
+        use_dst: bool,
+    }
+
+    unsafe extern "C" fn set_output(ctx: *mut drmtap_ctx, dst: *mut c_void, _: usize) -> i32 {
+        let mock = &mut *ctx.cast::<Mock>();
+        mock.dst = dst;
+        if !dst.is_null() {
+            mock.given = dst;
+        }
+        0
+    }
+
+    /// A 2x2 frame of 7s, written into the destination when `use_dst`, else into its own buffer.
+    unsafe extern "C" fn convert(
+        ctx: *mut drmtap_ctx,
+        _: *const drmtap_dmabuf_desc,
+        frame: *mut drmtap_frame_info,
+    ) -> i32 {
+        let mock = &mut *ctx.cast::<Mock>();
+        let out: *mut u8 = if mock.use_dst && !mock.dst.is_null() {
+            mock.dst.cast()
+        } else {
+            mock.own.as_mut_ptr()
+        };
+        std::ptr::write_bytes(out, 7, 16);
+        (*frame).data = out.cast();
+        (*frame).width = 2;
+        (*frame).height = 2;
+        (*frame).stride = 8;
+        (*frame).format = DRM_FORMAT_XRGB8888;
+        0
+    }
+
+    fn convert_with(use_dst: bool, buf: &mut Vec<u8>) -> Box<Mock> {
+        unsafe extern "C" fn grab(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) -> i32 {
+            -1
+        }
+        unsafe extern "C" fn release(_: *mut drmtap_ctx, _: *mut drmtap_frame_info) {}
+        unsafe extern "C" fn desc(
+            _: *mut drmtap_ctx,
+            _: *mut drmtap_dmabuf_desc,
+            _: *mut drmtap_frame_info,
+        ) -> i32 {
+            -1
+        }
+        unsafe extern "C" fn rotation(_: *mut drmtap_ctx, _: *mut u32) -> i32 {
+            -1
+        }
+        let mut lib = DrmtapLib::fake(grab, release, desc, rotation);
+        lib.convert_dmabuf = convert;
+        lib.set_output_buffer = set_output;
+        let mock = Box::into_raw(Box::new(Mock {
+            dst: std::ptr::null_mut(),
+            given: std::ptr::null_mut(),
+            own: vec![0; 16],
+            use_dst,
+        }));
+        let mut conv = RenderConverter {
+            lib: Box::leak(Box::new(lib)),
+            ctx: mock.cast(),
+        };
+        let mut d = drmtap_dmabuf_desc {
+            width: 2,
+            height: 2,
+            pitches: [8, 0, 0, 0],
+            ..Default::default()
+        };
+        let res = conv.convert_into(&mut d, -1, buf).unwrap();
+        assert!(matches!(res, (2, 2, Pixfmt::BGRA)));
+        drop(conv);
+        unsafe { Box::from_raw(mock) }
+    }
+
+    #[test]
+    fn converts_into_the_callers_buffer() {
+        let mut buf = vec![0; 64];
+        let allocation = buf.as_mut_ptr().cast::<c_void>();
+        let mock = convert_with(true, &mut buf);
+        assert_eq!(mock.given, allocation);
+        assert!(mock.dst.is_null());
+        assert_eq!(buf, [7; 16]);
+    }
+
+    #[test]
+    fn copies_a_frame_the_library_kept() {
+        let mut buf = Vec::new();
+        convert_with(false, &mut buf);
+        assert_eq!(buf, [7; 16]);
     }
 }
