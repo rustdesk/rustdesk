@@ -872,7 +872,7 @@ pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
                 height: d.height() as _,
                 name: display_name,
                 online: d.is_online(),
-                cursor_embedded: false,
+                cursor_embedded: d.cursor_embedded(),
                 original_resolution,
                 scale,
                 ..Default::default()

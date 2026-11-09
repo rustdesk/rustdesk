@@ -37,6 +37,12 @@ lazy_static! {
     pub static ref RDP_SESSION_INFO: Mutex<Option<RdpSessionInfo>> = Mutex::new(None);
 }
 
+// Only Embedded carries the shape. Metadata exposes the position but not the cursor image,
+// which would still leave the shape to XFixes.
+fn embedded_cursor_mode(available: u32) -> Option<u32> {
+    (available & 0x2 != 0).then_some(2u32)
+}
+
 #[derive(Serialize, Deserialize)]
 // For KDE Plasma only, because GNOME provides position info.
 struct PipewireDisplayOffsetCache {
@@ -105,6 +111,7 @@ pub struct RdpSessionInfo {
     pub session: dbus::Path<'static>,
     pub is_support_restore_token: bool,
     pub resolution: Arc<Mutex<Option<(usize, usize)>>>,
+    pub cursor_embedded: bool,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct PwStreamInfo {
@@ -159,6 +166,9 @@ pub struct PipeWireCapturable {
     pub position: (i32, i32),
     pub logical_size: (usize, usize),
     pub physical_size: (usize, usize),
+    // The compositor draws the cursor into this stream. Kept per capturable: a mixed
+    // DRM + PipeWire session must not label the DRM displays as embedded.
+    pub cursor_embedded: bool,
     // False when `physical_size` is the portal size standing in for a resolution get_res() could
     // not read.
     physical_size_measured: bool,
@@ -170,6 +180,7 @@ impl PipeWireCapturable {
         fd: OwnedFd,
         resolution: Arc<Mutex<Option<(usize, usize)>>>,
         stream: &PwStreamInfo,
+        cursor_embedded: bool,
     ) -> Self {
         // alternative to get screen resolution as stream.size is not always correct ex: on fractional scaling
         // https://github.com/rustdesk/rustdesk/issues/6116#issuecomment-1817724244
@@ -182,6 +193,7 @@ impl PipeWireCapturable {
             position: stream.position,
             logical_size: stream.size,
             physical_size: (0, 0),
+            cursor_embedded,
             physical_size_measured: false,
         });
         let physical_size_measured = measured.is_ok();
@@ -196,6 +208,7 @@ impl PipeWireCapturable {
             position: stream.position,
             logical_size: stream.size,
             physical_size,
+            cursor_embedded,
             physical_size_measured,
         }
     }
@@ -776,6 +789,7 @@ pub fn request_remote_desktop(
     Vec<PwStreamInfo>,
     dbus::Path<'static>,
     bool,
+    bool,
 )> {
     unsafe {
         if !INIT {
@@ -812,6 +826,18 @@ pub fn request_remote_desktop(
         }
     }
 
+    let cursor_mode = if capture_cursor {
+        match portal.available_cursor_modes() {
+            Ok(modes) => embedded_cursor_mode(modes),
+            Err(err) => {
+                warn!("Failed to query the portal cursor modes: {}", err);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // The following code may be improved.
     // https://flatpak.github.io/xdg-desktop-portal/#:~:text=To%20avoid%20a%20race%20condition
     // To avoid a race condition
@@ -828,7 +854,7 @@ pub fn request_remote_desktop(
             session.clone(),
             trace.clone(),
             is_support_restore_token,
-            capture_cursor,
+            cursor_mode,
         ),
         trace.clone(),
         PortalStage::CreateSession,
@@ -869,6 +895,7 @@ pub fn request_remote_desktop(
                     streams_res.clone(),
                     session,
                     is_support_restore_token,
+                    cursor_mode.is_some(),
                 ));
             }
         }
@@ -888,7 +915,7 @@ fn on_create_session_response(
     session: Arc<Mutex<Option<dbus::Path<'static>>>>,
     trace: PortalTrace,
     is_support_restore_token: bool,
-    capture_cursor: bool,
+    cursor_mode: Option<u32>,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -938,12 +965,8 @@ fn on_create_session_response(
             }
             args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
 
-            if capture_cursor {
-                get_available_cursor_modes().ok().map(|modes| {
-                    if modes & 0x2 != 0 {
-                        args.insert("cursor_mode".to_string(), Variant(Box::new(2u32)));
-                    }
-                });
+            if let Some(cursor_mode) = cursor_mode {
+                args.insert("cursor_mode".to_string(), Variant(Box::new(cursor_mode)));
             }
 
             trace.waiting(PortalStage::SelectSources);
@@ -984,6 +1007,7 @@ fn on_create_session_response(
                     trace.clone(),
                     ses.clone(),
                     is_support_restore_token,
+                    cursor_mode,
                 ),
                 trace.clone(),
                 PortalStage::SelectDevices,
@@ -1003,6 +1027,7 @@ fn on_select_devices_response(
     trace: PortalTrace,
     session: dbus::Path<'static>,
     is_support_restore_token: bool,
+    cursor_mode: Option<u32>,
 ) -> impl Fn(
     OrgFreedesktopPortalRequestResponse,
     &SyncConnection,
@@ -1021,6 +1046,10 @@ fn on_select_devices_response(
             args.insert("multiple".into(), Variant(Box::new(true)));
         }
         args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
+
+        if let Some(cursor_mode) = cursor_mode {
+            args.insert("cursor_mode".to_string(), Variant(Box::new(cursor_mode)));
+        }
 
         let session = session.clone();
         trace.waiting(PortalStage::SelectSources);
@@ -1142,7 +1171,8 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     };
 
     if rdp_connection.is_none() {
-        let (conn, fd, streams, session, is_support_restore_token) = request_remote_desktop(false)?;
+        let (conn, fd, streams, session, is_support_restore_token, cursor_embedded) =
+            request_remote_desktop(true)?;
         let conn = Arc::new(conn);
 
         let rdp_info = RdpSessionInfo {
@@ -1152,6 +1182,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
             session,
             is_support_restore_token,
             resolution: Arc::new(Mutex::new(None)),
+            cursor_embedded,
         };
         *rdp_connection = Some(rdp_info);
     }
@@ -1172,6 +1203,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
                 rdp_info.fd.clone(),
                 rdp_info.resolution.clone(),
                 s,
+                rdp_info.cursor_embedded,
             )
         })
         .collect())
@@ -1611,7 +1643,7 @@ fn fill_multi_matched_positions_cursor(
 ) -> ResultType<()> {
     // This creates a new remote desktop session for cursor-based position detection.
     // The session is temporary, used only for disambiguation, and is dropped after detection completes.
-    let (conn, fd, streams_with_cursor, _session, _is_support_restore_token) =
+    let (conn, fd, streams_with_cursor, _session, _is_support_restore_token, cursor_embedded) =
         request_remote_desktop(true)?;
     let conn = Arc::new(conn);
 
@@ -1677,6 +1709,7 @@ fn fill_multi_matched_positions_cursor(
                     position: pw_stream_with_cursor.position,
                     logical_size: pw_stream_with_cursor.size,
                     physical_size: (0, 0),
+                    cursor_embedded,
                     physical_size_measured: false,
                 })?;
                 // Take first frame and copy owned buffer to avoid borrow across second capture
@@ -1804,7 +1837,7 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::{corrected_origin, WaylandDisplayInfo};
+    use super::{corrected_origin, embedded_cursor_mode, WaylandDisplayInfo};
 
     fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
         WaylandDisplayInfo {
@@ -1817,6 +1850,15 @@ mod tests {
             refresh_rate: 60,
             transform: 0,
         }
+    }
+
+    #[test]
+    fn only_an_advertised_embedded_cursor_is_requested() {
+        assert_eq!(embedded_cursor_mode(0), None);
+        assert_eq!(embedded_cursor_mode(1), None); // Hidden
+        assert_eq!(embedded_cursor_mode(2), Some(2)); // Embedded
+        assert_eq!(embedded_cursor_mode(3), Some(2));
+        assert_eq!(embedded_cursor_mode(7), Some(2)); // Hidden|Embedded|Metadata
     }
 
     #[test]

@@ -126,4 +126,8 @@ impl Display {
     pub fn name(&self) -> String {
         "".to_owned()
     }
+
+    pub fn cursor_embedded(&self) -> bool {
+        self.0.cursor_embedded
+    }
 }

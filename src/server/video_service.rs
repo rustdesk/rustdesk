@@ -1433,7 +1433,7 @@ pub fn make_display_changed_msg(
         width: display.width,
         height: display.height,
         cursor_embedded: match source {
-            VideoSource::Monitor => display_service::capture_cursor_embedded(),
+            VideoSource::Monitor => display.cursor_embedded,
             VideoSource::Camera => false,
         },
         #[cfg(not(target_os = "android"))]

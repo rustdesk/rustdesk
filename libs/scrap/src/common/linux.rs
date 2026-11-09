@@ -136,4 +136,11 @@ impl Display {
             Display::WAYLAND(d) => d.name(),
         }
     }
+
+    pub fn cursor_embedded(&self) -> bool {
+        match self {
+            Display::X11(_) => super::is_cursor_embedded(),
+            Display::WAYLAND(d) => d.cursor_embedded(),
+        }
+    }
 }

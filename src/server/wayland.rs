@@ -2,7 +2,7 @@ use super::*;
 use hbb_common::{allow_err, anyhow};
 use base::platform::linux::DISTRO;
 use scrap::{
-    is_cursor_embedded, set_map_err,
+    set_map_err,
     wayland::pipewire::{fill_displays, try_fix_logical_size},
     Capturer, Display, Frame, TraitCapturer,
 };
@@ -558,10 +558,7 @@ fn init_displays() -> ResultType<()> {
         *PIPEWIRE_INITIALIZED.write().unwrap() = true;
         let num = all.len();
         let primary = super::display_service::get_primary_2(&all);
-        let mut displays = super::display_service::update_sync_displays(&all);
-        for display in displays.iter_mut() {
-            display.cursor_embedded = is_cursor_embedded();
-        }
+        let displays = super::display_service::update_sync_displays(&all);
 
         let mut rects: Vec<((i32, i32), usize, usize)> = Vec::new();
         for d in &all {
