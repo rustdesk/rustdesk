@@ -21,7 +21,9 @@ use hbb_common::{
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, sign},
-    timeout, tokio, ResultType, Stream,
+    timeout, tokio,
+    websocket::{check_ws, is_ws_endpoint},
+    ResultType, Stream,
 };
 use base::message_proto::*;
 use scrap::camera;
@@ -402,8 +404,11 @@ async fn create_relay_connection_(
     ipv4: bool,
     meta: ConnectionMeta,
 ) -> ResultType<()> {
+    // The proxy's address family does not constrain the relay target.
+    let relay_server = crate::check_port(relay_server, RELAY_PORT);
+    let use_ws_proxy = Config::is_proxy() && is_ws_endpoint(&check_ws(&relay_server));
     let mut stream = socket_client::connect_tcp(
-        socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
+        socket_client::ipv4_to_ipv6(relay_server, ipv4 || use_ws_proxy),
         CONNECT_TIMEOUT,
     )
     .await?;
@@ -643,6 +648,7 @@ pub fn check_zombie() {
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tokio::main]
 pub async fn start_server(_is_server: bool) {
+    allow_err!(crate::trusted_devices::initialize());
     crate::RendezvousMediator::start_all().await;
 }
 
@@ -670,17 +676,36 @@ pub async fn start_server(is_server: bool, no_server: bool) {
     });
 
     if is_server {
-        crate::common::set_server_running(true);
-        std::thread::spawn(move || {
-            if let Err(err) = crate::ipc::start("") {
-                log::error!("Failed to start ipc: {}", err);
-                if crate::is_server() {
-                    log::error!("ipc is occupied by another process, try kill it");
-                    std::thread::spawn(stop_main_window_process).join().ok();
-                }
-                std::process::exit(-1);
+        #[cfg(windows)]
+        if !crate::is_server() {
+            if let Err(err) = start_gui_ipc().await {
+                log::error!("Local hosting unavailable: failed to start GUI IPC listener: {err:#}");
+                return;
             }
-        });
+        }
+        crate::common::set_server_running(true);
+        if !cfg!(windows) || crate::is_server() {
+            std::thread::spawn(move || {
+                if let Err(err) = crate::ipc::start("") {
+                    log::error!("Failed to start ipc: {}", err);
+                    if crate::is_server() {
+                        #[cfg(windows)]
+                        {
+                            const MAIN_IPC_STARTUP_GRACE: Duration = Duration::from_secs(1);
+                            // Give the GUI time to arrange its replacement before forced takeover.
+                            std::thread::sleep(MAIN_IPC_STARTUP_GRACE);
+                            match crate::ipc::start("") {
+                                Ok(()) => return,
+                                Err(err) => log::error!("Failed to retry ipc startup: {err}"),
+                            }
+                        }
+                        log::error!("ipc is occupied by another process, try kill it");
+                        std::thread::spawn(stop_main_window_process).join().ok();
+                    }
+                    std::process::exit(-1);
+                }
+            });
+        }
         // Warm the DRM availability cache before any client connects, so the first connection does
         // not race a cold `_drm` probe and ship an empty display list ("No displays" + retry).
         // X11 is skipped -- probing there makes the root service open DRM readers for a path this
@@ -707,6 +732,7 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         wait_initial_config_sync().await;
+        allow_err!(crate::trusted_devices::initialize());
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
         #[cfg(feature = "hwcodec")]
@@ -720,11 +746,21 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                         match data {
                             Data::SyncConfig(Some(configs)) => {
                                 let (config, config2) = *configs;
-                                if Config::set(config) {
-                                    log::info!("config synced");
-                                }
-                                if Config2::set(config2) {
-                                    log::info!("config2 synced");
+                                #[cfg(target_os = "windows")]
+                                allow_err!(
+                                    crate::trusted_devices::config::update(move || {
+                                        crate::trusted_devices::config::sync_config(config, config2)
+                                    })
+                                    .await
+                                );
+                                #[cfg(not(target_os = "windows"))]
+                                {
+                                    if Config::set(config) {
+                                        log::info!("config synced");
+                                    }
+                                    if Config2::set(config2) {
+                                        log::info!("config2 synced");
+                                    }
                                 }
                             }
                             _ => {}
@@ -747,6 +783,13 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             }
         }
     }
+}
+
+#[cfg(windows)]
+async fn start_gui_ipc() -> ResultType<()> {
+    let incoming = crate::ipc::new_listener("").await?;
+    tokio::spawn(crate::ipc::start_with_listener("", incoming));
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -833,7 +876,7 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
     use hbb_common::sleep;
     for i in 1..=tries {
         sleep(i as f32 * CONFIG_SYNC_INTERVAL_SECS).await;
-        match crate::ipc::connect_service(1000).await {
+        match crate::ipc::connect_trusted_device_service(1000).await {
             Ok(mut conn) => {
                 if !synced {
                     if conn.send(&Data::SyncConfig(None)).await.is_ok() {
@@ -845,16 +888,25 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                     #[cfg(target_os = "macos")]
                                     let _chk_pk = crate::CheckIfResendPk::new();
                                     if !config.is_empty() {
-                                        if cfg0.0 != config {
-                                            cfg0.0 = config.clone();
-                                            Config::set(config);
-                                            log::info!("sync config from root");
+                                        let result =
+                                            crate::trusted_devices::config::update(move || {
+                                                crate::trusted_devices::config::sync_config(
+                                                    config.clone(),
+                                                    config2.clone(),
+                                                )?;
+                                                Ok((config, config2))
+                                            })
+                                            .await;
+                                        match result {
+                                            Ok(configs) => cfg0 = configs,
+                                            Err(error) => {
+                                                crate::trusted_devices::config::log_sync_error(
+                                                    error,
+                                                );
+                                                continue;
+                                            }
                                         }
-                                        if cfg0.1 != config2 {
-                                            cfg0.1 = config2.clone();
-                                            Config2::set(config2);
-                                            log::info!("sync config2 from root");
-                                        }
+                                        log::info!("sync config from root");
                                     } else {
                                         // only on macos, because this issue was only reproduced on macos
                                         #[cfg(target_os = "macos")]
@@ -895,7 +947,7 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                         match conn.send(&Data::SyncConfig(Some(cfg.clone().into()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
-                                match crate::ipc::connect_service(1000).await {
+                                match crate::ipc::connect_trusted_device_service(1000).await {
                                     Ok(mut _conn) => {
                                         conn = _conn;
                                         log::info!("reconnected to ipc_service");
@@ -904,9 +956,18 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                 }
                             }
                             _ => {
-                                cfg0 = cfg;
-                                conn.next_timeout(1000).await.ok();
-                                is_root_config_empty = false;
+                                match conn.next_timeout(1000).await {
+                                    Ok(Some(Data::SyncConfig(None))) => {
+                                        cfg0 = cfg;
+                                        is_root_config_empty = false;
+                                    }
+                                    Ok(Some(Data::SecurityConfigError(error))) => {
+                                        crate::trusted_devices::config::log_sync_error(error)
+                                    }
+                                    _ => crate::trusted_devices::config::log_sync_error(
+                                        "Host did not confirm configuration sync",
+                                    ),
+                                }
                             }
                         }
                     }
@@ -937,5 +998,64 @@ pub async fn stop_main_window_process() {
         if let Err(e) = crate::platform::try_kill_rustdesk_main_window_process() {
             log::error!("kill failed: {}", e);
         }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_gui_startup_tests {
+    use super::*;
+    use parity_tokio_ipc::{Endpoint, SecurityAttributes};
+    use std::{os::windows::io::AsRawHandle, process::Command};
+    use windows::Win32::{
+        Foundation::{HANDLE, WAIT_OBJECT_0},
+        System::Threading::WaitForSingleObject,
+    };
+
+    const CHILD_TEST: &str = "RUSTDESK_TEST_GUI_IPC_CHILD";
+    const CHILD_TIMEOUT_MS: u32 = 10_000;
+    // An unmatched test filter exits with zero without running the child assertions.
+    const CHILD_SUCCESS_EXIT_CODE: i32 = 42;
+
+    #[test]
+    fn windows_gui_survives_ipc_bind_failure() {
+        if std::env::var_os(CHILD_TEST).is_some() {
+            *hbb_common::config::APP_NAME.write().unwrap() =
+                format!("RustDesk-ipc-test-{}", std::process::id());
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let _incoming = runtime.block_on(async {
+                let mut endpoint = Endpoint::new(Config::ipc_path(""));
+                endpoint
+                    .set_security_attributes(SecurityAttributes::allow_everyone_create().unwrap());
+                endpoint.incoming().unwrap()
+            });
+            start_server(true, false);
+            assert!(!crate::common::is_server_running());
+            std::process::exit(CHILD_SUCCESS_EXIT_CODE);
+        }
+
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "server::windows_gui_startup_tests::windows_gui_survives_ipc_bind_failure",
+                "--nocapture",
+            ])
+            .env(CHILD_TEST, "1")
+            .spawn()
+            .unwrap();
+        let result =
+            unsafe { WaitForSingleObject(HANDLE(child.as_raw_handle()), CHILD_TIMEOUT_MS) };
+        if result != WAIT_OBJECT_0 {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("GUI IPC startup test timed out or failed to wait: {result:?}");
+        }
+        assert_eq!(
+            child.wait().unwrap().code(),
+            Some(CHILD_SUCCESS_EXIT_CODE),
+            "GUI subprocess did not complete the startup assertions"
+        );
     }
 }

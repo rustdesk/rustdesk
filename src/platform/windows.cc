@@ -15,6 +15,23 @@
 #include <sddl.h>
 #include <memory>
 
+#ifdef RUSTDESK_SCITER
+// Share the runner's service operations without loading either UI framework.
+#include "../../flutter/windows/runner/service_control.h"
+
+extern "C" DWORD run_service_control()
+{
+    int count = 0;
+    wchar_t** args = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (!args) {
+        return GetLastError();
+    }
+    const DWORD result = service_control::RunCommand(count, args);
+    LocalFree(args);
+    return result;
+}
+#endif
+
 extern "C" uint32_t get_session_user_info(PWSTR bufin, uint32_t nin, uint32_t id);
 
 void flog(char const *fmt, ...)

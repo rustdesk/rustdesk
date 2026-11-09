@@ -98,10 +98,12 @@ pub struct Remote<T: InvokeUiSession> {
     elevation_requested: bool,
     peer_info: ParsedPeerInfo,
     video_threads: HashMap<usize, VideoThread>,
+    last_auto_fps: Option<usize>,
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
     sent_close_reason: bool,
     cursor_dedupe: CursorDedupe,
+    trusted_device: crate::trusted_devices::client::Session,
 }
 
 #[derive(Default)]
@@ -150,10 +152,12 @@ impl<T: InvokeUiSession> Remote<T> {
             elevation_requested: false,
             peer_info: Default::default(),
             video_threads: Default::default(),
+            last_auto_fps: None,
             chroma: Default::default(),
             last_record_state: false,
             sent_close_reason: false,
             cursor_dedupe: Default::default(),
+            trusted_device: Default::default(),
         }
     }
 
@@ -207,6 +211,22 @@ impl<T: InvokeUiSession> Remote<T> {
                     .unwrap()
                     .set_connected();
                 let is_secured = peer.is_secured();
+                let trust = crate::trusted_devices::client::Session::new(
+                    &self.handler.lc.read().unwrap(),
+                    is_secured,
+                    pk.as_deref(),
+                );
+                match trust {
+                    Ok(trust) => {
+                        self.trusted_device = trust;
+                        self.handler.lc.write().unwrap().enable_trusted_devices = false;
+                    }
+                    Err(error) => {
+                        self.handler.on_error(&error.to_string());
+                        self.handle_disconnected(round);
+                        return;
+                    }
+                }
                 // Only WebRTC needs refining: its label names the transport that won the race,
                 // not the family ICE ended up nominating, and it is the one path where the two
                 // can disagree with the address the rendezvous observed.
@@ -382,7 +402,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.video_threads.iter().for_each(|(_, v)| {
                                 *v.frame_count.write().unwrap() = 0;
                             });
-                            self.fps_control(direct, fps.clone());
+                            self.fps_control(direct, fps.clone(), &mut peer).await;
                             let chroma = self.chroma.read().unwrap().clone();
                             let chroma = match chroma {
                                 Some(Chroma::I444) => "4:4:4",
@@ -428,6 +448,19 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         }
         self.handle_disconnected(round);
+        #[cfg(target_os = "android")]
+        for job in &mut self.write_jobs {
+            if let Err(error) = job.cancel_document().await {
+                const CLEANUP_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(60);
+                hbb_common::throttled_log!(
+                    CLEANUP_ERROR_LOG_INTERVAL,
+                    warn,
+                    "Failed to clean up document transfer {} on disconnect: {}",
+                    job.id(),
+                    error
+                );
+            }
+        }
     }
 
     fn handle_disconnected(&self, round: u32) {
@@ -729,7 +762,14 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             Data::Login((os_username, os_password, password, remember)) => {
                 self.handler
-                    .handle_login_from_ui(os_username, os_password, password, remember, peer)
+                    .handle_login_from_ui(
+                        os_username,
+                        os_password,
+                        password,
+                        remember,
+                        &mut self.trusted_device,
+                        peer,
+                    )
                     .await;
             }
             #[cfg(all(target_os = "windows", not(feature = "flutter")))]
@@ -758,6 +798,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
             }
             Data::Message(msg) => {
+                let msg = self.trusted_device.outgoing(msg);
                 // The Flutter clipboard broadcast is process-wide, so a clipboard can reach this
                 // round's queue before the round has logged in; it is dropped here, on the round
                 // itself.
@@ -787,6 +828,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.initial_clipboard_pending = false;
                     }
                     Some(message::Union::Misc(misc)) => match misc.union {
+                        Some(misc::Union::Option(ref option)) => {
+                            if option.custom_fps > 0 {
+                                self.last_auto_fps = None;
+                            }
+                        }
                         Some(misc::Union::RefreshVideo(_)) => {
                             self.video_threads.iter().for_each(|(_, v)| {
                                 *v.discard_queue.write().unwrap() = true;
@@ -809,7 +855,16 @@ impl<T: InvokeUiSession> Remote<T> {
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     let to = match r#type {
-                        fs::JobType::Generic => fs::DataSource::FilePath(PathBuf::from(&to)),
+                        fs::JobType::Generic => {
+                            if let Err(err) = fs::download::validate_download_name(
+                                &path,
+                                self.handler.peer_platform() == "Windows",
+                            ) {
+                                self.handle_job_status(id, -1, Some(err.to_string()));
+                                return true;
+                            }
+                            fs::DataSource::FilePath(PathBuf::from(&to))
+                        }
                         fs::JobType::Printer => {
                             fs::DataSource::MemoryCursor(std::io::Cursor::new(Vec::new()))
                         }
@@ -829,7 +884,33 @@ impl<T: InvokeUiSession> Remote<T> {
                             .await
                     );
                 } else {
-                    match fs::TransferJob::new_read(
+                    #[cfg(target_os = "android")]
+                    let result = {
+                        let source = fs::DataSource::FilePath(PathBuf::from(&path));
+                        let destination = to.clone();
+                        let read = move || {
+                            fs::TransferJob::new_read(
+                                id,
+                                r#type,
+                                destination,
+                                source,
+                                file_num,
+                                include_hidden,
+                                is_remote,
+                                od,
+                            )
+                        };
+                        if fs::android::is_path(path.as_ref()) {
+                            tokio::task::spawn_blocking(read)
+                                .await
+                                .map_err(hbb_common::anyhow::Error::from)
+                                .and_then(|result| result)
+                        } else {
+                            read()
+                        }
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::TransferJob::new_read(
                         id,
                         r#type,
                         to.clone(),
@@ -838,7 +919,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         include_hidden,
                         is_remote,
                         od,
-                    ) {
+                    );
+                    match result {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -899,7 +981,33 @@ impl<T: InvokeUiSession> Remote<T> {
                     job.is_last_job = true;
                     self.write_jobs.push(job);
                 } else {
-                    match fs::TransferJob::new_read(
+                    #[cfg(target_os = "android")]
+                    let result = {
+                        let source = fs::DataSource::FilePath(PathBuf::from(&path));
+                        let destination = to.clone();
+                        let read = move || {
+                            fs::TransferJob::new_read(
+                                id,
+                                r#type,
+                                destination,
+                                source,
+                                file_num,
+                                include_hidden,
+                                is_remote,
+                                od,
+                            )
+                        };
+                        if fs::android::is_path(path.as_ref()) {
+                            tokio::task::spawn_blocking(read)
+                                .await
+                                .map_err(hbb_common::anyhow::Error::from)
+                                .and_then(|result| result)
+                        } else {
+                            read()
+                        }
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::TransferJob::new_read(
                         id,
                         r#type,
                         to.clone(),
@@ -908,7 +1016,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         include_hidden,
                         is_remote,
                         od,
-                    ) {
+                    );
+                    match result {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -1060,7 +1169,21 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.remove_jobs
                         .insert(id, RemoveJob::new(Vec::new(), path, sep, is_remote));
                 } else {
-                    match fs::get_recursive_files(&path, include_hidden) {
+                    #[cfg(target_os = "android")]
+                    let result = if fs::android::is_path(path.as_ref()) {
+                        let path = path.clone();
+                        tokio::task::spawn_blocking(move || {
+                            fs::get_recursive_files(&path, include_hidden)
+                        })
+                        .await
+                        .map_err(hbb_common::anyhow::Error::from)
+                        .and_then(|result| result)
+                    } else {
+                        fs::get_recursive_files(&path, include_hidden)
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::get_recursive_files(&path, include_hidden);
+                    match result {
                         Ok(entries) => {
                             self.handler.update_folder_files(
                                 id,
@@ -1106,7 +1229,18 @@ impl<T: InvokeUiSession> Remote<T> {
                     msg_out.set_file_action(file_action);
                     allow_err!(peer.send(&msg_out).await);
                 } else {
-                    match fs::remove_file(&path) {
+                    #[cfg(target_os = "android")]
+                    let result = if fs::android::is_path(path.as_ref()) {
+                        tokio::task::spawn_blocking(move || fs::remove_file(&path))
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                    } else {
+                        fs::remove_file(&path)
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::remove_file(&path);
+                    match result {
                         Err(err) => {
                             self.handle_job_status(id, file_num, Some(err.to_string()));
                         }
@@ -1128,7 +1262,18 @@ impl<T: InvokeUiSession> Remote<T> {
                     msg_out.set_file_action(file_action);
                     allow_err!(peer.send(&msg_out).await);
                 } else {
-                    match fs::create_dir(&path) {
+                    #[cfg(target_os = "android")]
+                    let result = if fs::android::is_path(path.as_ref()) {
+                        tokio::task::spawn_blocking(move || fs::create_dir(&path))
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                    } else {
+                        fs::create_dir(&path)
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::create_dir(&path);
+                    match result {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -1151,6 +1296,18 @@ impl<T: InvokeUiSession> Remote<T> {
                     msg_out.set_file_action(file_action);
                     allow_err!(peer.send(&msg_out).await);
                 } else {
+                    #[cfg(target_os = "android")]
+                    let err = if fs::android::is_path(path.as_ref()) {
+                        tokio::task::spawn_blocking(move || fs::rename_file(&path, &new_name))
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                    } else {
+                        fs::rename_file(&path, &new_name)
+                    }
+                    .err()
+                    .map(|e| e.to_string());
+                    #[cfg(not(target_os = "android"))]
                     let err = fs::rename_file(&path, &new_name)
                         .err()
                         .map(|e| e.to_string());
@@ -1285,6 +1442,12 @@ impl<T: InvokeUiSession> Remote<T> {
         msg_out.set_file_action(file_action);
         allow_err!(peer.send(&msg_out).await);
         if let Some(job) = fs::remove_job(id, &mut self.write_jobs) {
+            #[cfg(target_os = "android")]
+            let mut job = job;
+            #[cfg(target_os = "android")]
+            if let Err(error) = job.cancel_document().await {
+                self.handle_job_status(id, job.file_num(), Some(error.to_string()));
+            }
             job.remove_download_file();
         }
         let _ = fs::remove_job(id, &mut self.read_jobs);
@@ -1377,7 +1540,12 @@ impl<T: InvokeUiSession> Remote<T> {
     // Currently, this function only considers decoding speed and queue length, not network delay.
     // The controlled end can consider auto fps as the maximum decoding fps.
     #[inline]
-    fn fps_control(&mut self, direct: bool, real_fps_map: HashMap<usize, i32>) {
+    async fn fps_control(
+        &mut self,
+        direct: bool,
+        real_fps_map: HashMap<usize, i32>,
+        peer: &mut Stream,
+    ) {
         self.video_threads.iter_mut().for_each(|(k, v)| {
             let real_fps = real_fps_map.get(k).cloned().unwrap_or_default();
             if real_fps == 0 {
@@ -1417,7 +1585,7 @@ impl<T: InvokeUiSession> Remote<T> {
         if limited_fps > custom_fps {
             limited_fps = custom_fps;
         }
-        let last_auto_fps = self.handler.lc.read().unwrap().last_auto_fps.clone();
+        let last_auto_fps = self.last_auto_fps;
         let displays = self.video_threads.keys().cloned().collect::<Vec<_>>();
         let mut fps_trending = |display: usize| {
             let thread = self.video_threads.get_mut(&display)?;
@@ -1463,9 +1631,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 });
                 let mut msg = Message::new();
                 msg.set_misc(misc);
-                self.sender.send(Data::Message(msg)).ok();
+                // Send inline so a queued manual FPS update is applied after this decision.
+                allow_err!(peer.send(&msg).await);
                 log::info!("Set fps to {}", auto_fps);
-                self.handler.lc.write().unwrap().last_auto_fps = Some(auto_fps);
+                self.last_auto_fps = Some(auto_fps);
             }
         }
         // send refresh
@@ -1562,18 +1731,24 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Hash(hash)) => {
                     if !self
                         .handler
-                        .handle_hash(&self.handler.password.clone(), hash, peer)
+                        .handle_hash(
+                            &self.handler.password.clone(),
+                            hash,
+                            &mut self.trusted_device,
+                            peer,
+                        )
                         .await
                     {
                         return false;
                     }
                 }
-                Some(message::Union::LoginResponse(lr)) => match lr.union {
+                Some(message::Union::LoginResponse(lr)) => match self
+                    .trusted_device
+                    .respond(lr, &self.handler)
+                    .await
+                    .union
+                {
                     Some(login_response::Union::Error(err)) => {
-                        if err == client::REQUIRE_2FA {
-                            self.handler.lc.write().unwrap().enable_trusted_devices =
-                                lr.enable_trusted_devices;
-                        }
                         if !self.handler.handle_login_error(&err) {
                             return false;
                         }
@@ -1782,6 +1957,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                     fs::transform_windows_path(&mut entries);
                                 }
                             }
+                            if fd.id <= 0 {
+                                if let Err(err) = fs::download::validate_listing(
+                                    &entries,
+                                    self.handler.peer_platform() == "Windows",
+                                ) {
+                                    self.handle_job_status(fd.id, -1, Some(err.to_string()));
+                                    return true;
+                                }
+                            }
                             // We cannot call cancel_transfer_job/handle_job_status while holding
                             // a mutable borrow from fs::get_job(&mut self.write_jobs), so defer
                             // the error handling until after the borrow scope ends.
@@ -1877,11 +2061,26 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 crate::is_support_file_transfer_resume_num(
                                                     peer_ver,
                                                 );
-                                            match fs::is_write_need_confirmation(
-                                                is_support_resume && job.is_resume,
-                                                &write_path,
-                                                &digest,
-                                            ) {
+                                            #[cfg(target_os = "android")]
+                                            let digest_result = if job.is_document() {
+                                                let path = write_path.clone();
+                                                let digest = digest.clone();
+                                                let resume = is_support_resume && job.is_resume;
+                                                tokio::task::spawn_blocking(move || {
+                                                    fs::is_write_need_confirmation(
+                                                        resume, &path, &digest,
+                                                    )
+                                                })
+                                                .await
+                                                .map_err(hbb_common::anyhow::Error::from)
+                                                .and_then(|result| result)
+                                            } else {
+                                                job.download_digest(is_support_resume, &digest)
+                                            };
+                                            #[cfg(not(target_os = "android"))]
+                                            let digest_result =
+                                                job.download_digest(is_support_resume, &digest);
+                                            match digest_result {
                                                 Ok(res) => match res {
                                                     DigestCheckResult::IsSame => {
                                                         let req = FileTransferSendConfirmRequest {
@@ -1938,13 +2137,19 @@ impl<T: InvokeUiSession> Remote<T> {
                                                         union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                                                         ..Default::default()
                                                     };
-                                                        job.confirm(&req).await;
+                                                        // This did not approve replacing an existing local file.
                                                         let msg = new_send_confirm(req);
                                                         allow_err!(peer.send(&msg).await);
                                                     }
                                                 },
                                                 Err(err) => {
-                                                    println!("error receiving digest: {}", err);
+                                                    self.cancel_transfer_job(digest.id, peer).await;
+                                                    self.handle_job_status(
+                                                        digest.id,
+                                                        -1,
+                                                        Some(err.to_string()),
+                                                    );
+                                                    return true;
                                                 }
                                             }
                                         }
@@ -1953,13 +2158,18 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Block(block)) => {
+                            let id = block.id;
+                            let mut write_error = None;
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                                if let Err(_err) = job.write(block).await {
-                                    // to-do: add "skip" for writing job
-                                }
+                                let result = job.write(block).await;
                                 if job.r#type == fs::JobType::Generic {
+                                    write_error = result.err().map(|err| err.to_string());
                                     self.update_jobs_status();
                                 }
+                            }
+                            if let Some(err) = write_error {
+                                self.cancel_transfer_job(id, peer).await;
+                                self.handle_job_status(id, -1, Some(err));
                             }
                         }
                         Some(file_response::Union::Done(d)) => {
@@ -1967,8 +2177,17 @@ impl<T: InvokeUiSession> Remote<T> {
                             let mut job_type = fs::JobType::Generic;
                             let mut printer_data = None;
                             if let Some(job) = fs::remove_job(d.id, &mut self.write_jobs) {
-                                job.modify_time();
-                                err = job.job_error();
+                                #[cfg(target_os = "android")]
+                                let mut job = job;
+                                err = job
+                                    .finish_download()
+                                    .err()
+                                    .map(|err| err.to_string())
+                                    .or_else(|| job.job_error());
+                                #[cfg(target_os = "android")]
+                                if let Err(error) = job.finish_document().await {
+                                    err = Some(error.to_string());
+                                }
                                 job_type = job.r#type;
                                 printer_data = match job.get_buf_data().await {
                                     Ok(d) => d,
@@ -2016,6 +2235,20 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Error(e)) => {
+                            #[cfg(target_os = "android")]
+                            if let Some(job) = fs::get_job(e.id, &mut self.write_jobs) {
+                                if let Err(error) = job.cancel_document().await {
+                                    const CLEANUP_ERROR_LOG_INTERVAL: Duration =
+                                        Duration::from_secs(60);
+                                    hbb_common::throttled_log!(
+                                        CLEANUP_ERROR_LOG_INTERVAL,
+                                        warn,
+                                        "Failed to clean up document transfer {}: {}",
+                                        e.id,
+                                        error
+                                    );
+                                }
+                            }
                             let job_type = fs::remove_job(e.id, &mut self.write_jobs)
                                 .or_else(|| fs::remove_job(e.id, &mut self.read_jobs))
                                 .map(|j| j.r#type)
@@ -2359,6 +2592,7 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn set_peer_info(&mut self, pi: &PeerInfo) {
+        self.last_auto_fps = None;
         self.peer_info.platform = pi.platform.clone();
 
         // Check features field for terminal support
@@ -2990,6 +3224,44 @@ mod tests {
             arrives(&mut far).await,
             "a clipboard after the login was held back"
         );
+    }
+
+    #[tokio::test]
+    async fn manual_fps_update_allows_the_same_automatic_limit_again() {
+        let (mut remote, mut peer, mut far) = remote_and_peer().await;
+        let (video_sender, _video_receiver) = std::sync::mpsc::channel();
+        remote.video_threads.insert(
+            0,
+            VideoThread {
+                video_queue: Arc::new(RwLock::new(ArrayQueue::new(client::VIDEO_QUEUE_SIZE))),
+                video_sender,
+                decode_fps: Arc::new(RwLock::new(Some(23))),
+                frame_count: Default::default(),
+                discard_queue: Default::default(),
+                fps_control: Default::default(),
+            },
+        );
+
+        for (manual_fps, expected) in [(None, 20), (Some(90), 90), (None, 20)] {
+            if let Some(fps) = manual_fps {
+                let lc = &remote.handler.lc;
+                let msg = lc.write().unwrap().set_custom_fps(fps, false);
+                remote
+                    .handle_msg_from_ui(Data::Message(msg), &mut peer)
+                    .await;
+            } else {
+                remote
+                    .fps_control(true, HashMap::from([(0, 20)]), &mut peer)
+                    .await;
+            }
+            let bytes = timeout(1000, far.next())
+                .await
+                .expect("FPS update was not sent")
+                .unwrap()
+                .unwrap();
+            let msg = Message::parse_from_bytes(&bytes).unwrap();
+            assert_eq!(msg.misc().option().custom_fps, expected);
+        }
     }
 }
 

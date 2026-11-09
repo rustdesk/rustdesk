@@ -25,6 +25,9 @@ use hwcodec::{
     },
 };
 
+#[cfg(all(test, windows, feature = "vram"))]
+mod tests;
+
 const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_FPS: i32 = 30;
 const DEFAULT_GOP: i32 = i32::MAX;
@@ -236,7 +239,7 @@ impl HwRamEncoder {
                 data.append(v);
                 Ok(data)
             }
-            Err(_) => Ok(Vec::<EncodeFrame>::new()),
+            Err(code) => Err(anyhow!("RAM encode failed: {}", code)),
         }
     }
 

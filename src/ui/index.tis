@@ -21,10 +21,11 @@ const disable_change_permanent_password = handler.get_builtin_option("disable-ch
 const disable_change_id = handler.get_builtin_option("disable-change-id") == "Y";
 
 // html min-width, min-height not working on mac, below works for all
+// Sciter applies Windows DPI scaling to these minimum dimensions.
 if (incoming_only) {
-  view.windowMinSize = (scaleIt(incoming_only_width), scaleIt((handler.is_installed() || disable_installation) ? 300 : 390));
+  view.windowMinSize = (incoming_only_width, (handler.is_installed() || disable_installation) ? 300 : 390);
 } else {
-  view.windowMinSize = (scaleIt(560), scaleIt(300));
+  view.windowMinSize = (560, 300);
 }
 
 var app;

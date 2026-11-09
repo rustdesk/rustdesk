@@ -968,6 +968,19 @@ pub async fn start_listen<T: InvokeUiCM>(
         }
     }
     cm.remove_connection(current_id, true);
+    for job in &mut write_jobs {
+        if let Err(error) = job.cancel_document().await {
+            const CLEANUP_ERROR_LOG_INTERVAL: std::time::Duration =
+                std::time::Duration::from_secs(60);
+            hbb_common::throttled_log!(
+                CLEANUP_ERROR_LOG_INTERVAL,
+                warn,
+                "Failed to clean up document transfer {} on disconnect: {}",
+                job.id(),
+                error
+            );
+        }
+    }
 }
 
 #[cfg(not(any(target_os = "ios")))]
@@ -1006,7 +1019,7 @@ async fn handle_fs(
             _ => None,
         };
         if let Some((path, id, file_num, allow_empty)) = checked {
-            if !crate::common::is_peer_path_allowed(path, allow_empty) {
+            if !crate::common::is_peer_path_allowed_async(path, allow_empty).await {
                 log::warn!("Reject file operation outside the app workspace: {}", path);
                 if id >= 0 {
                     send_raw(fs::new_error(id, "Permission denied", file_num), tx);
@@ -1018,12 +1031,10 @@ async fn handle_fs(
             let destination = std::path::Path::new(path)
                 .parent()
                 .map(|parent| parent.join(new_name));
-            let allowed = destination
-                .as_deref()
-                .and_then(std::path::Path::to_str)
-                .map_or(false, |path| {
-                    crate::common::is_peer_path_allowed(path, false)
-                });
+            let allowed = match destination.as_deref().and_then(std::path::Path::to_str) {
+                Some(path) => crate::common::is_peer_path_allowed_async(path, false).await,
+                None => false,
+            };
             if !allowed {
                 log::warn!(
                     "Reject rename destination outside the app workspace: {:?}",
@@ -1102,6 +1113,12 @@ async fn handle_fs(
         }
         ipc::FS::CancelWrite { id } => {
             if let Some(job) = fs::remove_job(id, write_jobs) {
+                #[cfg(target_os = "android")]
+                let mut job = job;
+                #[cfg(target_os = "android")]
+                if let Err(error) = job.cancel_document().await {
+                    send_raw(fs::new_error(id, error, job.file_num()), tx);
+                }
                 job.remove_download_file();
                 if let Some(tx) = tx_log {
                     if let Err(e) = tx.send(serialize_transfer_job(&job, false, true, "")) {
@@ -1112,6 +1129,13 @@ async fn handle_fs(
         }
         ipc::FS::WriteDone { id, file_num } => {
             if let Some(job) = fs::remove_job(id, write_jobs) {
+                #[cfg(target_os = "android")]
+                let mut job = job;
+                #[cfg(target_os = "android")]
+                if let Err(error) = job.finish_document().await {
+                    send_raw(fs::new_error(id, error, file_num), tx);
+                    return;
+                }
                 job.modify_time();
                 send_raw(fs::new_done(id, file_num), tx);
                 tx_log.map(|tx| tx.send(serialize_transfer_job(&job, true, false, "")));
@@ -1119,6 +1143,20 @@ async fn handle_fs(
         }
         ipc::FS::WriteError { id, file_num, err } => {
             if let Some(job) = fs::remove_job(id, write_jobs) {
+                #[cfg(target_os = "android")]
+                let mut job = job;
+                #[cfg(target_os = "android")]
+                if let Err(error) = job.cancel_document().await {
+                    const CLEANUP_ERROR_LOG_INTERVAL: std::time::Duration =
+                        std::time::Duration::from_secs(60);
+                    hbb_common::throttled_log!(
+                        CLEANUP_ERROR_LOG_INTERVAL,
+                        warn,
+                        "Failed to clean up document transfer {}: {}",
+                        id,
+                        error
+                    );
+                }
                 tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, false, &err)));
                 send_raw(fs::new_error(job.id(), err, file_num), tx);
             }
@@ -1169,7 +1207,20 @@ async fn handle_fs(
                 if let Some(file) = job.files().get(file_num as usize) {
                     if let fs::DataSource::FilePath(p) = &job.data_source {
                         let path = get_string(&fs::TransferJob::join(p, &file.name));
-                        match is_write_need_confirmation(is_resume, &path, &digest) {
+                        #[cfg(target_os = "android")]
+                        let digest_result = if fs::android::is_path(path.as_ref()) {
+                            spawn_blocking(move || {
+                                is_write_need_confirmation(is_resume, &path, &digest)
+                            })
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                        } else {
+                            is_write_need_confirmation(is_resume, &path, &digest)
+                        };
+                        #[cfg(not(target_os = "android"))]
+                        let digest_result = is_write_need_confirmation(is_resume, &path, &digest);
+                        match digest_result {
                             Ok(digest_result) => {
                                 job.set_digest(file_size, last_modified);
                                 match digest_result {
@@ -1598,7 +1649,11 @@ async fn read_empty_dirs(dir: &str, include_hidden: bool, tx: &UnboundedSender<D
 async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
     let path = {
         if dir.is_empty() {
-            Config::get_home()
+            #[cfg(target_os = "android")]
+            let home = fs::get_path(&fs::get_home_as_string());
+            #[cfg(not(target_os = "android"))]
+            let home = Config::get_home();
+            home
         } else {
             fs::get_path(dir)
         }
@@ -1676,6 +1731,14 @@ async fn remove_dir(path: String, id: i32, recursive: bool, tx: &UnboundedSender
     let path = fs::get_path(&path);
     handle_result(
         spawn_blocking(move || {
+            #[cfg(target_os = "android")]
+            if fs::android::is_path(&path) {
+                return if recursive {
+                    fs::android::remove_empty_tree(&fs::get_string(&path))
+                } else {
+                    fs::android::remove_empty_dir(&fs::get_string(&path))
+                };
+            }
             if recursive {
                 fs::remove_all_empty_dir(&path)
             } else {

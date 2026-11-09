@@ -25,8 +25,11 @@ const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + DISPLAY_LIST_TIMEOUT_MS 
     /// `next_raw_into`'s own cap.
 const BODY_READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// A repeat of the frame returned last goes out anyway once this much time has passed since
-/// then: a frame whose encode failed reaches the encoder again, even if nothing moves.
+/// then: a frame whose encode failed reaches the encoder again, even if nothing moves. At most
+/// MAX_REPEATS in a row: a hardware encoder gives up (switches) after 3 failed encodes, and every frame
+/// that reaches it restarts static_refresh, so an endless beat would re-encode a still screen for ever.
 const REPEAT_EVERY: Duration = Duration::from_secs(1);
+const MAX_REPEATS: u8 = 3;
 /// After this long without a new frame the screen reads as still, and the producer is asked for at
 /// most STILL_FPS, its old 33 ms tick: grabbing a still screen faster only feeds frame() repeats to
 /// drop. Three of those ticks, so a producer paced at STILL_FPS in motion never reads as still.
@@ -188,6 +191,8 @@ pub struct IpcDrmCapturer {
     spare: Vec<u8>,
     // When frame() last returned a frame; see REPEAT_EVERY.
     returned_at: Instant,
+    // Repeats sent since the last new picture; see MAX_REPEATS.
+    repeats: u8,
 }
 
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
@@ -530,6 +535,7 @@ impl IpcDrmCapturer {
                 got_frame: false,
                 spare: Vec::new(),
                 returned_at: Instant::now(),
+                repeats: 0,
             },
             displays,
             wire_idx,
@@ -699,9 +705,10 @@ impl TraitCapturer for IpcDrmCapturer {
                 return Err(io::Error::new(io::ErrorKind::Other, err));
             }
         };
-        if repeat && self.returned_at.elapsed() < REPEAT_EVERY {
+        if repeat && (self.returned_at.elapsed() < REPEAT_EVERY || self.repeats >= MAX_REPEATS) {
             return Err(io::ErrorKind::WouldBlock.into());
         }
+        self.repeats = if repeat { self.repeats + 1 } else { 0 };
         self.returned_at = Instant::now();
         Ok(Frame::PixelBuffer(PixelBuffer::new(
             &self.cur,
@@ -2518,6 +2525,7 @@ mod drm_capturer_tests {
             got_frame: false,
             spare: Vec::new(),
             returned_at: Instant::now(),
+            repeats: 0,
         }
     }
 
@@ -2780,7 +2788,7 @@ mod drm_capturer_tests {
     }
 
     #[test]
-    fn a_frame_equal_to_the_last_one_goes_out_once_a_second() {
+    fn a_frame_equal_to_the_last_one_goes_out_once_a_second_three_times() {
         let (still, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
         let (moved, _, _) = px_frame(&[&[1, 2, 3], &[4, 5, 7]], 0);
         let mut c = capturer_with(Some((w, h)));
@@ -2791,15 +2799,28 @@ mod drm_capturer_tests {
             c.frame(Duration::from_millis(50)),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock
         ));
-        // A second later it goes out again, in case its encode failed, and the second starts over.
+        // A second later it goes out again, in case its encode failed, and the second starts over,
+        // MAX_REPEATS times; then a still screen stays quiet until it changes.
+        for _ in 0..MAX_REPEATS {
+            std::thread::sleep(REPEAT_EVERY);
+            put_frame_with(&c, w, h, None, &still);
+            assert!(c.frame(Duration::from_millis(50)).is_ok());
+            put_frame_with(&c, w, h, None, &still);
+            assert!(matches!(
+                c.frame(Duration::from_millis(50)),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock
+            ));
+        }
         std::thread::sleep(REPEAT_EVERY);
-        put_frame_with(&c, w, h, None, &still);
-        assert!(c.frame(Duration::from_millis(50)).is_ok());
         put_frame_with(&c, w, h, None, &still);
         assert!(matches!(
             c.frame(Duration::from_millis(50)),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock
         ));
+        put_frame_with(&c, w, h, None, &moved);
+        assert!(c.frame(Duration::from_millis(50)).is_ok());
+        // A new picture starts the count over: its own repeat goes out again.
+        std::thread::sleep(REPEAT_EVERY);
         put_frame_with(&c, w, h, None, &moved);
         assert!(c.frame(Duration::from_millis(50)).is_ok());
     }
