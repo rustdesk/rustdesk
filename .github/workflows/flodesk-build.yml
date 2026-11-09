@@ -31,6 +31,11 @@ jobs:
           if ($d) { $d.FullName | Out-File -Append -Encoding utf8 $env:GITHUB_PATH }
       - uses: lukka/run-vcpkg@v11
         with: { vcpkgGitCommitId: "${{ env.VCPKG_COMMIT_ID }}", doNotCache: false }
+      - name: Install vcpkg dependencies
+        shell: bash
+        env: { VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static }
+        run: |
+          "$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
       - name: Verify ImageMagick + logo
         shell: bash
         run: |
@@ -87,7 +92,8 @@ jobs:
           git clone https://github.com/microsoft/vcpkg /opt/vcpkg && cd /opt/vcpkg && git checkout $VCPKG_COMMIT_ID && ./bootstrap-vcpkg.sh
           cd $GITHUB_WORKSPACE
           export VCPKG_ROOT=/opt/vcpkg ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}
-          for t in arm64-android armv7-android; do $VCPKG_ROOT/vcpkg install --triplet $t --x-install-root=$VCPKG_ROOT/installed; done
+          for t in arm64-android arm-neon-android; do $VCPKG_ROOT/vcpkg install --triplet $t --x-install-root=$VCPKG_ROOT/installed; done
+          ln -sfn $VCPKG_ROOT/installed/arm-neon-android $VCPKG_ROOT/installed/arm-android
           cd flutter && flutter pub get && cd ..
           ./flutter/ndk_arm64.sh && ./flutter/ndk_arm.sh
           mkdir -p flutter/android/app/src/main/jniLibs/{arm64-v8a,armeabi-v7a}
