@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Folder yang dipilih tidak kosong. Instalasi dapat menghapus data yang ada. Pertimbangkan untuk memilih folder lain."),
         ("Request approval", "Minta persetujuan"),
         ("Forever", "Selamanya"),
+        ("Enable Unicode input", ""),
+        ("unicode-input-tip", ""),
     ].iter().cloned().collect();
 }

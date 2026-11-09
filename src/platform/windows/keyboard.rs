@@ -5,7 +5,7 @@ use winapi::um::winuser::VK_PACKET;
 const HIGH_SURROGATES: std::ops::RangeInclusive<u16> = 0xD800..=0xDBFF;
 
 pub(crate) fn is_unicode_packet(event: &Event) -> bool {
-    event.platform_code == VK_PACKET as u32
+    rdev::is_unicode_packet_enabled() && event.platform_code == VK_PACKET as u32
 }
 
 #[derive(Default)]

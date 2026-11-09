@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "所选文件夹不为空。安装可能删除现有数据。建议选择其他文件夹。"),
         ("Request approval", "请求批准"),
         ("Forever", "永久"),
+        ("Enable Unicode input", "启用 Unicode 输入"),
+        ("unicode-input-tip", "捕获 KeePassXC 自动输入等工具发送的 Unicode 文本。需要使用输入源 1。"),
     ].iter().cloned().collect();
 }

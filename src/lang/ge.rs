@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "არჩეული საქაღალდე ცარიელი არ არის. ინსტალაციამ შეიძლება წაშალოს არსებული მონაცემები. რეკომენდებულია სხვა საქაღალდის არჩევა."),
         ("Request approval", "დამტკიცების მოთხოვნა"),
         ("Forever", "სამუდამოდ"),
+        ("Enable Unicode input", ""),
+        ("unicode-input-tip", ""),
     ].iter().cloned().collect();
 }
