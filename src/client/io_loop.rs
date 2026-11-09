@@ -2919,6 +2919,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 } else {
                     #[cfg(all(feature = "vram", feature = "flutter"))]
                     handler.on_texture(display, _texture);
+                    #[cfg(all(target_os = "macos", feature = "hwcodec", feature = "flutter"))]
+                    handler.on_cv_pixel_buffer(display, _texture);
                 }
             },
         );
