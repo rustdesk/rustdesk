@@ -482,6 +482,24 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   bool _pendingDockingOptionSync = false;
   int _dockingOptionSyncSerial = 0;
   int _dragEpoch = 0;
+  // Lab build: in fullscreen the toolbar is fully hidden (no collapsed handle)
+  // and only appears while the mouse is at the docked edge, like AnyDesk.
+  final _edgeRevealed = false.obs;
+  bool _hoveredSinceReveal = false;
+  Timer? _edgeRevealTimer;
+
+  void _revealEdgeToolbar() {
+    _hoveredSinceReveal = false;
+    _edgeRevealed.value = true;
+    // If the mouse touched the edge but never moved onto the toolbar, hide it
+    // again shortly instead of leaving it on screen.
+    _edgeRevealTimer?.cancel();
+    _edgeRevealTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted && !_hoveredSinceReveal && _dragging.isFalse) {
+        _edgeRevealed.value = false;
+      }
+    });
+  }
 
   int get windowId => stateGlobal.windowId;
 
@@ -655,6 +673,8 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       if (enter) {
         triggerAutoHide();
         _isCursorOverImage = true;
+        // Back on the remote screen: hide the fullscreen toolbar again.
+        if (_dragging.isFalse) _edgeRevealed.value = false;
       } else {
         _isCursorOverImage = false;
       }
@@ -678,6 +698,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   @override
   dispose() {
     ++_dockingOptionSyncSerial;
+    _edgeRevealTimer?.cancel();
     widget.onEnterOrLeaveImageCleaner(identityHashCode(this));
     super.dispose();
   }
@@ -696,6 +717,10 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       }
       final edge = _edge.value;
       final isHorizontal = _isHorizontalEdge(edge);
+      final fullscreen = stateGlobal.fullscreen.isTrue;
+      if (fullscreen && _edgeRevealed.isFalse && _dragging.isFalse) {
+        return _buildEdgeRevealTrigger(edge, isHorizontal);
+      }
 
       // Measure the live toolbar after every layout so the preview ghost can
       // match its actual footprint (collapsed handle vs expanded toolbar).
@@ -712,7 +737,13 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         alignment: _alignmentForEdge(edge, _fraction.value),
         child: KeyedSubtree(
           key: _toolbarKey,
-          child: collapse.isFalse
+          child: fullscreen
+              ? MouseRegion(
+                  opaque: false,
+                  onEnter: (_) => _hoveredSinceReveal = true,
+                  child: _buildToolbar(context, edge, isHorizontal),
+                )
+              : collapse.isFalse
               ? _buildToolbar(context, edge, isHorizontal)
               : _buildDraggableCollapse(context, edge, isHorizontal),
         ),
@@ -738,6 +769,25 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
         ],
       );
     });
+  }
+
+  // A thin, invisible strip along the docked edge. It is translucent, so the
+  // remote screen underneath still gets every click and hover; touching it
+  // only reveals the toolbar.
+  Widget _buildEdgeRevealTrigger(_ToolbarEdge edge, bool isHorizontal) {
+    const double thickness = 4;
+    return Align(
+      alignment: _alignmentForEdge(edge, 0.5),
+      child: MouseRegion(
+        opaque: false,
+        hitTestBehavior: HitTestBehavior.translucent,
+        onEnter: (_) => _revealEdgeToolbar(),
+        child: SizedBox(
+          width: isHorizontal ? double.infinity : thickness,
+          height: isHorizontal ? thickness : double.infinity,
+        ),
+      ),
+    );
   }
 
   Widget _buildDragPreview(BuildContext context, _ToolbarEdge edge,
