@@ -105,14 +105,17 @@ class CmWindowDock extends ValueNotifier<bool> {
     }
   }
 
-  Future<void> dock() async {
+  Future<void> dock({bool manual = false}) async {
     if (!enabled || value || _transition != null) return;
     final model = gFFI.serverModel;
     final connected = model.clients.where((client) => !client.disconnected);
+    // Keep automatic folding from hiding requests that need attention, while
+    // allowing an explicit click even when only disconnected tabs remain.
     if (model.hideCm ||
-        connected.isEmpty ||
-        connected.any((client) =>
-            !client.authorized || client.incomingVoiceCall)) return;
+        (!manual &&
+            (connected.isEmpty ||
+                connected.any((client) =>
+                    !client.authorized || client.incomingVoiceCall)))) return;
     model.cmHiddenTimer?.cancel();
     model.cmHiddenTimer = null;
     _transition = _dock();
@@ -179,7 +182,7 @@ class CmWindowDockView extends StatelessWidget {
               await cmWindowDock.expand();
               await windowManager.focus();
             } else {
-              await cmWindowDock.dock();
+              await cmWindowDock.dock(manual: true);
             }
           },
           child: child!,

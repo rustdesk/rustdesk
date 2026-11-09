@@ -287,7 +287,7 @@ void main() {
     await initGlobalFFI();
     gFFI.serverModel.clients.add(
         Client(1, true, false, false, 'Peer', '123456789', true, true, true));
-    final dock = CmWindowDock();
+    final dock = cmWindowDock;
     var bounds = const Rect.fromLTWH(-1000, 200, 336, 280);
     // A frameless Windows window still has an OS minimum tracking width.
     var minimumWidth = isWindows ? 132.0 : 0.0;
@@ -334,7 +334,7 @@ void main() {
       messenger.setMockMethodCallHandler(channel, null);
       messenger.setMockMethodCallHandler(screenChannel, null);
       gFFI.serverModel.clients.clear();
-      dock.dispose();
+      dock.value = false;
       desktopType = oldDesktopType;
       isTest = oldIsTest;
     });
@@ -347,6 +347,27 @@ void main() {
       await dock.expand();
       expect(await windowManager.getBounds(),
           const Rect.fromLTWH(-376, 200, 336, 280));
+    }
+
+    await tester.pumpWidget(MaterialApp(
+        theme: MyTheme.lightTheme,
+        home: const CmWindowDockView(child: Text('Connection details'))));
+    for (final state in ['Close', 'Accept', 'Incoming call']) {
+      final client = gFFI.serverModel.clients.single;
+      client.disconnected = state == 'Close';
+      client.authorized = state != 'Accept';
+      client.incomingVoiceCall = state == 'Incoming call';
+      await dock.resizeExpanded(dock.expandedSize);
+      final expanded = await windowManager.getBounds();
+      await dock.dock();
+      expect(await windowManager.getBounds(), expanded);
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+      expect(await windowManager.getBounds(),
+          const Rect.fromLTWH(-76, 344, 36, 72), reason: state);
+      await tester.tap(find.byType(CmDockTab));
+      await tester.pumpAndSettle();
+      expect(await windowManager.getBounds(), expanded);
     }
   });
 
