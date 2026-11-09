@@ -8,13 +8,13 @@ class IosKeyboardEdit {
 
   final int backspaces;
   final String text;
-  // Local padding refill; this text must not be sent to the peer.
+  // Local controller correction; this text must not be sent to the peer.
   final TextEditingValue? localValue;
 }
 
 /// Converts the hidden iOS field into Backspace/text edits at the remote caret.
 /// Padding and active composition are local; the field is not the remote document.
-/// Native cursor navigation is outside the supported input flow.
+/// Native cursor navigation is ignored; selections needed by the IME are kept.
 class IosSoftKeyboardInput {
   static const _singleCharacterLength = 1;
 
@@ -35,6 +35,7 @@ class IosSoftKeyboardInput {
   }
 
   IosKeyboardEdit update(TextEditingValue value) {
+    final localValue = _clampSelection(value);
     final hadPrefix = _prefixLength != 0;
     final prefixBackspaces = _updatePrefix(value);
     final committed = _withoutComposingText(value);
@@ -42,7 +43,7 @@ class IosSoftKeyboardInput {
     if (committed == _committedText) {
       return IosKeyboardEdit(
           backspaces: prefixBackspaces,
-          localValue: _replenishPrefix(value, hadPrefix));
+          localValue: _replenishPrefix(value, hadPrefix) ?? localValue);
     }
     // Count graphemes, not UTF-16 units, to avoid extra Backspaces for emoji.
     final previous = _committedText.characters.toList();
@@ -57,7 +58,7 @@ class IosSoftKeyboardInput {
     return IosKeyboardEdit(
       backspaces: prefixBackspaces + previous.length - common,
       text: current.skip(common).join(),
-      localValue: _replenishPrefix(value, hadPrefix),
+      localValue: _replenishPrefix(value, hadPrefix) ?? localValue,
     );
   }
 
@@ -89,6 +90,27 @@ class IosSoftKeyboardInput {
           : TextRange.empty,
     );
     return _previousValue;
+  }
+
+  TextEditingValue? _clampSelection(TextEditingValue value) {
+    // This buffer is not the remote document. Keep navigation at the end, but
+    // do not rewrite text changes or active composition from the keyboard.
+    if (value.text != _previousValue.text ||
+        !value.selection.isValid ||
+        (value.isComposingRangeValid && !value.composing.isCollapsed)) {
+      return null;
+    }
+    final selection = value.selection;
+    if (selection.isCollapsed && selection.extentOffset == value.text.length) {
+      return null;
+    }
+    // iOS selects a range before deleting or replacing it; preserve those edits.
+    if (!selection.isCollapsed &&
+        selection.end >= math.min(_prefixLength, value.text.length)) {
+      return null;
+    }
+    return value.copyWith(
+        selection: TextSelection.collapsed(offset: value.text.length));
   }
 
   int _updatePrefix(TextEditingValue value) {

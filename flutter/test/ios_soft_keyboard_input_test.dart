@@ -29,6 +29,58 @@ void main() {
       verifyEditingAndReset);
   test('prefix deletion replenishes the native field after exhaustion',
       verifyPaddingExhaustion);
+  test('typing ignores native cursor movement inside the hidden field',
+      verifyInputAfterPaddingNavigation);
+  test('backspace ignores native cursor movement inside the hidden field',
+      verifyBackspaceAfterPaddingNavigation);
+}
+
+void verifyInputAfterPaddingNavigation() {
+  const typed = 'abcdef';
+  for (final offset in [0, sentinelLength + typed.length ~/ 2]) {
+    final input = IosSoftKeyboardInput(sentinel);
+    var value = editing('$sentinel$typed');
+    var remote = applyEdit('existing', input.update(value));
+    value = value.copyWith(selection: TextSelection.collapsed(offset: offset));
+    final navigation = input.update(value);
+    remote = applyEdit(remote, navigation);
+    if (navigation.localValue != null) {
+      value = navigation.localValue!;
+      remote = applyEdit(remote, input.update(value));
+    }
+    final caret = value.selection.extentOffset;
+    value = value.copyWith(
+      text: value.text.replaceRange(caret, caret, 'x'),
+      selection: TextSelection.collapsed(offset: caret + 1),
+    );
+    remote = applyEdit(remote, input.update(value));
+    expect(remote, 'existing${typed}x');
+  }
+}
+
+void verifyBackspaceAfterPaddingNavigation() {
+  final input = IosSoftKeyboardInput(sentinel);
+  var value = editing('${sentinel}abc');
+  var remote = applyEdit('existing', input.update(value));
+  value = value.copyWith(
+      selection: const TextSelection.collapsed(offset: sentinelLength));
+  final navigation = input.update(value);
+  remote = applyEdit(remote, navigation);
+  if (navigation.localValue != null) {
+    value = navigation.localValue!;
+    remote = applyEdit(remote, input.update(value));
+  }
+  final caret = value.selection.extentOffset;
+  final selected = value.copyWith(
+      selection: TextSelection(baseOffset: caret - 1, extentOffset: caret));
+  final selectionEdit = input.update(selected);
+  expect(selectionEdit.localValue, isNull);
+  remote = applyEdit(remote, selectionEdit);
+  final deleted = value.copyWith(
+      text: value.text.replaceRange(caret - 1, caret, ''),
+      selection: TextSelection.collapsed(offset: caret - 1));
+  remote = applyEdit(remote, input.update(deleted));
+  expect(remote, 'existingab');
 }
 
 void verifyPaddingExhaustion() {
