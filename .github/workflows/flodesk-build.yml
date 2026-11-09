@@ -23,9 +23,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: "${{ env.RUST_VERSION }}-x86_64-pc-windows-msvc" }
       - uses: Swatinem/rust-cache@v2
-      - run: choco install -y llvm imagemagick
+      - name: Install LLVM + ImageMagick
+        shell: pwsh
+        run: |
+          choco install -y llvm imagemagick --no-progress
+          $d = Get-ChildItem 'C:\Program Files\ImageMagick-*' -Directory | Select-Object -First 1
+          if ($d) { $d.FullName | Out-File -Append -Encoding utf8 $env:GITHUB_PATH }
       - uses: lukka/run-vcpkg@v11
         with: { vcpkgGitCommitId: "${{ env.VCPKG_COMMIT_ID }}", doNotCache: false }
+      - name: Verify ImageMagick + logo
+        shell: bash
+        run: |
+          ls -l flodesk/logo.png
+          magick --version | head -1
       - name: Rebrand
         shell: bash
         run: bash flodesk/rebrand.sh . flodesk/logo.png "$RENDEZVOUS" "$RS_KEY"
@@ -64,7 +74,13 @@ jobs:
       - run: |
           sudo apt-get update && sudo apt-get install -y imagemagick clang cmake ninja-build pkg-config nasm
           cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
+      - name: Verify ImageMagick + logo
+        shell: bash
+        run: |
+          ls -l flodesk/logo.png
+          convert --version | head -1
       - name: Rebrand
+        shell: bash
         run: bash flodesk/rebrand.sh . flodesk/logo.png "$RENDEZVOUS" "$RS_KEY"
       - name: "Build (vcpkg deps + native libs, mirrors upstream flutter-build.yml android job)"
         run: |

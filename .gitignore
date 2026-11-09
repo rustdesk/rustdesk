@@ -60,3 +60,6 @@ flutter/web/
 /third_party/libdrmtap/
 # Local git worktrees
 .worktrees/
+
+# FloDesk brand logo (upstream ignores *png)
+!flodesk/logo.png

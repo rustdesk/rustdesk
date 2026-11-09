@@ -6,6 +6,16 @@ RD=$(realpath "$1"); LOGO=$(realpath "$2"); HOST=${3:-}; KEY=${4:-}
 cd "$RD"
 sedi() { sed -i "$@"; }
 
+# --- 0) preflight: logo + real ImageMagick (Windows also ships an unrelated System32\convert.exe) ---
+[ -f "$LOGO" ] || { echo "FATAL: logo not found: $LOGO" >&2; exit 1; }
+IM=()
+if command -v magick >/dev/null 2>&1 && magick --version 2>/dev/null | grep -qi imagemagick; then IM=(magick)
+elif command -v convert >/dev/null 2>&1 && convert --version 2>/dev/null | grep -qi imagemagick; then IM=(convert)
+else echo "FATAL: ImageMagick not found (magick/convert; Windows convert.exe is not ImageMagick)" >&2; exit 1; fi
+dims=$("${IM[@]}" identify -format '%w %h' "$LOGO" 2>/dev/null || identify -format '%w %h' "$LOGO")
+set -- $dims; { [ "${1:-0}" -ge 512 ] && [ "${2:-0}" -ge 512 ]; } || { echo "FATAL: logo must be >=512x512 (got ${1:-?}x${2:-?})" >&2; exit 1; }
+echo "ImageMagick: ${IM[*]}; logo ${1}x${2}"
+
 # --- 1) names / ids (verified against upstream layout) ---
 sedi 's/RwLock::new("RustDesk"/RwLock::new("FloDesk"/' libs/hbb_common/src/config.rs
 sedi -e 's/^ProductName = .*/ProductName = "FloDesk"/' \
@@ -25,18 +35,18 @@ sedi -e 's/android:label="RustDesk"/android:label="فلو دسک"/' \
      flutter/android/app/src/main/AndroidManifest.xml
 
 # --- 2) icons ---
-convert "$LOGO" -define icon:auto-resize=256,128,64,48,32,16 res/icon.ico
+"${IM[@]}" "$LOGO" -define icon:auto-resize=256,128,64,48,32,16 res/icon.ico
 cp res/icon.ico flutter/windows/runner/resources/app_icon.ico
-convert "$LOGO" -resize 512x512 res/icon.png
-for s in 32 64 128; do convert "$LOGO" -resize ${s}x${s} res/${s}x${s}.png; done
-convert "$LOGO" -resize 256x256 res/128x128@2x.png
+"${IM[@]}" "$LOGO" -resize 512x512 res/icon.png
+for s in 32 64 128; do "${IM[@]}" "$LOGO" -resize ${s}x${s} res/${s}x${s}.png; done
+"${IM[@]}" "$LOGO" -resize 256x256 res/128x128@2x.png
 R=flutter/android/app/src/main/res
 declare -A L=([mdpi]=48 [hdpi]=72 [xhdpi]=96 [xxhdpi]=144 [xxxhdpi]=192)
 for d in "${!L[@]}"; do
   s=${L[$d]}; f=$((s*9/4)); in=$((f*60/100))   # adaptive: 108dp canvas, logo in safe zone
-  convert "$LOGO" -resize ${s}x${s} $R/mipmap-$d/ic_launcher.png
-  convert "$LOGO" -resize ${s}x${s} $R/mipmap-$d/ic_launcher_round.png
-  convert -size ${f}x${f} xc:none \( "$LOGO" -resize ${in}x${in} \) -gravity center -composite $R/mipmap-$d/ic_launcher_foreground.png
+  "${IM[@]}" "$LOGO" -resize ${s}x${s} $R/mipmap-$d/ic_launcher.png
+  "${IM[@]}" "$LOGO" -resize ${s}x${s} $R/mipmap-$d/ic_launcher_round.png
+  "${IM[@]}" -size ${f}x${f} xc:none \( "$LOGO" -resize ${in}x${in} \) -gravity center -composite $R/mipmap-$d/ic_launcher_foreground.png
 done
 sedi 's#>\#[0-9A-Fa-f]\{6,8\}<#>\#0F1115<#' $R/values/colors.xml 2>/dev/null || true
 mkdir -p flutter/assets && cp "$LOGO" flutter/assets/flodesk_logo.png
