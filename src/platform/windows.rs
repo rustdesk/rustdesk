@@ -71,7 +71,9 @@ use winapi::{
     },
 };
 use windows::Win32::{
-    Foundation::{CloseHandle as WinCloseHandle, HANDLE as WinHANDLE},
+    Foundation::{
+        CloseHandle as WinCloseHandle, ERROR_SERVICE_DOES_NOT_EXIST, HANDLE as WinHANDLE,
+    },
     Security::{
         GetTokenInformation as WinGetTokenInformation, IsWellKnownSid, TokenUser,
         WinLocalSystemSid, TOKEN_QUERY as WIN_TOKEN_QUERY, TOKEN_USER,
@@ -89,10 +91,12 @@ use windows::Win32::{
 use windows_service::{
     define_windows_service,
     service::{
-        ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus,
-        ServiceType,
+        ServiceAccess, ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState,
+        ServiceStatus, ServiceType,
     },
     service_control_handler::{self, ServiceControlHandlerResult},
+    service_manager::{ServiceManager, ServiceManagerAccess},
+    Error,
 };
 use winreg::{enums::*, RegKey};
 
@@ -3441,8 +3445,11 @@ copy /Y \"%RUSTDESK_OUTPUT_DIR%\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsof
 }
 
 pub fn install_service() -> bool {
+    let Some(_installing) = crate::platform::InstallingService::try_new() else {
+        log::trace!("Service installation is already in progress");
+        return true;
+    };
     log::info!("Installing service...");
-    let _installing = crate::platform::InstallingService::new();
     let (_, path, _, exe) = get_install_info();
     Config::set_option("stop-service".into(), "".into());
     let cmds = match get_install_service_commands(&path, &exe) {
@@ -4318,6 +4325,29 @@ pub fn is_service_running(service_name: &str) -> bool {
     unsafe {
         let service_name = wide_string(service_name);
         is_service_running_w(service_name.as_ptr() as _)
+    }
+}
+
+pub fn is_installed_daemon() -> bool {
+    const SERVICE_QUERY_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+    let service_name = crate::get_app_name();
+    let service = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
+        .and_then(|manager| manager.open_service(&service_name, ServiceAccess::QUERY_STATUS));
+    match service {
+        Ok(_) => true,
+        Err(Error::Winapi(error))
+            if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST.0 as i32) =>
+        {
+            false
+        }
+        Err(error) => {
+            hbb_common::throttled_log!(
+                SERVICE_QUERY_LOG_INTERVAL,
+                error,
+                "Failed to query service registration for {service_name}; suppressing installation tip: {error:?}"
+            );
+            true
+        }
     }
 }
 

@@ -733,7 +733,7 @@ class App: Reactor.Component
                     {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() && !disable_installation ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
-                    {!service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
+                    {(!is_win || (!outgoing_only && !disable_installation)) && !service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && (!is_win || (!software_update_url && !handler.is_installed_lower_version())) && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
                     {system_error ? <SystemError /> : ""}
                     {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
                     {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
@@ -922,7 +922,11 @@ class InstallDaemon: Reactor.Component {
     }
 
     event click $(#install-me) {
-        handler.is_installed_daemon(true);
+        if (is_win) {
+            handler.set_option("stop-service", default_option_no);
+        } else {
+            handler.is_installed_daemon(true);
+        }
     }
 }
 
