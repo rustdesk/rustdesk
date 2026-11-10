@@ -732,21 +732,13 @@ fn start_grab_loop() {
         let try_handle_keyboard = move |event: Event, key: Key, is_press: bool| -> Option<Event> {
             #[cfg(windows)]
             if crate::platform::windows::keyboard::is_unicode_packet(&event) {
-                // VK_PACKET forwarding is supported only with Input Source 1.
-                // Source 2 forwards physical keys asynchronously through Flutter,
-                // while packet text would be sent directly from this native hook.
-                // These paths cannot preserve text ordering relative to Tab/Enter:
-                // characters may reach the wrong field or follow an early submit.
-                // Use Source 1 so text and control keys share the native input path.
+                // Source 2 sends physical keys asynchronously through Flutter.
+                // Use Source 1 to preserve packet text ordering with Tab/Enter.
                 #[cfg(feature = "flutter")]
                 if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
                     return Some(event);
                 }
-                return if client::handle_unicode_packet(&event) {
-                    None
-                } else {
-                    Some(event)
-                };
+                return (!client::handle_unicode_packet(&event)).then_some(event);
             }
 
             // fix #2211：CAPS LOCK don't work
