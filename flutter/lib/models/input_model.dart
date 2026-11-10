@@ -18,6 +18,7 @@ import '../../models/platform_model.dart';
 import '../../models/shortcut_model.dart';
 import '../../models/state_model.dart';
 import '../common/widgets/keyboard_shortcuts/shortcut_utils.dart';
+import 'ime_text_bridge.dart';
 import 'input_modifier_utils.dart';
 import 'local_flutter_shortcuts.dart';
 import 'relative_mouse_model.dart';
@@ -606,6 +607,39 @@ class InputModel {
       keyboardMode = await bind.sessionGetKeyboardMode(sessionId: sessionId) ??
           kKeyLegacyMode;
     }
+    _syncImeTextBridge();
+  }
+
+  // Text from input methods that Flutter delivers only as text input (Unikey,
+  // EVKey, ... on Windows). See ImeTextBridge.
+  late final ImeTextBridge _imeTextBridge =
+      ImeTextBridge(onText: _sendImeText);
+  final OrderedSender _orderedSender = OrderedSender();
+  bool _viewFocused = false;
+
+  void _syncImeTextBridge() {
+    // Checked first so other platforms never evaluate the session state below.
+    final on = _viewFocused &&
+        isWindows &&
+        isDesktop &&
+        shouldUseImeTextBridge(
+          isWindows: true,
+          inputSourceFlutter: isInputSourceFlutter,
+          keyboardMode: keyboardMode,
+          keyboardPerm: keyboardPerm,
+          viewOnly: isViewOnly,
+        );
+    if (on) {
+      _imeTextBridge.attach();
+    } else {
+      _imeTextBridge.detach();
+    }
+  }
+
+  void _sendImeText(String text) {
+    if (!keyboardPerm || isViewOnly) return;
+    _orderedSender.run(
+        () => bind.sessionInputString(sessionId: sessionId, value: text));
   }
 
   /// Updates the trackpad speed based on the session value.
@@ -953,7 +987,9 @@ class InputModel {
       // FIXME: e.character is wrong for dead keys, eg: ^ in de
       newKeyboardMode(
           e.character ?? '',
-          e.physicalKey.usbHidUsage & 0xFFFF,
+          _imeTextBridge.isAttached
+              ? forwardingUsbHid(e.physicalKey, e.logicalKey)
+              : e.physicalKey.usbHidUsage & 0xFFFF,
           // Show repeat event be converted to "release+press" events?
           e is KeyDownEvent || e is KeyRepeatEvent,
           iosCapsLock);
@@ -1241,12 +1277,18 @@ class InputModel {
   void newKeyboardMode(
       String character, int usbHid, bool down, bool iosCapsLock) {
     final lockModes = _buildLockModes(iosCapsLock);
-    bind.sessionHandleFlutterKeyEvent(
+    Future<void> send() => bind.sessionHandleFlutterKeyEvent(
         sessionId: sessionId,
         character: character,
         usbHid: usbHid,
         lockModes: lockModes,
         downOrUp: down);
+    if (_imeTextBridge.isAttached) {
+      // Keep keys and input-method text in the order they were typed.
+      _orderedSender.run(send);
+    } else {
+      send();
+    }
   }
 
   void mapKeyboardModeRaw(RawKeyEvent e, bool iosCapsLock) {
@@ -1479,6 +1521,8 @@ class InputModel {
     if (!isWeb && enter) {
       bind.setCurSessionId(sessionId: sessionId);
     }
+    _viewFocused = enter;
+    _syncImeTextBridge();
   }
 
   /// Send mouse movement event with distance in [x] and [y].
