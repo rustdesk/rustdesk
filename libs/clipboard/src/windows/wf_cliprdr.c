@@ -2447,7 +2447,11 @@ static FILEDESCRIPTORW *wf_cliprdr_get_file_descriptor(WCHAR *file_name, size_t 
 	fd->dwFileAttributes = GetFileAttributesW(file_name);
 	if (fd->dwFileAttributes == INVALID_FILE_ATTRIBUTES)
 	{
-		// TODO: debug handle some errors
+		// INVALID_FILE_ATTRIBUTES has FILE_ATTRIBUTE_DIRECTORY set, so the entry would go out as
+		// an empty directory in place of the file.
+		CloseHandle(hFile);
+		free(fd);
+		return NULL;
 	}
 
 	if (!GetFileTime(hFile, NULL, NULL, &fd->ftLastWriteTime))
