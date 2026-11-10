@@ -98,11 +98,14 @@ extern "C" {
     fn OH_NativeWindow_DestroyNativeWindow(window: *mut c_void);
     fn OH_NativeWindow_NativeWindowSetScalingModeV2(window: *mut c_void, mode: c_int) -> c_int;
 
-    static OH_MD_KEY_WIDTH: c_char;
-    static OH_MD_KEY_HEIGHT: c_char;
-    static OH_MD_KEY_PIXEL_FORMAT: c_char;
-    static OH_MD_KEY_VIDEO_STRIDE: c_char;
-    static OH_MD_KEY_VIDEO_SLICE_HEIGHT: c_char;
+    // The SDK declares these as `extern const char *`; the value is the
+    // pointer to the key name, so pass it directly instead of taking the
+    // address of a (wrongly typed) one-byte static.
+    static OH_MD_KEY_WIDTH: *const c_char;
+    static OH_MD_KEY_HEIGHT: *const c_char;
+    static OH_MD_KEY_PIXEL_FORMAT: *const c_char;
+    static OH_MD_KEY_VIDEO_STRIDE: *const c_char;
+    static OH_MD_KEY_VIDEO_SLICE_HEIGHT: *const c_char;
 }
 
 #[derive(Clone, Copy)]
@@ -206,7 +209,6 @@ impl Drop for Cleanup {
 pub struct OhCodecDecoder {
     mime: &'static str,
     cleanup: Cleanup,
-    codec_config: Vec<u8>,
     surface_generation: Option<u64>,
     last_rendered: u32,
     pending_since: Option<Instant>,
@@ -295,7 +297,7 @@ impl OhCodecDecoder {
             bail!("OH_AVFormat_CreateVideoFormat failed");
         }
         let configured = unsafe {
-            if !OH_AVFormat_SetIntValue(format, &OH_MD_KEY_PIXEL_FORMAT, AV_PIXEL_FORMAT_NV12) {
+            if !OH_AVFormat_SetIntValue(format, OH_MD_KEY_PIXEL_FORMAT, AV_PIXEL_FORMAT_NV12) {
                 None
             } else {
                 Some(OH_VideoDecoder_Configure(codec, format))
@@ -329,7 +331,6 @@ impl OhCodecDecoder {
         Ok(Self {
             mime,
             cleanup,
-            codec_config: Vec::new(),
             surface_generation: surface.map(|surface| surface.1),
             last_rendered: 0,
             pending_since: None,
@@ -360,9 +361,7 @@ impl OhCodecDecoder {
         if !self.target_is_current() {
             return Ok(false);
         }
-        let mut packet = std::mem::take(&mut self.codec_config);
-        packet.extend_from_slice(data);
-        self.queue_input(&packet, key)?;
+        self.queue_input(data, key)?;
         if self.is_surface_mode() {
             self.take_rendered_frame()
         } else {
@@ -548,11 +547,11 @@ unsafe extern "C" fn on_stream_changed(
     let mut stride = 0;
     let mut slice_height = 0;
     let mut pixel_format = AV_PIXEL_FORMAT_NV12;
-    OH_AVFormat_GetIntValue(format, &OH_MD_KEY_WIDTH, &mut width);
-    OH_AVFormat_GetIntValue(format, &OH_MD_KEY_HEIGHT, &mut height);
-    OH_AVFormat_GetIntValue(format, &OH_MD_KEY_VIDEO_STRIDE, &mut stride);
-    OH_AVFormat_GetIntValue(format, &OH_MD_KEY_VIDEO_SLICE_HEIGHT, &mut slice_height);
-    OH_AVFormat_GetIntValue(format, &OH_MD_KEY_PIXEL_FORMAT, &mut pixel_format);
+    OH_AVFormat_GetIntValue(format, OH_MD_KEY_WIDTH, &mut width);
+    OH_AVFormat_GetIntValue(format, OH_MD_KEY_HEIGHT, &mut height);
+    OH_AVFormat_GetIntValue(format, OH_MD_KEY_VIDEO_STRIDE, &mut stride);
+    OH_AVFormat_GetIntValue(format, OH_MD_KEY_VIDEO_SLICE_HEIGHT, &mut slice_height);
+    OH_AVFormat_GetIntValue(format, OH_MD_KEY_PIXEL_FORMAT, &mut pixel_format);
     if width <= 0 || height <= 0 {
         return;
     }

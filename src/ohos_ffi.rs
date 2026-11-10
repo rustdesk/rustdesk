@@ -630,6 +630,14 @@ pub extern "C" fn ohos_init_video(
     );
     if let Some(session) = get_session_by_session_id(&session_id) {
         session.send(Data::ResetDecoder(None));
+        // The rebuilt decoder waits on delta frames until something asks the
+        // peer for a keyframe; pair the reset with a refresh request the way
+        // use_texture_render_changed does.
+        let mut msg = Message::new();
+        let mut misc = Misc::new();
+        misc.set_refresh_video(true);
+        msg.set_misc(misc);
+        session.send(Data::Message(msg));
     }
     0
 }
@@ -642,6 +650,11 @@ pub extern "C" fn ohos_deinit_video(session_id: *const c_char) -> c_int {
     scrap::ohos::direct_render::unregister(session_id.as_u128());
     if let Some(session) = get_session_by_session_id(&session_id) {
         session.send(Data::ResetDecoder(None));
+        let mut msg = Message::new();
+        let mut misc = Misc::new();
+        misc.set_refresh_video(true);
+        msg.set_misc(misc);
+        session.send(Data::Message(msg));
     }
     0
 }

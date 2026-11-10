@@ -95,20 +95,21 @@ extern "C" {
 }
 
 // Exported constants in libnative_media_core.so; linked by name instead of
-// hardcoding the literals.
+// hardcoding the literals. The SDK declares the OH_MD_KEY_* symbols as
+// `extern const char *`: the value is the pointer to the key name, so it is
+// passed directly rather than the address of a (wrongly typed) one-byte
+// static.
 extern "C" {
-    static OH_AVCODEC_MIMETYPE_VIDEO_AVC: c_char;
-    static OH_AVCODEC_MIMETYPE_VIDEO_HEVC: c_char;
-    static OH_MD_KEY_WIDTH: c_char;
-    static OH_MD_KEY_HEIGHT: c_char;
-    static OH_MD_KEY_PIXEL_FORMAT: c_char;
-    static OH_MD_KEY_CODEC_CONFIG: c_char;
-    static OH_MD_KEY_BITRATE: c_char;
-    static OH_MD_KEY_FRAME_RATE: c_char;
-    static OH_MD_KEY_I_FRAME_INTERVAL: c_char;
-    static OH_MD_KEY_VIDEO_ENCODE_BITRATE_MODE: c_char;
-    static OH_MD_KEY_VIDEO_STRIDE: c_char;
-    static OH_MD_KEY_VIDEO_SLICE_HEIGHT: c_char;
+    static OH_MD_KEY_WIDTH: *const c_char;
+    static OH_MD_KEY_HEIGHT: *const c_char;
+    static OH_MD_KEY_PIXEL_FORMAT: *const c_char;
+    static OH_MD_KEY_CODEC_CONFIG: *const c_char;
+    static OH_MD_KEY_BITRATE: *const c_char;
+    static OH_MD_KEY_FRAME_RATE: *const c_char;
+    static OH_MD_KEY_I_FRAME_INTERVAL: *const c_char;
+    static OH_MD_KEY_VIDEO_ENCODE_BITRATE_MODE: *const c_char;
+    static OH_MD_KEY_VIDEO_STRIDE: *const c_char;
+    static OH_MD_KEY_VIDEO_SLICE_HEIGHT: *const c_char;
 }
 
 fn cstr(ptr: *const c_char) -> &'static str {
@@ -116,10 +117,6 @@ fn cstr(ptr: *const c_char) -> &'static str {
         return "";
     }
     unsafe { std::ffi::CStr::from_ptr(ptr) }.to_str().unwrap_or("")
-}
-
-fn key(ptr: *const c_char) -> *const c_char {
-    ptr as _
 }
 
 // ---------------------------------------------------------------------------
@@ -177,8 +174,10 @@ pub struct OhCodecEncoder {
     inner: Arc<EncoderInner>,
     config: OhEncoderConfig,
     bitrate: u32, // kbps
-    // CSD (SPS/PPS/VPS) delivered with the codec-data flag, prepended to the
-    // next sync frame so decoders can start mid-stream.
+    // CSD (SPS/PPS/VPS) delivered with the codec-data flag, kept here and
+    // prepended to every sync frame so a decoder joining mid-stream (a second
+    // viewer, or a controller-side decoder reset asking for a keyframe) can
+    // initialise without waiting for the encoder to be recreated.
     pending_config: Vec<u8>,
     warmed_up: bool,
     // Input layout the codec actually expects (queryable only after Prepare);
@@ -206,15 +205,15 @@ fn probe_encoder(mime: &str) -> bool {
             return false;
         }
         let ok = unsafe {
-            OH_AVFormat_SetIntValue(fmt, key(&OH_MD_KEY_PIXEL_FORMAT), AV_PIXEL_FORMAT_NV12)
+            OH_AVFormat_SetIntValue(fmt, OH_MD_KEY_PIXEL_FORMAT, AV_PIXEL_FORMAT_NV12)
                 && OH_AVFormat_SetIntValue(
                     fmt,
-                    key(&OH_MD_KEY_VIDEO_ENCODE_BITRATE_MODE),
+                    OH_MD_KEY_VIDEO_ENCODE_BITRATE_MODE,
                     BITRATE_MODE_CBR,
                 )
-                && OH_AVFormat_SetLongValue(fmt, key(&OH_MD_KEY_BITRATE), 2_000_000)
-                && OH_AVFormat_SetIntValue(fmt, key(&OH_MD_KEY_FRAME_RATE), DEFAULT_FPS)
-                && OH_AVFormat_SetIntValue(fmt, key(&OH_MD_KEY_I_FRAME_INTERVAL), DEFAULT_GOP_MS)
+                && OH_AVFormat_SetLongValue(fmt, OH_MD_KEY_BITRATE, 2_000_000)
+                && OH_AVFormat_SetIntValue(fmt, OH_MD_KEY_FRAME_RATE, DEFAULT_FPS)
+                && OH_AVFormat_SetIntValue(fmt, OH_MD_KEY_I_FRAME_INTERVAL, DEFAULT_GOP_MS)
         } && unsafe { OH_VideoEncoder_Configure(codec, fmt) } == AV_ERR_OK
             && unsafe { OH_VideoEncoder_Prepare(codec) } == AV_ERR_OK;
         unsafe { OH_AVFormat_Destroy(fmt) };
@@ -376,13 +375,14 @@ impl OhCodecEncoder {
                         continue;
                     }
                     if !data.is_empty() {
-                        if !self.pending_config.is_empty() {
-                            let mut with_config = std::mem::take(&mut self.pending_config);
+                        let is_sync = out.flags & AVCODEC_BUFFER_FLAGS_SYNC_FRAME != 0;
+                        if is_sync && !self.pending_config.is_empty() {
+                            let mut with_config = self.pending_config.clone();
                             with_config.extend_from_slice(&data);
                             data = with_config;
                         }
                         frames.push(OhEncodedFrame {
-                            key: out.flags & AVCODEC_BUFFER_FLAGS_SYNC_FRAME != 0,
+                            key: is_sync,
                             data,
                             pts: out.pts,
                         });
@@ -474,19 +474,19 @@ impl EncoderApi for OhCodecEncoder {
                     bail!("OH_AVFormat_CreateVideoFormat failed");
                 }
                 let ok = unsafe {
-                    OH_AVFormat_SetIntValue(fmt, key(&OH_MD_KEY_PIXEL_FORMAT), AV_PIXEL_FORMAT_NV12)
+                    OH_AVFormat_SetIntValue(fmt, OH_MD_KEY_PIXEL_FORMAT, AV_PIXEL_FORMAT_NV12)
                         && OH_AVFormat_SetIntValue(
                             fmt,
-                            key(&OH_MD_KEY_VIDEO_ENCODE_BITRATE_MODE),
+                            OH_MD_KEY_VIDEO_ENCODE_BITRATE_MODE,
                             BITRATE_MODE_CBR,
                         )
                         && OH_AVFormat_SetLongValue(
                             fmt,
-                            key(&OH_MD_KEY_BITRATE),
+                            OH_MD_KEY_BITRATE,
                             bitrate as i64 * 1000,
                         )
-                        && OH_AVFormat_SetIntValue(fmt, key(&OH_MD_KEY_FRAME_RATE), DEFAULT_FPS)
-                        && OH_AVFormat_SetIntValue(fmt, key(&OH_MD_KEY_I_FRAME_INTERVAL), gop_ms)
+                        && OH_AVFormat_SetIntValue(fmt, OH_MD_KEY_FRAME_RATE, DEFAULT_FPS)
+                        && OH_AVFormat_SetIntValue(fmt, OH_MD_KEY_I_FRAME_INTERVAL, gop_ms)
                 };
                 let rc = if ok {
                     unsafe { OH_VideoEncoder_Configure(codec, fmt) }
@@ -517,13 +517,13 @@ impl EncoderApi for OhCodecEncoder {
                     let desc = OH_VideoEncoder_GetInputDescription(codec);
                     if !desc.is_null() {
                         let mut v = 0;
-                        if OH_AVFormat_GetIntValue(desc, key(&OH_MD_KEY_VIDEO_STRIDE), &mut v)
+                        if OH_AVFormat_GetIntValue(desc, OH_MD_KEY_VIDEO_STRIDE, &mut v)
                             && v > 0
                         {
                             stride = v as usize;
                         }
                         let mut v = 0;
-                        if OH_AVFormat_GetIntValue(desc, key(&OH_MD_KEY_VIDEO_SLICE_HEIGHT), &mut v)
+                        if OH_AVFormat_GetIntValue(desc, OH_MD_KEY_VIDEO_SLICE_HEIGHT, &mut v)
                             && v > 0
                         {
                             slice_height = v as usize;
@@ -606,7 +606,7 @@ impl EncoderApi for OhCodecEncoder {
                 bail!("OH_AVFormat_Create failed");
             }
             let rc = unsafe {
-                OH_AVFormat_SetLongValue(fmt, key(&OH_MD_KEY_BITRATE), bitrate as i64 * 1000);
+                OH_AVFormat_SetLongValue(fmt, OH_MD_KEY_BITRATE, bitrate as i64 * 1000);
                 OH_VideoEncoder_SetParameter(self.inner.codec, fmt)
             };
             unsafe {
