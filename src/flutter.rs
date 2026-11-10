@@ -278,7 +278,7 @@ pub(super) enum FrameTaken {
 /// mismatched frame anyway lets the plugin rebuild its texture at the frame size
 /// while the widget still lays out at the old one, i.e. sheared rows that keep
 /// updating. Refusing it costs the few frames until the session size catches up.
-#[cfg(all(target_os = "macos", feature = "hwcodec"))]
+#[cfg(any(all(target_os = "macos", feature = "hwcodec"), test))]
 fn pixelbuffer_fits_session(session: (usize, usize), width: i32, height: i32) -> bool {
     // A negative size cannot come from a real surface; casting it to usize keeps
     // it unequal to any session size instead of silently matching a small one.
@@ -2742,7 +2742,7 @@ pub(super) mod async_tasks {
     }
 }
 
-#[cfg(all(test, target_os = "macos", feature = "hwcodec"))]
+#[cfg(test)]
 mod tests {
     use super::pixelbuffer_fits_session;
 
