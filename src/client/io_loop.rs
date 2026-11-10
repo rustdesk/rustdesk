@@ -1431,10 +1431,23 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::AnswerVoiceCall(accepted) => {
                 let ts = self.incoming_voice_call_timestamp.take();
                 if let Some(ts) = ts {
-                    let resp = new_voice_call_response(ts.get(), accepted);
-                    allow_err!(peer.send(&resp).await);
                     if accepted {
-                        self.stop_voice_call_sender = self.start_voice_call();
+                        // Start the capturer first: when it fails the answer
+                        // still reports refusal, so the peer does not wait on
+                        // a call that carries no audio.
+                        let sender = self.start_voice_call();
+                        let accepted = sender.is_some();
+                        let resp = new_voice_call_response(ts.get(), accepted);
+                        allow_err!(peer.send(&resp).await);
+                        if let Some(sender) = sender {
+                            self.stop_voice_call_sender = Some(sender);
+                            self.handler.on_voice_call_started();
+                        } else {
+                            self.handler.on_voice_call_closed("");
+                        }
+                    } else {
+                        let resp = new_voice_call_response(ts.get(), false);
+                        allow_err!(peer.send(&resp).await);
                     }
                 }
             }
