@@ -623,6 +623,11 @@ static napi_value NapiInitVideo(napi_env env, napi_callback_info info) {
     OHNativeWindow* win = nullptr;
     rc = OH_NativeWindow_CreateNativeWindowFromSurfaceId(sid, &win);
     if (rc != 0 || win == nullptr) {
+        // Roll back the Rust-side registration so the pending decoder reset
+        // does not keep rendering into a surface that was never wrapped.
+        if (g_fns.deinit_video != nullptr) {
+            g_fns.deinit_video(uuid.c_str());
+        }
         return ThrowErr(env, "initVideo: CreateNativeWindowFromSurfaceId failed");
     }
     std::lock_guard<std::mutex> lock(g_win_mutex);

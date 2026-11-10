@@ -796,6 +796,10 @@ struct RemotePage {
     ffiInputKey(this.uuid, name, false, true, this.altOn, this.ctrlOn, this.shiftOn, false);
   }
 
+  private pressKeyWithoutModifiers(name: string): void {
+    ffiInputKey(this.uuid, name, false, true, false, false, false, false);
+  }
+
   // Soft keyboard diff: send only the appended tail; local deletions become
   // VK_BACK clicks. With a modifier chip active, appended characters go
   // through ffiInputKey instead: input_string is a Unicode sequence and never
@@ -811,8 +815,10 @@ struct RemotePage {
       common++;
     }
     const deletions = sent.length - common;
+    // Deletions are local text editing, not a shortcut: with a Ctrl chip
+    // active they must not go out as Ctrl+Backspace.
     for (let i = 0; i < deletions; i++) {
-      this.pressKey('VK_BACK');
+      this.pressKeyWithoutModifiers('VK_BACK');
     }
     if (common < value.length) {
       const appended = value.substring(common);
