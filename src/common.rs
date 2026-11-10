@@ -239,8 +239,7 @@ pub fn need_fs_cm_send_files() -> bool {
     }
 }
 
-/// Android is scoped-storage only: the peer may never touch anything outside the app
-/// workspace (`Config::get_home()`, i.e. the app-specific external files directory).
+/// Android peers may access only the current shared file-transfer location.
 ///
 /// Every peer supplied path must be validated with this before it reaches the
 /// filesystem, for reads, writes, renames, creations and deletions alike. The path is
@@ -252,6 +251,22 @@ pub fn need_fs_cm_send_files() -> bool {
 #[cfg(target_os = "android")]
 pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
     use std::path::{Component, Path, PathBuf};
+
+    if base::fs::android::is_path(Path::new(path)) {
+        return match base::fs::android::allowed(path) {
+            Ok(allowed) => allowed,
+            Err(error) => {
+                const ERROR_LOG_INTERVAL: Duration = Duration::from_secs(60);
+                hbb_common::throttled_log!(
+                    ERROR_LOG_INTERVAL,
+                    warn,
+                    "Document access denied: {}",
+                    error
+                );
+                false
+            }
+        };
+    }
 
     // Canonicalize the deepest existing ancestor and re-append the missing tail.
     fn resolve(path: &Path) -> Option<PathBuf> {
@@ -279,7 +294,7 @@ pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
     if !path.is_absolute() || path.components().any(|c| c == Component::ParentDir) {
         return false;
     }
-    let home = Config::get_home();
+    let home = base::fs::get_path(&base::fs::get_home_as_string());
     let home = home.canonicalize().unwrap_or(home);
     if home.as_os_str().is_empty() {
         return false;
@@ -292,6 +307,24 @@ pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
 #[cfg(not(target_os = "android"))]
 pub fn is_peer_path_allowed(_path: &str, _allow_empty: bool) -> bool {
     true
+}
+
+#[cfg(target_os = "android")]
+pub async fn is_peer_path_allowed_async(path: &str, allow_empty: bool) -> bool {
+    let path = path.to_owned();
+    match tokio::task::spawn_blocking(move || is_peer_path_allowed(&path, allow_empty)).await {
+        Ok(allowed) => allowed,
+        Err(error) => {
+            const ERROR_LOG_INTERVAL: Duration = Duration::from_secs(60);
+            hbb_common::throttled_log!(
+                ERROR_LOG_INTERVAL,
+                error,
+                "File-transfer access check failed: {}",
+                error
+            );
+            false
+        }
+    }
 }
 
 #[inline]
@@ -937,7 +970,7 @@ pub fn get_sysinfo() -> serde_json::Value {
     let cpu_name = cpus.first().map(|x| x.brand()).unwrap_or_default();
     let cpu_name = cpu_name.trim_end();
     let cpu_freq = cpus.first().map(|x| x.frequency()).unwrap_or_default();
-    let cpu_freq = (cpu_freq as f64 / 1024. * 100.).round() / 100.;
+    let cpu_freq = (cpu_freq as f64 / 1000. * 100.).round() / 100.;
     let cpu = if cpu_freq > 0. {
         format!("{}, {}GHz, ", cpu_name, cpu_freq)
     } else {
@@ -980,6 +1013,20 @@ pub fn check_port<T: std::string::ToString>(host: T, port: i32) -> String {
 #[inline]
 pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
     hbb_common::socket_client::increase_port(host, offset)
+}
+
+/// A relay uuid arrives from the network and is sent on to the relay address, so bound what it
+/// may carry; it is an opaque pairing key, so do not pin today's UUID format.
+pub fn check_relay_uuid(uuid: &str) -> ResultType<()> {
+    if uuid.is_empty()
+        || uuid.len() > 128
+        || !uuid
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        bail!("invalid relay uuid (length {})", uuid.len());
+    }
+    Ok(())
 }
 
 pub const POSTFIX_SERVICE: &'static str = "_service";
@@ -3054,7 +3101,22 @@ mod tests {
         self,
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
-    use std::collections::HashSet;
+
+    #[test]
+    fn relay_uuid_rejects_control_bytes_but_not_other_id_formats() {
+        for uuid in [
+            "e4c181d0-41c7-4ae6-8ef0-36581b6b2b12",
+            "E4C181D0-41C7-4AE6-8EF0-36581B6B2B12",
+            "01890a5d-ac96-774b-bcce-b302099a8057",
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        ] {
+            assert!(check_relay_uuid(uuid).is_ok(), "rejected {uuid:?}");
+        }
+        let too_long = "a".repeat(129);
+        for uuid in ["", "\r\nPING\r\n", "a b", "a\0", too_long.as_str()] {
+            assert!(check_relay_uuid(uuid).is_err(), "accepted {uuid:?}");
+        }
+    }
 
     #[test]
     fn parses_stable_rustdesk_release_url() {
@@ -3100,16 +3162,6 @@ mod tests {
                 assert!(cursor_content_id(32, 32, hotx, 0, colors) <= MAX_SAFE_INTEGER);
             }
         }
-    }
-
-    #[inline]
-    fn get_timestamp_secs() -> u128 {
-        (std::time::SystemTime::UNIX_EPOCH
-            .elapsed()
-            .unwrap()
-            .as_millis()
-            + 500)
-            / 1000
     }
 
     fn interval_maker() -> Interval {
@@ -3178,9 +3230,10 @@ mod tests {
         }
     }
 
-    // ThrottledInterval tick less times than tokio interval, if there're sleeps
+    // ThrottledInterval tick less times than tokio interval, if there're sleeps.
+    // The clock is paused, so a stalled runner cannot make two ticks look close together.
     #[allow(non_snake_case)]
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_RustDesk_interval_sleep() {
         let base_intervals = [interval_maker, interval_at_maker];
         for (i, maker) in base_intervals.into_iter().enumerate() {
@@ -3190,17 +3243,24 @@ mod tests {
             loop {
                 tokio::select! {
                     _ = timer.tick() => {
-                        times.push(get_timestamp_secs());
+                        times.push(Instant::now());
                         if times.len() == 5 {
                             break;
                         }
                     }
                 }
             }
-            // No multiple ticks in the `interval` time.
-            // Values in "times" are unique and are less than normal tokio interval.
-            let times2: HashSet<u128> = HashSet::from_iter(times.clone());
-            assert_eq!(times.len(), times2.len(), "test: {}", i);
+            // No multiple ticks in the `interval` time: tokio's interval bursts the missed ticks
+            // with no gap, ThrottledInterval keeps them at least 0.9 * period apart.
+            for pair in times.windows(2) {
+                let gap = pair[1] - pair[0];
+                assert!(
+                    gap >= Duration::from_millis(900),
+                    "test: {}, gap: {:?}",
+                    i,
+                    gap
+                );
+            }
         }
     }
 

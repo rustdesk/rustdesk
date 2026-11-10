@@ -84,6 +84,8 @@ message LoginRequest {
   string my_platform = 13;
   bytes hwid = 14;
   string avatar = 17;
+  bytes trusted_device_v2_token = 18;
+  bool trusted_device_v2_supported = 19;
 }
 
 message Terminal {
@@ -93,6 +95,7 @@ message Terminal {
 message Auth2FA {
   string code = 1;
   bytes hwid = 2;
+  bool trust_this_device = 3;
 }
 
 message ChatMessage { string text = 1; }
@@ -147,6 +150,8 @@ message LoginResponse {
     PeerInfo peer_info = 2;
   }
   bool enable_trusted_devices = 3;
+  bool trusted_device_v2_supported = 4;
+  bytes trusted_device_v2_token = 5;
 }
 
 message TouchScaleUpdate {

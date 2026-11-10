@@ -184,6 +184,7 @@ const String kOptionAllowSyncClipboardBetweenSessions =
 const String kOptionEnableWebrtc = "enable-webrtc";
 const String kOptionRelayFallbackDelay = "relay-fallback-delay";
 const String kOptionEnableTrustedDevices = "enable-trusted-devices";
+const String kOptionTrustedDeviceExpiration = "trusted-device-expiration-days";
 const String kOptionShowVirtualMouse = "show-virtual-mouse";
 const String kOptionVirtualMouseScale = "virtual-mouse-scale";
 const String kOptionShowVirtualJoystick = "show-virtual-joystick";

@@ -143,6 +143,10 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
                 "zh-cn"
             })
             .to_owned();
+            // Hong Kong, Macao and the Hant script use Traditional Chinese.
+            if !locale.contains("hans") && ["hk", "mo", "hant"].iter().any(|x| locale.contains(x)) {
+                lang = "zh-tw".to_owned();
+            }
         }
     }
     if lang.is_empty() {
@@ -167,6 +171,18 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
             .map(|x| x.split("_").next().unwrap_or_default())
             .unwrap_or_default()
             .to_owned();
+        // The Kazakh and Georgian tables are keyed by country code, not by language code.
+        if lang == "kk" {
+            lang = "kz".to_owned();
+        } else if lang == "ka" {
+            lang = "ge".to_owned();
+        }
+        // Android 14 and older report Hebrew and Indonesian with their legacy codes (iw_IL, in_ID).
+        if lang == "iw" {
+            lang = "he".to_owned();
+        } else if lang == "in" {
+            lang = "id".to_owned();
+        }
     }
     if cjk_fallback && is_cjk_lang(&lang) {
         "en".to_owned()
@@ -364,5 +380,50 @@ mod test {
         assert_eq!(f("", "pt_BR", false), "pt-br");
         assert_eq!(f("", "pt-AO", false), "pt-pt");
         assert_eq!(f("", "pt-MZ", false), "pt-pt");
+    }
+
+    #[test]
+    fn test_resolve_lang_detects_kazakh_and_georgian_from_locale() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "kk_KZ.UTF-8", false), "kz");
+        assert_eq!(f("", "kk-KZ", false), "kz");
+        assert_eq!(f("", "ka_GE.UTF-8", false), "ge");
+        assert_eq!(f("", "ka-GE", false), "ge");
+    }
+
+    #[test]
+    fn test_resolve_lang_detects_hebrew_and_indonesian_from_legacy_android_codes() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "iw_IL", false), "he");
+        assert_eq!(f("", "in_ID", false), "id");
+        assert_eq!(f("", "he-IL", false), "he");
+        assert_eq!(f("", "id-ID", false), "id");
+    }
+
+    #[test]
+    fn test_resolve_lang_detects_traditional_chinese_for_hong_kong_and_macao() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "zh_HK.UTF-8", false), "zh-tw");
+        assert_eq!(f("", "zh-Hant-HK", false), "zh-tw");
+        assert_eq!(f("", "zh-Hant", false), "zh-tw");
+        assert_eq!(f("", "zh_MO", false), "zh-tw");
+        assert_eq!(f("", "zh-Hans-HK", false), "zh-cn");
+    }
+
+    #[test]
+    fn test_translations_keep_the_placeholder_of_their_key() {
+        use super::*;
+
+        // translate() puts the caller's value where `{}` is, so a translation without `{}` drops it.
+        for table in [&*ru::T, &*sc::T, &*vi::T] {
+            for (key, value) in table.iter() {
+                if key.contains("{}") && !value.is_empty() {
+                    assert!(value.contains("{}"), "{key:?} => {value:?}");
+                }
+            }
+        }
     }
 }

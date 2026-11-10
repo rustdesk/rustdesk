@@ -6,7 +6,47 @@ import time
 import argparse
 import logging
 import shutil
+import sys
 import zipfile
+
+
+def _file_stream_positions(files):
+    if not files:
+        return []
+    values = files.values() if hasattr(files, "values") else (item[1] for item in files)
+    positions = []
+    for value in values:
+        stream = value[1] if isinstance(value, tuple) and len(value) > 1 else value
+        if hasattr(stream, "tell") and hasattr(stream, "seek"):
+            try:
+                positions.append((stream, stream.tell()))
+            except (OSError, ValueError):
+                pass
+    return positions
+
+
+def _with_simple_retries(fn, max_attempts=8, sleep_secs=1.0):
+    def _wrapper(*args, **kwargs):
+        file_positions = _file_stream_positions(kwargs.get("files"))
+        for i in range(max_attempts):
+            try:
+                if i:
+                    for stream, position in file_positions:
+                        stream.seek(position)
+                return fn(*args, **kwargs)
+            except Exception as e:
+                logging.warning(f"{fn.__name__} attempt {i+1}/{max_attempts} failed: {e}")
+                if i == max_attempts - 1:
+                    raise
+                time.sleep(sleep_secs)
+    return _wrapper
+
+
+HTTP_RETRY_MAX_TRIES = int(os.getenv("HTTP_RETRY_MAX_TRIES") or "8")
+HTTP_RETRY_SLEEP_SECS = float(os.getenv("HTTP_RETRY_SLEEP_SECS") or "1")
+
+requests.get = _with_simple_retries(requests.get, max_attempts=HTTP_RETRY_MAX_TRIES, sleep_secs=HTTP_RETRY_SLEEP_SECS)
+requests.post = _with_simple_retries(requests.post, max_attempts=HTTP_RETRY_MAX_TRIES, sleep_secs=HTTP_RETRY_SLEEP_SECS)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,7 +63,7 @@ SECRET_KEY = os.getenv("SECRET_KEY") or "worldpeace2024"
 # The headers for API requests
 HEADERS = {"Authorization": f"Bearer {SECRET_KEY}"}
 
-SIGN_TIMEOUT = int(os.getenv("SIGN_TIMEOUT") or "30")
+SIGN_TIMEOUT = int(os.getenv("SIGN_TIMEOUT") or "100")
 TIMEOUT = float(os.getenv("TIMEOUT") or "900")
 
 
@@ -155,19 +195,29 @@ def sign_one_file(file_path):
     logging.info(f"Uploaded {file_path}")
     task_id = res["id"]
     n = 0
+    status = {}
     while True:
         if n >= SIGN_TIMEOUT:
+            logging.error(
+                "Timed out waiting to sign %s after %s polls "
+                "(task_id=%s, state=%s, fetched_at=%s)",
+                file_path, n, task_id,
+                status.get("state") if status else None,
+                status.get("fetched_at") if status else None,
+            )
             delete_task(task_id)
-            logging.error(f"Failed to sign {file_path}")
             break
         time.sleep(6)
         n += 1
         status = get_status(task_id)
         if status and status.get("state") == "done":
-            download_one_file(
+            downloaded = download_one_file(
                 task_id, os.path.basename(file_path), os.path.dirname(file_path)
             )
             delete_task(task_id)
+            if not downloaded:
+                logging.error(f"Failed to download signed {file_path}")
+                return False
             logging.info(f"Signed {file_path}")
             return True
     return False
@@ -217,7 +267,7 @@ def sign_files(dir_path, only_ext=None):
             if ext in SIGN_EXTENSIONS:
                 if not sign_one_file(file_path):
                     logging.error(f"Failed to sign {file_path}")
-                    break
+                    sys.exit(1)
 
 
 def main():

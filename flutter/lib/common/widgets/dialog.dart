@@ -937,13 +937,15 @@ void enterPasswordDialog(
 }
 
 void enterUserLoginDialog(SessionID sessionId,
-    OverlayDialogManager dialogManager, String osAccountDescTip) async {
+    OverlayDialogManager dialogManager, String osAccountDescTip,
+    {bool waitForAccept = false}) async {
   await _connectDialog(
     sessionId,
     dialogManager,
     osUsernameController: TextEditingController(),
     osPasswordController: TextEditingController(),
     osAccountDescTip: osAccountDescTip,
+    waitForAccept: waitForAccept,
   );
 }
 
@@ -966,6 +968,7 @@ _connectDialog(
   TextEditingController? osPasswordController,
   TextEditingController? passwordController,
   String? osAccountDescTip,
+  bool waitForAccept = false,
 }) async {
   final errUsername = ''.obs;
   var rememberPassword = false;
@@ -1008,8 +1011,17 @@ _connectDialog(
         rememberPassword,
       );
       close();
-      dialogManager.showLoading(translate('Logging in...'),
-          onCancel: closeConnection);
+      if (waitForAccept) {
+        showWaitAcceptDialog(
+            sessionId,
+            'wait-remote-accept-nook',
+            'Prompt',
+            'Please wait for the remote side to accept your session request...',
+            dialogManager);
+      } else {
+        dialogManager.showLoading(translate('Logging in...'),
+            onCancel: closeConnection);
+      }
     }
 
     descWidget(String text) {
@@ -2278,9 +2290,12 @@ void changeBot({Function()? callback}) async {
 
 void change2fa({Function()? callback}) async {
   if (bind.mainHasValid2FaSync()) {
-    await bind.mainSetOption(key: "2fa", value: "");
-    await bind.mainClearTrustedDevices();
-    callback?.call();
+    try {
+      await bind.mainSetOption(key: "2fa", value: "");
+      callback?.call();
+    } catch (error) {
+      showToast(error.toString());
+    }
     return;
   }
   var new2fa = (await bind.mainGenerate2Fa());
@@ -2795,23 +2810,48 @@ void confrimDeleteTrustedDevicesDialog(
   CommonConfirmDialog(gFFI.dialogManager, '${translate('Confirm Delete')}?',
       () async {
     if (selectedDevices.isEmpty) return;
-    if (selectedDevices.length == trustedDevices.length) {
-      await bind.mainClearTrustedDevices();
-      trustedDevices.clear();
-      selectedDevices.clear();
-    } else {
-      final json = jsonEncode(selectedDevices.map((e) => e.toList()).toList());
-      await bind.mainRemoveTrustedDevices(json: json);
-      trustedDevices.removeWhere((element) {
-        return selectedDevices.contains(element.hwid);
-      });
-      selectedDevices.clear();
+    try {
+      if (selectedDevices.length == trustedDevices.length) {
+        await bind.mainClearTrustedDevices();
+        trustedDevices.clear();
+        selectedDevices.clear();
+      } else {
+        final json = jsonEncode(selectedDevices.map((e) => e.toList()).toList());
+        await bind.mainRemoveTrustedDevices(json: json);
+        trustedDevices.removeWhere((element) {
+          return selectedDevices.contains(element.recordId);
+        });
+        selectedDevices.clear();
+      }
+    } catch (error) {
+      showToast(error.toString());
     }
   });
 }
 
+Future<void> renewTrustedDevice(
+    TrustedDevice device,
+    RxList<TrustedDevice> trustedDevices,
+    RxList<Uint8List> selectedDevices) async {
+  try {
+    final json = jsonEncode([device.recordId.toList()]);
+    await bind.mainRenewTrustedDevices(json: json);
+    final result = await TrustedDevice.get();
+    selectedDevices.clear();
+    trustedDevices.assignAll(result);
+  } catch (error) {
+    showToast(error.toString());
+  }
+}
+
 void manageTrustedDeviceDialog() async {
-  RxList<TrustedDevice> trustedDevices = (await TrustedDevice.get()).obs;
+  late final RxList<TrustedDevice> trustedDevices;
+  try {
+    trustedDevices = (await TrustedDevice.get()).obs;
+  } catch (error) {
+    showToast(error.toString());
+    return;
+  }
   RxList<Uint8List> selectedDevices = RxList.empty();
   gFFI.dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
@@ -2837,25 +2877,67 @@ void manageTrustedDeviceDialog() async {
   });
 }
 
+Widget trustedDeviceExpiration({
+  required bool enabled,
+  required VoidCallback onChanged,
+  bool showLabel = true,
+}) {
+  final period = bind.mainGetOptionSync(key: kOptionTrustedDeviceExpiration);
+  const periods = ['1', '7', '30', '90', '0'];
+  const dropdownHeight = 36.0;
+  return Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (showLabel) Text(translate('Trust duration (days)')),
+        SizedBox(
+          width: isDesktop || isWebDesktop ? 140 : 100,
+          height: dropdownHeight,
+          child: ComboBox(
+            keys: periods,
+            values: ['1', '7', '30', '90', translate('Forever')],
+            initialKey: periods.contains(period) ? period : '90',
+            enabled: enabled && !isOptionFixed(kOptionTrustedDeviceExpiration),
+            onChanged: (value) async {
+              try {
+                await bind.mainSetOption(
+                    key: kOptionTrustedDeviceExpiration, value: value);
+              } catch (error) {
+                showToast(error.toString());
+              }
+              onChanged();
+            },
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class TrustedDevice {
-  late final Uint8List hwid;
+  late final Uint8List recordId;
   late final int time;
+  late final int expiresAt;
   late final String id;
   late final String name;
   late final String platform;
 
   TrustedDevice.fromJson(Map<String, dynamic> json) {
-    final hwidList = json['hwid'] as List<dynamic>;
-    hwid = Uint8List.fromList(hwidList.cast<int>());
+    final recordIdList = json['record_id'] as List<dynamic>;
+    recordId = Uint8List.fromList(recordIdList.cast<int>());
     time = json['time'];
+    expiresAt = json['expires_at'];
     id = json['id'];
     name = json['name'];
     platform = json['platform'];
   }
 
   String daysRemaining() {
-    final expiry = time + 90 * 24 * 60 * 60 * 1000;
-    final remaining = expiry - DateTime.now().millisecondsSinceEpoch;
+    if (expiresAt == 0) return translate('Forever');
+    final remaining = expiresAt - DateTime.now().millisecondsSinceEpoch;
     if (remaining < 0) {
       return '0';
     }
@@ -2864,18 +2946,11 @@ class TrustedDevice {
 
   static Future<List<TrustedDevice>> get() async {
     final List<TrustedDevice> devices = List.empty(growable: true);
-    try {
-      final devicesJson = await bind.mainGetTrustedDevices();
-      if (devicesJson.isNotEmpty) {
-        final devicesList = json.decode(devicesJson);
-        if (devicesList is List) {
-          for (var device in devicesList) {
-            devices.add(TrustedDevice.fromJson(device));
-          }
-        }
-      }
-    } catch (e) {
-      print(e.toString());
+    final devicesJson = await bind.mainGetTrustedDevices();
+    final result = json.decode(devicesJson) as Map<String, dynamic>;
+    final devicesList = result['devices'] as List;
+    for (final device in devicesList) {
+      devices.add(TrustedDevice.fromJson(device));
     }
     devices.sort((a, b) => b.time.compareTo(a.time));
     return devices;
@@ -2909,7 +2984,7 @@ Widget trustedDevicesTable(
               onChanged: (value) {
                 if (value == true) {
                   selectedDevices.clear();
-                  selectedDevices.addAll(devices.map((e) => e.hwid));
+                  selectedDevices.addAll(devices.map((e) => e.recordId));
                 } else {
                   selectedDevices.clear();
                 }
@@ -2923,21 +2998,30 @@ Widget trustedDevicesTable(
           rows: devices.map((device) {
             return DataRow(cells: [
               DataCell(Checkbox(
-                value: selectedDevices.contains(device.hwid),
+                value: selectedDevices.contains(device.recordId),
                 onChanged: (value) {
                   if (value == null) return;
                   if (value) {
-                    selectedDevices.remove(device.hwid);
-                    selectedDevices.add(device.hwid);
+                    selectedDevices.remove(device.recordId);
+                    selectedDevices.add(device.recordId);
                   } else {
-                    selectedDevices.remove(device.hwid);
+                    selectedDevices.remove(device.recordId);
                   }
                 },
               )),
               DataCell(Text(device.platform)),
               DataCell(Text(device.id)),
               DataCell(Text(device.name)),
-              DataCell(Text(device.daysRemaining())),
+              DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(device.daysRemaining()),
+                if (device.expiresAt != 0)
+                  IconButton(
+                    icon: Icon(Icons.refresh),
+                    tooltip: translate('Renew trust'),
+                    onPressed: () =>
+                        renewTrustedDevice(device, devices, selectedDevices),
+                  ),
+              ])),
             ]);
           }).toList(),
         )),
