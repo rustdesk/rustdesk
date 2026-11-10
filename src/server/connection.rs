@@ -432,6 +432,10 @@ pub struct Connection {
     portable: PortableState,
     from_switch: bool,
     voice_call_request_timestamp: Option<NonZeroI64>,
+    // The timestamp of an offer received from the peer, distinct from
+    // voice_call_request_timestamp: an offer this side made, so a malicious
+    // peer cannot answer its own request and switch the input device.
+    voice_call_incoming_timestamp: Option<NonZeroI64>,
     voice_calling: bool,
     options_in_login: Option<OptionMessage>,
     #[cfg(not(any(target_os = "ios")))]
@@ -639,6 +643,7 @@ impl Connection {
             from_switch: false,
             audio_sender: None,
             voice_call_request_timestamp: None,
+            voice_call_incoming_timestamp: None,
             voice_calling: false,
             options_in_login: None,
             #[cfg(not(any(target_os = "ios")))]
@@ -4135,7 +4140,7 @@ impl Connection {
                 Some(message::Union::VoiceCallRequest(request)) => {
                     if request.is_connect {
                         let ts = request.req_timestamp;
-                        self.voice_call_request_timestamp =
+                        self.voice_call_incoming_timestamp =
                             NonZeroI64::new(if ts != 0 { ts } else { get_time() });
                         // Notify the connection manager.
                         self.send_to_cm(Data::VoiceCallIncoming);
@@ -4935,7 +4940,10 @@ impl Connection {
     // No CM notification here: the offer state lives in the CM UI that asked
     // for it, and StartVoiceCall / CloseVoiceCall report the outcome.
     pub async fn request_voice_call(&mut self) {
-        if self.voice_calling || self.voice_call_request_timestamp.is_some() {
+        if self.voice_calling
+            || self.voice_call_request_timestamp.is_some()
+            || self.voice_call_incoming_timestamp.is_some()
+        {
             return;
         }
         let msg = new_voice_call_request(true);
@@ -4963,7 +4971,7 @@ impl Connection {
     }
 
     pub async fn handle_voice_call(&mut self, accepted: bool) {
-        if let Some(ts) = self.voice_call_request_timestamp.take() {
+        if let Some(ts) = self.voice_call_incoming_timestamp.take() {
             let msg = new_voice_call_response(ts.get(), accepted);
             if accepted {
                 crate::audio_service::set_voice_call_input_device(
@@ -4996,6 +5004,7 @@ impl Connection {
         self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
         // A pending offer this side made is withdrawn with the call.
         self.voice_call_request_timestamp = None;
+        self.voice_call_incoming_timestamp = None;
         self.voice_calling = false;
         if self.is_authed_view_camera_conn() {
             if let Some(s) = self.server.upgrade() {
