@@ -62,7 +62,6 @@ docopt = "1.1"
 quest = "0.3"
 
 [build-dependencies]
-cc = "1.0"
 target_build_utils = "0.3"
 bindgen = "0.72.1"
 pkg-config = { version = "0.3.27", optional = true }

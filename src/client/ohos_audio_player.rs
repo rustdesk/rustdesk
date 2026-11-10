@@ -131,8 +131,9 @@ impl OhosAudioPlayer {
             drop(Box::from_raw(ctx));
             anyhow::bail!("GenerateRenderer failed");
         }
-        // The builder handle stays alive with the renderer after
-        // GenerateRenderer succeeds on OHOS; it is not freed separately.
+        // The builder is done once the renderer exists; the header says to
+        // destroy it, otherwise every renderer leaks one builder.
+        let _ = OH_AudioStreamBuilder_Destroy(builder);
         if OH_AudioRenderer_Start(renderer) != AUDIOSTREAM_SUCCESS {
             let _ = OH_AudioRenderer_Release(renderer);
             drop(Box::from_raw(ctx));

@@ -586,9 +586,11 @@ unsafe fn pump_audio(
     let mut ab: *mut OH_AudioBuffer = std::ptr::null_mut();
     let err = OH_AVScreenCapture_AcquireAudioBuffer(capture, &mut ab, source);
     if err != AV_SCREEN_CAPTURE_ERR_OK || ab.is_null() {
-        if *counter < 3 {
-            log::warn!("avscreen AcquireAudioBuffer({source}) failed: {err}");
-        }
+        hbb_common::throttled_log!(
+            std::time::Duration::from_secs(5),
+            warn,
+            "avscreen AcquireAudioBuffer({source}) failed: {err}"
+        );
         return;
     }
     let buf = (*ab).buf;

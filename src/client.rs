@@ -2329,7 +2329,7 @@ impl AudioBuffer {
     /// exceeds AUDIO_BUFFER_MS,  only AUDIO_BUFFER_MS
     /// will be kept.
     #[cfg(any(target_env = "ohos", not(target_os = "linux")))]
-    pub fn append_pcm2(&self, buffer: &[f32]) -> usize {
+    fn append_pcm2(&self, buffer: &[f32]) -> usize {
         let mut lock = self.0.lock().unwrap();
         let cap = lock.capacity();
         let having = lock.occupied_len() + buffer.len();
@@ -2592,8 +2592,7 @@ impl AudioHandler {
                     }
                 };
                 if let Some(player) = self.player.as_mut() {
-                    let appended = player.buffer_mut().append_pcm2(&buffer);
-                    player.buffer_mut().try_shrink(appended);
+                    player.buffer_mut().append_pcm(&buffer);
                 }
             }
             #[cfg(not(any(target_os = "linux", target_env = "ohos")))]
@@ -2621,11 +2620,6 @@ impl AudioHandler {
                 let data_u8 =
                     unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
                 self.simple.as_mut().map(|x| x.write(data_u8));
-            }
-            #[cfg(target_env = "ohos")]
-            {
-                // No audio playback on OpenHarmony yet; drop the decoded frames.
-                let _ = (buffer, n);
             }
         });
     }

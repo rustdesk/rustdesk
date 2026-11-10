@@ -20,11 +20,13 @@ use std::{ptr, sync::mpsc::Sender};
 pub const VOICE_CALL_SAMPLE_RATE: u32 = 48000;
 
 struct CapturerCtx {
-    // Residual samples not yet a whole opus packet.
+    // Residual samples not yet a whole opus packet, interleaved f32 at the
+    // layout the capturer actually runs at.
     pending: std::sync::Mutex<Vec<f32>>,
     encoder: std::sync::Mutex<OpusEncoder>,
     sender: Sender<base::message_proto::Message>,
     channels: u16,
+    rate: u32,
     stopped: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -73,6 +75,41 @@ fn deactivate_mix_session() {
     }
 }
 
+// Average the interleaved channels into one mono timeline. Averaging a
+// stereo mix read back at 2x mono collapses L/R into a clean downmix, the
+// same trick the audio service uses for the controlled-side mic.
+fn downmix(interleaved: &[f32], channels: usize) -> Vec<f32> {
+    if channels <= 1 {
+        return interleaved.to_vec();
+    }
+    interleaved
+        .chunks_exact(channels)
+        .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+        .collect()
+}
+
+// Linear resample of a mono timeline from `rate` to VOICE_CALL_SAMPLE_RATE.
+fn resample_mono(input: &[f32], rate: u32) -> Vec<f32> {
+    let from = rate as f64;
+    let to = f64::from(VOICE_CALL_SAMPLE_RATE);
+    if input.len() < 2 {
+        return input.to_vec();
+    }
+    let out_len = ((input.len() as f64) * to / from).floor() as usize;
+    let mut out = Vec::with_capacity(out_len);
+    let step = from / to;
+    let mut pos = 0.0f64;
+    while out.len() < out_len {
+        let i = pos as usize;
+        let frac = (pos - i as f64) as f32;
+        let a = input[i];
+        let b = input.get(i + 1).copied().unwrap_or(a);
+        out.push(a + (b - a) * frac);
+        pos += step;
+    }
+    out
+}
+
 unsafe extern "C" fn on_read_data(
     _capturer: *mut OH_AudioCapturer,
     userData: *mut std::os::raw::c_void,
@@ -92,11 +129,26 @@ unsafe extern "C" fn on_read_data(
     let src = std::slice::from_raw_parts(buffer as *const f32, length as usize / 4);
     let mut pending = ctx.pending.lock().unwrap();
     pending.extend_from_slice(src);
-    while pending.len() >= PACKET_SAMPLES * ctx.channels as usize {
-        let packet_samples = PACKET_SAMPLES * ctx.channels as usize;
-        let packet: Vec<f32> = pending.drain(..packet_samples).collect();
+    // The encoder consumes 48 kHz mono. When the HAL ignored the requested
+    // layout (an emulator's virtual mic runs at its native stereo format),
+    // the interleaved stream is averaged into a mono timeline at its own
+    // rate and resampled — the same treatment the controlled-side mic gets
+    // in the audio service, which is what keeps that case from reading back
+    // as 2x garbled audio.
+    let in_frame = PACKET_SAMPLES * ctx.channels as usize;
+    while pending.len() >= in_frame {
+        let packet: Vec<f32> = pending.drain(..in_frame).collect();
+        let mono = if ctx.rate == VOICE_CALL_SAMPLE_RATE && ctx.channels == 1 {
+            packet
+        } else {
+            let mut m = downmix(&packet, ctx.channels as usize);
+            if ctx.rate != VOICE_CALL_SAMPLE_RATE {
+                m = resample_mono(&m, ctx.rate);
+            }
+            m
+        };
         let mut encoder = ctx.encoder.lock().unwrap();
-        match encoder.encode_vec_float(&packet, packet.len() * 6) {
+        match encoder.encode_vec_float(&mono, mono.len() * 6) {
             Ok(data) if !data.is_empty() => {
                 let mut msg = base::message_proto::Message::new();
                 msg.set_audio_frame(base::message_proto::AudioFrame {
@@ -175,6 +227,7 @@ impl OhosVoiceCallCapturer {
             encoder: std::sync::Mutex::new(encoder),
             sender: tx,
             channels: channels as u16,
+            rate: VOICE_CALL_SAMPLE_RATE,
             stopped: stopped.clone(),
         }));
         let callbacks = OH_AudioCapturer_Callbacks {
@@ -194,14 +247,39 @@ impl OhosVoiceCallCapturer {
             drop(Box::from_raw(ctx));
             bail!("GenerateCapturer failed");
         }
+        // The builder is done once the capturer exists; the header says to
+        // destroy it, otherwise every capturer leaks one builder.
+        let _ = OH_AudioStreamBuilder_Destroy(builder);
         if OH_AudioCapturer_Start(capturer) != AUDIOSTREAM_SUCCESS {
             let _ = OH_AudioCapturer_Release(capturer);
             drop(Box::from_raw(ctx));
             bail!("OH_AudioCapturer_Start failed");
         }
+        // The HAL may run the stream at its native layout instead of the
+        // requested 48 kHz mono; record what it reports so the callback
+        // downmixes/resamples (same handling as the controlled-side mic).
+        {
+            let (mut rate, mut reported_channels) = (0i32, 0i32);
+            let _ = OH_AudioCapturer_GetSamplingRate(capturer, &mut rate);
+            let _ = OH_AudioCapturer_GetChannelCount(capturer, &mut reported_channels);
+            let ctx_ref = unsafe { &*ctx };
+            let rate = if rate > 0 { rate as u32 } else { VOICE_CALL_SAMPLE_RATE };
+            let reported_channels =
+                if reported_channels > 0 { reported_channels as u16 } else { 1 };
+            // The callback reads these once packets flow; plain writes are
+            // fine here because Start has not begun delivering yet.
+            let ctx_mut = ctx_ref as *const CapturerCtx as *mut CapturerCtx;
+            unsafe {
+                (*ctx_mut).rate = rate;
+                (*ctx_mut).channels = reported_channels;
+            }
+            if rate != VOICE_CALL_SAMPLE_RATE || reported_channels != 1 {
+                log::info!(
+                    "ohos voice call capturer runs at {rate} Hz/{reported_channels} ch (requested 48000/1); the callback converts"
+                );
+            }
+        }
         log::info!("ohos voice call capturer started");
-        // The builder handle stays alive with the capturer after
-        // GenerateCapturer succeeds; it is not freed separately.
         Ok(Self {
             capturer,
             stopped,
@@ -354,16 +432,16 @@ impl OhosMicSource {
             drop(Box::from_raw(ctx));
             bail!("GenerateCapturer failed");
         }
+        // The builder is done once the capturer exists; the header says to
+        // destroy it, otherwise every capturer leaks one builder.
+        let _ = OH_AudioStreamBuilder_Destroy(builder);
         if OH_AudioCapturer_Start(capturer) != AUDIOSTREAM_SUCCESS {
             let _ = OH_AudioCapturer_Release(capturer);
             drop(Box::from_raw(ctx));
             bail!("OH_AudioCapturer_Start failed");
         }
-        // The builder handle stays alive with the capturer after
-        // GenerateCapturer succeeds; it is not freed separately. The ctx stays
-        // leaked like the controller-side capturer's: the callback may still
-        // run while stop() releases the stream, so it cannot be freed on the
-        // Rust side.
+        // The ctx stays leaked: the callback may still run while stop()
+        // releases the stream, so it cannot be freed on the Rust side.
         let (mut rate, mut channels) = (0i32, 0i32);
         let _ = OH_AudioCapturer_GetSamplingRate(capturer, &mut rate);
         let _ = OH_AudioCapturer_GetChannelCount(capturer, &mut channels);

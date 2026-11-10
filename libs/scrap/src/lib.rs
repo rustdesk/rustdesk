@@ -23,7 +23,9 @@ pub mod dxgi;
 #[cfg(target_os = "android")]
 pub mod android;
 
-#[cfg(target_env = "ohos")]
+// Opened under cfg(test) as well so the pure-Rust ohos helpers' tests run on
+// the CI host; the native submodules inside stay target_env = "ohos" only.
+#[cfg(any(target_env = "ohos", test))]
 pub mod ohos;
 
 mod common;

@@ -145,16 +145,23 @@ pub async fn connect_service(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnC
 pub(crate) async fn connect_trusted_device_service(
     ms_timeout: u64,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
-    let connection = connect_service(ms_timeout)
-        .await
-        .map_err(crate::trusted_devices::authority::Unavailable)?;
-    // The root-service uid check only applies where the installed service
-    // exists; on ohos connect_service fails anyway (no service socket).
     #[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
-    if connection.peer_uid() != Some(0) {
-        bail!("Trusted-device system service is not an authenticated root peer");
+    {
+        let connection = connect_service(ms_timeout)
+            .await
+            .map_err(crate::trusted_devices::authority::Unavailable)?;
+        if connection.peer_uid() != Some(0) {
+            bail!("Trusted-device system service is not an authenticated root peer");
+        }
+        Ok(connection)
     }
-    Ok(connection)
+    #[cfg(all(target_os = "linux", target_env = "ohos"))]
+    {
+        let _ = ms_timeout;
+        Err(crate::trusted_devices::authority::Unavailable(
+            hbb_common::anyhow::anyhow!("No trusted-device system service on this platform"),
+        ))
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

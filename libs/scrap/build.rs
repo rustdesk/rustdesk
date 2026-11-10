@@ -288,11 +288,6 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=native_buffer");
         // H264/H265 decoding can render directly into an XComponent surface.
         println!("cargo:rustc-link-lib=dylib=native_window");
-        // No libaom on OpenHarmony for M1: link a stub that fails AV1 calls at
-        // runtime (see src/ohos/aom_stub.c).
-        cc::Build::new()
-            .file("src/ohos/aom_stub.c")
-            .compile("aom_stub");
         println!("cargo:rustc-link-lib=c++");
         gen_ohos_bindings(&include);
         return;
