@@ -659,7 +659,7 @@ impl<T: InvokeUiSession> Remote<T> {
             return Some(tx);
         }
         // iOS does not have this server.
-        #[cfg(not(any(target_os = "ios")))]
+        #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
         {
             // NOTE:
             // The client server and --server both use the same sound input device.

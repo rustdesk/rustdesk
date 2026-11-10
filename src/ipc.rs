@@ -160,7 +160,8 @@ pub(crate) async fn connect_trusted_device_service(
         let _ = ms_timeout;
         Err(crate::trusted_devices::authority::Unavailable(
             hbb_common::anyhow::anyhow!("No trusted-device system service on this platform"),
-        ))
+        )
+        .into())
     }
 }
 

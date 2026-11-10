@@ -94,9 +94,10 @@ impl OhosHandler {
     where
         V: Sized + Serialize + Clone,
     {
-        let sid = self.session_id.to_string();
-        let mut event = event.to_vec();
-        event.push(("sid", sid));
+        // Rebuild as serde values so the sid entry can join the generic one.
+        let mut event: Vec<(&str, serde_json::Value)> =
+            event.iter().map(|(k, v)| (*k, serde_json::json!(v))).collect();
+        event.push(("sid", serde_json::json!(self.session_id.to_string())));
         push_event(name, &event);
     }
 }
@@ -706,6 +707,7 @@ pub extern "C" fn ohos_session_new(
         None,
         None,
         None,
+        "",
     );
     let session: OhosSession = Arc::new(session);
     SESSIONS.write().unwrap().insert(session_id, session);
