@@ -2564,8 +2564,11 @@ static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_fi
 		return FALSE;
 	}
 
+	// Receivers never read an empty file, so the audit waits for the first file with content.
 	if ((clipboard->fileDescriptor[clipboard->nFiles]->dwFileAttributes &
 		 FILE_ATTRIBUTE_DIRECTORY) == 0 &&
+		(clipboard->fileDescriptor[clipboard->nFiles]->nFileSizeLow |
+		 clipboard->fileDescriptor[clipboard->nFiles]->nFileSizeHigh) != 0 &&
 		clipboard->first_file_index == (size_t)-1) {
 		clipboard->first_file_index = clipboard->nFiles;
 	}
