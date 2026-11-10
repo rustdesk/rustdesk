@@ -2146,6 +2146,35 @@ pub(crate) fn get_bundle_id() -> Option<String> {
 }
 
 #[cfg(test)]
+mod network_error_tests {
+    use super::is_host_unreachable_error;
+    use hbb_common::{anyhow, libc, thiserror};
+    use std::io;
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("transport error: {0}")]
+    struct TransportError(#[source] io::Error);
+
+    #[test]
+    fn host_unreachable_matches_direct_and_context_errors() {
+        for (code, expected) in [(libc::EHOSTUNREACH, true), (libc::ECONNREFUSED, false)] {
+            let err = anyhow::Error::new(io::Error::from_raw_os_error(code));
+            assert_eq!(is_host_unreachable_error(&err), expected);
+            assert_eq!(is_host_unreachable_error(&err.context("connect")), expected);
+        }
+    }
+
+    #[test]
+    fn host_unreachable_matches_nested_sources() {
+        for (code, expected) in [(libc::EHOSTUNREACH, true), (libc::ECONNREFUSED, false)] {
+            let err = anyhow::Error::new(TransportError(io::Error::from_raw_os_error(code)))
+                .context("connect");
+            assert_eq!(is_host_unreachable_error(&err), expected);
+        }
+    }
+}
+
+#[cfg(test)]
 mod update_tests {
     use super::*;
 
