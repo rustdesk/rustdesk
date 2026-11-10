@@ -3451,18 +3451,19 @@ pub fn install_service() -> bool {
     };
     log::info!("Installing service...");
     let (_, path, _, exe) = get_install_info();
+    let previous_stop_service = Config::get_option("stop-service");
     Config::set_option("stop-service".into(), "".into());
     let cmds = match get_install_service_commands(&path, &exe) {
         Ok(cmds) => cmds,
         Err(err) => {
-            Config::set_option("stop-service".into(), "Y".into());
+            Config::set_option("stop-service".into(), previous_stop_service);
             log::error!("Failed to prepare service installation: {err}");
             return true;
         }
     };
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
     if let Err(err) = run_cmds(cmds, false, "install") {
-        Config::set_option("stop-service".into(), "Y".into());
+        Config::set_option("stop-service".into(), previous_stop_service);
         crate::ipc::EXIT_RECV_CLOSE.store(true, Ordering::Relaxed);
         log::debug!("{err}");
         return true;
