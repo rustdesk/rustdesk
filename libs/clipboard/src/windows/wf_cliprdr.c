@@ -2466,8 +2466,8 @@ static FILEDESCRIPTORW *wf_cliprdr_get_file_descriptor(WCHAR *file_name, size_t 
 	// with the number of files and not with their size.
 	//
 	// GetFileSize() reports failure as INVALID_FILE_SIZE, which cannot be told apart from a
-	// genuine 4GB-1 file without GetLastError(), and it fails outright on the directory
-	// handles FILE_FLAG_BACKUP_SEMANTICS lets us open above. A directory gets no size. A
+	// genuine 4GB-1 file without GetLastError(). A directory gets no size: whatever the
+	// handle FILE_FLAG_BACKUP_SEMANTICS lets us open above reports is not a file size. A
 	// file whose size cannot be read is rejected rather than sent with the flag off: the
 	// Unix receiver reads the size fields whether or not the flag is set, for compatibility
 	// with older Windows senders, and would take the zero for an empty file.
