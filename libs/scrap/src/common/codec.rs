@@ -1330,7 +1330,7 @@ mod presentation_tests {
 
     #[test]
     fn a_later_software_picture_still_wins_after_an_earlier_one() {
-        // Both software branches call the helper per packet, so the rule has to hold
+        // The software path calls the helper per packet, so the rule has to hold
         // across a batch: the newest picture owns the slot, and a packet that
         // presents nothing afterwards must not resurrect anything.
         let mut slot = Some(7u8);
