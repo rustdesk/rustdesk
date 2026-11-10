@@ -87,6 +87,18 @@ impl OhosHandler {
     fn with_session_id(&self, f: impl FnOnce(SessionID)) {
         f(self.session_id);
     }
+
+    // Every session event carries the session id so the receiving page can
+    // drop events from a session that is still tearing down after a switch.
+    fn push_event_sid<V>(&self, name: &str, event: &[(&str, V)])
+    where
+        V: Sized + Serialize + Clone,
+    {
+        let sid = self.session_id.to_string();
+        let mut event = event.to_vec();
+        event.push(("sid", sid));
+        push_event(name, &event);
+    }
 }
 
 impl InvokeUiSession for OhosHandler {
@@ -100,7 +112,7 @@ impl InvokeUiSession for OhosHandler {
     fn set_cursor_data(&self, cd: CursorData) {
         use hbb_common::base64::Engine;
         let colors = hbb_common::base64::engine::general_purpose::STANDARD.encode(&cd.colors);
-        push_event(
+        self.push_event_sid(
             "cursor_data",
             &[
                 ("id", &cd.id.to_string()),
@@ -114,11 +126,11 @@ impl InvokeUiSession for OhosHandler {
     }
 
     fn set_cursor_id(&self, id: String) {
-        push_event("cursor_id", &[("id", &id)]);
+        self.push_event_sid("cursor_id", &[("id", &id)]);
     }
 
     fn set_cursor_position(&self, cp: CursorPosition) {
-        push_event(
+        self.push_event_sid(
             "cursor_position",
             &[("x", &cp.x.to_string()), ("y", &cp.y.to_string())],
         );
@@ -128,7 +140,7 @@ impl InvokeUiSession for OhosHandler {
 
     fn switch_display(&self, display: &SwitchDisplay) {
         let resolutions = serialize_resolutions(&display.resolutions.resolutions);
-        push_event(
+        self.push_event_sid(
             "switch_display",
             &[
                 ("display", &display.display.to_string()),
@@ -153,7 +165,7 @@ impl InvokeUiSession for OhosHandler {
         }
         let features = serde_json::ser::to_string(&features).unwrap_or("".to_owned());
         let resolutions = serialize_resolutions(&pi.resolutions.resolutions);
-        push_event(
+        self.push_event_sid(
             "peer_info",
             &[
                 ("username", &pi.username),
@@ -170,11 +182,11 @@ impl InvokeUiSession for OhosHandler {
     }
 
     fn set_displays(&self, displays: &Vec<DisplayInfo>) {
-        push_event("sync_peer_info", &[("displays", &make_displays_msg(displays))]);
+        self.push_event_sid("sync_peer_info", &[("displays", &make_displays_msg(displays))]);
     }
 
     fn set_platform_additions(&self, data: &str) {
-        push_event("sync_platform_additions", &[("platform_additions", &data)]);
+        self.push_event_sid("sync_platform_additions", &[("platform_additions", &data)]);
     }
 
     fn on_connected(&self, _conn_type: ConnType) {}
@@ -184,24 +196,24 @@ impl InvokeUiSession for OhosHandler {
     }
 
     fn set_permission(&self, name: &str, value: bool) {
-        push_event("permission", &[(name, &value.to_string())]);
+        self.push_event_sid("permission", &[(name, &value.to_string())]);
     }
 
     fn close_success(&self) {}
 
     fn on_connection_closed(&self) {
-        push_event::<&str>("connection_closed", &[]);
+        self.push_event_sid::<&str>("connection_closed", &[]);
     }
 
     fn new_message(&self, msg: String) {
-        push_event("chat_client_mode", &[("text", &msg)]);
+        self.push_event_sid("chat_client_mode", &[("text", &msg)]);
     }
 
     fn update_transfer_list(&self) {}
 
     fn update_quality_status(&self, status: QualityStatus) {
         const NULL: String = String::new();
-        push_event(
+        self.push_event_sid(
             "update_quality_status",
             &[
                 ("speed", &status.speed.map_or(NULL, |it| it)),
@@ -224,7 +236,7 @@ impl InvokeUiSession for OhosHandler {
     }
 
     fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str) {
-        push_event(
+        self.push_event_sid(
             "connection_ready",
             &[
                 ("secure", &is_secured.to_string()),
@@ -235,11 +247,11 @@ impl InvokeUiSession for OhosHandler {
     }
 
     fn set_fingerprint(&self, fingerprint: String) {
-        push_event("fingerprint", &[("fingerprint", &fingerprint)]);
+        self.push_event_sid("fingerprint", &[("fingerprint", &fingerprint)]);
     }
 
     fn job_error(&self, id: i32, err: String, file_num: i32) {
-        push_event(
+        self.push_event_sid(
             "job_error",
             &[
                 ("id", &id.to_string()),
@@ -250,7 +262,7 @@ impl InvokeUiSession for OhosHandler {
     }
 
     fn job_done(&self, id: i32, file_num: i32) {
-        push_event(
+        self.push_event_sid(
             "job_done",
             &[("id", &id.to_string()), ("file_num", &file_num.to_string())],
         );
@@ -259,7 +271,7 @@ impl InvokeUiSession for OhosHandler {
     fn clear_all_jobs(&self) {}
 
     fn load_last_job(&self, _cnt: i32, job_json: &str, _auto_start: bool) {
-        push_event("load_last_job", &[("value", job_json)]);
+        self.push_event_sid("load_last_job", &[("value", job_json)]);
     }
 
     fn update_folder_files(
@@ -271,12 +283,12 @@ impl InvokeUiSession for OhosHandler {
         only_count: bool,
     ) {
         if only_count {
-            push_event(
+            self.push_event_sid(
                 "update_folder_files",
                 &[("info", &make_fd_flutter(id, entries, only_count))],
             );
         } else {
-            push_event(
+            self.push_event_sid(
                 "file_dir",
                 &[
                     ("is_local", "false"),
@@ -296,7 +308,7 @@ impl InvokeUiSession for OhosHandler {
         is_upload: bool,
         is_identical: bool,
     ) {
-        push_event(
+        self.push_event_sid(
             "override_file_confirm",
             &[
                 ("id", &id.to_string()),
@@ -311,7 +323,7 @@ impl InvokeUiSession for OhosHandler {
     fn update_block_input_state(&self, _on: bool) {}
 
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64) {
-        push_event(
+        self.push_event_sid(
             "job_progress",
             &[
                 ("id", &id.to_string()),
@@ -349,7 +361,7 @@ impl InvokeUiSession for OhosHandler {
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool) {
         let has_retry = if retry { "true" } else { "" };
-        push_event(
+        self.push_event_sid(
             "msgbox",
             &[
                 ("type", msgtype),
@@ -375,17 +387,17 @@ impl InvokeUiSession for OhosHandler {
     }
 
     fn clipboard_html(&self, html: String) {
-        push_event("clipboard_html", &[("html", &html)]);
+        self.push_event_sid("clipboard_html", &[("html", &html)]);
     }
 
     fn clipboard_image_png(&self, content: Vec<u8>) {
         use hbb_common::base64::Engine;
         let encoded = hbb_common::base64::engine::general_purpose::STANDARD.encode(&content);
-        push_event("clipboard_image", &[("png", &encoded)]);
+        self.push_event_sid("clipboard_image", &[("png", &encoded)]);
     }
 
     fn cancel_msgbox(&self, tag: &str) {
-        push_event("cancel_msgbox", &[("tag", tag)]);
+        self.push_event_sid("cancel_msgbox", &[("tag", tag)]);
     }
 
     fn switch_back(&self, _id: &str) {}
@@ -416,7 +428,7 @@ impl InvokeUiSession for OhosHandler {
     fn set_current_display(&self, _disp_idx: i32) {}
 
     fn update_record_status(&self, start: bool) {
-        push_event("record_status", &[("start", &start.to_string())]);
+        self.push_event_sid("record_status", &[("start", &start.to_string())]);
     }
 
     fn printer_request(&self, _id: i32, _path: String) {}

@@ -382,6 +382,12 @@ struct RemotePage {
     this.uuid = evStr(p['uuid']);
     this.peerId = evStr(p['peerId']);
     this.eventHandler = (ev: RdeskEvent): void => {
+      // A session that is still tearing down after a close keeps emitting;
+      // drop its events so they never land on the next page's handler.
+      const sid = ev.get('sid');
+      if (sid !== '' && sid !== this.uuid) {
+        return;
+      }
       this.handleEvent(ev);
     };
     globalEvents.subscribe(this.eventHandler);
