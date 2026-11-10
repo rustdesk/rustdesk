@@ -226,7 +226,8 @@ impl Drop for SealState {
 }
 
 /// The datagram a registration goes out as: data under the session, where it carries the
-/// device's proof, or with no session yet an empty hello, the registration following its welcome.
+/// device's proof until the server holds it, or with no session yet an empty hello, the
+/// registration following its welcome.
 /// `hello` asks for one even under a session, as after a missed answer. A RegisterPk with a key
 /// other than the one proofs are signed by means the key pair changed: `device` loads the new
 /// one, and is called for nothing else.
