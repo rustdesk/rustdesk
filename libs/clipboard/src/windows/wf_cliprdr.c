@@ -2561,7 +2561,8 @@ static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_fi
 	}
 
 	if ((clipboard->fileDescriptor[clipboard->nFiles]->dwFileAttributes &
-		 FILE_ATTRIBUTE_DIRECTORY) == 0) {
+		 FILE_ATTRIBUTE_DIRECTORY) == 0 &&
+		clipboard->first_file_index == (size_t)-1) {
 		clipboard->first_file_index = clipboard->nFiles;
 	}
 
