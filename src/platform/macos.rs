@@ -125,6 +125,14 @@ pub fn major_version() -> u32 {
     unsafe { majorVersion() }
 }
 
+pub(crate) fn is_host_unreachable_error(err: &hbb_common::anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|err| err.raw_os_error() == Some(hbb_common::libc::EHOSTUNREACH))
+    })
+}
+
 pub fn is_process_trusted(prompt: bool) -> bool {
     autoreleasepool(|| unsafe_is_process_trusted(prompt))
 }
