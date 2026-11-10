@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "선택한 폴더가 비어 있지 않습니다. 설치 시 기존 데이터가 삭제될 수 있습니다. 다른 폴더를 선택하는 것이 좋습니다."),
         ("Request approval", "승인 요청"),
         ("Forever", "영구"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Unicode 입력 활성화"),
+        ("unicode-input-tip", "KeePassXC Auto-Type 같은 도구가 보내는 Unicode 텍스트를 캡처합니다. 입력 소스 1이 필요합니다."),
     ].iter().cloned().collect();
 }

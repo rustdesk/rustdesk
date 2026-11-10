@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "O cartafol seleccionado non está baleiro. A instalación pode eliminar os datos existentes. Considera escoller outro cartafol."),
         ("Request approval", "Solicitar aprobación"),
         ("Forever", "Para sempre"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Activar a entrada Unicode"),
+        ("unicode-input-tip", "Capturar o texto Unicode enviado por ferramentas como KeePassXC Auto-Type. Require a fonte de entrada 1."),
     ].iter().cloned().collect();
 }

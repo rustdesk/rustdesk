@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Le dossier sélectionné n’est pas vide. L’installation peut supprimer des données existantes. Envisagez de choisir un autre dossier."),
         ("Request approval", "Demander l'approbation"),
         ("Forever", "Pour toujours"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Activer la saisie Unicode"),
+        ("unicode-input-tip", "Capturer le texte Unicode envoyé par des outils tels que KeePassXC Auto-Type. Nécessite la source d'entrée 1."),
     ].iter().cloned().collect();
 }

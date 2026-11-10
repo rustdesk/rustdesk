@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "પસંદ કરેલ ફોલ્ડર ખાલી નથી. ઇન્સ્ટોલેશન હાલનો ડેટા કાઢી નાખી શકે છે. બીજું ફોલ્ડર પસંદ કરવાનું વિચારો."),
         ("Request approval", "મંજૂરીની વિનંતી કરો"),
         ("Forever", "કાયમ માટે"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Unicode ઇનપુટ સક્ષમ કરો"),
+        ("unicode-input-tip", "KeePassXC Auto-Type જેવા સાધનો દ્વારા મોકલાયેલ Unicode લખાણ કૅપ્ચર કરો. ઇનપુટ સ્રોત 1 જરૂરી છે."),
     ].iter().cloned().collect();
 }

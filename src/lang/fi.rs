@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Valittu kansio ei ole tyhjä. Asennus voi poistaa olemassa olevia tietoja. Harkitse toisen kansion valitsemista."),
         ("Request approval", "Pyydä hyväksyntää"),
         ("Forever", "Ikuisesti"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Ota Unicode-syöte käyttöön"),
+        ("unicode-input-tip", "Sieppaa työkalujen (esimerkiksi KeePassXC Auto-Type) lähettämää Unicode-tekstiä. Vaatii syötelähteen 1."),
     ].iter().cloned().collect();
 }

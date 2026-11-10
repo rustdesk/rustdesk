@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Der ausgewählte Ordner ist nicht leer. Bei der Installation können vorhandene Daten gelöscht werden. Erwägen Sie, einen anderen Ordner auszuwählen."),
         ("Request approval", "Genehmigung anfordern"),
         ("Forever", "Für immer"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Unicode-Eingabe aktivieren"),
+        ("unicode-input-tip", "Unicode-Text erfassen, der von Werkzeugen wie KeePassXC Auto-Type gesendet wird. Erfordert Eingabequelle 1."),
     ].iter().cloned().collect();
 }

@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Sa cartella seletzionada non est bòida. S'installatzione diat pòdere iscantzellare sos datos chi bi sunt. Ti cussigiamus de isseberare un'àtera cartella."),
         ("Request approval", "Pedi s'aprovatzione"),
         ("Forever", "Pro semper"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Abìlita s'intrada Unicode"),
+        ("unicode-input-tip", "Catura su testu Unicode imbiadu dae ainas comente KeePassXC Auto-Type. Bisòngiat sa mitza de intrada 1."),
     ].iter().cloned().collect();
 }

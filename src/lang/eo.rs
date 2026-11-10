@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "La elektita dosierujo ne estas malplena. La instalado povas forigi ekzistantajn datumojn. Konsideru elekti alian dosierujon."),
         ("Request approval", "Peti aprobon"),
         ("Forever", "Por ĉiam"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Ebligi Unicode-enigon"),
+        ("unicode-input-tip", "Kapti Unicode-tekston senditan de iloj kiel KeePassXC Auto-Type. Postulas enigfonton 1."),
     ].iter().cloned().collect();
 }

@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Folderul selectat nu este gol. Instalarea poate șterge datele existente. Ia în considerare alegerea altui folder."),
         ("Request approval", "Solicită aprobarea"),
         ("Forever", "Pentru totdeauna"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Activează introducerea Unicode"),
+        ("unicode-input-tip", "Capturează textul Unicode trimis de instrumente precum KeePassXC Auto-Type. Necesită sursa de intrare 1."),
     ].iter().cloned().collect();
 }

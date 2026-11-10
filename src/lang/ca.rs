@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "La carpeta seleccionada no és buida. La instal·lació pot suprimir les dades existents. Considereu triar una altra carpeta."),
         ("Request approval", "Sol·licita aprovació"),
         ("Forever", "Per sempre"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Habilita l'entrada Unicode"),
+        ("unicode-input-tip", "Captura el text Unicode enviat per eines com ara KeePassXC Auto-Type. Requereix la font d'entrada 1."),
     ].iter().cloned().collect();
 }

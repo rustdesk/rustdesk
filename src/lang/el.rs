@@ -826,7 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Ο επιλεγμένος φάκελος δεν είναι κενός. Η εγκατάσταση ενδέχεται να διαγράψει υπάρχοντα δεδομένα. Εξετάστε το ενδεχόμενο να επιλέξετε διαφορετικό φάκελο."),
         ("Request approval", "Αίτημα έγκρισης"),
         ("Forever", "Για πάντα"),
-        ("Enable Unicode input", ""),
-        ("unicode-input-tip", ""),
+        ("Enable Unicode input", "Ενεργοποίηση εισαγωγής Unicode"),
+        ("unicode-input-tip", "Λήψη κειμένου Unicode που αποστέλλεται από εργαλεία όπως το KeePassXC Auto-Type. Απαιτείται η πηγή εισόδου 1."),
     ].iter().cloned().collect();
 }
