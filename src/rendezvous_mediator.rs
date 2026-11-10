@@ -358,8 +358,10 @@ impl RendezvousMediator {
                     futs.push(tokio::spawn(async move {
                         if let Err(err) = Self::start(server, host).await {
                             #[cfg(target_os = "macos")]
-                            if err.downcast_ref::<std::io::Error>().is_some_and(|err| {
-                                err.raw_os_error() == Some(hbb_common::libc::EHOSTUNREACH)
+                            if err.chain().any(|cause| {
+                                cause.downcast_ref::<std::io::Error>().is_some_and(|err| {
+                                    err.raw_os_error() == Some(hbb_common::libc::EHOSTUNREACH)
+                                })
                             }) {
                                 // An app update can briefly invalidate its Local Network policy.
                                 const LOCAL_NETWORK_RETRY_TIMEOUT: u64 = 3_000;
@@ -1718,7 +1720,7 @@ where
             Ok(stream) => return Some(stream),
             // Not logged one by one, but the count says which gateway it was: RST fails a
             // punch at once and fits a dozen into the window, a silent drop holds the one
-            // punch for the whole of it. `connect_tcp_local` keeps no errno anyway.
+            // punch for the whole of it.
             Err(_) => round += 1,
         }
     }
