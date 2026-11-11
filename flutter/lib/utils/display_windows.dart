@@ -25,6 +25,29 @@ import 'package:window_size/window_size.dart' as window_size;
 const String kPeerOptionDisplayWindows = 'display_windows';
 const String kWindowEventSaveDisplayWindow = 'save_display_window';
 
+/// Sent to every sub window with a peer id: the window closes its tab of that peer (the toolbar's close-session
+/// button closes the peer's session in all windows).
+const String kWindowEventClosePeerSessions = 'close_peer_sessions';
+
+/// Closes the tab of `peerId` in every other sub window; the caller closes its own.
+Future<void> closePeerSessionsInOtherWindows(String peerId) async {
+  List<int> ids = [];
+  try {
+    ids = await DesktopMultiWindow.getAllSubWindowIds();
+  } catch (e) {
+    displayWindowsLog('closePeerSessions: getAllSubWindowIds failed: $e');
+  }
+  for (final id in ids) {
+    if (id == kWindowId) continue;
+    try {
+      await DesktopMultiWindow.invokeMethod(
+          id, kWindowEventClosePeerSessions, peerId);
+    } catch (e) {
+      displayWindowsLog('closePeerSessions: window $id did not answer: $e');
+    }
+  }
+}
+
 /// Restore frame of a window whose target local screen no longer exists; the window is maximized on the primary
 /// screen over it.
 const Size kDisplayWindowFallbackSize = Size(600, 400);

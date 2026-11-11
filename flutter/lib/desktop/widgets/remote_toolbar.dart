@@ -23,6 +23,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
+import 'package:flutter_hbb/utils/display_windows.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
@@ -852,6 +853,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
+    if (widget.ffi.connType == ConnType.defaultConn) {
+      toolbarItems.add(_CloseSessionMenu(id: widget.id, ffi: widget.ffi));
+    }
     final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     // innerAxis: how the toolbar icons themselves flow.
     // outerAxis: how the toolbar block and the handle stack against each other
@@ -3014,6 +3018,38 @@ class _CloseMenu extends StatelessWidget {
         if (await showConnEndAuditDialogCloseCanceled(ffi: ffi)) {
           return;
         }
+        closeConnection(id: id);
+      },
+      color: _ToolbarTheme.redColor,
+      hoverColor: _ToolbarTheme.hoverRedColor,
+    );
+  }
+}
+
+/// Closes the session of this peer in every window (`closePeerSessionsInOtherWindows()`, then this window).
+class _CloseSessionMenu extends StatelessWidget {
+  final String id;
+  final FFI ffi;
+  const _CloseSessionMenu({Key? key, required this.id, required this.ffi})
+      : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return _IconMenuButton(
+      icon: SizedBox(
+        width: _ToolbarTheme.buttonSize,
+        height: _ToolbarTheme.buttonSize,
+        child: Center(
+          child: Icon(Icons.power_settings_new,
+              color: Colors.white, size: _ToolbarTheme.buttonSize * 0.625),
+        ),
+      ),
+      tooltip: 'Close session (all windows)',
+      onPressed: () async {
+        if (await showConnEndAuditDialogCloseCanceled(ffi: ffi)) {
+          return;
+        }
+        await closePeerSessionsInOtherWindows(id);
         closeConnection(id: id);
       },
       color: _ToolbarTheme.redColor,
