@@ -428,14 +428,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
+    final needsInstallationUpgrade = isWindows &&
+        systemError.isEmpty &&
+        !bind.isDisableInstallation() &&
+        bind.mainIsInstalled() &&
+        bind.mainIsInstalledLowerVersion();
     final needsServiceInstallation = isWindows &&
         systemError.isEmpty &&
+        !needsInstallationUpgrade &&
         !bind.isDisableInstallation() &&
         bind.mainIsInstalled() &&
         !bind.isOutgoingOnly() &&
         !mainGetBoolOptionSync(kOptionStopService) &&
         !bind.mainIsInstalledDaemon(prompt: false);
-    if (!needsServiceInstallation &&
+    if (!needsInstallationUpgrade &&
+        !needsServiceInstallation &&
         !bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
@@ -474,7 +481,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainGotoInstall();
         });
-      } else if (bind.mainIsInstalledLowerVersion()) {
+      } else if (needsInstallationUpgrade) {
         return buildInstallCard(
             "Status", "Your installation is lower version.", "Click to upgrade",
             () async {
