@@ -4329,9 +4329,6 @@ pub fn is_service_running(service_name: &str) -> bool {
 }
 
 pub fn is_installed_daemon() -> bool {
-    if super::installing_service() {
-        return true;
-    }
     const SERVICE_QUERY_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
     let service_name = crate::get_app_name();
     let service = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
