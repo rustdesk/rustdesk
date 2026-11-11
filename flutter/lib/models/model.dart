@@ -109,6 +109,12 @@ class FfiModel with ChangeNotifier {
   PeerInfo _pi = PeerInfo();
   int? lastUserDisplay;
   int? pendingMonitorRestore;
+
+  /// `true` from `FFI::start()` of a session that opened the connection (`tabWindowId == null`) until its first
+  /// non-cached `handlePeerInfo()`. `tryUseAllMyDisplaysForTheRemoteSession()` MUST run only while it is `true`: a
+  /// reconnect delivers a new peer info to every session window of the peer, and a second run in each window switches
+  /// it to display 0 and opens a window for every other display again.
+  bool autoOpenDisplaysPending = false;
   Timer? _pendingRestoreTimer;
   Rect? _rect;
 
@@ -1438,9 +1444,10 @@ class FfiModel with ChangeNotifier {
       final last = lastUserDisplay ?? _pi.currentDisplay;
       pendingMonitorRestore = (!isCache &&
               last != currentDisplay &&
-              bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
-                      sessionId: sessionId) !=
-                  'Y' &&
+              (!autoOpenDisplaysPending ||
+                  bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
+                          sessionId: sessionId) !=
+                      'Y') &&
               ((last == kAllDisplayValue && _pi.displays.isNotEmpty) ||
                   (last >= 0 && last < _pi.displays.length)))
           ? last
@@ -1534,6 +1541,10 @@ class FfiModel with ChangeNotifier {
   }
 
   tryUseAllMyDisplaysForTheRemoteSession(String peerId) async {
+    if (!autoOpenDisplaysPending) {
+      return;
+    }
+    autoOpenDisplaysPending = false;
     if (bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
             sessionId: sessionId) !=
         'Y') {
@@ -4155,6 +4166,7 @@ class FFI {
     final isNewPeer = tabWindowId == null;
     // If tabWindowId != null, this session is a "tab -> window" one.
     // Else this session is a new one.
+    ffiModel.autoOpenDisplaysPending = isNewPeer;
     if (isNewPeer) {
       // ignore: unused_local_variable
       final addRes = bind.sessionAddSync(
