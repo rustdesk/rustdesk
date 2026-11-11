@@ -244,6 +244,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn update_copies_only_after_a_running_app_has_exited() {
+        let app_name = format!("RustDeskWaitTest{}", uuid::Uuid::new_v4().simple());
+        let dir = create_test_dir_for_update();
+        let app = dir.join(format!("{app_name}.exe"));
+        fs::copy(get_system_executable("ping.exe").unwrap(), &app).unwrap();
+        let mut running = std::process::Command::new(&app)
+            .args(["-n", "4", "127.0.0.1"])
+            .creation_flags(::windows::Win32::System::Threading::CREATE_NO_WINDOW.0)
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        let result = run_update_wait_for_test(&app_name, "", None);
+        let exited = running.try_wait().unwrap().is_some();
+        if !exited {
+            running.kill().unwrap();
+            running.wait().unwrap();
+        }
+        std::fs::remove_dir_all(&dir).expect("test directory should be removed");
+        assert_eq!(result, (Some(0), false, true));
+        assert!(exited, "the copy must not start while the app still runs");
+    }
+
     // Stands in for sc.exe: the old instance still reports RUNNING, then the
     // service is stopping, then stopped. The start is refused until it has
     // stopped, as the SCM does, and the service runs once started.
