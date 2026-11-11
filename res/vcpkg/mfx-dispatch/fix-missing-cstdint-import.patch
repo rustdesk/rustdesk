@@ -1,0 +1,66 @@
+From d6241243f85a0d947bdfe813006686a930edef24 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Tomasz=20K=C5=82oczko?= <kloczek@github.com>
+Date: Thu, 26 Jan 2023 20:15:33 +0000
+Subject: [PATCH] Fix building with gcc 13.x
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In fedoe=ra now is used gcc 13.0.1 with whoch build fails
+with below errora
+
+src/mfxparser.cpp: In function 'std::string MFX::printCodecId(mfxU32)':
+src/mfxparser.cpp:60:3: error: 'uint8_t' was not declared in this scope
+   60 |   uint8_t* data = reinterpret_cast<uint8_t*>(&id);
+      |   ^~~~~~~
+src/mfxparser.cpp:29:1: note: 'uint8_t' is defined in header '<cstdint>'; did you forget to '#include <cstdint>'?
+   28 | #include "mfxloader.h"
+  +++ |+#include <cstdint>
+   29 |
+src/mfxparser.cpp:60:12: error: 'data' was not declared in this scope; did you mean 'std::data'?
+   60 |   uint8_t* data = reinterpret_cast<uint8_t*>(&id);
+      |            ^~~~
+      |            std::data
+In file included from /usr/include/c++/13/list:64,
+                 from src/mfxparser.cpp:26:
+/usr/include/c++/13/bits/range_access.h:346:5: note: 'std::data' declared here
+  346 |     data(initializer_list<_Tp> __il) noexcept
+      |     ^~~~
+src/mfxparser.cpp:60:36: error: 'uint8_t' does not name a type
+   60 |   uint8_t* data = reinterpret_cast<uint8_t*>(&id);
+      |                                    ^~~~~~~
+src/mfxparser.cpp:60:36: note: 'uint8_t' is defined in header '<cstdint>'; did you forget to '#include <cstdint>'?
+src/mfxparser.cpp:60:43: error: expected '>' before '*' token
+   60 |   uint8_t* data = reinterpret_cast<uint8_t*>(&id);
+      |                                           ^
+src/mfxparser.cpp:60:43: error: expected '(' before '*' token
+   60 |   uint8_t* data = reinterpret_cast<uint8_t*>(&id);
+      |                                           ^
+      |                                           (
+src/mfxparser.cpp:60:44: error: expected primary-expression before '>' token
+   60 |   uint8_t* data = reinterpret_cast<uint8_t*>(&id);
+      |                                            ^
+src/mfxparser.cpp:60:50: error: expected ')' before ';' token
+   60 |   uint8_t* data = reinterpret_cast<uint8_t*>(&id);
+      |                                                  ^
+      |                                                  )
+
+This patch fixes that issue.
+
+Signed-off-by: Tomasz Kłoczko <kloczek@github.com>
+---
+ src/mfxparser.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/mfxparser.cpp b/src/mfxparser.cpp
+index 9d3823ec3e4a06851c689810c9d1accb2dfb42f9..beea53220c4b016f8520acb5a3073cbdbbcbe144 100644
+--- a/src/mfxparser.cpp
++++ b/src/mfxparser.cpp
+@@ -23,6 +23,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++#include <cstdint>
+ #include <list>
+ 
+ #include "mfxloader.h"
