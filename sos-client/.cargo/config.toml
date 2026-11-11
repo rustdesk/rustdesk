@@ -1,0 +1,12 @@
+# cargo 别名。
+#
+#   cargo xtask              等价于「在 sos-client 目录下 cargo run -p xtask」
+#
+# 注意：cargo 只从**当前工作目录**向上查找 .cargo/config.toml，
+# 所以这些别名在 sos-client 目录内有效。在仓库根执行不会走别名。
+#
+# 之前这里试过 `xtask = "!powershell ..."` —— 那是 npm 的语法，
+# cargo 别名只接受 cargo 子命令，会报 `no such command: !powershell`。
+# 现在别名指向的是真正的 cargo 子命令（run），才成立。
+[alias]
+xtask = "run --manifest-path xtask/Cargo.toml --"

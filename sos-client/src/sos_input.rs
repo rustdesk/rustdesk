@@ -64,7 +64,20 @@ fn dispatch_mouse(data: &[u8]) {
     match hbb_common::message_proto::MouseEvent::parse_from_bytes(data) {
         Ok(me) => {
             let parse_us = t0.elapsed().as_micros();
-            librustdesk::input_service::handle_mouse_(&me, 1, String::new(), 0, true, true);
+            // 直接调 **injector** 而不是 `handle_mouse_` wrapper。
+            //
+            // `handle_mouse_` = `handle_mouse_simulation_` + `handle_mouse_show_cursor_`。
+            // 后者负责白板/远程光标渲染，在 SYSTEM 子进程里既没有订阅者、
+            // 也不该参与画面合成 —— 纯属浪费，还会读写一些只在本进程内
+            // 有意义的光标状态。
+            //
+            // `handle_mouse_simulation_` 内部完成：`EXITING` 检查 →
+            // `try_change_desktop()`（**锁屏/安全桌面能注入的前提**）→
+            // 修饰键同步 → Enigo 注入 → 相对鼠标状态维护。
+            //
+            // `conn = 1`：SOS 单控制端模型下恒定；多控制端时只影响
+            // `LATEST_PEER_INPUT_CURSOR` 的归属判断，不影响注入本身。
+            librustdesk::input_service::handle_mouse_simulation_(&me, 1);
             let handle_us = t0.elapsed().as_micros() - parse_us;
             // 每秒报告一次耗时统计
             static COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -78,7 +91,7 @@ fn dispatch_mouse(data: &[u8]) {
                 let avg_parse = PARSE_TOTAL.load(std::sync::atomic::Ordering::Relaxed) / n;
                 let avg_handle = HANDLE_TOTAL.load(std::sync::atomic::Ordering::Relaxed) / n;
                 log::info!(
-                    "[MOUSE_MSR] #{} parse={}us handle={}us",
+                    "[INPUT] #{} parse={}us handle={}us",
                     n,
                     avg_parse,
                     avg_handle
@@ -89,6 +102,26 @@ fn dispatch_mouse(data: &[u8]) {
     }
 }
 
+/// 键盘注入。
+///
+/// **必须整条交给上游 `handle_key_`，不能自己走 Enigo 捷径。**
+///
+/// 早期实现在 `chr`（字符输入）上做了一条「快速路径」：每个事件新建一个
+/// `enigo::Enigo` 直接 `key_down/key_up(Key::Layout(c))`。它比上游少做了
+/// 四件事，其中第一件是致命的：
+///
+/// 1. **`try_change_desktop()`** —— 上游三种键盘模式（Legacy / Map /
+///    Translate）的入口都先调它，把**当前线程**切到输入桌面。
+///    不走这条路径，线程就停在 `Default` 桌面，而 `Winlogon`（锁屏）和
+///    UAC 安全桌面只把输入送给**位于该桌面上**的线程 —— 于是锁屏界面
+///    「看得见、打不出字」。
+/// 2. `LockModesHandler` —— CapsLock/NumLock 与远端状态强制对齐。
+/// 3. `sync_modifiers` / `release_keys` —— 修饰键不泄漏、不残留。
+/// 4. `record_pressed_key` —— 记录按下状态。
+///
+/// 改成直接调 `handle_key_`（而不是 `handle_key`）的理由：后者在 Windows 上
+/// 先转到 `portable_service::client::handle_key`，还要判一次 `RUNNING`
+/// 再落到 `handle_key_`。SYSTEM 子进程本身就是注入器，这层判断没有意义。
 fn dispatch_key(data: &[u8]) {
     use hbb_common::protobuf::Message;
     let ke = match hbb_common::message_proto::KeyEvent::parse_from_bytes(data) {
@@ -98,17 +131,5 @@ fn dispatch_key(data: &[u8]) {
             return;
         }
     };
-    if ke.has_chr() {
-        if let Some(c) = std::char::from_u32(ke.chr()) {
-            let mut en = enigo::Enigo::new();
-            use enigo::KeyboardControllable;
-            if ke.down {
-                let _ = en.key_down(enigo::Key::Layout(c));
-            } else {
-                let _ = en.key_up(enigo::Key::Layout(c));
-            }
-        }
-        return;
-    }
-    librustdesk::input_service::handle_key(&ke);
+    librustdesk::input_service::handle_key_(&ke);
 }

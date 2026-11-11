@@ -1,13 +1,41 @@
 [package]
 name = "rustdesk-sos"
-version = "0.1.0"
+# 必须跟上上游协议基线，不能写自建版本号。
+# 这个值会被写进 PeerInfo.version 发给控制端，控制端用 get_version_number()
+# 做功能门控（相对鼠标需 1.4.5、多 UI 会话需 1.2.4、新剪贴板需 1.3.0）。
+# 旧值 0.1.0 会被解析成 1000，比所有阈值都小 —— 相当于自称远古客户端，功能全被降级。
+version = "1.4.9"
+# edition 2024 需要 rustc 1.85+，与下面被 build.rs 逼出来的 rust-version 冲突；
+# 且上游根 crate 也是 2021。
 edition = "2021"
-authors = ["RustDesk"]
+rust-version = "1.80"
+# 本 crate 是下游衍生交付件，不是 RustDesk 官方发布，不沿用官方的 authors 与邮箱。
+authors = ["RustDesk SOS maintainers"]
 description = "RustDesk SOS 精简受控端 - 单文件远程协助客户端"
+license = "AGPL-3.0"
+readme = "README.md"
+# 内部交付件，不发布到 crates.io
+publish = false
 
 [[bin]]
 name = "rustdesk-sos"
 path = "src/main.rs"
+
+# PE 版本资源字符串表。由 build.rs 里的 winres 读取，写进 exe 的
+# VS_VERSION_INFO，在「文件属性 → 详细信息」里可见。
+#
+# winres 0.1.12 的默认值有两个坑：
+#   ProductName / FileDescription 都取 package.name（`rustdesk-sos`），
+#   不是 package.description —— 所以描述得在这里显式覆盖；
+#   CompanyName / LegalCopyright 根本不设，留空。
+# 这里只写字符串字段；数值字段（FileVersion/ProductVersion）由 winres
+# 自动从 package.version 填，不要在此重复。
+[package.metadata.winres]
+ProductName = "RustDesk SOS"
+FileDescription = "RustDesk SOS 精简受控端 - 单文件远程协助客户端"
+OriginalFilename = "rustdesk-sos.exe"
+CompanyName = "RustDesk SOS maintainers"
+LegalCopyright = "Copyright (C) RustDesk SOS maintainers. Licensed under AGPL-3.0."
 
 [dependencies]
 # 核心公共库
@@ -22,10 +50,6 @@ enigo = { path = "../libs/enigo" }
 # Windows 注册表
 winreg = "0.52"
 
-# 音频捕获与编码
-cpal = "0.15"
-opus = "0.3"
-
 # 剪贴板操作
 clipboard = { path = "../libs/clipboard" }
 
@@ -38,15 +62,20 @@ windows = { version = "0.61", features = [
     "Win32_Security",
     "Win32_System_Console",
     "Win32_Storage_FileSystem",
-    "Win32_System_Registry",
     "Win32_System_DataExchange",
     "Win32_System_Ole",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
-    "Win32_System_Pipes",
-    "Win32_Globalization",
+    "Win32_System_SystemInformation",
+    # tests/vpx_mem.rs 测量编码器物理内存占用
+    "Win32_System_ProcessStatus",
+    "Win32_System_RemoteDesktop",
     "Win32_Graphics_Gdi",
-    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Media",
 ] }
 
 # 异步运行时
@@ -66,29 +95,16 @@ log = "0.4"
 # 工具
 anyhow = "1.0"
 hex = "0.4"
-serde = "1.0"
-serde_json = "1.0"
-rand = "0.8"
 
-# 锁定兼容 Rust 1.75 的依赖版本
+# 钉住 `which` 的传递依赖 `home`：更新版本要求 rustc 1.88+
+# 会把上面声明的 MSRV（1.80）顶掉。
 home = "=0.5.9"
 
 [build-dependencies]
 protobuf-codegen = "3.7"
 cc = "1.0"
 winres = "0.1"
-
-[target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = [
-    "winuser",
-    "shellapi",
-    "securitybaseapi",
-    "wtsapi32",
-    "processthreadsapi",
-    "handleapi",
-    "synchapi",
-    "psapi",
-] }
+bindgen = "0.72.1"
 
 [profile.release]
 opt-level = "s"

@@ -1,0 +1,20 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "sos-client 的构建助手（cargo xtask release）"
+publish = false
+
+# 独立 workspace 根：避免 cargo 向上找到仓库根 Cargo.toml 的 [workspace]，
+# 也让它有自己的 target/，与外层 sos-client/target 互不干扰
+# （xtask 内部会再 spawn 一个 cargo，共用 target 目录会撞构建锁）。
+[workspace]
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+# 刻意零依赖：这样 `cargo xtask` 本身编译只要一秒左右，
+# 不会因为要链接 rustdesk / scrap / libvpx 而变成一次完整构建。
+[dependencies]

@@ -32,6 +32,8 @@ mod win32_impl {
 
     const WM_TRAY_ICON: u32 = WM_USER + 1;
     pub(super) const WM_TRAY_UPDATE_TIP: u32 = WM_USER + 3;
+    /// 双击托盘图标：弹出 ID/密码气泡
+    pub(super) const WM_TRAY_SHOW_INFO: u32 = WM_USER + 4;
     const TRAY_ICON_ID: u32 = 1;
 
     /// 托盘窗口句柄，用于 PostMessage 驱动 tooltip 刷新
@@ -182,6 +184,11 @@ mod win32_impl {
             return LRESULT(0);
         }
 
+        if msg == WM_TRAY_SHOW_INFO {
+            show_info_balloon(hwnd);
+            return LRESULT(0);
+        }
+
         if msg == WM_COMMAND {
             let state = get_state(hwnd);
             let cmd = (wparam.0 & 0xFFFF) as u16;
@@ -239,6 +246,35 @@ mod win32_impl {
             format!("RustDesk SOS\nID: {}", device_id)
         } else {
             format!("RustDesk SOS\nID: {}\n密码: {}", device_id, pwd)
+        }
+    }
+
+    /// 弹出气泡通知显示设备 ID 与当前密码（双击托盘图标触发）
+    unsafe fn show_info_balloon(hwnd: HWND) {
+        let device_id = get_device_id();
+        let pwd = crate::sos_config::get_current_password();
+        let body = if pwd.is_empty() {
+            format!("ID: {}", device_id)
+        } else {
+            format!("ID: {}\n密码: {}", device_id, pwd)
+        };
+        let title: Vec<u16> = "RustDesk SOS\0".encode_utf16().collect();
+        let body: Vec<u16> = format!("{}\0", body).encode_utf16().collect();
+
+        let mut nid = NOTIFYICONDATAW {
+            cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+            hWnd: hwnd,
+            uID: TRAY_ICON_ID,
+            uFlags: NIF_INFO,
+            dwInfoFlags: NIIF_INFO,
+            ..Default::default()
+        };
+        let n = body.len().min(nid.szInfo.len() - 1);
+        nid.szInfo[..n].copy_from_slice(&body[..n]);
+        let t = title.len().min(nid.szInfoTitle.len() - 1);
+        nid.szInfoTitle[..t].copy_from_slice(&title[..t]);
+        if !Shell_NotifyIconW(NIM_MODIFY, &nid).as_bool() {
+            log::warn!("Failed to show tray balloon");
         }
     }
 
@@ -326,6 +362,27 @@ pub fn notify_password_changed() {
 
 #[cfg(not(windows))]
 pub fn notify_password_changed() {}
+
+/// 弹出显示设备 ID 与密码的气泡（主循环收到 `TrayCommand::ShowInfo` 时调用）
+#[cfg(windows)]
+pub fn show_info() {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
+    let raw = win32_impl::TRAY_HWND.load(std::sync::atomic::Ordering::Acquire);
+    if raw != 0 {
+        unsafe {
+            let _ = PostMessageW(
+                Some(HWND(raw as *mut _)),
+                win32_impl::WM_TRAY_SHOW_INFO,
+                WPARAM::default(),
+                LPARAM::default(),
+            );
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn show_info() {}
 
 /// 公开的托盘入口（非 Windows 平台提供空实现）
 #[cfg(not(windows))]

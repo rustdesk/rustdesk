@@ -6,14 +6,21 @@ use hbb_common::ResultType;
 
 #[cfg(windows)]
 extern "C" {
-    /// 在交互 session 中以 SYSTEM 身份启动进程（sessionId != 0 过滤 winlogon）
-    /// 等效上游 impersonate_system::run_as_system，但按 session 过滤。
+    /// 以 SYSTEM 身份启动进程，可优先选控制台会话。
+    /// `prefer_console` 仅在跨会话 IPC（`Global\` 命名）可用时才应为真。
+    /// `out_session` / `out_pid` / `out_console_session` 可选，回传诊断信息。
     /// 返回子进程句柄（调用者负责 CloseHandle），失败返回 0。
-    pub fn SosRunAsSystemInSession1(cmd: *const u16) -> isize;
+    pub fn SosRunAsSystemInSession1(
+        cmd: *const u16,
+        prefer_console: i32,
+        out_session: *mut u32,
+        out_pid: *mut u32,
+        out_console_session: *mut u32,
+    ) -> isize;
 
     /// 阻塞等待下一次桌面切换，或 dwTimeout 毫秒超时。
     /// 返回 1=桌面已切换，0=超时，-1=错误。
-    /// 内部使用 SetWinEventHook(WINEVENT_INCONTEXT) + 消息泵。
+    /// 内部使用 SetWinEventHook(WINEVENT_INTOUTCONTEXT) + 消息泵。
     pub fn SosWaitForDesktopSwitch(timeout_ms: u32) -> i32;
 }
 
@@ -55,13 +62,13 @@ pub fn is_system_process() -> bool {
 /// 输出当前进程的令牌/权限诊断信息
 #[cfg(windows)]
 pub fn log_token_info(stage: &str) {
-    use winapi::um::processthreadsapi::ProcessIdToSessionId;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Security::{
         GetTokenInformation, IsWellKnownSid, TokenElevation, TokenIntegrityLevel, TokenStatistics,
         TokenUser, WinLocalSystemSid, TOKEN_ELEVATION, TOKEN_MANDATORY_LABEL, TOKEN_QUERY,
         TOKEN_STATISTICS, TOKEN_USER,
     };
+    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
     use windows::Win32::System::Threading::{
         GetCurrentProcess, GetCurrentProcessId, OpenProcessToken,
     };
@@ -69,7 +76,8 @@ pub fn log_token_info(stage: &str) {
     unsafe {
         let mut session_id = 0u32;
         let pid = GetCurrentProcessId();
-        ProcessIdToSessionId(pid, &mut session_id);
+        // 失败就保持 0：这只是诊断日志，不该影响启动流程
+        let _ = ProcessIdToSessionId(pid, &mut session_id);
 
         let mut token = HANDLE::default();
         if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
@@ -225,8 +233,16 @@ pub fn run_service() -> ResultType<()> {
                 .chain(std::iter::once(0))
                 .collect::<Vec<u16>>()
         };
-        let se = OpenEventW(SYNCHRONIZE, 0, to_wide(CAPTURE_START_EVENT).as_ptr());
-        let pe = OpenEventW(SYNCHRONIZE, 0, to_wide(CAPTURE_STOP_EVENT).as_ptr());
+        let se = OpenEventW(
+            SYNCHRONIZE,
+            0,
+            to_wide(&crate::sos_shmem::scoped_name(CAPTURE_START_EVENT)).as_ptr(),
+        );
+        let pe = OpenEventW(
+            SYNCHRONIZE,
+            0,
+            to_wide(&crate::sos_shmem::scoped_name(CAPTURE_STOP_EVENT)).as_ptr(),
+        );
         if se == 0 || pe == 0 {
             log::error!("Failed to open capture start/stop events");
             return Ok(());
@@ -279,15 +295,21 @@ pub fn run_service() -> ResultType<()> {
             let ret = unsafe { WaitForMultipleObjects(2, handles.as_ptr(), 0, INFINITE) };
             if ret == WAIT_OBJECT_0 {
                 // CAPTURE_START
-                log::info!("[EVENT] Received CAPTURE_START");
-                cap_active.store(true, Ordering::SeqCst);
+                //
+                // 主进程在安全桌面期间每秒重复 SetEvent（幂等，用于兜住
+                // 「子进程刚被看门狗重启、错过了最初的信号」），所以这里
+                // 只在状态**真的变化**时记日志，否则日志会被刷屏。
+                if !cap_active.swap(true, Ordering::SeqCst) {
+                    log::info!("[EVENT] Received CAPTURE_START");
+                }
                 if let Some(t) = cap_handle.lock().unwrap().as_ref() {
                     t.unpark();
                 }
             } else if ret == WAIT_OBJECT_0 + 1 {
                 // CAPTURE_STOP
-                log::info!("[EVENT] Received CAPTURE_STOP");
-                cap_active.store(false, Ordering::SeqCst);
+                if cap_active.swap(false, Ordering::SeqCst) {
+                    log::info!("[EVENT] Received CAPTURE_STOP");
+                }
             } else {
                 log::error!("[EVENT] WaitForMultipleObjects failed, ret={}", ret);
                 break;
@@ -311,33 +333,83 @@ pub fn run_service() -> ResultType<()> {
 
 // ── 主进程中启动 SYSTEM 子进程 ──
 
-/// 在 Session 1 中以 SYSTEM 身份启动自身副本。
-/// 成功返回子进程句柄（用于 WaitForSingleObject 监控），失败返回 0。
-pub fn launch_system_sub_process(debug: bool) -> isize {
+/// 以 SYSTEM 身份启动自身副本，**优先放在控制台会话**。
+///
+/// # 为什么优先控制台会话
+///
+/// 现场使用方式是「在 RDP 会话里启动 SOS → 退出 RDP → 从控制端连接」。
+/// 退出后该会话变成 `WTSDisconnected`，Windows **不再为它合成桌面**，
+/// 任何抓屏 API 都拿不到像素（现场日志：`E_ACCESSDENIED` 连续 30 秒）。
+/// 控制台会话则始终绑定物理显示输出，即使停在登录界面也在合成画面。
+///
+/// `global_namespace`：共享内存/命名事件是否在 `Global\` 命名空间里。
+/// 若主进程没能启用 `SeCreateGlobalPrivilege`，就必须让子进程留在**同一会话**
+/// 并使用会话内名字，因此要把它开关透传下去。
+///
+pub fn launch_system_sub_process(debug: bool, global_namespace: bool) -> isize {
     #[cfg(windows)]
     {
         let exe = std::env::current_exe()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| "rustdesk-sos.exe".into());
-        let args = if debug {
-            "--service --debug"
-        } else {
-            "--service"
-        };
+        let mut args = String::from("--service");
+        if debug {
+            args.push_str(" --debug");
+        }
+        if !global_namespace {
+            // 子进程据此把事件/共享内存名去掉 `Global\` 前缀（见 `sos_shmem::scoped_name`）
+            args.push_str(" --no-global");
+        }
         let cmd = format!("\"{}\" {}", exe, args);
-        log::info!("Starting SYSTEM sub-process: {}", cmd);
+        log::info!(
+            "Starting SYSTEM sub-process (global_namespace={}): {}",
+            global_namespace,
+            cmd
+        );
 
         let cmd_wide: Vec<u16> = cmd.encode_utf16().chain(std::iter::once(0)).collect();
-        let handle = unsafe { SosRunAsSystemInSession1(cmd_wide.as_ptr()) };
+        let mut winlogon_session = 0u32;
+        let mut winlogon_pid = 0u32;
+        let mut console_session = 0u32;
+        let handle = unsafe {
+            SosRunAsSystemInSession1(
+                cmd_wide.as_ptr(),
+                // 只有用 `Global\` 命名时子进程才能跨会话连上 IPC；否则必须同会话
+                if global_namespace { 1 } else { 0 },
+                &mut winlogon_session,
+                &mut winlogon_pid,
+                &mut console_session,
+            )
+        };
         if handle != 0 {
             log::info!(
-                "SYSTEM sub-process created via CreateProcessWithTokenW, handle=0x{:x}",
-                handle
+                "SYSTEM sub-process created via CreateProcessWithTokenW, handle=0x{:x} \
+                 winlogon_pid={} session={} console_session={} (main {})",
+                handle,
+                winlogon_pid,
+                winlogon_session,
+                console_session,
+                crate::sos_uac::desktop_state()
             );
+            if global_namespace && winlogon_session != console_session {
+                log::warn!(
+                    "[SESSION] console session {} unavailable, sub-process runs in session {} — \
+                     its screen may differ from the console display",
+                    console_session,
+                    winlogon_session
+                );
+            } else if !global_namespace {
+                log::warn!(
+                    "[SESSION] cross-session IPC unavailable (Global\\ namespace not created), \
+                     sub-process stays in session {} — if this session gets disconnected \
+                     there will be no picture",
+                    winlogon_session
+                );
+            }
             return handle;
         }
         log::error!("SosRunAsSystemInSession1 failed, fallback to run_as_system");
-        match librustdesk::platform::run_as_system(args) {
+        match librustdesk::platform::run_as_system(&args) {
             Ok(()) => {
                 log::info!("fallback run_as_system succeeded (no handle for monitor)");
                 0

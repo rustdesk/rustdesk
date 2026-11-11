@@ -61,6 +61,8 @@ pub fn set_nat_type(t: i32) {
     }
 }
 
+// ── 注册表配置 ──
+
 /// 注册表配置管理
 pub struct RegistryConfig;
 
@@ -79,11 +81,6 @@ impl RegistryConfig {
             .unwrap_or_else(|_| default.to_string())
     }
 
-    pub fn set_string(name: &str, value: &str) -> ResultType<()> {
-        let key = Self::open_key()?;
-        key.set_value(name, &value.to_string()).map_err(Into::into)
-    }
-
     pub fn get_binary(name: &str) -> ResultType<Vec<u8>> {
         // winreg 不支持直接读 REG_BINARY；改用 hex 编码存储
         let s = Self::get_string(name, "");
@@ -91,19 +88,6 @@ impl RegistryConfig {
             return Ok(vec![]);
         }
         hex::decode(&s).map_err(|e| anyhow::anyhow!("Failed to decode hex value: {}", e))
-    }
-
-    #[allow(dead_code)]
-    pub fn get_dword(name: &str, default: u32) -> u32 {
-        Self::open_key()
-            .and_then(|k| k.get_value(name).map_err(Into::into))
-            .unwrap_or(default)
-    }
-
-    #[allow(dead_code)]
-    pub fn set_dword(name: &str, value: u32) -> ResultType<()> {
-        let key = Self::open_key()?;
-        key.set_value(name, &value).map_err(Into::into)
     }
 
     /// 检查注册表键是否存在（首次运行检测）
@@ -117,11 +101,6 @@ impl RegistryConfig {
 
     pub fn get_id() -> String {
         Self::get_string("ID", "")
-    }
-
-    #[allow(dead_code)]
-    pub fn get_enc_id() -> String {
-        Self::get_string("EncID", "")
     }
 
     /// 获取 Ed25519 密钥对：优先注册表（兼容旧数据），否则在内存中生成一份
@@ -145,24 +124,13 @@ impl RegistryConfig {
         lock.lock().unwrap().clone()
     }
 
-    #[allow(dead_code)]
-    pub fn get_key_confirmed() -> bool {
-        Self::get_dword("KeyConfirmed", 0) != 0
-    }
-
-    #[allow(dead_code)]
+    /// 记录公钥是否已在信令服务器确认（`RegisterPkResponse` 成功后置位）
+    ///
+    /// `UUID_MISMATCH` 时会被清回 `false`，随后换 ID 重新注册。
     pub fn set_key_confirmed(v: bool) {
-        let _ = Self::set_dword("KeyConfirmed", if v { 1 } else { 0 });
-    }
-
-    #[allow(dead_code)]
-    pub fn get_rendezvous_server() -> String {
-        Self::get_string("RendezvousServer", "")
-    }
-
-    #[allow(dead_code)]
-    pub fn set_rendezvous_server(server: &str) -> ResultType<()> {
-        Self::set_string("RendezvousServer", server)
+        if let Ok(key) = Self::open_key() {
+            let _ = key.set_value("KeyConfirmed", &u32::from(v));
+        }
     }
 
     /// 获取持久化的密码盐值（不存在时自动生成并存储）
@@ -184,26 +152,6 @@ impl RegistryConfig {
             let _ = key.set_value("Salt", &salt);
         }
         salt
-    }
-
-    // ── Options 子键 ──
-
-    #[allow(dead_code)]
-    pub fn get_option(key: &str) -> String {
-        let sub_path = format!("{}\\Options", sos_constants::REGISTRY_PATH);
-        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        hklm.open_subkey(&sub_path)
-            .and_then(|k| k.get_value(key))
-            .unwrap_or_default()
-    }
-
-    #[allow(dead_code)]
-    pub fn set_option(key: &str, value: &str) -> ResultType<()> {
-        let sub_path = format!("{}\\Options", sos_constants::REGISTRY_PATH);
-        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        let (sub_key, _) = hklm.create_subkey(&sub_path)?;
-        sub_key.set_value(key, &value.to_string())?;
-        Ok(())
     }
 
     // ── 首次运行初始化 ──
@@ -230,7 +178,7 @@ impl RegistryConfig {
     ///
     /// 注册表仅存储设备 ID，用于保持跨启动的设备身份一致性。
     /// 密钥对、密码、信令服务器等均为内存管理（SOS 为一次性工具）。
-    pub fn init_first_run(cli_id: &str, _cli_rendezvous: &str) -> ResultType<()> {
+    pub fn init_first_run(cli_id: &str, _cli_manager: &str) -> ResultType<()> {
         // 清理旧版遗留键
         Self::clean_legacy_keys();
 
@@ -288,18 +236,18 @@ impl RegistryConfig {
 pub struct SosConfig {
     pub id: String,
     pub rendezvous_server: String,
-    #[allow(dead_code)]
+    /// 中继服务器（来自 `--relay`）。空串表示交给信令服务器下发。
+    /// 支持逗号分隔多个地址，由 `sos_rendezvous::resolve_relay_candidates`
+    /// 逐个尝试。
     pub relay_server: String,
-    #[allow(dead_code)]
-    pub key_pair: (Vec<u8>, Vec<u8>), // (sk, pk)
-    pub password: String,             // CLI 传入的临时密码
-    pub server_pub_key: String,       // 信令服务器公钥（Base64）
+    pub password: String,       // CLI 传入的临时密码
+    pub server_pub_key: String, // 信令服务器公钥（Base64）
 }
 
 impl SosConfig {
     /// 从 CLI 参数和注册表构建运行时配置
     pub fn from_cli_and_registry(
-        cli_rendezvous: &str,
+        cli_manager: &str,
         cli_relay: &str,
         cli_key: &str,
         cli_password: &str,
@@ -307,14 +255,14 @@ impl SosConfig {
         // 确保注册表已初始化
         if !RegistryConfig::is_initialized() {
             log::info!("First run detected, initializing registry...");
-            RegistryConfig::init_first_run("", cli_rendezvous)?;
+            RegistryConfig::init_first_run("", cli_manager)?;
         }
 
         // ID: 始终从注册表读取（自动生成或首次运行生成）
         let id = {
             let rid = RegistryConfig::get_id();
             if rid.is_empty() {
-                RegistryConfig::init_first_run("", cli_rendezvous)?;
+                RegistryConfig::init_first_run("", cli_manager)?;
                 RegistryConfig::get_id()
             } else {
                 rid
@@ -322,13 +270,11 @@ impl SosConfig {
         };
 
         // 信令服务器: CLI > 默认（不读注册表，SOS 为一次性工具）
-        let rendezvous_server = if !cli_rendezvous.is_empty() {
-            cli_rendezvous.to_string()
+        let rendezvous_server = if !cli_manager.is_empty() {
+            cli_manager.to_string()
         } else {
             sos_constants::default_rendezvous_server()
         };
-
-        let key_pair = RegistryConfig::get_key_pair();
 
         // 信令服务器公钥：CLI > RustDesk 官方默认
         let server_pub_key = if !cli_key.is_empty() {
@@ -348,26 +294,15 @@ impl SosConfig {
             id,
             rendezvous_server,
             relay_server,
-            key_pair,
             password: cli_password.to_string(),
             server_pub_key,
         })
     }
 }
 
-// ── 上游视频服务全局实例 ──
+// ── 上游剪贴板服务全局实例 ──
 
 use librustdesk::service::GenericService;
-
-/// 上游 video_service 全局实例（由 main 初始化，连接循环订阅）
-pub static VIDEO_SVC: std::sync::OnceLock<GenericService> = std::sync::OnceLock::new();
-
-/// 设置视频服务实例
-pub fn set_video_service(svc: GenericService) {
-    let _ = VIDEO_SVC.set(svc);
-}
-
-// ── 上游剪贴板服务全局实例 ──
 
 /// 上游 clipboard_service 全局实例（由 main 初始化，连接循环订阅）
 pub static CLIPBOARD_SVC: std::sync::OnceLock<GenericService> = std::sync::OnceLock::new();

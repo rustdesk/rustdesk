@@ -1,0 +1,13 @@
+# 构建产物。xtask 也把最终交付物放这里。
+dist/
+
+# xtask 自己是个独立 workspace，有单独的 target/
+xtask/target/
+
+# 本机工具：WMI 诊断脚本，以及手动放进来的 UPX 副本。
+#
+# 两者都不属于交付源码：诊断脚本是排查现场问题的一次性工具，
+# UPX 是第三方二进制（体积大、有单独许可证、且 xtask 本来就能从
+# PATH / UPX_PATH / 常见安装位置找到系统装的那一份）。
+# 需要时本地放进 tools/ 即可，xtask 会自动发现并使用。
+tools/

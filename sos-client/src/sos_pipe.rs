@@ -31,7 +31,23 @@ pub const PIPE_ACCESS_OUTBOUND: u32 = 2;
 const PIPE_TYPE_MESSAGE: u32 = 4;
 const PIPE_READMODE_MESSAGE: u32 = 2;
 const PIPE_WAIT: u32 = 0;
-const PIPE_UNLIMITED_INSTANCES: u32 = 255;
+
+/// `dwOpenMode` 标志：声明自己必须是同名管道的**第一个**实例。
+/// 第二个 server 用同一个名字创建会直接失败（ERROR_ACCESS_DENIED），
+/// 而不是静默地再开一个实例、把客户端从原有实例那里抢走。
+///
+/// 之前用的是 `PIPE_UNLIMITED_INSTANCES`（255），两个 rustdesk-sos 实例
+/// 可以同时创建 `\\.\pipe\sos_input` 而谁都不报错，各自的 SYSTEM 子进程
+/// 各接一半客户端，最终互相把对方踢掉。
+const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
+/// 单实例管道的最大实例数（配合上面的标志）。
+const PIPE_SINGLE_INSTANCE: u32 = 1;
+
+/// 建管道失败时的重试次数与间隔。
+/// 看门狗重建管道时，上一轮的服务线程可能还没走到 `CloseHandle`，
+/// 此时 FIRST_PIPE_INSTANCE 会让创建失败；短暂重试即可恢复。
+const PIPE_CREATE_RETRY: u32 = 50;
+const PIPE_CREATE_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(20);
 const GENERIC_READ: u32 = 0x80000000;
 const OPEN_EXISTING: u32 = 3;
 const ERROR_PIPE_CONNECTED: u32 = 535;
@@ -117,18 +133,34 @@ pub fn create_pipe_server(
     let name = name.to_owned();
     let handle = std::thread::spawn(move || unsafe {
         let wide = to_wide(&name);
-        let pipe = CreateNamedPipeW(
-            wide.as_ptr(),
-            access,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            PIPE_UNLIMITED_INSTANCES,
-            4096,
-            4096,
-            0,
-            std::ptr::null(),
-        );
+        let mut pipe = INVALID_HANDLE_VALUE;
+        let mut attempt = 0u32;
+        while attempt < PIPE_CREATE_RETRY {
+            pipe = CreateNamedPipeW(
+                wide.as_ptr(),
+                access | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+                PIPE_SINGLE_INSTANCE,
+                4096,
+                4096,
+                0,
+                std::ptr::null(),
+            );
+            if pipe != INVALID_HANDLE_VALUE {
+                break;
+            }
+            attempt += 1;
+            if attempt < PIPE_CREATE_RETRY {
+                std::thread::sleep(PIPE_CREATE_RETRY_DELAY);
+            }
+        }
         if pipe == INVALID_HANDLE_VALUE {
-            log::error!("[PIPE] CreateNamedPipeW({name}) failed: {}", GetLastError());
+            // 坚持到这里失败，通常意味着**另一个实例**正占着这个名字。
+            log::error!(
+                "[PIPE] CreateNamedPipeW({name}) failed after {PIPE_CREATE_RETRY} tries: {} ({}ms)",
+                GetLastError(),
+                PIPE_CREATE_RETRY as u64 * PIPE_CREATE_RETRY_DELAY.as_millis() as u64
+            );
             return;
         }
         log::info!("[PIPE] Server: {name}");
