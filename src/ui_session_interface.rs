@@ -141,6 +141,11 @@ impl ConnectionRoundState {
     pub fn is_connected(&self) -> bool {
         matches!(self.state, ConnectionState::Connected)
     }
+
+    /// Whether a connection round was ever started (`new_round()`).
+    pub fn has_started(&self) -> bool {
+        self.round > 0
+    }
 }
 
 impl Default for ConnectionRoundState {
@@ -1313,8 +1318,13 @@ impl<T: InvokeUiSession> Session<T> {
         // 1. If current session is connecting, do not reconnect.
         // 2. If the connection is established, send `Data::Close`.
         // 3. If the connection is disconnected, do nothing.
+        //
+        // The state check applies to every round, including the first one, which `flutter::session_start_()` starts
+        // without storing its thread in `self.thread`. Each window of a multi-window session runs its own retry timer;
+        // the timers fire together after a dropped connection, and every call that skipped this check started one more
+        // round for the same peer.
         let mut connection_round_state_lock = self.connection_round_state.lock().unwrap();
-        if self.thread.lock().unwrap().is_some() {
+        if self.thread.lock().unwrap().is_some() || connection_round_state_lock.has_started() {
             match connection_round_state_lock.state {
                 ConnectionState::Connecting => return,
                 ConnectionState::Connected => self.send(Data::Close),

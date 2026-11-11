@@ -349,6 +349,14 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _ = status_timer.tick() => {
+                            // A newer round of this session exists: this round no longer receives the UI's `Data`
+                            // (`Session::sender` belongs to the newer round), and it holds the peer's shared cliprdr
+                            // receiver (`clipboard::get_rx_cliprdr_client()`) that the newer round waits for.
+                            if self.handler.connection_round_state.lock().unwrap().is_round_gt(round) {
+                                log::info!("Connection round {round} is superseded, closing it");
+                                self.send_close_reason(&mut peer, "").await;
+                                break;
+                            }
                             if self.handler.is_restarting_remote_device()
                                 && last_recv_time.elapsed() >= RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT
                             {
