@@ -2037,23 +2037,21 @@ class _DisplayMenuState extends State<_DisplayMenu> {
           // greyed out.
           Widget syncClipboard(bool clipboardDisabled) => Padding(
                 padding: const EdgeInsets.only(left: 24),
-                child: StatefulBuilder(
-                    builder: (context, setState) => CkbMenuButton(
-                        value: bind.mainGetLocalOption(
-                                key: kOptionAllowSyncClipboardBetweenSessions) ==
-                            'Y',
-                        onChanged: clipboardDisabled
-                            ? null
-                            : (value) async {
-                                if (value == null) return;
-                                await bind.mainSetLocalOption(
-                                    key: kOptionAllowSyncClipboardBetweenSessions,
-                                    value: value ? 'Y' : 'N');
-                                setState(() {});
-                              },
-                        child: Text(
-                            translate('Sync clipboard between sessions')),
-                        ffi: ffi)),
+                child: CkbMenuButton(
+                    value: bind.mainGetLocalOption(
+                            key: kOptionAllowSyncClipboardBetweenSessions) ==
+                        'Y',
+                    onChanged: clipboardDisabled ||
+                            isOptionFixed(kOptionAllowSyncClipboardBetweenSessions) == true
+                        ? null
+                        : (value) {
+                            if (value == null) return;
+                            bind.mainSetLocalOption(
+                                key: kOptionAllowSyncClipboardBetweenSessions,
+                                value: value ? 'Y' : 'N');
+                          },
+                    child: Text(translate('Sync clipboard between sessions')),
+                    ffi: ffi),
               );
           return Column(children: [
             for (final e in v) ...[
