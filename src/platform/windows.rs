@@ -96,7 +96,6 @@ use windows_service::{
     },
     service_control_handler::{self, ServiceControlHandlerResult},
     service_manager::{ServiceManager, ServiceManagerAccess},
-    Error,
 };
 use winreg::{enums::*, RegKey};
 
@@ -4330,13 +4329,16 @@ pub fn is_service_running(service_name: &str) -> bool {
 }
 
 pub fn is_installed_daemon() -> bool {
+    if super::installing_service() {
+        return true;
+    }
     const SERVICE_QUERY_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
     let service_name = crate::get_app_name();
     let service = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
         .and_then(|manager| manager.open_service(&service_name, ServiceAccess::QUERY_STATUS));
     match service {
         Ok(_) => true,
-        Err(Error::Winapi(error))
+        Err(windows_service::Error::Winapi(error))
             if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST.0 as i32) =>
         {
             false
