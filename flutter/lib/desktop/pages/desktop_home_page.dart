@@ -428,7 +428,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
-    if (!bind.isCustomClient() &&
+    final needsServiceInstallation = isWindows &&
+        systemError.isEmpty &&
+        !bind.isDisableInstallation() &&
+        bind.mainIsInstalled() &&
+        !bind.isOutgoingOnly() &&
+        !mainGetBoolOptionSync(kOptionStopService) &&
+        !bind.mainIsInstalledDaemon(prompt: false);
+    if (!needsServiceInstallation &&
+        !bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
         bind.mainUriPrefixSync().contains('rustdesk')) {
@@ -473,9 +481,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainUpdateMe();
         });
-      } else if (!bind.isOutgoingOnly() &&
-          !mainGetBoolOptionSync(kOptionStopService) &&
-          !bind.mainIsInstalledDaemon(prompt: false)) {
+      } else if (needsServiceInstallation) {
         return buildInstallCard("", "install_daemon_tip", "Install", () async {
           await start_service(true);
         });
