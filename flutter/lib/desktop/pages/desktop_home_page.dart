@@ -435,7 +435,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         bind.mainIsInstalledLowerVersion();
     final needsServiceInstallation = isWindows &&
         systemError.isEmpty &&
-        !needsInstallationUpgrade &&
+        (!needsInstallationUpgrade ||
+            bind.mainGetBuildinOption(key: kOptionHideHelpCards) == 'Y') &&
         !bind.isDisableInstallation() &&
         bind.mainIsInstalled() &&
         !bind.isOutgoingOnly() &&
@@ -481,7 +482,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainGotoInstall();
         });
-      } else if (needsInstallationUpgrade) {
+      } else if (needsInstallationUpgrade && !needsServiceInstallation) {
         return buildInstallCard(
             "Status", "Your installation is lower version.", "Click to upgrade",
             () async {
