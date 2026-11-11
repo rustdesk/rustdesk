@@ -64,6 +64,3 @@ index 9d3823ec3e4a06851c689810c9d1accb2dfb42f9..beea53220c4b016f8520acb5a3073cbd
  #include <list>
  
  #include "mfxloader.h"
--- 
-2.47.3
-
