@@ -428,23 +428,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
-    final needsInstallationUpgrade = isWindows &&
+    if (isWindows &&
         systemError.isEmpty &&
-        !bind.isDisableInstallation() &&
-        bind.mainIsInstalled() &&
-        bind.mainIsInstalledLowerVersion();
-    final needsServiceInstallation = isWindows &&
-        systemError.isEmpty &&
-        (!needsInstallationUpgrade ||
-            bind.mainGetBuildinOption(key: kOptionHideHelpCards) == 'Y') &&
         !bind.isDisableInstallation() &&
         bind.mainIsInstalled() &&
         !bind.isOutgoingOnly() &&
         !mainGetBoolOptionSync(kOptionStopService) &&
-        !bind.mainIsInstalledDaemon(prompt: false);
-    if (!needsInstallationUpgrade &&
-        !needsServiceInstallation &&
-        !bind.isCustomClient() &&
+        !bind.mainIsInstalledDaemon(prompt: false)) {
+      return buildInstallCard("", "install_daemon_tip", "Install", () async {
+        await start_service(true);
+      });
+    }
+    if (!bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
         bind.mainUriPrefixSync().contains('rustdesk')) {
@@ -482,16 +477,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainGotoInstall();
         });
-      } else if (needsInstallationUpgrade && !needsServiceInstallation) {
+      } else if (bind.mainIsInstalledLowerVersion()) {
         return buildInstallCard(
             "Status", "Your installation is lower version.", "Click to upgrade",
             () async {
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainUpdateMe();
-        });
-      } else if (needsServiceInstallation) {
-        return buildInstallCard("", "install_daemon_tip", "Install", () async {
-          await start_service(true);
         });
       }
     } else if (isMacOS) {

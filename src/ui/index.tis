@@ -711,9 +711,8 @@ class App: Reactor.Component
 
     function render() {
         var is_can_screen_recording = handler.is_can_screen_recording(false);
-        var show_upgrade = is_win && !disable_installation && handler.is_installed() && handler.is_installed_lower_version();
         var show_install_daemon = is_win && !disable_installation && !outgoing_only && !service_stopped &&
-            !show_upgrade && handler.is_installed() && !handler.is_installed_daemon(false);
+            handler.is_installed() && !handler.is_installed_daemon(false);
         return
             <div .app>
                     <div .left-pane style={incoming_only ? "width:*" : ""}>
@@ -732,8 +731,8 @@ class App: Reactor.Component
                         {!outgoing_only && <PasswordArea />}
                     </div>
                     {(!is_win || handler.is_installed() || disable_installation) ? "" : <InstallMe />}
-                    {software_update_url && !disable_installation && !show_upgrade && !show_install_daemon ? <UpdateMe /> : ""}
-                    {show_upgrade ? <UpgradeMe /> : ""}
+                    {software_update_url && !disable_installation && !show_install_daemon ? <UpdateMe /> : ""}
+                    {!show_install_daemon && is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() && !disable_installation ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
                     {(is_win ? show_install_daemon : !service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false)) ? <InstallDaemon /> : ""}
