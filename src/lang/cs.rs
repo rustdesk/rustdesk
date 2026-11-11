@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Vybraná složka není prázdná. Instalace může odstranit existující data. Zvažte výběr jiné složky."),
         ("Request approval", "Požádat o schválení"),
         ("Forever", "Navždy"),
+        ("Send text as key presses (for VMs and admin windows)", "Odesílat text jako stisky kláves (pro virtuální počítače a okna správce)"),
+        ("physical_key_text_input_tip", "Text napsaný nebo vložený v telefonu, napsaný v režimu překladu nebo odeslaný pomocí \"Odesílat stisky kláves schránky\" se odesílá jako stisky kláves tohoto počítače, takže jej přijmou i konzole virtuálních počítačů a okna spuštěná jako správce. Znaky, které rozložení klávesnice nedokáže napsat, se nadále odesílají jako Unicode. Virtuální počítač musí používat stejné rozložení klávesnice jako tento počítač. Zalomení řádků a tabulátory se odesílají jako stisky kláves Enter a Tab."),
+        ("Send text as key presses in virtual machine consoles", "Odesílat text jako stisky kláves v konzolích virtuálních počítačů"),
+        ("vm_console_key_press_text_input_tip", "Když je aktivním oknem konzole VMware, VirtualBox nebo Hyper-V, text napsaný nebo vložený v telefonu, napsaný v režimu překladu nebo odeslaný pomocí \"Odesílat stisky kláves schránky\" se odesílá jako stisky kláves tohoto počítače, protože tyto konzole nedokážou přečíst jinak používaný vstup Unicode. Klávesy stisknuté se současně drženou klávesou Ctrl, Alt nebo Windows se zpracovávají jako dříve. Znaky, které rozložení klávesnice nedokáže napsat, a text, který by převedla aktivní vstupní metoda, se nadále odesílají jako Unicode. Virtuální počítač musí používat stejné rozložení klávesnice jako tento počítač."),
     ].iter().cloned().collect();
 }

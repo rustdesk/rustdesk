@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Hautatutako karpeta ez dago hutsik. Instalazioak lehendik dauden datuak ezaba ditzake. Beste karpeta bat aukeratzea gomendatzen da."),
         ("Request approval", "Eskatu onespena"),
         ("Forever", "Betiko"),
+        ("Send text as key presses (for VMs and admin windows)", "Bidali testua tekla-sakatze gisa (makina birtualetarako eta administratzaile-leihoetarako)"),
+        ("physical_key_text_input_tip", "Telefonoan idatzitako edo itsatsitako testua, itzultze moduan idatzitakoa edo \"Bidali arbelaren tekla-sakatzeak\" erabiliz bidalitakoa ordenagailu honetako teklen sakatze gisa bidaltzen da, makina birtualen kontsolek eta administratzaile gisa exekutatutako leihoek jaso dezaten. Teklatuaren diseinuarekin idatzi ezin diren karaktereak Unicode gisa bidaltzen dira oraindik ere. Makina birtualak ordenagailu honen teklatu-diseinu bera erabili behar du. Lerro-jauziak eta tabulazioak Enter eta Tab teklen sakatze gisa bidaltzen dira."),
+        ("Send text as key presses in virtual machine consoles", "Bidali testua tekla-sakatze gisa makina birtualen kontsoletan"),
+        ("vm_console_key_press_text_input_tip", "VMware, VirtualBox edo Hyper-V kontsola bat leiho aktiboa denean, telefonoan idatzitako edo itsatsitako testua, itzultze moduan idatzitakoa edo \"Bidali arbelaren tekla-sakatzeak\" erabiliz bidalitakoa ordenagailu honetako teklen sakatze gisa bidaltzen da, kontsola horiek ezin baitute bestela erabiltzen den Unicode sarrera irakurri. Ctrl, Alt edo Windows sakatuta dagoela idatzitako teklak lehen bezala kudeatzen dira. Teklatuaren diseinuarekin idatzi ezin diren karaktereak eta sarrera-metodo aktibo batek bihurtuko lukeen testua Unicode gisa bidaltzen dira oraindik ere. Makina birtualak ordenagailu honen teklatu-diseinu bera erabili behar du."),
     ].iter().cloned().collect();
 }

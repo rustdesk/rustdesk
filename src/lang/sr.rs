@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Izabrani direktorijum nije prazan. Instalacija može da obriše postojeće podatke. Razmislite o izboru drugog direktorijuma."),
         ("Request approval", "Zatraži odobrenje"),
         ("Forever", "Zauvek"),
+        ("Send text as key presses (for VMs and admin windows)", "Pošalji tekst kao pritiske tastera (za virtuelne mašine i administratorske prozore)"),
+        ("physical_key_text_input_tip", "Tekst otkucan ili nalepljen na telefonu, otkucan u modu prevođenja ili poslat pomoću \"Pošalji pritiske tastera iz clipboard-a\" šalje se kao pritisci tastera ovog računara, tako da ga primaju konzole virtuelnih mašina i prozori pokrenuti kao administrator. Znakovi koje raspored tastature ne može da otkuca i dalje se šalju kao Unicode. Virtuelna mašina mora da koristi isti raspored tastature kao ovaj računar. Prelomi redova i tabulatori šalju se kao pritisci tastera Enter i Tab."),
+        ("Send text as key presses in virtual machine consoles", "Pošalji tekst kao pritiske tastera u konzolama virtuelnih mašina"),
+        ("vm_console_key_press_text_input_tip", "Dok je konzola VMware, VirtualBox ili Hyper-V aktivan prozor, tekst otkucan ili nalepljen na telefonu, otkucan u modu prevođenja ili poslat pomoću \"Pošalji pritiske tastera iz clipboard-a\" šalje se kao pritisci tastera ovog računara, jer te konzole ne mogu da čitaju Unicode unos koji se inače koristi. Tasteri otkucani uz držanje tastera Ctrl, Alt ili Windows obrađuju se kao i ranije. Znakovi koje raspored tastature ne može da otkuca, kao i tekst koji bi aktivni metod unosa konvertovao, i dalje se šalju kao Unicode. Virtuelna mašina mora da koristi isti raspored tastature kao ovaj računar."),
     ].iter().cloned().collect();
 }

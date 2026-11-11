@@ -125,6 +125,7 @@ winapi = { version = "0.3", features = [
     "cfgmgr32",
     "ioapiset",
     "winspool",
+    "winnls",
 ] }
 windows = { version = "0.61", features = [
     "Wdk_Foundation",
@@ -146,6 +147,7 @@ windows = { version = "0.61", features = [
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
     "Win32_System_WindowsProgramming",
+    "Win32_UI_Input_Ime",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }

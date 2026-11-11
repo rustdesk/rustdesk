@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Valitud kaust ei ole tühi. Paigaldamine võib olemasolevad andmed kustutada. Kaalu teise kausta valimist."),
         ("Request approval", "Küsi heakskiitu"),
         ("Forever", "Igavesti"),
+        ("Send text as key presses (for VMs and admin windows)", "Saada tekst klahvivajutustena (virtuaalmasinate ja administraatori akende jaoks)"),
+        ("physical_key_text_input_tip", "Telefonis trükitud või kleebitud, tõlkerežiimis trükitud või käsuga \"Saada lõikelaua klahvivajutused\" saadetud tekst saadetakse selle arvuti klahvide vajutustena, nii et virtuaalmasinate konsoolid ja administraatorina käivitatud aknad selle kätte saavad. Märgid, mida klaviatuuripaigutusega trükkida ei saa, saadetakse endiselt Unicode'ina. Virtuaalmasin peab kasutama sama klaviatuuripaigutust kui see arvuti. Reavahetused ja tabeldusmärgid saadetakse Enter- ja Tab-klahvi vajutustena."),
+        ("Send text as key presses in virtual machine consoles", "Saada tekst virtuaalmasinate konsoolides klahvivajutustena"),
+        ("vm_console_key_press_text_input_tip", "Kui aktiivne aken on VMware'i, VirtualBoxi või Hyper-V konsool, saadetakse telefonis trükitud või kleebitud, tõlkerežiimis trükitud või käsuga \"Saada lõikelaua klahvivajutused\" saadetud tekst selle arvuti klahvide vajutustena, kuna need konsoolid ei suuda lugeda muidu kasutatavat Unicode-sisendit. Klahve, mida vajutatakse Ctrl-, Alt- või Windows-klahvi all hoides, käsitletakse nagu varem. Märgid, mida klaviatuuripaigutusega trükkida ei saa, ja tekst, mille aktiivne sisestusmeetod teisendaks, saadetakse endiselt Unicode'ina. Virtuaalmasin peab kasutama sama klaviatuuripaigutust kui see arvuti."),
     ].iter().cloned().collect();
 }

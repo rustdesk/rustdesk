@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Folder yang dipilih tidak kosong. Instalasi dapat menghapus data yang ada. Pertimbangkan untuk memilih folder lain."),
         ("Request approval", "Minta persetujuan"),
         ("Forever", "Selamanya"),
+        ("Send text as key presses (for VMs and admin windows)", "Kirim teks sebagai penekanan tombol (untuk VM dan jendela administrator)"),
+        ("physical_key_text_input_tip", "Teks yang diketik atau ditempel di ponsel, diketik dalam mode terjemahan, atau dikirim dengan \"Kirim keystrokes clipboard\" dikirim sebagai penekanan tombol komputer ini, sehingga konsol mesin virtual dan jendela yang dijalankan sebagai administrator dapat menerimanya. Karakter yang tidak dapat diketik dengan tata letak papan ketik tetap dikirim sebagai Unicode. Mesin virtual harus menggunakan tata letak papan ketik yang sama dengan komputer ini. Baris baru dan tab dikirim sebagai penekanan tombol Enter dan Tab."),
+        ("Send text as key presses in virtual machine consoles", "Kirim teks sebagai penekanan tombol di konsol mesin virtual"),
+        ("vm_console_key_press_text_input_tip", "Selama konsol VMware, VirtualBox, atau Hyper-V menjadi jendela aktif, teks yang diketik atau ditempel di ponsel, diketik dalam mode terjemahan, atau dikirim dengan \"Kirim keystrokes clipboard\" dikirim sebagai penekanan tombol komputer ini, karena konsol tersebut tidak dapat membaca input Unicode yang biasanya digunakan. Tombol yang diketik sambil menahan Ctrl, Alt, atau Windows ditangani seperti sebelumnya. Karakter yang tidak dapat diketik dengan tata letak papan ketik, serta teks yang akan dikonversi oleh metode input yang aktif, tetap dikirim sebagai Unicode. Mesin virtual harus menggunakan tata letak papan ketik yang sama dengan komputer ini."),
     ].iter().cloned().collect();
 }

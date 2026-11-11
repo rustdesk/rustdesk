@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Seçilen klasör boş değil. Kurulum mevcut verileri silebilir. Farklı bir klasör seçmeyi düşünün."),
         ("Request approval", "Onay iste"),
         ("Forever", "Sonsuza dek"),
+        ("Send text as key presses (for VMs and admin windows)", "Metni tuş basışları olarak gönder (sanal makineler ve yönetici pencereleri için)"),
+        ("physical_key_text_input_tip", "Telefonda yazılan veya yapıştırılan, Çeviri modunda yazılan ya da \"Panoya tuş vuruşlarını gönder\" ile gönderilen metin, bu bilgisayarın tuşlarına basış olarak gönderilir; böylece sanal makine konsolları ve yönetici olarak çalıştırılan pencereler bu metni alır. Klavye düzeninin yazamadığı karakterler yine Unicode olarak gönderilir. Sanal makine, bu bilgisayarla aynı klavye düzenini kullanmalıdır. Satır sonları ve sekmeler, Enter ve Tab tuşu basışları olarak gönderilir."),
+        ("Send text as key presses in virtual machine consoles", "Sanal makine konsollarında metni tuş basışları olarak gönder"),
+        ("vm_console_key_press_text_input_tip", "Etkin pencere bir VMware, VirtualBox veya Hyper-V konsolu olduğunda, telefonda yazılan veya yapıştırılan, Çeviri modunda yazılan ya da \"Panoya tuş vuruşlarını gönder\" ile gönderilen metin, bu bilgisayarın tuşlarına basış olarak gönderilir; çünkü bu konsollar normalde kullanılan Unicode girişini okuyamaz. Ctrl, Alt veya Windows basılı tutularak yazılan tuşlar eskisi gibi işlenir. Klavye düzeninin yazamadığı karakterler ve etkin bir giriş yönteminin dönüştüreceği metin yine Unicode olarak gönderilir. Sanal makine, bu bilgisayarla aynı klavye düzenini kullanmalıdır."),
     ].iter().cloned().collect();
 }

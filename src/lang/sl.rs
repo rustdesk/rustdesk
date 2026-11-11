@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Izbrana mapa ni prazna. Namestitev lahko izbriše obstoječe podatke. Razmislite o izbiri druge mape."),
         ("Request approval", "Zahtevaj odobritev"),
         ("Forever", "Za vedno"),
+        ("Send text as key presses (for VMs and admin windows)", "Pošlji besedilo kot pritiske tipk (za navidezne stroje in skrbniška okna)"),
+        ("physical_key_text_input_tip", "Besedilo, vtipkano ali prilepljeno na telefonu, vtipkano v načinu prevajanja ali poslano z \"Vtipkaj vsebino odložišča\", se pošlje kot pritiski tipk tega računalnika, tako da ga prejmejo konzole navideznih strojev in okna, zagnana kot skrbnik. Znaki, ki jih s postavitvijo tipkovnice ni mogoče vtipkati, se še vedno pošljejo kot Unicode. Navidezni stroj mora uporabljati enako postavitev tipkovnice kot ta računalnik. Prelomi vrstic in tabulatorji se pošljejo kot pritiski tipk Enter in Tab."),
+        ("Send text as key presses in virtual machine consoles", "Pošlji besedilo kot pritiske tipk v konzolah navideznih strojev"),
+        ("vm_console_key_press_text_input_tip", "Ko je aktivno okno konzola VMware, VirtualBox ali Hyper-V, se besedilo, vtipkano ali prilepljeno na telefonu, vtipkano v načinu prevajanja ali poslano z \"Vtipkaj vsebino odložišča\", pošlje kot pritiski tipk tega računalnika, saj te konzole ne morejo brati sicer uporabljenega vnosa Unicode. Tipke, vtipkane ob pridržani tipki Ctrl, Alt ali Windows, se obravnavajo kot doslej. Znaki, ki jih s postavitvijo tipkovnice ni mogoče vtipkati, in besedilo, ki bi ga aktivni način vnosa pretvoril, se še vedno pošljejo kot Unicode. Navidezni stroj mora uporabljati enako postavitev tipkovnice kot ta računalnik."),
     ].iter().cloned().collect();
 }

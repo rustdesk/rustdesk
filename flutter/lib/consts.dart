@@ -173,6 +173,10 @@ const String kOptionAllowAlwaysSoftwareRender = "allow-always-software-render";
 const String kOptionEnableCheckUpdate = "enable-check-update";
 const String kOptionAllowAutoUpdate = "allow-auto-update";
 const String kOptionAllowRemoveWallpaper = "allow-remove-wallpaper";
+const String kOptionAllowPhysicalKeyTextInput =
+    "allow-physical-key-text-input";
+const String kOptionEnableVmConsoleKeyPressTextInput =
+    "enable-vm-console-key-press-text-input";
 const String kOptionStopService = "stop-service";
 const String kOptionDirectxCapture = "enable-directx-capture";
 const String kOptionAllowRemoteCmModification = "allow-remote-cm-modification";

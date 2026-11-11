@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "La carpeta seleccionada no está vacía. La instalación puede eliminar los datos existentes. Considera elegir otra carpeta."),
         ("Request approval", "Solicitar aprobación"),
         ("Forever", "Para siempre"),
+        ("Send text as key presses (for VMs and admin windows)", "Enviar texto como pulsaciones de teclas (para máquinas virtuales y ventanas de administrador)"),
+        ("physical_key_text_input_tip", "El texto escrito o pegado en un teléfono, escrito en modo traducido o enviado con \"Enviar pulsaciones de teclas\" se envía como pulsaciones de las teclas de este equipo, para que lo reciban las consolas de máquinas virtuales y las ventanas ejecutadas como administrador. Los caracteres que la distribución del teclado no puede escribir se siguen enviando como Unicode. La máquina virtual debe usar la misma distribución de teclado que este equipo. Los saltos de línea y las tabulaciones se envían como pulsaciones de las teclas Enter y Tab."),
+        ("Send text as key presses in virtual machine consoles", "Enviar texto como pulsaciones de teclas en consolas de máquinas virtuales"),
+        ("vm_console_key_press_text_input_tip", "Mientras una consola de VMware, VirtualBox o Hyper-V sea la ventana activa, el texto escrito o pegado en un teléfono, escrito en modo traducido o enviado con \"Enviar pulsaciones de teclas\" se envía como pulsaciones de las teclas de este equipo, ya que estas consolas no pueden leer la entrada Unicode que se usa en otros casos. Las teclas pulsadas mientras se mantiene Ctrl, Alt o Windows se gestionan como antes. Los caracteres que la distribución del teclado no puede escribir, y el texto que un método de entrada activo convertiría, se siguen enviando como Unicode. La máquina virtual debe usar la misma distribución de teclado que este equipo."),
     ].iter().cloned().collect();
 }

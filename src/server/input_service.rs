@@ -2233,6 +2233,14 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 
             let record_key = chr as u64 + KEY_CHAR_START;
             record_pressed_key(KeysDown::EnigoKey(record_key), down);
+            #[cfg(target_os = "windows")]
+            if down
+                && use_key_presses_for_text(evt, &mut en)
+                && crate::platform::windows::try_input_char_as_key_presses(chr, text_key_state(evt))
+            {
+                release_keys(&mut en, &to_release);
+                return;
+            }
             process_chr(&mut en, chr, down, has_hotkey_modifiers(evt))
         }
         Some(key_event::Union::Unicode(chr)) => {
@@ -2240,14 +2248,93 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
             #[cfg(target_os = "linux")]
             release_shift_for_char_input(&mut en);
 
+            // The web client sends characters outside a-z this way from a mobile browser.
+            #[cfg(target_os = "windows")]
+            if use_key_presses_for_text(evt, &mut en)
+                && crate::platform::windows::try_input_char_as_key_presses(chr, text_key_state(evt))
+            {
+                release_keys(&mut en, &to_release);
+                return;
+            }
             process_unicode(&mut en, chr)
         }
-        Some(key_event::Union::Seq(ref seq)) => process_seq(&mut en, seq),
+        Some(key_event::Union::Seq(ref seq)) => {
+            #[cfg(target_os = "windows")]
+            if use_key_presses_for_text(evt, &mut en) {
+                crate::platform::windows::input_text_as_key_presses(
+                    seq,
+                    text_key_state(evt),
+                    |s| en.key_sequence(s),
+                );
+                release_keys(&mut en, &to_release);
+                return;
+            }
+            process_seq(&mut en, seq)
+        }
         _ => {}
     }
 
     #[cfg(not(target_os = "macos"))]
     release_keys(&mut en, &to_release);
+}
+
+/// Whether legacy or Translate-mode text should use key presses instead of Unicode input. Not
+/// with Ctrl, Alt or Windows in the event or held down, as they would combine with the keys.
+/// Shift may be in the event: the character is already final, so the key presses release it
+/// first. A Seq does not release held modifiers. Auto Login types the OS password at the logon
+/// or lock screen, where Unicode input works: keep it there. VM consoles have their own option,
+/// on by default, as Unicode input never types correctly there.
+#[cfg(target_os = "windows")]
+fn use_key_presses_for_text(evt: &KeyEvent, en: &mut Enigo) -> bool {
+    let (always, in_vm_consoles) = key_press_text_input_options();
+    !has_hotkey_modifiers(evt)
+        && (always || (in_vm_consoles && crate::platform::windows::is_foreground_vm_console()))
+        && ![Key::Control, Key::Alt, Key::Meta]
+            .into_iter()
+            .any(|key| get_modifier_state(key, en))
+        && !crate::platform::is_logon_screen()
+}
+
+/// The portable service runs as SYSTEM with its own config, so the main process sends it the
+/// user's key-press text options with each key event.
+#[cfg(target_os = "windows")]
+static PORTABLE_SERVICE_KEY_PRESS_TEXT_INPUT_OPTIONS: Mutex<Option<(bool, bool)>> =
+    Mutex::new(None);
+
+/// Whether text uses key presses always, and in VM consoles.
+#[cfg(target_os = "windows")]
+pub fn key_press_text_input_options() -> (bool, bool) {
+    use base::config::keys::{
+        OPTION_ALLOW_PHYSICAL_KEY_TEXT_INPUT, OPTION_ENABLE_VM_CONSOLE_KEY_PRESS_TEXT_INPUT,
+    };
+    if let Some(options) = *PORTABLE_SERVICE_KEY_PRESS_TEXT_INPUT_OPTIONS
+        .lock()
+        .unwrap()
+    {
+        return options;
+    }
+    (
+        Config::get_bool_option(OPTION_ALLOW_PHYSICAL_KEY_TEXT_INPUT),
+        Config::get_bool_option(OPTION_ENABLE_VM_CONSOLE_KEY_PRESS_TEXT_INPUT),
+    )
+}
+
+#[cfg(target_os = "windows")]
+pub fn set_portable_service_key_press_text_input_options(options: (bool, bool)) {
+    *PORTABLE_SERVICE_KEY_PRESS_TEXT_INPUT_OPTIONS
+        .lock()
+        .unwrap() = Some(options);
+}
+
+/// The input service has just set the host's Caps Lock to the event's, and pressed Shift if the
+/// event has it.
+#[cfg(target_os = "windows")]
+fn text_key_state(evt: &KeyEvent) -> crate::platform::windows::TextKeyState {
+    let has = |key: ControlKey| evt.modifiers.iter().any(|ck| ck.value() == key.value());
+    crate::platform::windows::TextKeyState {
+        caps_lock: has(ControlKey::CapsLock),
+        shift_down: has(ControlKey::Shift) || has(ControlKey::RShift),
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -2339,6 +2426,19 @@ fn translate_keyboard_mode(evt: &KeyEvent) {
                             simulate_(&EventType::KeyRelease(RdevKey::ShiftRight));
                         }
                     }
+                }
+                #[cfg(target_os = "windows")]
+                if !simulate_win_hot_key && use_key_presses_for_text(evt, &mut en) {
+                    crate::platform::windows::input_text_as_key_presses(
+                        seq,
+                        text_key_state(evt),
+                        |s| {
+                            for chr in s.chars() {
+                                rdev::simulate_unicode(chr as _).ok();
+                            }
+                        },
+                    );
+                    return;
                 }
                 for chr in seq.chars() {
                     // char in rust is 4 bytes.
@@ -2834,5 +2934,21 @@ mod peer_abs_sample_tests {
         assert!(s.age_ms < 1_000);
         note_pointer_moved_without_absolute_sample();
         assert_eq!(last_peer_abs_sample(), None);
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod key_press_text_input_tests {
+    use super::*;
+
+    #[test]
+    fn portable_service_uses_the_options_sent_by_the_main_process() {
+        set_portable_service_key_press_text_input_options((true, false));
+        assert_eq!(key_press_text_input_options(), (true, false));
+        set_portable_service_key_press_text_input_options((false, false));
+        assert_eq!(key_press_text_input_options(), (false, false));
+        *PORTABLE_SERVICE_KEY_PRESS_TEXT_INPUT_OPTIONS
+            .lock()
+            .unwrap() = None;
     }
 }

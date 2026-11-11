@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "所选文件夹不为空。安装可能删除现有数据。建议选择其他文件夹。"),
         ("Request approval", "请求批准"),
         ("Forever", "永久"),
+        ("Send text as key presses (for VMs and admin windows)", "以按键方式发送文本（用于虚拟机和管理员窗口）"),
+        ("physical_key_text_input_tip", "在手机上输入或粘贴的文本、在翻译模式下输入的文本，或通过“发送剪贴板按键”发送的文本，将以本机按键的方式发送，使虚拟机控制台和以管理员身份运行的窗口能够接收。键盘布局无法输入的字符仍以 Unicode 方式发送。虚拟机必须使用与本机相同的键盘布局。换行符和制表符将以 Enter 和 Tab 按键发送。"),
+        ("Send text as key presses in virtual machine consoles", "在虚拟机控制台中以按键方式发送文本"),
+        ("vm_console_key_press_text_input_tip", "当 VMware、VirtualBox 或 Hyper-V 控制台为活动窗口时，在手机上输入或粘贴的文本、在翻译模式下输入的文本，或通过“发送剪贴板按键”发送的文本，将以本机按键的方式发送，因为这些控制台无法读取其他情况下使用的 Unicode 输入。按住 Ctrl、Alt 或 Windows 键时输入的按键仍按原方式处理。键盘布局无法输入的字符，以及会被当前输入法转换的文本，仍以 Unicode 方式发送。虚拟机必须使用与本机相同的键盘布局。"),
     ].iter().cloned().collect();
 }
