@@ -1,7 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart' show StringCharacters;
+import 'package:flutter/widgets.dart'
+    show StringCharacters, TextEditingController;
 
 class IosKeyboardEdit {
   const IosKeyboardEdit({this.backspaces = 0, this.text = '', this.localValue});
@@ -10,6 +11,28 @@ class IosKeyboardEdit {
   final String text;
   // Local controller correction; this text must not be sent to the peer.
   final TextEditingValue? localValue;
+}
+
+class IosSoftKeyboardController extends TextEditingController {
+  IosSoftKeyboardController({super.text});
+
+  @override
+  set selection(TextSelection newSelection) {
+    final composing = value.composing;
+    if (newSelection.isValid &&
+        newSelection.isCollapsed &&
+        newSelection.end <= text.length &&
+        value.isComposingRangeValid &&
+        !composing.isCollapsed &&
+        newSelection != value.selection) {
+      // A Space drag must not move the hidden caret or unmark preedit before
+      // the input listener runs. IME edits/commits still use the value setter.
+      // Notify to resync native selection-only updates even if value is unchanged.
+      notifyListeners();
+      return;
+    }
+    super.selection = newSelection;
+  }
 }
 
 /// Converts the hidden iOS field into Backspace/text edits at the remote caret.

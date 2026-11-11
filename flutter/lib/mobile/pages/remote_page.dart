@@ -26,6 +26,7 @@ import '../../utils/image.dart';
 import '../utils/ios_soft_keyboard_input.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
+import '../widgets/hidden_keyboard_input.dart';
 
 // Keep deletable local text so Backspace can reach existing remote content.
 // iOS spaces separate the first word from padding; digits affect IME word
@@ -114,8 +115,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   InputModel get inputModel => gFFI.inputModel;
   SessionID get sessionId => gFFI.sessionId;
 
-  final TextEditingController _textController =
-      TextEditingController(text: initText);
+  final TextEditingController _textController = isIOS
+      ? IosSoftKeyboardController(text: initText)
+      : TextEditingController(text: initText);
   final _iosKeyboardInput = IosSoftKeyboardInput(initText);
 
   _RemotePageState(String id) {
@@ -702,9 +704,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       (_showEdit || chatKeyboardRequested),
                   showGestureHelp: _showGestureHelp);
             }),
-            SizedBox(
-              width: 0,
-              height: 0,
+            HiddenKeyboardInput(
+              isIOS: isIOS,
               child: !_showEdit
                   ? Container()
                   : TextFormField(
