@@ -93,6 +93,10 @@ use crate::ui_session_interface::SessionPermissionConfig;
 
 pub use super::lang::*;
 
+pub mod audio_devices;
+pub mod audio_volume;
+#[cfg(windows)]
+pub mod microphone_boost;
 mod login_method;
 
 #[cfg(not(target_os = "linux"))]
@@ -2377,13 +2381,7 @@ impl AudioHandler {
     /// Start the audio playback.
     #[cfg(not(target_os = "linux"))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
-        let device = AUDIO_HOST
-            .default_output_device()
-            .with_context(|| "Failed to get default output device")?;
-        log::info!(
-            "Using default output device: \"{}\"",
-            device.name().unwrap_or("".to_owned())
-        );
+        let device = open_output_device()?;
         let config = device.default_output_config().map_err(|e| anyhow!(e))?;
         let sample_format = config.sample_format();
         log::info!("Default output format: {:?}", config);
@@ -2535,7 +2533,7 @@ impl AudioHandler {
                     input_channels: self.channels,
                     output_channels: self.device_channel,
                 };
-                let buffer = match prepare_decoded_audio(
+                let mut buffer = match prepare_decoded_audio(
                     &buffer[0..n],
                     self.audio_resampler.as_mut(),
                     config,
@@ -2546,6 +2544,10 @@ impl AudioHandler {
                         return;
                     }
                 };
+                audio_volume::apply_gain(
+                    &mut buffer,
+                    audio_volume::playback_gain(&audio_devices::thread_peer_id()),
+                );
                 self.audio_buffer.append_pcm(&buffer);
             }
             #[cfg(target_os = "linux")]
@@ -2598,6 +2600,55 @@ impl AudioHandler {
         self.audio_stream = Some(Box::new(stream));
         self.playback_status = playback_status;
         Ok(())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+thread_local! {
+    /// Name of the output device the playback stream of this audio thread opened.
+    static OPENED_OUTPUT_DEVICE: std::cell::RefCell<Option<String>> = Default::default();
+}
+
+/// Returns the output device that playback of this audio thread MUST use now: the selected device
+/// (`audio_devices::thread_output_selection()`) when it is present, else the default output device.
+#[cfg(not(target_os = "linux"))]
+fn resolve_output_device() -> ResultType<Device> {
+    let selected = audio_devices::thread_output_selection();
+    if !selected.is_empty() {
+        if let Ok(mut devices) = AUDIO_HOST.output_devices() {
+            if let Some(device) = devices.find(|d| d.name().ok().as_deref() == Some(selected.as_str())) {
+                return Ok(device);
+            }
+        }
+        log::warn!("Output device \"{selected}\" is not present; using the default output device");
+    }
+    AUDIO_HOST
+        .default_output_device()
+        .with_context(|| "Failed to get default output device")
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_output_device() -> ResultType<Device> {
+    let device = resolve_output_device()?;
+    let name = device.name().unwrap_or_default();
+    log::info!("Using output device: \"{name}\"");
+    audio_volume::set_playing_output(&audio_devices::thread_peer_id(), &name);
+    OPENED_OUTPUT_DEVICE.with(|o| *o.borrow_mut() = Some(name));
+    Ok(device)
+}
+
+/// Whether the device `resolve_output_device()` returns now differs from the one playback opened.
+#[cfg(target_os = "windows")]
+fn output_device_changed() -> bool {
+    let Some(opened) = OPENED_OUTPUT_DEVICE.with(|o| o.borrow().clone()) else {
+        return false;
+    };
+    match resolve_output_device().map(|d| d.name().unwrap_or_default()) {
+        Ok(name) if !name.is_empty() && name != opened => {
+            log::info!("Output device changed from \"{opened}\" to \"{name}\"");
+            true
+        }
+        _ => false,
     }
 }
 
@@ -2960,8 +3011,21 @@ impl LoginConfigHandler {
         if !login_method.is_empty() && !self.set_login_method(login_method) {
             log::warn!("Failed to initialize login method: {}", login_method);
         }
-        let config = self.load_config();
+        let mut config = self.load_config();
         self.remember = !config.password.is_empty();
+        // A session starts muted unless the peer option `audio_devices::OPTION_AUDIO_MUTE_SAVED` holds "N". The mute
+        // toggle changes `disable_audio` for the running session only; the Audio dialog's Save/Clear write the option.
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if conn_type == ConnType::DEFAULT_CONN {
+            let muted = config
+                .options
+                .get(audio_devices::OPTION_AUDIO_MUTE_SAVED)
+                .map_or(true, |v| v != "N");
+            if config.disable_audio.v != muted {
+                config.disable_audio.v = muted;
+                config.store(&self.id);
+            }
+        }
         self.config = config;
 
         let conn_token = conn_token
@@ -4144,9 +4208,10 @@ pub fn start_video_thread<F, T>(
 
 /// Start an audio thread
 /// Return a audio [`MediaSender`]
-pub fn start_audio_thread() -> MediaSender {
+pub fn start_audio_thread(peer_id: String) -> MediaSender {
     let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     std::thread::spawn(move || {
+        audio_devices::set_thread_peer_id(&peer_id);
         let mut audio_handler = AudioHandler::default();
         loop {
             #[cfg(target_os = "windows")]
@@ -5035,6 +5100,8 @@ pub trait Interface: Send + Clone + 'static + Sized {
 #[derive(Clone)]
 pub enum Data {
     Close,
+    /// This side's input device to stream into the controlled side's virtual microphone; "" ends the stream.
+    HostMicrophone(String),
     RejectInsecureConnection,
     Login((String, String, String, bool)),
     Message(Message),

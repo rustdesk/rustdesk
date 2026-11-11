@@ -751,6 +751,241 @@ pub fn session_peer_option(session_id: SessionID, name: String, value: String) {
     }
 }
 
+/// JSON array of this side's output device names.
+pub fn main_get_audio_output_devices() -> SyncReturn<String> {
+    SyncReturn(
+        serde_json::to_string(&crate::client::audio_devices::get_output_devices())
+            .unwrap_or_default(),
+    )
+}
+
+/// Stores the output device of the session's peer ("" = default output device, followed live); playback switches
+/// within one second.
+pub fn session_set_audio_output_device(session_id: SessionID, device: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.set_option(
+            crate::client::audio_devices::OPTION_AUDIO_OUTPUT_DEVICE.to_owned(),
+            device.clone(),
+        );
+        let peer_id = session.lc.read().unwrap().get_id().to_owned();
+        crate::client::audio_devices::set_output_selection(&peer_id, &device);
+    }
+}
+
+/// JSON array of this side's input device names.
+pub fn main_get_audio_input_devices() -> SyncReturn<String> {
+    SyncReturn(
+        serde_json::to_string(&crate::client::audio_devices::get_input_devices())
+            .unwrap_or_default(),
+    )
+}
+
+/// Stores this side's input device streamed into the peer's virtual microphone (peer option
+/// `audio-host-input-device`, "" = none) and starts or ends the stream.
+pub fn session_set_host_microphone(session_id: SessionID, device: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.set_option(
+            crate::client::audio_devices::OPTION_AUDIO_HOST_INPUT_DEVICE.to_owned(),
+            device.clone(),
+        );
+        crate::client::Interface::send(&*session, crate::client::Data::HostMicrophone(device));
+    }
+}
+
+/// Asks the peer for its capture devices; `session_get_remote_audio_inputs()` returns them once they arrive.
+pub fn session_request_remote_audio_inputs(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let peer_id = session.lc.read().unwrap().get_id().to_owned();
+        crate::client::audio_devices::clear_remote_inputs(&peer_id);
+        crate::client::Interface::send(
+            &*session,
+            crate::client::Data::Message(crate::client::audio_devices::request_inputs_message()),
+        );
+    }
+}
+
+/// JSON `{"devices": [...], "own_setting": "...", "system_sound": bool}` received from the peer, or "".
+pub fn session_get_remote_audio_inputs(session_id: SessionID) -> SyncReturn<String> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let peer_id = session.lc.read().unwrap().get_id().to_owned();
+        return SyncReturn(crate::client::audio_devices::remote_inputs_json(&peer_id));
+    }
+    SyncReturn("".to_owned())
+}
+
+/// Changes recording device `device` of the peer: `set_default` makes it the peer's default recording device,
+/// `volume` (percent, -1 leaves it) and `boost_db` (with `set_boost`) set its endpoint volume and Microphone Boost.
+/// Volume and boost are stored per peer and per device (peer options `audio-volume-remote-recording`,
+/// `audio-boost-remote-recording`) and sent again after every login.
+pub fn session_control_remote_recording_device(
+    session_id: SessionID,
+    device: String,
+    set_default: bool,
+    volume: i32,
+    set_boost: bool,
+    boost_db: f64,
+) {
+    use crate::client::audio_volume as v;
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        if volume >= 0 {
+            let json = v::with_entry(
+                &session.get_option(v::OPTION_VOLUME_REMOTE_RECORDING.to_owned()),
+                &device,
+                volume.clamp(0, 100) as u32,
+            );
+            session.set_option(v::OPTION_VOLUME_REMOTE_RECORDING.to_owned(), json);
+        }
+        if set_boost {
+            let json = v::with_entry(
+                &session.get_option(v::OPTION_BOOST_REMOTE_RECORDING.to_owned()),
+                &device,
+                boost_db as f32,
+            );
+            session.set_option(v::OPTION_BOOST_REMOTE_RECORDING.to_owned(), json);
+        }
+        crate::client::Interface::send(
+            &*session,
+            crate::client::Data::Message(crate::client::audio_devices::recording_device_control_message(
+                &device,
+                set_default,
+                volume,
+                set_boost.then_some(boost_db as f32),
+            )),
+        );
+    }
+}
+
+/// Peak level (0..1) of this side's input device `device` since the previous call (starts a level meter).
+pub fn main_get_input_level(device: String) -> SyncReturn<f64> {
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "ios")))]
+    return SyncReturn(crate::audio_level::level(&device) as f64);
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "ios"))]
+    {
+        let _ = device;
+        SyncReturn(0.0)
+    }
+}
+
+/// The last peak level (0..1) of the peer's default recording device, and asks the peer for the next one.
+pub fn session_get_remote_recording_level(session_id: SessionID) -> SyncReturn<f64> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let peer_id = session.lc.read().unwrap().get_id().to_owned();
+        crate::client::Interface::send(
+            &*session,
+            crate::client::Data::Message(crate::client::audio_devices::request_recording_level_message()),
+        );
+        return SyncReturn(crate::client::audio_devices::remote_recording_level(&peer_id) as f64);
+    }
+    SyncReturn(0.0)
+}
+
+/// Asks the peer to install virtual microphone driver `driver` ("vb-cable"); the peer's following `AudioInputs`
+/// report the outcome (`virtual_microphone_install`).
+pub fn session_install_remote_virtual_microphone(session_id: SessionID, driver: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        crate::client::Interface::send(
+            &*session,
+            crate::client::Data::Message(
+                crate::client::audio_devices::install_virtual_microphone_message(&driver),
+            ),
+        );
+    }
+}
+
+/// JSON `{"playing_output": "...", "output": {..}, "remote_input": {..}, "host_input": {..}}`: the output device that
+/// plays and the stored volumes (percent) of the session's peer.
+pub fn session_get_audio_volumes(session_id: SessionID) -> SyncReturn<String> {
+    use crate::client::audio_volume as v;
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let peer_id = session.lc.read().unwrap().get_id().to_owned();
+        return SyncReturn(
+            serde_json::json!({
+                "playing_output": v::playing_output(&peer_id),
+                "output": v::parse_percent_map(&session.get_option(v::OPTION_VOLUME_OUTPUT.to_owned())),
+                "remote_input": v::parse_percent_map(&session.get_option(v::OPTION_VOLUME_REMOTE_INPUT.to_owned())),
+                "host_input": v::parse_percent_map(&session.get_option(v::OPTION_VOLUME_HOST_INPUT.to_owned())),
+                "boost": v::parse_db_map(&session.get_option(v::OPTION_BOOST_HOST_INPUT.to_owned())),
+            })
+            .to_string(),
+        );
+    }
+    SyncReturn("".to_owned())
+}
+
+/// Stores and applies a volume (percent, 0..=200) of the session's peer for `device`. `kind`: "output" (an output
+/// device of this side), "remote_input" (a value of the peer option `audio-input-device`), "host_input" (an input
+/// device of this side streamed into the peer's virtual microphone).
+pub fn session_set_audio_volume(session_id: SessionID, kind: String, device: String, percent: i32) {
+    use crate::client::audio_volume as v;
+    let percent = percent.clamp(0, v::MAX_PERCENT as i32) as u32;
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let peer_id = session.lc.read().unwrap().get_id().to_owned();
+        let option = match kind.as_str() {
+            "output" => v::OPTION_VOLUME_OUTPUT,
+            "remote_input" => v::OPTION_VOLUME_REMOTE_INPUT,
+            "host_input" => v::OPTION_VOLUME_HOST_INPUT,
+            _ => return,
+        };
+        let json = v::with_entry(&session.get_option(option.to_owned()), &device, percent);
+        session.set_option(option.to_owned(), json);
+        match kind.as_str() {
+            "output" => v::set_output_volume(&peer_id, &device, percent),
+            "remote_input" => v::set_remote_input_volume(&peer_id, &device, percent),
+            _ => {
+                let streaming = session.get_option(
+                    crate::client::audio_devices::OPTION_AUDIO_HOST_INPUT_DEVICE.to_owned(),
+                );
+                if streaming == device {
+                    v::set_capture_gain(percent);
+                }
+            }
+        }
+    }
+}
+
+/// JSON `{"min", "max", "step", "current"}` (dB) of the Microphone Boost of this side's input device `device`, or ""
+/// when the device has none.
+pub fn main_get_microphone_boost(device: String) -> SyncReturn<String> {
+    #[cfg(windows)]
+    if let Some(b) = crate::client::microphone_boost::get(&device) {
+        return SyncReturn(serde_json::to_string(&b).unwrap_or_default());
+    }
+    let _ = device;
+    SyncReturn("".to_owned())
+}
+
+/// Stores (per peer, per device) and applies the Microphone Boost of this side's input device `device`, in dB.
+pub fn session_set_microphone_boost(session_id: SessionID, device: String, db: f64) {
+    use crate::client::audio_volume as v;
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let json = v::with_entry(&session.get_option(v::OPTION_BOOST_HOST_INPUT.to_owned()), &device, db as f32);
+        session.set_option(v::OPTION_BOOST_HOST_INPUT.to_owned(), json);
+        #[cfg(windows)]
+        crate::client::microphone_boost::set(&device, db as f32);
+    }
+}
+
+/// Stores the peer's capture device selection (peer option `audio-input-device`: "" = the peer's own setting,
+/// "=" + name = that device, "=" = System Sound / default input) and sends it to the peer.
+pub fn session_set_remote_audio_input(session_id: SessionID, value: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.set_option(
+            crate::client::audio_devices::OPTION_AUDIO_INPUT_DEVICE.to_owned(),
+            value.clone(),
+        );
+        crate::client::audio_volume::set_remote_input_selection(
+            session.lc.read().unwrap().get_id(),
+            &value,
+        );
+        crate::client::Interface::send(
+            &*session,
+            crate::client::Data::Message(crate::client::audio_devices::input_selection_message(
+                &value,
+            )),
+        );
+    }
+}
+
 pub fn session_get_peer_option(session_id: SessionID, name: String) -> String {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         return session.get_option(name);

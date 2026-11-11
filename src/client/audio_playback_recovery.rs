@@ -154,14 +154,44 @@ impl AudioHandler {
         self.finish_playback_start(result);
     }
 
+    /// Schedules a playback restart when the output device to use (`super::resolve_output_device()`) is no longer the
+    /// opened one: the Windows default output device changed, or the selected device appeared or disappeared.
+    /// Checked at most once per `RECOVERY_INTERVAL`.
+    fn check_output_device(&mut self, now: Instant) {
+        let due = NEXT_DEVICE_CHECK.with(|n| {
+            if n.get().is_some_and(|due| now < due) {
+                return false;
+            }
+            n.set(Some(now + RECOVERY_INTERVAL));
+            true
+        });
+        if !due
+            || self.audio_stream.is_none()
+            || self.playback_recovery.format.is_none()
+            || self.playback_recovery.retry_at.is_some()
+        {
+            return;
+        }
+        if super::output_device_changed() {
+            self.clear_playback_stream();
+            self.playback_recovery.retry_at = Some(now);
+        }
+    }
+
     pub(super) fn receive_audio(
         &mut self,
         receiver: &mpsc::Receiver<MediaData>,
     ) -> Result<MediaData, mpsc::RecvError> {
         receive_with_recovery(receiver, RECOVERY_INTERVAL, || {
-            self.recover_playback_with(Instant::now(), Self::restart_playback);
+            let now = Instant::now();
+            self.check_output_device(now);
+            self.recover_playback_with(now, Self::restart_playback);
         })
     }
+}
+
+thread_local! {
+    static NEXT_DEVICE_CHECK: std::cell::Cell<Option<Instant>> = Default::default();
 }
 
 pub(super) fn receive_with_recovery(

@@ -872,7 +872,76 @@ message Misc {
     // is rebuilt, and held again, the next time it is shown, before any connection names it
     // by id again, so the shape just selected is always there to give.
     uint64 request_cursor_data = 39;
+    // Fork extension, numbered away from upstream.
+    // Controller -> controlled: send `AudioInputs`.
+    bool request_audio_inputs = 1001;
+    // Controlled -> controller: the capture devices and the controlled side's own setting.
+    AudioInputs audio_inputs = 1002;
+    // Controller -> controlled: the capture device for this connection.
+    AudioInputSelection audio_input_selection = 1003;
+    // Controller -> controlled: the controller's microphone stream (AudioFormat + AudioFrame) starts or stops; the
+    // controlled side plays it into its virtual microphone.
+    HostMicrophone host_microphone = 1004;
+    // Controller -> controlled: install the named virtual microphone driver ("vb-cable"); the controlled side answers
+    // with `AudioInputs` once the installer ends.
+    string install_virtual_microphone = 1005;
+    // Controller -> controlled: change a recording device of the controlled side; answered with `AudioInputs`.
+    RecordingDeviceControl recording_device_control = 1006;
+    // Controller -> controlled: send `recording_level` of the default recording device.
+    bool request_recording_level = 1007;
+    // Controlled -> controller: peak level (0..1) of the default recording device since the previous request.
+    float recording_level = 1008;
   }
+}
+
+message HostMicrophone {
+  bool active = 1;
+}
+
+message AudioInputs {
+  // Capture device names.
+  repeated string devices = 1;
+  // The controlled side's own "audio-input" option; "" is System Sound (loopback of the default output device) on
+  // Windows, else the default input device.
+  string own_setting = 2;
+  // Whether "" means System Sound on the controlled side.
+  bool system_sound = 3;
+  // Recording device name of the controlled side's virtual microphone (VB-CABLE, Virtual Audio Driver); "" when none
+  // is installed.
+  string virtual_microphone = 4;
+  // Outcome of the last `install_virtual_microphone` of this connection: "" none, "installing", "installed",
+  // "failed: <reason>".
+  string virtual_microphone_install = 5;
+  // Active recording endpoints (Windows friendly names), the virtual microphone's included.
+  repeated string recording_devices = 6;
+  // Default recording endpoint.
+  string default_recording = 7;
+  // Endpoint volume of `default_recording`, percent; -1 unknown.
+  int32 default_recording_volume = 8;
+  // Microphone Boost of `default_recording`: `{"min","max","step","current"}` dB, or "" when it has none.
+  string default_recording_boost = 9;
+  // Recording endpoints that are not active, "<name>\t<state>" with state "disabled", "unplugged" or "not present".
+  repeated string inactive_recording_devices = 10;
+}
+
+message RecordingDeviceControl {
+  // Recording endpoint name.
+  string device = 1;
+  // Make it the default recording device for every role.
+  bool set_default = 2;
+  // Endpoint volume, percent; -1 leaves it.
+  int32 volume = 3;
+  // Set the Microphone Boost to `boost_db`.
+  bool set_boost = 4;
+  float boost_db = 5;
+}
+
+message AudioInputSelection {
+  // false: the controlled side's own "audio-input" option.
+  bool is_override = 1;
+  // With `is_override`: a name from `AudioInputs.devices`, or "" for System Sound / the default input device. A name
+  // the controlled side does not currently have falls back to its default input device.
+  string device = 2;
 }
 
 message VoiceCallRequest {

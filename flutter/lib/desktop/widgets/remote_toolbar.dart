@@ -23,6 +23,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
+import './audio_devices_dialog.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
@@ -847,6 +848,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
     }
     toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
+    if (isWindows && widget.ffi.connType == ConnType.defaultConn) {
+      toolbarItems.add(_AudioDevicesMenu(ffi: widget.ffi));
+    }
     if (!isWeb) {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
@@ -2029,7 +2033,13 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     return futureBuilder(
         future: toolbarDisplayToggle(context, id, ffi),
         hasData: (data) {
-          final v = data as List<TToggleMenu>;
+          // Mute lives in the speaker button's Audio dialog (`audioDevicesDialog()`) where that button exists; the
+          // entry stays in `toolbarDisplayToggle()` so its keyboard shortcut is still registered.
+          final v = (data as List<TToggleMenu>)
+              .where((e) => !(isWindows &&
+                  ffi.connType == ConnType.defaultConn &&
+                  e.actionId == kShortcutActionToggleMute))
+              .toList();
           if (v.isEmpty) return Offstage();
           return Column(
               children: v
@@ -3589,6 +3599,16 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
         Obx(() => collapse.isTrue
             ? _MinimizedMonitorSwitchButton(id: widget.id, ffi: widget.ffi)
             : const Offstage()),
+        if (isWindows && widget.ffi.connType == ConnType.defaultConn)
+          Obx(() => collapse.isTrue
+              ? buttonWrapper(
+                  () => audioDevicesDialog(widget.ffi),
+                  Tooltip(
+                    message: 'Audio devices',
+                    child: Icon(Icons.volume_up, size: iconSize),
+                  ),
+                )
+              : const Offstage()),
         Obx(() => buttonWrapper(
               () {
                 widget.setFullscreen(!isFullscreen.value);
@@ -3747,6 +3767,31 @@ class EdgeThicknessControl extends StatelessWidget {
     );
 
     return slider;
+  }
+}
+
+/// Speaker button: output device of this PC and capture device of the remote PC (`audioDevicesDialog()`).
+class _AudioDevicesMenu extends StatelessWidget {
+  final FFI ffi;
+  const _AudioDevicesMenu({Key? key, required this.ffi}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return _IconMenuButton(
+      // Same footprint as the SVG icons: a `buttonSize` square (the blue `Ink` tile) with a ~20 px glyph centered.
+      icon: SizedBox(
+        width: _ToolbarTheme.buttonSize,
+        height: _ToolbarTheme.buttonSize,
+        child: Center(
+          child: Icon(Icons.volume_up,
+              color: Colors.white, size: _ToolbarTheme.buttonSize * 0.625),
+        ),
+      ),
+      tooltip: 'Audio devices',
+      color: _ToolbarTheme.blueColor,
+      hoverColor: _ToolbarTheme.hoverBlueColor,
+      onPressed: () => audioDevicesDialog(ffi),
+    );
   }
 }
 

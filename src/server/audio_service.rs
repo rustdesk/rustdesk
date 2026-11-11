@@ -26,6 +26,70 @@ static RESTARTING: AtomicBool = AtomicBool::new(false);
 
 lazy_static::lazy_static! {
     static ref VOICE_CALL_INPUT_DEVICE: Arc::<Mutex::<Option<String>>> = Default::default();
+    /// Capture device chosen by a controlling connection: `(conn_id, device)`; `device` "" is System Sound / the
+    /// default input device. The last connection to choose wins; it is cleared when that connection closes.
+    static ref CONNECTION_INPUT_DEVICE: Mutex<Option<(i32, String)>> = Default::default();
+}
+
+/// Sets (`Some`) or clears (`None`) the capture device chosen by connection `conn_id`.
+pub fn set_connection_input_device(conn_id: i32, device: Option<String>) {
+    let mut lock = CONNECTION_INPUT_DEVICE.lock().unwrap();
+    let new = match device {
+        Some(device) => Some((conn_id, device)),
+        None => {
+            if lock.as_ref().map(|(id, _)| *id) != Some(conn_id) {
+                return;
+            }
+            None
+        }
+    };
+    if *lock == new {
+        return;
+    }
+    *lock = new;
+    drop(lock);
+    restart();
+}
+
+/// Capture device names of this side (devices with an input configuration). Runs on
+/// `crate::audio_device_thread`, which keeps CPAL's process-global device enumerator valid.
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn get_capture_devices() -> Vec<String> {
+    crate::audio_device_thread::run(|| {
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let mut out = Vec::new();
+        match cpal::default_host().devices() {
+            Ok(devices) => {
+                for device in devices {
+                    let name = device.name().unwrap_or_default();
+                    match device.default_input_config() {
+                        Ok(_) => out.push(name),
+                        Err(e) => log::debug!("Capture device list: \"{name}\" has no input configuration: {e}"),
+                    }
+                }
+            }
+            Err(e) => log::warn!("Capture device list: device enumeration failed: {e}"),
+        }
+        log::info!("Capture device list: {out:?}");
+        out
+    })
+    .unwrap_or_default()
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn get_capture_devices() -> Vec<String> {
+    #[cfg(target_os = "linux")]
+    return crate::platform::linux::get_pa_sources()
+        .drain(..)
+        .map(|x| x.1)
+        .collect();
+    #[cfg(target_os = "android")]
+    vec![]
+}
+
+/// Whether "" as the capture device means System Sound (loopback of the default output device).
+pub fn empty_input_is_system_sound() -> bool {
+    cfg!(windows) || cfg!(feature = "screencapturekit")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -62,11 +126,13 @@ pub fn set_voice_call_input_device(device: Option<String>, set_if_present: bool)
 
 #[inline]
 fn get_audio_input() -> String {
-    VOICE_CALL_INPUT_DEVICE
-        .lock()
-        .unwrap()
-        .clone()
-        .unwrap_or(Config::get_option("audio-input"))
+    if let Some(device) = VOICE_CALL_INPUT_DEVICE.lock().unwrap().clone() {
+        return device;
+    }
+    if let Some((_, device)) = CONNECTION_INPUT_DEVICE.lock().unwrap().clone() {
+        return device;
+    }
+    Config::get_option("audio-input")
 }
 
 pub fn restart() {
@@ -217,6 +283,48 @@ mod cpal_impl {
         static ref HOST_SCREEN_CAPTURE_KIT: Result<Host, cpal::HostUnavailable> = cpal::host_from_id(cpal::HostId::ScreenCaptureKit);
     }
 
+    lazy_static::lazy_static! {
+        /// The capture stream follows a default device: `(is_output, opened device name, last check)`.
+        /// `is_output` is the default output device (System Sound loopback), else the default input device.
+        static ref FOLLOWED_DEFAULT: Mutex<Option<(bool, String, std::time::Instant)>> = Default::default();
+    }
+
+    const DEFAULT_DEVICE_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+    fn set_followed_default(is_output: bool, device: &Device) {
+        *FOLLOWED_DEFAULT.lock().unwrap() = Some((
+            is_output,
+            device.name().unwrap_or_default(),
+            std::time::Instant::now(),
+        ));
+    }
+
+    /// Returns true, at most once per `DEFAULT_DEVICE_CHECK_INTERVAL`, when the followed default device is now a
+    /// different device.
+    fn followed_default_changed() -> bool {
+        let mut lock = FOLLOWED_DEFAULT.lock().unwrap();
+        let Some((is_output, name, last)) = lock.as_mut() else {
+            return false;
+        };
+        if last.elapsed() < DEFAULT_DEVICE_CHECK_INTERVAL {
+            return false;
+        }
+        *last = std::time::Instant::now();
+        let current = if *is_output {
+            HOST.default_output_device()
+        } else {
+            HOST.default_input_device()
+        }
+        .and_then(|d| d.name().ok());
+        match current {
+            Some(current) if current != *name => {
+                log::info!("Default audio device changed from \"{name}\" to \"{current}\"");
+                true
+            }
+            _ => false,
+        }
+    }
+
     #[derive(Default)]
     pub struct State {
         stream: Option<ActiveCaptureStream>,
@@ -280,6 +388,8 @@ mod cpal_impl {
             if stream.errors.needs_restart() {
                 // Recreate on the service thread, outside the capture callbacks.
                 log::warn!("Recreating audio capture stream after an error");
+                super::restart();
+            } else if followed_default_changed() {
                 super::restart();
             }
         }
@@ -346,7 +456,15 @@ mod cpal_impl {
             let mut send_packet = |packet: &[f32]| {
                 let packet =
                     audio_capture::rechannel(packet, config.device_channel, rechannel_buffer);
-                sender.submit(packet);
+                // `capture_gain()` is 1 except while this process streams a controller microphone.
+                let gain = crate::client::audio_volume::capture_gain();
+                if (gain - 1.0).abs() < 0.001 {
+                    sender.submit(packet);
+                } else {
+                    let mut scaled = packet.to_vec();
+                    crate::client::audio_volume::apply_gain(&mut scaled, gain);
+                    sender.submit(&scaled);
+                }
             };
             if let Some(resampler) = self.resampler.as_mut() {
                 resampler.process_with(data, send_packet).with_context(|| {
@@ -418,6 +536,7 @@ mod cpal_impl {
             "Default output device: {}",
             device.name().unwrap_or("".to_owned())
         );
+        set_followed_default(true, &device);
         let format = device
             .default_output_config()
             .map_err(|e| anyhow!(e))
@@ -458,10 +577,16 @@ mod cpal_impl {
                 }
             }
         }
-        let device = device.unwrap_or(
-            HOST.default_input_device()
-                .with_context(|| "Failed to get default input device for loopback")?,
-        );
+        let device = match device {
+            Some(device) => device,
+            None => {
+                let device = HOST
+                    .default_input_device()
+                    .with_context(|| "Failed to get default input device for loopback")?;
+                set_followed_default(false, &device);
+                device
+            }
+        };
         log::info!("Input device: {}", device.name().unwrap_or("".to_owned()));
         let format = device
             .default_input_config()
@@ -473,6 +598,7 @@ mod cpal_impl {
 
     fn play(sp: &GenericService) -> ResultType<ActiveCaptureStream> {
         use cpal::SampleFormat::*;
+        *FOLLOWED_DEFAULT.lock().unwrap() = None;
         let (device, config) = get_device()?;
         let sp = sp.clone();
         // Sample rate must be one of 8000, 12000, 16000, 24000, or 48000.

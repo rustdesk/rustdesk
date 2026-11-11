@@ -78,6 +78,8 @@ pub struct Remote<T: InvokeUiSession> {
     sender: mpsc::UnboundedSender<Data>,
     // Stop sending local audio to remote client.
     stop_voice_call_sender: Option<std::sync::mpsc::Sender<()>>,
+    /// Stops the stream of this side's microphone into the controlled side's virtual microphone.
+    stop_host_microphone_sender: Option<std::sync::mpsc::Sender<()>>,
     voice_call_request_timestamp: Option<NonZeroI64>,
     read_jobs: Vec<fs::TransferJob>,
     write_jobs: Vec<fs::TransferJob>,
@@ -129,9 +131,19 @@ impl<T: InvokeUiSession> Remote<T> {
         receiver: mpsc::UnboundedReceiver<Data>,
         sender: mpsc::UnboundedSender<Data>,
     ) -> Self {
+        let peer_id = handler.lc.read().unwrap().get_id().to_owned();
+        crate::client::audio_volume::load(&peer_id, |k| handler.lc.read().unwrap().get_option(k));
+        crate::client::audio_devices::set_output_selection(
+            &peer_id,
+            &handler
+                .lc
+                .read()
+                .unwrap()
+                .get_option(crate::client::audio_devices::OPTION_AUDIO_OUTPUT_DEVICE),
+        );
         Self {
             handler,
-            audio_sender: crate::client::start_audio_thread(),
+            audio_sender: crate::client::start_audio_thread(peer_id),
             receiver,
             sender,
             read_jobs: Vec::new(),
@@ -148,6 +160,7 @@ impl<T: InvokeUiSession> Remote<T> {
             data_count: Arc::new(AtomicUsize::new(0)),
             video_format: CodecFormat::Unknown,
             stop_voice_call_sender: None,
+            stop_host_microphone_sender: None,
             voice_call_request_timestamp: None,
             elevation_requested: false,
             peer_info: Default::default(),
@@ -430,6 +443,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 if let Some(s) = self.stop_voice_call_sender.take() {
                     s.send(()).ok();
                 }
+                if let Some(s) = self.stop_host_microphone_sender.take() {
+                    s.send(()).ok();
+                }
                 if kcp.is_some() {
                     // Attempted rather than skipped even here: if the loss was one-way the peer
                     // does get it, and drops its side instead of waiting out its own timeout.
@@ -583,8 +599,50 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
+    /// Streams this side's input device `device` into the controlled side's virtual microphone (`Misc.host_microphone`),
+    /// or ends the stream when `device` is "". A device that is not present records from the default input device.
+    async fn set_host_microphone(&mut self, device: String, peer: &mut Stream) {
+        if let Some(s) = self.stop_host_microphone_sender.take() {
+            s.send(()).ok();
+        }
+        allow_err!(
+            peer.send(&crate::client::audio_devices::host_microphone_message(!device.is_empty()))
+                .await
+        );
+        crate::client::audio_volume::set_capture_gain(100);
+        if !device.is_empty() {
+            let (volumes, boosts) = {
+                let lc = self.handler.lc.read().unwrap();
+                (
+                    lc.get_option(crate::client::audio_volume::OPTION_VOLUME_HOST_INPUT),
+                    lc.get_option(crate::client::audio_volume::OPTION_BOOST_HOST_INPUT),
+                )
+            };
+            crate::client::audio_volume::set_capture_gain(
+                crate::client::audio_volume::parse_percent_map(&volumes)
+                    .get(&device)
+                    .copied()
+                    .unwrap_or(100),
+            );
+            #[cfg(windows)]
+            if let Some(db) = crate::client::audio_volume::parse_db_map(&boosts).get(&device) {
+                crate::client::microphone_boost::set(&device, *db);
+            }
+            #[cfg(not(windows))]
+            let _ = boosts;
+            log::info!("Streaming input device \"{device}\" to the remote virtual microphone");
+            self.stop_host_microphone_sender = self.start_microphone_stream(Some(device));
+        }
+    }
+
     // Start a voice call recorder, records audio and send to remote
     fn start_voice_call(&mut self) -> Option<std::sync::mpsc::Sender<()>> {
+        self.start_microphone_stream(None)
+    }
+
+    /// Records `device` (None: the voice call input device setting, else the default input device) and sends it to
+    /// the peer as `AudioFormat` + `AudioFrame`.
+    fn start_microphone_stream(&mut self, device: Option<String>) -> Option<std::sync::mpsc::Sender<()>> {
         if self.handler.is_file_transfer()
             || self.handler.is_port_forward()
             || self.handler.is_terminal()
@@ -599,7 +657,13 @@ impl<T: InvokeUiSession> Remote<T> {
             // It's better to distinguish the server side and client side.
             // But it' not necessary for now, because it's not a common case.
             // And it is immediately known when the input device is changed.
-            crate::audio_service::set_voice_call_input_device(get_default_sound_input(), false);
+            match device {
+                Some(device) => crate::audio_service::set_voice_call_input_device(Some(device), true),
+                None => crate::audio_service::set_voice_call_input_device(
+                    get_default_sound_input(),
+                    false,
+                ),
+            }
             // Create a channel to receive error or closed message
             let (tx, rx) = std::sync::mpsc::channel();
             let (tx_audio_data, mut rx_audio_data) =
@@ -1342,6 +1406,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 allow_err!(peer.send(&msg).await);
                 self.elevation_requested = true;
             }
+            Data::HostMicrophone(device) => {
+                self.set_host_microphone(device, peer).await;
+            }
             Data::NewVoiceCall => {
                 let msg = new_voice_call_request(true);
                 // Save the voice call request timestamp for the further validation.
@@ -1818,6 +1885,55 @@ impl<T: InvokeUiSession> Remote<T> {
 
                         if self.handler.is_file_transfer() {
                             self.handler.load_last_jobs();
+                        }
+
+                        if self.handler.is_default() {
+                            let input = self.handler.lc.read().unwrap().get_option(
+                                crate::client::audio_devices::OPTION_AUDIO_INPUT_DEVICE,
+                            );
+                            if !input.is_empty() {
+                                allow_err!(
+                                    peer.send(
+                                        &crate::client::audio_devices::input_selection_message(
+                                            &input
+                                        )
+                                    )
+                                    .await
+                                );
+                            }
+                            // Stored volume and boost of the peer's recording devices; a device the peer does not have
+                            // is ignored there.
+                            let (volumes, boosts) = {
+                                let lc = self.handler.lc.read().unwrap();
+                                (
+                                    crate::client::audio_volume::parse_percent_map(&lc.get_option(
+                                        crate::client::audio_volume::OPTION_VOLUME_REMOTE_RECORDING,
+                                    )),
+                                    crate::client::audio_volume::parse_db_map(&lc.get_option(
+                                        crate::client::audio_volume::OPTION_BOOST_REMOTE_RECORDING,
+                                    )),
+                                )
+                            };
+                            let mut devices: Vec<&String> = volumes.keys().chain(boosts.keys()).collect();
+                            devices.sort();
+                            devices.dedup();
+                            for device in devices {
+                                allow_err!(
+                                    peer.send(&crate::client::audio_devices::recording_device_control_message(
+                                        device,
+                                        false,
+                                        volumes.get(device).map_or(-1, |v| *v as i32),
+                                        boosts.get(device).copied(),
+                                    ))
+                                    .await
+                                );
+                            }
+                            let host_input = self.handler.lc.read().unwrap().get_option(
+                                crate::client::audio_devices::OPTION_AUDIO_HOST_INPUT_DEVICE,
+                            );
+                            if !host_input.is_empty() {
+                                self.set_host_microphone(host_input, peer).await;
+                            }
                         }
 
                         self.is_connected = true;
@@ -2473,6 +2589,14 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
                         self.handler.set_current_display(d_idx);
+                    }
+                    Some(misc::Union::RecordingLevel(level)) => {
+                        let peer_id = self.handler.lc.read().unwrap().get_id().to_owned();
+                        crate::client::audio_devices::set_remote_recording_level(&peer_id, level);
+                    }
+                    Some(misc::Union::AudioInputs(inputs)) => {
+                        let peer_id = self.handler.lc.read().unwrap().get_id().to_owned();
+                        crate::client::audio_devices::set_remote_inputs(&peer_id, inputs);
                     }
                     _ => {}
                 },
