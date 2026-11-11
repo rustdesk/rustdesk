@@ -1445,6 +1445,11 @@ enum Sink<'a> {
         &'a mut hbb_common::udp_seal::ClientSeal,
         bool,
     ),
+    Probe(
+        &'a mut FramedSocket,
+        &'a TargetAddr<'a>,
+        &'a mut hbb_common::udp_seal::ClientSeal,
+    ),
 }
 
 impl Sink<'_> {
@@ -1457,6 +1462,11 @@ impl Sink<'_> {
                     socket.send_bytes(bytes.into(), addr.to_owned()).await?;
                 }
                 Ok(())
+            }
+            Sink::Probe(socket, addr, seal) => {
+                socket.send(msg, addr.to_owned()).await?;
+                let hello = seal_state::probe(seal)?;
+                socket.send_bytes(hello.into(), addr.to_owned()).await
             }
         }
     }

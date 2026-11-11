@@ -2,7 +2,7 @@
 //!
 //! A socket starts out probing: every registration goes sealed. Two unanswered in a row and the
 //! server is taken for one without the seal: registrations go plaintext, and every fourth one
-//! is sealed to notice an upgrade. A sealed datagram that opens makes the socket sealed, where
+//! takes a hello to notice an upgrade. A sealed datagram that opens makes the socket sealed, where
 //! nothing goes plaintext and a plaintext answer to a registration is dropped as forged. A
 //! missed answer while sealed is retried both under the session and with a hello, since a server
 //! restart retires every session; the session stays for pushes until a welcome replaces it. Such
@@ -97,12 +97,15 @@ impl SealState {
         self.set_mode(mode);
     }
 
-    /// A new socket may be a new path, so it is probed again.
+    /// A new socket may be a new path, so one that sealed is probed again. One that had not
+    /// keeps its count: a rebind every minute would otherwise keep it probing for good.
     pub(super) fn on_rebind(&mut self) {
         if let Some(seal) = self.seal.as_mut() {
             seal.reset();
         }
-        self.set_mode(Mode::Probing(0));
+        if self.mode.seals() {
+            self.set_mode(Mode::Probing(0));
+        }
     }
 
     pub(super) fn round_sink<'a>(
@@ -110,9 +113,12 @@ impl SealState {
         socket: &'a mut FramedSocket,
         addr: &'a TargetAddr<'a>,
     ) -> Sink<'a> {
-        let sealed = !matches!(self.mode, Mode::Fallback(r) if r != PROBE_EVERY - 1);
+        let sealed = !matches!(self.mode, Mode::Fallback(_));
         match self.seal.as_mut() {
             Some(seal) if sealed => Sink::Sealed(socket, addr, seal, self.mode == Mode::Resealing),
+            Some(seal) if self.mode == Mode::Fallback(PROBE_EVERY - 1) => {
+                Sink::Probe(socket, addr, seal)
+            }
             _ => Sink::Framed(socket, addr),
         }
     }
@@ -267,6 +273,15 @@ pub(super) fn seal_round(
     Ok(datagrams)
 }
 
+/// The hello a fallen-back socket sends beside a plaintext registration, so the round is
+/// answered whether or not the server seals by now.
+pub(super) fn probe(seal: &mut ClientSeal) -> ResultType<Vec<u8>> {
+    match seal.hello(&[]) {
+        Some(bytes) => Ok(bytes),
+        None => bail!("failed to seal a datagram to the rendezvous server"),
+    }
+}
+
 /// A one-off datagram to `host`, the PunchHoleSent of a UDP punch, goes sealed only while that
 /// host's registration is: an older server would drop it, and the punch with it. It goes under the
 /// registration's session; with none yet, as right after a cookie, it goes as a hello, 0-RTT data
@@ -326,7 +341,7 @@ mod tests {
             state.on_round(timed_out);
             sealed.push(matches!(
                 state.round_sink(&mut socket, &addr),
-                Sink::Sealed(..)
+                Sink::Sealed(..) | Sink::Probe(..)
             ));
         }
         sealed
@@ -495,6 +510,35 @@ mod tests {
         );
         let punch = seal_one_shot("cookie", b"\x0a\x00".to_vec());
         assert_eq!(udp_seal::hello_cookie(&punch), Some([5u8; 16]));
+    }
+
+    #[tokio::test]
+    async fn a_fallen_back_probe_registers_in_plaintext_beside_its_hello() {
+        let (mut state, _) = state("probe-round");
+        rounds(&mut state, &[false, true, true, false, false, false]).await;
+        let register_peer = message(|m| m.set_register_peer(RegisterPeer::default()));
+        let probe = registration(&mut state, &register_peer).await;
+        assert_eq!(probe.len(), 2);
+        assert_eq!(
+            probe[0],
+            register_peer.write_to_bytes().unwrap(),
+            "an older server answers it as any other round"
+        );
+        assert!(udp_seal::is_hello(&probe[1]));
+    }
+
+    #[tokio::test]
+    async fn a_rebind_does_not_send_a_socket_that_never_sealed_back_to_probing() {
+        let (mut state, _) = state("rebind-unsealed");
+        assert_eq!(rounds(&mut state, &[false, true]).await, [true, true]);
+        state.on_rebind();
+        assert_eq!(
+            rounds(&mut state, &[true, false]).await,
+            [false, false],
+            "its two probes went unanswered already"
+        );
+        state.on_rebind();
+        assert_eq!(rounds(&mut state, &[false]).await, [false]);
     }
 
     #[tokio::test]
