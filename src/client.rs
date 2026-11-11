@@ -5010,7 +5010,11 @@ pub trait Interface: Send + Clone + 'static + Sized {
         // force relay
         let errno = errno::errno().0;
         log::error!("Connection closed: {err}({errno})");
+        // The relay hint is for a direct connection that never received data (a firewall or NAT blocks it). A reset of
+        // a session that has received data is a dropped session (the controlled side restarted its service, the
+        // network blinked): it MUST be a plain "error" msgbox, which `check_if_retry()` retries automatically.
         if direct == Some(true)
+            && !received
             && ((cfg!(windows) && (errno == 10054 || err.contains("10054")))
                 || (!cfg!(windows) && (errno == 104 || err.contains("104")))
                 || (!err.contains("Failed") && err.contains("deadline")))

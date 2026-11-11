@@ -959,6 +959,13 @@ class FfiModel with ChangeNotifier {
       showWaitUacDialog(sessionId, dialogManager, type);
     } else if (type == 'elevation-error') {
       showElevationError(sessionId, type, title, text, dialogManager);
+    } else if ((type == 'relay-hint' || type == 'relay-hint2') &&
+        _pi.isSet.isTrue &&
+        (text.contains('10054') || text.contains('104')) &&
+        _lostSessionRetryAllowed()) {
+      // A reset while reconnecting a session that was established: the controlled side is restarting, not
+      // blocked by a firewall; retry instead of offering a relay.
+      showMsgBox(sessionId, 'error', title, text, link, true, dialogManager);
     } else if (type == 'relay-hint' || type == 'relay-hint2') {
       showRelayHintDialog(sessionId, type, title, text, dialogManager, peerId);
     } else if (text == kMsgboxTextWaitingForImage) {
@@ -1027,8 +1034,30 @@ class FfiModel with ChangeNotifier {
         }
       }
     }
+    // A session that was established (`_pi.isSet`) and whose reconnect cannot reach the controlled side's service
+    // (it restarts after an update, the PC reboots) retries for `_kLostSessionRetrySecs`.
+    if (type == 'error' &&
+        title == 'Connection Error' &&
+        text.startsWith('Failed to connect to') &&
+        text.contains('Please try later') &&
+        _pi.isSet.isTrue) {
+      return _lostSessionRetryAllowed();
+    }
     return false;
   }
+
+  /// Starts the lost-session retry window on the first call; true while it lasts. A successful peer info resets
+  /// `_offlineReconnectStartTime`.
+  bool _lostSessionRetryAllowed() {
+    _offlineReconnectStartTime ??= DateTime.now();
+    return DateTime.now().difference(_offlineReconnectStartTime!).inSeconds <
+        _kLostSessionRetrySecs;
+  }
+
+  static const int _kLostSessionRetrySecs = 300;
+
+  /// Longest wait between two automatic reconnect attempts.
+  static const int _kMaxReconnectDelaySecs = 8;
 
   handleToast(Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     final type = evt['type'] ?? 'info';
@@ -1096,7 +1125,9 @@ class FfiModel with ChangeNotifier {
       _timer = Timer(Duration(seconds: _reconnects), () {
         reconnect(dialogManager, sessionId, false);
       });
-      _reconnects *= 2;
+      _reconnects = _reconnects * 2 > _kMaxReconnectDelaySecs
+          ? _kMaxReconnectDelaySecs
+          : _reconnects * 2;
     } else {
       _reconnects = 1;
       _offlineReconnectStartTime = null;
