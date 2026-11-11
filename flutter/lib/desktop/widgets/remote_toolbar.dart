@@ -23,6 +23,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './kb_layout_type_chooser.dart';
+import './keyboard_exclude_dialog.dart';
 import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/common/widgets/custom_scale_base.dart';
 
@@ -2591,6 +2592,13 @@ class _KeyboardMenu extends StatelessWidget {
               Divider(),
               ...toolbarToggles(),
               ...mouseSpeed(),
+              if (isWindows && !ffi.ffiModel.viewOnly)
+                MenuButton(
+                  child: Text('Shortcuts sent to the remote PC')
+                      .paddingOnly(left: 26.0),
+                  onPressed: () => keyboardExcludeShortcutsDialog(ffi),
+                  ffi: ffi,
+                ),
               ...mobileActions(),
             ]);
   }
