@@ -27,6 +27,7 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
+import 'package:flutter_hbb/utils/display_windows.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/http_service.dart' as http;
 import 'package:tuple/tuple.dart';
@@ -1507,6 +1508,93 @@ class FfiModel with ChangeNotifier {
     if (!isCache) {
       tryUseAllMyDisplaysForTheRemoteSession(peerId);
     }
+    if (isDesktop && connType == ConnType.defaultConn) {
+      // `tryUseAllMyDisplaysForTheRemoteSession()` has switched this window to its display before its first await.
+      _initWindowView(peerId);
+      armDisplayWindowReports();
+    }
+  }
+
+  bool _windowViewInitialized = false;
+
+  /// Pins this window's view style and custom scale (`windowViewStyles`, `windowCustomScalePercents`) to the stored
+  /// state of its display (`loadDisplayWindows()`), else to the peer's current values, and restores the stored scroll
+  /// offsets. The view style and scale are pinned once per session; the scroll offsets are restored on every peer
+  /// info, because a reconnect re-lays out the canvas and resets them to 0.
+  Future<void> _initWindowView(String peerId) async {
+    if (_windowViewInitialized) {
+      final stored = loadDisplayWindows(peerId)[_pi.currentDisplay];
+      if (stored?.scrollX != null || stored?.scrollY != null) {
+        displayWindowsLog('reconnect scroll restore session=$sessionId peer=$peerId '
+            'display=${_pi.currentDisplay} x=${stored!.scrollX} y=${stored.scrollY}');
+        parent.target?.canvasModel
+            .restoreScrollOffset(stored.scrollX, stored.scrollY);
+      }
+      return;
+    }
+    _windowViewInitialized = true;
+    final ffi = parent.target;
+    if (ffi == null) {
+      return;
+    }
+    final key = sessionId.toString();
+    final stored = loadDisplayWindows(peerId)[_pi.currentDisplay];
+    displayWindowsLog('initView session=$key peer=$peerId display=${_pi.currentDisplay} '
+        'stored=${stored == null ? null : jsonEncode(stored.toJson())}');
+    final style =
+        stored?.viewStyle ?? await bind.sessionGetViewStyle(sessionId: sessionId);
+    if (style != null && style.isNotEmpty) {
+      windowViewStyles[key] = style;
+    }
+    windowCustomScalePercents[key] = stored?.customScalePercent ??
+        parseCustomScalePercent(await bind.sessionGetFlutterOption(
+            sessionId: sessionId, k: kCustomScalePercentKey));
+    await ffi.canvasModel.updateViewStyle();
+    if (stored?.scrollX != null || stored?.scrollY != null) {
+      ffi.canvasModel.restoreScrollOffset(stored!.scrollX, stored.scrollY);
+    }
+  }
+
+  /// Opens every stored display window of `peerId` (`loadDisplayWindows()`) that the peer still has: the window that
+  /// opened the connection switches to the lowest one, every other one opens in its own window. Returns false when
+  /// no stored display exists on the peer.
+  Future<bool> _tryRestoreDisplayWindows(String peerId) async {
+    final ffi = parent.target;
+    if (ffi == null || !isDesktop || ffi.connType != ConnType.defaultConn) {
+      return false;
+    }
+    final stored = loadDisplayWindows(peerId);
+    final valid = stored.keys
+        .where((d) =>
+            (d >= 0 && d < _pi.displays.length) ||
+            (d == kAllDisplayValue &&
+                _pi.isSupportMultiDisplay &&
+                _pi.displays.length > 1))
+        .toList()
+      ..sort();
+    if (valid.isEmpty) {
+      displayWindowsLog('restore peer=$peerId stored=${stored.keys.toList()} valid=[] '
+          'displays=${_pi.displays.length}');
+      return false;
+    }
+    displayWindowsLog('restore peer=$peerId stored=${stored.keys.toList()} valid=$valid '
+        'displays=${_pi.displays.length} current=${_pi.currentDisplay} multi=${_pi.isSupportMultiDisplay}');
+    final first = valid.first;
+    if (_pi.currentDisplay != first) {
+      openMonitorInTheSameTab(first, ffi, _pi, recordSelection: false);
+    }
+    // `restoreWindowPosition()` gave this window the state of the lowest stored display, which the peer may no
+    // longer have.
+    final lowestStored = (stored.keys.toList()..sort()).first;
+    if (first != lowestStored) {
+      await applyDisplayWindowState(stateGlobal.windowId, stored[first]!);
+    }
+    if (_pi.isSupportMultiDisplay) {
+      for (final d in valid.skip(1)) {
+        openMonitorInNewTabOrWindow(d, peerId, _pi);
+      }
+    }
+    return true;
   }
 
   checkDesktopKeyboardMode() async {
@@ -1545,6 +1633,18 @@ class FfiModel with ChangeNotifier {
       return;
     }
     autoOpenDisplaysPending = false;
+    if (await _tryRestoreDisplayWindows(peerId)) {
+      return;
+    }
+    // A remote desktop connection without a stored window for a display the peer has opens only the peer's current
+    // (main) display, maximized on the primary screen and never fullscreen; `use_all_my_displays_for_the_remote_session`
+    // does not apply to it.
+    if (isDesktop && parent.target?.connType == ConnType.defaultConn) {
+      if (loadDisplayWindows(peerId).isNotEmpty) {
+        await applyDisplayWindowState(stateGlobal.windowId, null);
+      }
+      return;
+    }
     if (bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
             sessionId: sessionId) !=
         'Y') {
@@ -2332,6 +2432,86 @@ class CanvasModel with ChangeNotifier {
     }
   }
 
+  /// True from `restoreScrollOffset()` until the restored offsets have held for `_kScrollSettle` or the user scrolls
+  /// (`endScrollRestore()`); while true, the window's report keeps the stored offsets instead of the current ones.
+  bool scrollRestorePending = false;
+  Timer? _scrollRestoreTimer;
+  static const Duration _kScrollSettle = Duration(seconds: 3);
+
+  void endScrollRestore([String reason = '']) {
+    if (!scrollRestorePending) return;
+    if (reason.isNotEmpty) {
+      displayWindowsLog('scroll restore ended: $reason');
+    }
+    scrollRestorePending = false;
+    _scrollRestoreTimer?.cancel();
+    _scrollRestoreTimer = null;
+  }
+
+  /// Jumps the scroll controllers to the pixel offsets `x` / `y` once the scrollbars are attached and their extents
+  /// reach the offsets (checked every 200 ms, for up to 10 s / 15 s; scroll-auto mode attaches none), and jumps them
+  /// back whenever a re-layout moves them (the first frames after a connect or reconnect re-layout the canvas and
+  /// reset the offsets). It ends `_kScrollSettle` after the last correction.
+  void restoreScrollOffset(double? x, double? y) {
+    endScrollRestore();
+    scrollRestorePending = true;
+    var tries = 0;
+    DateTime? attachedAt;
+    _scrollRestoreTimer = Timer.periodic(const Duration(milliseconds: 200), (t) {
+      tries++;
+      if (!_horizontal.hasClients && !_vertical.hasClients) {
+        if (attachedAt == null && tries >= 50) {
+          displayWindowsLog('scroll restore x=$x y=$y: no scrollbar attached in 10 s');
+          endScrollRestore();
+        }
+        return;
+      }
+      // Before the first frame of a (re)connect the canvas has no extent yet; an offset beyond the extent is applied
+      // once the extent reaches it.
+      final reachable =
+          (x == null || !_horizontal.hasClients || _horizontal.position.maxScrollExtent >= x - 0.5) &&
+              (y == null || !_vertical.hasClients || _vertical.position.maxScrollExtent >= y - 0.5);
+      if (!reachable) {
+        if (tries >= 75) {
+          displayWindowsLog('scroll restore x=$x y=$y: extent '
+              'maxX=${_horizontal.hasClients ? _horizontal.position.maxScrollExtent : null} '
+              'maxY=${_vertical.hasClients ? _vertical.position.maxScrollExtent : null} did not reach it in 15 s');
+          endScrollRestore();
+        }
+        return;
+      }
+      var moved = false;
+      if (x != null && _horizontal.hasClients) {
+        final target = x.clamp(0.0, _horizontal.position.maxScrollExtent);
+        if ((_horizontal.offset - target).abs() > 0.5) {
+          _horizontal.jumpTo(target);
+          moved = true;
+        }
+      }
+      if (y != null && _vertical.hasClients) {
+        final target = y.clamp(0.0, _vertical.position.maxScrollExtent);
+        if ((_vertical.offset - target).abs() > 0.5) {
+          _vertical.jumpTo(target);
+          moved = true;
+        }
+      }
+      if (moved) {
+        displayWindowsLog('scroll restore x=$x y=$y applied '
+            'maxX=${_horizontal.hasClients ? _horizontal.position.maxScrollExtent : null} '
+            'maxY=${_vertical.hasClients ? _vertical.position.maxScrollExtent : null}');
+        updateScrollPercent();
+        notifyListeners();
+        attachedAt = DateTime.now();
+      }
+      attachedAt ??= DateTime.now();
+      if (DateTime.now().difference(attachedAt!) >= _kScrollSettle) {
+        displayWindowsLog('scroll restore x=$x y=$y settled');
+        endScrollRestore();
+        reportDisplayWindowSoon();
+      }
+    });
+  }
+
   ScrollController get scrollHorizontal => _horizontal;
   ScrollController get scrollVertical => _vertical;
   double get scrollX => _scrollX;
@@ -2394,7 +2574,7 @@ class CanvasModel with ChangeNotifier {
   updateSize() => _size = getSize();
 
   updateViewStyle({refreshMousePos = true, notify = true}) async {
-    final style = await bind.sessionGetViewStyle(sessionId: sessionId);
+    final style = await getSessionViewStyle(sessionId);
     if (style == null) {
       return;
     }
@@ -2469,7 +2649,7 @@ class CanvasModel with ChangeNotifier {
 
   tryUpdateScrollStyle(Duration duration, String? style) async {
     if (_scrollStyle == ScrollStyle.scrollauto) return;
-    style ??= await bind.sessionGetViewStyle(sessionId: sessionId);
+    style ??= await getSessionViewStyle(sessionId);
     if (style != kRemoteViewStyleOriginal && style != kRemoteViewStyleCustom) {
       return;
     }
@@ -2715,6 +2895,8 @@ class CanvasModel with ChangeNotifier {
 
     setScrollPercent(scrollPixelPercent.x, scrollPixelPercent.y);
     pushScrollPositionToUI(scrollPixel.x, scrollPixel.y);
+    endScrollRestore('edge scroll');
+    reportDisplayWindowSoon();
 
     notifyListeners();
   }
@@ -2774,7 +2956,7 @@ class CanvasModel with ChangeNotifier {
       _scale = 1.0 / _devicePixelRatio;
     }
     _resetCanvasOffset(getDisplayWidth(), getDisplayHeight());
-    bind.sessionSetViewStyle(sessionId: sessionId, value: _lastViewStyle.style);
+    setSessionViewStyle(sessionId, _lastViewStyle.style);
     notifyListeners();
   }
 

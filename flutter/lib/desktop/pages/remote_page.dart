@@ -20,6 +20,7 @@ import '../../models/platform_model.dart';
 import '../../models/shortcut_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
+import '../../utils/display_windows.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 import '../widgets/tabbar_widget.dart';
@@ -67,6 +68,12 @@ class RemotePage extends StatefulWidget {
   final DesktopTabController? tabController;
 
   FFI get ffi => (_lastState.value! as _RemotePageState)._ffi;
+
+  /// `ffi`, or null while the page's state does not exist yet (a tab just added and not built).
+  FFI? get ffiOrNull {
+    final state = _lastState.value;
+    return state == null ? null : (state as _RemotePageState)._ffi;
+  }
 
   void releaseMacOSInputForTabTransfer() {
     if (!isMacOS) return;
@@ -564,6 +571,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowRestore() {
     super.onWindowRestore();
+    reportDisplayWindowSoon();
     // On windows, we use `onWindowRestore` way to handle window restore from
     // a minimized state.
     if (isWindows) {
@@ -578,6 +586,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowMaximize() {
     super.onWindowMaximize();
+    reportDisplayWindowSoon();
     WakelockManager.enable(_uniqueKey);
     // Update pointer lock center when window is maximized
     _updatePointerLockCenterIfNeeded();
@@ -586,6 +595,9 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowResize() {
     super.onWindowResize();
+    // Sub windows get move/resize from `MultiWindowListener` (`onWindowMove` / `onWindowResize`); the
+    // `WindowListener` callbacks `onWindowMoved` / `onWindowResized` of `DesktopTab` fire for the main window only.
+    reportDisplayWindowSoon();
     // Update pointer lock center when window is resized
     _updatePointerLockCenterIfNeeded();
   }
@@ -593,6 +605,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowMove() {
     super.onWindowMove();
+    reportDisplayWindowSoon();
     // Update pointer lock center when window is moved
     _updatePointerLockCenterIfNeeded();
   }
@@ -635,6 +648,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowEnterFullScreen() {
     super.onWindowEnterFullScreen();
+    reportDisplayWindowSoon();
     if (isMacOS) {
       stateGlobal.setFullscreen(true);
       _queueMacOSKeyboardAfterFullScreen();
@@ -644,6 +658,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void onWindowLeaveFullScreen() {
     super.onWindowLeaveFullScreen();
+    reportDisplayWindowSoon();
     if (isMacOS) {
       stateGlobal.setFullscreen(false);
       _queueMacOSKeyboardAfterFullScreen();
@@ -1174,6 +1189,16 @@ class _ImagePaintState extends State<ImagePaint> {
       return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             c.updateScrollPercent();
+            // A user scroll (wheel: a `UserScrollNotification` with a direction; drag: drag details) ends a pending
+            // restore. A re-layout or a programmatic jump also sends `UserScrollNotification`, with direction idle.
+            if (notification is UserScrollNotification &&
+                notification.direction.name != 'idle') {
+              c.endScrollRestore('user scroll (${notification.direction.name})');
+            } else if (notification is ScrollUpdateNotification &&
+                notification.dragDetails != null) {
+              c.endScrollRestore('user drag');
+            }
+            reportDisplayWindowSoon();
             return false;
           },
           child: mouseRegion(

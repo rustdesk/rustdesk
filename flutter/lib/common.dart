@@ -15,6 +15,7 @@ import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
+import 'package:flutter_hbb/utils/display_windows.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -2023,8 +2024,16 @@ Future<Offset?> _adjustRestoreMainWindowOffset(
 /// Note that windowId must be provided if it's subwindow
 //
 // display is used to set the offset of the window in individual display mode.
+//
+// A remote desktop window gets the stored state (`loadDisplayWindows()`) of `display`, or of the lowest stored display
+// when `display` is null (the window that opens the connection); without a stored state it opens maximized on the
+// primary screen (`applyDisplayWindowState()` with `null`).
+// `ignoreDisplayWindows` is true for a tab moved to a new window: its display is known only from the moved session.
 Future<bool> restoreWindowPosition(WindowType type,
-    {int? windowId, String? peerId, int? display}) async {
+    {int? windowId,
+    String? peerId,
+    int? display,
+    bool ignoreDisplayWindows = false}) async {
   if (bind
       .mainGetEnv(key: "DISABLE_RUSTDESK_RESTORE_WINDOW_POSITION")
       .isNotEmpty) {
@@ -2034,6 +2043,18 @@ Future<bool> restoreWindowPosition(WindowType type,
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
     return false;
+  }
+  if (type == WindowType.RemoteDesktop &&
+      windowId != null &&
+      peerId != null &&
+      !ignoreDisplayWindows) {
+    final stored = loadDisplayWindows(peerId);
+    final state = stored.isEmpty
+        ? null
+        : stored[display ?? (stored.keys.toList()..sort()).first];
+    // No stored state: maximized on the primary screen, never fullscreen.
+    await applyDisplayWindowState(windowId, state);
+    return true;
   }
 
   bool isRemotePeerPos = false;
@@ -3452,6 +3473,7 @@ openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
   );
   ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id,
       updateCursorPos: updateCursorPos);
+  reportDisplayWindowSoon();
 }
 
 // Open new tab or window to show this monitor.
@@ -3480,13 +3502,17 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
 }
 
 setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount,
-    WindowType windowType, int? display, Rect? screenRect) async {
+    WindowType windowType, int? display, Rect? screenRect,
+    {bool ignoreDisplayWindows = false}) async {
   if (screenRect == null) {
     // Do not restore window position to new connection if there's a pre-session.
     // https://github.com/rustdesk/rustdesk/discussions/8825
     if (preSessionCount == 0) {
       await restoreWindowPosition(windowType,
-          windowId: windowId, display: display, peerId: peerId);
+          windowId: windowId,
+          display: display,
+          peerId: peerId,
+          ignoreDisplayWindows: ignoreDisplayWindows);
     }
   } else {
     await tryMoveToScreenAndSetFullscreen(screenRect);

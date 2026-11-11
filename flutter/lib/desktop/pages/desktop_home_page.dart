@@ -23,6 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
+import 'package:flutter_hbb/utils/display_windows.dart';
 import '../widgets/button.dart';
 
 class DesktopHomePage extends StatefulWidget {
@@ -838,6 +839,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         final screenRect = parseParamScreenRect(args);
         await rustDeskWinManager.openMonitorSession(
             windowId, peerId, display, displayCount, screenRect, windowType);
+      } else if (call.method == kWindowEventSaveDisplayWindow) {
+        storeDisplayWindow(call.arguments);
       } else if (call.method == kWindowEventRemoteWindowCoords) {
         final windowId = int.tryParse(call.arguments);
         if (windowId != null) {

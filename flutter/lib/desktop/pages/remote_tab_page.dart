@@ -15,6 +15,8 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
+import 'package:flutter_hbb/utils/display_windows.dart';
+import 'package:flutter_hbb/utils/scale.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
@@ -49,6 +51,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   String? peerId;
   bool _isScreenRectSet = false;
   int? _display;
+  bool _isMovedTab = false;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
@@ -62,6 +65,27 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final screenRect = parseParamScreenRect(params);
     _isScreenRectSet = screenRect != null;
     _display = display as int?;
+    _isMovedTab = tabWindowId != null && display == null;
+    registerDisplayWindowSessions(() => tabController.state.value.tabs
+            .where((tab) => tab.page is RemotePage)
+            .map((tab) => (tab.key, (tab.page as RemotePage).ffiOrNull))
+            .where((e) => e.$2 != null && e.$2!.ffiModel.pi.isSet.value)
+            .map((e) {
+          final ffi = e.$2!;
+          final key = ffi.sessionId.toString();
+          final c = ffi.canvasModel;
+          return DisplayWindowSession(e.$1, ffi.ffiModel.pi.currentDisplay,
+              viewStyle: windowViewStyles[key],
+              customScalePercent: windowCustomScalePercents[key],
+              // While a restore settles, the stored offsets are kept (null = stored value).
+              scrollX: !c.scrollRestorePending && c.scrollHorizontal.hasClients
+                  ? c.scrollHorizontal.offset
+                  : null,
+              scrollY: !c.scrollRestorePending && c.scrollVertical.hasClients
+                  ? c.scrollVertical.offset
+                  : null);
+        }).toList());
+    stateGlobal.fullscreen.listen((_) => reportDisplayWindowSoon());
     tryMoveToScreenAndSetFullscreen(screenRect);
     if (peerId != null) {
       ConnectionTypeState.init(peerId!);
@@ -124,6 +148,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
               ? null
               : tabController.state.value.tabs[0].key,
           display: _display,
+          ignoreDisplayWindows: _isMovedTab,
         );
       });
     }
@@ -437,13 +462,16 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       final displays = args['displays'];
       final screenRect = parseParamScreenRect(args);
       final prePeerCount = tabController.length;
+      displayWindowsLog('new_remote_desktop id=$id display=$display tabs='
+          '${tabController.state.value.tabs.map((e) => e.key).toList()}');
       Future.delayed(Duration.zero, () async {
         if (stateGlobal.fullscreen.isTrue) {
           await WindowController.fromWindowId(windowId()).setFullscreen(false);
           stateGlobal.setFullscreen(false, procWnd: false);
         }
         await setNewConnectWindowFrame(windowId(), id!, prePeerCount,
-            WindowType.RemoteDesktop, display, screenRect);
+            WindowType.RemoteDesktop, display, screenRect,
+            ignoreDisplayWindows: tabWindowId != null && display == null);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });

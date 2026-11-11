@@ -751,6 +751,12 @@ pub fn session_peer_option(session_id: SessionID, name: String, value: String) {
     }
 }
 
+/// Writes a window-placement trace line from Flutter to the RustDesk log.
+pub fn main_display_windows_log(message: String) -> SyncReturn<()> {
+    log::info!("{}", message);
+    SyncReturn(())
+}
+
 pub fn session_get_peer_option(session_id: SessionID, name: String) -> String {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         return session.get_option(name);

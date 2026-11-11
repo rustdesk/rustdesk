@@ -13,6 +13,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/shortcut_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/utils/scale.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -803,11 +804,10 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
 Future<List<TRadioMenu<String>>> toolbarViewStyle(
     BuildContext context, String id, FFI ffi) async {
   final groupValue =
-      await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
+      await getSessionViewStyle(ffi.sessionId) ?? '';
   void onChanged(String? value) async {
     if (value == null) return;
-    bind
-        .sessionSetViewStyle(sessionId: ffi.sessionId, value: value)
+    setSessionViewStyle(ffi.sessionId, value)
         .then((_) => ffi.canvasModel.updateViewStyle());
   }
 
@@ -1030,7 +1030,7 @@ Future<List<TToggleMenu>> toolbarCursor(
         }));
   }
   // zoom cursor
-  final viewStyle = await bind.sessionGetViewStyle(sessionId: sessionId) ?? '';
+  final viewStyle = await getSessionViewStyle(sessionId) ?? '';
   if (!isMobile &&
       pi.platform != kPeerPlatformAndroid &&
       viewStyle != kRemoteViewStyleOriginal) {

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/utils/display_windows.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 
 /// must keep the order
@@ -95,21 +96,49 @@ class RustDeskMultiWindowManager {
     }
   }
 
+  /// Tail of the `openMonitorSession()` queue.
+  Future<void> _monitorSessionQueue = Future.value();
+
   // This function must be called in the main window thread.
   // Because the _remoteDesktopWindows is managed in that thread.
-  openMonitorSession(int windowId, String peerId, int display, int displayCount,
-      Rect? screenRect, int windowType) async {
+  //
+  // Calls run one at a time: concurrent calls (one per restored display) MUST NOT pass the
+  // `kWindowEventActiveDisplaySession` check or pick a window before the previous call has registered its window.
+  Future<void> openMonitorSession(int windowId, String peerId, int display,
+      int displayCount, Rect? screenRect, int windowType) {
+    final f = _monitorSessionQueue.then((_) => _openMonitorSession(
+        windowId, peerId, display, displayCount, screenRect, windowType));
+    _monitorSessionQueue = f.catchError((e) {
+      displayWindowsLog('openMonitorSession peer=$peerId display=$display failed: $e');
+    });
+    return f;
+  }
+
+  Future<void> _openMonitorSession(int windowId, String peerId, int display,
+      int displayCount, Rect? screenRect, int windowType) async {
     final isCamera = windowType == WindowType.ViewCamera.index;
     final windowIDs = isCamera ? _viewCameraWindows : _remoteDesktopWindows;
+    displayWindowsLog('openMonitorSession peer=$peerId display=$display from=$windowId '
+        'windows=$windowIDs inactive=$_inactiveWindows');
     if (windowIDs.length > 1) {
       for (final windowId in windowIDs) {
-        if (await DesktopMultiWindow.invokeMethod(
-            windowId,
-            kWindowEventActiveDisplaySession,
-            jsonEncode({
-              'id': peerId,
-              'display': display,
-            }))) {
+        // A window that fails to answer (still starting, or its handler throws) does not show the display; the
+        // error MUST NOT abort opening it.
+        bool shown = false;
+        try {
+          shown = await DesktopMultiWindow.invokeMethod(
+                  windowId,
+                  kWindowEventActiveDisplaySession,
+                  jsonEncode({
+                    'id': peerId,
+                    'display': display,
+                  })) ==
+              true;
+        } catch (e) {
+          displayWindowsLog('openMonitorSession peer=$peerId display=$display: window $windowId did not answer: $e');
+        }
+        if (shown) {
+          displayWindowsLog('openMonitorSession peer=$peerId display=$display: already shown in window $windowId');
           return;
         }
       }
@@ -200,9 +229,19 @@ class RustDeskMultiWindowManager {
       if (_inactiveWindows.isNotEmpty) {
         for (final windowId in windows) {
           if (_inactiveWindows.contains(windowId)) {
+            // Claim the hidden window before the first `await`, so a concurrent call cannot pick it too: its
+            // `kWindowEventNewRemoteDesktop` would add a tab with the same peer id key, which
+            // `DesktopTabController.add()` drops.
+            _inactiveWindows.remove(windowId);
+            displayWindowsLog('newSession reuse hidden window $windowId msg=$msg');
             if (screenRect == null) {
+              final params = jsonDecode(msg);
               await restoreWindowPosition(type,
-                  windowId: windowId, peerId: remoteId);
+                  windowId: windowId,
+                  peerId: remoteId,
+                  display: params['display'] as int?,
+                  ignoreDisplayWindows: params['tab_window_id'] != null &&
+                      params['display'] == null);
             }
             await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
             if (methodName != kWindowEventNewRemoteDesktop) {
@@ -215,6 +254,7 @@ class RustDeskMultiWindowManager {
       }
       final windowId = await newSessionWindow(
           type, remoteId, msg, windows, screenRect != null);
+      displayWindowsLog('newSession new window $windowId msg=$msg');
       return MultiWindowCallResult(windowId, null);
     }
   }
@@ -256,8 +296,9 @@ class RustDeskMultiWindowManager {
     final msg = jsonEncode(params);
 
     // separate window for file transfer is not supported
-    bool openInTabs = type != WindowType.RemoteDesktop ||
-        mainGetLocalBoolOptionSync(kOptionOpenNewConnInTabs);
+    // A remote desktop connection MUST open in its own window, never as a tab of an existing window
+    // (`kOptionOpenNewConnInTabs` is ignored for it).
+    bool openInTabs = type != WindowType.RemoteDesktop;
 
     if (windows.length > 1 || !openInTabs) {
       for (final windowId in windows) {

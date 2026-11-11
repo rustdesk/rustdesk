@@ -248,6 +248,8 @@ void runMultiWindow(
           windowId: kWindowId!,
           peerId: argument['id'] as String?,
           display: argument['display'] as int?,
+          ignoreDisplayWindows: argument['tab_window_id'] != null &&
+              argument['display'] == null,
         );
       }
       break;

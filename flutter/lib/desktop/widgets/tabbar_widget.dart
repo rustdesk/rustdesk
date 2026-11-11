@@ -19,6 +19,7 @@ import 'package:scroll_pos/scroll_pos.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import '../../utils/display_windows.dart';
 import '../../utils/multi_window_manager.dart';
 
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
@@ -187,11 +188,26 @@ class DesktopTabController {
     for (int i = 0; i < state.value.tabs.length; i++) {
       final tab = state.value.tabs[i];
       if (tab.key == key) {
-        final ffi = isCamera
-            ? (tab.page as ViewCameraPage).ffi
-            : (tab.page as RemotePage).ffi;
-        if (ffi.ffiModel.pi.currentDisplay == display) {
-          return jumpTo(i, callOnSelected: true);
+        // A tab added a moment ago has no page state yet (`RemotePage.ffi` would throw): its display is the one it
+        // was opened with.
+        int? current;
+        if (isCamera) {
+          try {
+            current = (tab.page as ViewCameraPage).ffi.ffiModel.pi.currentDisplay;
+          } catch (_) {
+            current = null;
+          }
+        } else {
+          final page = tab.page as RemotePage;
+          current = page.ffiOrNull?.ffiModel.pi.currentDisplay ?? page.display;
+        }
+        if (current == display) {
+          try {
+            return jumpTo(i, callOnSelected: true);
+          } catch (_) {
+            // The tab exists but cannot be selected yet; the display is shown.
+            return true;
+          }
         }
       }
     }
@@ -395,6 +411,7 @@ class _DesktopTabState extends State<DesktopTab>
   void onWindowMaximize() {
     stateGlobal.setMinimized(false);
     _setMaximized(true);
+    _saveFrame();
     super.onWindowMaximize();
   }
 
@@ -402,6 +419,7 @@ class _DesktopTabState extends State<DesktopTab>
   void onWindowUnmaximize() {
     stateGlobal.setMinimized(false);
     _setMaximized(false);
+    _saveFrame();
     super.onWindowUnmaximize();
   }
 
@@ -412,6 +430,13 @@ class _DesktopTabState extends State<DesktopTab>
       } else if (kWindowType != null && kWindowId != null) {
         await saveWindowPosition(kWindowType!,
             windowId: kWindowId, flush: flush);
+        if (kWindowType == WindowType.RemoteDesktop) {
+          if (flush ?? false) {
+            await reportDisplayWindowNow();
+          } else {
+            reportDisplayWindowSoon();
+          }
+        }
       }
     } catch (e) {
       debugPrint('Error saving window position: $e');
