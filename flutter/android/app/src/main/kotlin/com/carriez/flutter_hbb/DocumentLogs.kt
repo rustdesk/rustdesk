@@ -7,6 +7,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import android.util.Log
+import ffi.FFI
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.UUID
@@ -31,8 +32,7 @@ internal class DocumentLogs(private val context: Context) {
         setEnabled(grant() != null)
     }
 
-    @androidx.annotation.Keep
-    private external fun setEnabled(enabled: Boolean)
+    private fun setEnabled(enabled: Boolean) = FFI.setDocumentLogsEnabled(enabled)
 
     private fun grant(): Uri? = prefs.getString(LOG_GRANT, null)?.let(Uri::parse)
 
