@@ -2169,7 +2169,7 @@ jobs:
             export CARGO_INCREMENTAL=0
             export DEB_ARCH=${{ matrix.job.deb_arch }}
             python3 ./build.py --flutter --skip-cargo
-            if [[ "${{ matrix.job.arch }}" == "x86_64" ]]; then
+            if [[ "${{ matrix.job.arch }}" == "x86_64" && "${{ inputs.upload-artifact }}" == "false" ]]; then
               pushd /workspace/flutter
               flutter test --no-pub --timeout 60s || exit 1
               popd
