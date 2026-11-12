@@ -103,6 +103,7 @@ pub struct Remote<T: InvokeUiSession> {
     last_record_state: bool,
     sent_close_reason: bool,
     cursor_dedupe: CursorDedupe,
+    trusted_device: crate::trusted_devices::client::Session,
 }
 
 #[derive(Default)]
@@ -156,6 +157,7 @@ impl<T: InvokeUiSession> Remote<T> {
             last_record_state: false,
             sent_close_reason: false,
             cursor_dedupe: Default::default(),
+            trusted_device: Default::default(),
         }
     }
 
@@ -209,6 +211,22 @@ impl<T: InvokeUiSession> Remote<T> {
                     .unwrap()
                     .set_connected();
                 let is_secured = peer.is_secured();
+                let trust = crate::trusted_devices::client::Session::new(
+                    &self.handler.lc.read().unwrap(),
+                    is_secured,
+                    pk.as_deref(),
+                );
+                match trust {
+                    Ok(trust) => {
+                        self.trusted_device = trust;
+                        self.handler.lc.write().unwrap().enable_trusted_devices = false;
+                    }
+                    Err(error) => {
+                        self.handler.on_error(&error.to_string());
+                        self.handle_disconnected(round);
+                        return;
+                    }
+                }
                 // Only WebRTC needs refining: its label names the transport that won the race,
                 // not the family ICE ended up nominating, and it is the one path where the two
                 // can disagree with the address the rendezvous observed.
@@ -430,6 +448,19 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         }
         self.handle_disconnected(round);
+        #[cfg(target_os = "android")]
+        for job in &mut self.write_jobs {
+            if let Err(error) = job.cancel_document().await {
+                const CLEANUP_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(60);
+                hbb_common::throttled_log!(
+                    CLEANUP_ERROR_LOG_INTERVAL,
+                    warn,
+                    "Failed to clean up document transfer {} on disconnect: {}",
+                    job.id(),
+                    error
+                );
+            }
+        }
     }
 
     fn handle_disconnected(&self, round: u32) {
@@ -731,7 +762,14 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             Data::Login((os_username, os_password, password, remember)) => {
                 self.handler
-                    .handle_login_from_ui(os_username, os_password, password, remember, peer)
+                    .handle_login_from_ui(
+                        os_username,
+                        os_password,
+                        password,
+                        remember,
+                        &mut self.trusted_device,
+                        peer,
+                    )
                     .await;
             }
             #[cfg(all(target_os = "windows", not(feature = "flutter")))]
@@ -760,6 +798,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
             }
             Data::Message(msg) => {
+                let msg = self.trusted_device.outgoing(msg);
                 // The Flutter clipboard broadcast is process-wide, so a clipboard can reach this
                 // round's queue before the round has logged in; it is dropped here, on the round
                 // itself.
@@ -845,7 +884,33 @@ impl<T: InvokeUiSession> Remote<T> {
                             .await
                     );
                 } else {
-                    match fs::TransferJob::new_read(
+                    #[cfg(target_os = "android")]
+                    let result = {
+                        let source = fs::DataSource::FilePath(PathBuf::from(&path));
+                        let destination = to.clone();
+                        let read = move || {
+                            fs::TransferJob::new_read(
+                                id,
+                                r#type,
+                                destination,
+                                source,
+                                file_num,
+                                include_hidden,
+                                is_remote,
+                                od,
+                            )
+                        };
+                        if fs::android::is_path(path.as_ref()) {
+                            tokio::task::spawn_blocking(read)
+                                .await
+                                .map_err(hbb_common::anyhow::Error::from)
+                                .and_then(|result| result)
+                        } else {
+                            read()
+                        }
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::TransferJob::new_read(
                         id,
                         r#type,
                         to.clone(),
@@ -854,7 +919,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         include_hidden,
                         is_remote,
                         od,
-                    ) {
+                    );
+                    match result {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -915,7 +981,33 @@ impl<T: InvokeUiSession> Remote<T> {
                     job.is_last_job = true;
                     self.write_jobs.push(job);
                 } else {
-                    match fs::TransferJob::new_read(
+                    #[cfg(target_os = "android")]
+                    let result = {
+                        let source = fs::DataSource::FilePath(PathBuf::from(&path));
+                        let destination = to.clone();
+                        let read = move || {
+                            fs::TransferJob::new_read(
+                                id,
+                                r#type,
+                                destination,
+                                source,
+                                file_num,
+                                include_hidden,
+                                is_remote,
+                                od,
+                            )
+                        };
+                        if fs::android::is_path(path.as_ref()) {
+                            tokio::task::spawn_blocking(read)
+                                .await
+                                .map_err(hbb_common::anyhow::Error::from)
+                                .and_then(|result| result)
+                        } else {
+                            read()
+                        }
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::TransferJob::new_read(
                         id,
                         r#type,
                         to.clone(),
@@ -924,7 +1016,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         include_hidden,
                         is_remote,
                         od,
-                    ) {
+                    );
+                    match result {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -1076,7 +1169,21 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.remove_jobs
                         .insert(id, RemoveJob::new(Vec::new(), path, sep, is_remote));
                 } else {
-                    match fs::get_recursive_files(&path, include_hidden) {
+                    #[cfg(target_os = "android")]
+                    let result = if fs::android::is_path(path.as_ref()) {
+                        let path = path.clone();
+                        tokio::task::spawn_blocking(move || {
+                            fs::get_recursive_files(&path, include_hidden)
+                        })
+                        .await
+                        .map_err(hbb_common::anyhow::Error::from)
+                        .and_then(|result| result)
+                    } else {
+                        fs::get_recursive_files(&path, include_hidden)
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::get_recursive_files(&path, include_hidden);
+                    match result {
                         Ok(entries) => {
                             self.handler.update_folder_files(
                                 id,
@@ -1122,7 +1229,18 @@ impl<T: InvokeUiSession> Remote<T> {
                     msg_out.set_file_action(file_action);
                     allow_err!(peer.send(&msg_out).await);
                 } else {
-                    match fs::remove_file(&path) {
+                    #[cfg(target_os = "android")]
+                    let result = if fs::android::is_path(path.as_ref()) {
+                        tokio::task::spawn_blocking(move || fs::remove_file(&path))
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                    } else {
+                        fs::remove_file(&path)
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::remove_file(&path);
+                    match result {
                         Err(err) => {
                             self.handle_job_status(id, file_num, Some(err.to_string()));
                         }
@@ -1144,7 +1262,18 @@ impl<T: InvokeUiSession> Remote<T> {
                     msg_out.set_file_action(file_action);
                     allow_err!(peer.send(&msg_out).await);
                 } else {
-                    match fs::create_dir(&path) {
+                    #[cfg(target_os = "android")]
+                    let result = if fs::android::is_path(path.as_ref()) {
+                        tokio::task::spawn_blocking(move || fs::create_dir(&path))
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                    } else {
+                        fs::create_dir(&path)
+                    };
+                    #[cfg(not(target_os = "android"))]
+                    let result = fs::create_dir(&path);
+                    match result {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -1167,6 +1296,18 @@ impl<T: InvokeUiSession> Remote<T> {
                     msg_out.set_file_action(file_action);
                     allow_err!(peer.send(&msg_out).await);
                 } else {
+                    #[cfg(target_os = "android")]
+                    let err = if fs::android::is_path(path.as_ref()) {
+                        tokio::task::spawn_blocking(move || fs::rename_file(&path, &new_name))
+                            .await
+                            .map_err(hbb_common::anyhow::Error::from)
+                            .and_then(|result| result)
+                    } else {
+                        fs::rename_file(&path, &new_name)
+                    }
+                    .err()
+                    .map(|e| e.to_string());
+                    #[cfg(not(target_os = "android"))]
                     let err = fs::rename_file(&path, &new_name)
                         .err()
                         .map(|e| e.to_string());
@@ -1301,6 +1442,12 @@ impl<T: InvokeUiSession> Remote<T> {
         msg_out.set_file_action(file_action);
         allow_err!(peer.send(&msg_out).await);
         if let Some(job) = fs::remove_job(id, &mut self.write_jobs) {
+            #[cfg(target_os = "android")]
+            let mut job = job;
+            #[cfg(target_os = "android")]
+            if let Err(error) = job.cancel_document().await {
+                self.handle_job_status(id, job.file_num(), Some(error.to_string()));
+            }
             job.remove_download_file();
         }
         let _ = fs::remove_job(id, &mut self.read_jobs);
@@ -1584,18 +1731,24 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Hash(hash)) => {
                     if !self
                         .handler
-                        .handle_hash(&self.handler.password.clone(), hash, peer)
+                        .handle_hash(
+                            &self.handler.password.clone(),
+                            hash,
+                            &mut self.trusted_device,
+                            peer,
+                        )
                         .await
                     {
                         return false;
                     }
                 }
-                Some(message::Union::LoginResponse(lr)) => match lr.union {
+                Some(message::Union::LoginResponse(lr)) => match self
+                    .trusted_device
+                    .respond(lr, &self.handler)
+                    .await
+                    .union
+                {
                     Some(login_response::Union::Error(err)) => {
-                        if err == client::REQUIRE_2FA {
-                            self.handler.lc.write().unwrap().enable_trusted_devices =
-                                lr.enable_trusted_devices;
-                        }
                         if !self.handler.handle_login_error(&err) {
                             return false;
                         }
@@ -1908,7 +2061,26 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 crate::is_support_file_transfer_resume_num(
                                                     peer_ver,
                                                 );
-                                            match job.download_digest(is_support_resume, &digest) {
+                                            #[cfg(target_os = "android")]
+                                            let digest_result = if job.is_document() {
+                                                let path = write_path.clone();
+                                                let digest = digest.clone();
+                                                let resume = is_support_resume && job.is_resume;
+                                                tokio::task::spawn_blocking(move || {
+                                                    fs::is_write_need_confirmation(
+                                                        resume, &path, &digest,
+                                                    )
+                                                })
+                                                .await
+                                                .map_err(hbb_common::anyhow::Error::from)
+                                                .and_then(|result| result)
+                                            } else {
+                                                job.download_digest(is_support_resume, &digest)
+                                            };
+                                            #[cfg(not(target_os = "android"))]
+                                            let digest_result =
+                                                job.download_digest(is_support_resume, &digest);
+                                            match digest_result {
                                                 Ok(res) => match res {
                                                     DigestCheckResult::IsSame => {
                                                         let req = FileTransferSendConfirmRequest {
@@ -2005,11 +2177,17 @@ impl<T: InvokeUiSession> Remote<T> {
                             let mut job_type = fs::JobType::Generic;
                             let mut printer_data = None;
                             if let Some(job) = fs::remove_job(d.id, &mut self.write_jobs) {
+                                #[cfg(target_os = "android")]
+                                let mut job = job;
                                 err = job
                                     .finish_download()
                                     .err()
                                     .map(|err| err.to_string())
                                     .or_else(|| job.job_error());
+                                #[cfg(target_os = "android")]
+                                if let Err(error) = job.finish_document().await {
+                                    err = Some(error.to_string());
+                                }
                                 job_type = job.r#type;
                                 printer_data = match job.get_buf_data().await {
                                     Ok(d) => d,
@@ -2057,6 +2235,20 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Error(e)) => {
+                            #[cfg(target_os = "android")]
+                            if let Some(job) = fs::get_job(e.id, &mut self.write_jobs) {
+                                if let Err(error) = job.cancel_document().await {
+                                    const CLEANUP_ERROR_LOG_INTERVAL: Duration =
+                                        Duration::from_secs(60);
+                                    hbb_common::throttled_log!(
+                                        CLEANUP_ERROR_LOG_INTERVAL,
+                                        warn,
+                                        "Failed to clean up document transfer {}: {}",
+                                        e.id,
+                                        error
+                                    );
+                                }
+                            }
                             let job_type = fs::remove_job(e.id, &mut self.write_jobs)
                                 .or_else(|| fs::remove_job(e.id, &mut self.read_jobs))
                                 .map(|j| j.r#type)

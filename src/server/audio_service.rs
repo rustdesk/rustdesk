@@ -449,7 +449,7 @@ mod cpal_impl {
         }
         if device.is_none() && !audio_input.is_empty() {
             for d in HOST
-                .devices()
+                .input_devices()
                 .with_context(|| "Failed to get audio devices")?
             {
                 if d.name().unwrap_or("".to_owned()) == audio_input {

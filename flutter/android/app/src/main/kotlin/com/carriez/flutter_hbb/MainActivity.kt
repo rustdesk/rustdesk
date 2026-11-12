@@ -63,7 +63,8 @@ class MainActivity : FlutterActivity() {
         data class ExportFiles(
             val sources: List<File>,
             val rejected: Int,
-            val result: MethodChannel.Result
+            val result: MethodChannel.Result,
+            val documentLogs: Boolean = false
         ) : PendingPicker()
     }
 
@@ -73,6 +74,7 @@ class MainActivity : FlutterActivity() {
     )
 
     private var pendingPicker: PendingPicker? = null
+    private val documentPicker by lazy { DocumentPicker(this) }
 
     private var isAudioStart = false
     private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
@@ -127,6 +129,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (documentPicker.onResult(requestCode, resultCode, data)) return
         if (requestCode == REQ_IMPORT_FILES) {
             val pending = pendingPicker as? PendingPicker.ImportFiles ?: return
             pendingPicker = null
@@ -223,6 +226,14 @@ class MainActivity : FlutterActivity() {
                     Log.e(logTag, "Failed to export selected files", e)
                     failed += pending.sources.size - processed
                 }
+                if (pending.documentLogs) {
+                    try {
+                        exported += (application as MainApplication).documentStorage.logs.exportTo(treeUri)
+                    } catch (error: Exception) {
+                        Log.e(logTag, "Failed to export document logs", error)
+                        failed++
+                    }
+                }
                 runOnUiThread {
                     pending.result.success(mapOf("exported" to exported, "failed" to failed))
                 }
@@ -243,6 +254,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        documentPicker.close()
         Log.e(logTag, "onDestroy")
         // The process can outlive the UI whenever something keeps it alive:
         // MainService, or the accessibility InputService on its own. Only the
@@ -275,6 +287,7 @@ class MainActivity : FlutterActivity() {
 
     private fun initFlutterChannel(flutterMethodChannel: MethodChannel) {
         flutterMethodChannel.setMethodCallHandler { call, result ->
+            if (documentPicker.handle(call, result)) return@setMethodCallHandler
             // make sure result will be invoked, otherwise flutter will await forever
             when (call.method) {
                 "init_service" -> {
@@ -614,19 +627,22 @@ class MainActivity : FlutterActivity() {
                 }
                 EXPORT_FILES -> {
                     val paths = (call.arguments as? Map<*, *>)?.get("paths") as? List<*>
-                    if (paths.isNullOrEmpty()) {
+                    val documentLogs = (call.arguments as? Map<*, *>)?.get("documentLogs") == true
+                    if (paths == null || (paths.isEmpty() && !documentLogs)) {
                         result.error("invalid_source", "The selected files are outside app-scoped storage", null)
                     } else {
                         val sources = paths.mapNotNull {
                             (it as? String)?.let(::canonicalExportSource)
                         }
                         val rejected = paths.size - sources.size
-                        if (sources.isEmpty()) {
+                        if (sources.isEmpty() && (!documentLogs ||
+                            !(application as MainApplication).documentStorage.logs.hasPermission())) {
                             result.success(mapOf("exported" to 0, "failed" to rejected))
                         } else if (pendingPicker != null) {
                             result.error("picker_in_progress", "Another document picker is already open", null)
                         } else {
-                            pendingPicker = PendingPicker.ExportFiles(sources, rejected, result)
+                            pendingPicker = PendingPicker.ExportFiles(
+                                sources, rejected, result, documentLogs = documentLogs)
                             try {
                                 startActivityForResult(
                                     Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {

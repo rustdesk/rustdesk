@@ -177,6 +177,12 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
         } else if lang == "ka" {
             lang = "ge".to_owned();
         }
+        // Android 14 and older report Hebrew and Indonesian with their legacy codes (iw_IL, in_ID).
+        if lang == "iw" {
+            lang = "he".to_owned();
+        } else if lang == "in" {
+            lang = "id".to_owned();
+        }
     }
     if cjk_fallback && is_cjk_lang(&lang) {
         "en".to_owned()
@@ -387,6 +393,16 @@ mod test {
     }
 
     #[test]
+    fn test_resolve_lang_detects_hebrew_and_indonesian_from_legacy_android_codes() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "iw_IL", false), "he");
+        assert_eq!(f("", "in_ID", false), "id");
+        assert_eq!(f("", "he-IL", false), "he");
+        assert_eq!(f("", "id-ID", false), "id");
+    }
+
+    #[test]
     fn test_resolve_lang_detects_traditional_chinese_for_hong_kong_and_macao() {
         use super::resolve_lang as f;
 
@@ -395,5 +411,19 @@ mod test {
         assert_eq!(f("", "zh-Hant", false), "zh-tw");
         assert_eq!(f("", "zh_MO", false), "zh-tw");
         assert_eq!(f("", "zh-Hans-HK", false), "zh-cn");
+    }
+
+    #[test]
+    fn test_translations_keep_the_placeholder_of_their_key() {
+        use super::*;
+
+        // translate() puts the caller's value where `{}` is, so a translation without `{}` drops it.
+        for table in [&*ru::T, &*sc::T, &*vi::T] {
+            for (key, value) in table.iter() {
+                if key.contains("{}") && !value.is_empty() {
+                    assert!(value.contains("{}"), "{key:?} => {value:?}");
+                }
+            }
+        }
     }
 }

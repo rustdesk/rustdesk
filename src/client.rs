@@ -93,6 +93,8 @@ use crate::ui_session_interface::SessionPermissionConfig;
 
 pub use super::lang::*;
 
+mod login_method;
+
 #[cfg(not(target_os = "linux"))]
 mod audio_playback;
 #[cfg(target_os = "windows")]
@@ -1858,6 +1860,7 @@ impl Client {
         conn_type: ConnType,
         ipv4: bool,
     ) -> ResultType<Stream> {
+        crate::common::check_relay_uuid(&uuid)?;
         // The proxy's address family does not constrain the relay target.
         let relay_server = check_port(relay_server, RELAY_PORT);
         let use_ws_proxy = Config::is_proxy() && is_ws_endpoint(&check_ws(&relay_server));
@@ -2834,6 +2837,7 @@ pub struct LoginConfigHandler {
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
+    login_method: login_method::LoginMethod,
     config: PeerConfig,
     pub port_forward: (String, i32),
     /// This login's `multiplex`, filled with `port_forward` under the turn
@@ -2911,6 +2915,7 @@ impl LoginConfigHandler {
         adapter_luid: Option<i64>,
         shared_password: Option<String>,
         conn_token: Option<String>,
+        login_method: &str,
     ) {
         let mut id = id;
         if id.contains("@") {
@@ -2951,6 +2956,10 @@ impl LoginConfigHandler {
 
         self.id = id;
         self.conn_type = conn_type;
+        self.login_method = Default::default();
+        if !login_method.is_empty() && !self.set_login_method(login_method) {
+            log::warn!("Failed to initialize login method: {}", login_method);
+        }
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
@@ -3671,7 +3680,7 @@ impl LoginConfigHandler {
         let password0 = config.password.clone();
         let remember = self.remember;
         let hash = self.hash.clone();
-        if remember {
+        if remember && !self.skips_saved_password() {
             // remember is true: use PeerConfig password or ui login
             // not sync shared password to recent
             if !password.is_empty()
@@ -3681,7 +3690,7 @@ impl LoginConfigHandler {
                 config.password = password.clone();
                 log::debug!("remember password of {}", self.id);
             }
-        } else {
+        } else if !self.skips_saved_password() {
             if self.password_source.is_personal_ab(&password) {
                 // sync personal ab password to recent automatically
                 config.password = password.clone();
@@ -3708,7 +3717,8 @@ impl LoginConfigHandler {
         #[cfg(feature = "flutter")]
         {
             // sync connected password to personal ab automatically if it is not shared password
-            if !config.password.is_empty()
+            if !self.skips_saved_password()
+                && !config.password.is_empty()
                 && !self.password_source.is_shared_ab(&password, &hash)
                 && !self.password_source.is_personal_ab(&password)
             {
@@ -3860,6 +3870,9 @@ impl LoginConfigHandler {
             avatar,
             ..Default::default()
         };
+        if self.skips_saved_password() {
+            lr.password.clear();
+        }
         match self.conn_type {
             ConnType::FILE_TRANSFER => lr.set_file_transfer(FileTransfer {
                 dir: self.get_remote_dir(),
@@ -4637,6 +4650,7 @@ pub async fn handle_hash(
     password_preset: &str,
     hash: Hash,
     interface: &impl Interface,
+    trust: &mut crate::trusted_devices::client::Session,
     peer: &mut Stream,
 ) -> bool {
     lc.write().unwrap().hash = hash.clone();
@@ -4732,10 +4746,14 @@ pub async fn handle_hash(
 
     lc.write().unwrap().password = password.clone();
 
+    let request_approval = lc.read().unwrap().skips_saved_password();
+
     let is_terminal_admin = lc.read().unwrap().is_terminal_admin;
     let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
     if is_terminal && is_terminal_admin {
-        if password.is_empty() {
+        if request_approval {
+            interface.msgbox("terminal-admin-login-request-approval", "", "", "");
+        } else if password.is_empty() {
             interface.msgbox("terminal-admin-login-password", "", "", "");
         } else {
             interface.msgbox("terminal-admin-login", "", "", "");
@@ -4746,7 +4764,9 @@ pub async fn handle_hash(
 
     let password = if password.is_empty() {
         // login without password, the remote side can click accept
-        interface.msgbox("input-password", "Password Required", "", "");
+        if !request_approval {
+            interface.msgbox("input-password", "Password Required", "", "");
+        }
         Vec::new()
     } else {
         let mut hasher = Sha256::new();
@@ -4755,7 +4775,28 @@ pub async fn handle_hash(
         hasher.finalize()[..].into()
     };
 
-    send_login(lc.clone(), String::new(), String::new(), password, peer).await;
+    if request_approval {
+        interface.msgbox(
+            "wait-remote-accept-nook",
+            "Prompt",
+            "Please wait for the remote side to accept your session request...",
+            "",
+        );
+    }
+
+    if let Err(error) = send_login(
+        lc.clone(),
+        String::new(),
+        String::new(),
+        password,
+        trust,
+        peer,
+    )
+    .await
+    {
+        interface.on_error(&error.to_string());
+        return false;
+    }
     lc.write().unwrap().hash = hash;
     true
 }
@@ -4799,13 +4840,15 @@ async fn send_login(
     os_username: String,
     os_password: String,
     password: Vec<u8>,
+    trust: &mut crate::trusted_devices::client::Session,
     peer: &mut Stream,
-) {
+) -> ResultType<()> {
     let msg_out = lc
         .read()
         .unwrap()
         .create_login_msg(os_username, os_password, password);
-    allow_err!(peer.send(&msg_out).await);
+    let msg_out = trust.login(msg_out).await?;
+    peer.send(&msg_out).await
 }
 
 /// Handle login request made from ui.
@@ -4824,8 +4867,9 @@ pub async fn handle_login_from_ui(
     os_password: String,
     password: String,
     remember: bool,
+    trust: &mut crate::trusted_devices::client::Session,
     peer: &mut Stream,
-) {
+) -> ResultType<()> {
     let mut hash_password = if password.is_empty() {
         let mut password2 = lc.read().unwrap().password.clone();
         if password2.is_empty() {
@@ -4850,7 +4894,15 @@ pub async fn handle_login_from_ui(
     hasher2.update(&lc.read().unwrap().hash.challenge);
     hash_password = hasher2.finalize()[..].to_vec();
 
-    send_login(lc.clone(), os_username, os_password, hash_password, peer).await;
+    send_login(
+        lc.clone(),
+        os_username,
+        os_password,
+        hash_password,
+        trust,
+        peer,
+    )
+    .await
 }
 
 async fn send_switch_login_request(
@@ -4885,13 +4937,20 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }
-    async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) -> bool;
+    async fn handle_hash(
+        &self,
+        pass: &str,
+        hash: Hash,
+        trust: &mut crate::trusted_devices::client::Session,
+        peer: &mut Stream,
+    ) -> bool;
     async fn handle_login_from_ui(
         &self,
         os_username: String,
         os_password: String,
         password: String,
         remember: bool,
+        trust: &mut crate::trusted_devices::client::Session,
         peer: &mut Stream,
     );
     async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream);
@@ -5735,6 +5794,10 @@ mod webrtc_race_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "client/tests/trusted_devices_tests.rs"]
+mod trusted_devices_tests;
 
 #[cfg(test)]
 mod kx_tests {

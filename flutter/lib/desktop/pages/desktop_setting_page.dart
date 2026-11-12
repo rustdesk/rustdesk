@@ -1181,6 +1181,13 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               message: translate("enable-trusted-devices-tip"),
               child: _OptionCheckBox(context, "Enable trusted devices",
                   kOptionEnableTrustedDevices,
+                  optSetter: (key, value) async {
+                try {
+                  await mainSetBoolOption(key, value);
+                } catch (error) {
+                  showToast(error.toString());
+                }
+              },
                   enabled: !locked, update: (v) {
                 setState(() {});
               }),
@@ -1198,7 +1205,21 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       ).marginOnly(left: 30);
 
       return Column(
-        children: [tfa, bot, trust],
+        children: [
+          tfa,
+          bot,
+          trust,
+          if (mainGetBoolOptionSync(kOptionEnableTrustedDevices))
+            trustedDeviceExpiration(
+              enabled: !locked,
+              onChanged: () {
+                if (mounted) setState(() {});
+              },
+            ).marginOnly(
+              left: _kCheckBoxLeftMargin + 20 + _kContentHSubMargin,
+              top: _kContentHMargin,
+            ),
+        ],
       );
     }
 

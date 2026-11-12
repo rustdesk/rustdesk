@@ -56,7 +56,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add Tag", "Add tag"),
         ("Wrong credentials", "Wrong username or password"),
         ("Edit Tag", "Edit tag"),
-        ("Forget Password", "Forget password"),
+        ("Forget Password", "Clear saved password"),
         ("Add to Favorites", "Add to favorites"),
         ("Remove from Favorites", "Remove from favorites"),
         ("Socks5 Proxy", "Socks5 proxy"),
@@ -290,6 +290,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "\"{}\" can't be used as a shortcut."),
         ("api_server_connection_tip", "Your custom server uses unencrypted HTTP. Contact your administrator to enable HTTPS."),
         ("api_server_empty_tip", "With API Server empty, your custom server defaults to HTTP. Contact your administrator to enable HTTPS."),
+        ("android-logs-folder-tip", "Choose Android → media to store log files."),
+        ("install-directory-not-empty-tip", "The selected folder is not empty. Installation may delete existing data. Consider choosing a different folder."),
         ("mcp-server-tip", "Let MCP clients such as Claude control remote computers through RustDesk. Listens on 127.0.0.1 only and requires an access token. Connections and control requests need your approval unless you turn that off below."),
         ("mcp-read-access-tip", "Enabling MCP lets local MCP clients that hold the access token list your open remote sessions and take screenshots of them without asking for control."),
     ].iter().cloned().collect();
