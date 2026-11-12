@@ -77,7 +77,12 @@ void main() {
   setUp(() {
     binding.option = '';
     platformFFI.setBindingForTesting(binding);
+    messenger.setMockMethodCallHandler(
+        const MethodChannel('org.rustdesk.rustdesk/host'), (call) async => null);
   });
+
+  tearDown(() => messenger.setMockMethodCallHandler(
+      const MethodChannel('org.rustdesk.rustdesk/host'), null));
 
   test('CM docking is opt-in with Y', () async {
     for (final option in ['', 'N', 'true']) {
@@ -192,12 +197,17 @@ void main() {
     };
     var bounds = const Rect.fromLTWH(1620, 0, 300, 490);
     final visibleBounds = <Rect>[];
+    final visibleTaskbarEntries = <bool>[];
+    var skipTaskbar = false;
     messenger.setMockMethodCallHandler(screenChannel, (call) async {
       if (call.method == 'getCursorScreenPoint') return {'x': 0.0, 'y': 0.0};
       if (call.method == 'getAllDisplays') return {'displays': [display]};
       return display;
     });
     messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'setSkipTaskbar') {
+        skipTaskbar = call.arguments['isSkipTaskbar'] as bool;
+      }
       if (call.method.startsWith('is')) return false;
       if (call.method == 'setBounds') {
         final args = call.arguments;
@@ -211,6 +221,7 @@ void main() {
           call.method == 'focus' ||
           (call.method == 'setOpacity' && call.arguments['opacity'] == 1)) {
         visibleBounds.add(bounds);
+        visibleTaskbarEntries.add(!skipTaskbar);
       }
       return null;
     });
@@ -222,6 +233,7 @@ void main() {
     await showCmWindow(isStartup: true);
 
     expect(visibleBounds, isNotEmpty);
+    expect(visibleTaskbarEntries, everyElement(!isWindows));
     expect(visibleBounds,
         everyElement(const Rect.fromLTWH(1584, 800, 336, 280)));
   });

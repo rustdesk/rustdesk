@@ -154,7 +154,16 @@ bool FlutterWindow::OnCreate() {
             GetLastError() != 0) {
           result->Error("cm_banner_window", "Failed to remove the native caption controls");
         } else {
-          result->Success();
+          // Keep the banner out of the taskbar when Windows shows it again.
+          const LONG_PTR ex_style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+          SetLastError(0);
+          if (SetWindowLongPtr(hwnd, GWL_EXSTYLE,
+                              (ex_style & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW) == 0 &&
+              GetLastError() != 0) {
+            result->Error("cm_banner_window", "Failed to hide the banner taskbar entry");
+          } else {
+            result->Success();
+          }
         }
       }
     });

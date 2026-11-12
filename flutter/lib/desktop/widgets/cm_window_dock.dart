@@ -86,6 +86,10 @@ class CmWindowDock extends ValueNotifier<bool> {
 
   Future<void> resizeExpanded(Size contentSize, {bool align = false}) async {
     final windowSize = Size(contentSize.width + size.width, expandedHeight);
+    if (isWindows && enabled) {
+      await RdPlatformChannel.instance.setCmBannerWindow();
+      await windowManager.setSkipTaskbar(true);
+    }
     // On macOS, hiding just the title-bar buttons leaves the native title-bar
     // view over the transparent margin. Hide the whole view and its shadow.
     if (isMacOS || isWindows) {
