@@ -1516,10 +1516,13 @@ jobs:
         # Custom clients rename com.carriez.flutter_hbb; only ffi.FFI keeps its name.
         shell: bash
         run: |
-          if grep -rnE --include='*.rs' 'fn Java_' src libs | grep -v 'fn Java_ffi_FFI_' \
-            || grep -rl --include='*.kt' 'external fun' flutter/android \
-              | grep -vx 'flutter/android/app/src/main/kotlin/ffi.kt'; then
-            echo "::error::Declare Android natives in ffi.FFI and export them as Java_ffi_FFI_* (see AGENTS.md)"
+          bad=0
+          grep -rnE --include='*.rs' 'fn Java_' src libs | grep -v 'fn Java_ffi_FFI_' && bad=1
+          grep -rl --include='*.kt' 'external fun' flutter/android \
+            | grep -vx 'flutter/android/app/src/main/kotlin/ffi.kt' && bad=1
+          grep -rn --include='*.rs' 'com/carriez' src libs && bad=1
+          if [ "$bad" = 1 ]; then
+            echo "::error::Declare Android natives in ffi.FFI, export them as Java_ffi_FFI_*, and do not look up app classes by name (see AGENTS.md)"
             exit 1
           fi
 

@@ -84,7 +84,7 @@ workspace member. `base::config::keys` re-exports the handful of keys
 
 * Custom clients move the Kotlin classes out of `com.carriez.flutter_hbb` into their own package; only the `ffi` package keeps its name. A `Java_com_carriez_flutter_1hbb_*` export therefore does not link there and the app crashes with `UnsatisfiedLinkError`.
 * Declare every `external fun` in `ffi.FFI` (`flutter/android/app/src/main/kotlin/ffi.kt`) and export it from Rust as `Java_ffi_FFI_*`. A class elsewhere that needs one calls it through `FFI`.
-* From Rust, reach app classes only through objects Kotlin passed in (`call_method` on a `GlobalRef`), never by a class name such as `find_class("com/carriez/...")`.
+* From Rust, reach app classes only through objects Kotlin passed in (`call_method` on a `GlobalRef`), never by a class name such as `find_class("com/carriez/...")`. Mark each Kotlin method Rust calls this way `@Keep`, or R8 renames it in release builds and the call fails with `NoSuchMethodError`.
 
 ## Web (Flutter Web) Architecture
 
