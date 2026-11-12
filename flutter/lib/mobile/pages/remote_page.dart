@@ -26,7 +26,6 @@ import '../../utils/image.dart';
 import '../utils/ios_soft_keyboard_input.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
-import '../widgets/hidden_keyboard_input.dart';
 
 // Keep deletable local text so Backspace can reach existing remote content.
 // iOS spaces separate the first word from padding; digits affect IME word

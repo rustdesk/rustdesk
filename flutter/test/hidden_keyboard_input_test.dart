@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/mobile/utils/ios_soft_keyboard_input.dart';
-import 'package:flutter_hbb/mobile/widgets/hidden_keyboard_input.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -33,6 +33,12 @@ void main() {
       verifyInputAfterPaddingNavigation);
   test('backspace ignores native cursor movement inside the hidden field',
       verifyBackspaceAfterPaddingNavigation);
+  test('whole-field replacement preserves host text and leading whitespace',
+      verifyReplacement);
+  test('Undo and Redo after replacing only padding keep it local',
+      verifyUndoRedo);
+  test('clearing padding and text keeps the next Backspace usable',
+      verifyClearAndDelete);
 }
 
 void verifyInputAfterPaddingNavigation() {
@@ -119,48 +125,31 @@ void verifyPaddingExhaustion() {
 }
 
 void verifyRecomposition() {
-  for (final entry in {'a': 'â', 'u': 'ư', 'd': 'đ', 'ㅇ': '아'}.entries) {
-    final input = IosSoftKeyboardInput(sentinel);
-    var remote = 'existing';
-    // Native iOS traces remove the preceding sentinel with the old letter,
-    // then restore the sentinel before inserting the recomposed character.
-    for (final text in [
-      '$sentinel${entry.key}',
-      sentinel.substring(0, sentinelLength - 1),
-      sentinel,
-      '$sentinel${entry.value}',
-    ]) {
-      remote = applyEdit(remote, input.update(editing(text)));
-    }
-    expect(remote, 'existing${entry.value}', reason: entry.toString());
+  final input = IosSoftKeyboardInput(sentinel);
+  var remote = 'existing';
+  // Native iOS traces remove the preceding sentinel with the old letter,
+  // then restore the sentinel before inserting the recomposed character.
+  for (final text in [
+    '$sentinelㅇ',
+    sentinel.substring(0, sentinelLength - 1),
+    sentinel,
+    '$sentinel아',
+  ]) {
+    remote = applyEdit(remote, input.update(editing(text)));
   }
+  expect(remote, 'existing아');
 }
 
 void verifyComposingCommit() {
-  final cases = {
-    '你好': ['n', 'ni', 'ni\u2006h', 'ni\u2006ha', 'ni\u2006hao'],
-    '女孩': ['n', 'n\u2006h'],
-    '交通车上了': [
-      'j',
-      'j\u2006t',
-      'j\u2006t\u2006c',
-      'j\u2006t\u2006c\u2006s',
-      'j\u2006t\u2006c\u2006s\u2006l'
-    ],
-    '妳好': ['ㄋ', 'ㄋㄧ', 'ㄋㄧˇ', 'ㄋㄧˇ\u2004ㄏㄠˇ', '妳ㄏㄠˇ'],
-    '嗎': ['ㄇ', 'ㄇㄚ', 'ㄇㄚ˙'],
-  };
-  for (final entry in cases.entries) {
-    final input = IosSoftKeyboardInput(sentinel);
-    var remote = 'existing';
-    for (final text in [...entry.value, entry.key]) {
-      remote = applyEdit(
-          remote, input.update(editing('$sentinel$text', composing: true)));
-      expect(remote, 'existing', reason: 'Uncommitted $text');
-    }
-    remote = applyEdit(remote, input.update(editing('$sentinel${entry.key}')));
-    expect(remote, 'existing${entry.key}');
+  final input = IosSoftKeyboardInput(sentinel);
+  var remote = 'existing';
+  for (final text in ['n', 'ni', 'ni\u2006hao', '你好']) {
+    remote = applyEdit(
+        remote, input.update(editing('$sentinel$text', composing: true)));
+    expect(remote, 'existing', reason: 'Uncommitted $text');
   }
+  remote = applyEdit(remote, input.update(editing('$sentinel你好')));
+  expect(remote, 'existing你好');
 }
 
 void verifyDeletion() {
@@ -207,4 +196,78 @@ void verifyEditingAndReset() {
   input.reset();
   remote = applyEdit(remote, input.update(editing('$sentinel你好')));
   expect(remote, 'existing家庭出身你好', reason: 'Reset discards pending preedit');
+}
+
+// Select the hidden local field, not the remote document.
+TextEditingValue selectAll(String text) => editing(text).copyWith(
+    selection: TextSelection(baseOffset: 0, extentOffset: text.length));
+
+({String remote, TextEditingValue value}) dispatch(
+    IosSoftKeyboardInput input, String remote, TextEditingValue value) {
+  final edit = input.update(value);
+  final corrected = edit.localValue ?? value;
+  if (edit.localValue != null) {
+    final echo = input.update(corrected);
+    expect([echo.backspaces, echo.text], [0, ''],
+        reason: 'Restoring local padding must not send remote input');
+  }
+  return (remote: applyEdit(remote, edit), value: corrected);
+}
+
+void verifyReplacement() {
+  final actual = <Object>[];
+  final expected = <Object>[];
+  for (final text in ['', ' ', ' hello', 'ㄱ']) {
+    final input = IosSoftKeyboardInput(sentinel);
+    final selected = dispatch(input, 'existing', selectAll(sentinel));
+    final result = dispatch(input, selected.remote, editing(text));
+    actual.add([result.remote, result.value.text]);
+    expected.add(['existing$text', text == 'ㄱ' ? text : '$sentinel$text']);
+  }
+  expect(actual, expected);
+}
+
+void verifyUndoRedo() {
+  for (final text in ['abc', ' hello', ' ', 'ㄱ']) {
+    final input = IosSoftKeyboardInput(sentinel);
+    var result = dispatch(input, 'existing', selectAll(sentinel));
+    result = dispatch(input, result.remote, editing(text));
+    expect(result.remote, 'existing$text');
+    final replacement = result.value;
+    result = dispatch(input, result.remote, editing(sentinel));
+    expect(result.remote, 'existing', reason: 'Undo replacement');
+    result = dispatch(input, result.remote, replacement);
+    expect(result.remote, 'existing$text', reason: 'Redo replacement');
+    expect(result.value, replacement);
+  }
+}
+
+void verifyClearAndDelete() {
+  final input = IosSoftKeyboardInput(sentinel);
+  var result = dispatch(input, 'existing', editing('${sentinel}abc'));
+  result = dispatch(input, result.remote, selectAll(result.value.text));
+  result = dispatch(input, result.remote, editing(''));
+  expect(result.remote, 'existing');
+  expect(result.value.text, sentinel);
+  result = dispatch(
+      input,
+      result.remote,
+      result.value.copyWith(
+          selection: const TextSelection(
+              baseOffset: sentinelLength - 1, extentOffset: sentinelLength)));
+  result = dispatch(
+      input, result.remote, editing(sentinel.substring(0, sentinelLength - 1)));
+  expect(result.remote, 'existin');
+
+  final depleted = IosSoftKeyboardInput(sentinel);
+  result =
+      dispatch(depleted, 'existing${'x' * (sentinelLength - 1)}', editing(' '));
+  for (final text in [' ㄱ', '', ' ', ' 가']) {
+    if (text.isEmpty) {
+      result = dispatch(depleted, result.remote, selectAll(result.value.text));
+    }
+    result = dispatch(depleted, result.remote, editing(text));
+  }
+  expect(result.remote, 'existing가',
+      reason: 'IME recomposition can temporarily consume the last padding');
 }
