@@ -17,7 +17,7 @@ class RdPlatformChannel {
       MethodChannel("org.rustdesk.rustdesk/host");
 
   Future<void> setCmBannerWindow() {
-    assert(isWindows);
+    assert(isWindows || isLinux);
     return _hostMethodChannel.invokeMethod('setCmBannerWindow');
   }
 

@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include "bump_mouse.h"
+#include "cm_banner.h"
 
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
@@ -242,6 +243,16 @@ MyApplication* my_application_new() {
 
 void host_channel_call_handler(FlMethodChannel* channel, FlMethodCall* method_call, gpointer user_data)
 {
+  if (gIsConnectionManager &&
+      strcmp(fl_method_call_get_name(method_call), "setCmBannerWindow") == 0) {
+    auto* app = GTK_APPLICATION(user_data);
+    set_cm_banner_window(gtk_application_get_active_window(app));
+    g_autoptr(GError) error = nullptr;
+    if (!fl_method_call_respond_success(method_call, nullptr, &error)) {
+      g_warning("Failed to send CM banner response: %s", error->message);
+    }
+    return;
+  }
   if (strcmp(fl_method_call_get_name(method_call), "bumpMouse") == 0) {
     FlValue *args = fl_method_call_get_args(method_call);
 

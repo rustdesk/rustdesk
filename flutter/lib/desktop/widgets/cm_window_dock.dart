@@ -86,7 +86,7 @@ class CmWindowDock extends ValueNotifier<bool> {
 
   Future<void> resizeExpanded(Size contentSize, {bool align = false}) async {
     final windowSize = Size(contentSize.width + size.width, expandedHeight);
-    if (isWindows && enabled) {
+    if ((isWindows || isLinux) && enabled) {
       await RdPlatformChannel.instance.setCmBannerWindow();
       await windowManager.setSkipTaskbar(true);
     }
@@ -140,7 +140,9 @@ class CmWindowDock extends ValueNotifier<bool> {
     final right = screen == null
         ? bounds.right
         : screen.visibleFrame.right / (isWindows ? window.scaleFactor : 1);
-    if (isWindows) await RdPlatformChannel.instance.setCmBannerWindow();
+    if (isWindows || isLinux) {
+      await RdPlatformChannel.instance.setCmBannerWindow();
+    }
     if (isMacOS || isWindows) {
       await windowManager.setAsFrameless();
     }

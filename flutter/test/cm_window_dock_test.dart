@@ -12,7 +12,7 @@ import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/main.dart' show showCmWindow;
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
-import 'package:flutter_test/flutter_test.dart' hide isWindows;
+import 'package:flutter_test/flutter_test.dart' hide isWindows, isLinux;
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -233,7 +233,7 @@ void main() {
     await showCmWindow(isStartup: true);
 
     expect(visibleBounds, isNotEmpty);
-    expect(visibleTaskbarEntries, everyElement(!isWindows));
+    expect(visibleTaskbarEntries, everyElement(!(isWindows || isLinux)));
     expect(visibleBounds,
         everyElement(const Rect.fromLTWH(1584, 800, 336, 280)));
   });
