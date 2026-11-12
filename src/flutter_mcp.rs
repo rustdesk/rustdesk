@@ -9,7 +9,8 @@ use crate::{
     keyboard::client::legacy_modifiers,
 };
 use base::message_proto::{
-    Clipboard, ClipboardFormat, KeyEvent, KeyboardMode, Message, ScreenshotResponse,
+    Clipboard, ClipboardFormat, ControlKey, KeyEvent, KeyboardMode, Message, MouseEvent,
+    ScreenshotResponse,
 };
 use std::{
     collections::{HashSet, VecDeque},
@@ -456,6 +457,36 @@ pub fn send_mouse(
         .unwrap()
         .mouse(grant_id, mask, send);
     result
+}
+
+// MCP modifiers name remote keys and must not use human keyboard preferences.
+pub fn send_agent_mouse(
+    session: &crate::flutter::FlutterSession,
+    mask: i32,
+    x: i32,
+    y: i32,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) {
+    let mut message = Message::new();
+    message.set_mouse_event(MouseEvent {
+        mask,
+        x,
+        y,
+        modifiers: [
+            (alt, ControlKey::Alt),
+            (shift, ControlKey::Shift),
+            (ctrl, ControlKey::Control),
+            (command, ControlKey::Meta),
+        ]
+        .into_iter()
+        .filter_map(|(pressed, key)| pressed.then(|| key.into()))
+        .collect(),
+        ..Default::default()
+    });
+    session.send(Data::Message(message));
 }
 
 pub fn send_human_pointer(session_id: SessionID, msg: &str, send: impl FnOnce()) {
@@ -983,6 +1014,45 @@ mod tests {
             base::message_proto::KeyboardMode::Legacy,
             None,
         );
+        crate::flutter_ffi::session_close(id);
+    }
+
+    #[test]
+    fn agent_mouse_ignores_the_human_swap_preference() {
+        let (id, connection) = session();
+        connection
+            .lc
+            .write()
+            .unwrap()
+            .toggle_option("allow_swap_key".to_owned());
+        let mut receiver = capture(&connection);
+        set_agent_control(id, "grant".into());
+        for (modifier, expected, human) in [
+            ("ctrl", ControlKey::Control, ControlKey::Meta),
+            ("command", ControlKey::Meta, ControlKey::Control),
+        ] {
+            for event_type in ["down", "wheel"] {
+                let msg = format!(
+                    r#"{{"type":"{event_type}","buttons":"left","x":"12","y":"34","{modifier}":"true"}}"#
+                );
+                crate::flutter_ffi::session_send_mcp_mouse(id, "grant".into(), msg.clone());
+                let Data::Message(message) = receiver.try_recv().unwrap() else {
+                    panic!("expected agent mouse");
+                };
+                assert_eq!(message.mouse_event().x, 12);
+                assert_eq!(message.mouse_event().y, 34);
+                assert_eq!(message.mouse_event().modifiers, vec![expected.into()]);
+                release_input(&connection.ui_handler.mcp.id.to_string(), "grant", true);
+                while receiver.try_recv().is_ok() {}
+                crate::flutter_ffi::session_send_mouse(id, msg);
+                let Data::Message(message) = receiver.try_recv().unwrap() else {
+                    panic!("expected human mouse");
+                };
+                assert_eq!(message.mouse_event().modifiers, vec![human.into()]);
+                set_agent_control(id, "grant".into());
+                while receiver.try_recv().is_ok() {}
+            }
+        }
         crate::flutter_ffi::session_close(id);
     }
 

@@ -2276,7 +2276,9 @@ fn send_mouse(session_id: SessionID, msg: String, _grant_id: Option<&str>) {
             {
                 crate::flutter_mcp::send_mouse(session_id, _grant_id, mask, || {
                     if _grant_id.is_some() {
-                        crate::client::send_mouse(mask, x, y, alt, ctrl, shift, command, &*session);
+                        crate::flutter_mcp::send_agent_mouse(
+                            &session, mask, x, y, alt, ctrl, shift, command,
+                        );
                     } else {
                         session.send_mouse(mask, x, y, alt, ctrl, shift, command);
                     }
