@@ -754,6 +754,25 @@ class RustDeskMcpBackend implements McpBackend {
       });
 
   @override
+  Future<void> pasteText(String sessionId, String text, {bool paste = true}) =>
+      _serialized(sessionId, (input) async {
+        await _writable(sessionId);
+        final sid = UuidValue(sessionId);
+        input.checkActive();
+        _checkInputResult(await bind.sessionSetMcpClipboard(
+            sessionId: sid, grantId: input.grantId, value: text));
+        if (!paste) return;
+        // The peer sets its clipboard on another thread than the one that
+        // injects keys, so a shortcut sent right away can paste the old text.
+        await Future.delayed(const Duration(milliseconds: 300));
+        final mac =
+            await bind.sessionGetPlatform(sessionId: sid, isRemote: true) ==
+                kPeerPlatformMacOS;
+        await _pressKey(
+            input, sessionId, 'VK_V', [mac ? 'command' : 'ctrl'], 'press');
+      });
+
+  @override
   Future<void> pressKey(String sessionId, String key, List<String> modifiers,
           {String action = 'press'}) =>
       _serialized(sessionId, (input) async {

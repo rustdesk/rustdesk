@@ -868,6 +868,14 @@ pub fn session_input_mcp_string(session_id: SessionID, grant_id: String, value: 
     "Not supported".into()
 }
 
+#[allow(unused_variables)]
+pub fn session_set_mcp_clipboard(session_id: SessionID, grant_id: String, value: String) -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::flutter_mcp::set_clipboard(session_id, &grant_id, &value);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    "Not supported".into()
+}
+
 // chat_client_mode
 pub fn session_send_chat(session_id: SessionID, text: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {

@@ -82,6 +82,26 @@ final Set<String> kMcpKeyNames = {
       .split(' '),
 };
 
+String mcpKeyName(String key) =>
+    const {
+      'End': 'VK_END',
+      'Home': 'VK_HOME',
+      'PageUp': 'VK_PRIOR',
+      'PageDown': 'VK_NEXT',
+      'ArrowLeft': 'VK_LEFT',
+      'ArrowRight': 'VK_RIGHT',
+      'ArrowUp': 'VK_UP',
+      'ArrowDown': 'VK_DOWN',
+      'Enter': 'VK_RETURN',
+      'Escape': 'VK_ESCAPE',
+      'Tab': 'VK_TAB',
+      'Backspace': 'VK_BACK',
+      'Delete': 'VK_DELETE',
+      'Insert': 'VK_INSERT',
+      'Space': 'VK_SPACE',
+    }[key] ??
+    key;
+
 bool isValidMcpKey(String key) => key.length == 1 || kMcpKeyNames.contains(key);
 
 ({int width, int height})? pngSize(List<int> bytes) {

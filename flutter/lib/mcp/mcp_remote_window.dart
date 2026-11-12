@@ -213,6 +213,7 @@ class AgentControlBanner extends StatelessWidget {
                   TextButton(
                     style: TextButton.styleFrom(
                       backgroundColor: Colors.white,
+                      foregroundColor: Colors.deepPurple,
                       visualDensity: VisualDensity.compact,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),

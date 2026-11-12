@@ -118,6 +118,11 @@ class _FakeBackend implements McpBackend {
   }
 
   @override
+  Future<void> pasteText(String sessionId, String text,
+          {bool paste = true}) async =>
+      calls.add('paste $sessionId $text $paste');
+
+  @override
   Future<void> pressKey(String sessionId, String key, List<String> modifiers,
           {String action = 'press'}) async =>
       calls.add('key $sessionId $key ${modifiers.join('+')} $action');
@@ -209,6 +214,7 @@ void main() {
         'mouse',
         'scroll',
         'type_text',
+        'paste_text',
         'press_key',
         'disconnect',
       });
@@ -262,7 +268,7 @@ void main() {
 
     test('press_key rejects unknown key names', () async {
       final r = await _rpc(
-          dispatcher, _call('press_key', {'session_id': 's', 'key': 'Enter'}));
+          dispatcher, _call('press_key', {'session_id': 's', 'key': 'UnknownKey'}));
       expect(r['result']['isError'], true);
       expect(r['result']['content'][0]['text'], contains('VK_RETURN'));
       expect(backend.calls, isEmpty);
@@ -451,12 +457,12 @@ void main() {
 
     test('invalid screenshot arguments fail before any input is sent',
         () async {
-      for (final tool in ['type_text', 'press_key']) {
+      for (final tool in ['type_text', 'paste_text', 'press_key']) {
         final r = await _rpc(
             dispatcher,
             _call(tool, {
               'session_id': 's',
-              if (tool == 'type_text') 'text': 'hello' else 'key': 'VK_RETURN',
+              if (tool == 'press_key') 'key': 'VK_RETURN' else 'text': 'hello',
               'screenshot_after_ms': 0,
               'display': '0',
             }));
@@ -512,6 +518,49 @@ void main() {
           }));
       expect(slow['result']['isError'], true);
       expect(slow['result']['content'][0]['text'], contains('60 seconds'));
+    });
+
+    test('paste_text pastes by default and can only set the clipboard',
+        () async {
+      final r = await _rpc(dispatcher,
+          _call('paste_text', {'session_id': 's', 'text': 'Get-Date'}));
+      expect(r['result']['content'][0]['text'], 'ok');
+      await _rpc(
+          dispatcher,
+          _call('paste_text',
+              {'session_id': 's', 'text': 'dir', 'paste': false}));
+      final bad = await _rpc(
+          dispatcher,
+          _call(
+              'paste_text', {'session_id': 's', 'text': 'dir', 'paste': 'no'}));
+      expect(bad['result']['isError'], true);
+      expect(backend.calls, ['paste s Get-Date true', 'paste s dir false']);
+    });
+
+    test('common navigation key names reach the backend as native names',
+        () async {
+      for (final entry in {
+        'End': 'VK_END',
+        'Home': 'VK_HOME',
+        'PageUp': 'VK_PRIOR',
+        'PageDown': 'VK_NEXT',
+        'ArrowLeft': 'VK_LEFT',
+        'ArrowRight': 'VK_RIGHT',
+        'ArrowUp': 'VK_UP',
+        'ArrowDown': 'VK_DOWN',
+        'Enter': 'VK_RETURN',
+        'Escape': 'VK_ESCAPE',
+        'Tab': 'VK_TAB',
+        'Backspace': 'VK_BACK',
+        'Delete': 'VK_DELETE',
+        'Insert': 'VK_INSERT',
+        'Space': 'VK_SPACE',
+      }.entries) {
+        final r = await _rpc(dispatcher,
+            _call('press_key', {'session_id': 's', 'key': entry.key}));
+        expect(r['result']['isError'], isFalse, reason: entry.key);
+        expect(backend.calls.last, 'key s ${entry.value}  press');
+      }
     });
 
     test('backend failures become tool errors', () async {

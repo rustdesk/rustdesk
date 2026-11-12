@@ -68,6 +68,10 @@ abstract class McpBackend {
 
   Future<void> typeText(String sessionId, String text, {int delayMs = 0});
 
+  /// Puts [text] on the remote clipboard and, with [paste], presses the
+  /// paste shortcut.
+  Future<void> pasteText(String sessionId, String text, {bool paste = true});
+
   /// [key] uses RustDesk key names such as `VK_RETURN` or `VK_A`. [action] is
   /// one of [kMcpKeyActions].
   Future<void> pressKey(String sessionId, String key, List<String> modifiers,
@@ -523,12 +527,15 @@ class McpDispatcher {
         'Type text on the remote machine as keyboard input. By default the '
             'text is sent at once, which is fast and fine in browsers. Each '
             'line break (LF, CRLF or CR) is pressed as Enter, which may submit '
-            'a single-line field or form. '
+            'a single-line field or form. PowerShell 5.1 with PSReadLine '
+            'may ignore this Unicode keyboard input; use `paste_text` there. '
             'Some apps (Notepad, for example) drop or garble characters that '
             'arrive that fast; there set `delay_ms` to 20-30 to type one '
             'character at a time (slower, at most $kMcpMaxTypeChars '
             'characters and 60 seconds per call). Check the result with '
-            '`screenshot_after_ms`. Needs agent control.',
+            '`screenshot_after_ms`. Delayed non-ASCII input can be garbled '
+            'on GNOME Wayland peers; prefer delay_ms 0 for that text. '
+            'Needs agent control.',
         {
           'session_id': _sessionIdProp,
           'text': {'type': 'string'},
@@ -563,6 +570,45 @@ class McpDispatcher {
         },
       ),
       _Tool(
+        'paste_text',
+        'Put text on the remote clipboard and paste it with Ctrl+V (Command+V '
+            'on macOS). Use it where `type_text` arrives empty, e.g. Windows '
+            'PowerShell 5.1 with PSReadLine, and for long text. It replaces '
+            'the remote user\'s clipboard. Clipboard delivery is asynchronous '
+            'and not acknowledged by the peer; verify the pasted text before '
+            'submitting it. Pasted line breaks are not pressed '
+            'as Enter; press VK_RETURN afterwards to run a command. Where '
+            'Ctrl+V does not paste (Linux terminals, a legacy console), set '
+            '`paste` false and paste with the app\'s own shortcut or a right '
+            'click. Fails if clipboard sharing is off for the session. Needs '
+            'agent control.',
+        {
+          'session_id': _sessionIdProp,
+          'text': {'type': 'string'},
+          'paste': {
+            'type': 'boolean',
+            'description': 'Press the paste shortcut, default true. False only '
+                'sets the clipboard.',
+          },
+          'display': {
+            'type': 'integer',
+            'description': 'Display captured by `screenshot_after_ms`, '
+                'default 0.',
+          },
+          'screenshot_after_ms': _screenshotAfterProp,
+        },
+        ['session_id', 'text'],
+        _input,
+        (a) async {
+          final value = _requireString(a, 'text');
+          final paste = a['paste'] ?? true;
+          if (paste is! bool) {
+            throw McpToolException('Missing or invalid argument: paste');
+          }
+          return input(a, () => backend.pasteText(sid(a), value, paste: paste));
+        },
+      ),
+      _Tool(
         'press_key',
         'Press a key, optionally with modifiers, e.g. key `VK_C` with '
             'modifiers [`ctrl`]. `action` `down` holds the key and `up` '
@@ -572,13 +618,16 @@ class McpDispatcher {
             '`modifiers` to the input that needs them. `Meta` is the Windows '
             'or Command key, the same key as the `command` modifier. `shift` '
             'does not change a letter or digit key into a capital or symbol: '
-            'use `type_text` for those characters. Needs agent control.',
+            'use `type_text` for those characters. Common navigation names '
+            'such as End, Home, PageUp, PageDown and ArrowLeft are also '
+            'accepted. Needs agent control.',
         {
           'session_id': _sessionIdProp,
           'key': {
             'type': 'string',
             'description': 'A key name such as VK_RETURN, VK_TAB, VK_ESCAPE, '
-                'VK_BACK, VK_DELETE, VK_SPACE, VK_LEFT, VK_UP, VK_F5, VK_A or '
+                'VK_BACK, VK_DELETE, VK_SPACE, VK_HOME, VK_END, VK_PRIOR, '
+                'VK_NEXT, VK_LEFT, VK_UP, VK_F5, VK_A or '
                 'VK_0, or a single character.',
           },
           'modifiers': {
@@ -604,7 +653,7 @@ class McpDispatcher {
         _input,
         (a) async {
           final mods = _modifiers(a);
-          final key = _requireString(a, 'key');
+          final key = mcpKeyName(_requireString(a, 'key'));
           if (!isValidMcpKey(key)) {
             throw McpToolException(
                 'Unknown key: $key. Use a name like VK_RETURN, VK_TAB, VK_ESCAPE, '

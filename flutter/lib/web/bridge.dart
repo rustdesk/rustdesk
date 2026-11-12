@@ -2033,6 +2033,13 @@ class RustdeskImpl {
           dynamic hint}) async =>
       'Not supported';
 
+  Future<String> sessionSetMcpClipboard(
+          {required UuidValue sessionId,
+          required String grantId,
+          required String value,
+          dynamic hint}) async =>
+      'Not supported';
+
   bool sessionMcpAuthenticate(
           {required UuidValue sessionId,
           required String grantId,

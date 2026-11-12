@@ -8,7 +8,9 @@ use crate::{
     },
     keyboard::client::legacy_modifiers,
 };
-use base::message_proto::{KeyboardMode, KeyEvent, Message, ScreenshotResponse};
+use base::message_proto::{
+    Clipboard, ClipboardFormat, KeyEvent, KeyboardMode, Message, ScreenshotResponse,
+};
 use std::{
     collections::{HashSet, VecDeque},
     fs::OpenOptions,
@@ -300,6 +302,33 @@ pub fn input_string(session_id: SessionID, grant_id: &str, value: &str) -> Strin
     String::new()
 }
 
+/// Sets the peer's text clipboard for a paste shortcut. Some apps drop the
+/// Unicode key events `input_string` produces, e.g. PSReadLine in Windows
+/// PowerShell 5.1, but accept pasted text.
+pub fn set_clipboard(session_id: SessionID, grant_id: &str, value: &str) -> String {
+    let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
+        return "The session was closed.".into();
+    };
+    let owner = session.ui_handler.mcp.owner.read().unwrap();
+    if !owner.accepts(Some(grant_id)) {
+        return "Control changed; this input was cancelled.".into();
+    }
+    // Without clipboard sharing the peer ignores the text and the paste would
+    // insert whatever its clipboard already holds.
+    if !session.is_text_clipboard_required() {
+        return "Clipboard sharing is off for this session, here or on the remote side. Use type_text."
+            .into();
+    }
+    let mut msg_out = Message::new();
+    msg_out.set_clipboard(Clipboard {
+        content: value.as_bytes().to_vec().into(),
+        format: ClipboardFormat::Text.into(),
+        ..Default::default()
+    });
+    session.send(Data::Message(msg_out));
+    String::new()
+}
+
 pub fn with_human_input(session_id: SessionID, send: impl FnOnce()) {
     let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
         return;
@@ -544,6 +573,7 @@ mod tests {
             None,
             None,
             None,
+            "",
         );
         crate::flutter::sessions::insert_session(
             id,
@@ -799,6 +829,24 @@ mod tests {
             panic!("expected text");
         };
         assert_eq!(text.key_event().seq(), "human");
+        crate::flutter_ffi::session_close(id);
+    }
+
+    #[test]
+    fn clipboard_text_needs_the_grant_and_clipboard_sharing() {
+        let (id, connection) = session();
+        let mut receiver = capture(&connection);
+        set_agent_control(id, "grant".into());
+        assert!(!set_clipboard(id, "grant", "Get-Date").is_empty());
+        *connection.server_keyboard_enabled.write().unwrap() = true;
+        *connection.server_clipboard_enabled.write().unwrap() = true;
+        assert!(!set_clipboard(id, "stale", "Get-Date").is_empty());
+        assert!(receiver.try_recv().is_err());
+        assert!(set_clipboard(id, "grant", "Get-Date").is_empty());
+        let Data::Message(msg) = receiver.try_recv().unwrap() else {
+            panic!("expected clipboard");
+        };
+        assert_eq!(msg.clipboard().content.as_ref(), b"Get-Date");
         crate::flutter_ffi::session_close(id);
     }
 
