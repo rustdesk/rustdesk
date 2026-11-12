@@ -26,7 +26,7 @@ const DEFAULT_LOG_FILE_COUNT: usize = 90;
 static PUBLIC_LOGS_ENABLED: AtomicBool = AtomicBool::new(true);
 
 #[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_DocumentLogs_setEnabled(
+pub extern "system" fn Java_ffi_FFI_setDocumentLogsEnabled(
     _env: jni::JNIEnv,
     _instance: jni::objects::JObject,
     enabled: jni::sys::jboolean,
