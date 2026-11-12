@@ -1,0 +1,22 @@
+{
+  "baseline": {
+    "scenario": "Ubuntu baseline MCP to Windows11 stock RustDesk PowerShell5.1PSReadLine2.0",
+    "reported_empty_input": "not reproduced",
+    "expected": "MCP baseline café 日本語",
+    "actual": "MCP baseline café 日本語"
+  },
+  "current": {
+    "expected": "MCP paste café 日本語 😀",
+    "immediate_capture": {
+      "utc": "2026-11-12T06:40:49.3756244Z",
+      "length": 0,
+      "exactText": ""
+    },
+    "after_observing_paste": {
+      "utc": "2026-11-12T06:41:33.6871512Z",
+      "length": 21,
+      "exactText": "MCP paste café 日本語 😀"
+    },
+    "submitted": false
+  }
+}
