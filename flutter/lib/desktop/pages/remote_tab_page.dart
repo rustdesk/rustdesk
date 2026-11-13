@@ -103,6 +103,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           switchUuid: params['switch_uuid'],
           forceRelay: params['forceRelay'],
           isSharedPassword: params['isSharedPassword'],
+          initialDisplay: params['initial_display'],
         ),
       ));
       _update_remote_count();
@@ -477,6 +478,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           switchUuid: switchUuid,
           forceRelay: args['forceRelay'],
           isSharedPassword: args['isSharedPassword'],
+          initialDisplay: args['initial_display'],
         ),
       ));
     } else if (call.method == kWindowDisableGrabKeyboard) {
@@ -500,6 +502,28 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         windowOnTop(windowId());
       }
       return jumpOk;
+    } else if (call.method == kWindowEventOpenPeerDisplay) {
+      final args = jsonDecode(call.arguments);
+      final String id = args['id'];
+      final int display = args['display'];
+      final tab =
+          tabController.state.value.tabs.firstWhereOrNull((e) => e.key == id);
+      if (tab == null) {
+        return false;
+      }
+      final pi = (tab.page as RemotePage).ffi.ffiModel.pi;
+      if (pi.displays.isEmpty) {
+        return false;
+      }
+      final inRange = display == kAllDisplayValue ||
+          (display >= 0 && display < pi.displays.length);
+      if (!inRange || pi.currentDisplay == display) {
+        tabController.jumpToByKey(id);
+        windowOnTop(windowId());
+        return true;
+      }
+      openMonitorInNewTabOrWindow(display, id, pi);
+      return true;
     } else if (call.method == kWindowEventGetRemoteList) {
       return tabController.state.value.tabs
           .map((e) => e.key)
