@@ -273,8 +273,10 @@ class McpDispatcher {
       ),
       _Tool(
         'connect',
-        'Open a remote desktop session to a peer. The user is asked to approve '
-            'the connection unless they turned approval off. Returns a '
+        'Open a remote desktop session to a peer. The user approves the '
+            'new connection and its initial agent control unless automatic '
+            'approval of new connections is enabled. The separate takeover '
+            'setting applies to sessions that are already open. Returns a '
             '`session_id` for the other tools. A new session starts under '
             'agent control. If the peer is already open, that session is '
             'returned unchanged. Waits up to about 25 seconds: returns once '
@@ -369,7 +371,9 @@ class McpDispatcher {
       _Tool(
         'request_control',
         'Ask for exclusive control of a session that is under human control. '
-            'The user must approve unless they turned approval off. Waits up '
+            'The user must approve unless automatic takeover of existing '
+            'sessions is enabled; this is separate from new-connection '
+            'approval. Waits up '
             'to about 25 seconds for the answer; if the user has not answered '
             'by then, says so, and calling request_control again keeps '
             'waiting for the same request. The human can take control back '

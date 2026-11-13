@@ -8,6 +8,17 @@ The Bearer token is stored as a plain-text local option, `mcp-server-token`, in 
 
 **Regenerate token** stops the MCP server, generates and saves a replacement token, then restarts the service if enabled. The old token no longer authenticates new requests, and existing server connections are closed. Copy the updated client configuration to every MCP client that should retain access. Remote RustDesk passwords are separate and are not changed by this operation.
 
+## Connection and takeover approval
+
+Two settings control separate prompts:
+
+- **Automatically approve new connections and initial agent control** (`allow-mcp-auto-approve-connect`): skip the controller's prompt when opening a new remote session. Approval includes the new session's initial agent control; the connection is not read-only. The peer's password, two-factor authentication and incoming acceptance requirements still apply.
+- **Automatically approve agent takeover of existing sessions** (`allow-mcp-auto-approve`): skip the prompt for `request_control` on a session already open under human control. It does not approve new connections.
+
+Both default to off. For existing installations, the original `allow-mcp-auto-approve` value continues to govern takeover only; the new connection setting remains off until explicitly enabled. New-connection approval can therefore reappear after an upgrade even if the old combined setting was enabled. Taking control back always cancels the agent grant; these settings do not prevent human takeover.
+
+An unanswered connection or takeover prompt expires after 60 seconds and reports an approval timeout, distinct from an explicit denial. Tool calls wait for at most about 25 seconds at a time; if approval is still pending, call the same tool again to keep waiting on that request.
+
 ## Screenshot scaling
 
 `screenshot` accepts an optional `scale` greater than zero and at most one, for example `{"session_id":"…","scale":0.5}`. The default, `1`, returns the original PNG. Scaling happens on the controller after capture: it reduces returned image bytes and model image-processing work, not the remote capture or transfer time.
