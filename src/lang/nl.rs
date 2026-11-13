@@ -117,6 +117,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Block user input", "Gebruikersinvoer blokkeren"),
         ("Unblock user input", "Gebruikersinvoer deblokkeren"),
         ("Adjust Window", "Venster aanpassen"),
+        ("canvas_margin", "Canvasmarge"),
         ("Original", "Origineel"),
         ("Shrink", "Verkleinen"),
         ("Stretch", "Uitrekken"),
