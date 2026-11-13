@@ -497,8 +497,8 @@ fn get_ext(name: &str) -> &str {
 #[inline]
 fn is_compressed_file(name: &str) -> bool {
     let compressed_exts = ["xz", "gz", "zip", "7z", "rar", "bz2", "tgz", "png", "jpg"];
-    let ext = get_ext(name).to_ascii_lowercase();
-    compressed_exts.contains(&ext.as_str())
+    let ext = get_ext(name);
+    compressed_exts.iter().any(|x| ext.eq_ignore_ascii_case(x))
 }
 
 pub fn validate_file_name_no_traversal(name: &str) -> ResultType<()> {
