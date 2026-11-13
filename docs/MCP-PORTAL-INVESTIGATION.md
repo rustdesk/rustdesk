@@ -1,5 +1,7 @@
 # Wayland portal approval and first-connection reset
 
+Tracked separately in [rustdesk/rustdesk#17005](https://github.com/rustdesk/rustdesk/issues/17005), following the remaining timeout limitation in #16542. A functional fix is out of scope for the MCP PR.
+
 ## Local reproduction
 
 The dedicated Ubuntu 26.04.1 ARM64 / GNOME 50.1 Wayland peer was run with its system RustDesk service temporarily stopped and a single user `--server` process. The macOS controller used the previously verified local Wayland-text-fix build and a permanent peer password, submitted through MCP. Neither binary contained a portal timeout fix. The peer input/server build was the 1.5.3 package from run 43158980474; relevant source paths were compared with tag 1.5.1.
@@ -55,4 +57,4 @@ The original tester's one-time-password failure has not been reproduced: these l
 
 No functional portal patch is included in this MCP PR. The captured failure has been narrowed to existing ordinary connection/login behavior, with a concrete peer-side repair boundary. Any implementation should be isolated and tested as an ordinary Linux peer correction, including successful delayed approval on the same connection, a silent/closed controller, cancellation, and preservation of early non-heartbeat messages. A clean ordinary-controller comparison and a temporary-password case remain useful before claiming the original incident fully explained.
 
-Private diagnostics retain both sides' logs. This record omits credentials and portal restore tokens. No message has been posted to testers or maintainers on behalf of this investigation.
+Private diagnostics retain both sides' logs. This record omits credentials and portal restore tokens. Issue #17005 contains the separate upstream report; no follow-up comment was sent to testers.
