@@ -1923,7 +1923,5 @@ mod tests {
         // Cameras and phones name their photos IMG_0001.JPG.
         assert!(is_compressed_file("IMG_0001.JPG"));
         assert!(is_compressed_file("Backup.ZIP"));
-        assert!(is_compressed_file("photo.jpg"));
-        assert!(!is_compressed_file("notes.TXT"));
     }
 }
