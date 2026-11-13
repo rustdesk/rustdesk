@@ -4110,7 +4110,19 @@ impl Connection {
                     // TODO: Maybe we can do a voice call from cm directly.
                 }
                 Some(message::Union::ScreenshotRequest(request)) => {
-                    if let Some(tx) = self.inner.tx.clone() {
+                    // Only a running capture of that display answers a pending request, so one
+                    // for a display that does not exist would never be answered or removed.
+                    if request.display < 0
+                        || request.display as usize >= Self::video_source_count(self.video_source())
+                    {
+                        let mut msg_out = Message::new();
+                        msg_out.set_screenshot_response(ScreenshotResponse {
+                            sid: request.sid,
+                            msg: "Invalid display".to_owned(),
+                            ..Default::default()
+                        });
+                        self.send(msg_out).await;
+                    } else if let Some(tx) = self.inner.tx.clone() {
                         crate::video_service::set_take_screenshot(
                             self.video_source(),
                             request.display as _,
