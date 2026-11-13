@@ -2044,18 +2044,21 @@ fn options_for_update(reply: Option<Data>) -> ResultType<HashMap<String, String>
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
 async fn get_options_for_update() -> ResultType<HashMap<String, String>> {
     let Ok(mut c) = connect(1000, "").await else {
         // No service is running, so the local config is the only copy.
         return Ok(Config::get_options());
     };
     c.send(&Data::Options(None)).await?;
-    options_for_update(c.next_timeout(1000).await?)
+    let options = options_for_update(c.next_timeout(1000).await?)?;
+    // Keep the local copy in sync, set_options() compares against it.
+    Config::set_options(options.clone());
+    Ok(options)
 }
 
-pub fn set_option(key: &str, value: &str) {
-    let mut options = match get_options_for_update() {
+#[tokio::main(flavor = "current_thread")]
+pub async fn set_option(key: &str, value: &str) {
+    let mut options = match get_options_for_update().await {
         Ok(options) => options,
         Err(err) => {
             log::error!("Option {key} not changed, failed to read the current options: {err}");
@@ -2067,11 +2070,15 @@ pub fn set_option(key: &str, value: &str) {
     } else {
         options.insert(key.to_owned(), value.to_owned());
     }
-    allow_err!(set_options(options));
+    allow_err!(set_options_async(options).await);
 }
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
+    set_options_async(value).await
+}
+
+async fn set_options_async(value: HashMap<String, String>) -> ResultType<()> {
     let _nat = CheckTestNatType::new();
     let affected = crate::trusted_devices::config::changes_authentication(&value);
     let connection = connect(1000, "").await;
