@@ -27,6 +27,16 @@ The result reports the returned image's `width` and `height`, the original `remo
 
 Screenshots attached through `screenshot_after_ms` remain at original resolution.
 
+## Remote session actions
+
+`remote_action` runs `ctrl_alt_del`, `lock_screen` or `os_password`. It requires current agent control, keyboard permission and a non-view-only session, and shares the input queue and native grant checks with the input tools. Taking control back cancels queued actions.
+
+- `ctrl_alt_del`: Windows requires the peer's reported SAS support (normally an installed/elevated service); on Linux this is the desktop's Ctrl+Alt+Del shortcut, not Windows SAS.
+- `lock_screen`: request the existing Windows, macOS or Linux lock action.
+- `os_password`: use the OS password already saved for this peer in the session toolbar. It is not accepted as a tool argument or returned to the agent. Windows/macOS peers version 1.5.1 or newer are required; older and other platforms are refused. It sends the existing `OSLogin` message, whose peer handler checks the login/lock screen before input. It never falls back to typing a password into an arbitrary focused application. Show the sign-in/unlock UI first; this action does not wake or click it for you.
+
+An `ok` result means the action was sent, not that locking or login succeeded. The OSLogin handler silently ignores the request when the peer is not locked, and a fork reporting a supported version but lacking that handler may ignore it too. Check the resulting screen. The saved-password operation reuses the existing peer handler and its input scheduling; it does not add a new execution acknowledgement.
+
 ## Text input
 
 Prefer `paste_text` for long text, code and PowerShell prompts when clipboard sharing and application paste are available. It replaces the remote clipboard. Use `type_text` when the application needs per-character input or cannot accept paste. A successful tool response confirms sending, not that the target application has consumed the text: inspect the application before submitting or sending more.
