@@ -684,7 +684,6 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 #[derive(Debug, PartialEq, Eq)]
 enum DrmCursorRoute {
     UseDrm(u64),
-    WaitForDrm,
     FallbackXFixes,
 }
 
@@ -692,39 +691,30 @@ enum DrmCursorRoute {
 fn decide_drm_cursor_route(
     latched_is_x11: bool,
     drm_available: bool,
-    drm_stream_active: bool,
     drm_id: Option<u64>,
     has_non_drm_display: bool,
 ) -> DrmCursorRoute {
-    if latched_is_x11 && !drm_available && !drm_stream_active {
+    if latched_is_x11 && !drm_available {
         return DrmCursorRoute::FallbackXFixes;
     }
     if let Some(id) = drm_id {
         if id != scrap::drm_reader::HIDDEN_CURSOR_ID || !has_non_drm_display {
             return DrmCursorRoute::UseDrm(id);
         }
-        return DrmCursorRoute::FallbackXFixes;
     }
-    if drm_stream_active {
-        DrmCursorRoute::WaitForDrm
-    } else {
-        DrmCursorRoute::FallbackXFixes
-    }
+    DrmCursorRoute::FallbackXFixes
 }
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
     // DRM/KMS capture: the hardware cursor arrives over the `_drm` stream, not from XFixes.
     #[cfg(feature = "drm")]
-    match decide_drm_cursor_route(
+    if let DrmCursorRoute::UseDrm(id) = decide_drm_cursor_route(
         is_x11(),
         crate::server::drm_capturer::is_available_cached(),
-        crate::server::drm_capturer::has_active_stream(),
         crate::server::drm_capturer::drm_cursor_id(),
         crate::server::display_service::has_non_drm_backed_display(),
     ) {
-        DrmCursorRoute::UseDrm(id) => return Ok(Some(id)),
-        DrmCursorRoute::WaitForDrm => return Ok(None),
-        DrmCursorRoute::FallbackXFixes => {}
+        return Ok(Some(id));
     }
     let mut res = None;
     DISPLAY.with(|conn| {
@@ -751,10 +741,7 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     // Memoised `is_x11()` on purpose, for the reason spelled out in `get_cursor()`; the two must
     // agree anyway, since a caller that took the DRM branch there has to take it here.
     #[cfg(feature = "drm")]
-    if !is_x11()
-        || crate::server::drm_capturer::is_available_cached()
-        || crate::server::drm_capturer::has_active_stream()
-    {
+    if !is_x11() || crate::server::drm_capturer::is_available_cached() {
         if let Some(c) = crate::server::drm_capturer::drm_cursor() {
             // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
             // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
@@ -3290,20 +3277,19 @@ mod drm_cursor_route_tests {
     #[test]
     fn uses_drm_cursor_even_when_is_x11_latched_true() {
         assert_eq!(
-            decide_drm_cursor_route(true, true, true, Some(42), false),
+            decide_drm_cursor_route(true, true, Some(42), false),
             DrmCursorRoute::UseDrm(42)
         );
     }
 
     #[test]
-    fn waits_for_first_drm_cursor_only_while_stream_is_active() {
+    fn falls_back_to_xfixes_when_drm_has_no_cursor_snapshot() {
         assert_eq!(
-            decide_drm_cursor_route(false, true, true, None, false),
-            DrmCursorRoute::WaitForDrm
+            decide_drm_cursor_route(false, true, None, false),
+            DrmCursorRoute::FallbackXFixes
         );
-        // If DRM stream ended (e.g. fell back to PipeWire), allow XFixes fallback.
         assert_eq!(
-            decide_drm_cursor_route(false, true, false, None, false),
+            decide_drm_cursor_route(false, true, None, true),
             DrmCursorRoute::FallbackXFixes
         );
     }
@@ -3311,13 +3297,12 @@ mod drm_cursor_route_tests {
     #[test]
     fn preserves_xfixes_fallback_on_x11_or_mixed_hidden_cursor() {
         assert_eq!(
-            decide_drm_cursor_route(true, false, false, None, false),
+            decide_drm_cursor_route(true, false, None, false),
             DrmCursorRoute::FallbackXFixes
         );
         assert_eq!(
             decide_drm_cursor_route(
                 false,
-                true,
                 true,
                 Some(scrap::drm_reader::HIDDEN_CURSOR_ID),
                 true,
