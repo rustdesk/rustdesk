@@ -525,8 +525,12 @@ class McpDispatcher {
       ),
       _Tool(
         'type_text',
-        'Type text on the remote machine as keyboard input. By default the '
-            'text is sent at once, which is fast and fine in browsers. Each '
+        'Type text through the remote keyboard input path. Use this when '
+            'the app needs per-character input events or cannot accept paste. '
+            'Prefer `paste_text` for long text, code and PowerShell prompts '
+            'when clipboard sharing and application paste are available. '
+            'Default delay_ms is 0 (send at once); add a delay only when '
+            'the app needs paced input. Each '
             'line break (LF, CRLF or CR) is normally pressed as Enter, which '
             'may submit a single-line field or form. On Wayland, text containing '
             'non-ASCII characters is sent as one whole text batch: delay_ms '
@@ -537,9 +541,9 @@ class McpDispatcher {
             'may ignore this Unicode keyboard input. If this tool returns ok '
             'but the text is missing, incomplete or garbled in the target app, '
             'use `paste_text` instead of repeatedly retrying keyboard input. '
-            'Some apps (Notepad, for example) drop or garble characters that '
-            'arrive that fast; there set `delay_ms` to 20-30 to type one '
-            'character at a time (slower, at most $kMcpMaxTypeChars '
+            'If paste is unavailable and the app drops fast keyboard input, '
+            'set `delay_ms` to 20-30 to type one character at a time '
+            '(slower, at most $kMcpMaxTypeChars '
             'characters and 60 seconds per call). Check the result with '
             '`screenshot_after_ms`. Needs agent control.',
         {
@@ -578,12 +582,15 @@ class McpDispatcher {
       ),
       _Tool(
         'paste_text',
-        'Fallback for `type_text` when keyboard input is ignored, missing, '
-            'incomplete or garbled, even if `type_text` returned ok. Prefer '
-            'this tool in Windows PowerShell 5.1 with PSReadLine, where typed '
-            'Unicode can leave the prompt empty. Put the text on the remote '
-            'clipboard and paste it with Ctrl+V (Command+V on macOS); also '
-            'useful for long text. It replaces '
+        'Prefer this tool for long text, code and PowerShell prompts when '
+            'clipboard sharing and application paste are available; no need '
+            'to try `type_text` first. Also use it when `type_text` input is '
+            'missing, incomplete or garbled even though the tool returned ok. '
+            'Windows PowerShell 5.1 with PSReadLine can ignore typed Unicode '
+            'and leave the prompt empty. Put text on the remote clipboard '
+            'and paste with Ctrl+V (Command+V on macOS). For apps that block '
+            'paste or need per-character input events, use `type_text`. '
+            'It replaces '
             'the remote user\'s clipboard. Clipboard delivery is asynchronous '
             'and not acknowledged by the peer; verify the pasted text before '
             'submitting it. Line breaks are pasted unchanged and terminals '
