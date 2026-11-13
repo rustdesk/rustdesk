@@ -743,12 +743,20 @@ async fn ensure_pipewire_inited() -> ResultType<()> {
     check_init().await
 }
 
+#[cfg(feature = "drm")]
+#[inline]
+fn should_owe_drm_promotion_on_fallback(display_demoted: bool) -> bool {
+    !display_demoted
+}
+
 pub(super) fn get_capturer_for_display(
     display_idx: usize,
 ) -> ResultType<super::video_service::CapturerInfo> {
     if is_x11() {
         bail!("Do not call this function if not wayland");
     }
+    #[cfg(feature = "drm")]
+    let start_gen = scrap::wayland::display::wayland_snapshot_generation();
     // DRM/KMS capture path: build the capturer straight from the service `_drm` stream, bypassing
     // the PipeWire CAP_DISPLAY_INFO machinery entirely. `is_available()` is a GLOBAL verdict, so a
     // per-display DRM failure (an ungrabbable/demoted CRTC, or — after the phase-2 split — a
@@ -770,12 +778,15 @@ pub(super) fn get_capturer_for_display(
                     display_idx,
                     e
                 );
-                if !super::drm_capturer::is_display_demoted(display_idx) {
-                    super::display_service::note_drm_promotion_owed();
-                }
                 ensure_pipewire_inited()?;
             }
         }
+    }
+    #[cfg(feature = "drm")]
+    let demoted = super::drm_capturer::is_display_demoted(display_idx);
+    #[cfg(feature = "drm")]
+    if should_owe_drm_promotion_on_fallback(demoted) {
+        super::display_service::note_drm_promotion_owed();
     }
     // Resolved BEFORE the read guard below, deliberately. `get_display_infos` runs
     // `augment_with_wayland_geometry`, which is a compositor output roundtrip, and `clear()` takes
@@ -896,10 +907,8 @@ pub(super) fn get_capturer_for_display(
                 capturer: Box::new({
                     let mut c = cap_display_info.capturer.clone();
                     #[cfg(feature = "drm")]
-                    if super::drm_capturer::is_available_cached()
-                        || !super::drm_capturer::is_display_demoted(display_idx)
-                    {
-                        c.snapshot_gen = Some(scrap::wayland::display::wayland_snapshot_generation());
+                    if super::drm_capturer::is_available_cached() || !demoted {
+                        c.snapshot_gen = Some(start_gen);
                     }
                     c
                 }),
@@ -922,4 +931,31 @@ pub fn common_get_error() -> String {
         // to-do: check other distros
     }
     return "".to_owned();
+}
+
+#[cfg(all(test, feature = "drm"))]
+mod drm_fallback_promotion_tests {
+    use super::{should_owe_drm_promotion_on_fallback, CapturerPtr};
+    use scrap::TraitCapturer;
+    use std::io;
+    use std::time::Duration;
+
+    #[test]
+    fn fallback_capturer_rebuilds_when_layout_generation_bumps() {
+        assert!(should_owe_drm_promotion_on_fallback(false));
+        assert!(!should_owe_drm_promotion_on_fallback(true));
+
+        let start_gen = scrap::wayland::display::wayland_snapshot_generation();
+        let mut cap = CapturerPtr {
+            ptr: std::ptr::null_mut(),
+            snapshot_gen: Some(start_gen),
+        };
+        scrap::wayland::display::bump_layout_generation();
+        let err = match cap.frame(Duration::from_millis(10)) {
+            Err(e) => e,
+            Ok(_) => panic!("expected generation bump to trigger rebuild error"),
+        };
+        assert_eq!(err.kind(), io::ErrorKind::Other);
+        assert!(err.to_string().contains("generation changed"));
+    }
 }
