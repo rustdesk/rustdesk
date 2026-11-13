@@ -932,11 +932,8 @@ mod test {
     fn test_new_connection_uri_keeps_server_key_and_password() {
         let uri = super::new_connection_uri(
             "connect",
-            "123456789@rs.example.com?key=Ab+c/d=",
-            &[
-                ("password", "p+w&x#1%".to_owned()),
-                ("relay", "true".to_owned()),
-            ],
+            "123456789@rs.example.com?key=Ab+c/d=&relay",
+            &[("password", "p+w&x#1%".to_owned())],
         );
         let uri = url::Url::parse(&uri).unwrap();
         assert_eq!(uri.host_str(), Some("connect"));
@@ -944,6 +941,6 @@ mod test {
         let query: std::collections::HashMap<_, _> = uri.query_pairs().into_owned().collect();
         assert_eq!(query["key"], "Ab+c/d=");
         assert_eq!(query["password"], "p+w&x#1%");
-        assert_eq!(query["relay"], "true");
+        assert_eq!(query["relay"], "");
     }
 }
