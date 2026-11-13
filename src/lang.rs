@@ -426,4 +426,25 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_translations_keep_the_placeholders_of_their_english_text() {
+        use super::*;
+
+        // Some callers fill `{}` themselves (Dart `.replaceAll('{}', ...)`), so the English text,
+        // not only the key, decides how many `{}` a translation needs.
+        for table in [&*fa::T, &*nl::T, &*sc::T] {
+            for (key, value) in table.iter() {
+                if value.is_empty() {
+                    continue;
+                }
+                let english = en::T.get(key).filter(|v| !v.is_empty()).unwrap_or(key);
+                assert_eq!(
+                    english.matches("{}").count(),
+                    value.matches("{}").count(),
+                    "{key:?} => {value:?}"
+                );
+            }
+        }
+    }
 }
