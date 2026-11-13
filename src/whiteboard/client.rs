@@ -65,9 +65,11 @@ pub fn unregister_whiteboard(k: String) {
     let is_conns_empty = conns.is_empty();
     drop(conns);
 
-    TX_WHITEBOARD.read().unwrap().as_ref().map(|tx| {
-        allow_err!(tx.send((k, CustomEvent::Clear)));
-    });
+    if let Ok(tx) = TX_WHITEBOARD.try_read() {
+        tx.as_ref().map(|tx| {
+            allow_err!(tx.send((k, CustomEvent::Clear)));
+        });
+    }
     if is_conns_empty {
         std::thread::spawn(|| {
             let mut whiteboard = TX_WHITEBOARD.write().unwrap();
@@ -128,9 +130,14 @@ fn tx_send_event(conn: &mut Conn, k: String, event: CustomEvent) {
         }
     }
 
-    TX_WHITEBOARD.read().unwrap().as_ref().map(|tx| {
-        allow_err!(tx.send((k, event)));
-    });
+    // Not read(): start_whiteboard_() holds the write lock while it waits for a user session,
+    // forever on a login screen, and this runs on the connection's input thread. There is no
+    // sender to use before it finishes anyway.
+    if let Ok(tx) = TX_WHITEBOARD.try_read() {
+        tx.as_ref().map(|tx| {
+            allow_err!(tx.send((k, event)));
+        });
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -255,4 +262,37 @@ async fn start_whiteboard_() -> ResultType<()> {
             .await
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_input_does_not_wait_for_a_starting_whiteboard() {
+        let k = get_key_cursor(-1);
+        CONNS.write().unwrap().insert(
+            k.clone(),
+            Conn {
+                last_cursor_pos: (0.0, 0.0),
+                last_cursor_evt: LastCursorEvent {
+                    evt: None,
+                    tm: Instant::now(),
+                    c: 0,
+                },
+            },
+        );
+        // What start_whiteboard_() holds while the host is at the login screen.
+        let starting = TX_WHITEBOARD.write().unwrap();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let key = k.clone();
+        std::thread::spawn(move || {
+            update_whiteboard(key, CustomEvent::Clear);
+            done_tx.send(()).ok();
+        });
+        let done = done_rx.recv_timeout(std::time::Duration::from_secs(2));
+        drop(starting);
+        CONNS.write().unwrap().remove(&k);
+        assert!(done.is_ok(), "update_whiteboard() waited for the start");
+    }
 }
