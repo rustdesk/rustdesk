@@ -332,7 +332,12 @@ jobs:
         run: echo "SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib" >> "$GITHUB_ENV"
 
       - name: Build rustdesk
-        run: |
+          env:
+           RENDEZVOUS_SERVER: ${{ secrets.RENDEZVOUS_SERVER }}
+           RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
+           API_SERVER: ${{ secrets.API_SERVER }}
+         run: |
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}
           # Windows: build RustDesk
           # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix
           python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}
