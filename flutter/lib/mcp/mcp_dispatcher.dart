@@ -534,7 +534,9 @@ class McpDispatcher {
             'than pressed as Enter. This avoids the peer clipboard being '
             'overwritten between asynchronous pastes. Terminals may execute '
             'pasted newlines immediately. PowerShell 5.1 with PSReadLine '
-            'may ignore this Unicode keyboard input; use `paste_text` there. '
+            'may ignore this Unicode keyboard input. If this tool returns ok '
+            'but the text is missing, incomplete or garbled in the target app, '
+            'use `paste_text` instead of repeatedly retrying keyboard input. '
             'Some apps (Notepad, for example) drop or garble characters that '
             'arrive that fast; there set `delay_ms` to 20-30 to type one '
             'character at a time (slower, at most $kMcpMaxTypeChars '
@@ -576,9 +578,12 @@ class McpDispatcher {
       ),
       _Tool(
         'paste_text',
-        'Put text on the remote clipboard and paste it with Ctrl+V (Command+V '
-            'on macOS). Use it where `type_text` arrives empty, e.g. Windows '
-            'PowerShell 5.1 with PSReadLine, and for long text. It replaces '
+        'Fallback for `type_text` when keyboard input is ignored, missing, '
+            'incomplete or garbled, even if `type_text` returned ok. Prefer '
+            'this tool in Windows PowerShell 5.1 with PSReadLine, where typed '
+            'Unicode can leave the prompt empty. Put the text on the remote '
+            'clipboard and paste it with Ctrl+V (Command+V on macOS); also '
+            'useful for long text. It replaces '
             'the remote user\'s clipboard. Clipboard delivery is asynchronous '
             'and not acknowledged by the peer; verify the pasted text before '
             'submitting it. Line breaks are pasted unchanged and terminals '
