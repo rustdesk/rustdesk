@@ -2233,6 +2233,13 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 
             let record_key = chr as u64 + KEY_CHAR_START;
             record_pressed_key(KeysDown::EnigoKey(record_key), down);
+            #[cfg(target_os = "windows")]
+            if down
+                && use_key_presses_for_text(evt, &mut en)
+                && crate::platform::windows::try_input_char_as_key_presses(chr)
+            {
+                return;
+            }
             process_chr(&mut en, chr, down, has_hotkey_modifiers(evt))
         }
         Some(key_event::Union::Unicode(chr)) => {
@@ -2242,12 +2249,34 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 
             process_unicode(&mut en, chr)
         }
-        Some(key_event::Union::Seq(ref seq)) => process_seq(&mut en, seq),
+        Some(key_event::Union::Seq(ref seq)) => {
+            #[cfg(target_os = "windows")]
+            if use_key_presses_for_text(evt, &mut en) {
+                crate::platform::windows::input_text_as_key_presses(seq, |s| en.key_sequence(s));
+                return;
+            }
+            process_seq(&mut en, seq)
+        }
         _ => {}
     }
 
     #[cfg(not(target_os = "macos"))]
     release_keys(&mut en, &to_release);
+}
+
+/// Whether legacy text input should use key presses instead of Unicode input. Only for
+/// events without modifiers, with none held down: nothing is then in `to_release`, Caps Lock
+/// is off and no modifier combines with the keys. A Seq does not release held modifiers.
+/// Auto Login types the OS password at the logon or lock screen, where Unicode input works:
+/// keep it there.
+#[cfg(target_os = "windows")]
+fn use_key_presses_for_text(evt: &KeyEvent, en: &mut Enigo) -> bool {
+    evt.modifiers.is_empty()
+        && Config::get_bool_option(base::config::keys::OPTION_ALLOW_PHYSICAL_KEY_TEXT_INPUT)
+        && ![Key::Shift, Key::Control, Key::Alt, Key::Meta]
+            .into_iter()
+            .any(|key| get_modifier_state(key, en))
+        && !crate::platform::is_logon_screen()
 }
 
 #[cfg(target_os = "windows")]

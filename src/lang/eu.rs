@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Hautatutako karpeta ez dago hutsik. Instalazioak lehendik dauden datuak ezaba ditzake. Beste karpeta bat aukeratzea gomendatzen da."),
         ("Request approval", "Eskatu onespena"),
         ("Forever", "Betiko"),
+        ("Send text as key presses (for VMs and admin windows)", ""),
+        ("physical_key_text_input_tip", ""),
     ].iter().cloned().collect();
 }

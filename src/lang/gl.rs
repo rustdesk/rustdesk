@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "O cartafol seleccionado non está baleiro. A instalación pode eliminar os datos existentes. Considera escoller outro cartafol."),
         ("Request approval", "Solicitar aprobación"),
         ("Forever", "Para sempre"),
+        ("Send text as key presses (for VMs and admin windows)", ""),
+        ("physical_key_text_input_tip", ""),
     ].iter().cloned().collect();
 }

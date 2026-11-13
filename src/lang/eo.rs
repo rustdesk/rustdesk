@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "La elektita dosierujo ne estas malplena. La instalado povas forigi ekzistantajn datumojn. Konsideru elekti alian dosierujon."),
         ("Request approval", "Peti aprobon"),
         ("Forever", "Por ĉiam"),
+        ("Send text as key presses (for VMs and admin windows)", ""),
+        ("physical_key_text_input_tip", ""),
     ].iter().cloned().collect();
 }
