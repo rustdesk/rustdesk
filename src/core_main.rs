@@ -770,19 +770,19 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             }
             "--password" => {
                 if let Some(password) = args.next() {
-                    param_array.push(format!("password={password}"));
+                    param_array.push(("password", password));
                 }
             }
             "--relay" => {
-                param_array.push(format!("relay=true"));
+                param_array.push(("relay", "true".to_owned()));
             }
             "--request-approval" => {
-                param_array.push("request-approval=true".to_owned());
+                param_array.push(("request-approval", "true".to_owned()));
             }
             // inner
             "--switch_uuid" => {
                 if let Some(switch_uuid) = args.next() {
-                    param_array.push(format!("switch_uuid={switch_uuid}"));
+                    param_array.push(("switch_uuid", switch_uuid));
                 }
             }
             _ => {}
@@ -796,16 +796,7 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             if id.ends_with(&ext) {
                 id = id.replace(&ext, "");
             }
-            let params = param_array.join("&");
-            let params_flag = if params.is_empty() { "" } else { "?" };
-            uni_links = format!(
-                "{}{}/{}{}{}",
-                crate::get_uri_prefix(),
-                authority,
-                id,
-                params_flag,
-                params
-            );
+            uni_links = new_connection_uri(&authority, &id, &param_array);
         }
     }
     if uni_links.is_empty() {
@@ -835,6 +826,24 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             None
         };
     }
+}
+
+// The running instance parses this link as a URI: a `+` in a query value becomes a space and
+// `&`, `#`, `%` are special, so values such as a base64 server key or a password have to be
+// percent-encoded. The key of `<id>@<server>?key=<key>` goes to the query, where it is read.
+#[cfg(any(feature = "flutter", test))]
+fn new_connection_uri(authority: &str, id: &str, params: &[(&str, String)]) -> String {
+    let (id, id_query) = id.split_once('?').unwrap_or((id, ""));
+    let mut query = url::form_urlencoded::Serializer::new(String::new());
+    for (k, v) in id_query.split('&').filter_map(|arg| arg.split_once('=')) {
+        query.append_pair(k, v);
+    }
+    for (k, v) in params {
+        query.append_pair(k, v);
+    }
+    let query = query.finish();
+    let flag = if query.is_empty() { "" } else { "?" };
+    format!("{}{authority}/{id}{flag}{query}", crate::get_uri_prefix())
 }
 
 #[cfg(all(target_os = "linux", feature = "flutter"))]
@@ -911,4 +920,26 @@ fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool) {
 fn is_quick_support_exe(exe: &str) -> bool {
     let exe = exe.to_lowercase();
     exe.contains("-qs-") || exe.contains("-qs.exe") || exe.contains("_qs.exe")
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_new_connection_uri_keeps_server_key_and_password() {
+        let uri = super::new_connection_uri(
+            "connect",
+            "123456789@rs.example.com?key=Ab+c/d=",
+            &[
+                ("password", "p+w&x#1%".to_owned()),
+                ("relay", "true".to_owned()),
+            ],
+        );
+        let uri = url::Url::parse(&uri).unwrap();
+        assert_eq!(uri.host_str(), Some("connect"));
+        assert_eq!(uri.path(), "/123456789@rs.example.com");
+        let query: std::collections::HashMap<_, _> = uri.query_pairs().into_owned().collect();
+        assert_eq!(query["key"], "Ab+c/d=");
+        assert_eq!(query["password"], "p+w&x#1%");
+        assert_eq!(query["relay"], "true");
+    }
 }
