@@ -1,0 +1,69 @@
+name: Build Custom RustDesk Windows x64
+
+on:
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: 3.24.5
+  RUST_VERSION: 1.81.0
+  LLVM_VERSION: 15.0.6
+  VCPKG_COMMIT: 2024.08.23
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          architecture: x64
+
+      - name: Setup LLVM
+        run: |
+          choco install llvm --version=${{ env.LLVM_VERSION }} -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      - name: Setup vcpkg and codecs
+        shell: bash
+        run: |
+          git clone https://github.com C:/vcpkg
+          cd C:/vcpkg
+          git checkout ${{ env.VCPKG_COMMIT }}
+          ./bootstrap-vcpkg.bat
+          ./vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+          echo "VCPKG_ROOT=C:/vcpkg" >> $GITHUB_ENV
+
+      - name: Generate Flutter Rust Bridge
+        shell: bash
+        run: |
+          cargo install flutter_rust_bridge_codegen --version 1.82.6
+          cd flutter && flutter pub get && cd ..
+          flutter_rust_bridge_codegen --rust-input src/flutter_ffi.rs --dart-output flutter/lib/generated_bridge.dart
+
+      - name: Build RustDesk Windows x64
+        env:
+          RENDEZVOUS_SERVER: ${{ secrets.RENDEZVOUS_SERVER }}
+          RS_PUB_KEY: ${{ secrets.RS_PUB_KEY }}
+          API_SERVER: ${{ secrets.API_SERVER }}
+        run: |
+          python3 .\build.py --portable --flutter --hwcodec
+          Compress-Archive -Path .\flutter\build\windows\x64\runner\Release\* -DestinationPath .\rustdesk-win-x64-custom.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-windows-x64-custom
+          path: .\rustdesk-win-x64-custom.zip
