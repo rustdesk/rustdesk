@@ -1976,6 +1976,11 @@ class InputModel {
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (e is PointerScrollEvent) {
+      if (!_pointerMovedAfterEnter && !(isViewOnly && !showMyCursor)) {
+        final canvasPosition = _pointerPositionForRemoteCanvas(e);
+        handleMouse(getMouseEventMove(), canvasPosition,
+            edgeScroll: useEdgeScroll);
+      }
       final rawDx = e.scrollDelta.dx;
       final rawDy = e.scrollDelta.dy;
       final dominantDelta = rawDx.abs() > rawDy.abs() ? rawDx.abs() : rawDy.abs();
