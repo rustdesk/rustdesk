@@ -1,11 +1,12 @@
 use super::{
     verified_dmg::{
-        copy_and_verify_dmg_file, extract_dmg_inner, verified_dmg_path, verify_stored_dmg,
-        VerifiedDmg,
+        attach_dmg, copy_and_verify_dmg_file, extract_dmg_inner, verified_dmg_path,
+        verify_stored_dmg, VerifiedDmg, HDIUTIL_DEPRECATED_MACOS_VERSION,
     },
     verified_dmg_update_source, ResultType,
 };
 use std::{
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -20,8 +21,20 @@ fn create_test_dmg(test_dir: &Path) -> PathBuf {
     std::fs::create_dir_all(&app_dir).unwrap();
     std::fs::write(app_dir.join("marker"), TEST_DMG_MARKER).unwrap();
     let dmg_path = test_dir.join("update.dmg");
-    let output = Command::new("/usr/bin/hdiutil")
-        .args(["create", "-quiet", "-format", "UDZO", "-srcfolder"])
+    let (program, args): (&str, &[&str]) =
+        if super::major_version() >= HDIUTIL_DEPRECATED_MACOS_VERSION {
+            (
+                "/usr/sbin/diskutil",
+                &["image", "create", "from", "--format", "UDZO"],
+            )
+        } else {
+            (
+                "/usr/bin/hdiutil",
+                &["create", "-quiet", "-format", "UDZO", "-srcfolder"],
+            )
+        };
+    let output = Command::new(program)
+        .args(args)
         .arg(&source_dir)
         .arg(&dmg_path)
         .output()
@@ -70,6 +83,34 @@ fn verified_dmg_extracts_from_named_copy() {
 
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(marker.unwrap(), TEST_DMG_MARKER);
+}
+
+#[test]
+fn verified_dmg_guard_ejects_on_drop() {
+    let test_dir = std::env::temp_dir().join(format!(
+        "rustdesk-verified-dmg-eject-test-{}-{}",
+        std::process::id(),
+        hbb_common::rand::random::<u64>()
+    ));
+    let dmg_path = create_test_dmg(&test_dir);
+    let guard = attach_dmg(&dmg_path.to_string_lossy()).unwrap();
+    let mount_point = PathBuf::from(guard.mount_point());
+    assert_ne!(
+        std::fs::metadata(&mount_point).unwrap().dev(),
+        std::fs::metadata(mount_point.parent().unwrap())
+            .unwrap()
+            .dev(),
+        "DMG must be mounted before dropping its guard"
+    );
+
+    drop(guard);
+    let mount_metadata = std::fs::symlink_metadata(&mount_point);
+    std::fs::remove_dir_all(test_dir).unwrap();
+
+    assert!(
+        matches!(mount_metadata, Err(ref err) if err.kind() == std::io::ErrorKind::NotFound),
+        "DMG mount was not removed: {mount_metadata:?}"
+    );
 }
 
 #[test]
