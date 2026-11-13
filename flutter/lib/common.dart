@@ -2342,8 +2342,11 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         forceRelay = true;
         break;
       case '--display':
-        display = int.tryParse(args[i + 1]);
-        i++;
+        if (i + 1 < args.length) {
+          final value = int.tryParse(args[i + 1]);
+          display = value != null && value > 0 ? value : null;
+          i++;
+        }
         break;
       default:
         break;

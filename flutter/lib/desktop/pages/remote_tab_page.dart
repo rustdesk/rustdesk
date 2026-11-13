@@ -511,14 +511,21 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       if (tab == null) {
         return false;
       }
-      final pi = (tab.page as RemotePage).ffi.ffiModel.pi;
+      final ffi = (tab.page as RemotePage).ffi;
+      final pi = ffi.ffiModel.pi;
       if (pi.displays.isEmpty) {
         return false;
       }
-      final inRange = display == kAllDisplayValue ||
-          (display >= 0 && display < pi.displays.length);
+      final inRange = display >= 0 && display < pi.displays.length;
       if (!inRange || pi.currentDisplay == display) {
         tabController.jumpToByKey(id);
+        windowOnTop(windowId());
+        return true;
+      }
+      // Peers without multi-display support cannot stream a second display.
+      if (!pi.isSupportMultiDisplay) {
+        tabController.jumpToByKey(id);
+        openMonitorInTheSameTab(display, ffi, pi);
         windowOnTop(windowId());
         return true;
       }
