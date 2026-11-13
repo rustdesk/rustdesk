@@ -183,6 +183,11 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
         } else if lang == "in" {
             lang = "id".to_owned();
         }
+        // Norwegian also comes as the macrolanguage code (no_NO) or as Nynorsk (nn_NO);
+        // the only Norwegian table is Bokmål.
+        if lang == "no" || lang == "nn" {
+            lang = "nb".to_owned();
+        }
     }
     if cjk_fallback && is_cjk_lang(&lang) {
         "en".to_owned()
@@ -390,6 +395,15 @@ mod test {
         assert_eq!(f("", "kk-KZ", false), "kz");
         assert_eq!(f("", "ka_GE.UTF-8", false), "ge");
         assert_eq!(f("", "ka-GE", false), "ge");
+    }
+
+    #[test]
+    fn test_resolve_lang_detects_norwegian_from_no_and_nn_locales() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "no_NO.UTF-8", false), "nb");
+        assert_eq!(f("", "nn-NO", false), "nb");
+        assert_eq!(f("", "nb-NO", false), "nb");
     }
 
     #[test]
