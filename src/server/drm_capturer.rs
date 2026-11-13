@@ -828,6 +828,7 @@ async fn recv_thread(
         let _ = tx.send(Err(err));
         return;
     }
+    let _active_stream = ActiveDrmStreamGuard::enter();
     let _ = tx.send(Ok((displays, wire_idx)));
 
     // A cursor that arrived before new() stored the session transform, held for replay. Only the
@@ -1662,6 +1663,27 @@ pub fn drm_cursor_id() -> Option<u64> {
 /// through as-is, like the XFixes path, so the client sees one cursor format from either backend.
 pub fn drm_cursor() -> Option<DrmCursorData> {
     with_drm_cursor(|c| c.clone())
+}
+
+static ACTIVE_DRM_STREAMS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+struct ActiveDrmStreamGuard;
+
+impl ActiveDrmStreamGuard {
+    fn enter() -> Self {
+        ACTIVE_DRM_STREAMS.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        Self
+    }
+}
+
+impl Drop for ActiveDrmStreamGuard {
+    fn drop(&mut self) {
+        ACTIVE_DRM_STREAMS.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
+pub fn has_active_stream() -> bool {
+    ACTIVE_DRM_STREAMS.load(std::sync::atomic::Ordering::Acquire) > 0
 }
 
 enum ProbeState {

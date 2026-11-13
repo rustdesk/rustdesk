@@ -680,33 +680,51 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     res
 }
 
+#[cfg(feature = "drm")]
+#[derive(Debug, PartialEq, Eq)]
+enum DrmCursorRoute {
+    UseDrm(u64),
+    WaitForDrm,
+    FallbackXFixes,
+}
+
+#[cfg(feature = "drm")]
+fn decide_drm_cursor_route(
+    latched_is_x11: bool,
+    drm_available: bool,
+    drm_stream_active: bool,
+    drm_id: Option<u64>,
+    has_non_drm_display: bool,
+) -> DrmCursorRoute {
+    if latched_is_x11 && !drm_available && !drm_stream_active {
+        return DrmCursorRoute::FallbackXFixes;
+    }
+    if let Some(id) = drm_id {
+        if id != scrap::drm_reader::HIDDEN_CURSOR_ID || !has_non_drm_display {
+            return DrmCursorRoute::UseDrm(id);
+        }
+        return DrmCursorRoute::FallbackXFixes;
+    }
+    if drm_stream_active {
+        DrmCursorRoute::WaitForDrm
+    } else {
+        DrmCursorRoute::FallbackXFixes
+    }
+}
+
 pub fn get_cursor() -> ResultType<Option<u64>> {
     // DRM/KMS capture: the hardware cursor arrives over the `_drm` stream, not from XFixes.
-    //
-    // The MEMOISED `is_x11()` here, deliberately, unlike the capture-path callers that take the
-    // unmemoised `scrap::is_x11()` because this one latches on first use. The tradeoff is the other
-    // way round at cursor cadence: the unmemoised form forks `loginctl` per call, and this runs on
-    // every cursor poll. A latch that guessed wrong costs a cursor served by the wrong source until
-    // the process restarts, not a capture that cannot start -- and by the time a cursor is being
-    // polled there is a live session, which is the case the latch reads correctly.
     #[cfg(feature = "drm")]
-    if !is_x11() || crate::server::drm_capturer::is_available_cached() {
-        if let Some(id) = crate::server::drm_capturer::drm_cursor_id() {
-            // In a mixed DRM + PipeWire session the DRM streams only cover the DRM-backed displays;
-            // when the pointer sits on a PipeWire-served display every DRM stream reports the hidden
-            // sentinel. Returning that sentinel here would hide the cursor globally, including on the
-            // PipeWire display where it is still visible, so only report a hidden DRM cursor when it
-            // is authoritative -- a pure-DRM session. A visible DRM cursor is always authoritative;
-            // otherwise fall through to the normal cursor path.
-            if id != scrap::drm_reader::HIDDEN_CURSOR_ID
-                || !crate::server::display_service::has_non_drm_backed_display()
-            {
-                return Ok(Some(id));
-            }
-        } else if crate::server::drm_capturer::is_available_cached() {
-            // DRM is active; wait for the first DrmCursor packet instead of falling back to XFixes.
-            return Ok(None);
-        }
+    match decide_drm_cursor_route(
+        is_x11(),
+        crate::server::drm_capturer::is_available_cached(),
+        crate::server::drm_capturer::has_active_stream(),
+        crate::server::drm_capturer::drm_cursor_id(),
+        crate::server::display_service::has_non_drm_backed_display(),
+    ) {
+        DrmCursorRoute::UseDrm(id) => return Ok(Some(id)),
+        DrmCursorRoute::WaitForDrm => return Ok(None),
+        DrmCursorRoute::FallbackXFixes => {}
     }
     let mut res = None;
     DISPLAY.with(|conn| {
@@ -733,7 +751,10 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     // Memoised `is_x11()` on purpose, for the reason spelled out in `get_cursor()`; the two must
     // agree anyway, since a caller that took the DRM branch there has to take it here.
     #[cfg(feature = "drm")]
-    if !is_x11() || crate::server::drm_capturer::is_available_cached() {
+    if !is_x11()
+        || crate::server::drm_capturer::is_available_cached()
+        || crate::server::drm_capturer::has_active_stream()
+    {
         if let Some(c) = crate::server::drm_capturer::drm_cursor() {
             // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
             // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
@@ -3259,5 +3280,49 @@ pub fn has_gnome_shortcuts_inhibitor_permission() -> bool {
             log::debug!("Failed to query shortcuts inhibitor permission: {}", e);
             false
         }
+    }
+}
+
+#[cfg(all(test, feature = "drm"))]
+mod drm_cursor_route_tests {
+    use super::{decide_drm_cursor_route, DrmCursorRoute};
+
+    #[test]
+    fn uses_drm_cursor_even_when_is_x11_latched_true() {
+        assert_eq!(
+            decide_drm_cursor_route(true, true, true, Some(42), false),
+            DrmCursorRoute::UseDrm(42)
+        );
+    }
+
+    #[test]
+    fn waits_for_first_drm_cursor_only_while_stream_is_active() {
+        assert_eq!(
+            decide_drm_cursor_route(false, true, true, None, false),
+            DrmCursorRoute::WaitForDrm
+        );
+        // If DRM stream ended (e.g. fell back to PipeWire), allow XFixes fallback.
+        assert_eq!(
+            decide_drm_cursor_route(false, true, false, None, false),
+            DrmCursorRoute::FallbackXFixes
+        );
+    }
+
+    #[test]
+    fn preserves_xfixes_fallback_on_x11_or_mixed_hidden_cursor() {
+        assert_eq!(
+            decide_drm_cursor_route(true, false, false, None, false),
+            DrmCursorRoute::FallbackXFixes
+        );
+        assert_eq!(
+            decide_drm_cursor_route(
+                false,
+                true,
+                true,
+                Some(scrap::drm_reader::HIDDEN_CURSOR_ID),
+                true,
+            ),
+            DrmCursorRoute::FallbackXFixes
+        );
     }
 }
