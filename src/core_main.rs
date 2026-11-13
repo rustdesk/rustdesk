@@ -835,7 +835,11 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
 fn new_connection_uri(authority: &str, id: &str, params: &[(&str, String)]) -> String {
     let (id, id_query) = id.split_once('?').unwrap_or((id, ""));
     let mut query = url::form_urlencoded::Serializer::new(String::new());
-    for (k, v) in id_query.split('&').filter_map(|arg| arg.split_once('=')) {
+    for (k, v) in id_query
+        .split('&')
+        .filter(|arg| !arg.is_empty())
+        .map(|arg| arg.split_once('=').unwrap_or((arg, "")))
+    {
         query.append_pair(k, v);
     }
     for (k, v) in params {
