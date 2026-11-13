@@ -2034,8 +2034,34 @@ pub async fn get_option_async(key: &str) -> String {
     }
 }
 
+// The base of a read-modify-write of the options table has to be the service's own table.
+// Writing back this process's snapshot instead would replace the service's options with it,
+// e.g. an empty table that drops the custom server and changes the id (#16728).
+fn options_for_update(reply: Option<Data>) -> ResultType<HashMap<String, String>> {
+    match reply {
+        Some(Data::Options(Some(value))) => Ok(value),
+        _ => bail!("the service did not return its options"),
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn get_options_for_update() -> ResultType<HashMap<String, String>> {
+    let Ok(mut c) = connect(1000, "").await else {
+        // No service is running, so the local config is the only copy.
+        return Ok(Config::get_options());
+    };
+    c.send(&Data::Options(None)).await?;
+    options_for_update(c.next_timeout(1000).await?)
+}
+
 pub fn set_option(key: &str, value: &str) {
-    let mut options = get_options();
+    let mut options = match get_options_for_update() {
+        Ok(options) => options,
+        Err(err) => {
+            log::error!("Option {key} not changed, failed to read the current options: {err}");
+            return;
+        }
+    };
     if value.is_empty() {
         options.remove(key);
     } else {
@@ -2460,5 +2486,21 @@ mod test {
     #[test]
     fn test_select_server_uid_fails_when_multiple_servers_are_ambiguous() {
         assert!(select_server_uid_for_user_main_ipc(&[501, 502], None, false).is_err());
+    }
+
+    #[test]
+    fn test_options_for_update_only_accepts_the_service_table() {
+        use super::*;
+
+        // A timeout or an unexpected reply must not become the base of the write.
+        assert!(options_for_update(None).is_err());
+        assert!(options_for_update(Some(Data::Options(None))).is_err());
+        assert!(options_for_update(Some(Data::Close)).is_err());
+
+        let options = HashMap::from([("custom-rendezvous-server".to_owned(), "a".to_owned())]);
+        assert_eq!(
+            options_for_update(Some(Data::Options(Some(options.clone())))).unwrap(),
+            options
+        );
     }
 }
