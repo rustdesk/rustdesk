@@ -447,4 +447,20 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_translations_spell_the_app_name_as_rustdesk() {
+        use super::*;
+
+        // translate() swaps the exact "RustDesk" for a custom client's name, so any other
+        // spelling stays visible in custom clients.
+        let re = hbb_common::regex::Regex::new(r"(?i)\brus?t?desk\b").unwrap();
+        for table in [&*da::T, &*el::T, &*es::T, &*nl::T, &*uk::T] {
+            for (key, value) in table.iter() {
+                for found in re.find_iter(value) {
+                    assert_eq!(found.as_str(), "RustDesk", "{key:?} => {value:?}");
+                }
+            }
+        }
+    }
 }
