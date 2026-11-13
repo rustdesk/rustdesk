@@ -119,6 +119,10 @@ Future<void> main(List<String> args) async {
 }
 
 Future<void> initEnv(String appType) async {
+  if (isLinux &&
+      (appType == kAppTypeMain || appType == kAppTypeConnectionManager)) {
+    await CmWindowDock.initPlatformSupport();
+  }
   // global shared preference
   await platformFFI.init(appType);
   // global FFI, use this **ONLY** for global configuration
@@ -305,44 +309,34 @@ void runConnectionManagerScreen() async {
 bool _isCmReadyToShow = false;
 
 showCmWindow({bool isStartup = false}) async {
-  if (isMacOS || isWindows) await cmWindowDock.syncMinimizable();
+  if (cmWindowDock.enabled) {
+    if (isStartup || _isCmReadyToShow) {
+      await cmWindowDock.show(isStartup: isStartup);
+      _isCmReadyToShow = true;
+    }
+    return;
+  }
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
-        size: cmWindowDock.enabled
-            ? Size(CmWindowDock.compactSize.width + CmWindowDock.size.width,
-                cmWindowDock.expandedHeight)
-            : kConnectionManagerWindowSizeClosedChat,
-        alwaysOnTop: true);
+        size: kConnectionManagerWindowSizeClosedChat, alwaysOnTop: true);
     await windowManager.waitUntilReadyToShow(windowOptions, null);
     bind.mainHideDock();
-    if (cmWindowDock.enabled) {
-      await cmWindowDock.resizeExpanded(
-          kConnectionManagerWindowSizeClosedChat, align: true);
-    }
     await Future.wait([
       windowManager.show(),
       windowManager.focus(),
       windowManager.setOpacity(1)
     ]);
     // ensure initial window size to be changed
-    if (!cmWindowDock.enabled) {
-      await windowManager.setSizeAlignment(
-          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
-    }
+    await windowManager.setSizeAlignment(
+        kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
     _isCmReadyToShow = true;
   } else if (_isCmReadyToShow) {
     if (await windowManager.getOpacity() != 1) {
-      if (cmWindowDock.enabled) {
-        await cmWindowDock.resizeExpanded(
-            kConnectionManagerWindowSizeClosedChat, align: true);
-      }
       await windowManager.setOpacity(1);
       await windowManager.focus();
       await windowManager.minimize(); //needed
-      if (!cmWindowDock.enabled) {
-        await windowManager.setSizeAlignment(
-            kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
-      }
+      await windowManager.setSizeAlignment(
+          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
       windowOnTop(null);
     }
   }

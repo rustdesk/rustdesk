@@ -4,6 +4,7 @@ import 'package:window_size/window_size.dart' as window_size;
 
 import '../../common.dart';
 import '../../consts.dart';
+import '../../main.dart' show getHiddenTitleBarWindowOptions;
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 import '../../utils/platform_channel.dart';
@@ -12,9 +13,16 @@ final cmWindowDock = CmWindowDock();
 
 class CmWindowDock extends ValueNotifier<bool> {
   CmWindowDock()
-      : enabled = !kUseCompatibleUiMode &&
+      : enabled = supported &&
             bind.mainGetOptionSync(key: kOptionAllowAcceptWindowBanner) == 'Y',
         super(false);
+
+  static bool _platformSupported = !isLinux;
+  static bool get supported => !kUseCompatibleUiMode && _platformSupported;
+
+  static Future<void> initPlatformSupport() async {
+    _platformSupported = await RdPlatformChannel.instance.isCmBannerSupported();
+  }
 
   static const size = Size(36, 72);
   static const bottomInset = 64.0;
@@ -24,6 +32,29 @@ class CmWindowDock extends ValueNotifier<bool> {
 
   // Keep the mode fixed for the lifetime of this CM process.
   final bool enabled;
+
+  Future<void> show({bool isStartup = false}) async {
+    if (isMacOS || isWindows) await syncMinimizable();
+    if (isStartup) {
+      final windowOptions = getHiddenTitleBarWindowOptions(
+          size: Size(compactSize.width + size.width, expandedHeight),
+          alwaysOnTop: true);
+      await windowManager.waitUntilReadyToShow(windowOptions, null);
+      bind.mainHideDock();
+      await resizeExpanded(kConnectionManagerWindowSizeClosedChat, align: true);
+      await Future.wait([
+        windowManager.show(),
+        windowManager.focus(),
+        windowManager.setOpacity(1)
+      ]);
+    } else if (await windowManager.getOpacity() != 1) {
+      await resizeExpanded(kConnectionManagerWindowSizeClosedChat, align: true);
+      await windowManager.setOpacity(1);
+      await windowManager.focus();
+      await windowManager.minimize(); //needed
+      windowOnTop(null);
+    }
+  }
 
   Size get expandedSize {
     final contentSize = gFFI.chatModel.isShowCMSidePage
@@ -65,27 +96,32 @@ class CmWindowDock extends ValueNotifier<bool> {
     if (value) return;
     final height = expandedHeight;
     if (bounds.height == height) return;
-    await windowManager.setBounds(Rect.fromLTWH(
+    await _setBounds(Rect.fromLTWH(
         bounds.left, bounds.bottom - height, bounds.width, height));
   }
 
+  Future<void> _setBounds(Rect bounds) {
+    if (isLinux && enabled) {
+      return RdPlatformChannel.instance.setCmBannerBounds(bounds);
+    }
+    return windowManager.setBounds(bounds);
+  }
+
   Future<void> syncMinimizable() async {
-    final minimizable = !enabled;
-    if (await windowManager.isMinimizable() != minimizable) {
-      await windowManager.setMinimizable(minimizable);
+    if (!enabled) return;
+    if (await windowManager.isMinimizable()) {
+      await windowManager.setMinimizable(false);
       if (isMacOS) {
-        if (enabled) {
-          await windowManager.setAsFrameless();
-        } else {
-          await windowManager.setTitleBarStyle(TitleBarStyle.hidden,
-              windowButtonVisibility: minimizable);
-        }
+        await windowManager.setAsFrameless();
       }
     }
   }
 
   Future<void> resizeExpanded(Size contentSize, {bool align = false}) async {
     final windowSize = Size(contentSize.width + size.width, expandedHeight);
+    if (isMacOS && enabled) {
+      await RdPlatformChannel.instance.setCmBannerWindow();
+    }
     if ((isWindows || isLinux) && enabled) {
       await RdPlatformChannel.instance.setCmBannerWindow();
       await windowManager.setSkipTaskbar(true);
@@ -96,11 +132,17 @@ class CmWindowDock extends ValueNotifier<bool> {
       await windowManager.setAsFrameless();
     }
     if (align) {
-      await windowManager.setSizeAlignment(windowSize, Alignment.bottomRight);
+      if (isLinux && enabled) {
+        final position =
+            await calcWindowPosition(windowSize, Alignment.bottomRight);
+        await _setBounds(position & windowSize);
+      } else {
+        await windowManager.setSizeAlignment(windowSize, Alignment.bottomRight);
+      }
     } else {
       final bounds = await windowManager.getBounds();
       final bottom = bounds.bottom + (value ? bottomInset : 0);
-      await windowManager.setBounds(Rect.fromLTWH(
+      await _setBounds(Rect.fromLTWH(
         bounds.right - windowSize.width,
         bottom - windowSize.height,
         windowSize.width,
@@ -146,7 +188,7 @@ class CmWindowDock extends ValueNotifier<bool> {
     if (isMacOS || isWindows) {
       await windowManager.setAsFrameless();
     }
-    await windowManager.setBounds(Rect.fromLTWH(
+    await _setBounds(Rect.fromLTWH(
       right - size.width,
       bounds.bottom - bottomInset - size.height,
       size.width,
