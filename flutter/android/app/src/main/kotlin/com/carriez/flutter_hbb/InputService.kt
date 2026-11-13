@@ -627,6 +627,15 @@ class InputService : AccessibilityService() {
     // apps such as the launcher react to focus and click, not to touch.
     private fun tryClickNodeAt(x: Int, y: Int): Boolean {
         val node = findClickableNodeAt(x, y) ?: return false
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        // A screen-sized container (for example a Flutter view whose children
+        // were not found) clicks its focused child, not the one under the
+        // pointer. Let the caller send a touch tap instead.
+        if (isScreenSized(bounds)) {
+            Log.d(logTag, "tv click x:$x y:$y node:${node.className} $bounds container, touch")
+            return false
+        }
         // A list or grid whose items are not clickable themselves clicks its
         // selected item, not the one under the pointer. Select and focus the
         // item under the pointer first.
@@ -646,7 +655,7 @@ class InputService : AccessibilityService() {
         if (!ok && node.isFocused() && Build.VERSION.SDK_INT >= 33) {
             ok = performGlobalAction(GLOBAL_ACTION_DPAD_CENTER)
         }
-        Log.d(logTag, "tv click x:$x y:$y node:${node.className} ok:$ok")
+        Log.d(logTag, "tv click x:$x y:$y node:${node.className} $bounds ok:$ok")
         return ok
     }
 
@@ -665,7 +674,9 @@ class InputService : AccessibilityService() {
     private fun findDeepestClickable(node: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
         val rect = Rect()
         node.getBoundsInScreen(rect)
-        if (!node.isVisibleToUser() || !rect.contains(x, y)) {
+        // Some apps (Flutter) mark container nodes as not visible while their
+        // children are visible, so only bounds decide whether to descend.
+        if (!rect.contains(x, y)) {
             return null
         }
         for (i in node.childCount - 1 downTo 0) {
@@ -675,7 +686,14 @@ class InputService : AccessibilityService() {
                 return found
             }
         }
-        return if (node.isClickable() || node.isFocusable()) node else null
+        val clickable = node.isClickable() || node.isFocusable()
+        return if (clickable && node.isVisibleToUser()) node else null
+    }
+
+    private fun isScreenSized(rect: Rect): Boolean {
+        val metrics = resources.displayMetrics
+        val screenArea = metrics.widthPixels.toLong() * metrics.heightPixels
+        return rect.width().toLong() * rect.height() >= screenArea * 9 / 10
     }
 
     private fun isCollection(node: AccessibilityNodeInfo): Boolean {
