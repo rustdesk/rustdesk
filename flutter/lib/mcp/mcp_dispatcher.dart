@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'mcp_image.dart';
 import 'mcp_utils.dart';
 
 const String kMcpProtocolVersion = '2025-06-18';
@@ -390,9 +391,12 @@ class McpDispatcher {
       ),
       _Tool(
         'screenshot',
-        'Capture the current screen of a remote session as a PNG image, '
-            'followed by a text line with its pixel size. Mouse coordinates '
-            'use the same pixels. Allowed in either mode. Take one before '
+        'Capture the current screen of a remote session as a PNG image. '
+            'Optional `scale` reduces the returned image size (e.g. 0.5). '
+            'Mouse coordinates always use original remote display pixels: '
+            'multiply image coordinates by coordinate_scale_x/y from the '
+            'result before clicking. Scaling reduces returned image bytes, '
+            'not the peer capture time. Allowed in either mode. Take one before '
             'clicking and another afterwards to check the result, or pass '
             '`screenshot_after_ms` to an input tool.',
         {
@@ -401,19 +405,46 @@ class McpDispatcher {
             'type': 'integer',
             'description': 'Remote display index, default 0 (primary).',
           },
+          'scale': {
+            'type': 'number',
+            'exclusiveMinimum': 0,
+            'maximum': 1,
+            'description': 'Output size factor, greater than 0 and at most 1. '
+                'Default 1 (original image). Mouse input still uses original pixels.',
+          },
         },
         ['session_id'],
         _readOnly,
         (a) async {
+          final value = a['scale'] ?? 1;
+          if (value is! num || !value.isFinite || value <= 0 || value > 1) {
+            throw McpToolException(
+                '`scale` must be greater than 0 and at most 1.');
+          }
           final display = _optionalInt(a, 'display');
-          final image = await backend.screenshot(sid(a), display: display);
+          final original = await backend.screenshot(sid(a), display: display);
+          final remoteSize = pngSize(original.pngBytes);
+          final McpImage image;
+          try {
+            image = McpImage(
+                await scaleMcpPng(original.pngBytes, value.toDouble()));
+          } catch (_) {
+            throw McpToolException('Could not scale the screenshot.');
+          }
           final size = pngSize(image.pngBytes);
           return {
-            'content': _imageContent(image, display),
+            'content': _imageContent(image, display,
+                remoteSize: value == 1 ? null : remoteSize),
             'structuredContent': {
               'display': display,
               if (size != null) 'width': size.width,
               if (size != null) 'height': size.height,
+              if (remoteSize != null && size != null) ...{
+                'remote_width': remoteSize.width,
+                'remote_height': remoteSize.height,
+                'coordinate_scale_x': remoteSize.width / size.width,
+                'coordinate_scale_y': remoteSize.height / size.height,
+              },
             },
           };
         },
@@ -423,6 +454,10 @@ class McpDispatcher {
             'display': {'type': 'integer'},
             'width': {'type': 'integer'},
             'height': {'type': 'integer'},
+            'remote_width': {'type': 'integer'},
+            'remote_height': {'type': 'integer'},
+            'coordinate_scale_x': {'type': 'number'},
+            'coordinate_scale_y': {'type': 'number'},
           },
           'required': ['display'],
         },
@@ -707,7 +742,8 @@ class McpDispatcher {
     ];
   }
 
-  List<Map<String, dynamic>> _imageContent(McpImage image, int display) {
+  List<Map<String, dynamic>> _imageContent(McpImage image, int display,
+      {({int width, int height})? remoteSize}) {
     final size = pngSize(image.pngBytes);
     return [
       {
@@ -718,8 +754,14 @@ class McpDispatcher {
       if (size != null)
         {
           'type': 'text',
-          'text': 'Display $display: ${size.width}x${size.height} px. '
-              'Mouse coordinates are pixels in this image.',
+          'text': remoteSize == null
+              ? 'Display $display: ${size.width}x${size.height} px. '
+                  'Mouse coordinates are pixels in this image.'
+              : 'Display $display: image ${size.width}x${size.height} px, '
+                  'remote ${remoteSize.width}x${remoteSize.height} px. '
+                  'Mouse coordinates use remote pixels: multiply image x by '
+                  '${remoteSize.width / size.width} and image y by '
+                  '${remoteSize.height / size.height}.',
         },
     ];
   }

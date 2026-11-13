@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter_hbb/mcp/mcp_utils.dart';
 import 'package:flutter_hbb/mcp/mcp_dispatcher.dart';
@@ -36,6 +37,7 @@ final png1920x1080 = <int>[
 
 class _FakeBackend implements McpBackend {
   final calls = <String>[];
+  List<int>? screenshotBytes;
 
   @override
   Future<List<Map<String, dynamic>>> listPeers() async => [
@@ -89,7 +91,7 @@ class _FakeBackend implements McpBackend {
     if (sessionId == 'shot-timeout') {
       throw McpToolException('Timed out waiting for the screenshot.');
     }
-    return McpImage(png1920x1080);
+    return McpImage(screenshotBytes ?? png1920x1080);
   }
 
   @override
@@ -237,6 +239,58 @@ void main() {
       expect(backend.calls, ['screenshot s 1']);
     });
 
+    test('scaled screenshot reports original coordinate mapping', () async {
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      canvas.drawColor(const ui.Color(0xffff0000), ui.BlendMode.src);
+      final picture = recorder.endRecording();
+      final original = await picture.toImage(7, 5);
+      picture.dispose();
+      final bytes = await original.toByteData(format: ui.ImageByteFormat.png);
+      original.dispose();
+      backend.screenshotBytes = bytes!.buffer.asUint8List();
+      final r = await _rpc(
+          dispatcher, _call('screenshot', {'session_id': 's', 'scale': 0.5}));
+      final result = r['result'];
+      final png = base64Decode(result['content'][0]['data']);
+      expect(pngSize(png), (width: 4, height: 3));
+      expect(result['structuredContent'], {
+        'display': 0,
+        'width': 4,
+        'height': 3,
+        'remote_width': 7,
+        'remote_height': 5,
+        'coordinate_scale_x': 7 / 4,
+        'coordinate_scale_y': 5 / 3,
+      });
+      expect(result['content'][1]['text'],
+          contains('Mouse coordinates use remote pixels'));
+      final codec = await ui.instantiateImageCodec(png);
+      final frame = await codec.getNextFrame();
+      final pixel = await frame.image.toByteData();
+      expect(pixel!.buffer.asUint8List().take(4), [255, 0, 0, 255]);
+      frame.image.dispose();
+      codec.dispose();
+      await _rpc(
+          dispatcher,
+          _call('mouse', {
+            'session_id': 's',
+            'action': 'click',
+            'x': 6,
+            'y': 4,
+          }));
+      expect(backend.calls.last, startsWith('mouse s click 6 4'));
+    });
+
+    test('invalid screenshot scales fail before capturing', () async {
+      for (final scale in [0, -0.5, 1.1, '0.5', true]) {
+        final r = await _rpc(dispatcher,
+            _call('screenshot', {'session_id': 's', 'scale': scale}));
+        expect(r['result']['isError'], true);
+      }
+      expect(backend.calls, isEmpty);
+    });
+
     test('mouse validates action and coordinates', () async {
       var r = await _rpc(
           dispatcher,
@@ -267,8 +321,8 @@ void main() {
     });
 
     test('press_key rejects unknown key names', () async {
-      final r = await _rpc(
-          dispatcher, _call('press_key', {'session_id': 's', 'key': 'UnknownKey'}));
+      final r = await _rpc(dispatcher,
+          _call('press_key', {'session_id': 's', 'key': 'UnknownKey'}));
       expect(r['result']['isError'], true);
       expect(r['result']['content'][0]['text'], contains('VK_RETURN'));
       expect(backend.calls, isEmpty);

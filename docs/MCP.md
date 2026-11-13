@@ -1,0 +1,23 @@
+# Desktop MCP server
+
+Enable the MCP server in desktop Settings → General. Copy its client configuration into an MCP client supporting Streamable HTTP. The endpoint defaults to `http://127.0.0.1:21119/mcp`; it requires a Bearer token and accepts loopback Host/Origin values only. The server is disabled by default.
+
+## Token storage and regeneration
+
+The Bearer token is stored as a plain-text local option, `mcp-server-token`, in `RustDesk_local.toml` in RustDesk's configuration directory. It is not stored in the operating system credential store. Keep that file and copied MCP client configurations private; both contain the token. It authenticates access to this controller's MCP service, not to a remote machine.
+
+**Regenerate token** stops the MCP server, generates and saves a replacement token, then restarts the service if enabled. The old token no longer authenticates new requests, and existing server connections are closed. Copy the updated client configuration to every MCP client that should retain access. Remote RustDesk passwords are separate and are not changed by this operation.
+
+## Screenshot scaling
+
+`screenshot` accepts an optional `scale` greater than zero and at most one, for example `{"session_id":"…","scale":0.5}`. The default, `1`, returns the original PNG. Scaling happens on the controller after capture: it reduces returned image bytes and model image-processing work, not the remote capture or transfer time.
+
+The result reports the returned image's `width` and `height`, the original `remote_width` and `remote_height`, and `coordinate_scale_x` / `coordinate_scale_y`. Mouse and scroll coordinates always use **original remote display pixels**, measured from that display's top-left corner. Multiply coordinates observed in the scaled image by these factors to map them back. Use the reported factors rather than simply dividing by `scale`, because integer image dimensions are rounded. Regions/cropping are not supported.
+
+Screenshots attached through `screenshot_after_ms` remain at original resolution.
+
+## Text input
+
+Prefer `paste_text` for long text, code and PowerShell prompts when clipboard sharing and application paste are available. It replaces the remote clipboard. Use `type_text` when the application needs per-character input or cannot accept paste. A successful tool response confirms sending, not that the target application has consumed the text: inspect the application before submitting or sending more.
+
+On Wayland, `type_text` sends text containing non-ASCII characters as one complete batch to avoid clipboard replacement between asynchronous pastes. It ignores `delay_ms` for that batch and normalizes CRLF/CR to LF; line breaks are pasted as text rather than sent as Enter keys. Some terminals execute pasted newlines immediately. To review a command first, input one line without a line break, verify it, then press Enter separately.
