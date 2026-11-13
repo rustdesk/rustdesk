@@ -474,6 +474,8 @@ class InputService : AccessibilityService() {
                 return
             } else if (tryHandlePowerKeyEvent(event)) {
                 return
+            } else if (tryHandleDpadKeyEvent(event)) {
+                return
             }
         }
 
@@ -551,6 +553,42 @@ class InputService : AccessibilityService() {
             return true
         }
         return false
+    }
+
+    // Android TV and other D-pad devices move focus with D-pad keys, but an
+    // accessibility service cannot inject key events outside a text field.
+    // Map arrow, Enter and Escape keys to D-pad global actions instead,
+    // unless an editable field has input focus (arrows then move the caret).
+    private fun tryHandleDpadKeyEvent(event: KeyEventAndroid): Boolean {
+        if (Build.VERSION.SDK_INT < 33) {
+            return false
+        }
+        val action = when (event.keyCode) {
+            KeyEventAndroid.KEYCODE_DPAD_UP -> GLOBAL_ACTION_DPAD_UP
+            KeyEventAndroid.KEYCODE_DPAD_DOWN -> GLOBAL_ACTION_DPAD_DOWN
+            KeyEventAndroid.KEYCODE_DPAD_LEFT -> GLOBAL_ACTION_DPAD_LEFT
+            KeyEventAndroid.KEYCODE_DPAD_RIGHT -> GLOBAL_ACTION_DPAD_RIGHT
+            KeyEventAndroid.KEYCODE_DPAD_CENTER,
+            KeyEventAndroid.KEYCODE_ENTER,
+            KeyEventAndroid.KEYCODE_NUMPAD_ENTER -> GLOBAL_ACTION_DPAD_CENTER
+            KeyEventAndroid.KEYCODE_ESCAPE -> GLOBAL_ACTION_BACK
+            else -> return false
+        }
+        if (isEditableFocused()) {
+            return false
+        }
+        // Act on key down only, so one press moves focus once.
+        // Key repeat sends more key downs while the key is held.
+        if (event.action == KeyEventAndroid.ACTION_DOWN) {
+            val ok = performGlobalAction(action)
+            Log.d(logTag, "dpad keyCode:${event.keyCode} globalAction:$action ok:$ok")
+        }
+        return true
+    }
+
+    private fun isEditableFocused(): Boolean {
+        val node = findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+        return node.isEditable()
     }
 
     private fun insertAccessibilityNode(list: LinkedList<AccessibilityNodeInfo>, node: AccessibilityNodeInfo) {
