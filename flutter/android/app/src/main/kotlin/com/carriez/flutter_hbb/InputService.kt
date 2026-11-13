@@ -627,6 +627,18 @@ class InputService : AccessibilityService() {
     // apps such as the launcher react to focus and click, not to touch.
     private fun tryClickNodeAt(x: Int, y: Int): Boolean {
         val node = findClickableNodeAt(x, y) ?: return false
+        // A list or grid whose items are not clickable themselves clicks its
+        // selected item, not the one under the pointer. Select and focus the
+        // item under the pointer first.
+        val item = if (isCollection(node)) childAt(node, x, y) else null
+        if (item != null) {
+            item.performAction(AccessibilityNodeInfo.ACTION_SELECT)
+            item.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            if (item.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                Log.d(logTag, "tv click x:$x y:$y item:${item.className} ok:true")
+                return true
+            }
+        }
         if (node.isFocusable() && !node.isFocused()) {
             node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         }
@@ -664,6 +676,26 @@ class InputService : AccessibilityService() {
             }
         }
         return if (node.isClickable() || node.isFocusable()) node else null
+    }
+
+    private fun isCollection(node: AccessibilityNodeInfo): Boolean {
+        if (node.collectionInfo != null) {
+            return true
+        }
+        val name = node.className?.toString() ?: return false
+        return name.endsWith("GridView") || name.endsWith("ListView") || name.endsWith("RecyclerView")
+    }
+
+    private fun childAt(node: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
+        val rect = Rect()
+        for (i in node.childCount - 1 downTo 0) {
+            val child = node.getChild(i) ?: continue
+            child.getBoundsInScreen(rect)
+            if (child.isVisibleToUser() && rect.contains(x, y)) {
+                return child
+            }
+        }
+        return null
     }
 
     private fun isEditableFocused(): Boolean {
