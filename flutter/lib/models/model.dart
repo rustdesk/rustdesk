@@ -1187,7 +1187,10 @@ class FfiModel with ChangeNotifier {
       closeConnection();
     }
 
-    if (waitForFirstImage.isFalse) return;
+    if (waitForFirstImage.isFalse ||
+        dialogManager.existing('$sessionId-waiting-for-image')) {
+      return;
+    }
     dialogManager.show(
       (setState, close, context) => CustomAlertDialog(
           title: null,
