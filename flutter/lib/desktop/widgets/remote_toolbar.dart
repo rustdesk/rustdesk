@@ -2932,7 +2932,7 @@ class _VoiceCallMenu extends StatelessWidget {
         audioInput,
         Divider(),
         MenuButton(
-          child: Text(translate('End call')),
+          child: Text(translate('Stop voice call')),
           onPressed: () => bind.sessionCloseVoiceCall(sessionId: ffi.sessionId),
           ffi: ffi,
         ),
