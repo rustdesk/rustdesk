@@ -945,12 +945,11 @@ mod drm_fallback_promotion_tests {
         assert!(should_owe_drm_promotion_on_fallback(false));
         assert!(!should_owe_drm_promotion_on_fallback(true));
 
-        let start_gen = scrap::wayland::display::wayland_snapshot_generation();
+        let current_gen = scrap::wayland::display::wayland_snapshot_generation();
         let mut cap = CapturerPtr {
             ptr: std::ptr::null_mut(),
-            snapshot_gen: Some(start_gen),
+            snapshot_gen: Some(current_gen.wrapping_sub(1)),
         };
-        scrap::wayland::display::bump_layout_generation();
         let err = match cap.frame(Duration::from_millis(10)) {
             Err(e) => e,
             Ok(_) => panic!("expected generation bump to trigger rebuild error"),
