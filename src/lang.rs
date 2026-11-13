@@ -484,7 +484,6 @@ mod test {
 
         // The ID field parses `<id>@<server>?key=<key>` and `<id>@public` literally.
         let query = hbb_common::regex::Regex::new(r"\?(\w+)=").unwrap();
-        let public = hbb_common::regex::Regex::new(r#""<id>@([^"]*)""#).unwrap();
         for table in [&*ca::T, &*da::T, &*es::T, &*hr::T] {
             for key in ["id_input_tip", "web_id_input_tip"] {
                 let value = table[key];
@@ -492,11 +491,9 @@ mod test {
                     continue;
                 }
                 assert!(value.contains("?key="), "{key:?} => {value:?}");
+                assert!(value.contains("<id>@public"), "{key:?} => {value:?}");
                 for found in query.captures_iter(value) {
                     assert_eq!(&found[1], "key", "{key:?} => {value:?}");
-                }
-                for found in public.captures_iter(value) {
-                    assert_eq!(&found[1], "public", "{key:?} => {value:?}");
                 }
             }
         }
