@@ -689,14 +689,9 @@ enum DrmCursorRoute {
 
 #[cfg(feature = "drm")]
 fn decide_drm_cursor_route(
-    latched_is_x11: bool,
-    drm_available: bool,
     drm_id: Option<u64>,
     has_non_drm_display: bool,
 ) -> DrmCursorRoute {
-    if latched_is_x11 && !drm_available {
-        return DrmCursorRoute::FallbackXFixes;
-    }
     if let Some(id) = drm_id {
         if id != scrap::drm_reader::HIDDEN_CURSOR_ID || !has_non_drm_display {
             return DrmCursorRoute::UseDrm(id);
@@ -707,10 +702,11 @@ fn decide_drm_cursor_route(
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
     // DRM/KMS capture: the hardware cursor arrives over the `_drm` stream, not from XFixes.
+    // A published DRM cursor snapshot is always authoritative for a visible pointer (and for the
+    // hidden sentinel in a pure-DRM session), even if `is_x11()` latched true early or the cached
+    // availability probe lapsed to Unknown while a stream is still running.
     #[cfg(feature = "drm")]
     if let DrmCursorRoute::UseDrm(id) = decide_drm_cursor_route(
-        is_x11(),
-        crate::server::drm_capturer::is_available_cached(),
         crate::server::drm_capturer::drm_cursor_id(),
         crate::server::display_service::has_non_drm_backed_display(),
     ) {
@@ -738,26 +734,24 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     // have advanced past `hcursor` between get_cursor() and here, so return the latest rather than
     // bailing (which would trigger a MouseCursorService backoff).
     //
-    // Memoised `is_x11()` on purpose, for the reason spelled out in `get_cursor()`; the two must
-    // agree anyway, since a caller that took the DRM branch there has to take it here.
+    // Match `get_cursor()`: if a DRM cursor snapshot is published, use it directly regardless of
+    // whether `is_x11()` latched true or the cached probe lapsed.
     #[cfg(feature = "drm")]
-    if !is_x11() || crate::server::drm_capturer::is_available_cached() {
-        if let Some(c) = crate::server::drm_capturer::drm_cursor() {
-            // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
-            // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
-            // by the normal path instead of being hidden everywhere.
-            if c.id != scrap::drm_reader::HIDDEN_CURSOR_ID
-                || !crate::server::display_service::has_non_drm_backed_display()
-            {
-                let mut cd: CursorData = Default::default();
-                cd.id = c.id;
-                cd.width = c.width;
-                cd.height = c.height;
-                cd.hotx = c.hotx;
-                cd.hoty = c.hoty;
-                cd.colors = c.colors.into();
-                return Ok(cd);
-            }
+    if let Some(c) = crate::server::drm_capturer::drm_cursor() {
+        // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
+        // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
+        // by the normal path instead of being hidden everywhere.
+        if c.id != scrap::drm_reader::HIDDEN_CURSOR_ID
+            || !crate::server::display_service::has_non_drm_backed_display()
+        {
+            let mut cd: CursorData = Default::default();
+            cd.id = c.id;
+            cd.width = c.width;
+            cd.height = c.height;
+            cd.hotx = c.hotx;
+            cd.hoty = c.hoty;
+            cd.colors = c.colors.into();
+            return Ok(cd);
         }
     }
     let mut res = None;
@@ -3275,38 +3269,33 @@ mod drm_cursor_route_tests {
     use super::{decide_drm_cursor_route, DrmCursorRoute};
 
     #[test]
-    fn uses_drm_cursor_even_when_is_x11_latched_true() {
+    fn uses_published_drm_cursor_regardless_of_x11_latch_or_probe_cache() {
         assert_eq!(
-            decide_drm_cursor_route(true, true, Some(42), false),
+            decide_drm_cursor_route(Some(42), false),
             DrmCursorRoute::UseDrm(42)
+        );
+        assert_eq!(
+            decide_drm_cursor_route(Some(scrap::drm_reader::HIDDEN_CURSOR_ID), false),
+            DrmCursorRoute::UseDrm(scrap::drm_reader::HIDDEN_CURSOR_ID)
         );
     }
 
     #[test]
     fn falls_back_to_xfixes_when_drm_has_no_cursor_snapshot() {
         assert_eq!(
-            decide_drm_cursor_route(false, true, None, false),
+            decide_drm_cursor_route(None, false),
             DrmCursorRoute::FallbackXFixes
         );
         assert_eq!(
-            decide_drm_cursor_route(false, true, None, true),
+            decide_drm_cursor_route(None, true),
             DrmCursorRoute::FallbackXFixes
         );
     }
 
     #[test]
-    fn preserves_xfixes_fallback_on_x11_or_mixed_hidden_cursor() {
+    fn preserves_xfixes_fallback_for_mixed_display_hidden_cursor() {
         assert_eq!(
-            decide_drm_cursor_route(true, false, None, false),
-            DrmCursorRoute::FallbackXFixes
-        );
-        assert_eq!(
-            decide_drm_cursor_route(
-                false,
-                true,
-                Some(scrap::drm_reader::HIDDEN_CURSOR_ID),
-                true,
-            ),
+            decide_drm_cursor_route(Some(scrap::drm_reader::HIDDEN_CURSOR_ID), true),
             DrmCursorRoute::FallbackXFixes
         );
     }
