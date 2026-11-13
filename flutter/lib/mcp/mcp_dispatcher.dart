@@ -73,6 +73,9 @@ abstract class McpBackend {
   /// paste shortcut.
   Future<void> pasteText(String sessionId, String text, {bool paste = true});
 
+  /// [action] is one of [kMcpRemoteActions].
+  Future<void> remoteAction(String sessionId, String action);
+
   /// [key] uses RustDesk key names such as `VK_RETURN` or `VK_A`. [action] is
   /// one of [kMcpKeyActions].
   Future<void> pressKey(String sessionId, String key, List<String> modifiers,
@@ -733,6 +736,43 @@ class McpDispatcher {
         },
       ),
       _Tool(
+        'remote_action',
+        'Send a session toolbar action that ordinary keys cannot express. '
+            '`ctrl_alt_del` sends Ctrl+Alt+Del (the secure attention '
+            'sequence), e.g. to reach the Windows sign-in screen. '
+            '`lock_screen` locks the remote session. `os_password` sends the '
+            'OS password saved for this peer through its guarded OS login '
+            'path; you never see the password. Requires Windows or macOS '
+            '1.5.1 or newer; older and other peers are refused. The peer '
+            'types it and presses Enter only at its login or lock screen. '
+            'Show the sign-in screen first. Success means the action was '
+            'sent, not that the OS accepted it; check a screenshot. '
+            'Ctrl+Alt+Del requires Windows secure attention support or Linux. '
+            'Needs agent control and remote keyboard permission.',
+        {
+          'session_id': _sessionIdProp,
+          'action': {
+            'type': 'string',
+            'enum': kMcpRemoteActions.toList(),
+          },
+          'display': {
+            'type': 'integer',
+            'description': 'Display captured by `screenshot_after_ms`, '
+                'default 0.',
+          },
+          'screenshot_after_ms': _screenshotAfterProp,
+        },
+        ['session_id', 'action'],
+        _input,
+        (a) async {
+          final action = _requireString(a, 'action');
+          if (!kMcpRemoteActions.contains(action)) {
+            throw McpToolException('Unknown action: $action');
+          }
+          return input(a, () => backend.remoteAction(sid(a), action));
+        },
+      ),
+      _Tool(
         'disconnect',
         'Close a remote desktop session. Needs agent control.',
         {'session_id': _sessionIdProp},
@@ -898,6 +938,12 @@ const Map<String, String> kMcpMouseButtons = {
 const Set<String> kMcpScrollDirections = {'up', 'down', 'left', 'right'};
 
 const Set<String> kMcpKeyActions = {'press', 'down', 'up'};
+
+const Set<String> kMcpRemoteActions = {
+  'ctrl_alt_del',
+  'lock_screen',
+  'os_password',
+};
 
 const Map<String, String> kMcpModifierKeyNames = {
   'ctrl': 'VK_CONTROL',

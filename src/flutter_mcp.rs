@@ -9,7 +9,7 @@ use crate::{
     keyboard::client::legacy_modifiers,
 };
 use base::message_proto::{
-    Clipboard, ClipboardFormat, ControlKey, KeyEvent, KeyboardMode, Message, MouseEvent,
+    Clipboard, ClipboardFormat, ControlKey, KeyEvent, KeyboardMode, Message, MouseEvent, OSLogin,
     ScreenshotResponse,
 };
 use std::{
@@ -327,6 +327,66 @@ pub fn set_clipboard(session_id: SessionID, grant_id: &str, value: &str) -> Stri
         ..Default::default()
     });
     session.send(Data::Message(msg_out));
+    String::new()
+}
+
+/// Toolbar actions an agent cannot express as ordinary keys. The OS password
+/// is the one saved for the peer, so the agent never sees it.
+pub fn remote_action(session_id: SessionID, grant_id: &str, action: &str) -> String {
+    let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
+        return "The session was closed.".into();
+    };
+    let owner = session.ui_handler.mcp.owner.read().unwrap();
+    if !owner.accepts(Some(grant_id)) {
+        return "Control changed; this input was cancelled.".into();
+    }
+    if !*session.server_keyboard_enabled.read().unwrap() || session.lc.read().unwrap().view_only.v {
+        return "Keyboard input is disabled for this session.".into();
+    }
+    let lc = session.lc.read().unwrap();
+    let Some(pi) = lc.peer_info.as_ref() else {
+        return "The session is not ready.".into();
+    };
+    match action {
+        "ctrl_alt_del" => {
+            if pi.platform != "Linux" && !(pi.platform == "Windows" && pi.sas_enabled) {
+                return "This peer does not support Ctrl+Alt+Del.".into();
+            }
+            let mut msg = Message::new();
+            msg.set_key_event(crate::keyboard::client::event_ctrl_alt_del(&pi.platform));
+            drop(lc);
+            session.send(Data::Message(msg));
+        }
+        "lock_screen" => {
+            if !matches!(pi.platform.as_str(), "Windows" | "Mac OS" | "Linux") {
+                return "This peer does not support locking the screen.".into();
+            }
+            let mut msg = Message::new();
+            msg.set_key_event(crate::keyboard::client::event_lock_screen());
+            drop(lc);
+            session.send(Data::Message(msg));
+        }
+        "os_password" => {
+            if !crate::client::is_peer_handling_os_login(pi) {
+                return "Safe OS login requires a Windows or macOS peer version 1.5.1 or newer."
+                    .into();
+            }
+            let password = lc.get_option("os-password");
+            if password.is_empty() {
+                return "No OS password is saved for this peer. Ask the user to set it under OS password in the session toolbar."
+                    .into();
+            }
+            drop(lc);
+            // Keep the grant gate through the send; the peer checks its lock screen.
+            let mut msg = Message::new();
+            msg.set_os_login(OSLogin {
+                password,
+                ..Default::default()
+            });
+            session.send(Data::Message(msg));
+        }
+        _ => return format!("Unknown action: {action}"),
+    }
     String::new()
 }
 
@@ -878,6 +938,124 @@ mod tests {
             panic!("expected clipboard");
         };
         assert_eq!(msg.clipboard().content.as_ref(), b"Get-Date");
+        crate::flutter_ffi::session_close(id);
+    }
+
+    #[test]
+    fn remote_actions_require_the_grant_keyboard_and_peer_capability() {
+        let (id, connection) = session();
+        let mut receiver = capture(&connection);
+        set_agent_control(id, "grant".into());
+        {
+            let mut lc = connection.lc.write().unwrap();
+            let pi = base::message_proto::PeerInfo {
+                platform: "Windows".into(),
+                version: "1.5.1".into(),
+                ..Default::default()
+            };
+            lc.handle_peer_info(&pi);
+            lc.peer_info = Some(pi);
+        }
+        assert!(!remote_action(id, "grant", "lock_screen").is_empty());
+        *connection.server_keyboard_enabled.write().unwrap() = true;
+        assert!(!remote_action(id, "stale", "ctrl_alt_del").is_empty());
+        assert!(!remote_action(id, "grant", "format_disk").is_empty());
+        assert!(!remote_action(id, "grant", "ctrl_alt_del").is_empty());
+        assert!(receiver.try_recv().is_err());
+        connection
+            .lc
+            .write()
+            .unwrap()
+            .peer_info
+            .as_mut()
+            .unwrap()
+            .sas_enabled = true;
+        assert!(remote_action(id, "grant", "ctrl_alt_del").is_empty());
+        assert!(remote_action(id, "grant", "lock_screen").is_empty());
+        let keys = sent_keys(&mut receiver);
+        assert_eq!(keys.len(), 2);
+        assert_eq!(control_key(&keys[0]), Some(ControlKey::CtrlAltDel));
+        assert_eq!(control_key(&keys[1]), Some(ControlKey::LockScreen));
+        {
+            let mut lc = connection.lc.write().unwrap();
+            let mut pi = lc.peer_info.clone().unwrap();
+            pi.platform = "Linux".into();
+            lc.handle_peer_info(&pi);
+            lc.peer_info = Some(pi);
+            lc.toggle_option("allow_swap_key".into());
+        }
+        assert!(remote_action(id, "grant", "ctrl_alt_del").is_empty());
+        let keys = sent_keys(&mut receiver);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(control_key(&keys[0]), Some(ControlKey::Delete));
+        assert!(keys[0].modifiers.contains(&ControlKey::Control.into()));
+        assert!(keys[0].modifiers.contains(&ControlKey::Alt.into()));
+        assert!(!keys[0].modifiers.contains(&ControlKey::Meta.into()));
+        set_agent_control(id, String::new());
+        assert!(!remote_action(id, "grant", "lock_screen").is_empty());
+        assert!(receiver.try_recv().is_err());
+        crate::flutter_ffi::session_close(id);
+    }
+
+    #[test]
+    fn remote_os_password_refuses_unsupported_peers_and_missing_passwords() {
+        let (id, connection) = session();
+        let mut receiver = capture(&connection);
+        set_agent_control(id, "grant".into());
+        *connection.server_keyboard_enabled.write().unwrap() = true;
+        for (platform, version) in [
+            ("Windows", "1.5.0"),
+            ("Mac OS", "1.4.9"),
+            ("Linux", "1.5.1"),
+        ] {
+            let mut lc = connection.lc.write().unwrap();
+            lc.peer_info = Some(base::message_proto::PeerInfo {
+                platform: platform.into(),
+                version: version.into(),
+                ..Default::default()
+            });
+            lc.set_option("os-password".into(), "test-only-secret".into());
+            drop(lc);
+            assert!(remote_action(id, "grant", "os_password").contains("1.5.1"));
+        }
+        {
+            let mut lc = connection.lc.write().unwrap();
+            lc.peer_info.as_mut().unwrap().platform = "Windows".into();
+            lc.set_option("os-password".into(), String::new());
+        }
+        assert!(remote_action(id, "grant", "os_password").starts_with("No OS password"));
+        assert!(receiver.try_recv().is_err());
+        crate::flutter_ffi::session_close(id);
+    }
+
+    #[test]
+    fn remote_os_password_sends_only_guarded_login_not_focused_text() {
+        let (id, connection) = session();
+        let mut receiver = capture(&connection);
+        set_agent_control(id, "grant".into());
+        *connection.server_keyboard_enabled.write().unwrap() = true;
+        for platform in ["Windows", "Mac OS"] {
+            {
+                let mut lc = connection.lc.write().unwrap();
+                lc.peer_info = Some(base::message_proto::PeerInfo {
+                    platform: platform.into(),
+                    version: "1.5.1".into(),
+                    ..Default::default()
+                });
+                lc.set_option("os-password".into(), "test-only-secret".into());
+            }
+            assert!(!remote_action(id, "stale", "os_password").is_empty());
+            assert!(receiver.try_recv().is_err());
+            assert!(remote_action(id, "grant", "os_password").is_empty());
+            let Data::Message(msg) = receiver.try_recv().unwrap() else {
+                panic!("expected guarded OS login");
+            };
+            let Some(MessageUnion::OsLogin(login)) = msg.union else {
+                panic!("password must never be sent as a key event");
+            };
+            assert_eq!(login.password, "test-only-secret");
+            assert!(receiver.try_recv().is_err());
+        }
         crate::flutter_ffi::session_close(id);
     }
 

@@ -788,6 +788,17 @@ class RustDeskMcpBackend implements McpBackend {
       });
 
   @override
+  Future<void> remoteAction(String sessionId, String action) =>
+      _serialized(sessionId, (input) async {
+        await _writable(sessionId);
+        input.checkActive();
+        _checkInputResult(await bind.sessionMcpRemoteAction(
+            sessionId: UuidValue(sessionId),
+            grantId: input.grantId,
+            action: action));
+      });
+
+  @override
   Future<void> pressKey(String sessionId, String key, List<String> modifiers,
           {String action = 'press'}) =>
       _serialized(sessionId, (input) async {

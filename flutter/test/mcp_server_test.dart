@@ -125,6 +125,10 @@ class _FakeBackend implements McpBackend {
       calls.add('paste $sessionId $text $paste');
 
   @override
+  Future<void> remoteAction(String sessionId, String action) async =>
+      calls.add('action $sessionId $action');
+
+  @override
   Future<void> pressKey(String sessionId, String key, List<String> modifiers,
           {String action = 'press'}) async =>
       calls.add('key $sessionId $key ${modifiers.join('+')} $action');
@@ -218,6 +222,7 @@ void main() {
         'type_text',
         'paste_text',
         'press_key',
+        'remote_action',
         'disconnect',
       });
       for (final t in r['result']['tools']) {
@@ -626,6 +631,31 @@ void main() {
         expect(r['result']['isError'], isFalse, reason: entry.key);
         expect(backend.calls.last, 'key s ${entry.value}  press');
       }
+    });
+
+    test('remote_action sends known actions only and can capture the result',
+        () async {
+      for (final action in kMcpRemoteActions) {
+        final r = await _rpc(dispatcher,
+            _call('remote_action', {'session_id': 's', 'action': action}));
+        expect(r['result']['content'][0]['text'], 'ok');
+      }
+      final bad = await _rpc(dispatcher,
+          _call('remote_action', {'session_id': 's', 'action': 'reboot'}));
+      expect(bad['result']['isError'], true);
+      expect(backend.calls,
+          kMcpRemoteActions.map((action) => 'action s $action').toList());
+      final shot = await _rpc(
+          dispatcher,
+          _call('remote_action', {
+            'session_id': 's',
+            'action': 'lock_screen',
+            'display': 1,
+            'screenshot_after_ms': 0,
+          }));
+      expect(shot['result']['content'][1]['type'], 'image');
+      expect(
+          backend.calls.sublist(3), ['action s lock_screen', 'screenshot s 1']);
     });
 
     test('backend failures become tool errors', () async {
