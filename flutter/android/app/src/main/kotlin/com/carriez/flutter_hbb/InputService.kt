@@ -8,7 +8,9 @@ package com.carriez.flutter_hbb
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.app.UiModeManager
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Path
 import android.os.Build
 import android.os.Bundle
@@ -97,6 +99,17 @@ class InputService : AccessibilityService() {
     private var mouseY = 0
     private var timer = Timer()
     private var recentActionTask: TimerTask? = null
+
+    // Android TV ignores most touch input, so a left click there is sent to
+    // the view under the pointer as an accessibility click instead.
+    private val isTv: Boolean by lazy {
+        val uiModeManager = getSystemService(UI_MODE_SERVICE) as? UiModeManager
+        uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+    }
+    private val touchSlop: Int by lazy { ViewConfiguration.get(this).scaledTouchSlop }
+    @Volatile private var tvTapPending = false
+    private var tvTapDownX = 0
+    private var tvTapDownY = 0
     // 100(tap timeout) + 400(long press timeout)
     private val longPressDuration = ViewConfiguration.getTapTimeout().toLong() + ViewConfiguration.getLongPressTimeout().toLong()
 
@@ -143,6 +156,7 @@ class InputService : AccessibilityService() {
                 override fun run() {
                     if (isWaitingLongPress) {
                         isWaitingLongPress = false
+                        tvTapPending = false
                         continueGesture(mouseX, mouseY)
                     }
                 }
@@ -150,7 +164,30 @@ class InputService : AccessibilityService() {
 
             leftIsDown = true
             startGesture(mouseX, mouseY)
+            if (isTv) {
+                tvTapPending = true
+                tvTapDownX = mouseX
+                tvTapDownY = mouseY
+            }
             return
+        }
+
+        // On Android TV, hold back the touch gesture until the pointer moves
+        // (drag) or the button is released (click).
+        if (leftIsDown && tvTapPending) {
+            if (mask == LEFT_UP) {
+                tvTapPending = false
+                leftIsDown = false
+                isWaitingLongPress = false
+                if (!tryClickNodeAt(tvTapDownX, tvTapDownY)) {
+                    endGesture(mouseX, mouseY)
+                }
+                return
+            }
+            if (abs(mouseX - tvTapDownX) + abs(mouseY - tvTapDownY) <= touchSlop) {
+                return
+            }
+            tvTapPending = false
         }
 
         // left down, was down
@@ -584,6 +621,49 @@ class InputService : AccessibilityService() {
             Log.d(logTag, "dpad keyCode:${event.keyCode} globalAction:$action ok:$ok")
         }
         return true
+    }
+
+    // Clicks the view under (x, y) with accessibility actions. Android TV
+    // apps such as the launcher react to focus and click, not to touch.
+    private fun tryClickNodeAt(x: Int, y: Int): Boolean {
+        val node = findClickableNodeAt(x, y) ?: return false
+        if (node.isFocusable() && !node.isFocused()) {
+            node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        }
+        var ok = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        if (!ok && node.isFocused() && Build.VERSION.SDK_INT >= 33) {
+            ok = performGlobalAction(GLOBAL_ACTION_DPAD_CENTER)
+        }
+        Log.d(logTag, "tv click x:$x y:$y node:${node.className} ok:$ok")
+        return ok
+    }
+
+    private fun findClickableNodeAt(x: Int, y: Int): AccessibilityNodeInfo? {
+        // getWindows() lists windows from top to bottom.
+        val roots = windows.mapNotNull { it.root }.ifEmpty { listOfNotNull(rootInActiveWindow) }
+        for (root in roots) {
+            val node = findDeepestClickable(root, x, y)
+            if (node != null) {
+                return node
+            }
+        }
+        return null
+    }
+
+    private fun findDeepestClickable(node: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        if (!node.isVisibleToUser() || !rect.contains(x, y)) {
+            return null
+        }
+        for (i in node.childCount - 1 downTo 0) {
+            val child = node.getChild(i) ?: continue
+            val found = findDeepestClickable(child, x, y)
+            if (found != null) {
+                return found
+            }
+        }
+        return if (node.isClickable() || node.isFocusable()) node else null
     }
 
     private fun isEditableFocused(): Boolean {
