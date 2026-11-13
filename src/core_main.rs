@@ -497,13 +497,12 @@ pub fn core_main() -> Option<CoreMainAction> {
                     };
                     if let Ok(lic) = crate::custom_server::get_custom_server_from_string(&name) {
                         if !lic.host.is_empty() {
-                            crate::ui_interface::set_option("key".into(), lic.key);
-                            crate::ui_interface::set_option(
-                                "custom-rendezvous-server".into(),
-                                lic.host,
-                            );
-                            crate::ui_interface::set_option("api-server".into(), lic.api);
-                            crate::ui_interface::set_option("relay-server".into(), lic.relay);
+                            // Not ui_interface::set_option(): this process never loaded the
+                            // service's options, and that would replace them with its own.
+                            crate::ipc::set_option("key", &lic.key);
+                            crate::ipc::set_option("custom-rendezvous-server", &lic.host);
+                            crate::ipc::set_option("api-server", &lic.api);
+                            crate::ipc::set_option("relay-server", &lic.relay);
                         }
                     }
                 } else {
