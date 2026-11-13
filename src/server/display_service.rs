@@ -1147,9 +1147,7 @@ mod wayland_layout_tests {
 
 #[cfg(all(test, target_os = "linux", feature = "drm"))]
 mod drm_promotion_tests {
-    use super::{
-        note_drm_promotion_owed, should_promote_drm, WAYLAND_LAYOUT, PROMOTION_OWED,
-    };
+    use super::{note_drm_promotion_owed, should_promote_drm, PROMOTION_OWED};
     use crate::server::drm_capturer::Availability;
     use std::sync::atomic::Ordering;
 
