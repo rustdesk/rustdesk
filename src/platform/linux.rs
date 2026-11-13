@@ -690,7 +690,7 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
     // the process restarts, not a capture that cannot start -- and by the time a cursor is being
     // polled there is a live session, which is the case the latch reads correctly.
     #[cfg(feature = "drm")]
-    if !is_x11() {
+    if !is_x11() || crate::server::drm_capturer::is_available_cached() {
         if let Some(id) = crate::server::drm_capturer::drm_cursor_id() {
             // In a mixed DRM + PipeWire session the DRM streams only cover the DRM-backed displays;
             // when the pointer sits on a PipeWire-served display every DRM stream reports the hidden
@@ -703,6 +703,9 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
             {
                 return Ok(Some(id));
             }
+        } else if crate::server::drm_capturer::is_available_cached() {
+            // DRM is active; wait for the first DrmCursor packet instead of falling back to XFixes.
+            return Ok(None);
         }
     }
     let mut res = None;
@@ -730,7 +733,7 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     // Memoised `is_x11()` on purpose, for the reason spelled out in `get_cursor()`; the two must
     // agree anyway, since a caller that took the DRM branch there has to take it here.
     #[cfg(feature = "drm")]
-    if !is_x11() {
+    if !is_x11() || crate::server::drm_capturer::is_available_cached() {
         if let Some(c) = crate::server::drm_capturer::drm_cursor() {
             // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
             // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
