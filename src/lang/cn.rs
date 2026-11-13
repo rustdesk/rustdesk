@@ -841,5 +841,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Take over", "接管"),
         ("mcp-server-tip", "允许 Claude 等 MCP 客户端通过 RustDesk 控制远程电脑。仅监听 127.0.0.1 并需要访问令牌；除非在下方关闭，否则连接和控制请求都需要你的批准。"),
         ("mcp-read-access-tip", "启用 MCP 后，持有访问令牌的本机 MCP 客户端无需请求控制即可列出你已打开的远程会话并截取其屏幕。"),
+        ("Automatically approve new connections and initial agent control", "自动批准新连接并授予智能体初始控制权"),
+        ("Automatically approve agent takeover of existing sessions", "自动批准智能体接管现有会话"),
+        ("An MCP client wants to connect to {} and take initial control. Your input is blocked until you take over. Allow?", "MCP 客户端想要连接到 {} 并获得初始控制权。在您接管前，您的输入将被阻止。是否允许？"),
     ].iter().cloned().collect();
 }

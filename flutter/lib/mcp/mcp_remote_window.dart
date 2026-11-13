@@ -123,7 +123,7 @@ FFI? _bySessionId(Map<String, FFI> sessions, Object? sessionId) =>
         .where((f) => f.sessionId.toString() == sessionId)
         .firstOrNull;
 
-Future<bool> _askAgentControl(String peerId, FFI ffi, String requestId) async {
+Future<bool?> _askAgentControl(String peerId, FFI ffi, String requestId) async {
   final window = WindowController.fromWindowId(kWindowId!);
   final tag = 'mcp-agent-control-$requestId';
   // Register before yielding so cancellation can find the dialog even while
@@ -143,7 +143,7 @@ Future<bool> _askAgentControl(String peerId, FFI ffi, String requestId) async {
                 actions: [
                   dialogButton('Cancel',
                       icon: const Icon(Icons.close_rounded),
-                      onPressed: close,
+                      onPressed: () => close(false),
                       isOutline: true),
                   dialogButton('OK',
                       icon: const Icon(Icons.done_rounded),
@@ -151,7 +151,7 @@ Future<bool> _askAgentControl(String peerId, FFI ffi, String requestId) async {
                 ],
                 // No onSubmit: a stray Enter typed in another tab must not
                 // grant control.
-                onCancel: close,
+                onCancel: () => close(false),
               ),
           tag: tag)
       .timeout(_kControlRequestTimeout, onTimeout: () {
@@ -163,7 +163,7 @@ Future<bool> _askAgentControl(String peerId, FFI ffi, String requestId) async {
       answer,
       window.show().then((_) => window.focus()),
     ], eagerError: true);
-    return results.first == true;
+    return results.first as bool?;
   } finally {
     ffi.dialogManager.dismissByTag(tag);
   }

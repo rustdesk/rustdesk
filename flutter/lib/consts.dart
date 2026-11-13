@@ -105,7 +105,10 @@ const String kOptionEnableLanDiscovery = "enable-lan-discovery";
 const String kOptionEnableMcpServer = "allow-mcp-server";
 const String kOptionMcpServerPort = "mcp-server-port";
 const String kOptionMcpServerToken = "mcp-server-token";
+// Keep the existing key for control only; upgrading must not auto-approve
+// new connections without an explicit opt-in. Both allow-* options default off.
 const String kOptionMcpAutoApproveControl = "allow-mcp-auto-approve";
+const String kOptionMcpAutoApproveConnect = "allow-mcp-auto-approve-connect";
 const String kOptionWhitelist = "whitelist";
 const String kOptionIdWhitelist = "id-whitelist";
 const String kOptionEnableAbr = "enable-abr";

@@ -743,7 +743,13 @@ class _GeneralState extends State<_General> {
       if (mainGetLocalBoolOptionSync(kOptionEnableMcpServer)) ...[
         _OptionCheckBox(
           context,
-          'Let agents connect and take control without asking',
+          'Automatically approve new connections and initial agent control',
+          kOptionMcpAutoApproveConnect,
+          isServer: false,
+        ),
+        _OptionCheckBox(
+          context,
+          'Automatically approve agent takeover of existing sessions',
           kOptionMcpAutoApproveControl,
           isServer: false,
         ),

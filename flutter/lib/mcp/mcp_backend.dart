@@ -31,7 +31,8 @@ class McpWindowBusy extends McpToolException {
 }
 
 class RustDeskMcpBackend implements McpBackend {
-  final Future<bool> Function(String peerId) approveConnect;
+  /// True grants initial control too; false denies, null means approval expired.
+  final Future<bool?> Function(String peerId) approveConnect;
 
   RustDeskMcpBackend({required this.approveConnect});
 
@@ -318,9 +319,15 @@ class RustDeskMcpBackend implements McpBackend {
   Future<({String sessionId, McpInputState input})> _open(String peerId) async {
     _checkRunning();
     final autoApprove =
-        mainGetLocalBoolOptionSync(kOptionMcpAutoApproveControl);
-    if (!autoApprove && !await approveConnect(peerId)) {
-      throw McpToolException('The user denied the connection to $peerId.');
+        mainGetLocalBoolOptionSync(kOptionMcpAutoApproveConnect);
+    if (!autoApprove) {
+      final allowed = await approveConnect(peerId);
+      if (allowed == null) {
+        throw McpToolException('Connection approval timed out for $peerId.');
+      }
+      if (!allowed) {
+        throw McpToolException('The user denied the connection to $peerId.');
+      }
     }
     // The human may have opened this peer while the prompt was up. That
     // session stays theirs; the next connect call returns it unchanged.
@@ -359,6 +366,8 @@ class RustDeskMcpBackend implements McpBackend {
           'Timed out waiting for the session window to open.');
     }
     _checkRunning();
+    // Connecting approves initial control of this new session. The separate
+    // control setting governs taking over sessions that are already open.
     final input = await _requestControl(sessionId, ask: false);
     return (sessionId: sessionId, input: input);
   }
@@ -428,6 +437,9 @@ class RustDeskMcpBackend implements McpBackend {
           {'session_id': sessionId, 'request_id': grantId},
           _kControlRequestTimeout);
       checkCurrent();
+      if (granted == null) {
+        throw McpToolException('Control approval timed out.');
+      }
       if (granted != true) return null;
     }
     await _find(sessionId);

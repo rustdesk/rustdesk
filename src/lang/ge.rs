@@ -841,5 +841,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Take over", ""),
         ("mcp-server-tip", ""),
         ("mcp-read-access-tip", ""),
+        ("Automatically approve new connections and initial agent control", ""),
+        ("Automatically approve agent takeover of existing sessions", ""),
+        ("An MCP client wants to connect to {} and take initial control. Your input is blocked until you take over. Allow?", ""),
     ].iter().cloned().collect();
 }
