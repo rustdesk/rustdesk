@@ -2110,6 +2110,17 @@ pub(super) async fn refresh_displays_for_login() {
 }
 
 /// Mirrors get_display_infos: only a MULTI-display host advertises a demoted display.
+pub(super) fn is_display_demoted(display_idx: usize) -> bool {
+    let Some(expected) = display_info_of(display_idx as i32) else {
+        return false;
+    };
+    DRM_DISPLAY_HEALTH
+        .lock()
+        .unwrap()
+        .get(&connector_key(&expected))
+        .is_some_and(|h| h.demoted())
+}
+
 pub(super) fn display_count_and_any_demoted() -> Option<(usize, bool)> {
     // Snapshot the identity keys under DRM_STATE, then consult health with DRM_STATE RELEASED --
     // same order as get_display_infos: never hold DRM_STATE while taking a per-display map.

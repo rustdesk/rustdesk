@@ -235,17 +235,34 @@ mod tests {
     }
 }
 
-struct CapturerPtr(*mut Capturer);
+struct CapturerPtr {
+    ptr: *mut Capturer,
+    #[cfg(feature = "drm")]
+    snapshot_gen: Option<u64>,
+}
 
 impl Clone for CapturerPtr {
     fn clone(&self) -> Self {
-        Self(self.0)
+        Self {
+            ptr: self.ptr,
+            #[cfg(feature = "drm")]
+            snapshot_gen: self.snapshot_gen,
+        }
     }
 }
 
 impl TraitCapturer for CapturerPtr {
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
-        unsafe { (*self.0).frame(timeout) }
+        #[cfg(feature = "drm")]
+        if let Some(gen) = self.snapshot_gen {
+            if scrap::wayland::display::wayland_snapshot_generation() != gen {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "wayland layout generation changed; rebuilding capturer",
+                ));
+            }
+        }
+        unsafe { (*self.ptr).frame(timeout) }
     }
 }
 
@@ -582,7 +599,11 @@ fn init_displays() -> ResultType<()> {
             // No `with_context` here: the peer is shown `format!("{}", err)`, which
             // renders only the outermost layer, and the mapped reason is the inner one.
             let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
-            let capturer = CapturerPtr(capturer);
+            let capturer = CapturerPtr {
+                ptr: capturer,
+                #[cfg(feature = "drm")]
+                snapshot_gen: None,
+            };
 
             let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
                 rects: rects.clone(),
@@ -661,7 +682,7 @@ pub fn clear() {
     for (_, addr) in write_lock.iter() {
         let cap_display_info: *mut CapDisplayInfo = *addr as _;
         unsafe {
-            let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
+            let _box_capturer = Box::from_raw((*cap_display_info).capturer.ptr);
             let _box_cap_display_info = Box::from_raw(cap_display_info);
         }
     }
@@ -749,6 +770,9 @@ pub(super) fn get_capturer_for_display(
                     display_idx,
                     e
                 );
+                if !super::drm_capturer::is_display_demoted(display_idx) {
+                    super::display_service::note_drm_promotion_owed();
+                }
                 ensure_pipewire_inited()?;
             }
         }
@@ -869,7 +893,16 @@ pub(super) fn get_capturer_for_display(
                 current: cap_display_info.current,
                 privacy_mode_id: 0,
                 _capturer_privacy_mode_id: 0,
-                capturer: Box::new(cap_display_info.capturer.clone()),
+                capturer: Box::new({
+                    let mut c = cap_display_info.capturer.clone();
+                    #[cfg(feature = "drm")]
+                    if super::drm_capturer::is_available_cached()
+                        || !super::drm_capturer::is_display_demoted(display_idx)
+                    {
+                        c.snapshot_gen = Some(scrap::wayland::display::wayland_snapshot_generation());
+                    }
+                    c
+                }),
             })
         }
     } else {

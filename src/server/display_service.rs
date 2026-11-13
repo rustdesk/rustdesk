@@ -318,6 +318,20 @@ pub(super) fn remap_wayland_uinput_coord(x: i32, y: i32) -> (i32, i32) {
     scrap::wayland::display::remap_to_live_layout(x, y, &lock.baseline, &lock.live)
 }
 
+#[cfg(all(target_os = "linux", feature = "drm"))]
+static PROMOTION_OWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(super) fn note_drm_promotion_owed() {
+    PROMOTION_OWED.store(true, Ordering::Release);
+}
+
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[inline]
+fn should_promote_drm(owed: bool, avail: super::drm_capturer::Availability) -> bool {
+    owed && avail == super::drm_capturer::Availability::Available
+}
+
 // The uinput absolute range is set when the session inits. If the compositor layout
 // changes afterwards (monitor scale/position change, or a portal virtual output
 // appearing once the capture starts), injected coordinates get rescaled by the stale
@@ -363,18 +377,14 @@ fn refresh_wayland_uinput_rect_if_changed() {
     // down every other live capturer. Baseline promotes with the clear (rustdesk#15601).
     #[cfg(feature = "drm")]
     {
-        // An edge seen while DRM is transiently non-Available stays OWED rather than consumed.
-        static PROMOTION_OWED: std::sync::atomic::AtomicBool =
-            std::sync::atomic::AtomicBool::new(false);
-        // The latch fires when a capturer was built with no wayland snapshot: a later cache
-        // refill makes wayland_snapshot_missing lie, so live_changed alone would miss it. Taken
-        // UNCONDITIONALLY: short-circuiting past it on a live_changed poll would leave it set and
-        // spend a second, spurious promotion one poll later on the freshly rebuilt capturer.
         let blind_build = super::drm_capturer::take_unrotated_snapshot_pending();
         if live_changed || blind_build {
-            PROMOTION_OWED.store(true, Ordering::Release);
+            note_drm_promotion_owed();
         }
-        if PROMOTION_OWED.load(Ordering::Acquire) && super::drm_capturer::is_available_cached() {
+        if should_promote_drm(
+            PROMOTION_OWED.load(Ordering::Acquire),
+            super::drm_capturer::availability_cached(),
+        ) {
             PROMOTION_OWED.store(false, Ordering::Release);
             scrap::wayland::display::clear_wayland_displays_cache();
             scrap::wayland::display::bump_layout_generation();
@@ -1132,5 +1142,35 @@ mod wayland_layout_tests {
         l.observe(&rotated);
         l.reset_baseline(rotated.clone());
         assert!(!l.edge(&rotated, false, 0));
+    }
+}
+
+#[cfg(all(test, target_os = "linux", feature = "drm"))]
+mod drm_promotion_tests {
+    use super::{
+        note_drm_promotion_owed, should_promote_drm, WAYLAND_LAYOUT, PROMOTION_OWED,
+    };
+    use crate::server::drm_capturer::Availability;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn promotion_arms_on_pipewire_fallback_and_waits_for_available_verdict() {
+        PROMOTION_OWED.store(false, Ordering::SeqCst);
+        // Simulate falling back to PipeWire when DRM is transiently Unavailable.
+        note_drm_promotion_owed();
+        assert!(PROMOTION_OWED.load(Ordering::SeqCst));
+        assert!(!should_promote_drm(
+            PROMOTION_OWED.load(Ordering::SeqCst),
+            Availability::Unavailable,
+        ));
+        assert!(!should_promote_drm(
+            PROMOTION_OWED.load(Ordering::SeqCst),
+            Availability::Unsettled,
+        ));
+        assert!(should_promote_drm(
+            PROMOTION_OWED.load(Ordering::SeqCst),
+            Availability::Available,
+        ));
+        PROMOTION_OWED.store(false, Ordering::SeqCst);
     }
 }
