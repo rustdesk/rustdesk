@@ -541,7 +541,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Plug out all", "Desconnecta-ho tot"),
         ("True color (4:4:4)", "Color real (4:4:4)"),
         ("Enable blocking user input", "Bloca el control de l'usuari amb els dispositius d'entrada"),
-        ("id_input_tip", "Evita que l'usuari pugui interactuar p. ex. amb el teclat o ratolí"),
+        ("id_input_tip", ""),
         ("privacy_mode_impl_mag_tip", "Mode 1"),
         ("privacy_mode_impl_virtual_display_tip", "Mode 2"),
         ("Enter privacy mode", "Inicia el Mode privat"),

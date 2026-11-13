@@ -477,4 +477,28 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_id_input_tips_show_the_syntax_the_id_field_accepts() {
+        use super::*;
+
+        // The ID field parses `<id>@<server>?key=<key>` and `<id>@public` literally.
+        let query = hbb_common::regex::Regex::new(r"\?(\w+)=").unwrap();
+        let public = hbb_common::regex::Regex::new(r#""<id>@([^"]*)""#).unwrap();
+        for table in [&*ca::T, &*da::T, &*es::T, &*hr::T] {
+            for key in ["id_input_tip", "web_id_input_tip"] {
+                let value = table[key];
+                if value.is_empty() {
+                    continue;
+                }
+                assert!(value.contains("?key="), "{key:?} => {value:?}");
+                for found in query.captures_iter(value) {
+                    assert_eq!(&found[1], "key", "{key:?} => {value:?}");
+                }
+                for found in public.captures_iter(value) {
+                    assert_eq!(&found[1], "public", "{key:?} => {value:?}");
+                }
+            }
+        }
+    }
 }

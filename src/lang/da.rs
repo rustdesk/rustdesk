@@ -541,7 +541,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Plug out all", "Frakobl alt"),
         ("True color (4:4:4)", "True color (4:4:4)"),
         ("Enable blocking user input", "Aktivér blokering af brugerstyring"),
-        ("id_input_tip", "Du kan indtaste ét ID, en direkte IP-adresse, eller et domæne med en port (<domæne>:<port>).\nHvis du ønsker at forbinde til en enhed på en anden server, tilføj da serveradressen (<id>@<server_adresse>?key=<nøgle>), fx,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nHvis du ønsker adgang til en enhed på en offentlig server, indtast venligst \"<id>@offentlig server\"; nøglen er ikke nødvendig for offentlige servere.\n\nHvis du vil gennemtvinge brug af en relay-forbindelse på den første forbindelse, så tilføj \"/r\" efter ID'et, fx, \"9123456234/r\"."),
+        ("id_input_tip", "Du kan indtaste ét ID, en direkte IP-adresse, eller et domæne med en port (<domæne>:<port>).\nHvis du ønsker at forbinde til en enhed på en anden server, tilføj da serveradressen (<id>@<server_adresse>?key=<nøgle>), fx,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nHvis du ønsker adgang til en enhed på en offentlig server, indtast venligst \"<id>@public\"; nøglen er ikke nødvendig for offentlige servere.\n\nHvis du vil gennemtvinge brug af en relay-forbindelse på den første forbindelse, så tilføj \"/r\" efter ID'et, fx, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Tilstand 1"),
         ("privacy_mode_impl_virtual_display_tip", "Tilstand 2"),
         ("Enter privacy mode", "Start privatlivstilstand"),
