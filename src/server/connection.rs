@@ -4089,7 +4089,9 @@ impl Connection {
                         if let Some(sender) = &self.audio_sender {
                             allow_err!(sender.send(MediaData::AudioFrame(Box::new(frame))));
                         } else {
-                            log::warn!(
+                            hbb_common::throttled_log!(
+                                Duration::from_secs(60),
+                                warn,
                                 "Processing audio frame without the voice call audio sender."
                             );
                         }
