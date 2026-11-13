@@ -178,8 +178,15 @@ String? mcpNextStep(String state) {
   return null;
 }
 
-/// Text runs and Enter markers, with CRLF counted as one newline.
-Iterable<String> mcpTextChunks(String text, {required bool delayed}) sync* {
+/// Text runs and Enter markers, or one normalized Wayland Unicode batch.
+Iterable<String> mcpTextChunks(String text,
+    {required bool delayed, bool batchUnicode = false}) sync* {
+  if (batchUnicode && text.runes.any((c) => c > 0x7f)) {
+    // Wayland peers paste Unicode through one shared clipboard. A later text
+    // chunk can replace it before the application reads the preceding paste.
+    yield text.replaceAll(RegExp(r'\r\n|\r'), '\n');
+    return;
+  }
   final lines = text.split(RegExp(r'\r\n|\r|\n'));
   for (var i = 0; i < lines.length; i++) {
     if (i > 0) yield '\n';

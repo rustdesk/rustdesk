@@ -735,9 +735,12 @@ class RustDeskMcpBackend implements McpBackend {
   @override
   Future<void> typeText(String sessionId, String text, {int delayMs = 0}) =>
       _serialized(sessionId, (input) async {
-        await _writable(sessionId);
+        final session = await _writable(sessionId);
         final sid = UuidValue(sessionId);
-        final chunks = mcpTextChunks(text, delayed: delayMs > 0).toList();
+        final chunks = mcpTextChunks(text,
+                delayed: delayMs > 0,
+                batchUnicode: session['is_wayland'] == true)
+            .toList();
         for (var i = 0; i < chunks.length; i++) {
           input.checkActive();
           if (chunks[i] == '\n') {

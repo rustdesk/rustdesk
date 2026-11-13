@@ -101,6 +101,7 @@ Map<String, dynamic> _describe(String peerId, FFI ffi) {
     'session_id': ffi.sessionId.toString(),
     'mode': ffi.ffiModel.agentControl ? 'agent' : 'human',
     'ready': ready,
+    'is_wayland': pi.isWayland,
     'state': status.state,
     if (status.message != null) 'message': status.message,
     if (ready)

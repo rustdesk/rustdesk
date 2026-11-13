@@ -159,6 +159,7 @@ const _sessionSchema = {
       'enum': ['agent', 'human'],
     },
     'ready': {'type': 'boolean'},
+    'is_wayland': {'type': 'boolean'},
     'state': {
       'type': 'string',
       'enum': [
@@ -526,23 +527,27 @@ class McpDispatcher {
         'type_text',
         'Type text on the remote machine as keyboard input. By default the '
             'text is sent at once, which is fast and fine in browsers. Each '
-            'line break (LF, CRLF or CR) is pressed as Enter, which may submit '
-            'a single-line field or form. PowerShell 5.1 with PSReadLine '
+            'line break (LF, CRLF or CR) is normally pressed as Enter, which '
+            'may submit a single-line field or form. On Wayland, text containing '
+            'non-ASCII characters is sent as one whole text batch: delay_ms '
+            'is ignored and normalized line breaks are pasted as text rather '
+            'than pressed as Enter. This avoids the peer clipboard being '
+            'overwritten between asynchronous pastes. Terminals may execute '
+            'pasted newlines immediately. PowerShell 5.1 with PSReadLine '
             'may ignore this Unicode keyboard input; use `paste_text` there. '
             'Some apps (Notepad, for example) drop or garble characters that '
             'arrive that fast; there set `delay_ms` to 20-30 to type one '
             'character at a time (slower, at most $kMcpMaxTypeChars '
             'characters and 60 seconds per call). Check the result with '
-            '`screenshot_after_ms`. Delayed non-ASCII input can be garbled '
-            'on GNOME Wayland peers; prefer delay_ms 0 for that text. '
-            'Needs agent control.',
+            '`screenshot_after_ms`. Needs agent control.',
         {
           'session_id': _sessionIdProp,
           'text': {'type': 'string'},
           'delay_ms': {
             'type': 'integer',
             'description': 'Pause between characters, 0 to 200. Default 0 '
-                '(send everything at once).',
+                '(send everything at once). Ignored for a Wayland text batch '
+                'containing non-ASCII characters.',
           },
           'display': {
             'type': 'integer',

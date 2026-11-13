@@ -491,6 +491,17 @@ void main() {
       expect(mcpTextChunks('plain text', delayed: false), ['plain text']);
     });
 
+    test('Wayland Unicode text is one batch while ASCII retains pacing', () {
+      const text = 'あいう\r\n\r\n日本語 Ω\r';
+      for (final delayed in [false, true]) {
+        expect(mcpTextChunks(text, delayed: delayed, batchUnicode: true),
+            ['あいう\n\n日本語 Ω\n']);
+      }
+      expect(mcpTextChunks('a\r\nb', delayed: true, batchUnicode: true),
+          ['a', '\n', 'b']);
+      expect(mcpTextChunks('日本', delayed: true), ['日', '本']);
+    });
+
     test('type_text accepts the limit and rejects longer text', () async {
       final ok = await _rpc(
           dispatcher,
