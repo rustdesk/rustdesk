@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "La carpeta seleccionada no está vacía. La instalación puede eliminar los datos existentes. Considera elegir otra carpeta."),
         ("Request approval", "Solicitar aprobación"),
         ("Forever", "Para siempre"),
+        ("Confirm before connecting with saved passwords", "Confirmar antes de conectar con contraseñas guardadas"),
+        ("Connect to this target using a saved password?", "¿Conectar a este dispositivo con una contraseña guardada?"),
     ].iter().cloned().collect();
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'common/saved_password_confirmation.dart';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -2350,7 +2351,12 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   if (type != null && id != null) {
     switch (type) {
       case UriLinkType.remoteDesktop:
-        Future.delayed(Duration.zero, () {
+        Future.delayed(Duration.zero, () async {
+          if (switchUuid == null &&
+              !await confirmSavedPasswordConnection(id!,
+                  loginMethod: loginMethod)) {
+            return;
+          }
           rustDeskWinManager.newRemoteDesktop(id!,
               loginMethod: loginMethod,
               password: password,
@@ -2359,35 +2365,55 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         });
         break;
       case UriLinkType.fileTransfer:
-        Future.delayed(Duration.zero, () {
+        Future.delayed(Duration.zero, () async {
+          if (!await confirmSavedPasswordConnection(id!,
+              loginMethod: loginMethod)) {
+            return;
+          }
           rustDeskWinManager.newFileTransfer(id!,
               loginMethod: loginMethod,
               password: password, forceRelay: forceRelay);
         });
         break;
       case UriLinkType.viewCamera:
-        Future.delayed(Duration.zero, () {
+        Future.delayed(Duration.zero, () async {
+          if (!await confirmSavedPasswordConnection(id!,
+              loginMethod: loginMethod)) {
+            return;
+          }
           rustDeskWinManager.newViewCamera(id!,
               loginMethod: loginMethod,
               password: password, forceRelay: forceRelay);
         });
         break;
       case UriLinkType.portForward:
-        Future.delayed(Duration.zero, () {
+        Future.delayed(Duration.zero, () async {
+          if (!await confirmSavedPasswordConnection(id!,
+              loginMethod: loginMethod)) {
+            return;
+          }
           rustDeskWinManager.newPortForward(id!, false,
               loginMethod: loginMethod,
               password: password, forceRelay: forceRelay);
         });
         break;
       case UriLinkType.rdp:
-        Future.delayed(Duration.zero, () {
+        Future.delayed(Duration.zero, () async {
+          if (!await confirmSavedPasswordConnection(id!,
+              loginMethod: loginMethod)) {
+            return;
+          }
           rustDeskWinManager.newPortForward(id!, true,
               loginMethod: loginMethod,
               password: password, forceRelay: forceRelay);
         });
         break;
       case UriLinkType.terminal:
-        Future.delayed(Duration.zero, () {
+        Future.delayed(Duration.zero, () async {
+          if (!await confirmSavedPasswordConnection(id!,
+              loginMethod: loginMethod)) {
+            return;
+          }
           rustDeskWinManager.newTerminal(id!,
               loginMethod: loginMethod,
               password: password, forceRelay: forceRelay);
@@ -2546,6 +2572,62 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
   return null;
 }
 
+final _savedPasswordConfirmation = SavedPasswordConfirmation();
+
+Future<bool> confirmSavedPasswordConnection(String id,
+    {bool hasSavedAddressBookPassword = false, String loginMethod = ''}) {
+  return _savedPasswordConfirmation.confirm(
+    id: id,
+    enabled:
+        !isWeb && mainGetLocalBoolOptionSync(kOptionAllowConfirmSavedPassword),
+    loginMethod: loginMethod,
+    hasSavedPassword: (peerId) async {
+      if (hasSavedAddressBookPassword ||
+          await bind.mainPeerHasPassword(id: peerId)) {
+        return true;
+      }
+      // Personal address-book passwords also apply when connecting by ID.
+      return bind.mainGetLocalOption(key: 'access_token').isNotEmpty &&
+          gFFI.abModel.addressbooks.values.any((ab) =>
+              ab.isPersonal() &&
+              ab.peers
+                  .any((peer) => peer.id == peerId && peer.hash.isNotEmpty));
+    },
+    showConfirmation: (peerId) async {
+      var alias = await bind.mainGetPeerOption(id: peerId, key: 'alias');
+      if (alias.isEmpty) {
+        for (final ab in gFFI.abModel.addressbooks.values) {
+          for (final peer in ab.peers) {
+            if (peer.id == peerId && alias.isEmpty) alias = peer.alias;
+          }
+        }
+      }
+      if (isDesktop) await windowOnTop(null);
+      return gFFI.dialogManager.show<bool>((setState, close, context) {
+        return CustomAlertDialog(
+          title: Text(translate('Confirmation')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(translate('Connect to this target using a saved password?')),
+              const SizedBox(height: 12),
+              if (alias.isNotEmpty) Text(alias),
+              Text(formatID(peerId)),
+            ],
+          ),
+          actions: [
+            dialogButton('Cancel',
+                onPressed: () => close(false), isOutline: true),
+            dialogButton('Connect', onPressed: () => close(true)),
+          ],
+          onCancel: () => close(false),
+        );
+      }, backDismiss: true, clickMaskDismiss: true);
+    },
+  );
+}
+
 connectMainDesktop(String id,
     {required bool isFileTransfer,
     required bool isViewCamera,
@@ -2556,7 +2638,13 @@ connectMainDesktop(String id,
     String? password,
     String? connToken,
     bool? isSharedPassword,
+    bool hasSavedAddressBookPassword = false,
     String loginMethod = ''}) async {
+  if (!await confirmSavedPasswordConnection(id,
+      hasSavedAddressBookPassword: hasSavedAddressBookPassword,
+      loginMethod: loginMethod)) {
+    return;
+  }
   if (isFileTransfer) {
     await rustDeskWinManager.newFileTransfer(id,
         loginMethod: loginMethod,
@@ -2609,6 +2697,7 @@ connect(BuildContext context, String id,
     String? password,
     String? connToken,
     bool? isSharedPassword,
+    bool hasSavedAddressBookPassword = false,
     String loginMethod = ''}) async {
   if (id == '') return;
   if (!isDesktop || desktopType == DesktopType.main) {
@@ -2635,6 +2724,7 @@ connect(BuildContext context, String id,
       await connectMainDesktop(
         id,
         loginMethod: loginMethod,
+        hasSavedAddressBookPassword: hasSavedAddressBookPassword,
         isFileTransfer: isFileTransfer,
         isViewCamera: isViewCamera,
         isTerminal: isTerminal,
@@ -2657,9 +2747,16 @@ connect(BuildContext context, String id,
         'forceRelay': forceRelay,
         'connToken': connToken,
         'loginMethod': loginMethod,
+        'hasSavedAddressBookPassword': hasSavedAddressBookPassword,
       });
     }
   } else {
+    if (!await confirmSavedPasswordConnection(id,
+        hasSavedAddressBookPassword: hasSavedAddressBookPassword,
+        loginMethod: loginMethod)) {
+      return;
+    }
+    if (!context.mounted) return;
     if (isFileTransfer) {
       if (isWeb) {
         Navigator.push(

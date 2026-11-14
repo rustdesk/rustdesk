@@ -1598,6 +1598,9 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
     }
   }
   connect(context, peer.id,
+      hasSavedAddressBookPassword: tab == PeerTabIndex.ab &&
+          (password.isNotEmpty ||
+              (gFFI.abModel.current.isPersonal() && peer.hash.isNotEmpty)),
       loginMethod: loginMethod,
       password: password,
       isSharedPassword: isSharedPassword,

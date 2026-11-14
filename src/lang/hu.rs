@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "A kiválasztott mappa nem üres. A telepítés törölheti a meglévő adatokat. Fontolja meg egy másik mappa kiválasztását."),
         ("Request approval", "Jóváhagyás kérése"),
         ("Forever", "Örökre"),
+        ("Confirm before connecting with saved passwords", "Megerősítés csatlakozás előtt mentett jelszó használatakor"),
+        ("Connect to this target using a saved password?", "Csatlakozik ehhez az eszközhöz a mentett jelszóval?"),
     ].iter().cloned().collect();
 }

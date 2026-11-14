@@ -528,6 +528,12 @@ class _GeneralState extends State<_General> {
     (isMacOS && bind.mainIsInstalled() && bind.mainIsInstalledDaemon(prompt: false) && !bind.isCustomClient());
     final children = <Widget>[
       if (!isWeb && !incomingOnly)
+        _OptionCheckBox(
+            context,
+            'Confirm before connecting with saved passwords',
+            kOptionAllowConfirmSavedPassword,
+            isServer: false),
+      if (!isWeb && !incomingOnly)
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             kOptionEnableConfirmClosingTabs,
             isServer: false),

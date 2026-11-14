@@ -108,8 +108,11 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _isUsingPublicServer = false;
   var _allowAskForNoteAtEndOfConnection = false;
   var _preventSleepWhileConnected = true;
+  var _confirmSavedPassword = false;
 
   _SettingsState() {
+    _confirmSavedPassword =
+        mainGetLocalBoolOptionSync(kOptionAllowConfirmSavedPassword);
     _enableAbr = option2bool(
         kOptionEnableAbr, bind.mainGetOptionSync(key: kOptionEnableAbr));
     _denyLANDiscovery = !option2bool(kOptionEnableLanDiscovery,
@@ -950,6 +953,23 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   _allowAskForNoteAtEndOfConnection = newValue;
                 });
               },
+            ),
+          if (!isWeb && !incomingOnly && !disabledSettings)
+            SettingsTile.switchTile(
+              title: Text(
+                  translate('Confirm before connecting with saved passwords')),
+              initialValue: _confirmSavedPassword,
+              onToggle: isOptionFixed(kOptionAllowConfirmSavedPassword)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(
+                          kOptionAllowConfirmSavedPassword, v);
+                      if (!mounted) return;
+                      setState(() {
+                        _confirmSavedPassword = mainGetLocalBoolOptionSync(
+                            kOptionAllowConfirmSavedPassword);
+                      });
+                    },
             ),
           if (!incomingOnly)
             SettingsTile.switchTile(

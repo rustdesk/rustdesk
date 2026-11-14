@@ -22,6 +22,7 @@ pub const OPTION_THEME: &str = "theme";
 pub const OPTION_REMOTE_MENUBAR_DRAG_LEFT: &str = "remote-menubar-drag-left";
 pub const OPTION_REMOTE_MENUBAR_DRAG_RIGHT: &str = "remote-menubar-drag-right";
 pub const OPTION_HIDE_AB_TAGS_PANEL: &str = "hideAbTagsPanel";
+pub const OPTION_ALLOW_CONFIRM_SAVED_PASSWORD: &str = "allow-confirm-saved-password";
 pub const OPTION_ENABLE_CONFIRM_CLOSING_TABS: &str = "enable-confirm-closing-tabs";
 pub const OPTION_ENABLE_OPEN_NEW_CONNECTIONS_IN_TABS: &str = "enable-open-new-connections-in-tabs";
 pub const OPTION_TEXTURE_RENDER: &str = "use-texture-render";
@@ -222,6 +223,7 @@ pub const KEYS_LOCAL_SETTINGS: &[&str] = &[
     OPTION_THEME,
     OPTION_LANGUAGE,
     OPTION_ENABLE_CONFIRM_CLOSING_TABS,
+    OPTION_ALLOW_CONFIRM_SAVED_PASSWORD,
     OPTION_ENABLE_OPEN_NEW_CONNECTIONS_IN_TABS,
     OPTION_TEXTURE_RENDER,
     OPTION_ALLOW_D3D_RENDER,
