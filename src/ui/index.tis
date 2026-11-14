@@ -711,6 +711,8 @@ class App: Reactor.Component
 
     function render() {
         var is_can_screen_recording = handler.is_can_screen_recording(false);
+        var show_install_daemon = is_win && !disable_installation && !outgoing_only && !service_stopped &&
+            handler.is_installed() && !handler.is_installed_daemon(false);
         return
             <div .app>
                     <div .left-pane style={incoming_only ? "width:*" : ""}>
@@ -729,11 +731,11 @@ class App: Reactor.Component
                         {!outgoing_only && <PasswordArea />}
                     </div>
                     {(!is_win || handler.is_installed() || disable_installation) ? "" : <InstallMe />}
-                    {software_update_url && !disable_installation ? <UpdateMe /> : ""}
-                    {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() && !disable_installation ? <UpgradeMe /> : ""}
+                    {software_update_url && !disable_installation && !show_install_daemon ? <UpdateMe /> : ""}
+                    {!show_install_daemon && is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() && !disable_installation ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
-                    {!service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
+                    {(is_win ? show_install_daemon : !service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false)) ? <InstallDaemon /> : ""}
                     {system_error ? <SystemError /> : ""}
                     {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
                     {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
@@ -922,7 +924,11 @@ class InstallDaemon: Reactor.Component {
     }
 
     event click $(#install-me) {
-        handler.is_installed_daemon(true);
+        if (is_win) {
+            handler.set_option("stop-service", default_option_no);
+        } else {
+            handler.is_installed_daemon(true);
+        }
     }
 }
 
