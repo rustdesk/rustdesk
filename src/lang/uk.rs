@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Вибрана тека не порожня. Встановлення може видалити наявні дані. Радимо вибрати іншу теку."),
         ("Request approval", "Запросити схвалення"),
         ("Forever", "Назавжди"),
+        ("Enable Unicode input", "Увімкнути введення Unicode"),
+        ("unicode-input-tip", "Перехоплювати текст Unicode, надісланий такими інструментами, як KeePassXC Auto-Type. Потрібне джерело введення 1."),
     ].iter().cloned().collect();
 }

@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "De geselecteerde map is niet leeg. De installatie kan bestaande gegevens verwijderen. Overweeg een andere map te kiezen."),
         ("Request approval", "Goedkeuring aanvragen"),
         ("Forever", "Voor altijd"),
+        ("Enable Unicode input", "Unicode-invoer inschakelen"),
+        ("unicode-input-tip", "Unicode-tekst opvangen die wordt verzonden door hulpmiddelen zoals KeePassXC Auto-Type. Vereist invoerbron 1."),
     ].iter().cloned().collect();
 }

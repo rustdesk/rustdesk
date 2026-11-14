@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Izvēlētā mape nav tukša. Instalēšana var izdzēst esošos datus. Apsveriet iespēju izvēlēties citu mapi."),
         ("Request approval", "Pieprasīt apstiprinājumu"),
         ("Forever", "Uz visiem laikiem"),
+        ("Enable Unicode input", "Iespējot Unicode ievadi"),
+        ("unicode-input-tip", "Pārtvert Unicode tekstu, ko nosūta tādi rīki kā KeePassXC Auto-Type. Nepieciešams ievades avots 1."),
     ].iter().cloned().collect();
 }

@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Izbrana mapa ni prazna. Namestitev lahko izbriše obstoječe podatke. Razmislite o izbiri druge mape."),
         ("Request approval", "Zahtevaj odobritev"),
         ("Forever", "Za vedno"),
+        ("Enable Unicode input", "Omogoči vnos Unicode"),
+        ("unicode-input-tip", "Zajemi besedilo Unicode, ki ga pošiljajo orodja, kot je KeePassXC Auto-Type. Zahteva vir vnosa 1."),
     ].iter().cloned().collect();
 }

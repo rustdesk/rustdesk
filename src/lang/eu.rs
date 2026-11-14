@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Hautatutako karpeta ez dago hutsik. Instalazioak lehendik dauden datuak ezaba ditzake. Beste karpeta bat aukeratzea gomendatzen da."),
         ("Request approval", "Eskatu onespena"),
         ("Forever", "Betiko"),
+        ("Enable Unicode input", "Gaitu Unicode sarrera"),
+        ("unicode-input-tip", "Atzeman KeePassXC Auto-Type bezalako tresnek bidalitako Unicode testua. 1. sarrera-iturria behar du."),
     ].iter().cloned().collect();
 }

@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "پوشه انتخاب‌شده خالی نیست. نصب ممکن است داده‌های موجود را حذف کند. بهتر است پوشه دیگری انتخاب کنید."),
         ("Request approval", "درخواست تأیید"),
         ("Forever", "برای همیشه"),
+        ("Enable Unicode input", "فعال‌سازی ورودی Unicode"),
+        ("unicode-input-tip", "متن Unicode ارسال‌شده توسط ابزارهایی مانند KeePassXC Auto-Type را دریافت می‌کند. به منبع ورودی 1 نیاز دارد."),
     ].iter().cloned().collect();
 }

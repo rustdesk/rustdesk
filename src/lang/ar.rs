@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "المجلد المحدد ليس فارغًا. قد يؤدي التثبيت إلى حذف البيانات الموجودة. يُنصح باختيار مجلد آخر."),
         ("Request approval", "طلب الموافقة"),
         ("Forever", "إلى الأبد"),
+        ("Enable Unicode input", "تفعيل إدخال Unicode"),
+        ("unicode-input-tip", "التقاط نص Unicode الذي ترسله أدوات مثل KeePassXC Auto-Type. يتطلب استخدام مصدر الإدخال 1."),
     ].iter().cloned().collect();
 }

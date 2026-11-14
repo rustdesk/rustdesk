@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Vybraný priečinok nie je prázdny. Inštalácia môže odstrániť existujúce údaje. Zvážte výber iného priečinka."),
         ("Request approval", "Požiadať o schválenie"),
         ("Forever", "Navždy"),
+        ("Enable Unicode input", "Povoliť vstup Unicode"),
+        ("unicode-input-tip", "Zachytávať text Unicode odosielaný nástrojmi, ako je KeePassXC Auto-Type. Vyžaduje sa zdroj vstupu 1."),
     ].iter().cloned().collect();
 }

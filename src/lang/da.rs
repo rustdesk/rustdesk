@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Den valgte mappe er ikke tom. Installationen kan slette eksisterende data. Overvej at vælge en anden mappe."),
         ("Request approval", "Anmod om godkendelse"),
         ("Forever", "For evigt"),
+        ("Enable Unicode input", "Aktivér Unicode-input"),
+        ("unicode-input-tip", "Opfang Unicode-tekst sendt af værktøjer som KeePassXC Auto-Type. Kræver inputkilde 1."),
     ].iter().cloned().collect();
 }

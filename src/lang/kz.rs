@@ -826,5 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Таңдалған бума бос емес. Орнату бар деректерді жоюы мүмкін. Басқа буманы таңдаған жөн."),
         ("Request approval", "Мақұлдауды сұрау"),
         ("Forever", "Мәңгі"),
+        ("Enable Unicode input", "Unicode енгізуін қосу"),
+        ("unicode-input-tip", "KeePassXC Auto-Type сияқты құралдар жіберген Unicode мәтінін қабылдау. Енгізу көзі 1 қажет."),
     ].iter().cloned().collect();
 }

@@ -100,6 +100,8 @@ pub mod client {
     #[derive(Default)]
     struct GrabOwnerState {
         owner: Option<u128>,
+        #[cfg(windows)]
+        unicode_packet: crate::platform::windows::keyboard::UnicodePacket,
         last_grab: Option<std::time::Instant>,
         /// True while a deferred-release thread is in flight. Prevents
         /// spawning redundant threads during the X11 feedback loop.
@@ -206,6 +208,10 @@ pub mod client {
                 #[cfg(target_os = "linux")]
                 let had_owner = gs.owner.is_some();
                 gs.owner = Some(session_id);
+                #[cfg(windows)]
+                {
+                    gs.unicode_packet = Default::default();
+                }
                 gs.last_grab = Some(std::time::Instant::now());
                 // Invalidate any in-flight deferred release from the previous
                 // owner so it cannot suppress a fresh timer for the new owner.
@@ -296,6 +302,10 @@ pub mod client {
                 KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
 
                 gs.owner = None;
+                #[cfg(windows)]
+                {
+                    gs.unicode_packet = Default::default();
+                }
                 gs.last_grab = None;
                 gs.deferred_pending = false;
                 release_after_unlock = Some(take_remote_keys());
@@ -319,6 +329,54 @@ pub mod client {
         if let Some(to_release) = release_after_unlock {
             release_remote_keys_for_events(keyboard_mode, to_release);
         }
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn set_unicode_input_enabled(enabled: bool) {
+        let mut gs = GRAB_STATE.lock().unwrap();
+        gs.unicode_packet = Default::default();
+        rdev::set_unicode_packet_enabled(enabled);
+    }
+
+    #[cfg(windows)]
+    pub(super) fn handle_unicode_packet(event: &Event) -> bool {
+        const ERROR_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+        let mut gs = GRAB_STATE.lock().unwrap();
+        if !rdev::is_unicode_packet_enabled() {
+            return false;
+        }
+        let Some(_owner) = gs.owner else {
+            return false;
+        };
+        #[cfg(feature = "flutter")]
+        let Some(session) =
+            flutter::sessions::get_session_by_session_id(&hbb_common::SessionID::from_u128(_owner))
+        else {
+            gs.unicode_packet = Default::default();
+            return false;
+        };
+        #[cfg(feature = "flutter")]
+        if !*session.server_keyboard_enabled.read().unwrap()
+            || session.lc.read().unwrap().view_only.v
+        {
+            gs.unicode_packet = Default::default();
+            return false;
+        }
+        if matches!(event.event_type, EventType::KeyPress(_)) {
+            match gs.unicode_packet.decode(event.position_code) {
+                Ok(Some(key_event)) => {
+                    #[cfg(feature = "flutter")]
+                    session.send_key_event(&key_event);
+                    #[cfg(not(feature = "flutter"))]
+                    send_key_event(&key_event);
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    hbb_common::throttled_log!(ERROR_LOG_INTERVAL, warn, "{err}");
+                }
+            }
+        }
+        true
     }
 
     pub fn process_event(keyboard_mode: &str, event: &Event, lock_modes: Option<i32>) {
@@ -664,10 +722,25 @@ fn should_block_relative_mouse_shortcut(key: Key, is_press: bool) -> bool {
 }
 
 fn start_grab_loop() {
+    #[cfg(windows)]
+    client::set_unicode_input_enabled(
+        crate::get_local_option(base::config::keys::OPTION_ALLOW_UNICODE_INPUT) == "Y",
+    );
     std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
         let try_handle_keyboard = move |event: Event, key: Key, is_press: bool| -> Option<Event> {
+            #[cfg(windows)]
+            if crate::platform::windows::keyboard::is_unicode_packet(&event) {
+                // Source 2 sends physical keys asynchronously through Flutter.
+                // Use Source 1 to preserve packet text ordering with Tab/Enter.
+                #[cfg(feature = "flutter")]
+                if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
+                    return Some(event);
+                }
+                return (!client::handle_unicode_packet(&event)).then_some(event);
+            }
+
             // fix #2211：CAPS LOCK don't work
             if key == Key::CapsLock || key == Key::NumLock {
                 return Some(event);
