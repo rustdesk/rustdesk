@@ -726,7 +726,7 @@ pub fn core_main() -> Option<CoreMainAction> {
 
 fn import_config(path: &str) {
     use hbb_common::{config::*, get_exe_time, get_modified_time};
-    let path2 = path.replace(".toml", "2.toml");
+    let path2 = import_config2_path(path);
     let path2 = std::path::Path::new(&path2);
     let path = std::path::Path::new(path);
     log::info!("import config from {:?} and {:?}", path, path2);
@@ -911,4 +911,23 @@ fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool) {
 fn is_quick_support_exe(exe: &str) -> bool {
     let exe = exe.to_lowercase();
     exe.contains("-qs-") || exe.contains("-qs.exe") || exe.contains("_qs.exe")
+}
+
+fn import_config2_path(path: &str) -> String {
+    path.strip_suffix(".toml")
+        .map(|stem| format!("{}2.toml", stem))
+        .unwrap_or_else(|| path.to_owned())
+}
+
+#[cfg(test)]
+mod import_config_path_tests {
+    use super::*;
+
+    #[test]
+    fn options_import_keeps_toml_in_parent_directory_names() {
+        assert_eq!(
+            import_config2_path("/backups.toml/RustDesk.toml"),
+            "/backups.toml/RustDesk2.toml"
+        );
+    }
 }
