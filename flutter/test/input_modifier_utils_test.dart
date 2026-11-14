@@ -233,4 +233,14 @@ void main() {
       );
     });
   });
+
+  group('releasedModifier', () {
+    test('prefers the logical modifier when Alt and Control are swapped', () {
+      expect(
+        releasedModifier(
+            LogicalKeyboardKey.controlLeft, PhysicalKeyboardKey.altLeft),
+        ModifierKind.ctrl,
+      );
+    });
+  });
 }
