@@ -10,6 +10,11 @@ enum GestureState {
   threeFingerVerticalDrag
 }
 
+// [FIX #15630] note: the Android trackpad's synthesized 2-finger drag is
+// consumed in MainActivity.dispatchTouchEvent before Flutter's pointer
+// pipeline (see InputModel._trackpadTwoFinger), so no recognizer-level
+// device filtering is needed here — these are plain recognizers again.
+
 class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   CustomTouchGestureRecognizer({
     Object? debugOwner,
