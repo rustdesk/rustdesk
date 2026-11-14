@@ -1633,8 +1633,8 @@ class InputModel {
   }
 
   void _syncCursorBeforeScrollIfNeeded(PointerEvent e) {
-    if (_relativeMouse.enabled.value) return;
-    if (!_pointerMovedAfterEnter && !(isViewOnly && !showMyCursor)) {
+    if ((!isDesktop && !isWebDesktop) || _relativeMouse.enabled.value) return;
+    if (!_pointerMovedAfterEnter) {
       final canvasPosition = _pointerPositionForRemoteCanvas(e);
       handleMouse(getMouseEventMove(), canvasPosition,
           edgeScroll: useEdgeScroll);
@@ -1701,7 +1701,6 @@ class InputModel {
             Offset(x.toDouble(), y.toDouble()));
       } else {
         if (isViewCamera) return;
-        _syncCursorBeforeScrollIfNeeded(e);
         bind.sessionSendMouse(
             sessionId: sessionId,
             msg: '{"type": "trackpad", "x": "$x", "y": "$y"}');
