@@ -39,6 +39,22 @@ void main() {
       verifyUndoRedo);
   test('clearing padding and text keeps the next Backspace usable',
       verifyClearAndDelete);
+  test('rejected input preserves accepted text when permission returns', () {
+    final input = IosSoftKeyboardInput(sentinel);
+    final initial = input.update(editing('$sentinelㅎ'), inputAllowed: false);
+    expect(initial.localValue, editing(sentinel));
+    final accepted = editing('${sentinel}abc');
+    var remote = applyEdit('existing', input.update(accepted));
+    for (final text in ['${sentinel}abcㅎ', '${sentinel}ab']) {
+      final rejected = input.update(editing(text), inputAllowed: false);
+      expect((rejected.backspaces, rejected.text), (0, ''));
+      expect(rejected.localValue, accepted);
+    }
+    remote = applyEdit(remote, input.update(editing('${accepted.text}ㅗ')));
+    expect(remote, 'existingabcㅗ');
+    remote = applyEdit(remote, input.update(accepted));
+    expect(remote, 'existingabc');
+  });
 }
 
 void verifyInputAfterPaddingNavigation() {
@@ -129,13 +145,16 @@ void verifyRecomposition() {
   var remote = 'existing';
   // Native iOS traces remove the preceding sentinel with the old letter,
   // then restore the sentinel before inserting the recomposed character.
-  for (final text in [
-    '$sentinelㅇ',
-    sentinel.substring(0, sentinelLength - 1),
-    sentinel,
-    '$sentinel아',
+  // Reduced sequence: editing() reconstructs collapsed selections at text end.
+  for (final (text, backspaces, inserted) in [
+    ('$sentinelㅇ', 0, 'ㅇ'),
+    (sentinel.substring(0, sentinelLength - 1), 1, ''),
+    (sentinel, 0, ''),
+    ('$sentinel아', 0, '아'),
   ]) {
-    remote = applyEdit(remote, input.update(editing(text)));
+    final edit = input.update(editing(text));
+    expect((edit.backspaces, edit.text), (backspaces, inserted));
+    remote = applyEdit(remote, edit);
   }
   expect(remote, 'existing아');
 }

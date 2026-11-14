@@ -95,7 +95,22 @@ class IosSoftKeyboardInput {
   // Count suffix characters as graphemes; local selection ranges use UTF-16.
   // Cursor correction is computed here, not applied to the incoming snapshot.
   // A padding refill, if needed, takes priority over that local correction.
-  IosKeyboardEdit update(TextEditingValue value) {
+  IosKeyboardEdit update(TextEditingValue value,
+      {bool hasFocus = true, bool inputAllowed = true}) {
+    if (!hasFocus) {
+      // Flutter clears composing on blur without removing the preedit. Reset
+      // both buffers so this cannot become a commit now or on the next focus.
+      reset();
+    }
+    if (!hasFocus || !inputAllowed) {
+      // Initial snapshots have no selection; restoring one must place the caret.
+      return IosKeyboardEdit(
+          localValue: _previousValue.copyWith(
+              selection: _previousValue.selection.isValid
+                  ? _previousValue.selection
+                  : TextSelection.collapsed(
+                      offset: _previousValue.text.length)));
+    }
     final localValue = _clampSelection(value);
     final hadPrefix = _prefixLength != 0;
     final prefixBackspaces = _updatePrefix(value);
