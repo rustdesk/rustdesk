@@ -1924,4 +1924,69 @@ mod tests {
         assert!(is_compressed_file("IMG_0001.JPG"));
         assert!(is_compressed_file("Backup.ZIP"));
     }
+
+    fn write_resume_files(dir: &TestTempDir, name: &str, size: u64, download: &[u8]) -> String {
+        std::fs::create_dir_all(&dir.path).expect("create temp dir");
+        let file_path = dir.join(name).to_string_lossy().to_string();
+        let digest = FileDigest {
+            size,
+            modified: 1_700_000_000,
+        };
+        std::fs::write(
+            format!("{file_path}.digest"),
+            serde_json::to_string(&digest).expect("serialize digest"),
+        )
+        .expect("write digest file");
+        std::fs::write(format!("{file_path}.download"), download).expect("write download file");
+        file_path
+    }
+
+    fn new_digest(file_size: u64) -> FileTransferDigest {
+        FileTransferDigest {
+            id: 7,
+            file_num: 2,
+            last_modified: 1_700_000_000,
+            file_size,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn write_confirmation_resumes_partial_download_with_matching_digest() {
+        let dir = TestTempDir::new("rustdesk_resume_match");
+        let file_path = write_resume_files(&dir, "big.bin", 100, b"partial");
+
+        match is_write_need_confirmation(true, &file_path, &new_digest(100))
+            .expect("confirmation check should succeed")
+        {
+            DigestCheckResult::NeedConfirm(d) => {
+                assert_eq!(d.id, 7);
+                assert_eq!(d.file_num, 2);
+                assert!(d.is_identical);
+                assert_eq!(d.transferred_size, b"partial".len() as u64);
+            }
+            _ => panic!("expected NeedConfirm for a resumable download"),
+        }
+
+        assert!(matches!(
+            is_write_need_confirmation(false, &file_path, &new_digest(100))
+                .expect("confirmation check should succeed"),
+            DigestCheckResult::NoSuchFile
+        ));
+    }
+
+    #[test]
+    fn write_confirmation_does_not_resume_changed_or_empty_download() {
+        let dir = TestTempDir::new("rustdesk_resume_skip");
+        let changed = write_resume_files(&dir, "changed.bin", 100, b"partial");
+        let empty = write_resume_files(&dir, "empty.bin", 100, b"");
+
+        for (file_path, size) in [(&changed, 200), (&empty, 100)] {
+            assert!(matches!(
+                is_write_need_confirmation(true, file_path, &new_digest(size))
+                    .expect("confirmation check should succeed"),
+                DigestCheckResult::NoSuchFile
+            ));
+        }
+    }
 }
