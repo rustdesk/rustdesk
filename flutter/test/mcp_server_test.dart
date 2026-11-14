@@ -381,6 +381,31 @@ void main() {
       expect(backend.calls, ['key s VK_C ctrl+shift press']);
     });
 
+    test('Windows modifier aliases normalize across keyboard, mouse and scroll',
+        () async {
+      for (final alias in ['win', 'meta']) {
+        backend.calls.clear();
+        for (final tool in ['press_key', 'mouse', 'scroll']) {
+          final r = await _rpc(
+              dispatcher,
+              _call(tool, {
+                'session_id': 's',
+                if (tool == 'press_key') 'key': 'VK_C',
+                if (tool == 'mouse') 'action': 'click',
+                if (tool != 'press_key') ...{'x': 10, 'y': 20},
+                if (tool == 'scroll') ...{'direction': 'down', 'amount': 1},
+                'modifiers': [alias, 'command']
+              }));
+          expect(r['result']['isError'], false);
+        }
+        expect(backend.calls, [
+          'key s VK_C command press',
+          'mouse s click 10 20 d0 +command',
+          'scroll s 10 20 down 1 d0 +command',
+        ]);
+      }
+    });
+
     test('request_control reports grant and denial', () async {
       var r =
           await _rpc(dispatcher, _call('request_control', {'session_id': 's'}));

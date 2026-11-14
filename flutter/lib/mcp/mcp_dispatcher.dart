@@ -571,6 +571,8 @@ class McpDispatcher {
             'the app needs per-character input events or cannot accept paste. '
             'Prefer `paste_text` for long text, code and PowerShell prompts '
             'when clipboard sharing and application paste are available. '
+            'For `ssh.exe` in the classic Windows console, prefer this tool: '
+            'Ctrl+V may reach the remote terminal as literal ^V instead of pasting. '
             'Default delay_ms is 0 (send at once); add a delay only when '
             'the app needs paced input. Each '
             'line break (LF, CRLF or CR) is normally pressed as Enter, which '
@@ -638,9 +640,12 @@ class McpDispatcher {
             'submitting it. Line breaks are pasted unchanged and terminals '
             'may execute them immediately. To review a command first, paste '
             'one line without a line break, then press VK_RETURN. Where '
-            'Ctrl+V does not paste (Linux terminals, a legacy console), set '
-            '`paste` false and paste with the app\'s own shortcut or a right '
-            'click. Fails if clipboard sharing is off for the session. Needs '
+            'Ctrl+V does not paste (Linux terminals or a legacy console), '
+            'prefer `type_text`. In particular, `ssh.exe` in the classic '
+            'Windows console may send literal ^V to the remote terminal. '
+            'Alternatively, set `paste` false and paste with the app\'s own '
+            'shortcut or a right click. Fails if clipboard sharing is off '
+            'for the session. Needs '
             'agent control.',
         {
           'session_id': _sessionIdProp,
@@ -676,7 +681,8 @@ class McpDispatcher {
             'use `press` on Linux. Always release what '
             'you hold. Modifier keys cannot be held this way: pass '
             '`modifiers` to the input that needs them. `Meta` is the Windows '
-            'or Command key, the same key as the `command` modifier. `shift` '
+            'or Command key. The modifiers `command`, `win` and `meta` '
+            'all name that same key. `shift` '
             'does not change a letter or digit key into a capital or symbol: '
             'use `type_text` for those characters. Common navigation names '
             'such as End, Home, PageUp, PageDown and ArrowLeft are also '
@@ -952,7 +958,15 @@ const Map<String, String> kMcpModifierKeyNames = {
   'command': 'Meta',
 };
 
-final Set<String> kMcpKeyModifiers = kMcpModifierKeyNames.keys.toSet();
+const Map<String, String> kMcpModifierAliases = {
+  'win': 'command',
+  'meta': 'command',
+};
+
+final Set<String> kMcpKeyModifiers = {
+  ...kMcpModifierKeyNames.keys,
+  ...kMcpModifierAliases.keys,
+};
 
 const int kMcpMaxTypeChars = 1000;
 
@@ -974,7 +988,11 @@ List<String> _modifiers(Map<String, dynamic> a) {
       throw McpToolException('Unknown modifier: $m');
     }
   }
-  return raw.cast<String>();
+  return raw
+      .cast<String>()
+      .map((m) => kMcpModifierAliases[m] ?? m)
+      .toSet()
+      .toList();
 }
 
 class _RpcError implements Exception {

@@ -41,4 +41,8 @@ An `ok` result means the action was sent, not that locking or login succeeded. T
 
 Prefer `paste_text` for long text, code and PowerShell prompts when clipboard sharing and application paste are available. It replaces the remote clipboard. Use `type_text` when the application needs per-character input or cannot accept paste. A successful tool response confirms sending, not that the target application has consumed the text: inspect the application before submitting or sending more.
 
+In `ssh.exe` running in the classic Windows console, prefer `type_text`: Ctrl+V can reach the remote terminal as literal `^V`. For applications with a different paste shortcut (including Linux terminals), use `type_text`, or set `paste: false` and invoke the application's paste shortcut or right-click paste separately.
+
+The `modifiers` array on keyboard, mouse and scroll tools accepts `ctrl`, `shift`, `alt` and `command`; `win` and `meta` are aliases for `command` (the Windows/Command key). Aliases are normalized before sending and naming the same modifier more than once does not press it twice.
+
 On Wayland, `type_text` sends text containing non-ASCII characters as one complete batch to avoid clipboard replacement between asynchronous pastes. It ignores `delay_ms` for that batch and normalizes CRLF/CR to LF; line breaks are pasted as text rather than sent as Enter keys. Some terminals execute pasted newlines immediately. To review a command first, input one line without a line break, verify it, then press Enter separately.
