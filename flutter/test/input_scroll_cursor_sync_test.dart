@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/input_model.dart';
@@ -23,7 +24,20 @@ class _FakeBind extends Fake implements RustdeskImpl {
   }
 
   @override
-  void setCurSessionId({required UuidValue sessionId, dynamic hint}) {}
+  Future<void> setCurSessionId({
+    required UuidValue sessionId,
+    dynamic hint,
+  }) async {}
+
+  @override
+  String mainGetInputSource({dynamic hint}) => 'flutter';
+
+  @override
+  Future<void> sessionEnterOrLeave({
+    required UuidValue sessionId,
+    required bool enter,
+    dynamic hint,
+  }) async {}
 
   @override
   bool sessionGetToggleOptionSync({
@@ -43,6 +57,12 @@ class _FakeCanvas extends Fake implements CanvasModel {
   final double x = 0.0;
   @override
   final double y = 0.0;
+  @override
+  final double scrollX = 0.0;
+  @override
+  final double scrollY = 0.0;
+  @override
+  final Offset imageOffset = Offset.zero;
   @override
   final ScrollStyle scrollStyle = ScrollStyle.scrollauto;
   @override
@@ -83,7 +103,7 @@ class _FakeFFI extends Fake implements FFI {
   @override
   final String id = 'test-peer';
   @override
-  final SessionID sessionId = const Uuid().v4obj();
+  final UuidValue sessionId = const Uuid().v4obj();
   @override
   final ConnType connType = ConnType.defaultConn;
   @override
@@ -104,7 +124,7 @@ void main() {
 
   setUp(() {
     fakeBind = _FakeBind();
-    platformFFI.ffiBind = fakeBind;
+    platformFFI.setBindingForTesting(fakeBind);
     final ffi = _FakeFFI();
     inputModel = InputModel(WeakReference<FFI>(ffi));
     inputModel.enterOrLeave(true);
@@ -122,11 +142,11 @@ void main() {
     );
 
     expect(fakeBind.sentMouse, hasLength(2));
-    expect(fakeBind.sentMouse['type'], '');
-    expect(fakeBind.sentMouse['x'], '640');
-    expect(fakeBind.sentMouse['y'], '420');
-    expect(fakeBind.sentMouse['type'], 'wheel');
-    expect(fakeBind.sentMouse['y'], '-1');
+    expect(fakeBind.sentMouse[0]['type'], '');
+    expect(fakeBind.sentMouse[0]['x'], '634');
+    expect(fakeBind.sentMouse[0]['y'], '386');
+    expect(fakeBind.sentMouse[1]['type'], 'wheel');
+    expect(fakeBind.sentMouse[1]['y'], '-1');
 
     // Subsequent scroll without leaving should not emit another synthetic move.
     fakeBind.sentMouse.clear();
@@ -137,7 +157,7 @@ void main() {
       ),
     );
     expect(fakeBind.sentMouse, hasLength(1));
-    expect(fakeBind.sentMouse['type'], 'wheel');
+    expect(fakeBind.sentMouse[0]['type'], 'wheel');
   });
 
   test('syncs cursor position before initial precision touchpad scroll', () {
@@ -154,10 +174,10 @@ void main() {
     );
 
     expect(fakeBind.sentMouse, hasLength(2));
-    expect(fakeBind.sentMouse['type'], '');
-    expect(fakeBind.sentMouse['x'], '800');
-    expect(fakeBind.sentMouse['y'], '300');
-    expect(fakeBind.sentMouse['type'], 'trackpad');
-    expect(fakeBind.sentMouse['y'], '2');
+    expect(fakeBind.sentMouse[0]['type'], '');
+    expect(fakeBind.sentMouse[0]['x'], '794');
+    expect(fakeBind.sentMouse[0]['y'], '266');
+    expect(fakeBind.sentMouse[1]['type'], 'trackpad');
+    expect(fakeBind.sentMouse[1]['y'], '2');
   });
 }
