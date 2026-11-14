@@ -385,6 +385,12 @@ pub struct Connection {
     recording: bool,
     block_input: bool,
     privacy_mode: bool,
+    // Dropping the receiver cancels the pending activation.
+    #[cfg(windows)]
+    privacy_preparation: Option<(
+        String,
+        hbb_common::tokio::sync::oneshot::Receiver<ResultType<()>>,
+    )>,
     control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
@@ -600,6 +606,8 @@ impl Connection {
             recording: Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &control_permissions),
             block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &control_permissions),
             privacy_mode: Self::permission(keys::OPTION_ENABLE_PRIVACY_MODE, &control_permissions),
+            #[cfg(windows)]
+            privacy_preparation: None,
             control_permissions,
             last_test_delay: None,
             network_delay: 0,
@@ -875,6 +883,10 @@ impl Connection {
                                 conn.block_input = enabled;
                                 conn.send_permission(Permission::BlockInput, enabled).await;
                             } else if &name == "privacy_mode" {
+                                #[cfg(windows)]
+                                if !enabled {
+                                    conn.privacy_preparation = None;
+                                }
                                 // Keep permission state and runtime state consistent:
                                 // when revoking the permission, try to leave privacy mode first.
                                 // Otherwise we could end up in an inconsistent state where
@@ -947,6 +959,8 @@ impl Connection {
                             }
                         }
                         ipc::Data::PrivacyModeState((_, state, impl_key)) => {
+                            #[cfg(windows)]
+                            conn.privacy_preparation.take();
                             let msg_out = match state {
                                 privacy_mode::PrivacyModeState::OffSucceeded => {
                                     crate::common::make_privacy_mode_msg(
@@ -1163,6 +1177,16 @@ impl Connection {
                             conn.on_close("privacy mode", false).await;
                             break;
                         }
+                        #[cfg(windows)]
+                        ipc::Data::PrivacyModeState((_, privacy_mode::PrivacyModeState::OffUnknown, impl_key)) => {
+                            if privacy_mode::get_cur_impl_key().as_deref() == Some(impl_key.as_str()) {
+                                conn.privacy_preparation = None;
+                                conn.send(crate::common::make_privacy_mode_msg(
+                                    back_notification::PrivacyModeState::PrvOffUnknown,
+                                    impl_key,
+                                )).await;
+                            }
+                        }
                         #[cfg(all(target_os = "windows", feature = "flutter"))]
                         ipc::Data::PrinterData(data) => {
                             if Self::permission(keys::OPTION_ENABLE_REMOTE_PRINTER, &conn.control_permissions) {
@@ -1177,6 +1201,11 @@ impl Connection {
                 _ = second_timer.tick() => {
                     #[cfg(windows)]
                     conn.portable_check();
+                    #[cfg(windows)]
+                    if let Some((impl_key, _)) = conn.privacy_preparation.as_ref() {
+                        let impl_key = impl_key.clone();
+                        conn.turn_on_privacy(impl_key).await;
+                    }
                     raii::AuthedConnID::check_wake_lock_on_setting_changed();
                     if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
                         if instant.elapsed().as_secs() > minute * 60 {
@@ -5183,14 +5212,53 @@ impl Connection {
         }
     }
 
+    // Return true while pending instead of awaiting here: the connection must keep
+    // processing remote input and video while its timer polls for completion.
+    #[cfg(windows)]
+    fn poll_privacy_preparation(&mut self, impl_key: &str) -> ResultType<bool> {
+        use hbb_common::tokio::sync::oneshot::error::TryRecvError;
+        if matches!(&self.privacy_preparation, Some((key, _)) if key != impl_key) {
+            self.privacy_preparation = None;
+        }
+        if let Some((_, receiver)) = self.privacy_preparation.as_mut() {
+            let result = match receiver.try_recv() {
+                Ok(result) => result,
+                Err(TryRecvError::Empty) => return Ok(true),
+                Err(error) => Err(error.into()),
+            };
+            self.privacy_preparation = None;
+            return result.map(|()| false);
+        }
+        self.privacy_preparation = privacy_mode::prepare_virtual_display(impl_key, self.inner.id)?
+            .map(|receiver| (impl_key.to_owned(), receiver));
+        Ok(self.privacy_preparation.is_some())
+    }
+
     async fn turn_on_privacy(&mut self, impl_key: String) {
         if !self.is_authed_remote_conn() || !self.privacy_mode {
+            #[cfg(windows)]
+            self.privacy_preparation.take();
             let msg_out = crate::common::make_privacy_mode_msg(
                 back_notification::PrivacyModeState::PrvOnFailedDenied,
                 impl_key,
             );
             self.send(msg_out).await;
             return;
+        }
+
+        #[cfg(windows)]
+        match self.poll_privacy_preparation(&impl_key) {
+            Ok(true) => return,
+            Ok(false) => {}
+            Err(error) => {
+                self.send(crate::common::make_privacy_mode_msg_with_details(
+                    back_notification::PrivacyModeState::PrvOnFailed,
+                    error.to_string(),
+                    impl_key,
+                ))
+                .await;
+                return;
+            }
         }
 
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
@@ -5274,6 +5342,8 @@ impl Connection {
     }
 
     async fn turn_off_privacy(&mut self, impl_key: String) {
+        #[cfg(windows)]
+        self.privacy_preparation.take();
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
                 back_notification::PrivacyModeState::PrvNotSupported,
@@ -5324,6 +5394,8 @@ impl Connection {
             return;
         }
         self.closed = true;
+        #[cfg(windows)]
+        self.privacy_preparation.take();
         // If voice A,B -> C, and A,B has voice call
         // B disconnects, C will reset the voice call input.
         //

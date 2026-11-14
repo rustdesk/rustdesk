@@ -29,7 +29,7 @@ pub mod macos;
 #[cfg(windows)]
 mod win_virtual_display;
 #[cfg(windows)]
-pub use win_virtual_display::restore_reg_connectivity;
+pub use win_virtual_display::{check_privacy_mode, restore_reg_connectivity};
 
 pub const INVALID_PRIVACY_MODE_CONN_ID: i32 = 0;
 pub const OCCUPIED: &'static str = "Privacy occupied by another one.";
@@ -213,7 +213,47 @@ fn get_supported_impl(impl_key: &str) -> String {
     cur_impl
 }
 
+#[cfg(windows)]
+pub fn prepare_virtual_display(
+    impl_key: &str,
+    conn_id: i32,
+) -> ResultType<Option<oneshot::Receiver<ResultType<()>>>> {
+    const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+    if get_supported_impl(impl_key) != PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
+        || !crate::virtual_display_manager::is_amyuni_idd()
+        || !crate::virtual_display_manager::is_virtual_display_supported()
+        || get_privacy_mode_conn_id()
+            .is_some_and(|owner| owner != INVALID_PRIVACY_MODE_CONN_ID && owner != conn_id)
+    {
+        return Ok(None);
+    }
+    let (tx, rx) = oneshot::channel();
+    std::thread::Builder::new()
+        .name("privacy-prepare".to_owned())
+        .spawn(move || {
+            let result =
+                crate::virtual_display_manager::amyuni_idd::prepare_privacy_monitor(|| {
+                    tx.is_closed()
+                });
+            if let Err(Err(error)) = tx.send(result) {
+                hbb_common::throttled_log!(
+                    LOG_INTERVAL,
+                    debug,
+                    "Privacy mode preparation ended after cancellation: {}",
+                    error
+                );
+            }
+        })?;
+    Ok(Some(rx))
+}
+
 pub async fn turn_on_privacy(impl_key: &str, conn_id: i32) -> Option<ResultType<bool>> {
+    #[cfg(windows)]
+    if get_supported_impl(impl_key) == PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
+        && crate::virtual_display_manager::is_amyuni_idd()
+    {
+        return turn_on_privacy_async(impl_key.to_string(), conn_id).await;
+    }
     if is_async_privacy_mode() {
         turn_on_privacy_async(impl_key.to_string(), conn_id).await
     } else {

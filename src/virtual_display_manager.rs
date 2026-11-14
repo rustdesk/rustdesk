@@ -406,6 +406,13 @@ pub mod amyuni_idd {
     const HARDWARE_ID: &str = "usbmmidd";
     const PLUG_MONITOR_IO_CONTROL_CDOE: u32 = 2307084;
     const INSTALLER_EXE_FILE: &str = "deviceinstaller64.exe";
+    const DIAGNOSTIC_LOG_INTERVAL: Duration = Duration::from_secs(1);
+    const PRIVACY_INITIALIZATION_TIMEOUT: Duration = Duration::from_secs(20);
+    // First-install traces show resets after PnP is idle and the monitor is visible.
+    // This quiet interval is an empirical margin, not an initialization-complete signal.
+    const PRIVACY_DISPLAY_STABLE_FOR: Duration = Duration::from_secs(5);
+    const PRIVACY_INITIALIZATION_POLL: Duration = Duration::from_millis(200);
+    const PRIVACY_MONITOR_TIMEOUT: Duration = Duration::from_secs(6);
 
     lazy_static::lazy_static! {
         static ref LOCK: Arc<Mutex<()>> = Default::default();
@@ -486,7 +493,8 @@ pub mod amyuni_idd {
 
     // If the driver is installed by "deviceinstaller64.exe", the driver will be installed asynchronously.
     // The caller must wait some time before using the driver.
-    fn check_install_driver(is_async: &mut bool) -> ResultType<()> {
+    // Returns whether this call started driver installation.
+    fn check_install_driver(is_async: &mut bool) -> ResultType<bool> {
         let _l = LOCK.lock().unwrap();
         let drivers = windows::get_display_drivers();
         if drivers
@@ -494,7 +502,7 @@ pub mod amyuni_idd {
             .any(|(s, c)| s == super::AMYUNI_IDD_DEVICE_STRING && *c == 0)
         {
             *is_async = false;
-            return Ok(());
+            return Ok(false);
         }
 
         if let Ok(Some(work_dir)) = get_deviceinstaller64_work_dir() {
@@ -502,7 +510,7 @@ pub mod amyuni_idd {
                 log::info!("Installing driver by deviceinstaller64.exe");
                 install_if_x86_on_x64(&work_dir, "install usbmmidd.inf usbmmidd")?;
                 *is_async = true;
-                return Ok(());
+                return Ok(true);
             }
         }
 
@@ -521,7 +529,7 @@ pub mod amyuni_idd {
         let _ =
             unsafe { win_device::install_driver(&inf_path, HARDWARE_ID, &mut reboot_required)? };
         *is_async = false;
-        Ok(())
+        Ok(true)
     }
 
     pub fn reset_all() -> ResultType<()> {
@@ -657,6 +665,116 @@ pub mod amyuni_idd {
         }
 
         plug_in_monitor_(true, is_async, None)
+    }
+
+    fn privacy_initialization_capturer() -> ResultType<scrap::Capturer> {
+        let display = scrap::Display::all()?
+            .into_iter()
+            .find(scrap::Display::is_primary)
+            .ok_or_else(|| {
+                hbb_common::anyhow::anyhow!("No primary display during initialization.")
+            })?;
+        Ok(scrap::Capturer::new(display)?)
+    }
+
+    // Observe independently: session capture may fall back to GDI during initialization.
+    fn wait_for_privacy_display_stability() -> ResultType<()> {
+        use scrap::TraitCapturer;
+        use std::io::ErrorKind;
+
+        let started = Instant::now();
+        let mut capturer = privacy_initialization_capturer();
+        let mut stable_since = Instant::now();
+        while started.elapsed() < PRIVACY_INITIALIZATION_TIMEOUT {
+            let capture = match capturer.as_mut() {
+                Ok(capture) if !capture.is_gdi() => capture,
+                _ => {
+                    // GDI does not expose DXGI access loss, so it cannot establish early readiness.
+                    hbb_common::throttled_log!(
+                        DIAGNOSTIC_LOG_INTERVAL, warn,
+                        "Cannot observe DXGI initialization (GDI or error: {:?}); retaining {:?} first-install wait",
+                        capturer.as_ref().err(), PRIVACY_INITIALIZATION_TIMEOUT
+                    );
+                    std::thread::sleep(
+                        PRIVACY_INITIALIZATION_TIMEOUT.saturating_sub(started.elapsed()),
+                    );
+                    return Ok(());
+                }
+            };
+            // A static desktop can time out without losing the duplication interface.
+            match capture.frame(Duration::ZERO).map(|_| ()) {
+                Ok(()) => {}
+                Err(error) if error.kind() == ErrorKind::WouldBlock => {}
+                Err(error) if error.kind() == ErrorKind::ConnectionReset => {
+                    drop(capturer);
+                    capturer = privacy_initialization_capturer();
+                    stable_since = Instant::now();
+                }
+                Err(error) => {
+                    capturer = Err(error.into());
+                    continue;
+                }
+            }
+            if stable_since.elapsed() >= PRIVACY_DISPLAY_STABLE_FOR {
+                hbb_common::throttled_log!(
+                    DIAGNOSTIC_LOG_INTERVAL,
+                    info,
+                    "First-use display capture stable for {:?} after {:?}",
+                    PRIVACY_DISPLAY_STABLE_FOR,
+                    started.elapsed()
+                );
+                return Ok(());
+            }
+            std::thread::sleep(PRIVACY_INITIALIZATION_POLL);
+        }
+        bail!("Timed out waiting for display initialization to stabilize.");
+    }
+
+    pub fn prepare_privacy_monitor(cancelled: impl Fn() -> bool) -> ResultType<()> {
+        static PREPARATION_LOCK: Mutex<()> = Mutex::new(());
+        let _preparation = PREPARATION_LOCK.try_lock().map_err(|error| {
+            hbb_common::anyhow::anyhow!("Privacy mode preparation is unavailable: {}", error)
+        })?;
+        if cancelled() {
+            bail!("Privacy mode preparation cancelled.");
+        }
+        if get_monitor_count() > 0 {
+            return Ok(());
+        }
+        if windows::get_device_names(None).is_empty() {
+            bail!(crate::privacy_mode::NO_PHYSICAL_DISPLAYS);
+        }
+        let mut is_async = false;
+        let installed = check_install_driver(&mut is_async)?;
+        if get_monitor_count() == VIRTUAL_DISPLAY_MAX_COUNT {
+            bail!("There are already {VIRTUAL_DISPLAY_MAX_COUNT} monitors plugged in.");
+        }
+        plug_in_monitor_(true, is_async, Some(PRIVACY_MONITOR_TIMEOUT))?;
+        // Finish first-install initialization even if cancelled; a retry would otherwise
+        // see an installed driver and skip this wait.
+        if installed {
+            if let Err(error) = wait_for_privacy_display_stability() {
+                let cleanup = plug_out_monitor(0, false, false);
+                hbb_common::throttled_log!(
+                    DIAGNOSTIC_LOG_INTERVAL,
+                    error,
+                    "First-use display initialization failed: {}; cleanup: {:?}",
+                    error,
+                    cleanup
+                );
+                return Err(error);
+            }
+        }
+        if cancelled() {
+            if get_monitor_count() > 0 {
+                plug_out_monitor(0, false, false)?;
+            }
+            bail!("Privacy mode preparation cancelled.");
+        }
+        if get_monitor_count() == 0 {
+            bail!("No active virtual displays after privacy mode preparation.");
+        }
+        Ok(())
     }
 
     // `index` the display index to plug out. -1 means plug out all.
