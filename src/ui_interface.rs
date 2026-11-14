@@ -197,7 +197,14 @@ pub fn use_texture_render() -> bool {
     return cfg!(feature = "flutter")
         && LocalConfig::get_option(keys::OPTION_TEXTURE_RENDER) == "Y";
 
-    #[cfg(target_os = "linux")]
+    // Texture upload rendered a black remote surface on the tested LoongGPU
+    // stacks. Keep it available as an explicit opt-in while that path is
+    // isolated; this is not a statement about every LoongArch GPU.
+    #[cfg(all(target_os = "linux", target_arch = "loongarch64"))]
+    return cfg!(feature = "flutter")
+        && LocalConfig::get_option(keys::OPTION_TEXTURE_RENDER) == "Y";
+
+    #[cfg(all(target_os = "linux", not(target_arch = "loongarch64")))]
     return cfg!(feature = "flutter")
         && LocalConfig::get_option(keys::OPTION_TEXTURE_RENDER) != "N";
 
