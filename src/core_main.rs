@@ -742,11 +742,45 @@ fn import_config(path: &str) {
             log::info!("config written");
         }
     }
-    let config2: Config2 = load_path(path2.into());
     if get_modified_time(&path2) > get_modified_time(&Config2::file()) {
+        let config2 = match read_import_config2(path2) {
+            Ok(config) => config,
+            Err(err) => {
+                log::error!("Failed to import config {:?}: {}", path2, err);
+                return;
+            }
+        };
         if store_path(Config2::file(), config2).is_err() {
             log::info!("config2 written");
         }
+    }
+}
+
+fn read_import_config2(path: &std::path::Path) -> hbb_common::ResultType<config::Config2> {
+    hbb_common::toml::from_str(&std::fs::read_to_string(path)?)
+        .map_err(|_| hbb_common::anyhow::anyhow!("Invalid configuration file"))
+}
+
+#[cfg(test)]
+mod import_config_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_unreadable_or_malformed_options_instead_of_importing_defaults() {
+        let path = std::env::temp_dir().join(format!(
+            "rustdesk-import-{}-{}.toml",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        for data in [b"[options\n".as_slice(), b"\xff\xfe\x00".as_slice()] {
+            std::fs::write(&path, data).unwrap();
+            assert!(read_import_config2(&path).is_err());
+        }
+        std::fs::remove_file(&path).unwrap();
+        assert!(read_import_config2(&path).is_err());
     }
 }
 
