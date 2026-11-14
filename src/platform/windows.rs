@@ -2177,7 +2177,15 @@ pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
     if let Ok(portable_exe) = std::env::var(PORTABLE_APPNAME_RUNTIME_ENV_KEY) {
         exe = portable_exe;
     }
-    get_custom_server_from_string(&exe)
+    custom_server_from_exe_path(&exe)
+}
+
+fn custom_server_from_exe_path(exe: &str) -> ResultType<CustomServer> {
+    let name = Path::new(exe)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| anyhow!("Invalid executable filename"))?;
+    get_custom_server_from_string(name)
 }
 
 // We can't directly use `RegKey::set_value` to update the registry value, because it will fail with `ERROR_ACCESS_DENIED`
@@ -4892,6 +4900,16 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn executable_server_config_ignores_parent_directory_names() {
+        assert!(custom_server_from_exe_path(r"C:\host=wrong.invalid,\rustdesk.exe").is_err());
+        let config = custom_server_from_exe_path(
+            r"C:\host=wrong.invalid,\rustdesk-host=correct.invalid,.exe",
+        )
+        .unwrap();
+        assert_eq!(config.host, "correct.invalid");
+    }
 
     #[test]
     fn vbs_files_use_utf16le_with_bom_and_crlf() {
