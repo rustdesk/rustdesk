@@ -38,6 +38,9 @@ jobs:
     env:
       build_output_dir: RustDeskTempTopMostWindow/WindowInjection/${{ inputs.platform }}/${{ inputs.configuration }}
     steps:
+      - name: Check out customization sources
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
 
@@ -47,8 +50,29 @@ jobs:
 
       - name: Build the project
         run: |
-          cd RustDeskTempTopMostWindow && git checkout ecd8d6a139eee76845ea66423fb739af450fda90
+          cd RustDeskTempTopMostWindow
+          git checkout ecd8d6a139eee76845ea66423fb739af450fda90
+          git apply "${{ github.workspace }}/res/privacy_mode_background.patch"
+          Copy-Item "${{ github.workspace }}/res/windows/privacy_background.h" WindowInjection/
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
+
+      - name: Test privacy backgrounds
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $arch = if ('${{ inputs.platform }}' -eq 'ARM64') { 'arm64' } else { 'x64' }
+          cmd /c "`"$vs/VC/Auxiliary/Build/vcvarsall.bat`" $arch && cl /nologo /EHsc /std:c++14 res/windows/privacy_background_test.cpp /Fe:privacy_background_test.exe /link gdiplus.lib user32.lib gdi32.lib"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./privacy_background_test.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Add background configuration tool
+        shell: pwsh
+        run: |
+          Set-Content -LiteralPath "./${{ env.build_output_dir }}/privacy-background.ini" -Encoding Unicode -Value "[Privacy]`r`nBackground=black"
+          Copy-Item res/windows/set-privacy-background.ps1 "./${{ env.build_output_dir }}/"
+          Copy-Item res/windows/privacy-background.md "./${{ env.build_output_dir }}/"
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -57,3 +81,6 @@ jobs:
             name: topmostwindow-artifacts-${{ inputs.platform }}
             path: |
               ./${{ env.build_output_dir }}/WindowInjection.dll
+              ./${{ env.build_output_dir }}/privacy-background.ini
+              ./${{ env.build_output_dir }}/set-privacy-background.ps1
+              ./${{ env.build_output_dir }}/privacy-background.md

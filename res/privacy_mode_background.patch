@@ -1,0 +1,65 @@
+diff --git a/WindowInjection/dllmain.cpp b/WindowInjection/dllmain.cpp
+index 0f07aab..04832a4 100644
+--- a/WindowInjection/dllmain.cpp
++++ b/WindowInjection/dllmain.cpp
+@@ -10,6 +10,7 @@
+ 
+ #include "./img.h"
+ #include "./bitmap_loader.h"
++#include "./privacy_background.h"
+ 
+ #pragma comment(lib, "gdi32.lib")
+ 
+@@ -110,6 +111,24 @@ BitmapLoader g_bitmapLoader(false);
+ #else
+ BitmapLoader g_bitmapLoader(true);
+ #endif
++PrivacyBackground g_background;
++
++void ReloadPrivacyBackground()
++{
++	std::vector<wchar_t> path(32768);
++	const auto length = GetModuleFileNameW(g_module, path.data(), static_cast<DWORD>(path.size()));
++	if (length == 0 || length >= path.size())
++	{
++		OutputDebugStringW(L"RustDesk: cannot locate privacy background configuration.\n");
++		return;
++	}
++	const std::wstring filename(path.data(), length);
++	const auto separator = filename.find_last_of(L"\\/");
++	if (separator != std::wstring::npos)
++	{
++		g_background.Reload(filename.substr(0, separator));
++	}
++}
+ 
+ // Mainly from https://github.com/microsoft/Windows-classic-samples/blob/67a8cddc25880ebc64018e833f0bf51589fd4521/Samples/Win7Samples/winui/shell/appshellintegration/NotificationIcon/NotificationIcon.cpp#L360
+ VOID OnPaintGdi(HWND hwnd, HDC hdc);
+@@ -650,6 +669,7 @@ bool HandlePrivacyThreadMessage(UINT message)
+ 		(void)RefreshPrivacyWindows(g_module, g_zbid);
+ 		return true;
+ 	case WM_RUSTDESK_SHOW_WINDOWS:
++		ReloadPrivacyBackground();
+ 		SetPrivacyWindowsVisible(true);
+ 		return true;
+ 	case WM_RUSTDESK_HIDE_WINDOWS:
+@@ -719,6 +739,7 @@ DWORD WINAPI UwU(LPVOID lpParam)
+ 	{
+ 		return FinishPrivacyThread(0);
+ 	}
++	ReloadPrivacyBackground();
+ 
+ #ifndef WINDOWINJECTION_EXPORTS
+ 	for (auto hwnd : g_hwnds)
+@@ -796,6 +817,11 @@ VOID OnPaintGdiPlus(HWND hwnd, HDC hdc)
+ 	{
+ 		return;
+ 	}
++	RECT client;
++	if (GetClientRect(hwnd, &client) && g_background.Paint(hdc, client))
++	{
++		return;
++	}
+ 
+ 	auto bitmap = g_bitmapLoader.GetBitmap();
+ 	if (bitmap)
