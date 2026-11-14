@@ -1633,6 +1633,7 @@ class InputModel {
   }
 
   void _syncCursorBeforeScrollIfNeeded(PointerEvent e) {
+    if (_relativeMouse.enabled.value) return;
     if (!_pointerMovedAfterEnter && !(isViewOnly && !showMyCursor)) {
       final canvasPosition = _pointerPositionForRemoteCanvas(e);
       handleMouse(getMouseEventMove(), canvasPosition,
