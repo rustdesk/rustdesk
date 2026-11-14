@@ -1,0 +1,5 @@
+{"trace": "soft-keyboard", "v": 1, "level": "full", "platform": "ios", "interpreter": "legacy-ios", "synthetic": true, "note": "Hand-written. #16632 with the old handler: the first letter is sent and taken back.", "initial": {"lead": 1024, "rest": "", "sel": [1024, 1024], "comp": [-1, -1]}}
+{"n": 1, "lead": 1024, "rest": "n", "sel": [1025, 1025], "comp": [1024, 1025], "act": [["text", "n"]]}
+{"n": 2, "lead": 1024, "rest": "ni", "sel": [1026, 1026], "comp": [1024, 1026], "act": []}
+{"n": 3, "lead": 1024, "rest": "nihao", "sel": [1029, 1029], "comp": [1024, 1029], "act": []}
+{"n": 4, "lead": 1024, "rest": "你好", "sel": [1026, 1026], "comp": [-1, -1], "act": [["bs", 1], ["text", "你好"]]}

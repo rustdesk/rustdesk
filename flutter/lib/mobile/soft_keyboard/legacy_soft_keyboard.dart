@@ -43,7 +43,8 @@ LegacyTailDiff legacyTailDiff(String oldValue, String newValue) {
 /// `_handleIOSSoftKeyboardInput` as it was in `remote_page.dart`, returning
 /// actions instead of sending them.
 ///
-/// Do not fix bugs here.
+/// Kept as the fallback and as the reference the new interpreter is compared
+/// against in tests. Do not fix bugs here.
 class LegacyIosSoftKeyboard implements SoftKeyboardInterpreter {
   LegacyIosSoftKeyboard(TextEditingValue initial)
       : _value = initial.text,
@@ -54,6 +55,9 @@ class LegacyIosSoftKeyboard implements SoftKeyboardInterpreter {
 
   @override
   String get name => 'legacy-ios';
+
+  @override
+  String? get lastNote => null;
 
   @override
   List<SoftKeyboardAction> update(TextEditingValue value) {
@@ -90,7 +94,8 @@ class LegacyIosSoftKeyboard implements SoftKeyboardInterpreter {
 /// `_handleNonIOSSoftKeyboardInput` as it was in `remote_page.dart`, returning
 /// actions instead of sending them.
 ///
-/// Do not fix bugs here.
+/// Kept as the default on Android and as the reference the new interpreter is
+/// compared against in tests. Do not fix bugs here.
 class LegacyAndroidSoftKeyboard implements SoftKeyboardInterpreter {
   LegacyAndroidSoftKeyboard(TextEditingValue initial) : _value = initial.text;
 
@@ -98,6 +103,9 @@ class LegacyAndroidSoftKeyboard implements SoftKeyboardInterpreter {
 
   @override
   String get name => 'legacy-android';
+
+  @override
+  String? get lastNote => null;
 
   @override
   List<SoftKeyboardAction> update(TextEditingValue value) {

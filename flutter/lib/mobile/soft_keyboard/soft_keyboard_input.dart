@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'soft_keyboard_actions.dart';
 import 'soft_keyboard_dispatcher.dart';
+import 'soft_keyboard_trace.dart';
 
 /// Connects the hidden text field to an interpreter and a dispatcher.
 ///
@@ -17,7 +18,9 @@ class SoftKeyboardInput {
     required this.dispatcher,
     required this.isAllowed,
     required this.reopenKeyboard,
-  });
+    this.platform = 'other',
+    SoftKeyboardTrace? trace,
+  }) : _trace = trace ?? SoftKeyboardTrace();
 
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -25,7 +28,8 @@ class SoftKeyboardInput {
   /// What the field holds when nothing has been typed.
   final String sentinel;
 
-  /// Creates the interpreter to use from now on. Called on every [refill].
+  /// Creates the interpreter to use from now on. Called on every [refill], so
+  /// a change of the setting never takes effect in the middle of typing.
   final SoftKeyboardInterpreter Function(TextEditingValue initial)
       createInterpreter;
 
@@ -38,6 +42,10 @@ class SoftKeyboardInput {
   /// asks for it.
   final VoidCallback reopenKeyboard;
 
+  /// Recorded in traces.
+  final String platform;
+
+  final SoftKeyboardTrace _trace;
   late SoftKeyboardInterpreter _interpreter;
 
   /// Whether the field still is as the last [refill] left it.
@@ -67,6 +75,7 @@ class SoftKeyboardInput {
     // not taken for input.
     final initial = TextEditingValue(text: sentinel);
     _interpreter = createInterpreter(initial);
+    _trace.start(_interpreter, initial, platform: platform);
     controller.value = initial;
     _untouched = true;
   }
@@ -81,7 +90,9 @@ class SoftKeyboardInput {
     if (!focusNode.hasFocus) return;
     _untouched = false;
     if (!isAllowed()) return;
-    final actions = _interpreter.update(controller.value);
+    final value = controller.value;
+    final actions = _interpreter.update(value);
+    _trace.record(value, actions, note: _interpreter.lastNote);
     dispatcher.dispatch(actions);
     for (final action in actions) {
       switch (action) {

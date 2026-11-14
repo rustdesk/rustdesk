@@ -1,0 +1,5 @@
+{"trace": "soft-keyboard", "v": 1, "level": "full", "platform": "ios", "interpreter": "hold+tail", "synthetic": true, "note": "Hand-written. English without a composing range; the last word is replaced.", "initial": {"lead": 1024, "rest": "", "sel": [1024, 1024], "comp": [-1, -1]}}
+{"n": 1, "lead": 1024, "rest": "t", "sel": [1025, 1025], "comp": [-1, -1], "act": [["text", "t"]]}
+{"n": 2, "lead": 1024, "rest": "te", "sel": [1026, 1026], "comp": [-1, -1], "act": [["text", "e"]]}
+{"n": 3, "lead": 1024, "rest": "teh", "sel": [1027, 1027], "comp": [-1, -1], "act": [["text", "h"]]}
+{"n": 4, "lead": 1024, "rest": "the ", "sel": [1028, 1028], "comp": [-1, -1], "act": [["bs", 2], ["text", "he "]]}

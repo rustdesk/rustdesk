@@ -1,0 +1,7 @@
+{"trace": "soft-keyboard", "v": 1, "level": "full", "platform": "android", "interpreter": "forward+mirror", "synthetic": true, "note": "Hand-written. Hangul: the syllable being typed is replaced in place, without a composing range.", "initial": {"lead": 1024, "rest": "", "sel": [1024, 1024], "comp": [-1, -1]}}
+{"n": 1, "lead": 1024, "rest": "ㅇ", "sel": [1025, 1025], "comp": [-1, -1], "act": [["text", "ㅇ"]]}
+{"n": 2, "lead": 1024, "rest": "아", "sel": [1025, 1025], "comp": [-1, -1], "act": [["bs", 1], ["text", "아"]]}
+{"n": 3, "lead": 1024, "rest": "안", "sel": [1025, 1025], "comp": [-1, -1], "act": [["bs", 1], ["text", "안"]]}
+{"n": 4, "lead": 1024, "rest": "안ㄴ", "sel": [1026, 1026], "comp": [-1, -1], "act": [["text", "ㄴ"]]}
+{"n": 5, "lead": 1024, "rest": "안녀", "sel": [1026, 1026], "comp": [-1, -1], "act": [["bs", 1], ["text", "녀"]]}
+{"n": 6, "lead": 1024, "rest": "안녕", "sel": [1026, 1026], "comp": [-1, -1], "act": [["bs", 1], ["text", "녕"]]}

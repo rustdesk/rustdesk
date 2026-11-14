@@ -72,3 +72,96 @@ List<String> typed(SoftKeyboardInterpreter interpreter, List<String> specs) =>
 
 SoftKeyboardInterpreter legacyIos() => LegacyIosSoftKeyboard(ev(''));
 SoftKeyboardInterpreter legacyAndroid() => LegacyAndroidSoftKeyboard(ev(''));
+SoftKeyboardInterpreter newIos() => SoftKeyboardReducer.ios(ev(''));
+SoftKeyboardInterpreter newAndroid() => SoftKeyboardReducer.android(ev(''));
+
+/// Creates the interpreter a trace was recorded with, from the `interpreter`
+/// field of its header.
+SoftKeyboardInterpreter interpreterByName(
+    String name, TextEditingValue initial) {
+  switch (name) {
+    case 'legacy-ios':
+      return LegacyIosSoftKeyboard(initial);
+    case 'legacy-android':
+      return LegacyAndroidSoftKeyboard(initial);
+    case 'hold+tail':
+      return SoftKeyboardReducer.ios(initial);
+    case 'forward+mirror':
+      return SoftKeyboardReducer.android(initial);
+    case 'hold+mirror':
+      // Not used by the app. Holding composing text on Android needs a way
+      // to tell a keyboard that only composes real compositions from one
+      // that also composes plain words.
+      return SoftKeyboardReducer(
+        policy: ComposingPolicy.hold,
+        diff: MirrorSoftKeyboardDiff(),
+        initial: initial,
+      );
+  }
+  throw ArgumentError.value(name, 'name', 'unknown soft keyboard interpreter');
+}
+
+/// The inverse of [encodeSoftKeyboardValue] for values encoded with text.
+TextEditingValue decodeValue(Map<String, Object?> json) {
+  final sel = (json['sel'] as List).cast<int>();
+  final comp = (json['comp'] as List).cast<int>();
+  return TextEditingValue(
+    text: kSoftKeyboardSentinelChar * (json['lead'] as int) +
+        (json['rest'] as String),
+    selection: TextSelection(baseOffset: sel[0], extentOffset: sel[1]),
+    composing: TextRange(start: comp[0], end: comp[1]),
+  );
+}
+
+/// The inverse of [encodeSoftKeyboardActions] for actions encoded with text.
+List<SoftKeyboardAction> decodeActions(List<Object?> json) {
+  return [
+    for (final action in json.cast<List>())
+      switch (action[0]) {
+        'bs' => SoftKeyboardBackspace(action[1] as int),
+        'text' => SoftKeyboardText(action[1] as String),
+        'reset' => const SoftKeyboardResetField(),
+        'set' => SoftKeyboardSetField(
+            decodeValue((action[1] as Map).cast<String, Object?>())),
+        _ => throw FormatException('unknown soft keyboard action: $action'),
+      }
+  ];
+}
+
+/// A stand-in for the remote text field: Backspace deletes before the caret,
+/// which is at the end, and text is appended.
+class RemoteText {
+  RemoteText({required this.backspaceDeletesCodePoint});
+
+  /// Whether Backspace deletes a whole code point, or one UTF-16 code unit.
+  /// The old iOS tail diff counts code units.
+  final bool backspaceDeletesCodePoint;
+
+  String text = '';
+
+  /// Backspaces that found nothing to delete: they went past what was typed.
+  int overrun = 0;
+
+  void apply(List<SoftKeyboardAction> actions) {
+    for (final action in actions) {
+      switch (action) {
+        case SoftKeyboardBackspace(:final count):
+          for (var i = 0; i < count; i++) {
+            if (text.isEmpty) {
+              overrun++;
+            } else if (backspaceDeletesCodePoint) {
+              final runes = text.runes.toList()..removeLast();
+              text = String.fromCharCodes(runes);
+            } else {
+              text = text.substring(0, text.length - 1);
+            }
+          }
+        case SoftKeyboardText(:final text):
+          this.text += text;
+        case SoftKeyboardResetField():
+        case SoftKeyboardSetField():
+          break;
+      }
+    }
+  }
+}

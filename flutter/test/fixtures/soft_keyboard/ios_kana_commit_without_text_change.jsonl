@@ -1,0 +1,7 @@
+{"trace": "soft-keyboard", "v": 1, "level": "full", "platform": "ios", "interpreter": "hold+tail", "synthetic": true, "note": "Hand-written. Romaji: the kana are accepted as they are, so the commit only clears the composing range.", "initial": {"lead": 1024, "rest": "", "sel": [1024, 1024], "comp": [-1, -1]}}
+{"n": 1, "lead": 1024, "rest": "あ", "sel": [1025, 1025], "comp": [1024, 1025], "act": []}
+{"n": 2, "lead": 1024, "rest": "あり", "sel": [1026, 1026], "comp": [1024, 1026], "act": []}
+{"n": 3, "lead": 1024, "rest": "ありが", "sel": [1027, 1027], "comp": [1024, 1027], "act": []}
+{"n": 4, "lead": 1024, "rest": "ありがと", "sel": [1028, 1028], "comp": [1024, 1028], "act": []}
+{"n": 5, "lead": 1024, "rest": "ありがとう", "sel": [1029, 1029], "comp": [1024, 1029], "act": []}
+{"n": 6, "lead": 1024, "rest": "ありがとう", "sel": [1029, 1029], "comp": [-1, -1], "act": [["text", "ありがとう"]]}

@@ -1,0 +1,8 @@
+{"trace": "soft-keyboard", "v": 1, "level": "full", "platform": "ios", "interpreter": "hold+tail", "synthetic": true, "note": "Hand-written. Pinyin: the first candidate is picked while the rest is still composing.", "initial": {"lead": 1024, "rest": "", "sel": [1024, 1024], "comp": [-1, -1]}}
+{"n": 1, "lead": 1024, "rest": "n", "sel": [1025, 1025], "comp": [1024, 1025], "act": []}
+{"n": 2, "lead": 1024, "rest": "ni", "sel": [1026, 1026], "comp": [1024, 1026], "act": []}
+{"n": 3, "lead": 1024, "rest": "nih", "sel": [1027, 1027], "comp": [1024, 1027], "act": []}
+{"n": 4, "lead": 1024, "rest": "niha", "sel": [1028, 1028], "comp": [1024, 1028], "act": []}
+{"n": 5, "lead": 1024, "rest": "nihao", "sel": [1029, 1029], "comp": [1024, 1029], "act": []}
+{"n": 6, "lead": 1024, "rest": "你hao", "sel": [1028, 1028], "comp": [1025, 1028], "act": [["text", "你"]]}
+{"n": 7, "lead": 1024, "rest": "你好", "sel": [1026, 1026], "comp": [-1, -1], "act": [["text", "好"]]}

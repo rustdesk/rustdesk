@@ -119,14 +119,18 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     controller: _textController,
     focusNode: _mobileFocusNode,
     sentinel: initText,
-    createInterpreter: (initial) =>
-        createSoftKeyboardInterpreter(isIOS: isIOS, initial: initial),
+    createInterpreter: (initial) => createSoftKeyboardInterpreter(
+      isIOS: isIOS,
+      useReducer: bind.mainGetLocalOption(key: kOptionMobileImeInput) == 'Y',
+      initial: initial,
+    ),
     dispatcher: SoftKeyboardDispatcher(
       sendBackspace: () => inputModel.inputKey('VK_BACK'),
       sendText: _sendSoftKeyboardText,
     ),
     isAllowed: () => inputModel.keyboardInputAllowed,
     reopenKeyboard: _openKeyboardUnlocked,
+    platform: isIOS ? 'ios' : (isAndroid ? 'android' : 'other'),
   );
 
   _RemotePageState(String id) {

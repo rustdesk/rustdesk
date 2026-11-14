@@ -1,0 +1,4 @@
+{"trace": "soft-keyboard", "v": 1, "level": "full", "platform": "android", "interpreter": "legacy-android", "synthetic": true, "note": "Hand-written. #7727 with the old handler: a replacement of equal length sends nothing.", "initial": {"lead": 1024, "rest": "", "sel": [1024, 1024], "comp": [-1, -1]}}
+{"n": 1, "lead": 1024, "rest": "ㅇ", "sel": [1025, 1025], "comp": [-1, -1], "act": [["text", "ㅇ"]]}
+{"n": 2, "lead": 1024, "rest": "아", "sel": [1025, 1025], "comp": [-1, -1], "act": []}
+{"n": 3, "lead": 1024, "rest": "안", "sel": [1025, 1025], "comp": [-1, -1], "act": []}

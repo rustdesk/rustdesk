@@ -119,6 +119,11 @@ abstract class SoftKeyboardInterpreter {
   /// Must be called for every value the controller reports, including the
   /// ones where only the selection or the composing range changed.
   List<SoftKeyboardAction> update(TextEditingValue value);
+
+  /// Why the last [update] did not mirror the local edit, if it did not.
+  ///
+  /// Diagnostic only; recorded in traces.
+  String? get lastNote;
 }
 
 String _escape(String s) => s.replaceAll('\n', r'\n');

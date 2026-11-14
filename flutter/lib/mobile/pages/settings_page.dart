@@ -75,6 +75,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _enableStartOnBoot = false;
   var _checkUpdateOnStartup = false;
   var _showTerminalExtraKeys = false;
+  var _mobileImeInput = false;
   var _floatingWindowDisabled = false;
   var _keepScreenOn = KeepScreenOn.duringControlled; // relay on floating window
   var _enableAbr = false;
@@ -155,6 +156,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         mainGetLocalBoolOptionSync(kOptionKeepAwakeDuringOutgoingSessions);
     _showTerminalExtraKeys =
         mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+    _mobileImeInput =
+        bind.mainGetLocalOption(key: kOptionMobileImeInput) == 'Y';
   }
 
   @override
@@ -932,6 +935,22 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   if (mounted) setState(() {});
                 });
               },
+            ),
+          if (!incomingOnly)
+            SettingsTile.switchTile(
+              title: Text(translate('Improved input method (IME) handling')),
+              initialValue: _mobileImeInput,
+              onToggle: isOptionFixed(kOptionMobileImeInput)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(kOptionMobileImeInput, v);
+                      final newValue =
+                          bind.mainGetLocalOption(key: kOptionMobileImeInput) ==
+                              'Y';
+                      setState(() {
+                        _mobileImeInput = newValue;
+                      });
+                    },
             ),
           if (!bind.isDisableAccount())
             SettingsTile.switchTile(

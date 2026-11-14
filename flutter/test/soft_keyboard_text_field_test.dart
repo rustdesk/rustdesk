@@ -43,6 +43,7 @@ void main() {
       ),
       isAllowed: () => allowed,
       reopenKeyboard: () => reopened++,
+      trace: SoftKeyboardTrace(level: SoftKeyboardTraceLevel.off),
     );
     // On the remote page the input is attached long before the field exists.
     if (attachBeforeField) input.attach();
@@ -229,6 +230,98 @@ void main() {
     await type(tester, ev('ab'));
     expect(out, ['a']);
   });
+
+  // With the interpreters that know about composing text.
+
+  testWidgets(
+      'a commit that leaves the text as it is reaches the controller but not onChanged',
+      (tester) async {
+    await pumpField(tester, SoftKeyboardReducer.ios);
+
+    await type(tester, ev('[あり]'));
+    expect(onChangedCalls, hasLength(1));
+    expect(out, isEmpty);
+
+    await type(tester, ev('あり'));
+    // The text did not change, so onChanged stays silent ...
+    expect(onChangedCalls, hasLength(1));
+    // ... but the controller reports the change, and the text is sent.
+    expect(controller.value.composing, TextRange.empty);
+    expect(out, ['あり']);
+  });
+
+  testWidgets('a composition is sent once, when it is committed',
+      (tester) async {
+    await pumpField(tester, SoftKeyboardReducer.ios);
+
+    for (final spec in ['[n]', '[ni]', '[nihao]', '你[hao]', '你好', '你好\n']) {
+      await type(tester, ev(spec));
+    }
+    expect(out, ['你', '好', '\n']);
+  });
+
+  testWidgets('composing text is dropped when the field loses focus',
+      (tester) async {
+    await pumpField(tester, SoftKeyboardReducer.ios);
+
+    await type(tester, ev('ab'));
+    await type(tester, ev('ab[nihao]'));
+    expect(out, ['ab']);
+
+    // The framework clears the composing range of a field that loses focus
+    // and keeps the text. That is not the keyboard committing the letters.
+    focusNode.unfocus();
+    await tester.pump();
+    expect(out, ['ab']);
+    // The field starts over, so the letters cannot come back later either.
+    expect(controller.value, TextEditingValue(text: sentinel));
+
+    await tester.showKeyboard(find.byType(TextFormField));
+    await type(tester, ev('[ni]'));
+    await type(tester, ev('你'));
+    expect(out, ['ab', '你']);
+    // What was typed before the field lost focus is gone from it, so
+    // Backspace now reaches the sentinel. It still is one Backspace.
+    await type(tester, ev(''));
+    await type(tester, ev('', lead: 1023));
+    expect(out, ['ab', '你', '<BS>', '<BS>']);
+  });
+
+  testWidgets(
+      'composing text is dropped when the field hears of the focus loss first',
+      (tester) async {
+    // Listeners are told in the order they were added. Here the field clears
+    // its composing range before the input has refilled it.
+    await pumpField(tester, SoftKeyboardReducer.ios, attachBeforeField: false);
+
+    await type(tester, ev('[nihao]'));
+    focusNode.unfocus();
+    await tester.pump();
+    expect(out, isEmpty);
+    expect(controller.value, TextEditingValue(text: sentinel));
+  });
+
+  for (final (name, create) in <(String, _Create)>[
+    ('iOS interpreter', SoftKeyboardReducer.ios),
+    ('Android interpreter', SoftKeyboardReducer.android),
+  ]) {
+    testWidgets('refilling the field is not taken for input by the $name',
+        (tester) async {
+      final input = await pumpField(tester, create);
+
+      await type(tester, ev('abc'));
+      expect(out, ['abc']);
+
+      // What the page does when the keyboard is opened again.
+      input.refill();
+      await tester.pump();
+      expect(controller.text, sentinel);
+      expect(out, ['abc']);
+
+      await type(tester, ev('d'));
+      expect(out, ['abc', 'd']);
+    });
+  }
 }
 
 /// Sends a Backspace for every character of padding that goes missing and
@@ -238,6 +331,9 @@ class _Correcting implements SoftKeyboardInterpreter {
 
   @override
   String get name => 'correcting';
+
+  @override
+  String? get lastNote => null;
 
   @override
   List<SoftKeyboardAction> update(TextEditingValue value) {
@@ -254,6 +350,9 @@ class _Correcting implements SoftKeyboardInterpreter {
 class _NeverSatisfied implements SoftKeyboardInterpreter {
   @override
   String get name => 'never satisfied';
+
+  @override
+  String? get lastNote => null;
 
   @override
   List<SoftKeyboardAction> update(TextEditingValue value) => [
