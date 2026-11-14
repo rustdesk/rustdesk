@@ -663,31 +663,47 @@ class InputService : AccessibilityService() {
         // getWindows() lists windows from top to bottom.
         val roots = windows.mapNotNull { it.root }.ifEmpty { listOfNotNull(rootInActiveWindow) }
         for (root in roots) {
-            val node = findDeepestClickable(root, x, y)
-            if (node != null) {
-                return node
+            val clickable = ArrayList<Pair<AccessibilityNodeInfo, Long>>()
+            val focusable = ArrayList<Pair<AccessibilityNodeInfo, Long>>()
+            collectNodesAt(root, x, y, clickable, focusable)
+            // The smallest node under the pointer is the one the user aimed
+            // at: a menu item, not the full-screen barrier behind the menu.
+            // Clickable nodes win over nodes that are only focusable; on a tie
+            // the deepest node wins.
+            val best = (clickable.ifEmpty { focusable }).asReversed().minByOrNull { it.second }
+            if (best != null) {
+                return best.first
             }
         }
         return null
     }
 
-    private fun findDeepestClickable(node: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
+    private fun collectNodesAt(
+        node: AccessibilityNodeInfo,
+        x: Int,
+        y: Int,
+        clickable: MutableList<Pair<AccessibilityNodeInfo, Long>>,
+        focusable: MutableList<Pair<AccessibilityNodeInfo, Long>>
+    ) {
         val rect = Rect()
         node.getBoundsInScreen(rect)
         // Some apps (Flutter) mark container nodes as not visible while their
         // children are visible, so only bounds decide whether to descend.
         if (!rect.contains(x, y)) {
-            return null
+            return
         }
-        for (i in node.childCount - 1 downTo 0) {
-            val child = node.getChild(i) ?: continue
-            val found = findDeepestClickable(child, x, y)
-            if (found != null) {
-                return found
+        if (node.isVisibleToUser()) {
+            val area = rect.width().toLong() * rect.height()
+            if (node.isClickable()) {
+                clickable.add(Pair(node, area))
+            } else if (node.isFocusable()) {
+                focusable.add(Pair(node, area))
             }
         }
-        val clickable = node.isClickable() || node.isFocusable()
-        return if (clickable && node.isVisibleToUser()) node else null
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectNodesAt(child, x, y, clickable, focusable)
+        }
     }
 
     private fun isScreenSized(rect: Rect): Boolean {
