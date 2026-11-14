@@ -47,6 +47,8 @@ const val LEFT_UP = 10
 const val RIGHT_UP = 18
 // (BUTTON_BACK << 3) | BUTTON_UP
 const val BACK_UP = 66
+// (BUTTON_FORWARD << 3) | BUTTON_UP
+const val FORWARD_UP = 130
 const val WHEEL_BUTTON_DOWN = 33
 const val WHEEL_BUTTON_UP = 34
 const val WHEEL_DOWN = 523331
@@ -60,6 +62,10 @@ const val MOUSE_TYPE_WHEEL = 3
 // WHEEL_STEP; tuned on real devices during review (the full 120px felt too
 // far per tick).
 const val MOUSE_WHEEL_STEP = 90
+// Android TV: pointer travel per drag scroll step, and the minimum time
+// between wheel scroll steps.
+const val TV_DRAG_STEP = 150
+const val TV_SCROLL_INTERVAL = 120L
 
 const val TOUCH_SCALE_START = 1
 const val TOUCH_SCALE = 2
@@ -110,6 +116,11 @@ class InputService : AccessibilityService() {
     @Volatile private var tvTapPending = false
     private var tvTapDownX = 0
     private var tvTapDownY = 0
+    // On Android TV a drag scrolls with accessibility actions, because the
+    // TV ignores injected touch gestures.
+    private var tvDragScroll = false
+    private var tvDragLastY = 0
+    private var lastTvScrollTime = 0L
     // 100(tap timeout) + 400(long press timeout)
     private val longPressDuration = ViewConfiguration.getTapTimeout().toLong() + ViewConfiguration.getLongPressTimeout().toLong()
 
@@ -188,6 +199,27 @@ class InputService : AccessibilityService() {
                 return
             }
             tvTapPending = false
+            tvDragScroll = true
+            tvDragLastY = tvTapDownY
+        }
+
+        if (tvDragScroll) {
+            if (mask == LEFT_UP) {
+                tvDragScroll = false
+                leftIsDown = false
+                isWaitingLongPress = false
+                return
+            }
+            if (leftIsDown) {
+                // One scroll step per TV_DRAG_STEP pixels of pointer travel.
+                // Dragging up pulls the content up, like a touch screen.
+                val dy = mouseY - tvDragLastY
+                if (abs(dy) >= TV_DRAG_STEP) {
+                    tvDragLastY = mouseY
+                    tvScrollAt(tvTapDownX, tvTapDownY, dy < 0)
+                }
+                return
+            }
         }
 
         // left down, was down
@@ -212,6 +244,25 @@ class InputService : AccessibilityService() {
 
         if (mask == BACK_UP) {
             performGlobalAction(GLOBAL_ACTION_BACK)
+            return
+        }
+
+        // On Android TV the forward side button acts as Enter (D-pad center).
+        if (mask == FORWARD_UP && isTv && Build.VERSION.SDK_INT >= 33) {
+            performGlobalAction(GLOBAL_ACTION_DPAD_CENTER)
+            return
+        }
+
+        // On Android TV the wheel scrolls the view under the pointer with
+        // accessibility actions, because the TV ignores injected swipes.
+        if (mask == MOUSE_TYPE_WHEEL && isTv) {
+            if (_y != 0) {
+                val now = System.currentTimeMillis()
+                if (now - lastTvScrollTime >= TV_SCROLL_INTERVAL) {
+                    lastTvScrollTime = now
+                    tvScrollAt(mouseX, mouseY, _y < 0)
+                }
+            }
             return
         }
 
@@ -703,6 +754,55 @@ class InputService : AccessibilityService() {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectNodesAt(child, x, y, clickable, focusable)
+        }
+    }
+
+    // Scrolls the smallest scrollable node under (x, y); [forward] moves the
+    // content toward its end. Falls back to D-pad up/down, which moves focus
+    // and scrolls focused lists.
+    private fun tvScrollAt(x: Int, y: Int, forward: Boolean) {
+        val action = if (forward) {
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+        } else {
+            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        }
+        val roots = windows.mapNotNull { it.root }.ifEmpty { listOfNotNull(rootInActiveWindow) }
+        for (root in roots) {
+            val found = ArrayList<Pair<AccessibilityNodeInfo, Long>>()
+            collectScrollableAt(root, x, y, found)
+            for ((node, _) in found.asReversed().sortedBy { it.second }) {
+                if (node.performAction(action)) {
+                    Log.d(logTag, "tv scroll x:$x y:$y forward:$forward node:${node.className}")
+                    return
+                }
+            }
+            if (found.isNotEmpty()) {
+                break
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            val ok = performGlobalAction(if (forward) GLOBAL_ACTION_DPAD_DOWN else GLOBAL_ACTION_DPAD_UP)
+            Log.d(logTag, "tv scroll x:$x y:$y forward:$forward dpad ok:$ok")
+        }
+    }
+
+    private fun collectScrollableAt(
+        node: AccessibilityNodeInfo,
+        x: Int,
+        y: Int,
+        found: MutableList<Pair<AccessibilityNodeInfo, Long>>
+    ) {
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        if (!rect.contains(x, y)) {
+            return
+        }
+        if (node.isScrollable() && node.isVisibleToUser()) {
+            found.add(Pair(node, rect.width().toLong() * rect.height()))
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectScrollableAt(child, x, y, found)
         }
     }
 
