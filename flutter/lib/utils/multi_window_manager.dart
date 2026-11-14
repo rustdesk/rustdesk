@@ -522,6 +522,8 @@ class RustDeskMultiWindowManager {
     }
   }
 
+  List<int> get remoteDesktopWindows => List.of(_remoteDesktopWindows);
+
   Set<int> getActiveWindows() {
     return _activeWindows;
   }

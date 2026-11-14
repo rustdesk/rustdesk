@@ -4435,7 +4435,7 @@ pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
 /// * `p` - The password.
 /// * `activate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
-fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
+pub(crate) fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
     let input_password = !p.is_empty();
     if activate {
         // Click event is used to bring up the password input box.
@@ -4478,7 +4478,7 @@ pub fn auto_login(p: String, pi: &PeerInfo, interface: impl Interface) {
 }
 
 /// Windows and macOS peers from the 1.5.1 release handle `os_login`.
-fn is_peer_handling_os_login(pi: &PeerInfo) -> bool {
+pub(crate) fn is_peer_handling_os_login(pi: &PeerInfo) -> bool {
     (pi.platform == crate::common::PLATFORM_WINDOWS || pi.platform == crate::common::PLATFORM_MACOS)
         && hbb_common::get_version_number(&pi.version) >= hbb_common::get_version_number("1.5.1")
 }
