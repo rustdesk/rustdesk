@@ -2688,13 +2688,21 @@ impl VideoHandler {
     #[inline]
     pub fn handle_frame(
         &mut self,
-        vf: VideoFrame,
+        mut vf: VideoFrame,
         pixelbuffer: &mut bool,
         chroma: &mut Option<Chroma>,
     ) -> ResultType<bool> {
         let format = CodecFormat::from(&vf);
         if format != self.decoder.format() {
             self.reset(Some(format));
+        }
+        if self.first_frame && self.decoder.valid() {
+            if let Some(video_frame::Union::Vp9s(batch)) = &mut vf.union {
+                let Some(keyframe) = batch.frames.iter().position(|frame| frame.key) else {
+                    return Ok(false);
+                };
+                batch.frames.drain(..keyframe);
+            }
         }
         match &vf.union {
             Some(frame) => {
@@ -2771,6 +2779,47 @@ impl VideoHandler {
         }
 
         self.record = start;
+    }
+}
+
+#[cfg(test)]
+mod vp9_reset_tests {
+    use super::*;
+    use scrap::{
+        codec::{EncoderApi, EncoderCfg},
+        vpxcodec::{VpxEncoder, VpxEncoderConfig, VpxVideoCodecId},
+        EncodeInput,
+    };
+
+    #[test]
+    fn vp9_reset_waits_for_keyframe_then_resumes_decoding() {
+        let config = EncoderCfg::VPX(VpxEncoderConfig {
+            width: 64,
+            height: 64,
+            quality: 1.0,
+            codec: VpxVideoCodecId::VP9,
+            keyframe_interval: None,
+        });
+        let mut encoder = VpxEncoder::new(config, false).unwrap();
+        let format = encoder.yuvfmt();
+        let yuv = vec![128; format.v + format.stride[2] * format.h / 2];
+        let mut encode = |ms| encoder.encode_to_message(EncodeInput::YUV(&yuv), ms).unwrap();
+        let (key, delta) = (encode(0), encode(33));
+        assert!(key.vp9s().frames[0].key);
+        assert!(!delta.vp9s().frames[0].key);
+
+        let decode = |handler: &mut VideoHandler, frame| {
+            handler.handle_frame(frame, &mut true, &mut None).unwrap()
+        };
+        let mut handler = VideoHandler::new(CodecFormat::VP9, 0);
+        assert!(decode(&mut handler, key.clone()));
+        handler.reset(None);
+        assert!(!decode(&mut handler, delta.clone()));
+
+        let mut batch = delta.clone();
+        batch.mut_vp9s().frames.extend(key.vp9s().frames.iter().cloned());
+        assert!(decode(&mut handler, batch));
+        assert!(decode(&mut handler, delta));
     }
 }
 
@@ -4080,6 +4129,17 @@ pub fn start_video_thread<F, T>(
                                         &mut count,
                                         &mut duration,
                                     );
+                                }
+                                Ok(false)
+                                    if format == CodecFormat::VP9 && handler.first_frame =>
+                                {
+                                    // Reuse the refresh gate to request one keyframe and discard
+                                    // queued dependent frames until it arrives.
+                                    let already_waiting =
+                                        std::mem::replace(&mut *discard_queue.write().unwrap(), true);
+                                    if !already_waiting {
+                                        session.refresh_video(display as _);
+                                    }
                                 }
                                 Err(e) => {
                                     // This is a simple workaround.
