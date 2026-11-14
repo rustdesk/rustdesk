@@ -21,6 +21,8 @@ import android.widget.EditText
 import android.view.accessibility.AccessibilityEvent
 import android.view.ViewGroup.LayoutParams
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
+import android.provider.Settings
 import android.view.KeyEvent as KeyEventAndroid
 import android.view.ViewConfiguration
 import android.graphics.Rect
@@ -190,6 +192,13 @@ class InputService : AccessibilityService() {
                 tvTapPending = false
                 leftIsDown = false
                 isWaitingLongPress = false
+                // A click on the screensaver (Ambient mode) only wakes the
+                // TV, like a remote button press.
+                if (isScreensaverShowing()) {
+                    val ok = performGlobalAction(GLOBAL_ACTION_BACK)
+                    Log.d(logTag, "tv click on screensaver, back ok:$ok")
+                    return
+                }
                 if (!tryClickNodeAt(tvTapDownX, tvTapDownY)) {
                     endGesture(mouseX, mouseY)
                 }
@@ -672,6 +681,24 @@ class InputService : AccessibilityService() {
             Log.d(logTag, "dpad keyCode:${event.keyCode} globalAction:$action ok:$ok")
         }
         return true
+    }
+
+    // Package of the configured screensaver, for example Google TV Ambient
+    // mode (com.google.android.apps.tv.dreamx).
+    private val screensaverPackage: String? by lazy {
+        try {
+            Settings.Secure.getString(contentResolver, "screensaver_components")
+                ?.split(',')?.firstOrNull()?.substringBefore('/')?.ifEmpty { null }
+        } catch (e: Exception) {
+            null
+        } ?: "com.google.android.apps.tv.dreamx"
+    }
+
+    // True when the top application window belongs to the screensaver.
+    private fun isScreensaverShowing(): Boolean {
+        val top = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+        val pkg = (top?.root ?: rootInActiveWindow)?.packageName?.toString()
+        return pkg != null && pkg == screensaverPackage
     }
 
     // Clicks the view under (x, y) with accessibility actions. Android TV
