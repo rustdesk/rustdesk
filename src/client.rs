@@ -2098,6 +2098,7 @@ impl ClientClipboardHandler {
 
             if check_text && self.is_text_required() {
                 if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Client, false) {
+                    crate::clipboard::remember_sent_clipboards(&msg);
                     self.send_msg(msg, false);
                 }
             }

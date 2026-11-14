@@ -794,6 +794,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     return true;
                 }
                 if let Some(msg) = msg {
+                    crate::clipboard::remember_sent_clipboards(&msg);
                     allow_err!(peer.send(&msg).await);
                 }
             }
@@ -1860,6 +1861,15 @@ impl<T: InvokeUiSession> Remote<T> {
                         let lc = self.handler.lc.read().unwrap();
                         !lc.disable_clipboard.v && !lc.view_only.v
                     };
+                    // The peer can send back the content it has just received from us. Applying
+                    // it empties the local clipboard, which breaks copy and paste in the
+                    // application that copied it. https://github.com/rustdesk/rustdesk/issues/16291
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if clipboard_allowed
+                        && crate::clipboard::is_recently_sent_clipboards(std::slice::from_ref(&cb))
+                    {
+                        return true;
+                    }
                     if clipboard_allowed {
                         #[cfg(all(
                             feature = "flutter",
@@ -1898,6 +1908,12 @@ impl<T: InvokeUiSession> Remote<T> {
                         let lc = self.handler.lc.read().unwrap();
                         !lc.disable_clipboard.v && !lc.view_only.v
                     };
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if clipboard_allowed
+                        && crate::clipboard::is_recently_sent_clipboards(&_mcb.clipboards)
+                    {
+                        return true;
+                    }
                     if clipboard_allowed {
                         #[cfg(all(
                             feature = "flutter",

@@ -315,6 +315,144 @@ pub fn update_clipboard(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     });
 }
 
+// The controlled side can send back the content it has just received: it writes the content to
+// its clipboard and reads it again whenever the owner marker is missing or unreadable. Applying
+// such a rebound takes the clipboard from the application that copied it, which breaks copy and
+// paste in applications like Excel. Decide on what was actually sent instead of on the marker,
+// which any process can rewrite. https://github.com/rustdesk/rustdesk/issues/16291
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const SENT_CLIPBOARDS_MAX: usize = 4;
+// Covers a round trip plus the peer's clipboard polling, while a real copy of the same content on
+// the peer is only mistaken for an echo within this window.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+const SENT_CLIPBOARDS_TTL: Duration = Duration::from_secs(2);
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Default)]
+struct SentClipboards {
+    // Per-format fingerprints of each send, oldest first.
+    records: std::collections::VecDeque<(std::time::Instant, Vec<u64>)>,
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+impl SentClipboards {
+    fn remember(&mut self, clipboards: &[Clipboard], now: std::time::Instant) {
+        let fingerprints: Vec<u64> = clipboard_fingerprints(clipboards)
+            .into_iter()
+            .map(|(fingerprint, _)| fingerprint)
+            .collect();
+        if fingerprints.is_empty() {
+            return;
+        }
+        self.records.push_back((now, fingerprints));
+        while self.records.len() > SENT_CLIPBOARDS_MAX {
+            self.records.pop_front();
+        }
+    }
+
+    // Returns the formats that matched when `clipboards` came back from what this process sent.
+    fn matched_formats(
+        &mut self,
+        clipboards: &[Clipboard],
+        now: std::time::Instant,
+    ) -> Option<Vec<String>> {
+        self.records
+            .retain(|(sent_at, _)| now.saturating_duration_since(*sent_at) < SENT_CLIPBOARDS_TTL);
+        if self.records.is_empty() {
+            return None;
+        }
+        let incoming = clipboard_fingerprints(clipboards);
+        if incoming.is_empty() {
+            return None;
+        }
+        // Every incoming format has to match one format of the same send, but not the other way
+        // around: a write that fails partway on the peer loses formats from the echo.
+        let is_rebound = self.records.iter().any(|(_, sent)| {
+            incoming
+                .iter()
+                .all(|(fingerprint, _)| sent.contains(fingerprint))
+        });
+        is_rebound.then(|| incoming.into_iter().map(|(_, name)| name).collect())
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
+    static ref SENT_CLIPBOARDS: Mutex<SentClipboards> = Mutex::new(SentClipboards::default());
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn clipboard_fingerprints(clipboards: &[Clipboard]) -> Vec<(u64, String)> {
+    clipboards
+        .iter()
+        .filter_map(clipboard_fingerprint)
+        .collect()
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn clipboard_fingerprint(clipboard: &Clipboard) -> Option<(u64, String)> {
+    use base::message_proto::ClipboardFormat as Format;
+    use std::hash::{Hash, Hasher};
+
+    // Image formats are not a stable set: writing `ImageRgba` also yields PNG and DIBV5 entries
+    // when the clipboard is read back, so only the text-like formats are compared.
+    let name = match clipboard.format.enum_value() {
+        Ok(Format::Text) => "Text".to_owned(),
+        Ok(Format::Html) => "Html".to_owned(),
+        Ok(Format::Rtf) => "Rtf".to_owned(),
+        Ok(Format::Special) if clipboard.special_name == RUSTDESK_CLIPBOARD_OWNER_FORMAT => {
+            return None
+        }
+        Ok(Format::Special) => format!("Special({})", clipboard.special_name),
+        _ => return None,
+    };
+    // `compress` is per message, not part of the content's identity.
+    let content = if clipboard.compress {
+        hbb_common::compress::decompress(&clipboard.content)
+    } else {
+        clipboard.content.to_vec()
+    };
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    clipboard.format.value().hash(&mut hasher);
+    clipboard.special_name.hash(&mut hasher);
+    content.hash(&mut hasher);
+    Some((hasher.finish(), name))
+}
+
+/// Records the clipboard content about to be sent, so it can be recognized if the peer sends it
+/// back.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn remember_sent_clipboards(msg: &Message) {
+    let clipboards: &[Clipboard] = match &msg.union {
+        Some(message::Union::Clipboard(clipboard)) => std::slice::from_ref(clipboard),
+        Some(message::Union::MultiClipboards(multi_clipboards)) => &multi_clipboards.clipboards,
+        _ => return,
+    };
+    SENT_CLIPBOARDS
+        .lock()
+        .unwrap()
+        .remember(clipboards, std::time::Instant::now());
+}
+
+/// Whether `clipboards` is content this process sent to a peer moments ago.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn is_recently_sent_clipboards(clipboards: &[Clipboard]) -> bool {
+    let matched = SENT_CLIPBOARDS
+        .lock()
+        .unwrap()
+        .matched_formats(clipboards, std::time::Instant::now());
+    match matched {
+        Some(formats) => {
+            log::trace!(
+                "Ignored clipboard content sent by this client, matched formats: {}",
+                formats.join(", ")
+            );
+            true
+        }
+        None => false,
+    }
+}
+
 #[cfg(not(target_os = "android"))]
 pub struct ClipboardContext {
     inner: arboard::Clipboard,
@@ -843,6 +981,84 @@ mod rgba_tests {
         assert_eq!(valid_rgba_dimensions(i32::MAX, i32::MAX, 4), None);
         #[cfg(target_pointer_width = "32")]
         assert_eq!(valid_rgba_dimensions(i32::MAX, 2, 0), None);
+    }
+}
+
+#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+mod sent_clipboards_tests {
+    use super::{
+        is_recently_sent_clipboards, remember_sent_clipboards, SentClipboards,
+        RUSTDESK_CLIPBOARD_OWNER_FORMAT,
+    };
+    use base::message_proto::{Clipboard, ClipboardFormat, Message, MultiClipboards};
+    use std::time::{Duration, Instant};
+
+    fn text(content: &str, compress: bool) -> Clipboard {
+        let content = if compress {
+            hbb_common::compress::compress(content.as_bytes())
+        } else {
+            content.as_bytes().to_vec()
+        };
+        Clipboard {
+            compress,
+            content: content.into(),
+            format: ClipboardFormat::Text.into(),
+            ..Default::default()
+        }
+    }
+
+    fn owner_marker() -> Clipboard {
+        Clipboard {
+            content: vec![0b01].into(),
+            format: ClipboardFormat::Special.into(),
+            special_name: RUSTDESK_CLIPBOARD_OWNER_FORMAT.to_owned(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn content_this_client_sent_coming_back_is_recognized() {
+        // Long enough that the content is compressed when it is sent.
+        let cells = "Excel cell ".repeat(64);
+        let mut msg = Message::new();
+        msg.set_multi_clipboards(MultiClipboards {
+            clipboards: vec![text(&cells, true), owner_marker()],
+            ..Default::default()
+        });
+        remember_sent_clipboards(&msg);
+        assert!(is_recently_sent_clipboards(&[text(&cells, false)]));
+        assert!(!is_recently_sent_clipboards(&[text("copied there", false)]));
+    }
+
+    #[test]
+    fn a_late_echo_of_an_older_copy_is_recognized() {
+        let mut sent = SentClipboards::default();
+        let now = Instant::now();
+        sent.remember(&[text("first copy", false)], now);
+        sent.remember(
+            &[text("second copy", false)],
+            now + Duration::from_millis(500),
+        );
+        assert!(sent
+            .matched_formats(
+                &[text("first copy", false)],
+                now + Duration::from_millis(800)
+            )
+            .is_some());
+    }
+
+    #[test]
+    fn content_copied_on_the_peer_is_applied() {
+        let mut sent = SentClipboards::default();
+        let now = Instant::now();
+        sent.remember(&[text("copied here", false)], now);
+        assert!(sent
+            .matched_formats(&[text("copied there", false)], now)
+            .is_none());
+        assert!(sent.matched_formats(&[owner_marker()], now).is_none());
+        assert!(sent
+            .matched_formats(&[text("copied here", false)], now + Duration::from_secs(3))
+            .is_none());
     }
 }
 
