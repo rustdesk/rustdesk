@@ -662,12 +662,18 @@ class LoginWidgetUserPass extends StatelessWidget {
                 controller: username,
                 focusNode: userFocusNode,
                 prefixIcon: DialogTextField.kUsernameIcon,
-                errorText: usernameMsg),
+                errorText: usernameMsg,
+                // The keyboard's action key moves to the password field.
+                textInputAction: TextInputAction.next),
             PasswordWidget(
               controller: pass,
               autoFocus: false,
               reRequestFocus: true,
               errorText: passMsg,
+              // The keyboard's action key logs in, so a TV remote does not
+              // need to reach the button behind the keyboard.
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => onLogin(),
             ),
             // NOT use Offstage to wrap LinearProgressIndicator
             if (isInProgress) const LinearProgressIndicator(),

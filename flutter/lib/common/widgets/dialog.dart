@@ -502,6 +502,8 @@ class DialogTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final int? maxLength;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onSubmitted;
 
   static const kUsernameTitle = 'Username';
   static const kUsernameIcon = Icon(Icons.account_circle_outlined);
@@ -520,6 +522,8 @@ class DialogTextField extends StatelessWidget {
       this.keyboardType,
       this.inputFormatters,
       this.maxLength,
+      this.textInputAction,
+      this.onSubmitted,
       required this.title,
       required this.controller})
       : super(key: key);
@@ -531,7 +535,7 @@ class DialogTextField extends StatelessWidget {
         Expanded(
           child: Column(
             children: [
-              TextField(
+              _dpadFocusTraversal(TextField(
                 decoration: InputDecoration(
                   labelText: title,
                   hintText: hintText,
@@ -547,7 +551,9 @@ class DialogTextField extends StatelessWidget {
                 keyboardType: keyboardType,
                 inputFormatters: inputFormatters,
                 maxLength: maxLength,
-              ),
+                textInputAction: textInputAction,
+                onSubmitted: onSubmitted,
+              )),
               if (errorText != null)
                 Align(
                   alignment: Alignment.centerLeft,
@@ -566,6 +572,24 @@ class DialogTextField extends StatelessWidget {
       ],
     ).paddingSymmetric(vertical: 4.0);
   }
+}
+
+// On Android, up and down arrows (the D-pad of a TV remote) move the focus out
+// of a single-line text field to the field or button above or below it.
+// Without this, the text field keeps these keys and a TV remote cannot reach
+// the next field or the dialog buttons.
+Widget _dpadFocusTraversal(Widget child) {
+  if (!isAndroid) return child;
+  return Shortcuts(
+    shortcuts: const <ShortcutActivator, Intent>{
+      SingleActivator(LogicalKeyboardKey.arrowUp):
+          DirectionalFocusIntent(TraversalDirection.up, ignoreTextFields: false),
+      SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
+          TraversalDirection.down,
+          ignoreTextFields: false),
+    },
+    child: child,
+  );
 }
 
 abstract class ValidationField extends StatelessWidget {
@@ -819,6 +843,8 @@ class PasswordWidget extends StatefulWidget {
     this.errorText,
     this.title,
     this.maxLength,
+    this.textInputAction,
+    this.onSubmitted,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -828,6 +854,8 @@ class PasswordWidget extends StatefulWidget {
   final String? errorText;
   final String? title;
   final int? maxLength;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onSubmitted;
 
   @override
   State<PasswordWidget> createState() => _PasswordWidgetState();
@@ -891,6 +919,8 @@ class _PasswordWidgetState extends State<PasswordWidget> {
       errorText: widget.errorText,
       focusNode: _focusNode,
       maxLength: widget.maxLength,
+      textInputAction: widget.textInputAction,
+      onSubmitted: widget.onSubmitted,
     );
   }
 }
