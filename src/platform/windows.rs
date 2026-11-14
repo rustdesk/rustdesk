@@ -131,6 +131,13 @@ const REG_NAME_WINDOWS_INSTALLER: &str = "WindowsInstaller";
 const MSI_WINDOWS_INSTALLER_VALUE: u32 = 1;
 const MSI_EXIT_SUCCESS_REBOOT_INITIATED: u32 = 1641;
 const MSI_EXIT_SUCCESS_REBOOT_REQUIRED: u32 = 3010;
+// Share the 0x5253_xxxx range of the elevated installer script exit codes, so
+// these continue after the last one taken in installer_shell.rs and
+// verified_update.rs. `elevated_install_failure_reason()` turns a code back
+// into a message, so a duplicate would explain a failure as the wrong one.
+const UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE: u32 = 0x5253_000D;
+const UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE: u32 = 0x5253_000E;
+const UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE: u32 = 0x5253_000F;
 const HKLM_PREFIX: &str = "HKEY_LOCAL_MACHINE\\";
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
@@ -3502,6 +3509,84 @@ fn get_directory_size_kb(path: &str) -> u64 {
     total_size / 1024
 }
 
+/// Batch lines that wait until no `{app_name}.exe` other than the updater is
+/// still running, and abort the update otherwise.
+///
+/// `sc stop` and `taskkill /F` return before the processes are gone, and the
+/// `XCOPY /C` that follows skips files a still-exiting process holds instead of
+/// failing, which leaves `librustdesk.dll` at the old version while the update
+/// reports success.
+///
+/// `/FO CSV` matters: the default table cuts the image name to 25 characters,
+/// so a longer custom client name would never match. The query is checked with
+/// `||` and written to a file because a pipe would hide its exit code and a
+/// failed redirection leaves `ERRORLEVEL` unchanged. `taskkill` runs on every
+/// poll for processes started after the first one.
+fn wait_for_app_exit_cmd(app_name: &str, filter: &str, restore_service_cmd: &str) -> String {
+    format!(
+        "set /a RUSTDESK_EXIT_WAIT=0
+:rustdesk_wait_for_exit
+taskkill /F /IM {app_name}.exe{filter} >nul 2>nul
+tasklist /NH /FO CSV /FI \"IMAGENAME eq {app_name}.exe\"{filter} > \"%RUSTDESK_OUTPUT_DIR%\\tasklist.csv\" || goto rustdesk_exit_query_failed
+find /I \"{app_name}.exe\" \"%RUSTDESK_OUTPUT_DIR%\\tasklist.csv\" >nul
+if errorlevel 2 goto rustdesk_exit_query_failed
+if errorlevel 1 goto rustdesk_exited
+if not errorlevel 0 goto rustdesk_exit_query_failed
+set /a RUSTDESK_EXIT_WAIT+=1
+if %RUSTDESK_EXIT_WAIT% geq 60 goto rustdesk_exit_timeout
+ping -n 2 127.0.0.1 >nul
+goto rustdesk_wait_for_exit
+:rustdesk_exit_query_failed
+set \"RUSTDESK_UPDATE_FAILURE={UPDATE_APP_EXIT_QUERY_FAILURE_EXIT_CODE}\"
+goto rustdesk_abort_update
+:rustdesk_exit_timeout
+set \"RUSTDESK_UPDATE_FAILURE={UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE}\"
+:rustdesk_abort_update
+{restore_service_cmd}
+exit /b %RUSTDESK_UPDATE_FAILURE%
+:rustdesk_exited"
+    )
+}
+
+/// Batch lines that start the service again after `wait_for_app_exit_cmd`
+/// aborted the update.
+///
+/// The SCM refuses to start a service that is still stopping, so the start
+/// waits for STOPPED. RUNNING counts only after STOPPED was seen: before that
+/// it may be the old instance `sc stop` and `taskkill` are taking down. The
+/// state names are part of sc.exe; the layout around them is localized, hence
+/// `findstr` with any number of spaces.
+fn restore_service_after_abort_cmd(app_name: &str) -> String {
+    format!(
+        "set /a RUSTDESK_SERVICE_WAIT=0
+set \"RUSTDESK_SERVICE_STOPPED=\"
+:rustdesk_restore_service
+sc query {app_name} > \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" || goto rustdesk_restore_service_failed
+findstr /R /C:\"1  *STOPPED\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul
+if errorlevel 2 goto rustdesk_restore_service_failed
+if not errorlevel 0 goto rustdesk_restore_service_failed
+if errorlevel 1 goto rustdesk_restore_service_check_running
+set \"RUSTDESK_SERVICE_STOPPED=1\"
+sc start {app_name} >nul
+goto rustdesk_restore_service_next
+:rustdesk_restore_service_check_running
+if not defined RUSTDESK_SERVICE_STOPPED goto rustdesk_restore_service_next
+findstr /R /C:\"4  *RUNNING\" \"%RUSTDESK_OUTPUT_DIR%\\service.txt\" >nul
+if errorlevel 2 goto rustdesk_restore_service_failed
+if not errorlevel 0 goto rustdesk_restore_service_failed
+if not errorlevel 1 goto rustdesk_service_restored
+:rustdesk_restore_service_next
+set /a RUSTDESK_SERVICE_WAIT+=1
+if %RUSTDESK_SERVICE_WAIT% geq 60 goto rustdesk_restore_service_failed
+ping -n 2 127.0.0.1 >nul
+goto rustdesk_restore_service
+:rustdesk_restore_service_failed
+sc start {app_name} >nul
+exit /b {UPDATE_SERVICE_RESTORE_FAILURE_EXIT_CODE}
+:rustdesk_service_restored"
+    )
+}
+
 pub fn update_me(debug: bool) -> ResultType<()> {
     let app_name = crate::get_app_name();
     let src_exe = std::env::current_exe()?.to_string_lossy().to_string();
@@ -3648,11 +3733,22 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
     // while I cannot find them by `tasklist` or the methods above.
     // There's should be 4 processes running: service, server, tray and main window.
     // But only 2 processes are shown in the tasklist.
+    //
+    // `sc stop` and `taskkill /F` do not wait for the processes to exit, see
+    // `wait_for_app_exit_cmd`. A tray or main window can hold the files too, so
+    // this is not limited to a running service.
+    let abort_restore_service_cmd = if is_service_running {
+        restore_service_after_abort_cmd(&app_name)
+    } else {
+        "".to_owned()
+    };
+    let wait_exit_cmd = wait_for_app_exit_cmd(&app_name, &filter, &abort_restore_service_cmd);
     let cmds = format!(
         "
 chcp 65001
 sc stop {app_name}
 taskkill /F /IM {app_name}.exe{filter}
+{wait_exit_cmd}
 {reg_cmd}
 {copy_exe}
 {rename_exe}
