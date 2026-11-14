@@ -7182,6 +7182,7 @@ version = "1.5.3"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
+ "getrandom 0.2.15",
  "md5",
  "native-windows-gui",
  "winapi 0.3.9",
