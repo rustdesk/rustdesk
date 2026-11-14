@@ -1240,7 +1240,9 @@ impl TransferJob {
             let download_path = format!("{}.download", &file_path);
             let digest_path = format!("{}.digest", &file_path);
 
-            let mut f = if Path::new(&download_path).exists() && Path::new(&digest_path).exists() {
+            let mut f = if let Some(DataStream::FileStream(file)) = self.data_stream.take() {
+                file
+            } else if Path::new(&download_path).exists() && Path::new(&digest_path).exists() {
                 // If both download and digest files exist, seek (writer) to the offset
                 // NOTE: same as write path: best-effort symlink validation happened earlier,
                 // but this reopen remains TOCTOU-prone by design for now.
@@ -1739,6 +1741,41 @@ mod tests {
         let mut entry = FileEntry::new();
         entry.name = name.to_string();
         entry
+    }
+
+    #[tokio::test]
+    async fn resumed_send_reads_the_source_despite_staging_siblings() {
+        let dir = TestTempDir::new("rustdesk_resume_source");
+        std::fs::create_dir_all(&dir.path).unwrap();
+        let source = dir.join("source.txt");
+        std::fs::write(&source, b"source contents").unwrap();
+        std::fs::write(dir.join("source.txt.download"), b"unrelated partial").unwrap();
+        std::fs::write(dir.join("source.txt.digest"), b"{}").unwrap();
+        let mut job = TransferJob::new_read(
+            1,
+            JobType::Generic,
+            String::new(),
+            DataSource::FilePath(source),
+            0,
+            false,
+            false,
+            true,
+        )
+        .unwrap();
+        job.init_data_stream_for_cm().await.unwrap();
+        job.confirm(&FileTransferSendConfirmRequest {
+            id: 1,
+            file_num: 0,
+            union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(7)),
+            ..Default::default()
+        })
+        .await;
+        let block = job.read().await.unwrap().unwrap();
+        assert_eq!(block.data.as_ref(), b"contents");
+        assert_eq!(
+            std::fs::read(dir.join("source.txt.download")).unwrap(),
+            b"unrelated partial"
+        );
     }
 
     fn new_validation_job(id: i32) -> TransferJob {
