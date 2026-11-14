@@ -100,8 +100,15 @@ class IosSoftKeyboardInput {
     final hadPrefix = _prefixLength != 0;
     final prefixBackspaces = _updatePrefix(value);
     final committed = _withoutComposingText(value);
+    // Remember local selection/composition changes even if the suffix is unchanged.
     _previousValue = value;
+    // Compare confirmed text after removing padding and marked composition:
+    //   [P]ab{c} -> [P]ab{cd} leaves both committed strings equal to "ab".
+    // No suffix diff is needed, but padding deletion can still affect the peer:
+    //   [P:4] -> [P:3] leaves both strings empty yet needs one Backspace.
     if (committed == _committedText) {
+      // text defaults to ''. Still return padding Backspaces and local corrections.
+      // Prefer a local refill; otherwise keep the correction from _clampSelection.
       return IosKeyboardEdit(
           backspaces: prefixBackspaces,
           localValue: _replenishPrefix(value, hadPrefix) ?? localValue);

@@ -710,6 +710,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   : TextFormField(
                       textInputAction: TextInputAction.newline,
                       autocorrect: false,
+                      // Keep remote commands and passwords literal on iOS.
+                      smartDashesType: isIOS ? SmartDashesType.disabled : null,
+                      smartQuotesType: isIOS ? SmartQuotesType.disabled : null,
                       // Flutter 3.16.9 Android.
                       // `enableSuggestions` causes secure keyboard to be shown.
                       // https://github.com/flutter/flutter/issues/139143
