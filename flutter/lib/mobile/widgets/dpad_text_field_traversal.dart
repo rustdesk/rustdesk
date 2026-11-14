@@ -1,7 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_hbb/common.dart';
 
-/// On Android, lets the up and down arrows (the D-pad of a TV remote) move the
+/// On Android TV, lets the up and down arrows (the D-pad of a TV remote) move the
 /// focus out of a single-line text field to the widget above or below it.
 ///
 /// A focused text field otherwise keeps these keys, so a TV remote cannot
@@ -17,6 +18,10 @@ class DpadTextFieldTraversal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Phones and tablets keep the default arrow key behavior.
+    if (!isAndroidTv) {
+      return child;
+    }
     return Shortcuts(
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.arrowUp):

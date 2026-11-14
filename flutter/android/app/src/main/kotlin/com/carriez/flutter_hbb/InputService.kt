@@ -167,7 +167,7 @@ class InputService : AccessibilityService() {
             isWaitingLongPress = true
             timer.schedule(object : TimerTask() {
                 override fun run() {
-                    if (isWaitingLongPress) {
+                    if (isWaitingLongPress && !tvDragScroll) {
                         isWaitingLongPress = false
                         tvTapPending = false
                         continueGesture(mouseX, mouseY)
@@ -208,6 +208,9 @@ class InputService : AccessibilityService() {
                 return
             }
             tvTapPending = false
+            // A slow drag can pass the touch slop without any single move
+            // cancelling the long press, so cancel it here.
+            isWaitingLongPress = false
             tvDragScroll = true
             tvDragLastY = tvTapDownY
         }
@@ -652,12 +655,12 @@ class InputService : AccessibilityService() {
         return false
     }
 
-    // Android TV and other D-pad devices move focus with D-pad keys, but an
+    // Android TV moves focus with D-pad keys, but an
     // accessibility service cannot inject key events outside a text field.
     // Map arrow, Enter and Escape keys to D-pad global actions instead,
     // unless an editable field has input focus (arrows then move the caret).
     private fun tryHandleDpadKeyEvent(event: KeyEventAndroid): Boolean {
-        if (Build.VERSION.SDK_INT < 33) {
+        if (!isTv || Build.VERSION.SDK_INT < 33) {
             return false
         }
         val action = when (event.keyCode) {
@@ -707,13 +710,6 @@ class InputService : AccessibilityService() {
         val node = findClickableNodeAt(x, y) ?: return false
         val bounds = Rect()
         node.getBoundsInScreen(bounds)
-        // A screen-sized container (for example a Flutter view whose children
-        // were not found) clicks its focused child, not the one under the
-        // pointer. Let the caller send a touch tap instead.
-        if (isScreenSized(bounds)) {
-            Log.d(logTag, "tv click x:$x y:$y node:${node.className} $bounds container, touch")
-            return false
-        }
         // A list or grid whose items are not clickable themselves clicks its
         // selected item, not the one under the pointer. Select and focus the
         // item under the pointer first.
@@ -725,6 +721,13 @@ class InputService : AccessibilityService() {
                 Log.d(logTag, "tv click x:$x y:$y item:${item.className} ok:true")
                 return true
             }
+        }
+        // A screen-sized container (for example a Flutter view whose children
+        // were not found) clicks its focused child, not the one under the
+        // pointer. Let the caller send a touch tap instead.
+        if (isScreenSized(bounds)) {
+            Log.d(logTag, "tv click x:$x y:$y node:${node.className} $bounds container, touch")
+            return false
         }
         if (node.isFocusable() && !node.isFocused()) {
             node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
