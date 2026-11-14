@@ -67,10 +67,17 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let hide_stop_service = crate::ui_interface::get_builtin_option(
         keys::OPTION_HIDE_STOP_SERVICE,
     ) == "Y";
-    // The tray icon is only shown when the service is running, so we don't need to check
-    // the `stop-service` option here.
+    #[cfg(target_os = "macos")]
+    let quit_label = if crate::platform::macos::is_installed_daemon(false) {
+        "Stop service"
+    } else {
+        "Quit"
+    };
+    #[cfg(not(target_os = "macos"))]
+    let quit_label = "Stop service";
+
     let quit_i = if !hide_stop_service {
-        Some(MenuItem::new(translate("Stop service".to_owned()), true, None))
+        Some(MenuItem::new(translate(quit_label.to_owned()), true, None))
     } else {
         None
     };
@@ -82,11 +89,15 @@ fn make_tray() -> hbb_common::ResultType<()> {
     }
     let tooltip = |count: usize| {
         if count == 0 {
-            format!(
-                "{} {}",
-                crate::get_app_name(),
-                translate("Service is running".to_owned()),
-            )
+            #[cfg(target_os = "macos")]
+            let status = if crate::platform::macos::is_installed_daemon(false) {
+                translate("Service is running".to_owned())
+            } else {
+                translate("Ready".to_owned())
+            };
+            #[cfg(not(target_os = "macos"))]
+            let status = translate("Service is running".to_owned());
+            format!("{} {}", crate::get_app_name(), status)
         } else {
             format!(
                 "{} - {}\n{}",
