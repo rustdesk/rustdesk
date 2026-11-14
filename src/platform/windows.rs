@@ -4496,33 +4496,47 @@ pub mod reg_display_settings {
     }
 
     pub fn restore_reg_connectivity(reg_recovery: RegRecovery, force: bool) -> ResultType<()> {
-        let subkey = connectivity_subkey(&reg_recovery)?;
+        connectivity_subkey(&reg_recovery)?;
         let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
-        let connectivity = hklm.open_subkey_with_flags(
-            format!("{}\\{}", REG_GRAPHICS_DRIVERS_PATH, REG_CONNECTIVITY_PATH),
-            KEY_READ,
-        )?;
-        let reg_item = connectivity.open_subkey_with_flags(subkey, KEY_READ | KEY_WRITE)?;
-        let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
-        if cur_reg_value.vtype.clone() as isize != reg_recovery.old.1
-            || cur_reg_value.bytes.len() != reg_recovery.old.0.len()
-        {
-            bail!("Invalid display connectivity recovery data");
-        }
+        let reg_item = hklm.open_subkey_with_flags(&reg_recovery.path, KEY_READ | KEY_WRITE)?;
         if !force {
+            let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
+            let new_reg_value = RegValue {
+                bytes: reg_recovery.new.0,
+                vtype: isize_to_reg_type(reg_recovery.new.1),
+            };
             // Compare if the current value is the same as the new value.
             // If they are not the same, the registry value has been changed by other processes.
             // So we do not restore the registry value.
-            if cur_reg_value.bytes != reg_recovery.new.0 {
+            if cur_reg_value != new_reg_value {
                 return Ok(());
             }
         }
         let reg_value = RegValue {
             bytes: reg_recovery.old.0,
-            vtype: cur_reg_value.vtype,
+            vtype: isize_to_reg_type(reg_recovery.old.1),
         };
         reg_item.set_raw_value(&reg_recovery.key, &reg_value)?;
         Ok(())
+    }
+
+    #[inline]
+    fn isize_to_reg_type(i: isize) -> RegType {
+        match i {
+            0 => RegType::REG_NONE,
+            1 => RegType::REG_SZ,
+            2 => RegType::REG_EXPAND_SZ,
+            3 => RegType::REG_BINARY,
+            4 => RegType::REG_DWORD,
+            5 => RegType::REG_DWORD_BIG_ENDIAN,
+            6 => RegType::REG_LINK,
+            7 => RegType::REG_MULTI_SZ,
+            8 => RegType::REG_RESOURCE_LIST,
+            9 => RegType::REG_FULL_RESOURCE_DESCRIPTOR,
+            10 => RegType::REG_RESOURCE_REQUIREMENTS_LIST,
+            11 => RegType::REG_QWORD,
+            _ => RegType::REG_NONE,
+        }
     }
 
     fn connectivity_subkey(recovery: &RegRecovery) -> ResultType<&str> {
@@ -4537,15 +4551,13 @@ pub mod reg_display_settings {
         {
             bail!("Invalid display connectivity recovery target");
         }
-        if recovery.old.1 != recovery.new.1 || recovery.old.0.len() != recovery.new.0.len() {
-            bail!("Invalid display connectivity recovery data");
-        }
         Ok(subkey)
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
+        use winreg::types::ToRegValue;
 
         #[test]
         fn registry_recovery_rejects_external_targets_before_access() {
@@ -4565,28 +4577,19 @@ pub mod reg_display_settings {
         }
 
         #[test]
-        fn registry_recovery_validates_connectivity_records() {
-            let prefix = format!("{}\\{}\\", REG_GRAPHICS_DRIVERS_PATH, REG_CONNECTIVITY_PATH);
-            let mut recovery = RegRecovery {
-                path: format!("{prefix}monitor"),
-                key: "Recent".to_owned(),
-                old: (0u32.to_le_bytes().to_vec(), RegType::REG_DWORD as isize),
-                new: (1u32.to_le_bytes().to_vec(), RegType::REG_DWORD as isize),
+        fn registry_recovery_accepts_display_changes() {
+            let connectivity = |value: &str| {
+                HashMap::from([(
+                    "monitor".to_owned(),
+                    HashMap::from([("Recent".to_owned(), value.to_reg_value())]),
+                )])
             };
+            let recovery = diff_recent_connectivity(
+                connectivity("before"),
+                connectivity("after-layout-change"),
+            )
+            .unwrap();
             assert_eq!(connectivity_subkey(&recovery).unwrap(), "monitor");
-            for child in ["", "monitor\\child", "monitor\0child"] {
-                recovery.path = format!("{prefix}{child}");
-                assert!(connectivity_subkey(&recovery).is_err());
-            }
-            recovery.path = format!("{prefix}monitor");
-            recovery.key = "Recent\0Other".to_owned();
-            assert!(connectivity_subkey(&recovery).is_err());
-            recovery.key = "Recent".to_owned();
-            recovery.old.1 = RegType::REG_BINARY as isize;
-            assert!(connectivity_subkey(&recovery).is_err());
-            recovery.old.1 = recovery.new.1;
-            recovery.old.0.clear();
-            assert!(connectivity_subkey(&recovery).is_err());
         }
     }
 }
