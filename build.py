@@ -34,6 +34,7 @@ else:
     flutter_build_dir = 'build/linux/x64/release/bundle/'
 flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
 skip_cargo = False
+ci = False
 
 
 def get_deb_arch() -> str:
@@ -146,6 +147,12 @@ def make_parser():
              'dlopen-ed in-process by the root service). Off by default.'
     )
     parser.add_argument(
+        '--ci',
+        action='store_true',
+        help='Indicate this build is a CI build. CI builds enforce Flutter lockfiles '
+             'externally and are built in ephemeral containers. Off by default.'
+    )
+    parser.add_argument(
         '--print-features',
         action='store_true',
         help='Print the cargo feature list these flags select, and exit without building. For a '
@@ -174,42 +181,6 @@ def make_parser():
             help='Enable feature screencapturekit'
         )
     return parser
-
-
-# Generate build script for docker
-#
-# it assumes all build dependencies are installed in environments
-# Note: do not use it in bare metal, or may break build environments
-def generate_build_script_for_docker():
-    with open("/tmp/build.sh", "w") as f:
-        f.write('''
-            #!/bin/bash
-            # environment
-            export CPATH="$(clang -v 2>&1 | grep "Selected GCC installation: " | cut -d' ' -f4-)/include"
-            # flutter
-            pushd /opt
-            wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.0.5-stable.tar.xz
-            tar -xvf flutter_linux_3.0.5-stable.tar.xz
-            export PATH=`pwd`/flutter/bin:$PATH
-            popd
-            # flutter_rust_bridge
-            dart pub global activate ffigen --version 5.0.1
-            pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
-            pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . --locked && popd
-            pushd flutter && flutter pub get && popd
-            ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
-            # install vcpkg
-            pushd /opt
-            export VCPKG_ROOT=`pwd`/vcpkg
-            git clone https://github.com/microsoft/vcpkg
-            vcpkg/bootstrap-vcpkg.sh
-            popd
-            $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
-            # build rustdesk
-            ./build.py --flutter --hwcodec
-        ''')
-    system2("chmod +x /tmp/build.sh")
-    system2("bash /tmp/build.sh")
 
 
 # Downloading third party resources is deprecated.
@@ -739,7 +710,42 @@ def build_flutter_deb(version, features):
         system2(f'cargo build --locked --features {features} --lib --release')
         ffi_bindgen_function_refactor()
     os.chdir('flutter')
-    system2('flutter build linux --release')
+
+    if ci:
+        # CI mode: allow patched pubspecs in the working tree
+        # but enforce externally-fetched dependencies by making
+        # sure the package config is frozen
+        system2('python3 flutter_pub_get.py is-package-config-frozen')
+        # Do not try re-downloading Flutter packages as we
+        # expect them to be fetched externally
+    else:
+        # Non-CI mode: do not allow developer to build with uncommitted
+        # pubspecs so that unclean modifications can be reverted to
+        # the committed pubspecs
+        system2('python3 flutter_pub_get.py check-local-pubspec-changes')
+        system2('python3 flutter_pub_get.py revert-local-pubspec-changes')
+        # Download Flutter packages using default lockfile
+        #
+        # This might fail the local builds that require
+        # patched pubspec files (like 3.44) but the error will
+        # explain what is wrong anyway
+        system2('python3 flutter_pub_get.py get-packages')
+
+    must_exit = False
+    try:
+        exit_code = os.system('flutter build linux --release')
+        if exit_code != 0:
+            raise Exception
+    except Exception:
+        sys.stderr.write('Error occurred when executing: "flutter build linux --release". Exiting.\n')
+        must_exit = True
+    finally:
+        if not ci:
+            # Non-CI mode: revert locked package config after build
+            system2('python3 flutter_pub_get.py revert-local-pubspec-changes')
+        if must_exit:
+            sys.exit(-1)
+
     system2('mkdir -p tmpdeb/usr/bin/')
     system2('mkdir -p tmpdeb/usr/share/rustdesk')
     system2('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
@@ -944,8 +950,42 @@ def build_flutter_dmg(version, features):
     # so the universal-by-default ARCHS_STANDARD doesn't try to link a missing slice.
     # FLUTTER_XCODE_* env vars are forwarded to xcodebuild as build settings.
     mac_arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
-    system2(
-        f'FLUTTER_XCODE_ARCHS={mac_arch} FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES flutter build macos --release')
+
+    if ci:
+        # CI mode: allow patched pubspecs in the working tree
+        # but enforce externally-fetched dependencies by making
+        # sure the package config is frozen
+        system2('python3 flutter_pub_get.py is-package-config-frozen')
+        # Do not try re-downloading Flutter packages as we
+        # expect them to be fetched externally
+    else:
+        # Non-CI mode: do not allow developer to build with uncommitted
+        # pubspecs so that unclean modifications can be reverted to
+        # the committed pubspecs
+        system2('python3 flutter_pub_get.py check-local-pubspec-changes')
+        system2('python3 flutter_pub_get.py revert-local-pubspec-changes')
+        # Download Flutter packages using default lockfile
+        #
+        # This might fail the local builds that require
+        # patched pubspec files (like 3.44) but the error will
+        # explain what is wrong anyway
+        system2('python3 flutter_pub_get.py get-packages')
+
+    must_exit = False
+    try:
+        exit_code = os.system(f'FLUTTER_XCODE_ARCHS={mac_arch} FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES flutter build macos --release')
+        if exit_code != 0:
+            raise Exception
+    except Exception:
+        sys.stderr.write(f'Error occurred when executing: "FLUTTER_XCODE_ARCHS={mac_arch} FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES flutter build macos --release". Exiting.\n')
+        must_exit = True
+    finally:
+        if not ci:
+            # Non-CI mode: revert locked package config after build
+            system2('python3 flutter_pub_get.py revert-local-pubspec-changes')
+        if must_exit:
+            sys.exit(-1)
+
     system2('cp -rf ../target/release/service ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/')
     '''
     system2(
@@ -960,7 +1000,42 @@ def build_flutter_arch_manjaro(version, features):
         system2(f'cargo build --locked --features {features} --lib --release')
     ffi_bindgen_function_refactor()
     os.chdir('flutter')
-    system2('flutter build linux --release')
+
+    if ci:
+        # CI mode: allow patched pubspecs in the working tree
+        # but enforce externally-fetched dependencies by making
+        # sure the package config is frozen
+        system2('python3 flutter_pub_get.py is-package-config-frozen')
+        # Do not try re-downloading Flutter packages as we
+        # expect them to be fetched externally
+    else:
+        # Non-CI mode: do not allow developer to build with uncommitted
+        # pubspecs so that unclean modifications can be reverted to
+        # the committed pubspecs
+        system2('python3 flutter_pub_get.py check-local-pubspec-changes')
+        system2('python3 flutter_pub_get.py revert-local-pubspec-changes')
+        # Download Flutter packages using default lockfile
+        #
+        # This might fail the local builds that require
+        # patched pubspec files (like 3.44) but the error will
+        # explain what is wrong anyway
+        system2('python3 flutter_pub_get.py get-packages')
+
+    must_exit = False
+    try:
+        exit_code = os.system('flutter build linux --release')
+        if exit_code != 0:
+            raise Exception
+    except Exception:
+        sys.stderr.write('Error occurred when executing: "flutter build linux --release". Exiting.\n')
+        must_exit = True
+    finally:
+        if not ci:
+            # Non-CI mode: revert locked package config after build
+            system2('python3 flutter_pub_get.py revert-local-pubspec-changes')
+        if must_exit:
+            sys.exit(-1)
+
     system2(f'strip {flutter_build_dir}/lib/librustdesk.so')
     os.chdir('../res')
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
@@ -973,7 +1048,42 @@ def build_flutter_windows(version, features, skip_portable_pack):
             print("cargo build failed, please check rust source code.")
             exit(-1)
     os.chdir('flutter')
-    system2('flutter build windows --release')
+
+    if ci:
+        # CI mode: allow patched pubspecs in the working tree
+        # but enforce externally-fetched dependencies by making
+        # sure the package config is frozen
+        system2('python3 flutter_pub_get.py is-package-config-frozen')
+        # Do not try re-downloading Flutter packages as we
+        # expect them to be fetched externally
+    else:
+        # Non-CI mode: do not allow developer to build with uncommitted
+        # pubspecs so that unclean modifications can be reverted to
+        # the committed pubspecs
+        system2('python3 flutter_pub_get.py check-local-pubspec-changes')
+        system2('python3 flutter_pub_get.py revert-local-pubspec-changes')
+        # Download Flutter packages using default lockfile
+        #
+        # This might fail the local builds that require
+        # patched pubspec files (like 3.44) but the error will
+        # explain what is wrong anyway
+        system2('python3 flutter_pub_get.py get-packages')
+
+    must_exit = False
+    try:
+        exit_code = os.system('flutter build windows --release')
+        if exit_code != 0:
+            raise Exception
+    except Exception:
+        sys.stderr.write('Error occurred when executing: "flutter build windows --release". Exiting.\n')
+        must_exit = True
+    finally:
+        if not ci:
+            # Non-CI mode: revert locked package config after build
+            system2('python3 flutter_pub_get.py revert-local-pubspec-changes')
+        if must_exit:
+            sys.exit(-1)
+
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
                  flutter_build_dir_2)
@@ -999,6 +1109,7 @@ def build_flutter_windows(version, features, skip_portable_pack):
 
 def main():
     global skip_cargo
+    global ci
     parser = make_parser()
     args = parser.parse_args()
 
@@ -1024,9 +1135,12 @@ def main():
     flutter = args.flutter
     if not flutter:
         system2('python3 res/inline-sciter.py')
-    print(args.skip_cargo)
+    print(f'Skip cargo: {args.skip_cargo}')
     if args.skip_cargo:
         skip_cargo = True
+    print(f'CI mode: {args.ci}')
+    if args.ci:
+        ci = True
     portable = args.portable
     package = args.package
     if package:
