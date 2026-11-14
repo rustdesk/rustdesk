@@ -228,6 +228,12 @@ void main() {
       for (final t in r['result']['tools']) {
         expect(t['inputSchema']['type'], 'object');
         expect(t['annotations']['readOnlyHint'], isA<bool>());
+        if (['press_key', 'mouse', 'scroll'].contains(t['name'])) {
+          expect(
+              t['inputSchema']['properties']['modifiers']['items']['enum'],
+              unorderedEquals(['ctrl', 'shift', 'alt', 'command', 'win', 'meta']),
+              reason: '${t['name']} must advertise all accepted modifiers');
+        }
       }
     });
   });

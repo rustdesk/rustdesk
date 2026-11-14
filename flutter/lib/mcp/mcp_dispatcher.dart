@@ -136,14 +136,15 @@ const _yProp = {
   'description': 'Y coordinate in remote screen pixels.',
 };
 
-const _modifiersProp = {
+final _modifiersProp = {
   'type': 'array',
   'items': {
     'type': 'string',
-    'enum': ['ctrl', 'shift', 'alt', 'command'],
+    'enum': kMcpKeyModifiers.toList(),
   },
   'description': 'Modifier keys held during this input, e.g. [`shift`] for a '
-      'shift-click. They apply to this call only.',
+      'shift-click. `win` and `meta` are aliases for `command`. '
+      'They apply to this call only.',
 };
 
 const _screenshotAfterProp = {
@@ -696,13 +697,7 @@ class McpDispatcher {
                 'VK_NEXT, VK_LEFT, VK_UP, VK_F5, VK_A or '
                 'VK_0, or a single character.',
           },
-          'modifiers': {
-            'type': 'array',
-            'items': {
-              'type': 'string',
-              'enum': kMcpKeyModifiers.toList(),
-            },
-          },
+          'modifiers': _modifiersProp,
           'action': {
             'type': 'string',
             'enum': kMcpKeyActions.toList(),
