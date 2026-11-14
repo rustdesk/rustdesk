@@ -94,10 +94,11 @@ class MainFlutterWindow: NSWindow {
                 window.collectionBehavior.insert([.moveToActiveSpace, .fullScreenAuxiliary])
                 if window.isMiniaturized {
                     window.deminiaturize(nil)
+                } else {
+                    window.setIsVisible(true)
+                    window.makeKeyAndOrderFront(nil)
+                    window.orderFrontRegardless()
                 }
-                window.setIsVisible(true)
-                window.makeKeyAndOrderFront(nil)
-                window.orderFrontRegardless()
             }
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -107,7 +108,9 @@ class MainFlutterWindow: NSWindow {
         DispatchQueue.main.async {
             guard !CommandLine.arguments.contains("--cm") else { return }
             let hasVisibleWindows = NSApp.windows.contains { window in
-                window.canBecomeMain && (window.isVisible || window.isMiniaturized)
+                (window.canBecomeKey || window.isMiniaturized) &&
+                (window.isVisible || window.isMiniaturized) &&
+                (window.contentViewController is FlutterViewController || window is MainFlutterWindow)
             }
             if hasVisibleWindows {
                 return
