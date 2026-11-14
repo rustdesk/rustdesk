@@ -2174,7 +2174,6 @@ class InputModel {
         type = kMouseEventTypeUp;
         break;
       case _kMouseEventMove:
-        _pointerMovedAfterEnter = true;
         isMove = true;
         break;
       default:
@@ -2202,6 +2201,7 @@ class InputModel {
     if (pos == null) {
       return null;
     }
+    if (isMove) _pointerMovedAfterEnter = true;
     if (isMatchingMouseUp) {
       _pressedMouseButtons &= ~buttons;
     }
