@@ -2015,6 +2015,9 @@ class _DisplayState extends State<_Display> {
       codec(context),
       if (isDesktop) trackpadSpeed(context),
       if (!isWeb) privacyModeImpl(context),
+      if (isWindows &&
+          bind.mainSupportedPrivacyModeImpls().contains(kPrivacyModeImplMag))
+        privacyModeBackground(context),
       other(context),
     ]).marginOnly(bottom: _kListViewBottomMargin);
   }
@@ -2235,6 +2238,37 @@ class _DisplayState extends State<_Display> {
             label: d[1] as String,
             onChanged: onChanged);
       }).toList(),
+    );
+  }
+
+  Widget privacyModeBackground(BuildContext context) {
+    final key = kOptionPrivacyModeBackground;
+    var groupValue = bind.mainGetOptionSync(key);
+    if (groupValue != 'black' && groupValue != 'desktop') {
+      groupValue = 'black';
+    }
+    onChanged(String value) async {
+      await bind.mainSetOption(key: key, value: value);
+      setState(() {});
+    }
+    return _Card(
+      title: 'Privacy mode background',
+      children: [
+        _Radio(
+          context,
+          value: 'black',
+          groupValue: groupValue,
+          label: 'Black',
+          onChanged: onChanged,
+        ),
+        _Radio(
+          context,
+          value: 'desktop',
+          groupValue: groupValue,
+          label: 'Desktop wallpaper and taskbar',
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 

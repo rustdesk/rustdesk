@@ -67,13 +67,6 @@ jobs:
           ./privacy_background_test.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Add background configuration tool
-        shell: pwsh
-        run: |
-          Set-Content -LiteralPath "./${{ env.build_output_dir }}/privacy-background.ini" -Encoding Unicode -Value "[Privacy]`r`nBackground=black"
-          Copy-Item res/windows/set-privacy-background.ps1 "./${{ env.build_output_dir }}/"
-          Copy-Item res/windows/privacy-background.md "./${{ env.build_output_dir }}/"
-
       - name: Archive build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ inputs.upload-artifact }}
@@ -81,6 +74,3 @@ jobs:
             name: topmostwindow-artifacts-${{ inputs.platform }}
             path: |
               ./${{ env.build_output_dir }}/WindowInjection.dll
-              ./${{ env.build_output_dir }}/privacy-background.ini
-              ./${{ env.build_output_dir }}/set-privacy-background.ps1
-              ./${{ env.build_output_dir }}/privacy-background.md

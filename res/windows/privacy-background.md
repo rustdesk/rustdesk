@@ -1,84 +1,38 @@
 # Windows Privacy Mode 1 backgrounds
 
-This customization applies to the Windows **controlled computer**, independent of
-whether the controller runs macOS, Windows, Linux, Android or iOS. The controller
-does not need a modified client. It changes the existing overlay's paint only;
-capture exclusion, monitor coverage, input blocking, and local **Ctrl+P** exit
-remain RustDesk's original implementation. A remote Ctrl+P is still sent to the
-remote application, just as before; use the remote toolbar to exit privacy mode.
+RustDesk now controls the Windows Privacy Mode 1 background from its own Display settings. On Windows, open **Settings → Display → Privacy mode background** and choose:
 
-The checked-in Windows artifact ships with `Background=black`. If the config file
-is missing, the DLL falls back to the original RustDesk privacy notice. The choices
-are:
+- **Black**: an opaque black local screen.
+- **Desktop wallpaper and taskbar**: the current Windows wallpaper plus the real Windows taskbar. The taskbar clock and notification area keep updating, so the visible result follows a newly created virtual desktop more closely than a static image.
 
-- `notice`: original notice, also used for missing or unknown configuration.
-- `black`: fully opaque black, without text.
-- `wallpaper`: a static background image, center cropped to fill each monitor.
-  The Windows taskbar remains the real Shell taskbar above the privacy overlay,
-  so its clock, notification area and taskbar state continue to update. Desktop
-  icons and windows are hidden by the overlay. This keeps the visible result
-  close to a newly created Windows virtual desktop without trying to clone the
-  taskbar or its locale/DPI behavior. It is not a Windows security lock screen.
+The choice is saved as the local `privacy-mode-background` option. When Privacy Mode 1 starts, RustDesk passes the choice to its Windows privacy-window broker. No PowerShell command, extra configuration file, or modified controller client is required. The Mac controller can use the same mode as any other controller; `Ctrl+P` continues to exit through the existing Windows keyboard hook.
+
+The desktop option captures the wallpaper path from the active Windows user when the privacy window is created. It does not copy desktop icons or application windows. The existing Privacy Mode 1 z-order leaves the real taskbar available, while the overlay covers the original desktop contents. Multi-monitor coverage and DPI scaling continue to use the existing privacy-window geometry.
+
+If the wallpaper cannot be loaded, Privacy Mode 1 falls back to pure black. Privacy Mode 2 is unchanged. This remains an overlay rather than a Windows security lock screen or a separate Windows virtual desktop.
 
 ## Build
 
 The RustDesk workflow builds the pinned `RustDeskTempTopMostWindow` revision with
 `res/privacy_mode_background.patch` and `res/windows/privacy_background.h`.
-Both the x64 and ARM64 Windows DLL jobs use the same source. No protocol, Rust,
-Flutter bridge, or non-Windows target changes are required.
+Both x64 and ARM64 Windows DLL jobs use the same source. The Rust and Flutter
+settings select the background at runtime; the controller does not need a custom
+build.
 
-For a local build, clone `https://github.com/rustdesk-org/RustDeskTempTopMostWindow`,
+For a local DLL build, clone `https://github.com/rustdesk-org/RustDeskTempTopMostWindow`,
 checkout `ecd8d6a139eee76845ea66423fb739af450fda90`, apply the patch with `git apply`,
-and copy `privacy_background.h` to `WindowInjection/`. In a Visual Studio C++
-developer command prompt:
-
-```bat
-msbuild WindowInjection\WindowInjection.vcxproj /p:Configuration=Release /p:Platform=x64
-```
-
-Use `/p:PlatformToolset=v143` (VS 2022) or the installed toolset when v142 is not
-installed. Build the DLL matching the installed RustDesk architecture. Exit
-RustDesk and its service before replacing the DLL; keep the original DLL as a
-backup. A full RustDesk rebuild is not necessary for this customization.
-
-## Select a background on the controlled Windows computer
-
-Run PowerShell as administrator if RustDesk is installed in Program Files:
-
-```powershell
-.\set-privacy-background.ps1 -Mode black -RustDeskDirectory 'C:\Program Files\RustDesk'
-.\set-privacy-background.ps1 -Mode wallpaper -RustDeskDirectory 'C:\Program Files\RustDesk'
-.\set-privacy-background.ps1 -Mode wallpaper -ImagePath 'D:\Pictures\background.jpg' -RustDeskDirectory 'C:\Program Files\RustDesk'
-.\set-privacy-background.ps1 -Mode notice -RustDeskDirectory 'C:\Program Files\RustDesk'
-```
-
-Turn privacy mode off before changing the background, then re-enter Mode 1.
-The tool exports the current user's wallpaper as `privacy-wallpaper.png` next to
-the DLL, so the SYSTEM broker does not read the wrong user's wallpaper. The
-configuration is a local `privacy-background.ini`; nothing is sent over the
-connection. A missing or unreadable exported image falls back to solid black.
-The wallpaper is a snapshot: rerun the tool after changing the desktop wallpaper.
-All monitors show the same image with their own aspect ratio. Slideshow, spanning
-wallpaper and different images per monitor are not reproduced. Because the real
-taskbar is retained, the clock changes while Privacy Mode is active and a Mac
-controller does not need any special support.
+and copy `res/windows/privacy_background.h` to `WindowInjection/`. Build the DLL
+with the installed Visual Studio C++ toolset and place it beside the RustDesk
+executable. The regular RustDesk build downloads this artifact automatically.
 
 ## Validation
 
-`privacy_background_test.cpp` renders into an offscreen Windows bitmap and checks
-the default notice path, black, wallpaper, reload, and missing-image fallback.
-Run in a Visual Studio developer command prompt from `res/windows`:
-
-```bat
-cl /nologo /EHsc /std:c++14 privacy_background_test.cpp /link gdiplus.lib user32.lib gdi32.lib
-privacy_background_test.exe
-```
-
-Before distributing, test an installed Windows host from a Mac controller:
-enter Mode 1, verify only the local display shows the overlay, type/click remotely,
-exit with the local Ctrl+P, and disconnect while privacy mode is active. Also
-exercise multi-monitor / mixed DPI layouts, display hot-plug and UAC. This change
-preserves existing behavior in those paths; an offscreen test cannot validate
-capture-driver or keyboard-hook behavior on hardware. Mode 2 remains unchanged.
+The Windows workflow runs `privacy_background_test.cpp` for the black, wallpaper,
+reload and missing-image paths, and rebuilds `WindowInjection.dll`. A hardware
+check should still cover a real Windows host controlled from macOS: enter Mode 1,
+verify the local taskbar clock continues to update, test remote input, exit with
+`Ctrl+P`, disconnect while Privacy Mode is active, and exercise mixed-DPI and
+multi-monitor layouts. The existing capture exclusion, input hook and Mode 2
+paths are unchanged.
 
 Reference: https://github.com/rustdesk/rustdesk/discussions/2919

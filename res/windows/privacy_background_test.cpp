@@ -36,13 +36,20 @@ int wmain()
 	try
 	{
 		Check(dc && bitmap, "create offscreen surface");
+		_wputenv_s(L"RUSTDESK_PRIVACY_BACKGROUND", L"");
 		PrivacyBackground background;
 		background.Reload(directory);
-		Check(!background.Paint(dc, client), "missing config preserves notice");
+		Check(background.Paint(dc, client), "missing config defaults to black");
+		Check(GetPixel(dc, 40, 30) == RGB(0, 0, 0), "default black center pixel");
+		std::puts("PASS default black background");
+		_wputenv_s(L"RUSTDESK_PRIVACY_BACKGROUND", L"black");
+		background.Reload(directory);
+		Check(background.Paint(dc, client), "environment black selects custom paint");
+		Check(GetPixel(dc, 40, 30) == RGB(0, 0, 0), "environment black center pixel");
+		_wputenv_s(L"RUSTDESK_PRIVACY_BACKGROUND", L"");
 		WritePrivateProfileStringW(L"Privacy", L"Background", L"unknown", config.c_str());
 		background.Reload(directory);
-		Check(!background.Paint(dc, client), "unknown mode preserves notice");
-		std::puts("PASS notice compatibility");
+		Check(background.Paint(dc, client), "unknown mode keeps opaque overlay");
 
 		WritePrivateProfileStringW(L"Privacy", L"Background", L"black", config.c_str());
 		background.Reload(directory);

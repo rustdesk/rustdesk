@@ -32,6 +32,15 @@ pub(super) const PRIVACY_MODE_IMPL: &str = "privacy_mode_impl_mag";
 pub const ORIGIN_PROCESS_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
 pub const WIN_TOPMOST_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
 pub const INJECTED_PROCESS_EXE: &'static str = WIN_TOPMOST_INJECTED_PROCESS_EXE;
+const PRIVACY_MODE_BACKGROUND_OPTION: &str = "privacy-mode-background";
+
+fn privacy_mode_background() -> &'static str {
+    if crate::ui_interface::get_option(PRIVACY_MODE_BACKGROUND_OPTION.to_owned()) == "desktop" {
+        "wallpaper"
+    } else {
+        "black"
+    }
+}
 pub(super) const PRIVACY_WINDOW_CLASS: &'static str = "RustDeskPrivacyWindowClass";
 pub(super) const PRIVACY_WINDOW_NAME: &'static str = "RustDeskPrivacyWindow";
 const PRIVACY_WINDOW_WAIT_MILLIS: u128 = 1_000;
@@ -73,6 +82,7 @@ impl WindowHandlers {
 
 pub struct PrivacyModeImpl {
     impl_key: String,
+    background: String,
     conn_id: i32,
     handlers: WindowHandlers,
     hwnd: u64,
@@ -109,6 +119,10 @@ impl PrivacyMode for PrivacyModeImpl {
             );
         }
 
+        let background = privacy_mode_background();
+        if !self.handlers.is_default() && self.background != background {
+            self.stop();
+        }
         let should_start_broker = self.handlers.is_default();
         if should_start_broker {
             log::info!("turn_on_privacy, broker not running, try start");
@@ -174,6 +188,7 @@ impl PrivacyModeImpl {
     pub fn new(impl_key: &str) -> Self {
         Self {
             impl_key: impl_key.to_owned(),
+            background: String::new(),
             conn_id: INVALID_PRIVACY_MODE_CONN_ID,
             handlers: WindowHandlers {
                 hthread: 0,
@@ -213,6 +228,10 @@ impl PrivacyModeImpl {
                 dll_file.to_string_lossy().as_ref()
             );
         }
+
+        let background = privacy_mode_background();
+        std::env::set_var("RUSTDESK_PRIVACY_BACKGROUND", background);
+        self.background = background.to_owned();
 
         if wait_find_privacy_hwnds(PRIVACY_WINDOW_WAIT_MILLIS).is_ok() {
             log::info!("Privacy window is ready");
