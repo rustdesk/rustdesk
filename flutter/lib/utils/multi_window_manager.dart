@@ -231,6 +231,7 @@ class RustDeskMultiWindowManager {
     bool? isRDP,
     bool? isSharedPassword,
     String? connToken,
+    int? initialDisplay,
   }) async {
     var params = {
       "type": type.index,
@@ -238,6 +239,9 @@ class RustDeskMultiWindowManager {
       "password": password,
       "forceRelay": forceRelay
     };
+    if (initialDisplay != null) {
+      params['initial_display'] = initialDisplay;
+    }
     if (switchUuid != null) {
       params['switch_uuid'] = switchUuid;
     }
@@ -278,7 +282,18 @@ class RustDeskMultiWindowManager {
     bool? isSharedPassword,
     String? switchUuid,
     bool? forceRelay,
+    int? initialDisplay,
   }) async {
+    if (initialDisplay != null) {
+      for (final windowId in _remoteDesktopWindows) {
+        if (await DesktopMultiWindow.invokeMethod(
+            windowId,
+            kWindowEventOpenPeerDisplay,
+            jsonEncode({'id': remoteId, 'display': initialDisplay - 1}))) {
+          return MultiWindowCallResult(windowId, null);
+        }
+      }
+    }
     return await newSession(
       WindowType.RemoteDesktop,
       kWindowEventNewRemoteDesktop,
@@ -289,6 +304,7 @@ class RustDeskMultiWindowManager {
       forceRelay: forceRelay,
       switchUuid: switchUuid,
       isSharedPassword: isSharedPassword,
+      initialDisplay: initialDisplay,
     );
   }
 
