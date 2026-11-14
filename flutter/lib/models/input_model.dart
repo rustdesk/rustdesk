@@ -1339,10 +1339,13 @@ class InputModel {
   /// Send key stroke event.
   /// [down] indicates the key's state(down or up).
   /// [press] indicates a click event(down and up).
-  void inputKey(String name, {bool? down, bool? press}) {
+  ///
+  /// The returned future completes when the event has been handed to the
+  /// session. Await it when the next event must not overtake this one.
+  Future<void> inputKey(String name, {bool? down, bool? press}) async {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
-    bind.sessionInputKey(
+    await bind.sessionInputKey(
         sessionId: sessionId,
         name: name,
         down: down ?? false,
