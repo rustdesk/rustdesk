@@ -248,9 +248,9 @@ pub fn event_to_key_name(event: &rdev::Event) -> Option<String> {
 /// written.
 pub fn reload_from_config() {
     let raw = hbb_common::config::LocalConfig::get_option(LOCAL_CONFIG_KEY);
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let is_wayland = crate::platform::linux::current_is_wayland();
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(not(target_os = "linux"), target_env = "ohos"))]
     let is_wayland = false;
     reload_from_raw(&raw, std::env::consts::OS, is_wayland);
 }
@@ -338,7 +338,7 @@ pub fn match_event(event: &rdev::Event) -> Option<String> {
     {
         return None;
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if super::MODIFIERS_STATE.lock().unwrap().get(&rdev::Key::AltGr) == Some(&true) {
         match crate::platform::linux::right_alt_is_level3_shift() {
             Ok(true) => return None,

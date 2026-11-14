@@ -1,0 +1,162 @@
+name: .NET Package
+
+on:
+  push:
+    branches:
+    - stable
+    - next
+
+jobs:
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: buildbase.bat
+      run: buildbase.bat ..\vs2019\libsodium.sln 16
+      working-directory: builds/msvc/build/
+      shell: cmd
+    - uses: actions/upload-artifact@v1
+      with:
+        name: build-win-x64
+        path: bin/x64/Release/v142/dynamic/libsodium.dll
+    - uses: actions/upload-artifact@v1
+      with:
+        name: build-win-x86
+        path: bin/Win32/Release/v142/dynamic/libsodium.dll
+        
+  build-linux-glibc:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:16.04
+    steps:
+    - name: Set up build environment
+      run: |
+        apt-get update && apt-get install -y build-essential
+    - uses: actions/checkout@v1
+    - name: configure
+      run: ./configure --disable-debug --prefix=$PWD/.libsodium-build
+    - name: make
+      run: make
+    - name: make check
+      run: make check
+    - name: make install
+      run: make install
+    - name: strip
+      run: strip --strip-all .libsodium-build/lib/libsodium.so
+    - uses: actions/upload-artifact@v1
+      with:
+        name: build-linux-x64
+        path: .libsodium-build/lib/libsodium.so
+        
+  build-linux-musl:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.7
+    steps:
+    - name: Set up build environment
+      run: |
+        apk update
+        apk add alpine-sdk ca-certificates
+    - uses: actions/checkout@v1
+    - name: configure
+      run: ./configure --disable-debug --prefix=$PWD/.libsodium-build
+    - name: make
+      run: make
+    - name: make check
+      run: make check
+    - name: make install
+      run: make install
+    - name: strip
+      run: strip --strip-all .libsodium-build/lib/libsodium.so
+    - uses: actions/upload-artifact@v1
+      with:
+        name: build-linux-musl-x64
+        path: .libsodium-build/lib/libsodium.so
+        
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: configure
+      run: ./configure --disable-debug --prefix=$PWD/.libsodium-build
+    - name: make
+      run: make
+    - name: make check
+      run: make check
+    - name: make install
+      run: make install
+    - uses: actions/upload-artifact@v1
+      with:
+        name: build-osx-x64
+        path: .libsodium-build/lib/libsodium.dylib
+
+  pack:
+    runs-on: ubuntu-latest
+    needs:
+    - build-windows
+    - build-linux-glibc
+    - build-linux-musl
+    - build-macos
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:5.0
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/download-artifact@v1
+      with:
+        name: build-win-x64
+        path: .libsodium-pack/runtimes/win-x64/native/
+    - uses: actions/download-artifact@v1
+      with:
+        name: build-win-x86
+        path: .libsodium-pack/runtimes/win-x86/native/
+    - uses: actions/download-artifact@v1
+      with:
+        name: build-linux-x64
+        path: .libsodium-pack/runtimes/linux-x64/native/
+    - uses: actions/download-artifact@v1
+      with:
+        name: build-linux-musl-x64
+        path: .libsodium-pack/runtimes/linux-musl-x64/native/
+    - uses: actions/download-artifact@v1
+      with:
+        name: build-osx-x64
+        path: .libsodium-pack/runtimes/osx-x64/native/
+    - name: Copy files
+      run: cp AUTHORS ChangeLog LICENSE packaging/dotnet-core/libsodium.pkgproj .libsodium-pack/
+    - name: Create NuGet package
+      run: dotnet pack -c Release .libsodium-pack/libsodium.pkgproj
+    - uses: actions/upload-artifact@v1
+      with:
+        name: nuget-package
+        path: .libsodium-pack/bin/Release/libsodium.1.0.18.nupkg
+
+  test-ubuntu18_04:
+    runs-on: ubuntu-latest
+    needs: 
+    - pack
+    container:
+      image: mcr.microsoft.com/dotnet/core/sdk:3.1-bionic
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/download-artifact@v1
+      with:
+        name: nuget-package
+        path: .libsodium-pack/
+    - name: dotnet new
+      run: dotnet new console -n Tests -o .libsodium-test/
+    - name: dotnet add package libsodium
+      run: dotnet add .libsodium-test/Tests.csproj package libsodium -s $PWD/.libsodium-pack
+    - name: Copy files
+      run: cp -f packaging/dotnet-core/test.cs .libsodium-test/Program.cs
+    - name: dotnet run
+      run: dotnet run
+      working-directory: .libsodium-test/

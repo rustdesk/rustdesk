@@ -17,6 +17,9 @@ cert.pfx
 *png
 *svg
 *jpg
+# App icons referenced by the HarmonyOS manifests.
+!harmonyos/AppScope/resources/base/media/*.png
+!harmonyos/entry/src/main/resources/base/media/*.png
 sciter.dll
 **pdb
 src/bridge_generated.rs

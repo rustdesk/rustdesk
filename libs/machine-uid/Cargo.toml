@@ -1,0 +1,19 @@
+[package]
+name = "machine-uid"
+version = "0.3.0"
+authors = ["Hanaasagi <ambiguous404@gmail.com>"]
+edition = "2018"
+license = "MIT"
+repository = "https://github.com/Hanaasagi/machine-uid"
+description = """
+Get os native machine id without root permission.
+"""
+
+[dependencies]
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.11"
+
+[build-dependencies]
+cc = "1.0"
+bindgen = "0.59"

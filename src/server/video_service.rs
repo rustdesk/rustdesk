@@ -19,9 +19,9 @@
 // https://slhck.info/video/2017/03/01/rate-control.html
 
 use super::{display_service::check_display_changed, service::ServiceTmpl, video_qos::VideoQoS, *};
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use crate::common::SimpleCallOnReturn;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use crate::platform::linux::is_x11;
 use crate::privacy_mode::{get_privacy_mode_conn_id, INVALID_PRIVACY_MODE_CONN_ID};
 #[cfg(windows)]
@@ -42,10 +42,13 @@ use hbb_common::{
 use scrap::hwcodec::{HwRamEncoder, HwRamEncoderConfig};
 #[cfg(feature = "vram")]
 use scrap::vram::{VRamEncoder, VRamEncoderConfig};
+#[cfg(target_env = "ohos")]
+use scrap::ohos::ohcodec::{OhCodecEncoder, OhEncoderConfig};
 #[cfg(not(windows))]
 use scrap::Capturer;
+#[cfg(not(target_env = "ohos"))]
+use scrap::aom::AomEncoderConfig;
 use scrap::{
-    aom::AomEncoderConfig,
     codec::{Encoder, EncoderCfg},
     record::{Recorder, RecorderContext},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
@@ -453,7 +456,7 @@ fn get_capturer_monitor(
     current: usize,
     portable_service_running: bool,
 ) -> ResultType<CapturerInfo> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         if !is_x11() {
             return super::wayland::get_capturer_for_display(current);
@@ -472,7 +475,7 @@ fn get_capturer_monitor(
 
     let display = displays.remove(current);
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if let Display::X11(inner) = &display {
         if let Err(err) = inner.get_shm_status() {
             log::warn!(
@@ -543,6 +546,7 @@ fn get_capturer_monitor(
     })
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn get_capturer_camera(current: usize) -> ResultType<CapturerInfo> {
     let cameras = camera::Cameras::get_sync_cameras();
     let ncamera = cameras.len();
@@ -590,7 +594,10 @@ fn get_capturer(
 ) -> ResultType<CapturerInfo> {
     match source {
         VideoSource::Monitor => get_capturer_monitor(current, portable_service_running),
+        #[cfg(not(target_env = "ohos"))]
         VideoSource::Camera => get_capturer_camera(current),
+        #[cfg(target_env = "ohos")]
+        VideoSource::Camera => bail!("camera capture is not supported on ohos"),
     }
 }
 
@@ -601,9 +608,9 @@ fn run(vs: VideoService) -> ResultType<()> {
     // ensure_inited() is needed because clear() may be called.
     // to-do: wayland ensure_inited should pass current display index.
     // But for now, we do not support multi-screen capture on wayland.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     super::wayland::ensure_inited()?;
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let _wayland_call_on_ret = {
         // Increment active display count when starting
         let _display_count = super::wayland::increment_active_display_count();
@@ -721,7 +728,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(windows)]
     start_uac_elevation_check();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let mut would_block_count = 0u32;
     let mut yuv = Vec::new();
     let mut mid_data = Vec::new();
@@ -914,7 +921,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                         try_gdi += 1;
                     }
                 }
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 {
                     would_block_count += 1;
                     if !is_x11() {
@@ -999,7 +1006,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 return Err(err.into());
             }
             _ => {
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 {
                     would_block_count = 0;
                 }
@@ -1138,6 +1145,17 @@ fn get_encoder_config(
                     keyframe_interval,
                 });
             }
+            #[cfg(target_env = "ohos")]
+            if let Some(name) = OhCodecEncoder::try_get(negotiated_codec) {
+                return EncoderCfg::OHOS_HW(OhEncoderConfig {
+                    name,
+                    width: c.width,
+                    height: c.height,
+                    quality,
+                    keyframe_interval,
+                    format: negotiated_codec,
+                });
+            }
             EncoderCfg::VPX(VpxEncoderConfig {
                 width: c.width as _,
                 height: c.height as _,
@@ -1157,12 +1175,16 @@ fn get_encoder_config(
             },
             keyframe_interval,
         }),
+        #[cfg(not(target_env = "ohos"))]
         CodecFormat::AV1 => EncoderCfg::AOM(AomEncoderConfig {
             width: c.width as _,
             height: c.height as _,
             quality,
             keyframe_interval,
         }),
+        #[cfg(target_env = "ohos")]
+        // AV1 is never negotiated on ohos (aom stub); keep the match total.
+        CodecFormat::AV1 => unreachable!("AV1 encoding is not supported on ohos"),
         _ => EncoderCfg::VPX(VpxEncoderConfig {
             width: c.width as _,
             height: c.height as _,
@@ -1420,9 +1442,12 @@ pub fn make_display_changed_msg(
         Some(d) => d,
         None => match source {
             VideoSource::Monitor => display_service::get_display_info(display_idx)?,
+            #[cfg(not(target_env = "ohos"))]
             VideoSource::Camera => camera::Cameras::get_sync_cameras()
                 .get(display_idx)?
                 .clone(),
+            #[cfg(target_env = "ohos")]
+            VideoSource::Camera => return None,
         },
     };
     let mut misc = Misc::new();
@@ -1436,7 +1461,7 @@ pub fn make_display_changed_msg(
             VideoSource::Monitor => display_service::capture_cursor_embedded(),
             VideoSource::Camera => false,
         },
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_env = "ohos")))]
         resolutions: Some(SupportedResolutions {
             resolutions: match source {
                 VideoSource::Monitor => {
