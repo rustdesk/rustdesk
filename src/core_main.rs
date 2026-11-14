@@ -914,8 +914,9 @@ fn is_quick_support_exe(exe: &str) -> bool {
 }
 
 fn import_config2_path(path: &str) -> String {
-    path.strip_suffix(".toml")
-        .map(|stem| format!("{}2.toml", stem))
+    path.rsplit_once('.')
+        .filter(|(_, extension)| extension.eq_ignore_ascii_case("toml"))
+        .map(|(stem, _)| format!("{}2.toml", stem))
         .unwrap_or_else(|| path.to_owned())
 }
 
@@ -924,10 +925,11 @@ mod import_config_path_tests {
     use super::*;
 
     #[test]
-    fn options_import_keeps_toml_in_parent_directory_names() {
+    fn options_import_preserves_parent_and_accepts_uppercase_extension() {
         assert_eq!(
             import_config2_path("/backups.toml/RustDesk.toml"),
             "/backups.toml/RustDesk2.toml"
         );
+        assert_eq!(import_config2_path("RustDesk.TOML"), "RustDesk2.toml");
     }
 }
