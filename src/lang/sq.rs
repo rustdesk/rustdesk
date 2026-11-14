@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Dosja e zgjedhur nuk është bosh. Instalimi mund të fshijë të dhënat ekzistuese. Konsideroni të zgjidhni një dosje tjetër."),
         ("Request approval", "Kërko miratim"),
         ("Forever", "Përgjithmonë"),
+        ("Send text as key presses (for VMs and admin windows)", "Dërgo tekstin si shtypje tastesh (për makinat virtuale dhe dritaret e administratorit)"),
+        ("physical_key_text_input_tip", "Teksti i shkruar ose i ngjitur në telefon, i shkruar në modalitetin e përkthimit ose i dërguar me \"Dërgo shtypjet e tasteve të clipboard-it\" dërgohet si shtypje të tasteve të këtij kompjuteri, kështu që e marrin konsolat e makinave virtuale dhe dritaret që ekzekutohen si administrator. Karakteret që nuk mund të shkruhen me paraqitjen e tastierës dërgohen ende si Unicode. Makina virtuale duhet të përdorë të njëjtën paraqitje tastiere si ky kompjuter. Ndërprerjet e rreshtave dhe tabulimet dërgohen si shtypje të tasteve Enter dhe Tab."),
+        ("Send text as key presses in virtual machine consoles", "Dërgo tekstin si shtypje tastesh në konsolat e makinave virtuale"),
+        ("vm_console_key_press_text_input_tip", "Kur dritarja aktive është një konsolë VMware, VirtualBox ose Hyper-V, teksti i shkruar ose i ngjitur në telefon, i shkruar në modalitetin e përkthimit ose i dërguar me \"Dërgo shtypjet e tasteve të clipboard-it\" dërgohet si shtypje të tasteve të këtij kompjuteri, sepse këto konsola nuk mund të lexojnë hyrjen Unicode që përdoret në raste të tjera. Tastet e shtypura duke mbajtur Ctrl, Alt ose Windows trajtohen si më parë. Karakteret që nuk mund të shkruhen me paraqitjen e tastierës, si dhe teksti që do ta konvertonte një metodë aktive hyrjeje, dërgohen ende si Unicode. Makina virtuale duhet të përdorë të njëjtën paraqitje tastiere si ky kompjuter."),
     ].iter().cloned().collect();
 }

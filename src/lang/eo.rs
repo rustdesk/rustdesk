@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "La elektita dosierujo ne estas malplena. La instalado povas forigi ekzistantajn datumojn. Konsideru elekti alian dosierujon."),
         ("Request approval", "Peti aprobon"),
         ("Forever", "Por ĉiam"),
+        ("Send text as key presses (for VMs and admin windows)", "Sendi tekston kiel klavpremojn (por virtualaj maŝinoj kaj fenestroj de administranto)"),
+        ("physical_key_text_input_tip", "Teksto tajpita aŭ algluita en telefono, tajpita en Traduki modo, aŭ sendita per \"Sendi poŝajn klavpremojn\", estas sendata kiel premoj de la klavoj de ĉi tiu komputilo, tiel ke konzoloj de virtualaj maŝinoj kaj fenestroj rulataj kiel administranto ricevas ĝin. Signoj, kiujn la klavara aranĝo ne povas tajpi, ankoraŭ estas sendataj kiel Unicode. Virtuala maŝino devas uzi la saman klavaran aranĝon kiel ĉi tiu komputilo. Linifinoj kaj taboj estas sendataj kiel premoj de la klavoj Enter kaj Tab."),
+        ("Send text as key presses in virtual machine consoles", "Sendi tekston kiel klavpremojn en konzoloj de virtualaj maŝinoj"),
+        ("vm_console_key_press_text_input_tip", "Dum konzolo de VMware, VirtualBox aŭ Hyper-V estas la aktiva fenestro, teksto tajpita aŭ algluita en telefono, tajpita en Traduki modo, aŭ sendita per \"Sendi poŝajn klavpremojn\", estas sendata kiel premoj de la klavoj de ĉi tiu komputilo, ĉar tiuj konzoloj ne povas legi la Unicode-enigon alie uzatan. Klavoj tajpitaj dum oni tenas Ctrl, Alt aŭ Windows estas traktataj kiel antaŭe. Signoj, kiujn la klavara aranĝo ne povas tajpi, kaj teksto, kiun aktiva enigmetodo konvertus, ankoraŭ estas sendataj kiel Unicode. La virtuala maŝino devas uzi la saman klavaran aranĝon kiel ĉi tiu komputilo."),
     ].iter().cloned().collect();
 }

@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "所選資料夾不是空的。安裝可能刪除現有資料。建議選擇其他資料夾。"),
         ("Request approval", "請求批准"),
         ("Forever", "永久"),
+        ("Send text as key presses (for VMs and admin windows)", "以按鍵方式傳送文字（適用於虛擬機器與系統管理員視窗）"),
+        ("physical_key_text_input_tip", "在手機上輸入或貼上的文字、在翻譯模式下輸入的文字，或透過「傳送剪貼簿按鍵」傳送的文字，都會以按下這台電腦按鍵的方式傳送，讓虛擬機器主控台與以系統管理員身分執行的視窗能夠接收。鍵盤配置無法輸入的字元仍會以 Unicode 傳送。虛擬機器必須使用與這台電腦相同的鍵盤配置。換行與定位字元會以 Enter 與 Tab 按鍵傳送。"),
+        ("Send text as key presses in virtual machine consoles", "在虛擬機器主控台中以按鍵方式傳送文字"),
+        ("vm_console_key_press_text_input_tip", "當 VMware、VirtualBox 或 Hyper-V 主控台為作用中視窗時，在手機上輸入或貼上的文字、在翻譯模式下輸入的文字，或透過「傳送剪貼簿按鍵」傳送的文字，都會以按下這台電腦按鍵的方式傳送，因為這些主控台無法讀取平常使用的 Unicode 輸入。按住 Ctrl、Alt 或 Windows 時輸入的按鍵會照舊處理。鍵盤配置無法輸入的字元，以及作用中輸入法會轉換的文字，仍會以 Unicode 傳送。虛擬機器必須使用與這台電腦相同的鍵盤配置。"),
     ].iter().cloned().collect();
 }

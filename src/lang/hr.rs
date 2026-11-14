@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Odabrana mapa nije prazna. Instalacija može izbrisati postojeće podatke. Razmislite o odabiru druge mape."),
         ("Request approval", "Zatraži odobrenje"),
         ("Forever", "Zauvijek"),
+        ("Send text as key presses (for VMs and admin windows)", "Pošalji tekst kao pritiske tipki (za virtualne strojeve i administratorske prozore)"),
+        ("physical_key_text_input_tip", "Tekst upisan ili zalijepljen na telefonu, upisan u načinu prevođenja ili poslan pomoću \"Pošalji pritiske tipki iz međuspremnika\" šalje se kao pritisci tipki ovog računala, tako da ga primaju konzole virtualnih strojeva i prozori pokrenuti kao administrator. Znakovi koje raspored tipkovnice ne može upisati i dalje se šalju kao Unicode. Virtualni stroj mora koristiti isti raspored tipkovnice kao ovo računalo. Prijelomi redaka i tabulatori šalju se kao pritisci tipki Enter i Tab."),
+        ("Send text as key presses in virtual machine consoles", "Pošalji tekst kao pritiske tipki u konzolama virtualnih strojeva"),
+        ("vm_console_key_press_text_input_tip", "Dok je konzola VMware, VirtualBox ili Hyper-V aktivni prozor, tekst upisan ili zalijepljen na telefonu, upisan u načinu prevođenja ili poslan pomoću \"Pošalji pritiske tipki iz međuspremnika\" šalje se kao pritisci tipki ovog računala jer te konzole ne mogu čitati Unicode unos koji se inače koristi. Tipke upisane uz držanje tipke Ctrl, Alt ili Windows obrađuju se kao i prije. Znakovi koje raspored tipkovnice ne može upisati te tekst koji bi aktivna metoda unosa pretvorila i dalje se šalju kao Unicode. Virtualni stroj mora koristiti isti raspored tipkovnice kao ovo računalo."),
     ].iter().cloned().collect();
 }

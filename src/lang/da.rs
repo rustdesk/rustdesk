@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Den valgte mappe er ikke tom. Installationen kan slette eksisterende data. Overvej at vælge en anden mappe."),
         ("Request approval", "Anmod om godkendelse"),
         ("Forever", "For evigt"),
+        ("Send text as key presses (for VMs and admin windows)", "Send tekst som tastetryk (til virtuelle maskiner og administratorvinduer)"),
+        ("physical_key_text_input_tip", "Tekst, der skrives eller indsættes på en telefon, skrives i oversættelsesmodus eller sendes med \"Send udklipsholder-tastetryk\", sendes som tryk på denne computers taster, så konsoller til virtuelle maskiner og vinduer, der kører som administrator, modtager den. Tegn, som tastaturlayoutet ikke kan skrive, sendes stadig som Unicode. En virtuel maskine skal bruge samme tastaturlayout som denne computer. Linjeskift og tabulatorer sendes som tryk på Enter- og Tab-tasterne."),
+        ("Send text as key presses in virtual machine consoles", "Send tekst som tastetryk i konsoller til virtuelle maskiner"),
+        ("vm_console_key_press_text_input_tip", "Når en VMware-, VirtualBox- eller Hyper-V-konsol er det aktive vindue, sendes tekst, der skrives eller indsættes på en telefon, skrives i oversættelsesmodus eller sendes med \"Send udklipsholder-tastetryk\", som tryk på denne computers taster, da disse konsoller ikke kan læse det Unicode-input, der ellers bruges. Taster, der trykkes, mens Ctrl, Alt eller Windows holdes nede, håndteres som før. Tegn, som tastaturlayoutet ikke kan skrive, og tekst, som en aktiv inputmetode ville konvertere, sendes stadig som Unicode. Den virtuelle maskine skal bruge samme tastaturlayout som denne computer."),
     ].iter().cloned().collect();
 }

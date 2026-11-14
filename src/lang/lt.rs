@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Pasirinktas aplankas nėra tuščias. Diegimas gali ištrinti esamus duomenis. Apsvarstykite galimybę pasirinkti kitą aplanką."),
         ("Request approval", "Prašyti patvirtinimo"),
         ("Forever", "Visam laikui"),
+        ("Send text as key presses (for VMs and admin windows)", "Siųsti tekstą klavišų paspaudimais (VM ir administratoriaus langams)"),
+        ("physical_key_text_input_tip", "Telefone įvestas ar įklijuotas, vertimo režimu įvestas arba funkcija \"Siųsti iškarpinės klavišų paspaudimus\" išsiųstas tekstas siunčiamas šio kompiuterio klavišų paspaudimais, kad jį gautų virtualiųjų mašinų konsolės ir administratoriaus teisėmis paleisti langai. Simboliai, kurių neįmanoma įvesti klaviatūros išdėstymu, vis tiek siunčiami kaip Unicode. Virtualioji mašina turi naudoti tą patį klaviatūros išdėstymą kaip šis kompiuteris. Eilučių lūžiai ir tabuliacijos siunčiami kaip Enter ir Tab klavišų paspaudimai."),
+        ("Send text as key presses in virtual machine consoles", "Siųsti tekstą klavišų paspaudimais virtualiųjų mašinų konsolėse"),
+        ("vm_console_key_press_text_input_tip", "Kai aktyvusis langas yra VMware, VirtualBox ar Hyper-V konsolė, telefone įvestas ar įklijuotas, vertimo režimu įvestas arba funkcija \"Siųsti iškarpinės klavišų paspaudimus\" išsiųstas tekstas siunčiamas šio kompiuterio klavišų paspaudimais, nes šios konsolės negali nuskaityti kitais atvejais naudojamos Unicode įvesties. Klavišai, paspausti laikant nuspaustą Ctrl, Alt ar Windows, apdorojami kaip anksčiau. Simboliai, kurių neįmanoma įvesti klaviatūros išdėstymu, ir tekstas, kurį konvertuotų aktyvus įvesties metodas, vis tiek siunčiami kaip Unicode. Virtualioji mašina turi naudoti tą patį klaviatūros išdėstymą kaip šis kompiuteris."),
     ].iter().cloned().collect();
 }

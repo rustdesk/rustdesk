@@ -4889,6 +4889,633 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
         .unwrap_or_default()
 }
 
+/// Keyboard layout of the foreground window's thread. `None` without a foreground window:
+/// `GetKeyboardLayout(0)` would return the layout of the calling thread instead.
+fn foreground_keyboard_layout() -> Option<HKL> {
+    unsafe {
+        let thread_id = GetWindowThreadProcessId(GetForegroundWindow(), null_mut());
+        if thread_id == 0 {
+            return None;
+        }
+        let layout = GetKeyboardLayout(thread_id);
+        (!layout.is_null()).then_some(layout)
+    }
+}
+
+/// Windows 10 1607 (build 14393) or later, which `ToUnicodeEx` needs to leave the keyboard
+/// state untouched.
+fn is_win_10_1607_or_greater() -> bool {
+    static RESULT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *RESULT
+        .get_or_init(|| base::platform::windows::is_windows_version_or_greater(10, 0, 14393, 0, 0))
+}
+
+/// Layout to type text with key presses: the foreground window's, unless its input method
+/// could turn the keys into other text or `ToUnicodeEx` cannot leave the keyboard state
+/// untouched.
+fn key_press_text_layout() -> Option<HKL> {
+    if !is_win_10_1607_or_greater() {
+        return None;
+    }
+    let layout = foreground_keyboard_layout()?;
+    if layout_may_use_ime(layout) && foreground_ime_may_transform_keys() {
+        return None;
+    }
+    Some(layout)
+}
+
+/// Whether `layout` is in a language Windows ships an input method for: Chinese, Japanese,
+/// Korean, Vietnamese (Telex, VNI), the Indic phonetic languages and Amharic. Third-party
+/// input methods are not detected.
+fn layout_may_use_ime(layout: HKL) -> bool {
+    use winapi::um::winnt::{
+        LANG_AMHARIC, LANG_BENGALI, LANG_CHINESE, LANG_GUJARATI, LANG_HINDI, LANG_JAPANESE,
+        LANG_KANNADA, LANG_KOREAN, LANG_MALAYALAM, LANG_MARATHI, LANG_ORIYA, LANG_PUNJABI,
+        LANG_TAMIL, LANG_TELUGU, LANG_VIETNAMESE, PRIMARYLANGID,
+    };
+    matches!(
+        PRIMARYLANGID(layout as usize as u16),
+        LANG_CHINESE
+            | LANG_JAPANESE
+            | LANG_KOREAN
+            | LANG_VIETNAMESE
+            | LANG_HINDI
+            | LANG_BENGALI
+            | LANG_GUJARATI
+            | LANG_KANNADA
+            | LANG_MALAYALAM
+            | LANG_MARATHI
+            | LANG_ORIYA
+            | LANG_PUNJABI
+            | LANG_TAMIL
+            | LANG_TELUGU
+            | LANG_AMHARIC
+    )
+}
+
+/// Whether the input method of the foreground thread's focused window could turn key presses
+/// into other text. The window's default IME window answers for its own thread, so this works
+/// across processes. The foreground thread may be busy, so the query runs on its own thread
+/// with a time limit. Any failure counts as "could".
+fn foreground_ime_may_transform_keys() -> bool {
+    use windows::Win32::{Foundation::HWND as WinHWND, UI::Input::Ime::ImmGetDefaultIMEWnd};
+    const IMC_GETCONVERSIONMODE: WPARAM = 1;
+    const IMC_GETOPENSTATUS: WPARAM = 5;
+    const QUERY_TIMEOUT_MS: u32 = 100;
+
+    let ime = unsafe {
+        let window = GetForegroundWindow();
+        let thread_id = GetWindowThreadProcessId(window, null_mut());
+        if thread_id == 0 {
+            return true;
+        }
+        let mut info: GUITHREADINFO = mem::zeroed();
+        info.cbSize = mem::size_of::<GUITHREADINFO>() as _;
+        let focus = if GetGUIThreadInfo(thread_id, &mut info) != 0 && !info.hwndFocus.is_null() {
+            info.hwndFocus
+        } else {
+            window
+        };
+        ImmGetDefaultIMEWnd(WinHWND(focus as _)).0 as usize
+    };
+    if ime == 0 {
+        return true;
+    }
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let query = move || {
+        let ask = |command: WPARAM| {
+            let mut result = 0;
+            let answered = unsafe {
+                SendMessageTimeoutW(
+                    ime as HWND,
+                    WM_IME_CONTROL,
+                    command,
+                    0,
+                    SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                    QUERY_TIMEOUT_MS,
+                    &mut result,
+                )
+            };
+            (answered != 0).then_some(result)
+        };
+        // The conversion mode reads as IME_CMODE_NATIVE on failure: ask only when open.
+        let transforms = ask(IMC_GETOPENSTATUS).and_then(|open| {
+            if open == 0 {
+                Some(false)
+            } else {
+                ask(IMC_GETCONVERSIONMODE).map(|mode| ime_mode_transforms_keys(true, mode as u32))
+            }
+        });
+        sender.send(transforms).ok();
+    };
+    if let Err(e) = std::thread::Builder::new()
+        .name("ime-query".to_owned())
+        .spawn(query)
+    {
+        hbb_common::throttled_log!(
+            Duration::from_secs(60),
+            debug,
+            "Failed to start the input method query: {}",
+            e
+        );
+        return true;
+    }
+    match receiver.recv_timeout(Duration::from_millis(QUERY_TIMEOUT_MS as u64 * 2 + 50)) {
+        Ok(Some(transforms)) => transforms,
+        _ => {
+            hbb_common::throttled_log!(
+                Duration::from_secs(60),
+                debug,
+                "The foreground input method did not report its mode"
+            );
+            true
+        }
+    }
+}
+
+/// Whether an input method that is `open` in `conversion` mode turns key presses into other
+/// text: open in a native, full-width, katakana or native-punctuation mode. Open in
+/// alphanumeric mode, keys pass through.
+fn ime_mode_transforms_keys(open: bool, conversion: u32) -> bool {
+    use windows::Win32::UI::Input::Ime::{
+        IME_CMODE_FULLSHAPE, IME_CMODE_KATAKANA, IME_CMODE_NATIVE, IME_CMODE_NATIVESYMBOL,
+        IME_CMODE_SYMBOL,
+    };
+    let converting = IME_CMODE_NATIVE.0
+        | IME_CMODE_FULLSHAPE.0
+        | IME_CMODE_KATAKANA.0
+        | IME_CMODE_NATIVESYMBOL.0
+        | IME_CMODE_SYMBOL.0;
+    open && conversion & converting != 0
+}
+
+/// Whether the foreground window is a virtual machine console that reads the scan code of each
+/// key. VMware and VirtualBox read the UTF-16 value of Unicode input as one, and Hyper-V does
+/// not accept Unicode input, so text sent there is never typed correctly without key presses.
+pub fn is_foreground_vm_console() -> bool {
+    let mut process_id: DWORD = 0;
+    unsafe {
+        GetWindowThreadProcessId(GetForegroundWindow(), &mut process_id);
+    }
+    if process_id == 0 {
+        return false;
+    }
+    match get_process_executable_path(process_id) {
+        Ok(path) => path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(is_vm_console_executable),
+        Err(e) => {
+            hbb_common::throttled_log!(
+                Duration::from_secs(60),
+                debug,
+                "Failed to check the foreground process for a VM console: {}",
+                e
+            );
+            false
+        }
+    }
+}
+
+fn is_vm_console_executable(name: &str) -> bool {
+    const VM_CONSOLES: [&str; 8] = [
+        "vmware.exe",
+        "vmplayer.exe",
+        "vmrc.exe",
+        "vmware-vmx.exe",
+        // Unity mode shows guest windows as host windows; Horizon shows remote desktops.
+        "vmware-unity-helper.exe",
+        "vmware-view.exe",
+        "virtualboxvm.exe",
+        // Hyper-V. Microsoft documents that it does not accept Unicode input.
+        "vmconnect.exe",
+    ];
+    VM_CONSOLES
+        .iter()
+        .any(|console| name.eq_ignore_ascii_case(console))
+}
+
+/// Types `chr` with the key presses the foreground keyboard layout needs, Shift and/or
+/// AltGr included, in a single `SendInput` call. A capital without a key of its own is typed
+/// with Caps Lock, and a dead key's own character with the dead key and Space, as on a
+/// physical keyboard. Unicode input puts the UTF-16 value in the
+/// scan code field: windows run as administrator drop it and VMware consoles read '1' (0x31)
+/// as N. Returns `false` without typing anything when the layout cannot type `chr` this way,
+/// so the caller can fall back to Unicode input.
+///
+/// The caller must not use this with Ctrl, Alt or Windows held down or in the event: they
+/// would combine with the keys. Shift is released first, as `chr` is already final.
+pub fn try_input_char_as_key_presses(chr: u32, state: TextKeyState) -> bool {
+    let Ok(c) = char::try_from(chr) else {
+        return false;
+    };
+    // A line break is typed as Enter, as in `input_text_as_key_presses`.
+    let c = if c == '\n' { '\r' } else { c };
+    key_press_text_layout().is_some_and(|layout| input_char_as_key_presses(c, layout, state))
+}
+
+/// The host keyboard state the input service set up for a text event. Caps Lock matches the
+/// event's, and Shift is down when the event has it. Taken from the event, as reading it back
+/// right after the input service changed it could see the old state.
+#[derive(Clone, Copy)]
+pub struct TextKeyState {
+    pub caps_lock: bool,
+    pub shift_down: bool,
+}
+
+/// Types `text` like `try_input_char_as_key_presses`, with one layout for the whole text. A
+/// line break ("\r\n" or "\n") is typed as Enter and '\t' as Tab. `fallback` receives, in
+/// order, the parts that cannot be typed this way.
+pub fn input_text_as_key_presses(text: &str, state: TextKeyState, mut fallback: impl FnMut(&str)) {
+    let Some(layout) = key_press_text_layout() else {
+        return fallback(text);
+    };
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        let (key, len) = match c {
+            '\r' if rest[1..].starts_with('\n') => ('\r', 2),
+            '\n' => ('\r', 1),
+            c => (c, c.len_utf8()),
+        };
+        let (part, tail) = rest.split_at(len);
+        if !input_char_as_key_presses(key, layout, state) {
+            fallback(part);
+        }
+        rest = tail;
+    }
+}
+
+const SCAN_LSHIFT: u16 = 0x2A;
+const SCAN_RSHIFT: u16 = 0x36;
+const SCAN_CAPSLOCK: u16 = 0x3A;
+const SCAN_SPACE: u16 = 0x39;
+// AltGr. Windows adds the implicit Left Ctrl itself, and a guest sees AltGr, not Ctrl+Alt.
+const SCAN_RALT: u16 = 0xE038;
+
+/// A key that types one character: its virtual key and scan code, Shift, AltGr, whether it is
+/// a dead key, and whether Caps Lock is toggled around it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CharKey {
+    vk: u32,
+    scan: u16,
+    shift: bool,
+    altgr: bool,
+    dead: bool,
+    toggle_caps: bool,
+}
+
+/// The key events that type one character, as (scan code, key up). The character counts as
+/// typed once the event at `before_key_down` is sent. While the number of events sent is in
+/// `dead_pending` (start exclusive, end inclusive), a dead key waits for the next key.
+#[derive(Debug)]
+struct KeyPresses {
+    events: Vec<(u16, bool)>,
+    before_key_down: usize,
+    dead_pending: Option<(usize, usize)>,
+}
+
+fn input_char_as_key_presses(c: char, layout: HKL, state: TextKeyState) -> bool {
+    // Releasing a Shift that is up has no effect, so both are released when the event has one.
+    let release: Vec<u16> = [(VK_LSHIFT, SCAN_LSHIFT), (VK_RSHIFT, SCAN_RSHIFT)]
+        .into_iter()
+        .filter(|&(vk, _)| state.shift_down || unsafe { GetKeyState(vk) } < 0)
+        .map(|(_, scan)| scan)
+        .collect();
+    let Some(plan) = (unsafe { plan_char_key_presses(c, layout, state.caps_lock, &release) })
+    else {
+        return false;
+    };
+    let mut inputs: Vec<INPUT> = plan
+        .events
+        .iter()
+        .map(|&(scan, up)| scan_code_input(scan, up))
+        .collect();
+    let len = inputs.len();
+    let sent = unsafe { SendInput(len as _, inputs.as_mut_ptr(), mem::size_of::<INPUT>() as _) };
+    let sent = sent as usize;
+    // `c` is typed once its first key-down is sent: a pending dead key is completed with
+    // Space. Otherwise the caller can try Unicode input.
+    if sent > 0 && sent < len {
+        let dead_pending = plan
+            .dead_pending
+            .is_some_and(|(start, end)| start < sent && sent <= end);
+        undo_partial_key_presses(&inputs[..sent], dead_pending);
+    }
+    sent > plan.before_key_down
+}
+
+/// The key events that type `c` on `layout` with Caps Lock `caps_on`, releasing the keys in
+/// `release` first. `None` when no key, or dead key and base letter, types exactly `c`.
+unsafe fn plan_char_key_presses(
+    c: char,
+    layout: HKL,
+    caps_on: bool,
+    release: &[u16],
+) -> Option<KeyPresses> {
+    let mut utf16 = [0_u16; 2];
+    // The control characters a key types: Enter, Tab, and Backspace and Esc, which a Windows
+    // client in Translate mode sends as text.
+    let key_control = matches!(c, '\r' | '\t' | '\u{8}' | '\u{1b}');
+    if (c.is_control() && !key_control) || c.encode_utf16(&mut utf16).len() != 1 {
+        return None;
+    }
+    let mut events: Vec<(u16, bool)> = release.iter().map(|&scan| (scan, true)).collect();
+    if let Some(key) = find_char_key(c, utf16[0], layout, caps_on) {
+        if key.toggle_caps {
+            events.extend([(SCAN_CAPSLOCK, false), (SCAN_CAPSLOCK, true)]);
+        }
+        let key_down = push_key(&mut events, &key);
+        // A dead key's own character is typed with Space, which ends the dead key.
+        let dead_pending = key.dead.then(|| {
+            let space_down = events.len();
+            events.extend([(SCAN_SPACE, false), (SCAN_SPACE, true)]);
+            (key_down, space_down)
+        });
+        if key.toggle_caps {
+            events.extend([(SCAN_CAPSLOCK, false), (SCAN_CAPSLOCK, true)]);
+        }
+        return Some(KeyPresses {
+            events,
+            before_key_down: key_down,
+            dead_pending,
+        });
+    }
+    let (dead, base) = composed_keys(utf16[0], layout, caps_on)?;
+    let dead_down = push_key(&mut events, &dead);
+    let base_down = push_key(&mut events, &base);
+    Some(KeyPresses {
+        events,
+        before_key_down: dead_down,
+        dead_pending: Some((dead_down, base_down)),
+    })
+}
+
+/// Adds the presses of `key` with its Shift and AltGr, and returns the index of its key-down.
+fn push_key(events: &mut Vec<(u16, bool)>, key: &CharKey) -> usize {
+    if key.shift {
+        events.push((SCAN_LSHIFT, false));
+    }
+    if key.altgr {
+        events.push((SCAN_RALT, false));
+    }
+    let key_down = events.len();
+    events.extend([(key.scan, false), (key.scan, true)]);
+    if key.altgr {
+        events.push((SCAN_RALT, true));
+    }
+    if key.shift {
+        events.push((SCAN_LSHIFT, true));
+    }
+    key_down
+}
+
+/// The key `VkKeyScanEx` names for `c16`, checked under the current Caps Lock state. Caps Lock
+/// inverts letters, which `VkKeyScanEx` ignores, so the other Shift state is tried next, then
+/// Caps Lock toggled around the key, then the lowercase letter's key with Caps Lock on.
+unsafe fn find_char_key(c: char, c16: u16, layout: HKL, caps_on: bool) -> Option<CharKey> {
+    const SHIFT: i16 = 0x100;
+    let code = VkKeyScanExW(c16, layout);
+    if code != -1 {
+        let candidates = [(code, false), (code ^ SHIFT, false), (code, true)];
+        for (code, toggle_caps) in candidates {
+            let key = checked_key(c16, code, caps_on != toggle_caps, toggle_caps, layout);
+            if key.is_some() {
+                return key;
+            }
+        }
+    }
+    caps_lock_key(c, c16, layout, caps_on)
+}
+
+/// Some capitals are typed with Caps Lock on and the key of the lowercase letter, e.g. 'Ě' on
+/// the Czech layout. VkKeyScanEx finds no key for them, or one that types the lowercase letter.
+unsafe fn caps_lock_key(c: char, c16: u16, layout: HKL, caps_on: bool) -> Option<CharKey> {
+    let mut lower = c.to_lowercase();
+    let (Some(l), None) = (lower.next(), lower.next()) else {
+        return None;
+    };
+    let mut l16 = [0_u16; 2];
+    if l == c || l.encode_utf16(&mut l16).len() != 1 {
+        return None;
+    }
+    let code = VkKeyScanExW(l16[0], layout);
+    // Only a key typed without modifiers, so Caps Lock is the only one involved.
+    if code == -1 || code >> 8 != 0 {
+        return None;
+    }
+    checked_key(c16, code, true, !caps_on, layout)
+}
+
+/// A character without a key of its own, typed as a dead key followed by its base letter as on
+/// a physical keyboard, e.g. 'ã' as '~' then 'a' on the Brazilian layout.
+unsafe fn composed_keys(c16: u16, layout: HKL, caps_on: bool) -> Option<(CharKey, CharKey)> {
+    use winapi::um::winnls::{NormalizationD, NormalizeString};
+    let mut parts = [0_u16; 4];
+    if NormalizeString(NormalizationD, &c16, 1, parts.as_mut_ptr(), parts.len() as _) != 2 {
+        return None;
+    }
+    let base = char::from_u32(parts[0] as u32)?;
+    let base_key = find_char_key(base, parts[0], layout, caps_on)
+        .filter(|key| !key.dead && !key.toggle_caps)?;
+    dead_key_characters(parts[1]).iter().find_map(|&spacing| {
+        let code = VkKeyScanExW(spacing, layout);
+        if code == -1 {
+            return None;
+        }
+        let dead = checked_key(spacing, code, caps_on, false, layout).filter(|key| key.dead)?;
+        composes(&dead, &base_key, c16, layout, caps_on).then_some((dead, base_key))
+    })
+}
+
+/// What a dead key for the combining `mark` types with Space. Layouts differ: US-International
+/// uses ASCII quotes for acute, diaeresis and cedilla.
+fn dead_key_characters(mark: u16) -> &'static [u16] {
+    match mark {
+        0x0300 => &[0x0060],         // grave `
+        0x0301 => &[0x00B4, 0x0027], // acute ´ '
+        0x0302 => &[0x005E],         // circumflex ^
+        0x0303 => &[0x007E, 0x02DC], // tilde ~ ˜
+        0x0304 => &[0x00AF],         // macron ¯
+        0x0306 => &[0x02D8],         // breve ˘
+        0x0307 => &[0x02D9],         // dot above ˙
+        0x0308 => &[0x00A8, 0x0022], // diaeresis ¨ "
+        0x030A => &[0x00B0, 0x02DA], // ring ° ˚
+        0x030B => &[0x02DD],         // double acute ˝
+        0x030C => &[0x02C7],         // caron ˇ
+        0x0327 => &[0x00B8, 0x0027], // cedilla ¸ '
+        0x0328 => &[0x02DB],         // ogonek ˛
+        _ => &[],
+    }
+}
+
+/// Whether `dead` then `base` type exactly `c16`. Unlike `checked_key`, `ToUnicodeEx` keeps the
+/// dead key between the two calls. That state belongs to the calling thread, and the second call
+/// ends the dead key either way.
+unsafe fn composes(dead: &CharKey, base: &CharKey, c16: u16, layout: HKL, caps_on: bool) -> bool {
+    let mut typed = [0_u16; 4];
+    let to_unicode = |key: &CharKey, typed: &mut [u16; 4]| {
+        let state = key_state(key.shift, key.altgr, caps_on);
+        ToUnicodeEx(
+            key.vk,
+            key.scan as u32 & 0xFF,
+            state.as_ptr(),
+            typed.as_mut_ptr(),
+            typed.len() as _,
+            0,
+            layout,
+        )
+    };
+    to_unicode(dead, &mut typed) == -1 && to_unicode(base, &mut typed) == 1 && typed[0] == c16
+}
+
+/// A keyboard state for `ToUnicodeEx` with only Shift, AltGr and Caps Lock as given.
+fn key_state(shift: bool, altgr: bool, caps: bool) -> [u8; 256] {
+    let mut state = [0_u8; 256];
+    if shift {
+        state[VK_SHIFT as usize] = 0x80;
+    }
+    if altgr {
+        state[VK_CONTROL as usize] = 0x80;
+        state[VK_MENU as usize] = 0x80;
+    }
+    if caps {
+        state[VK_CAPITAL as usize] = 0x01;
+    }
+    state
+}
+
+/// The key for `code` from `VkKeyScanExW`, if it types exactly `c16` with Caps Lock `caps`
+/// while typing, which is toggled for the key when `toggle_caps`. A dead key types `c16`
+/// followed by Space; it is not combined with a Caps Lock toggle.
+unsafe fn checked_key(
+    c16: u16,
+    code: i16,
+    caps: bool,
+    toggle_caps: bool,
+    layout: HKL,
+) -> Option<CharKey> {
+    const SHIFT: i16 = 1;
+    const CTRL_ALT: i16 = 6;
+    // Do not touch the keyboard state, so no dead key is left pending.
+    const TOUNICODE_KEEP_STATE: u32 = 4;
+
+    let vk = (code & 0xFF) as u32;
+    // VkKeyScanEx documents that it skips the numpad. Keep it out anyway: with Num Lock off, a
+    // numpad scan code types a navigation key instead.
+    if matches!(vk as i32, VK_NUMPAD0..=VK_DIVIDE) {
+        return None;
+    }
+    let shift = code >> 8 & SHIFT != 0;
+    let altgr = match code >> 8 & !SHIFT {
+        0 => false,
+        CTRL_ALT => true,
+        _ => return None,
+    };
+    let scan = MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC_EX, layout);
+    if scan == 0 || scan > 0xFFFF {
+        return None;
+    }
+    let state = key_state(shift, altgr, caps);
+    let mut typed = [0_u16; 4];
+    let len = ToUnicodeEx(
+        vk,
+        scan & 0xFF,
+        state.as_ptr(),
+        typed.as_mut_ptr(),
+        typed.len() as _,
+        TOUNICODE_KEEP_STATE,
+        layout,
+    );
+    // A dead key returns -1 and its character as typed with Space, which ends the dead key.
+    let dead = len == -1 && !toggle_caps;
+    ((len == 1 || dead) && typed[0] == c16).then_some(CharKey {
+        vk,
+        scan: scan as u16,
+        shift,
+        altgr,
+        dead,
+        toggle_caps,
+    })
+}
+
+/// A scan code key event. An 0xE0-prefixed scan code is sent as its low byte with the
+/// extended-key flag, as `SendInput` documents.
+fn scan_code_input(scan: u16, up: bool) -> INPUT {
+    let mut flags = KEYEVENTF_SCANCODE;
+    if scan >> 8 == 0xE0 {
+        flags |= KEYEVENTF_EXTENDEDKEY;
+    }
+    if up {
+        flags |= KEYEVENTF_KEYUP;
+    }
+    unsafe {
+        let mut input: INPUT = mem::zeroed();
+        input.type_ = INPUT_KEYBOARD;
+        let ki = input.u.ki_mut();
+        ki.wScan = scan & 0xFF;
+        ki.dwFlags = flags;
+        ki.dwExtraInfo = enigo::ENIGO_INPUT_EXTRA_VALUE;
+        input
+    }
+}
+
+/// After `SendInput` sent only `sent`, releases the keys left down, completes a pending dead
+/// key with Space when `dead_pending`, and turns Caps Lock back if it was toggled an odd number
+/// of times.
+fn undo_partial_key_presses(sent: &[INPUT], dead_pending: bool) {
+    let is_up = |input: &INPUT| unsafe { input.u.ki().dwFlags & KEYEVENTF_KEYUP != 0 };
+    let scan = |input: &INPUT| unsafe {
+        let ki = input.u.ki();
+        let extended = if ki.dwFlags & KEYEVENTF_EXTENDEDKEY != 0 {
+            0xE000
+        } else {
+            0
+        };
+        ki.wScan | extended
+    };
+    let mut undo = Vec::with_capacity(8);
+    for (i, input) in sent.iter().enumerate().rev() {
+        let released = sent[i + 1..]
+            .iter()
+            .any(|later| is_up(later) && scan(later) == scan(input));
+        if !is_up(input) && !released {
+            undo.push(scan_code_input(scan(input), true));
+        }
+    }
+    if dead_pending {
+        undo.push(scan_code_input(SCAN_SPACE, false));
+        undo.push(scan_code_input(SCAN_SPACE, true));
+    }
+    let caps_toggles = sent
+        .iter()
+        .filter(|input| !is_up(input) && scan(input) == SCAN_CAPSLOCK)
+        .count();
+    if caps_toggles % 2 == 1 {
+        undo.push(scan_code_input(SCAN_CAPSLOCK, false));
+        undo.push(scan_code_input(SCAN_CAPSLOCK, true));
+    }
+    // Only the Shift releases before the character may have been sent: nothing to undo.
+    let undone = if undo.is_empty() {
+        0
+    } else {
+        unsafe {
+            SendInput(
+                undo.len() as _,
+                undo.as_mut_ptr(),
+                mem::size_of::<INPUT>() as _,
+            )
+        }
+    };
+    hbb_common::throttled_log!(
+        Duration::from_secs(60),
+        warn,
+        "SendInput sent {} key events of a character, undo sent {} of {}",
+        sent.len(),
+        undone,
+        undo.len()
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4990,5 +5617,161 @@ ProcessId=10136
             arg,
         );
         assert_eq!(pids.len(), 0);
+    }
+
+    const DOWN: bool = false;
+    const UP: bool = true;
+
+    /// A keyboard layout a test loaded, unloaded on drop (even when the test fails) unless it
+    /// was already loaded.
+    struct LoadedLayout {
+        layout: HKL,
+        unload: bool,
+    }
+
+    impl Drop for LoadedLayout {
+        fn drop(&mut self) {
+            if self.unload {
+                unsafe { UnloadKeyboardLayout(self.layout) };
+            }
+        }
+    }
+
+    /// Runs `f` with the keyboard layout `id` loaded. Tests share the session's layout list,
+    /// so they take turns.
+    fn with_layout(id: &str, f: impl FnOnce(HKL)) {
+        static LAYOUTS: Mutex<()> = Mutex::new(());
+        let _turn = LAYOUTS.lock().unwrap_or_else(|e| e.into_inner());
+        let loaded = unsafe {
+            let count = GetKeyboardLayoutList(0, null_mut());
+            let mut before = vec![null_mut(); count.max(0) as usize];
+            GetKeyboardLayoutList(count, before.as_mut_ptr());
+            let id: Vec<u16> = id.encode_utf16().chain([0]).collect();
+            let layout = LoadKeyboardLayoutW(id.as_ptr(), KLF_NOTELLSHELL);
+            assert!(!layout.is_null(), "the keyboard layout should load");
+            LoadedLayout {
+                layout,
+                unload: !before.contains(&layout),
+            }
+        };
+        f(loaded.layout);
+    }
+
+    fn plan(c: char, layout: HKL, caps_on: bool, release: &[u16]) -> Option<(Vec<(u16, bool)>, usize)> {
+        unsafe { plan_char_key_presses(c, layout, caps_on, release) }
+            .map(|keys| (keys.events, keys.before_key_down))
+    }
+
+    #[test]
+    fn key_presses_follow_the_layout() {
+        with_layout("00000409", |us| {
+            assert_eq!(plan('1', us, false, &[]), Some((vec![(0x02, DOWN), (0x02, UP)], 0)));
+            // Backspace and Esc, as a Windows client in Translate mode sends them.
+            assert_eq!(plan('\u{8}', us, false, &[]), Some((vec![(0x0E, DOWN), (0x0E, UP)], 0)));
+            assert_eq!(plan('\u{1b}', us, false, &[]), Some((vec![(0x01, DOWN), (0x01, UP)], 0)));
+            let shift_a = vec![(SCAN_LSHIFT, DOWN), (0x1E, DOWN), (0x1E, UP), (SCAN_LSHIFT, UP)];
+            assert_eq!(plan('A', us, false, &[]), Some((shift_a.clone(), 1)));
+            // Caps Lock on: the capital needs no Shift and the lowercase letter does.
+            assert_eq!(plan('A', us, true, &[]), Some((vec![(0x1E, DOWN), (0x1E, UP)], 0)));
+            assert_eq!(plan('a', us, true, &[]), Some((shift_a, 1)));
+            // A Shift held for the event is released first: the character is already final.
+            assert_eq!(
+                plan('1', us, false, &[SCAN_LSHIFT]),
+                Some((vec![(SCAN_LSHIFT, UP), (0x02, DOWN), (0x02, UP)], 1))
+            );
+            assert_eq!(plan('€', us, false, &[]), None);
+        });
+        // #14104: on the French layout, '1' is Shift and the key that types '&'.
+        with_layout("0000040C", |fr| {
+            assert_eq!(plan('&', fr, false, &[]), Some((vec![(0x02, DOWN), (0x02, UP)], 0)));
+            assert_eq!(
+                plan('1', fr, false, &[]),
+                Some((vec![(SCAN_LSHIFT, DOWN), (0x02, DOWN), (0x02, UP), (SCAN_LSHIFT, UP)], 1))
+            );
+        });
+    }
+
+    #[test]
+    fn dead_keys_and_caps_lock_capitals() {
+        // '¨' is Shift and a dead key on the French layout, completed with Space.
+        with_layout("0000040C", |fr| {
+            assert_eq!(
+                plan('¨', fr, false, &[]),
+                Some((
+                    vec![
+                        (SCAN_LSHIFT, DOWN),
+                        (0x1A, DOWN),
+                        (0x1A, UP),
+                        (SCAN_LSHIFT, UP),
+                        (SCAN_SPACE, DOWN),
+                        (SCAN_SPACE, UP)
+                    ],
+                    1
+                ))
+            );
+        });
+        // Czech 'Ě' has no key of its own: Caps Lock and the key of 'ě', unless it is on.
+        with_layout("00000405", |cz| {
+            assert_eq!(
+                plan('Ě', cz, false, &[]),
+                Some((
+                    vec![
+                        (SCAN_CAPSLOCK, DOWN),
+                        (SCAN_CAPSLOCK, UP),
+                        (0x03, DOWN),
+                        (0x03, UP),
+                        (SCAN_CAPSLOCK, DOWN),
+                        (SCAN_CAPSLOCK, UP)
+                    ],
+                    2
+                ))
+            );
+            assert_eq!(plan('Ě', cz, true, &[]), Some((vec![(0x03, DOWN), (0x03, UP)], 0)));
+        });
+    }
+
+    #[test]
+    fn characters_without_a_key_use_a_dead_key_and_base_letter() {
+        // Brazilian ABNT2: '~' then 'a'.
+        with_layout("00010416", |abnt2| {
+            let tilde = vec![(0x28, DOWN), (0x28, UP)];
+            assert_eq!(
+                plan('ã', abnt2, false, &[]),
+                Some(([tilde.clone(), vec![(0x1E, DOWN), (0x1E, UP)]].concat(), 0))
+            );
+            let shifted_a = vec![(SCAN_LSHIFT, DOWN), (0x1E, DOWN), (0x1E, UP), (SCAN_LSHIFT, UP)];
+            assert_eq!(
+                plan('Ã', abnt2, false, &[]),
+                Some(([tilde, shifted_a].concat(), 0))
+            );
+        });
+        // French: '^' then 'e'.
+        with_layout("0000040C", |fr| {
+            assert_eq!(
+                plan('ê', fr, false, &[]),
+                Some((vec![(0x1A, DOWN), (0x1A, UP), (0x12, DOWN), (0x12, UP)], 0))
+            );
+        });
+    }
+
+    #[test]
+    fn vm_consoles_and_input_method_modes() {
+        assert!(is_vm_console_executable("vmware.exe"));
+        assert!(is_vm_console_executable("VirtualBoxVM.exe"));
+        assert!(is_vm_console_executable("vmware-view.exe"));
+        assert!(is_vm_console_executable("vmconnect.exe"));
+        assert!(!is_vm_console_executable("VirtualBox.exe"));
+        assert!(!is_vm_console_executable("notepad.exe"));
+        // Microsoft Japanese IME: off, on in alphanumeric mode, hiragana, katakana.
+        assert!(!ime_mode_transforms_keys(false, 0x9));
+        assert!(!ime_mode_transforms_keys(true, 0x0));
+        assert!(ime_mode_transforms_keys(true, 0x9));
+        assert!(ime_mode_transforms_keys(true, 0xB));
+        // Chinese IME in English mode with Chinese punctuation.
+        assert!(ime_mode_transforms_keys(true, 0x400));
+        assert!(config::option2bool(
+            base::config::keys::OPTION_ENABLE_VM_CONSOLE_KEY_PRESS_TEXT_INPUT,
+            ""
+        ));
     }
 }

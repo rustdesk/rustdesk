@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "선택한 폴더가 비어 있지 않습니다. 설치 시 기존 데이터가 삭제될 수 있습니다. 다른 폴더를 선택하는 것이 좋습니다."),
         ("Request approval", "승인 요청"),
         ("Forever", "영구"),
+        ("Send text as key presses (for VMs and admin windows)", "텍스트를 키 입력으로 보내기 (가상 머신 및 관리자 창용)"),
+        ("physical_key_text_input_tip", "휴대폰에서 입력하거나 붙여넣은 텍스트, 번역 모드에서 입력한 텍스트, 또는 \"클립보드 키 입력 보내기\"로 보낸 텍스트는 이 컴퓨터의 키 입력으로 전송되므로, 가상 머신 콘솔과 관리자 권한으로 실행된 창에서도 받을 수 있습니다. 키보드 레이아웃으로 입력할 수 없는 문자는 계속 Unicode로 전송됩니다. 가상 머신은 이 컴퓨터와 같은 키보드 레이아웃을 사용해야 합니다. 줄 바꿈과 탭은 Enter 및 Tab 키 입력으로 전송됩니다."),
+        ("Send text as key presses in virtual machine consoles", "가상 머신 콘솔에서 텍스트를 키 입력으로 보내기"),
+        ("vm_console_key_press_text_input_tip", "VMware, VirtualBox 또는 Hyper-V 콘솔이 활성 창인 동안, 휴대폰에서 입력하거나 붙여넣은 텍스트, 번역 모드에서 입력한 텍스트, 또는 \"클립보드 키 입력 보내기\"로 보낸 텍스트는 이 컴퓨터의 키 입력으로 전송됩니다. 이러한 콘솔은 평소에 사용되는 Unicode 입력을 읽을 수 없기 때문입니다. Ctrl, Alt 또는 Windows 키를 누른 상태로 입력한 키는 이전과 같이 처리됩니다. 키보드 레이아웃으로 입력할 수 없는 문자와 활성 입력기가 변환할 텍스트는 계속 Unicode로 전송됩니다. 가상 머신은 이 컴퓨터와 같은 키보드 레이아웃을 사용해야 합니다."),
     ].iter().cloned().collect();
 }

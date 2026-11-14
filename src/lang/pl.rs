@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Wybrany folder nie jest pusty. Instalacja może usunąć istniejące dane. Rozważ wybranie innego folderu."),
         ("Request approval", "Poproś o zatwierdzenie"),
         ("Forever", "Na zawsze"),
+        ("Send text as key presses (for VMs and admin windows)", "Wysyłaj tekst jako naciśnięcia klawiszy (dla maszyn wirtualnych i okien administratora)"),
+        ("physical_key_text_input_tip", "Tekst wpisany lub wklejony na telefonie, wpisany w trybie translacji albo wysłany za pomocą „Wysyła naciśnięcia klawiszy ze schowka” jest wysyłany jako naciśnięcia klawiszy tego komputera, dzięki czemu odbierają go konsole maszyn wirtualnych i okna uruchomione jako administrator. Znaki, których nie można wpisać w danym układzie klawiatury, są nadal wysyłane jako Unicode. Maszyna wirtualna musi używać tego samego układu klawiatury co ten komputer. Podziały wierszy i tabulatory są wysyłane jako naciśnięcia klawiszy Enter i Tab."),
+        ("Send text as key presses in virtual machine consoles", "Wysyłaj tekst jako naciśnięcia klawiszy w konsolach maszyn wirtualnych"),
+        ("vm_console_key_press_text_input_tip", "Gdy aktywnym oknem jest konsola VMware, VirtualBox lub Hyper-V, tekst wpisany lub wklejony na telefonie, wpisany w trybie translacji albo wysłany za pomocą „Wysyła naciśnięcia klawiszy ze schowka” jest wysyłany jako naciśnięcia klawiszy tego komputera, ponieważ te konsole nie odczytują wprowadzania Unicode używanego w pozostałych przypadkach. Klawisze wpisane przy przytrzymanym Ctrl, Alt lub Windows są obsługiwane jak dotychczas. Znaki, których nie można wpisać w danym układzie klawiatury, oraz tekst, który zostałby przekształcony przez aktywną metodę wprowadzania, są nadal wysyłane jako Unicode. Maszyna wirtualna musi używać tego samego układu klawiatury co ten komputer."),
     ].iter().cloned().collect();
 }

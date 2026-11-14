@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "O cartafol seleccionado non está baleiro. A instalación pode eliminar os datos existentes. Considera escoller outro cartafol."),
         ("Request approval", "Solicitar aprobación"),
         ("Forever", "Para sempre"),
+        ("Send text as key presses (for VMs and admin windows)", "Enviar o texto como pulsacións de teclas (para máquinas virtuais e ventás de administrador)"),
+        ("physical_key_text_input_tip", "O texto escrito ou pegado nun teléfono, escrito no modo tradución ou enviado con \"Enviar pulsacións de teclas do portapapeis\" envíase como pulsacións das teclas deste computador, para que o reciban as consolas de máquinas virtuais e as ventás executadas como administrador. Os caracteres que a distribución do teclado non pode escribir seguen enviándose como Unicode. A máquina virtual debe usar a mesma distribución de teclado que este computador. Os saltos de liña e as tabulacións envíanse como pulsacións das teclas Enter e Tab."),
+        ("Send text as key presses in virtual machine consoles", "Enviar o texto como pulsacións de teclas nas consolas de máquinas virtuais"),
+        ("vm_console_key_press_text_input_tip", "Mentres unha consola de VMware, VirtualBox ou Hyper-V sexa a ventá activa, o texto escrito ou pegado nun teléfono, escrito no modo tradución ou enviado con \"Enviar pulsacións de teclas do portapapeis\" envíase como pulsacións das teclas deste computador, xa que estas consolas non poden ler a entrada Unicode que se usa noutros casos. As teclas premidas mantendo Ctrl, Alt ou Windows procésanse como antes. Os caracteres que a distribución do teclado non pode escribir, e o texto que convertería un método de entrada activo, seguen enviándose como Unicode. A máquina virtual debe usar a mesma distribución de teclado que este computador."),
     ].iter().cloned().collect();
 }

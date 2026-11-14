@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Seçilmiş qovluq boş deyil. Quraşdırma mövcud məlumatları silə bilər. Başqa qovluq seçməyiniz tövsiyə olunur."),
         ("Request approval", "Təsdiq istə"),
         ("Forever", "Həmişəlik"),
+        ("Send text as key presses (for VMs and admin windows)", "Mətni düymə vurmaları kimi göndər (virtual maşınlar və administrator pəncərələri üçün)"),
+        ("physical_key_text_input_tip", "Telefonda yazılan və ya yapışdırılan, çevirmə rejimində yazılan və ya \"Mübadilə buferi düymə vurmalarını göndər\" ilə göndərilən mətn bu kompüterin düymə vurmaları kimi göndərilir, beləliklə virtual maşın konsolları və administrator kimi işə salınan pəncərələr onu qəbul edir. Klaviatura düzümü ilə yazıla bilməyən simvollar yenə də Unicode kimi göndərilir. Virtual maşın bu kompüterlə eyni klaviatura düzümündən istifadə etməlidir. Sətir keçidləri və tablar Enter və Tab düymə vurmaları kimi göndərilir."),
+        ("Send text as key presses in virtual machine consoles", "Virtual maşın konsollarında mətni düymə vurmaları kimi göndər"),
+        ("vm_console_key_press_text_input_tip", "VMware, VirtualBox və ya Hyper-V konsolu aktiv pəncərə olduqda, telefonda yazılan və ya yapışdırılan, çevirmə rejimində yazılan və ya \"Mübadilə buferi düymə vurmalarını göndər\" ilə göndərilən mətn bu kompüterin düymə vurmaları kimi göndərilir, çünki bu konsollar digər hallarda istifadə olunan Unicode daxiletməsini oxuya bilmir. Ctrl, Alt və ya Windows basılı saxlanarkən yazılan düymələr əvvəlki kimi emal olunur. Klaviatura düzümü ilə yazıla bilməyən simvollar və aktiv daxiletmə metodunun çevirəcəyi mətn yenə də Unicode kimi göndərilir. Virtual maşın bu kompüterlə eyni klaviatura düzümündən istifadə etməlidir."),
     ].iter().cloned().collect();
 }

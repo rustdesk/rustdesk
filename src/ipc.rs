@@ -327,6 +327,7 @@ pub enum DataPortableService {
     RequestStart,
     WillClose,
     CmShowElevation(bool),
+    KeyPressTextInputOptions((bool, bool)),
 }
 
 #[cfg(feature = "flutter")]

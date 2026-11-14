@@ -796,6 +796,9 @@ pub mod server {
                                             crate::input_service::handle_key_(&evt);
                                         }
                                     }
+                                    KeyPressTextInputOptions(options) => {
+                                        crate::input_service::set_portable_service_key_press_text_input_options(options);
+                                    }
                                     _ => {}
                                 },
                                 _ => {}
@@ -1505,6 +1508,11 @@ pub mod client {
     }
 
     fn handle_key_(evt: &KeyEvent) -> ResultType<()> {
+        ipc_send(Data::DataPortableService(
+            DataPortableService::KeyPressTextInputOptions(
+                crate::input_service::key_press_text_input_options(),
+            ),
+        ))?;
         let mut v = vec![];
         evt.write_to_vec(&mut v)?;
         ipc_send(Data::DataPortableService(DataPortableService::Key(v)))

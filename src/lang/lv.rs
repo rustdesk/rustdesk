@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Izvēlētā mape nav tukša. Instalēšana var izdzēst esošos datus. Apsveriet iespēju izvēlēties citu mapi."),
         ("Request approval", "Pieprasīt apstiprinājumu"),
         ("Forever", "Uz visiem laikiem"),
+        ("Send text as key presses (for VMs and admin windows)", "Sūtīt tekstu kā taustiņsitienus (virtuālajām mašīnām un administratora logiem)"),
+        ("physical_key_text_input_tip", "Teksts, kas ievadīts vai ielīmēts tālrunī, ievadīts tulkošanas režīmā vai nosūtīts ar \"Nosūtīt starpliktuves taustiņsitienus\", tiek sūtīts kā šī datora taustiņsitieni, tāpēc to saņem virtuālo mašīnu konsoles un logi, kas palaisti kā administrators. Rakstzīmes, kuras ar tastatūras izkārtojumu nevar ievadīt, joprojām tiek sūtītas kā Unicode. Virtuālajai mašīnai jāizmanto tāds pats tastatūras izkārtojums kā šim datoram. Rindu pārtraukumi un tabulācijas tiek sūtīti kā Enter un Tab taustiņsitieni."),
+        ("Send text as key presses in virtual machine consoles", "Sūtīt tekstu kā taustiņsitienus virtuālo mašīnu konsolēs"),
+        ("vm_console_key_press_text_input_tip", "Kamēr aktīvais logs ir VMware, VirtualBox vai Hyper-V konsole, teksts, kas ievadīts vai ielīmēts tālrunī, ievadīts tulkošanas režīmā vai nosūtīts ar \"Nosūtīt starpliktuves taustiņsitienus\", tiek sūtīts kā šī datora taustiņsitieni, jo šīs konsoles nespēj nolasīt citos gadījumos izmantoto Unicode ievadi. Taustiņi, kas nospiesti, turot Ctrl, Alt vai Windows, tiek apstrādāti tāpat kā iepriekš. Rakstzīmes, kuras ar tastatūras izkārtojumu nevar ievadīt, un teksts, ko pārveidotu aktīvā ievades metode, joprojām tiek sūtīti kā Unicode. Virtuālajai mašīnai jāizmanto tāds pats tastatūras izkārtojums kā šim datoram."),
     ].iter().cloned().collect();
 }

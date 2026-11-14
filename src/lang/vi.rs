@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Thư mục đã chọn không trống. Quá trình cài đặt có thể xóa dữ liệu hiện có. Hãy cân nhắc chọn một thư mục khác."),
         ("Request approval", "Yêu cầu phê duyệt"),
         ("Forever", "Vĩnh viễn"),
+        ("Send text as key presses (for VMs and admin windows)", "Gửi văn bản dưới dạng nhấn phím (cho máy ảo và cửa sổ quản trị viên)"),
+        ("physical_key_text_input_tip", "Văn bản được gõ hoặc dán trên điện thoại, gõ ở Chế độ dịch, hoặc gửi bằng \"Gửi phím từ Clipboard\" sẽ được gửi dưới dạng các lần nhấn phím của máy tính này, để console máy ảo và các cửa sổ chạy với quyền Quản trị viên có thể nhận được. Các ký tự mà bố cục bàn phím không gõ được vẫn được gửi dưới dạng Unicode. Máy ảo phải dùng cùng bố cục bàn phím với máy tính này. Ngắt dòng và tab được gửi dưới dạng nhấn phím Enter và Tab."),
+        ("Send text as key presses in virtual machine consoles", "Gửi văn bản dưới dạng nhấn phím trong console máy ảo"),
+        ("vm_console_key_press_text_input_tip", "Khi console VMware, VirtualBox hoặc Hyper-V là cửa sổ đang hoạt động, văn bản được gõ hoặc dán trên điện thoại, gõ ở Chế độ dịch, hoặc gửi bằng \"Gửi phím từ Clipboard\" sẽ được gửi dưới dạng các lần nhấn phím của máy tính này, vì các console này không đọc được dữ liệu nhập Unicode được dùng trong các trường hợp khác. Các phím được gõ khi đang giữ Ctrl, Alt hoặc Windows được xử lý như trước. Các ký tự mà bố cục bàn phím không gõ được, và văn bản mà bộ gõ đang hoạt động sẽ chuyển đổi, vẫn được gửi dưới dạng Unicode. Máy ảo phải dùng cùng bố cục bàn phím với máy tính này."),
     ].iter().cloned().collect();
 }

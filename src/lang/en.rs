@@ -292,5 +292,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("api_server_empty_tip", "With API Server empty, your custom server defaults to HTTP. Contact your administrator to enable HTTPS."),
         ("android-logs-folder-tip", "Choose Android → media to store log files."),
         ("install-directory-not-empty-tip", "The selected folder is not empty. Installation may delete existing data. Consider choosing a different folder."),
+        ("physical_key_text_input_tip", "Text typed or pasted on a phone, typed in Translate mode, or sent with \"Send clipboard keystrokes\", is sent as presses of this computer's keys, so virtual machine consoles and windows run as administrator receive it. Characters the keyboard layout cannot type are still sent as Unicode. A virtual machine must use the same keyboard layout as this computer. Line breaks and tabs are sent as Enter and Tab key presses."),
+        ("vm_console_key_press_text_input_tip", "While a VMware, VirtualBox or Hyper-V console is the active window, text typed or pasted on a phone, typed in Translate mode, or sent with \"Send clipboard keystrokes\", is sent as presses of this computer's keys, as these consoles cannot read the Unicode input used otherwise. Keys typed with Ctrl, Alt or Windows held are handled as before. Characters the keyboard layout cannot type, and text an active input method would convert, are still sent as Unicode. The virtual machine must use the same keyboard layout as this computer."),
     ].iter().cloned().collect();
 }

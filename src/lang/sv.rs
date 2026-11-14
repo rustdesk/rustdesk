@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Den valda mappen är inte tom. Installationen kan radera befintliga data. Överväg att välja en annan mapp."),
         ("Request approval", "Begär godkännande"),
         ("Forever", "För alltid"),
+        ("Send text as key presses (for VMs and admin windows)", "Skicka text som tangenttryckningar (för virtuella maskiner och administratörsfönster)"),
+        ("physical_key_text_input_tip", "Text som skrivs eller klistras in på en telefon, skrivs i översättningsläge eller skickas med \"Skicka knappkombination för urklipp\" skickas som tryckningar på den här datorns tangenter, så att konsoler för virtuella maskiner och fönster som körs som administratör tar emot den. Tecken som tangentbordslayouten inte kan skriva skickas fortfarande som Unicode. En virtuell maskin måste använda samma tangentbordslayout som den här datorn. Radbrytningar och tabbar skickas som tryckningar på tangenterna Enter och Tab."),
+        ("Send text as key presses in virtual machine consoles", "Skicka text som tangenttryckningar i konsoler för virtuella maskiner"),
+        ("vm_console_key_press_text_input_tip", "När en VMware-, VirtualBox- eller Hyper-V-konsol är det aktiva fönstret skickas text som skrivs eller klistras in på en telefon, skrivs i översättningsläge eller skickas med \"Skicka knappkombination för urklipp\" som tryckningar på den här datorns tangenter, eftersom dessa konsoler inte kan läsa den Unicode-inmatning som annars används. Tangenter som trycks medan Ctrl, Alt eller Windows hålls nedtryckt hanteras som tidigare. Tecken som tangentbordslayouten inte kan skriva, och text som en aktiv inmatningsmetod skulle konvertera, skickas fortfarande som Unicode. Den virtuella maskinen måste använda samma tangentbordslayout som den här datorn."),
     ].iter().cloned().collect();
 }

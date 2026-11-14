@@ -826,5 +826,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", ""),
         ("Request approval", ""),
         ("Forever", ""),
+        ("Send text as key presses (for VMs and admin windows)", ""),
+        ("physical_key_text_input_tip", ""),
+        ("Send text as key presses in virtual machine consoles", ""),
+        ("vm_console_key_press_text_input_tip", ""),
     ].iter().cloned().collect();
 }
