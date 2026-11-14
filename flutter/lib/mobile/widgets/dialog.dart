@@ -239,6 +239,7 @@ TextFormField serverSettingsTextFormField({
     ),
     validator: validator,
     autofocus: autofocus,
+    textInputAction: TextInputAction.next,
     keyboardType: TextInputType.visiblePassword,
     textCapitalization: TextCapitalization.none,
     autocorrect: false,

@@ -535,7 +535,7 @@ class DialogTextField extends StatelessWidget {
         Expanded(
           child: Column(
             children: [
-              _dpadFocusTraversal(TextField(
+              TextField(
                 decoration: InputDecoration(
                   labelText: title,
                   hintText: hintText,
@@ -553,7 +553,7 @@ class DialogTextField extends StatelessWidget {
                 maxLength: maxLength,
                 textInputAction: textInputAction,
                 onSubmitted: onSubmitted,
-              )),
+              ),
               if (errorText != null)
                 Align(
                   alignment: Alignment.centerLeft,
@@ -572,24 +572,6 @@ class DialogTextField extends StatelessWidget {
       ],
     ).paddingSymmetric(vertical: 4.0);
   }
-}
-
-// On Android, up and down arrows (the D-pad of a TV remote) move the focus out
-// of a single-line text field to the field or button above or below it.
-// Without this, the text field keeps these keys and a TV remote cannot reach
-// the next field or the dialog buttons.
-Widget _dpadFocusTraversal(Widget child) {
-  if (!isAndroid) return child;
-  return Shortcuts(
-    shortcuts: const <ShortcutActivator, Intent>{
-      SingleActivator(LogicalKeyboardKey.arrowUp):
-          DirectionalFocusIntent(TraversalDirection.up, ignoreTextFields: false),
-      SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
-          TraversalDirection.down,
-          ignoreTextFields: false),
-    },
-    child: child,
-  );
 }
 
 abstract class ValidationField extends StatelessWidget {

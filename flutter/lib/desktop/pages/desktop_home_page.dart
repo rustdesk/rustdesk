@@ -986,6 +986,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                         errorText: errMsg0.isNotEmpty ? errMsg0 : null),
                     controller: p0,
                     autofocus: true,
+                    textInputAction: TextInputAction.next,
                     onChanged: (value) {
                       rxPass.value = value.trim();
                       setState(() {
@@ -1015,6 +1016,8 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                         labelText: translate('Confirmation'),
                         errorText: errMsg1.isNotEmpty ? errMsg1 : null),
                     controller: p1,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => submit(),
                     onChanged: (value) {
                       setState(() {
                         errMsg1 = '';

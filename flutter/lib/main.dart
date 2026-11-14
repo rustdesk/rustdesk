@@ -28,6 +28,7 @@ import 'consts.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'mobile/widgets/deploy_dialog.dart';
+import 'mobile/widgets/dpad_text_field_traversal.dart';
 import 'models/platform_model.dart';
 
 /// Basic window and launch properties.
@@ -522,7 +523,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                       data: MediaQuery.of(context).copyWith(
                         textScaler: TextScaler.linear(1.0),
                       ),
-                      child: child ?? Container(),
+                      child: DpadTextFieldTraversal(
+                        child: child ?? Container(),
+                      ),
                     ),
                   )
               : (context, child) {
