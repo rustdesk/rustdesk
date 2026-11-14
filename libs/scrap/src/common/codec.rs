@@ -628,6 +628,8 @@ impl Decoder {
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb
+    // `present`: convert the last decoded picture to RGB/texture. False keeps
+    // decoder state (needed for P-frames) without the display convert.
     pub fn handle_video_frame(
         &mut self,
         frame: &video_frame::Union,
@@ -635,25 +637,26 @@ impl Decoder {
         _texture: &mut ImageTexture,
         _pixelbuffer: &mut bool,
         chroma: &mut Option<Chroma>,
+        present: bool,
     ) -> ResultType<bool> {
         match frame {
             video_frame::Union::Vp8s(vp8s) => {
                 if let Some(vp8) = &mut self.vp8 {
-                    Decoder::handle_vpxs_video_frame(vp8, vp8s, rgb, chroma)
+                    Decoder::handle_vpxs_video_frame(vp8, vp8s, rgb, chroma, present)
                 } else {
                     bail!("vp8 decoder not available");
                 }
             }
             video_frame::Union::Vp9s(vp9s) => {
                 if let Some(vp9) = &mut self.vp9 {
-                    Decoder::handle_vpxs_video_frame(vp9, vp9s, rgb, chroma)
+                    Decoder::handle_vpxs_video_frame(vp9, vp9s, rgb, chroma, present)
                 } else {
                     bail!("vp9 decoder not available");
                 }
             }
             video_frame::Union::Av1s(av1s) => {
                 if let Some(av1) = &mut self.av1 {
-                    Decoder::handle_av1s_video_frame(av1, av1s, rgb, chroma)
+                    Decoder::handle_av1s_video_frame(av1, av1s, rgb, chroma, present)
                 } else {
                     bail!("av1 decoder not available");
                 }
@@ -664,11 +667,17 @@ impl Decoder {
                 #[cfg(feature = "vram")]
                 if let Some(decoder) = &mut self.h264_vram {
                     *_pixelbuffer = false;
-                    return Decoder::handle_vram_video_frame(decoder, h264s, _texture);
+                    return Decoder::handle_vram_video_frame(decoder, h264s, _texture, present);
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h264_ram {
-                    return Decoder::handle_hwram_video_frame(decoder, h264s, rgb, &mut self.i420);
+                    return Decoder::handle_hwram_video_frame(
+                        decoder,
+                        h264s,
+                        rgb,
+                        &mut self.i420,
+                        present,
+                    );
                 }
                 Err(anyhow!("don't support h264!"))
             }
@@ -678,11 +687,17 @@ impl Decoder {
                 #[cfg(feature = "vram")]
                 if let Some(decoder) = &mut self.h265_vram {
                     *_pixelbuffer = false;
-                    return Decoder::handle_vram_video_frame(decoder, h265s, _texture);
+                    return Decoder::handle_vram_video_frame(decoder, h265s, _texture, present);
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h265_ram {
-                    return Decoder::handle_hwram_video_frame(decoder, h265s, rgb, &mut self.i420);
+                    return Decoder::handle_hwram_video_frame(
+                        decoder,
+                        h265s,
+                        rgb,
+                        &mut self.i420,
+                        present,
+                    );
                 }
                 Err(anyhow!("don't support h265!"))
             }
@@ -714,6 +729,7 @@ impl Decoder {
         vpxs: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
         chroma: &mut Option<Chroma>,
+        present: bool,
     ) -> ResultType<bool> {
         let mut last_frame = vpxcodec::Image::new();
         for vpx in vpxs.frames.iter() {
@@ -722,15 +738,13 @@ impl Decoder {
                 last_frame = frame;
             }
         }
-        for frame in decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
-        }
         if last_frame.is_null() {
             Ok(false)
         } else {
             *chroma = Some(last_frame.chroma());
-            last_frame.to(rgb);
+            if present {
+                last_frame.to(rgb);
+            }
             Ok(true)
         }
     }
@@ -741,6 +755,7 @@ impl Decoder {
         av1s: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
         chroma: &mut Option<Chroma>,
+        present: bool,
     ) -> ResultType<bool> {
         let mut last_frame = aom::Image::new();
         for av1 in av1s.frames.iter() {
@@ -749,15 +764,13 @@ impl Decoder {
                 last_frame = frame;
             }
         }
-        for frame in decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
-        }
         if last_frame.is_null() {
             Ok(false)
         } else {
             *chroma = Some(last_frame.chroma());
-            last_frame.to(rgb);
+            if present {
+                last_frame.to(rgb);
+            }
             Ok(true)
         }
     }
@@ -769,17 +782,22 @@ impl Decoder {
         frames: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
         i420: &mut Vec<u8>,
+        present: bool,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h264 in frames.frames.iter() {
-            for image in decoder.decode(&h264.data)? {
-                // TODO: just process the last frame
-                if image.to_fmt(rgb, i420).is_ok() {
+            let images = decoder.decode(&h264.data)?;
+            if let Some(image) = images.last() {
+                if present {
+                    if image.to_fmt(rgb, i420).is_ok() {
+                        ret = true;
+                    }
+                } else {
                     ret = true;
                 }
             }
         }
-        return Ok(ret);
+        Ok(ret)
     }
 
     #[cfg(feature = "vram")]
@@ -787,19 +805,22 @@ impl Decoder {
         decoder: &mut VRamDecoder,
         frames: &EncodedVideoFrames,
         texture: &mut ImageTexture,
+        present: bool,
     ) -> ResultType<bool> {
         let mut ret = false;
         for h26x in frames.frames.iter() {
             for image in decoder.decode(&h26x.data)? {
-                *texture = ImageTexture {
-                    texture: image.frame.texture,
-                    w: image.frame.width as _,
-                    h: image.frame.height as _,
-                };
                 ret = true;
+                if present {
+                    *texture = ImageTexture {
+                        texture: image.frame.texture,
+                        w: image.frame.width as _,
+                        h: image.frame.height as _,
+                    };
+                }
             }
         }
-        return Ok(ret);
+        Ok(ret)
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb
