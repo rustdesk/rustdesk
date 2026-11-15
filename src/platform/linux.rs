@@ -67,7 +67,11 @@ lazy_static::lazy_static! {
         let x11 = base::platform::linux::is_x11_or_headless();
         #[cfg(feature = "drm")]
         {
-            if x11 && !display_server_forced() && is_login_screen_wayland() {
+            if x11
+                && drm_capture_enabled()
+                && !display_server_forced()
+                && is_login_screen_wayland()
+            {
                 log::info!(
                     "drm: seat0 is a Wayland login screen that reads as x11 upstream; \
                      treating it as Wayland so the DRM path is not disabled at the one \
@@ -393,7 +397,7 @@ pub struct xcb_xfixes_get_cursor_image {
 pub fn is_login_screen_wayland() -> bool {
     let values = get_values_of_seat0_with_gdm_wayland(&[0, 2, 1]);
     #[cfg(feature = "drm")]
-    if is_wayland_tty_greeter(&values[0], &values[2]) {
+    if drm_capture_enabled() && is_wayland_tty_greeter(&values[0], &values[2]) {
         return true;
     }
     is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
