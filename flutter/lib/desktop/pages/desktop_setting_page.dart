@@ -2243,7 +2243,7 @@ class _DisplayState extends State<_Display> {
 
   Widget privacyModeBackground(BuildContext context) {
     final key = kOptionPrivacyModeBackground;
-    var groupValue = bind.mainGetOptionSync(key);
+    var groupValue = bind.mainGetOptionSync(key: key);
     if (groupValue != 'black' && groupValue != 'desktop') {
       groupValue = 'black';
     }
