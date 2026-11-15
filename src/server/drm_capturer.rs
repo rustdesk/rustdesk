@@ -1769,6 +1769,9 @@ pub(crate) enum Availability {
 /// blocking pool). This blocking form serves the capture-side callers through
 /// `is_available`, where waiting out a settle is acceptable.
 fn availability() -> Availability {
+    if !crate::platform::linux::drm_capture_enabled() {
+        return Availability::Unavailable;
+    }
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
         // Keep a settled "no" while an off-thread probe re-verifies it, avoiding a transient
@@ -1808,6 +1811,9 @@ fn availability() -> Availability {
 /// Non-blocking login-path assessment.
 /// Unknown starts a probe off-thread; callers require `Available` before admitting a session.
 pub(crate) fn availability_cached() -> Availability {
+    if !crate::platform::linux::drm_capture_enabled() {
+        return Availability::Unavailable;
+    }
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
         let stale_no =
@@ -2013,6 +2019,9 @@ fn refresh_available_async() {
 }
 
 pub(super) fn warm_availability() {
+    if !crate::platform::linux::drm_capture_enabled() {
+        return;
+    }
     // The gate is INSIDE the loop because `get_display_server()` answers "x11" whenever loginctl
     // cannot yet name the seat0 session. `is_x11_for_drm()` is that form minus the greeter
     // blind spot, where plain `is_x11()` is permanently true.
@@ -3591,5 +3600,12 @@ mod drm_capturer_tests {
             sum_master / n,
             sum_now / n
         );
+    }
+
+    #[test]
+    fn drm_capture_off_reports_unavailable_without_probing() {
+        assert!(!crate::platform::linux::drm_capture_enabled());
+        assert!(availability() == Availability::Unavailable);
+        assert!(availability_cached() == Availability::Unavailable);
     }
 }
