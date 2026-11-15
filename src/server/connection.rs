@@ -802,6 +802,10 @@ impl Connection {
                         }
                         ipc::Data::SwitchPermission{name, enabled} => {
                             log::info!("Change permission {} -> {}", name, enabled);
+                            // Android broadcasts these to every connection; only remote sessions use them.
+                            if (&name == "keyboard" || &name == "clipboard") && !conn.is_remote() {
+                                continue;
+                            }
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
                                 conn.send_permission(Permission::Keyboard, enabled).await;
