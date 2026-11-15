@@ -141,7 +141,13 @@ pub fn get_display_server_of_session(session: &str) -> String {
                 return sestype.to_lowercase();
             }
         }
-        display_server = "x11".to_owned();
+        // Only fall back to x11 when loginctl gave no type at all. A tty or
+        // unspecified session is not an X11 session: relabelling it x11 here
+        // defeats the tty/unspecified skip in _get_values_of_seat0, so the
+        // root service picks up SSH and manager sessions as desktops.
+        if display_server.is_empty() {
+            display_server = "x11".to_owned();
+        }
     }
     display_server.to_lowercase()
 }
