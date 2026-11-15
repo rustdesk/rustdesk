@@ -1575,7 +1575,7 @@ pub fn rename_file(path: &str, new_name: &str) -> ResultType<()> {
     }
     validate_file_name_no_traversal(new_name)?;
     let path = std::path::Path::new(&path);
-    if path.exists() {
+    if path.symlink_metadata().is_ok() {
         let dir = path
             .parent()
             .ok_or(anyhow!("Parent directoy of {path:?} not exists"))?;
@@ -1916,6 +1916,21 @@ mod tests {
 
         assert!(!src.exists());
         assert!(dst.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_file_renames_a_dangling_symlink() {
+        let tmp_root = TestTempDir::new("rustdesk_rename_dangling");
+        let src = tmp_root.join("link");
+        let dst = tmp_root.join("renamed");
+        std::fs::create_dir_all(&tmp_root.path).expect("create temp dir");
+        std::os::unix::fs::symlink(tmp_root.join("missing"), &src).expect("create symlink");
+
+        let src_str = src.to_string_lossy().to_string();
+        rename_file(&src_str, "renamed").expect("rename should succeed");
+
+        assert!(dst.symlink_metadata().unwrap().file_type().is_symlink());
     }
 
     #[test]
