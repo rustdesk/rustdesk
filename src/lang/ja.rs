@@ -827,5 +827,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "承認を要求"),
         ("Forever", "無期限"),
         ("username-login-disabled-oidc-unavailable", "ユーザー名とパスワードによるログインは無効になっており、利用可能な OIDC ログイン方法がありません。"),
+        ("Use DRM screen capture", "DRM による画面キャプチャを使用する"),
+        ("drm-capture-tip", "RustDesk サービスを通じてグラフィックカードから直接画面をキャプチャし、ログイン画面も含めて Wayland の画面共有の確認を表示しません。すべてのデバイスで動作するとは限りません。接続時に引き続き画面共有の確認が求められる場合は、これをオフにするか X11 を使用してください。この設定を変更すると現在のセッションは切断されます。"),
+        ("wayland-drm-tip", "Wayland で無人アクセスを行うには DRM 画面キャプチャを試し、動作しない場合は X11 を使用してください。"),
+        ("login-wayland-drm-tip", "Wayland のログイン画面にアクセスするには、DRM 画面キャプチャを試すか X11 に切り替えてください。"),
     ].iter().cloned().collect();
 }
