@@ -827,5 +827,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Demander l'approbation"),
         ("Forever", "Pour toujours"),
         ("username-login-disabled-oidc-unavailable", "La connexion par nom d’utilisateur et mot de passe est désactivée et aucune méthode de connexion OIDC n’est disponible."),
+        ("Use DRM screen capture", "Utiliser la capture d’écran DRM"),
+        ("drm-capture-tip", "Capture l’écran directement depuis la carte graphique via le service RustDesk, sans la demande de partage d’écran de Wayland, y compris sur l’écran de connexion. Peut ne pas fonctionner sur tous les appareils ; si les connexions demandent toujours de partager l’écran, désactivez cette option ou utilisez X11. La modifier déconnecte les sessions en cours."),
+        ("wayland-drm-tip", "Pour un accès non assisté sous Wayland, essayez la capture d’écran DRM, ou utilisez X11 si elle ne fonctionne pas."),
+        ("login-wayland-drm-tip", "Pour accéder à l’écran de connexion Wayland, essayez la capture d’écran DRM ou passez-le sous X11."),
     ].iter().cloned().collect();
 }

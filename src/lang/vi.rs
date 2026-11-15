@@ -827,5 +827,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Yêu cầu phê duyệt"),
         ("Forever", "Vĩnh viễn"),
         ("username-login-disabled-oidc-unavailable", "Đăng nhập bằng tên người dùng và mật khẩu đã bị vô hiệu hóa và không có phương thức đăng nhập OIDC nào khả dụng."),
+        ("Use DRM screen capture", "Dùng chụp màn hình qua DRM"),
+        ("drm-capture-tip", "Chụp màn hình trực tiếp từ card đồ họa thông qua dịch vụ RustDesk, không cần xác nhận chia sẻ màn hình của Wayland, kể cả ở màn hình đăng nhập. Có thể không hoạt động trên mọi thiết bị; nếu kết nối vẫn yêu cầu chia sẻ màn hình, hãy tắt tùy chọn này hoặc dùng X11. Thay đổi tùy chọn này sẽ ngắt các phiên hiện tại."),
+        ("wayland-drm-tip", "Để truy cập không giám sát trên Wayland, hãy thử chụp màn hình qua DRM, hoặc dùng X11 nếu không hoạt động."),
+        ("login-wayland-drm-tip", "Để truy cập màn hình đăng nhập Wayland, hãy thử chụp màn hình qua DRM hoặc chuyển nó sang X11."),
     ].iter().cloned().collect();
 }
