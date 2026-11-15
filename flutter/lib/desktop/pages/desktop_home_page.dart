@@ -549,10 +549,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ));
         }
       }
-      final installed = bind.mainIsInstalled();
-      if (installed && mainGetBoolOptionSync(kOptionAllowDrmCapture)) {
+      final drmSupported = bind.mainIsInstalled() &&
+          bind.mainGetCommonSync(key: 'is-drm-capture-supported') == 'true';
+      if (drmSupported && mainGetBoolOptionSync(kOptionAllowDrmCapture)) {
         // DRM capture reaches the session and the login screen: no warning.
-      } else if (installed &&
+      } else if (drmSupported &&
           !isOptionFixed(kOptionAllowDrmCapture) &&
           (bind.mainCurrentIsWayland() || bind.mainIsLoginWayland())) {
         final currentIsWayland = bind.mainCurrentIsWayland();

@@ -43,10 +43,12 @@ fn finish_macos_update(result: hbb_common::ResultType<()>) -> Option<CoreMainAct
 /// If it returns [`Some`], the action determines whether to start the UI or report failure.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<CoreMainAction> {
+    // Before global_init: on Linux its is_x11() can read Config (allow-drm-capture), and Config
+    // loads from a path named after the custom client's app name.
+    crate::load_custom_client();
     if !crate::common::global_init() {
         return None;
     }
-    crate::load_custom_client();
     #[cfg(windows)]
     if !crate::platform::windows::bootstrap() {
         // return None to terminate the process

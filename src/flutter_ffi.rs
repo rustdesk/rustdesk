@@ -2780,6 +2780,8 @@ pub fn main_get_common(key: String) -> String {
         return crate::platform::is_win_10_or_greater().to_string();
         #[cfg(not(target_os = "windows"))]
         return false.to_string();
+    } else if key == "is-drm-capture-supported" {
+        return cfg!(all(target_os = "linux", feature = "drm")).to_string();
     } else if key == "transfer-job-id" {
         return base::fs::get_next_job_id().to_string();
     } else if key == "is-remote-modify-enabled-by-control-permissions" {
