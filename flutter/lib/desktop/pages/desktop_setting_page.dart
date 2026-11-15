@@ -2015,8 +2015,7 @@ class _DisplayState extends State<_Display> {
       codec(context),
       if (isDesktop) trackpadSpeed(context),
       if (!isWeb) privacyModeImpl(context),
-      if (isWindows &&
-          bind.mainSupportedPrivacyModeImpls().contains(kPrivacyModeImplMag))
+      if (isWindows && bind.mainSupportedPrivacyModeImpls() != '[]')
         privacyModeBackground(context),
       other(context),
     ]).marginOnly(bottom: _kListViewBottomMargin);
