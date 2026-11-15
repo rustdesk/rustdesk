@@ -887,6 +887,11 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
 
+    // The producer stays up once started; turning allow-drm-capture off ends capture here.
+    if !crate::platform::linux::drm_capture_enabled() {
+        log::trace!("drm: allow-drm-capture is off; dropping this connection");
+        return Ok(());
+    }
     // World-connectable socket, so the peer MUST be authorized here (this listener bypasses the
     // generic `start()` accept loop). On the blocking pool: a cache miss forks `loginctl`.
     static DRM_AUTH_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
