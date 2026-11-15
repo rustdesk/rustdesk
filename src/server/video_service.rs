@@ -1315,6 +1315,11 @@ fn check_warmup_timeout(
     }
 }
 
+/// Encode one frame through the current encoder and distribute the result.
+/// Empty warm-up output before the encoder has ever produced a frame is
+/// returned as a no-op empty result, so the caller can bound that phase with
+/// the warm-up window; real encode errors count toward the error counter and
+/// may switch encoders.
 #[inline]
 fn handle_one_frame(
     display: usize,
