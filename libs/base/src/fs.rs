@@ -180,7 +180,9 @@ fn read_dir_recursive(
     if path.is_dir() {
         // to-do: symbol link handling, cp the link rather than the content
         // to-do: file mode, for unix
-        let fd = read_dir(path, include_hidden)?;
+        let fd = read_dir(path, include_hidden).map_err(|error| {
+            error.context(format!("Failed to read directory '{}'", path.display()))
+        })?;
         for entry in fd.entries.iter() {
             match entry.entry_type.enum_value() {
                 Ok(FileType::File) => {
@@ -189,14 +191,13 @@ fn read_dir_recursive(
                     files.push(entry);
                 }
                 Ok(FileType::Dir) => {
-                    if let Ok(mut tmp) = read_dir_recursive(
+                    let mut tmp = read_dir_recursive(
                         &path.join(&entry.name),
                         &prefix.join(&entry.name),
                         include_hidden,
-                    ) {
-                        for entry in tmp.drain(0..) {
-                            files.push(entry);
-                        }
+                    )?;
+                    for entry in tmp.drain(0..) {
+                        files.push(entry);
                     }
                 }
                 _ => {}
@@ -1776,6 +1777,61 @@ mod tests {
             expected,
             err
         );
+    }
+
+    #[test]
+    fn recursive_scan_reports_unreadable_subdirectory() {
+        #[cfg(unix)]
+        if unsafe { libc::geteuid() } == 0 {
+            // Root can bypass the directory permission used by this fixture.
+            return;
+        }
+        let tmp = TestTempDir::new("rustdesk_unreadable_subdirectory");
+        let restricted = tmp.join("restricted");
+        std::fs::create_dir_all(&restricted).unwrap();
+        std::fs::write(tmp.join("visible.txt"), b"visible").unwrap();
+        std::fs::write(restricted.join("important.txt"), b"important").unwrap();
+        #[cfg(unix)]
+        let set_readable = |readable| {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(
+                &restricted,
+                std::fs::Permissions::from_mode(if readable { 0o700 } else { 0 }),
+            )
+            .unwrap();
+        };
+        #[cfg(windows)]
+        let set_readable = |readable| {
+            use std::os::windows::process::CommandExt;
+            let status = std::process::Command::new("icacls")
+                .arg(&restricted)
+                .args(if readable {
+                    ["/remove:d", "*S-1-1-0"]
+                } else {
+                    ["/deny", "*S-1-1-0:(RD)"]
+                })
+                .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
+                .output()
+                .unwrap()
+                .status;
+            assert!(status.success());
+        };
+        set_readable(false);
+        let denied = restricted.read_dir().is_err();
+        let result = TransferJob::new_read(
+            1,
+            JobType::Generic,
+            "remote".into(),
+            DataSource::FilePath(tmp.path.clone()),
+            0,
+            true,
+            false,
+            true,
+        );
+        set_readable(true);
+        assert!(denied, "fixture must deny directory listing");
+        let error = result.expect_err("must not accept an incomplete transfer");
+        assert!(error.to_string().contains("restricted"), "{}", error);
     }
 
     #[test]

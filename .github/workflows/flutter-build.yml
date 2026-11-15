@@ -382,6 +382,7 @@ jobs:
           cargo test --locked --release --lib --features "$FEATURES"
           # Its Windows tests run nowhere else.
           cargo test --locked --release -p clipboard
+          cargo test --locked --release -p base recursive_scan_reports_unreadable_subdirectory
 
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
