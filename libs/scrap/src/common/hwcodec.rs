@@ -137,7 +137,7 @@ impl EncoderApi for HwRamEncoder {
             }
             Ok(vf)
         } else {
-            Err(anyhow!("no valid frame"))
+            Err(anyhow!("encoder warm-up pending"))
         }
     }
 
