@@ -434,8 +434,8 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 #[cfg(all(target_os = "linux", feature = "drm"))]
                 {
                     const CURSOR_CACHE_MAX: usize = 64;
-                    if super::drm_capturer::is_available_cached()
-                        && state.cached_cursor_data.len() >= CURSOR_CACHE_MAX
+                    if state.cached_cursor_data.len() >= CURSOR_CACHE_MAX
+                        && super::drm_capturer::is_available_cached()
                     {
                         state.cached_cursor_data.clear();
                         CURSOR_SHAPES.lock().unwrap().clear();
