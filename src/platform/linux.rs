@@ -500,6 +500,26 @@ mod tty_greeter_tests {
     }
 }
 
+/// The root service sets this for a greeter `--server`: that process reads the greeter account's
+/// config, which has not synced from root yet when `IS_X11` is computed.
+#[cfg(feature = "drm")]
+pub(crate) const ENV_DRM_CAPTURE: &str = "RUSTDESK_DRM_CAPTURE";
+
+/// DRM capture is compiled in and `allow-drm-capture` is on. While it is off, every path the drm
+/// feature changes runs as a build without it.
+pub fn drm_capture_enabled() -> bool {
+    #[cfg(feature = "drm")]
+    {
+        use base::config::keys::OPTION_ALLOW_DRM_CAPTURE;
+        std::env::var(ENV_DRM_CAPTURE).as_deref() == Ok("Y")
+            || Config::get_bool_option(OPTION_ALLOW_DRM_CAPTURE)
+    }
+    #[cfg(not(feature = "drm"))]
+    {
+        false
+    }
+}
+
 /// An explicit `RUSTDESK_FORCED_DISPLAY_SERVER` is an operator override, and the root service
 /// forwards it to the per-user server on purpose: the greeter correction may only fix an
 /// AUTO-detected answer, never argue with the operator — a half-applied override would leave
