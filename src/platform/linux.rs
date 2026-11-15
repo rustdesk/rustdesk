@@ -1284,57 +1284,6 @@ fn force_stop_server() {
     sleep_millis(super::SERVICE_INTERVAL);
 }
 
-/// Follows `allow-drm-capture` from the service loop. The `_drm` producer starts the first time it
-/// is on and then stays up; while the option is off `handle_drm_conn` refuses every peer.
-#[cfg(feature = "drm")]
-struct DrmCaptureSwitch {
-    on: bool,
-    producer_started: bool,
-}
-
-#[cfg(feature = "drm")]
-impl DrmCaptureSwitch {
-    fn new() -> Self {
-        Self {
-            on: drm_capture_enabled(),
-            producer_started: false,
-        }
-    }
-
-    /// Whether the option changed since the last call: every `--server` decided its paths at start.
-    fn poll(&mut self) -> bool {
-        let on = drm_capture_enabled();
-        let changed = on != self.on;
-        self.on = on;
-        if self.on && !self.producer_started {
-            self.producer_started = true;
-            // DRM/KMS capture producer (opt-in `drm` feature): a dedicated thread + runtime that
-            // streams scanout frames to the user `--server` over the `_drm` service-scoped channel.
-            // Runs here because this process is the root service that already holds CAP_SYS_ADMIN
-            // for the in-process (direct-mode) libdrmtap read.
-            //
-            // Builder, like every other thread this feature starts: `thread::spawn` PANICS if the
-            // thread cannot be created (EAGAIN under a thread-count or memory limit), and here that
-            // panic would unwind out of `start_os_service` -- taking down the root service itself,
-            // for a feature whose failure should only cost DRM capture. Losing the producer leaves
-            // the consumer to fall back to PipeWire/X11, which is the same path a host without the
-            // feature takes.
-            if let Err(err) = std::thread::Builder::new()
-                .name("drm-producer".into())
-                .spawn(|| {
-                    crate::ipc::start_drm();
-                })
-            {
-                log::warn!(
-                    "failed to spawn the drm capture producer thread: {err}; DRM capture is off \
-                     for this boot and the consumer falls back to PipeWire/X11"
-                );
-            }
-        }
-        changed
-    }
-}
-
 pub fn start_os_service() {
     check_if_stop_service();
     stop_rustdesk_servers();
@@ -1471,6 +1420,57 @@ pub fn start_os_service() {
         allow_err!(ps.kill());
     }
     log::info!("Exit");
+}
+
+/// Follows `allow-drm-capture` from the service loop. The `_drm` producer starts the first time it
+/// is on and then stays up; while the option is off `handle_drm_conn` refuses every peer.
+#[cfg(feature = "drm")]
+struct DrmCaptureSwitch {
+    on: bool,
+    producer_started: bool,
+}
+
+#[cfg(feature = "drm")]
+impl DrmCaptureSwitch {
+    fn new() -> Self {
+        Self {
+            on: drm_capture_enabled(),
+            producer_started: false,
+        }
+    }
+
+    /// Whether the option changed since the last call: every `--server` decided its paths at start.
+    fn poll(&mut self) -> bool {
+        let on = drm_capture_enabled();
+        let changed = on != self.on;
+        self.on = on;
+        if self.on && !self.producer_started {
+            self.producer_started = true;
+            // DRM/KMS capture producer (opt-in `drm` feature): a dedicated thread + runtime that
+            // streams scanout frames to the user `--server` over the `_drm` service-scoped channel.
+            // Runs here because this process is the root service that already holds CAP_SYS_ADMIN
+            // for the in-process (direct-mode) libdrmtap read.
+            //
+            // Builder, like every other thread this feature starts: `thread::spawn` PANICS if the
+            // thread cannot be created (EAGAIN under a thread-count or memory limit), and here that
+            // panic would unwind out of `start_os_service` -- taking down the root service itself,
+            // for a feature whose failure should only cost DRM capture. Losing the producer leaves
+            // the consumer to fall back to PipeWire/X11, which is the same path a host without the
+            // feature takes.
+            if let Err(err) = std::thread::Builder::new()
+                .name("drm-producer".into())
+                .spawn(|| {
+                    crate::ipc::start_drm();
+                })
+            {
+                log::warn!(
+                    "failed to spawn the drm capture producer thread: {err}; DRM capture is off \
+                     for this boot and the consumer falls back to PipeWire/X11"
+                );
+            }
+        }
+        changed
+    }
 }
 
 #[inline]
