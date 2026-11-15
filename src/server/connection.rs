@@ -805,7 +805,7 @@ impl Connection {
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
                                 conn.send_permission(Permission::Keyboard, enabled).await;
-                                // Before login, try_sub_monitor_services applies the value on authorization.
+                                // Until authorized, only record the value; try_sub_monitor_services subscribes from it.
                                 if let Some(s) = conn.server.upgrade().filter(|_| conn.authorized) {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
