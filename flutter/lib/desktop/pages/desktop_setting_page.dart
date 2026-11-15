@@ -2890,6 +2890,14 @@ class _WaylandCardState extends State<WaylandCard> {
                 "true";
 
         final children = [
+          if (isLinux && bind.mainIsInstalled() && !bind.isOutgoingOnly()) ...[
+            _OptionCheckBox(
+                context, 'Use DRM screen capture', kOptionAllowDrmCapture),
+            Align(
+              alignment: Alignment.topLeft,
+              child: Text(translate('drm-capture-tip')),
+            ).marginOnly(left: _kCardLeftMargin),
+          ],
           if (restoreToken.isNotEmpty)
             _buildClearScreenSelection(context, restoreToken),
           if (hasShortcutsPermission)

@@ -549,7 +549,26 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ));
         }
       }
-      if (bind.mainCurrentIsWayland()) {
+      final installed = bind.mainIsInstalled();
+      if (installed && mainGetBoolOptionSync(kOptionAllowDrmCapture)) {
+        // DRM capture reaches the session and the login screen: no warning.
+      } else if (installed &&
+          !isOptionFixed(kOptionAllowDrmCapture) &&
+          (bind.mainCurrentIsWayland() || bind.mainIsLoginWayland())) {
+        final currentIsWayland = bind.mainCurrentIsWayland();
+        LinuxCards.add(buildInstallCard(
+            "Warning",
+            currentIsWayland ? "wayland-drm-tip" : "login-wayland-drm-tip",
+            "Enable", () async {
+          await mainSetBoolOption(kOptionAllowDrmCapture, true);
+          setState(() {});
+        },
+            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+            help: 'Help',
+            link: currentIsWayland
+                ? 'https://rustdesk.com/docs/en/client/linux/#x11-required'
+                : 'https://rustdesk.com/docs/en/client/linux/#login-screen'));
+      } else if (bind.mainCurrentIsWayland()) {
         LinuxCards.add(buildInstallCard(
             "Warning", "wayland_experiment_tip", "", () async {},
             marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
