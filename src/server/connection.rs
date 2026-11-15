@@ -805,7 +805,8 @@ impl Connection {
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
                                 conn.send_permission(Permission::Keyboard, enabled).await;
-                                if let Some(s) = conn.server.upgrade() {
+                                // Before login, try_sub_monitor_services applies the value on authorization.
+                                if let Some(s) = conn.server.upgrade().filter(|_| conn.authorized) {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
                                         conn.inner.clone(), conn.can_sub_clipboard_service());
@@ -822,7 +823,7 @@ impl Connection {
                             } else if &name == "clipboard" {
                                 conn.clipboard = enabled;
                                 conn.send_permission(Permission::Clipboard, enabled).await;
-                                if let Some(s) = conn.server.upgrade() {
+                                if let Some(s) = conn.server.upgrade().filter(|_| conn.authorized) {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
                                         conn.inner.clone(), conn.can_sub_clipboard_service());
@@ -853,7 +854,7 @@ impl Connection {
                                     conn.try_empty_file_clipboard();
                                 }
                                 #[cfg(feature = "unix-file-copy-paste")]
-                                if let Some(s) = conn.server.upgrade() {
+                                if let Some(s) = conn.server.upgrade().filter(|_| conn.authorized) {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::FILE_NAME,
                                         conn.inner.clone(),
