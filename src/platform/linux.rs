@@ -712,7 +712,17 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
                 unsafe {
                     let img = XFixesGetCursorImage(*d);
                     if !img.is_null() {
-                        res = Some((*img).cursor_serial as u64);
+                        // Hidden X11 cursors must leave the controller's previous shape visible.
+                        let count = (*img).width as usize * (*img).height as usize;
+                        if count != 0
+                            && !(*img).pixels.is_null()
+                            && cursor_image_has_visible_pixels(std::slice::from_raw_parts(
+                                (*img).pixels,
+                                count,
+                            ))
+                        {
+                            res = Some((*img).cursor_serial as u64);
+                        }
                         XFree(img as _);
                     }
                 }
@@ -720,6 +730,25 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
         }
     });
     Ok(res)
+}
+
+fn cursor_image_has_visible_pixels(pixels: &[c_long]) -> bool {
+    pixels.iter().any(|&p| ((p >> 24) & 0xff) != 0)
+}
+
+#[cfg(test)]
+mod cursor_image_tests {
+    use super::cursor_image_has_visible_pixels;
+
+    #[test]
+    fn only_nonzero_alpha_makes_a_cursor_visible() {
+        assert!(!cursor_image_has_visible_pixels(&[]));
+        assert!(!cursor_image_has_visible_pixels(&[0, 0x00ff_ffff]));
+        assert!(cursor_image_has_visible_pixels(&[0, 0x0100_0000]));
+        assert!(cursor_image_has_visible_pixels(&[
+            0xff00_0000_u32 as std::os::raw::c_long,
+        ]));
+    }
 }
 
 pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
