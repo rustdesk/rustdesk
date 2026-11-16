@@ -54,11 +54,10 @@ struct PipewireDisplayOffsetCache {
 }
 
 // KDE Plasma may not provide position info
-static HAS_POSITION_ATTR: AtomicBool = AtomicBool::new(false);
 static IS_SERVER_RUNNING: AtomicU8 = AtomicU8::new(0); // 0: uninitialized, 1:true, 2: false
 
 impl PipewireDisplayOffsetCache {
-    fn displays_to_key(displays: &Arc<Displays>) -> String {
+    fn displays_to_key(displays: &Displays) -> String {
         displays
             .displays
             .iter()
@@ -72,7 +71,6 @@ impl PipewireDisplayOffsetCache {
 pub fn close_session() {
     let _ = RDP_SESSION_INFO.lock().unwrap().take();
     clear_wayland_displays_cache();
-    HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
 }
 
 #[inline]
@@ -94,7 +92,6 @@ pub fn try_close_session() {
     if close {
         *rdp_info = None;
         clear_wayland_displays_cache();
-        HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
     }
 }
 
@@ -105,12 +102,14 @@ pub struct RdpSessionInfo {
     pub session: dbus::Path<'static>,
     pub is_support_restore_token: bool,
     pub resolution: Arc<Mutex<Option<(usize, usize)>>>,
+    positions_filled: bool,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct PwStreamInfo {
     pub path: u64,
     source_type: u64,
     position: (i32, i32),
+    has_position: bool,
     size: (usize, usize),
 }
 
@@ -710,6 +709,7 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
                             .get("source_type")
                             .map_or(Some(0), |v| v.as_u64())?,
                         position: (0, 0),
+                        has_position: false,
                         size: (0, 0),
                     };
                     let v = attributes
@@ -744,7 +744,7 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
                             if v.len() == 2 {
                                 info.position.0 = v[0] as _;
                                 info.position.1 = v[1] as _;
-                                HAS_POSITION_ATTR.store(true, Ordering::SeqCst);
+                                info.has_position = true;
                             }
                         }
                     }
@@ -1152,6 +1152,7 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
             session,
             is_support_restore_token,
             resolution: Arc::new(Mutex::new(None)),
+            positions_filled: false,
         };
         *rdp_connection = Some(rdp_info);
     }
@@ -1284,8 +1285,8 @@ pub fn fill_displays(
     };
 
     let all_displays = get_displays();
-    if !HAS_POSITION_ATTR.load(Ordering::SeqCst) {
-        if all_displays.displays.len() > 1 {
+    if !rdp_info.positions_filled {
+        if all_displays.displays.len() > 1 && rdp_info.streams.iter().any(|s| !s.has_position) {
             debug!("Multiple Wayland displays detected, adjusting stream positions accordingly.");
             try_fill_positions(
                 mouse_move_to,
@@ -1295,7 +1296,7 @@ pub fn fill_displays(
                 &mut rdp_info.streams,
             )?;
         }
-        HAS_POSITION_ATTR.store(true, Ordering::SeqCst);
+        rdp_info.positions_filled = true;
     }
 
     if all_displays.displays.len() > 1 {
@@ -1375,6 +1376,28 @@ fn corrected_origin(
     }
 }
 
+fn display_matches_size(
+    wd: &WaylandDisplayInfo,
+    size: (usize, usize),
+    allow_logical: bool,
+) -> bool {
+    let mode = (wd.width as usize, wd.height as usize);
+    if mode == size {
+        return true;
+    }
+    if wd.transform % 180 != 0 && (mode.1, mode.0) == size {
+        return true;
+    }
+    if allow_logical {
+        if let Some((lw, lh)) = wd.logical_size {
+            if (lw as usize, lh as usize) == size {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn try_fill_positions(
     mouse_move_to: impl Fn(i32, i32),
     get_cursor_pos: fn() -> Option<(i32, i32)>,
@@ -1396,22 +1419,30 @@ fn try_fill_positions(
     }
 
     let mut multi_matched_indices = Vec::new();
+    let mut all_matched = true;
     for (i, sd) in shared_displays.iter_mut().enumerate() {
+        if streams.get(i).is_some_and(|s| s.has_position) {
+            continue;
+        }
         if let crate::Display::WAYLAND(d) = sd {
             let capturable = &mut d.0;
             let mut match_count = 0;
-            for wd in displays.displays.iter() {
-                if capturable.physical_size.0 == wd.width as usize
-                    && capturable.physical_size.1 == wd.height as usize
-                {
-                    capturable.position = (wd.x, wd.y);
-                    if let Some(pw_stream) = streams.get_mut(i) {
-                        pw_stream.position = (wd.x, wd.y);
+            for allow_logical in [false, true] {
+                for wd in displays.displays.iter() {
+                    if display_matches_size(wd, capturable.physical_size, allow_logical) {
+                        capturable.position = (wd.x, wd.y);
+                        if let Some(pw_stream) = streams.get_mut(i) {
+                            pw_stream.position = (wd.x, wd.y);
+                        }
+                        match_count += 1;
                     }
-                    match_count += 1;
+                }
+                if match_count > 0 {
+                    break;
                 }
             }
             if match_count == 0 {
+                all_matched = false;
                 warn!(
                     "No matching display found for capturable with size {:?}.",
                     capturable.physical_size
@@ -1433,8 +1464,37 @@ fn try_fill_positions(
         )?;
     }
 
-    save_positions_to_cache(displays, shared_displays);
+    // Do not cache unresolved default (0, 0) positions (e.g. a full-workspace stream).
+    if all_matched {
+        save_positions_to_cache(displays, shared_displays);
+    }
     Ok(())
+}
+
+fn validate_display_offset_cache(
+    cache_str: &str,
+    shared_len: usize,
+    displays: &Displays,
+    restore_token: &str,
+) -> Option<Vec<(i32, i32)>> {
+    let cache = serde_json::from_str::<PipewireDisplayOffsetCache>(cache_str).ok()?;
+    if cache.offsets.len() != shared_len || restore_token.is_empty() {
+        return None;
+    }
+    if cache.display_key != PipewireDisplayOffsetCache::displays_to_key(displays)
+        || cache.restore_token != restore_token
+    {
+        return None;
+    }
+    // Reject cached offsets that do not name a current display origin (e.g. stale [0, 0]).
+    if !cache
+        .offsets
+        .iter()
+        .all(|(x, y)| displays.displays.iter().any(|wd| wd.x == *x && wd.y == *y))
+    {
+        return None;
+    }
+    Some(cache.offsets)
 }
 
 fn try_fill_positions_from_cache(
@@ -1443,28 +1503,20 @@ fn try_fill_positions_from_cache(
     shared_displays: &mut Vec<crate::Display>,
     streams: &mut Vec<PwStreamInfo>,
 ) -> bool {
-    let Ok(cache) = serde_json::from_str::<PipewireDisplayOffsetCache>(&cache_str) else {
+    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+    let Some(offsets) =
+        validate_display_offset_cache(&cache_str, shared_displays.len(), displays, &restore_token)
+    else {
         return false;
     };
 
-    if cache.offsets.len() != shared_displays.len() {
-        return false;
-    }
-
-    let display_key = PipewireDisplayOffsetCache::displays_to_key(displays);
-    if cache.display_key != display_key {
-        return false;
-    }
-
-    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
-    if cache.restore_token != restore_token {
-        return false;
-    }
-
     for (i, sd) in shared_displays.iter_mut().enumerate() {
+        if streams.get(i).is_some_and(|s| s.has_position) {
+            continue;
+        }
         if let crate::Display::WAYLAND(d) = sd {
             let capturable = &mut d.0;
-            if let Some((x_off, y_off)) = cache.offsets.get(i) {
+            if let Some((x_off, y_off)) = offsets.get(i) {
                 capturable.position = (*x_off, *y_off);
                 if let Some(pw_stream) = streams.get_mut(i) {
                     pw_stream.position = (*x_off, *y_off);
@@ -1760,10 +1812,11 @@ fn fill_multi_matched_positions_cursor(
     Ok(())
 }
 
-fn sort_streams(
-    displays: &Arc<Displays>,
-    shared_displays: &mut Vec<crate::Display>,
-    streams: &mut Vec<PwStreamInfo>,
+fn sort_by_display_order<T, U>(
+    displays: &Displays,
+    streams: &mut Vec<T>,
+    shared_displays: &mut Vec<U>,
+    position: impl Fn(&T) -> (i32, i32),
 ) {
     if streams.is_empty() {
         // unreachable
@@ -1782,12 +1835,13 @@ fn sort_streams(
         }
     }
 
-    let mut sorted_streams = Vec::new();
-    let mut sorted_shared_displays = Vec::new();
+    let mut sorted_streams = Vec::with_capacity(streams.len());
+    let mut sorted_shared_displays = Vec::with_capacity(shared_displays.len());
     // Move matching items in order without cloning
     for (x, y) in display_order.into_iter() {
         for i in 0..streams.len() {
-            if streams[i].position.0 == x && streams[i].position.1 == y {
+            let pos = position(&streams[i]);
+            if pos.0 == x && pos.1 == y {
                 sorted_streams.push(streams.remove(i));
                 // shared_displays.len() must be equal to streams.len()
                 // But we still check the length to avoid panic
@@ -1798,13 +1852,27 @@ fn sort_streams(
             }
         }
     }
+    // Preserve streams whose position matched no display origin (e.g. workspace or unpositioned).
+    sorted_streams.append(streams);
+    sorted_shared_displays.append(shared_displays);
     *streams = sorted_streams;
     *shared_displays = sorted_shared_displays;
 }
 
+fn sort_streams(
+    displays: &Arc<Displays>,
+    shared_displays: &mut Vec<crate::Display>,
+    streams: &mut Vec<PwStreamInfo>,
+) {
+    sort_by_display_order(displays, streams, shared_displays, |s| s.position);
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{corrected_origin, WaylandDisplayInfo};
+    use super::{
+        corrected_origin, display_matches_size, sort_by_display_order,
+        validate_display_offset_cache, Displays, PipewireDisplayOffsetCache, WaylandDisplayInfo,
+    };
 
     fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
         WaylandDisplayInfo {
@@ -1817,6 +1885,93 @@ mod tests {
             refresh_rate: 60,
             transform: 0,
         }
+    }
+
+    #[test]
+    fn sort_streams_keeps_vertically_offset_and_unmatched_streams() {
+        let displays = Displays {
+            primary: 1,
+            displays: vec![
+                WaylandDisplayInfo {
+                    name: "HDMI-A-1".into(),
+                    ..output(0, 30, (1680, 1050))
+                },
+                WaylandDisplayInfo {
+                    name: "DP-1".into(),
+                    ..output(1680, 0, (1920, 1080))
+                },
+            ],
+        };
+
+        let mut streams = vec![((0, 30), "hdmi"), ((1680, 0), "dp")];
+        let mut shared = vec!["hdmi", "dp"];
+        sort_by_display_order(&displays, &mut streams, &mut shared, |s| s.0);
+        assert_eq!(shared, vec!["dp", "hdmi"]);
+
+        // An unmatched stream (e.g. workspace at (0, 0) when neither output is at (0, 0)) must stay.
+        let mut workspace_streams = vec![((0, 0), "workspace")];
+        let mut workspace_shared = vec!["workspace"];
+        sort_by_display_order(
+            &displays,
+            &mut workspace_streams,
+            &mut workspace_shared,
+            |s| s.0,
+        );
+        assert_eq!(workspace_shared, vec!["workspace"]);
+    }
+
+    #[test]
+    fn offset_cache_rejects_stale_unmatched_origin_and_matches_logical_fallback() {
+        let displays = Displays {
+            primary: 1,
+            displays: vec![
+                WaylandDisplayInfo {
+                    name: "HDMI-A-1".into(),
+                    logical_size: Some((1344, 840)),
+                    ..output(0, 30, (1680, 1050))
+                },
+                WaylandDisplayInfo {
+                    name: "DP-1".into(),
+                    logical_size: Some((1920, 1080)),
+                    ..output(1680, 0, (1920, 1080))
+                },
+            ],
+        };
+        let key = PipewireDisplayOffsetCache::displays_to_key(&displays);
+        assert_eq!(key, "HDMI-A-1-0-30-1680-1050;DP-1-1680-0-1920-1080");
+
+        let stale = serde_json::to_string(&PipewireDisplayOffsetCache {
+            display_key: key.clone(),
+            restore_token: "tok".into(),
+            offsets: vec![(0, 0)],
+        })
+        .unwrap();
+        assert_eq!(
+            validate_display_offset_cache(&stale, 1, &displays, "tok"),
+            None
+        );
+
+        let valid = serde_json::to_string(&PipewireDisplayOffsetCache {
+            display_key: key,
+            restore_token: "tok".into(),
+            offsets: vec![(0, 30), (1680, 0)],
+        })
+        .unwrap();
+        assert_eq!(
+            validate_display_offset_cache(&valid, 2, &displays, "tok"),
+            Some(vec![(0, 30), (1680, 0)])
+        );
+
+        assert!(!display_matches_size(
+            &displays.displays[0],
+            (1344, 840),
+            false
+        ));
+        assert!(display_matches_size(
+            &displays.displays[0],
+            (1344, 840),
+            true
+        ));
     }
 
     #[test]
