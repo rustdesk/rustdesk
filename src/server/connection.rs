@@ -389,7 +389,7 @@ pub struct Connection {
     #[cfg(windows)]
     privacy_preparation: Option<(
         String,
-        hbb_common::tokio::sync::oneshot::Receiver<ResultType<()>>,
+        hbb_common::tokio::sync::oneshot::Receiver<ResultType<Option<u32>>>,
     )>,
     control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
@@ -5212,26 +5212,34 @@ impl Connection {
         }
     }
 
-    // Return true while pending instead of awaiting here: the connection must keep
+    // Return while pending instead of awaiting here: the connection must keep
     // processing remote input and video while its timer polls for completion.
     #[cfg(windows)]
-    fn poll_privacy_preparation(&mut self, impl_key: &str) -> ResultType<bool> {
+    fn poll_privacy_preparation(
+        &mut self,
+        impl_key: &str,
+    ) -> ResultType<std::task::Poll<Option<u32>>> {
         use hbb_common::tokio::sync::oneshot::error::TryRecvError;
+        use std::task::Poll;
         if matches!(&self.privacy_preparation, Some((key, _)) if key != impl_key) {
             self.privacy_preparation = None;
         }
         if let Some((_, receiver)) = self.privacy_preparation.as_mut() {
             let result = match receiver.try_recv() {
                 Ok(result) => result,
-                Err(TryRecvError::Empty) => return Ok(true),
+                Err(TryRecvError::Empty) => return Ok(Poll::Pending),
                 Err(error) => Err(error.into()),
             };
             self.privacy_preparation = None;
-            return result.map(|()| false);
+            return result.map(Poll::Ready);
         }
         self.privacy_preparation = privacy_mode::prepare_virtual_display(impl_key, self.inner.id)?
             .map(|receiver| (impl_key.to_owned(), receiver));
-        Ok(self.privacy_preparation.is_some())
+        Ok(if self.privacy_preparation.is_some() {
+            Poll::Pending
+        } else {
+            Poll::Ready(None)
+        })
     }
 
     async fn turn_on_privacy(&mut self, impl_key: String) {
@@ -5247,9 +5255,9 @@ impl Connection {
         }
 
         #[cfg(windows)]
-        match self.poll_privacy_preparation(&impl_key) {
-            Ok(true) => return,
-            Ok(false) => {}
+        let prepared_display = match self.poll_privacy_preparation(&impl_key) {
+            Ok(std::task::Poll::Pending) => return,
+            Ok(std::task::Poll::Ready(display)) => display,
             Err(error) => {
                 self.send(crate::common::make_privacy_mode_msg_with_details(
                     back_notification::PrivacyModeState::PrvOnFailed,
@@ -5259,7 +5267,7 @@ impl Connection {
                 .await;
                 return;
             }
-        }
+        };
 
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
@@ -5283,7 +5291,13 @@ impl Connection {
                 }
             }
 
-            let turn_on_res = privacy_mode::turn_on_privacy(&impl_key, self.inner.id).await;
+            let turn_on_res = privacy_mode::turn_on_privacy(
+                &impl_key,
+                self.inner.id,
+                #[cfg(windows)]
+                prepared_display,
+            )
+            .await;
             match turn_on_res {
                 Some(Ok(res)) => {
                     if res {

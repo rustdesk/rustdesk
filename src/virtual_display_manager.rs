@@ -413,6 +413,7 @@ pub mod amyuni_idd {
     const PRIVACY_DISPLAY_STABLE_FOR: Duration = Duration::from_secs(5);
     const PRIVACY_INITIALIZATION_POLL: Duration = Duration::from_millis(200);
     const PRIVACY_MONITOR_TIMEOUT: Duration = Duration::from_secs(6);
+    const PRIVACY_MONITOR_INDEX: u32 = 0;
 
     lazy_static::lazy_static! {
         static ref LOCK: Arc<Mutex<()>> = Default::default();
@@ -730,16 +731,34 @@ pub mod amyuni_idd {
         bail!("Timed out waiting for display initialization to stabilize.");
     }
 
-    pub fn prepare_privacy_monitor(cancelled: impl Fn() -> bool) -> ResultType<()> {
+    fn lock_privacy_preparation<'a>(
+        lock: &'a Mutex<()>,
+        cancelled: impl Fn() -> bool,
+    ) -> ResultType<std::sync::MutexGuard<'a, ()>> {
+        // A cancelled first-install worker still finishes initialization. Let retries
+        // wait for it, but release cancelled waiters without waiting for the lock.
+        loop {
+            if cancelled() {
+                bail!("Privacy mode preparation cancelled.");
+            }
+            match lock.try_lock() {
+                Ok(preparation) => return Ok(preparation),
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    std::thread::sleep(PRIVACY_INITIALIZATION_POLL);
+                }
+                Err(error) => bail!("Privacy mode preparation is unavailable: {}", error),
+            }
+        }
+    }
+
+    pub fn prepare_privacy_monitor(cancelled: impl Fn() -> bool) -> ResultType<Option<u32>> {
         static PREPARATION_LOCK: Mutex<()> = Mutex::new(());
-        let _preparation = PREPARATION_LOCK.try_lock().map_err(|error| {
-            hbb_common::anyhow::anyhow!("Privacy mode preparation is unavailable: {}", error)
-        })?;
+        let _preparation = lock_privacy_preparation(&PREPARATION_LOCK, &cancelled)?;
         if cancelled() {
             bail!("Privacy mode preparation cancelled.");
         }
         if get_monitor_count() > 0 {
-            return Ok(());
+            return Ok(None);
         }
         if windows::get_device_names(None).is_empty() {
             bail!(crate::privacy_mode::NO_PHYSICAL_DISPLAYS);
@@ -754,7 +773,7 @@ pub mod amyuni_idd {
         // see an installed driver and skip this wait.
         if installed {
             if let Err(error) = wait_for_privacy_display_stability() {
-                let cleanup = plug_out_monitor(0, false, false);
+                let cleanup = plug_out_monitor(PRIVACY_MONITOR_INDEX as _, false, false);
                 hbb_common::throttled_log!(
                     DIAGNOSTIC_LOG_INTERVAL,
                     error,
@@ -767,14 +786,56 @@ pub mod amyuni_idd {
         }
         if cancelled() {
             if get_monitor_count() > 0 {
-                plug_out_monitor(0, false, false)?;
+                plug_out_monitor(PRIVACY_MONITOR_INDEX as _, false, false)?;
             }
             bail!("Privacy mode preparation cancelled.");
         }
         if get_monitor_count() == 0 {
             bail!("No active virtual displays after privacy mode preparation.");
         }
-        Ok(())
+        Ok(Some(PRIVACY_MONITOR_INDEX))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::sync::mpsc::{channel, RecvTimeoutError};
+
+        #[test]
+        fn privacy_preparation_waits_and_can_be_cancelled() {
+            const PENDING_CHECK: Duration = Duration::from_millis(100);
+            const COMPLETION_TIMEOUT: Duration = Duration::from_secs(2);
+            for cancel in [false, true] {
+                let lock = Mutex::new(());
+                let mut held = Some(lock.lock().unwrap());
+                let cancelled = atomic::AtomicBool::new(false);
+                let (sender, receiver) = channel();
+                std::thread::scope(|scope| {
+                    scope.spawn(|| {
+                        let result = lock_privacy_preparation(&lock, || {
+                            cancelled.load(atomic::Ordering::Relaxed)
+                        })
+                        .map(|_| ());
+                        sender.send(result).unwrap();
+                    });
+                    assert!(matches!(
+                        receiver.recv_timeout(PENDING_CHECK),
+                        Err(RecvTimeoutError::Timeout)
+                    ));
+                    if cancel {
+                        cancelled.store(true, atomic::Ordering::Relaxed);
+                    } else {
+                        drop(held.take());
+                    }
+                    let result = receiver.recv_timeout(COMPLETION_TIMEOUT).unwrap();
+                    if cancel {
+                        assert!(result.unwrap_err().to_string().contains("cancelled"));
+                    } else {
+                        result.unwrap();
+                    }
+                });
+            }
+        }
     }
 
     // `index` the display index to plug out. -1 means plug out all.

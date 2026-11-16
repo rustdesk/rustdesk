@@ -530,6 +530,12 @@ impl PrivacyModeImpl {
 }
 
 impl PrivacyMode for PrivacyModeImpl {
+    fn add_prepared_virtual_display(&mut self, index: u32) -> ResultType<()> {
+        // Preparation created this monitor before ensure_virtual_display could record it.
+        self.virtual_displays_added.push(index);
+        Ok(())
+    }
+
     fn is_async_privacy_mode(&self) -> bool {
         virtual_display_manager::is_amyuni_idd()
     }
