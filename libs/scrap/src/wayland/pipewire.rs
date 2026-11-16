@@ -1376,26 +1376,21 @@ fn corrected_origin(
     }
 }
 
-fn display_matches_size(
-    wd: &WaylandDisplayInfo,
+fn unique_fallback_origin(
+    outputs: &[WaylandDisplayInfo],
     size: (usize, usize),
-    allow_logical: bool,
-) -> bool {
-    let mode = (wd.width as usize, wd.height as usize);
-    if mode == size {
-        return true;
+) -> Option<(i32, i32)> {
+    let mut matches = outputs.iter().filter(|wd| {
+        let mode = (wd.width as usize, wd.height as usize);
+        (wd.transform % 180 != 0 && (mode.1, mode.0) == size)
+            || wd
+                .logical_size
+                .is_some_and(|(lw, lh)| (lw as usize, lh as usize) == size)
+    });
+    match (matches.next(), matches.next()) {
+        (Some(wd), None) => Some((wd.x, wd.y)),
+        _ => None,
     }
-    if wd.transform % 180 != 0 && (mode.1, mode.0) == size {
-        return true;
-    }
-    if allow_logical {
-        if let Some((lw, lh)) = wd.logical_size {
-            if (lw as usize, lh as usize) == size {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 fn try_fill_positions(
@@ -1427,26 +1422,34 @@ fn try_fill_positions(
         if let crate::Display::WAYLAND(d) = sd {
             let capturable = &mut d.0;
             let mut match_count = 0;
-            for allow_logical in [false, true] {
-                for wd in displays.displays.iter() {
-                    if display_matches_size(wd, capturable.physical_size, allow_logical) {
-                        capturable.position = (wd.x, wd.y);
-                        if let Some(pw_stream) = streams.get_mut(i) {
-                            pw_stream.position = (wd.x, wd.y);
-                        }
-                        match_count += 1;
+            for wd in displays.displays.iter() {
+                if capturable.physical_size.0 == wd.width as usize
+                    && capturable.physical_size.1 == wd.height as usize
+                {
+                    capturable.position = (wd.x, wd.y);
+                    if let Some(pw_stream) = streams.get_mut(i) {
+                        pw_stream.position = (wd.x, wd.y);
                     }
-                }
-                if match_count > 0 {
-                    break;
+                    match_count += 1;
                 }
             }
             if match_count == 0 {
-                all_matched = false;
-                warn!(
-                    "No matching display found for capturable with size {:?}.",
-                    capturable.physical_size
-                );
+                // Only apply rotated/logical fallback when a single output matches uniquely,
+                // because cursor disambiguation filters strictly by unrotated physical mode.
+                if let Some(origin) =
+                    unique_fallback_origin(&displays.displays, capturable.physical_size)
+                {
+                    capturable.position = origin;
+                    if let Some(pw_stream) = streams.get_mut(i) {
+                        pw_stream.position = origin;
+                    }
+                } else {
+                    all_matched = false;
+                    warn!(
+                        "No matching display found for capturable with size {:?}.",
+                        capturable.physical_size
+                    );
+                }
             } else if match_count > 1 {
                 multi_matched_indices.push(i);
             }
@@ -1812,11 +1815,10 @@ fn fill_multi_matched_positions_cursor(
     Ok(())
 }
 
-fn sort_by_display_order<T, U>(
-    displays: &Displays,
-    streams: &mut Vec<T>,
-    shared_displays: &mut Vec<U>,
-    position: impl Fn(&T) -> (i32, i32),
+fn sort_streams(
+    displays: &Arc<Displays>,
+    shared_displays: &mut Vec<crate::Display>,
+    streams: &mut Vec<PwStreamInfo>,
 ) {
     if streams.is_empty() {
         // unreachable
@@ -1840,8 +1842,7 @@ fn sort_by_display_order<T, U>(
     // Move matching items in order without cloning
     for (x, y) in display_order.into_iter() {
         for i in 0..streams.len() {
-            let pos = position(&streams[i]);
-            if pos.0 == x && pos.1 == y {
+            if streams[i].position.0 == x && streams[i].position.1 == y {
                 sorted_streams.push(streams.remove(i));
                 // shared_displays.len() must be equal to streams.len()
                 // But we still check the length to avoid panic
@@ -1859,19 +1860,11 @@ fn sort_by_display_order<T, U>(
     *shared_displays = sorted_shared_displays;
 }
 
-fn sort_streams(
-    displays: &Arc<Displays>,
-    shared_displays: &mut Vec<crate::Display>,
-    streams: &mut Vec<PwStreamInfo>,
-) {
-    sort_by_display_order(displays, streams, shared_displays, |s| s.position);
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        corrected_origin, display_matches_size, sort_by_display_order,
-        validate_display_offset_cache, Displays, PipewireDisplayOffsetCache, WaylandDisplayInfo,
+        corrected_origin, unique_fallback_origin, validate_display_offset_cache, Displays,
+        PipewireDisplayOffsetCache, WaylandDisplayInfo,
     };
 
     fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
@@ -1888,40 +1881,37 @@ mod tests {
     }
 
     #[test]
-    fn sort_streams_keeps_vertically_offset_and_unmatched_streams() {
-        let displays = Displays {
-            primary: 1,
-            displays: vec![
-                WaylandDisplayInfo {
-                    name: "HDMI-A-1".into(),
-                    ..output(0, 30, (1680, 1050))
-                },
-                WaylandDisplayInfo {
-                    name: "DP-1".into(),
-                    ..output(1680, 0, (1920, 1080))
-                },
-            ],
-        };
+    fn unique_fallback_origin_skips_ambiguous_rotated_or_logical_matches() {
+        let rotated_twins = [
+            WaylandDisplayInfo {
+                transform: 90,
+                ..output(0, 0, (1920, 1080))
+            },
+            WaylandDisplayInfo {
+                transform: 90,
+                ..output(1080, 0, (1920, 1080))
+            },
+        ];
+        assert_eq!(unique_fallback_origin(&rotated_twins, (1080, 1920)), None);
 
-        let mut streams = vec![((0, 30), "hdmi"), ((1680, 0), "dp")];
-        let mut shared = vec!["hdmi", "dp"];
-        sort_by_display_order(&displays, &mut streams, &mut shared, |s| s.0);
-        assert_eq!(shared, vec!["dp", "hdmi"]);
-
-        // An unmatched stream (e.g. workspace at (0, 0) when neither output is at (0, 0)) must stay.
-        let mut workspace_streams = vec![((0, 0), "workspace")];
-        let mut workspace_shared = vec!["workspace"];
-        sort_by_display_order(
-            &displays,
-            &mut workspace_streams,
-            &mut workspace_shared,
-            |s| s.0,
-        );
-        assert_eq!(workspace_shared, vec!["workspace"]);
+        let mixed = [
+            WaylandDisplayInfo {
+                name: "HDMI-A-1".into(),
+                logical_size: Some((1344, 840)),
+                ..output(0, 30, (1680, 1050))
+            },
+            WaylandDisplayInfo {
+                name: "DP-1".into(),
+                logical_size: Some((1920, 1080)),
+                ..output(1680, 0, (1920, 1080))
+            },
+        ];
+        assert_eq!(unique_fallback_origin(&mixed, (1344, 840)), Some((0, 30)));
+        assert_eq!(unique_fallback_origin(&mixed, (3600, 1080)), None);
     }
 
     #[test]
-    fn offset_cache_rejects_stale_unmatched_origin_and_matches_logical_fallback() {
+    fn offset_cache_rejects_stale_unmatched_origin() {
         let displays = Displays {
             primary: 1,
             displays: vec![
@@ -1961,17 +1951,6 @@ mod tests {
             validate_display_offset_cache(&valid, 2, &displays, "tok"),
             Some(vec![(0, 30), (1680, 0)])
         );
-
-        assert!(!display_matches_size(
-            &displays.displays[0],
-            (1344, 840),
-            false
-        ));
-        assert!(display_matches_size(
-            &displays.displays[0],
-            (1344, 840),
-            true
-        ));
     }
 
     #[test]
