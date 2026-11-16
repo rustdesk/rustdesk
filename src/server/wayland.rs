@@ -555,9 +555,7 @@ fn init_displays() -> ResultType<()> {
         }
         log::debug!("Attempting to fix logical size with try_fix_logical_size()");
         try_fix_logical_size(&mut all);
-        if all.is_empty() {
-            bail!("Failed to get capturer display info");
-        }
+        *PIPEWIRE_INITIALIZED.write().unwrap() = true;
         let num = all.len();
         let primary = super::display_service::get_primary_2(&all);
         let mut displays = super::display_service::update_sync_displays(&all);
@@ -596,9 +594,6 @@ fn init_displays() -> ResultType<()> {
             }));
 
             lock.insert(idx, cap_display_info as u64);
-        }
-        if !lock.is_empty() {
-            *PIPEWIRE_INITIALIZED.write().unwrap() = true;
         }
     }
     Ok(())

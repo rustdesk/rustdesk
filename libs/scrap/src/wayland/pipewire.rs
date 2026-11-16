@@ -1376,23 +1376,6 @@ fn corrected_origin(
     }
 }
 
-fn unique_fallback_origin(
-    outputs: &[WaylandDisplayInfo],
-    size: (usize, usize),
-) -> Option<(i32, i32)> {
-    let mut matches = outputs.iter().filter(|wd| {
-        let mode = (wd.width as usize, wd.height as usize);
-        (wd.transform % 180 != 0 && (mode.1, mode.0) == size)
-            || wd
-                .logical_size
-                .is_some_and(|(lw, lh)| (lw as usize, lh as usize) == size)
-    });
-    match (matches.next(), matches.next()) {
-        (Some(wd), None) => Some((wd.x, wd.y)),
-        _ => None,
-    }
-}
-
 fn try_fill_positions(
     mouse_move_to: impl Fn(i32, i32),
     get_cursor_pos: fn() -> Option<(i32, i32)>,
@@ -1434,22 +1417,11 @@ fn try_fill_positions(
                 }
             }
             if match_count == 0 {
-                // Only apply rotated/logical fallback when a single output matches uniquely,
-                // because cursor disambiguation filters strictly by unrotated physical mode.
-                if let Some(origin) =
-                    unique_fallback_origin(&displays.displays, capturable.physical_size)
-                {
-                    capturable.position = origin;
-                    if let Some(pw_stream) = streams.get_mut(i) {
-                        pw_stream.position = origin;
-                    }
-                } else {
-                    all_matched = false;
-                    warn!(
-                        "No matching display found for capturable with size {:?}.",
-                        capturable.physical_size
-                    );
-                }
+                all_matched = false;
+                warn!(
+                    "No matching display found for capturable with size {:?}.",
+                    capturable.physical_size
+                );
             } else if match_count > 1 {
                 multi_matched_indices.push(i);
             }
@@ -1457,7 +1429,7 @@ fn try_fill_positions(
     }
 
     if !multi_matched_indices.is_empty() {
-        fill_multi_matched_positions(
+        all_matched &= fill_multi_matched_positions(
             mouse_move_to,
             get_cursor_pos,
             displays,
@@ -1467,7 +1439,8 @@ fn try_fill_positions(
         )?;
     }
 
-    // Do not cache unresolved default (0, 0) positions (e.g. a full-workspace stream).
+    // Do not cache unresolved positions: a default (0, 0) (e.g. a full-workspace stream), or
+    // the guess a failed disambiguation leaves.
     if all_matched {
         save_positions_to_cache(displays, shared_displays);
     }
@@ -1489,13 +1462,17 @@ fn validate_display_offset_cache(
     {
         return None;
     }
-    // Reject cached offsets that do not name a current display origin (e.g. stale [0, 0]).
-    if !cache
-        .offsets
-        .iter()
-        .all(|(x, y)| displays.displays.iter().any(|wd| wd.x == *x && wd.y == *y))
-    {
-        return None;
+    // Each offset must name a current display of its own: a stale [0, 0] names none, and two
+    // streams left on one display by a failed disambiguation share it. Mirrored displays are
+    // separate entries at one origin, so they still pass.
+    let mut used = vec![false; displays.displays.len()];
+    for (x, y) in cache.offsets.iter() {
+        let i = displays
+            .displays
+            .iter()
+            .enumerate()
+            .position(|(i, wd)| !used[i] && wd.x == *x && wd.y == *y)?;
+        used[i] = true;
     }
     Some(cache.offsets)
 }
@@ -1607,12 +1584,12 @@ fn fill_multi_matched_positions(
     shared_displays: &mut Vec<crate::Display>,
     streams: &mut Vec<PwStreamInfo>,
     multi_matched_indices: Vec<usize>,
-) -> ResultType<()> {
+) -> ResultType<bool> {
     debug!(
         "Multiple capturables ({:?}) match the same display size, attempting to disambiguate positions.",
     &multi_matched_indices);
     if multi_matched_indices.is_empty() {
-        return Ok(());
+        return Ok(true);
     }
 
     let is_support_embeded_cursor = get_available_cursor_modes()
@@ -1620,17 +1597,17 @@ fn fill_multi_matched_positions(
         .map(|modes| modes & 0x2 != 0)
         .unwrap_or(false);
     if is_support_embeded_cursor {
-        fill_multi_matched_positions_cursor(
+        return fill_multi_matched_positions_cursor(
             mouse_move_to,
             get_cursor_pos,
             displays,
             shared_displays,
             streams,
             multi_matched_indices,
-        )?;
+        );
     }
 
-    Ok(())
+    Ok(false)
 }
 
 fn mouse_move_to_(
@@ -1663,7 +1640,7 @@ fn fill_multi_matched_positions_cursor(
     shared_displays: &mut Vec<crate::Display>,
     streams: &mut Vec<PwStreamInfo>,
     multi_matched_indices: Vec<usize>,
-) -> ResultType<()> {
+) -> ResultType<bool> {
     // This creates a new remote desktop session for cursor-based position detection.
     // The session is temporary, used only for disambiguation, and is dropped after detection completes.
     let (conn, fd, streams_with_cursor, _session, _is_support_restore_token) =
@@ -1671,6 +1648,7 @@ fn fill_multi_matched_positions_cursor(
     let conn = Arc::new(conn);
 
     let mut matched_indices = Vec::new();
+    let multi_matched_count = multi_matched_indices.len();
     const CAPTURE_TIMEOUT_MS: u64 = 1_000;
     for idx in multi_matched_indices {
         match (
@@ -1812,7 +1790,8 @@ fn fill_multi_matched_positions_cursor(
         }
     }
 
-    Ok(())
+    // Each resolved stream claims one display.
+    Ok(matched_indices.len() == multi_matched_count)
 }
 
 fn sort_streams(
@@ -1863,7 +1842,7 @@ fn sort_streams(
 #[cfg(test)]
 mod tests {
     use super::{
-        corrected_origin, unique_fallback_origin, validate_display_offset_cache, Displays,
+        corrected_origin, serde_json, validate_display_offset_cache, Displays,
         PipewireDisplayOffsetCache, WaylandDisplayInfo,
     };
 
@@ -1878,36 +1857,6 @@ mod tests {
             refresh_rate: 60,
             transform: 0,
         }
-    }
-
-    #[test]
-    fn unique_fallback_origin_skips_ambiguous_rotated_or_logical_matches() {
-        let rotated_twins = [
-            WaylandDisplayInfo {
-                transform: 90,
-                ..output(0, 0, (1920, 1080))
-            },
-            WaylandDisplayInfo {
-                transform: 90,
-                ..output(1080, 0, (1920, 1080))
-            },
-        ];
-        assert_eq!(unique_fallback_origin(&rotated_twins, (1080, 1920)), None);
-
-        let mixed = [
-            WaylandDisplayInfo {
-                name: "HDMI-A-1".into(),
-                logical_size: Some((1344, 840)),
-                ..output(0, 30, (1680, 1050))
-            },
-            WaylandDisplayInfo {
-                name: "DP-1".into(),
-                logical_size: Some((1920, 1080)),
-                ..output(1680, 0, (1920, 1080))
-            },
-        ];
-        assert_eq!(unique_fallback_origin(&mixed, (1344, 840)), Some((0, 30)));
-        assert_eq!(unique_fallback_origin(&mixed, (3600, 1080)), None);
     }
 
     #[test]
@@ -1938,6 +1887,18 @@ mod tests {
         .unwrap();
         assert_eq!(
             validate_display_offset_cache(&stale, 1, &displays, "tok"),
+            None
+        );
+
+        // Two streams left on one output by a failed disambiguation.
+        let repeated = serde_json::to_string(&PipewireDisplayOffsetCache {
+            display_key: key.clone(),
+            restore_token: "tok".into(),
+            offsets: vec![(1680, 0), (1680, 0)],
+        })
+        .unwrap();
+        assert_eq!(
+            validate_display_offset_cache(&repeated, 2, &displays, "tok"),
             None
         );
 
