@@ -68,10 +68,11 @@ pub struct UserSettings {
     pub email_alarm_notification: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize_repr, Deserialize_repr)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize_repr, Deserialize_repr)]
 #[repr(i64)]
 pub enum UserStatus {
     Disabled = 0,
+    #[default]
     Normal = 1,
     Unverified = -1,
 }
@@ -124,12 +125,6 @@ pub struct AuthResult {
     pub failed_msg: String,
     pub url: Option<String>,
     pub auth_body: Option<AuthBody>,
-}
-
-impl Default for UserStatus {
-    fn default() -> Self {
-        UserStatus::Normal
-    }
 }
 
 impl OidcSession {

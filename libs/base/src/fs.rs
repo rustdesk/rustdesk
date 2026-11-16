@@ -298,16 +298,11 @@ pub fn can_enable_overwrite_detection(version: i64) -> bool {
 }
 
 #[repr(i32)]
-#[derive(Copy, Clone, Serialize, Debug, PartialEq)]
+#[derive(Default, Copy, Clone, Serialize, Debug, PartialEq)]
 pub enum JobType {
+    #[default]
     Generic = 0,
     Printer = 1,
-}
-
-impl Default for JobType {
-    fn default() -> Self {
-        JobType::Generic
-    }
 }
 
 impl From<JobType> for file_transfer_send_request::FileType {

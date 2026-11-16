@@ -8,16 +8,12 @@ lazy_static::lazy_static! {
     static ref SCREENSHOT: Mutex<Screenshot> = Default::default();
 }
 
+#[derive(Default)]
 pub enum ScreenshotAction {
     SaveAs(String),
     CopyToClipboard,
+    #[default]
     Discard,
-}
-
-impl Default for ScreenshotAction {
-    fn default() -> Self {
-        Self::Discard
-    }
 }
 
 impl From<&str> for ScreenshotAction {

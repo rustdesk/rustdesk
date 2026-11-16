@@ -31,16 +31,11 @@ impl std::fmt::Display for VpxNoOutput {
 
 impl std::error::Error for VpxNoOutput {}
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VpxVideoCodecId {
     VP8,
+    #[default]
     VP9,
-}
-
-impl Default for VpxVideoCodecId {
-    fn default() -> VpxVideoCodecId {
-        VpxVideoCodecId::VP9
-    }
 }
 
 pub struct VpxEncoder {

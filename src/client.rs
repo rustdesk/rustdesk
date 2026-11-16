@@ -2775,17 +2775,12 @@ impl VideoHandler {
 }
 
 // The source of sent password
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum PasswordSource {
     PersonalAb(Vec<u8>),
     SharedAb(String),
+    #[default]
     Undefined,
-}
-
-impl Default for PasswordSource {
-    fn default() -> Self {
-        PasswordSource::Undefined
-    }
 }
 
 impl PasswordSource {
