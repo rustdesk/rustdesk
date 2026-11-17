@@ -98,6 +98,7 @@ use winreg::{enums::*, RegKey};
 
 mod acl;
 pub(crate) mod installer_files;
+mod installer_firewall;
 mod installer_handoff;
 mod installer_shell;
 mod verified_update;
@@ -1568,8 +1569,10 @@ fn get_after_install(
     reg_value_start_menu_shortcuts: Option<String>,
     reg_value_desktop_shortcuts: Option<String>,
     reg_value_printer: Option<String>,
-) -> String {
+) -> ResultType<String> {
     let app_name = crate::get_app_name();
+    let firewall_rules =
+        installer_firewall::install_commands(exe, &app_name, std::env::args_os().skip(1))?;
     let ext = app_name.to_lowercase();
     let nested_exe = escape_nested_cmd_ampersands(exe);
 
@@ -1600,7 +1603,7 @@ fn get_after_install(
         })
         .unwrap_or_default();
 
-    format!("
+    Ok(format!("
     chcp 65001
     reg add HKEY_CLASSES_ROOT\\.{ext} /f
     {desktop_shortcuts}
@@ -1618,11 +1621,10 @@ fn get_after_install(
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{nested_exe}\\\" \\\"%%1\\\"\"
-    netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=out action=allow program=\"{exe}\" enable=yes
-    netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=in action=allow program=\"{exe}\" enable=yes
+    {firewall_rules}
     {create_service}
     reg add HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /f /v SoftwareSASGeneration /t REG_DWORD /d 1
-    ", create_service=get_create_service(&exe))
+    ", create_service=get_create_service(&exe)))
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
@@ -1764,7 +1766,7 @@ copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\
         Some(reg_value_start_menu_shortcuts),
         Some(reg_value_desktop_shortcuts),
         Some(reg_value_printer),
-    );
+    )?;
     let after_install = native_after_install_commands(
         format!("{after_install}\r\n{install_remote_printer}"),
         &exe,
@@ -1827,7 +1829,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 pub fn run_after_install() -> ResultType<()> {
     let (_, _, _, exe) = get_install_info();
     run_cmds(
-        native_after_install_commands(get_after_install(&exe, None, None, None), &exe, false)?,
+        native_after_install_commands(get_after_install(&exe, None, None, None)?, &exe, false)?,
         true,
         "after_install",
     )
