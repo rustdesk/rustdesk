@@ -1,9 +1,6 @@
-vcpkg_download_distfile(
-    MISSING_CSTDINT_IMPORT_PATCH
-    URLS https://github.com/lu-zero/mfx_dispatch/commit/d6241243f85a0d947bdfe813006686a930edef24.patch?full_index=1
-    FILENAME fix-missing-cstdint-import-d6241243f85a0d947bdfe813006686a930edef24.patch
-    SHA512 5d2ffc4ec2ba0e5859d01d2e072f75436ebc3e62e0f6580b5bb8b9f82fe588e7558a46a1fdfa0297a782c0eeb8f50322258d0dd9e41d927cc9be496727b61e44
-)
+# lu-zero/mfx_dispatch commit d6241243f85a0d947bdfe813006686a930edef24 ("Fix building with gcc 13.x"), vendored
+# (`git format-patch --full-index`): GitHub answers anonymous downloads of commit .patch URLs with HTTP 429.
+set(MISSING_CSTDINT_IMPORT_PATCH fix-missing-cstdint-import.patch)
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH

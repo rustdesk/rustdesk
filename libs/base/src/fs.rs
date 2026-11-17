@@ -498,7 +498,7 @@ fn get_ext(name: &str) -> &str {
 fn is_compressed_file(name: &str) -> bool {
     let compressed_exts = ["xz", "gz", "zip", "7z", "rar", "bz2", "tgz", "png", "jpg"];
     let ext = get_ext(name);
-    compressed_exts.contains(&ext)
+    compressed_exts.iter().any(|x| ext.eq_ignore_ascii_case(x))
 }
 
 pub fn validate_file_name_no_traversal(name: &str) -> ResultType<()> {
@@ -1916,5 +1916,12 @@ mod tests {
 
         assert!(!src.exists());
         assert!(dst.exists());
+    }
+
+    #[test]
+    fn compressed_file_extensions_ignore_case() {
+        // Cameras and phones name their photos IMG_0001.JPG.
+        assert!(is_compressed_file("IMG_0001.JPG"));
+        assert!(is_compressed_file("Backup.ZIP"));
     }
 }

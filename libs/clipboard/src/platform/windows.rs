@@ -29,7 +29,8 @@ const CHANNEL_RC_NO_MEMORY: u32 = 12;
 /// used by FreeRDP to represent errors.
 const ERROR_INTERNAL_ERROR: u32 = 0x54F;
 
-pub type size_t = ::std::os::raw::c_ulonglong;
+// Pointer-sized like C's size_t. bindgen on x64 emitted c_ulonglong, which is wrong on 32-bit.
+pub type size_t = usize;
 pub type __vcrt_bool = bool;
 pub type wchar_t = ::std::os::raw::c_ushort;
 

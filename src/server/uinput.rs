@@ -964,8 +964,16 @@ pub mod service {
                 };
                 allow_err!(mouse.click_button(&btn))
             }
-            DataMouse::ScrollX(_length) => {
-                // TODO: not supported for now
+            DataMouse::ScrollX(length) => {
+                let scroll = if *length < 0 {
+                    mouce::ScrollDirection::Left
+                } else {
+                    mouce::ScrollDirection::Right
+                };
+
+                for _ in 0..length.unsigned_abs() {
+                    allow_err!(mouse.scroll_wheel(&scroll))
+                }
             }
             DataMouse::ScrollY(length) => {
                 let mut length = *length;

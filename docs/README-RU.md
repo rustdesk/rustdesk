@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Ваш удаленый рабочий стол"><br>
+  <img src="../res/logo-header.svg" alt="RustDesk - Ваш удалённый рабочий стол"><br>
   <a href="#первичные-шаги-для-сборки">Первичные шаги для сборки</a> •
-  <a href="#как-собрать-с-помощью-Docker">Как собрать с помощью Docker</a> •
+  <a href="#как-собрать-с-помощью-docker">Как собрать с помощью Docker</a> •
   <a href="#структура-файлов">Структура файлов</a> •
   <a href="#скриншоты">Скриншоты</a><br>
-  [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-GR.md">Ελληνικά</a>]<br>
+  [<a href="../README.md">English</a>] | [<a href="README-UA.md">Українська</a>] | [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-PTPT.md">Português (Portugal)</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>] | [<a href="README-DA.md">Dansk</a>] | [<a href="README-GR.md">Ελληνικά</a>] | [<a href="README-TR.md">Türkçe</a>] | [<a href="README-NO.md">Norsk</a>] | [<a href="README-RO.md">Română</a>]<br>
   <b>Нам нужна ваша помощь в переводе этого README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">интерфейса RustDesk</a>
      и <a href="https://github.com/rustdesk/doc.rustdesk.com">документации RustDesk</a> на ваш родной язык.</b>
 </p>
@@ -42,7 +42,7 @@ RustDesk приветствует вклад каждого. Ознакомьт�
 
 Для ПК-версии используются библиотеки Flutter или Sciter (устаревшее) для графического интерфейса. Данное руководство подразумевает работу с Sciter, так как он более простой в использовании и с ним легче начать работу. Вы можете также посмотреть на механизм нашего [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) для сборок на Flutter.
 
-Загрузите динамическую библиотеку Flutter самостоятельно.
+Загрузите динамическую библиотеку Sciter самостоятельно.
 
 [Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
@@ -160,7 +160,8 @@ target/release/rustdesk
 
 ## Структура файлов
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: видеокодек, конфигурация, враппер TCP/UDP, protobuf, функции файловой системы для передачи файлов и некоторые другие служебные функции
+- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: видеокодек, конфигурация, враппер TCP/UDP и некоторые другие служебные функции, общие с сервером
+- **[libs/base](https://github.com/rustdesk/rustdesk/tree/master/libs/base)**: protobuf, функции файловой системы для передачи файлов, код для клавиатуры и платформ, который используется только этим приложением
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: захват экрана
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: специфичное для платформы управление клавиатурой/мышью
 - **[libs/clipboard](https://github.com/rustdesk/rustdesk/tree/master/libs/clipboard)**: функционал буфера обмена файлами для Windows, Linux, и macOS

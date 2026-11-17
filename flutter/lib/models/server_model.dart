@@ -191,8 +191,8 @@ class ServerModel with ChangeNotifier {
       });
     }
 
-    // Initial keyboard status is off on mobile
-    if (isMobile) {
+    // Initial keyboard status is off on iOS; Android syncs it from InputService natively.
+    if (isIOS) {
       bind.mainSetOption(key: kOptionEnableKeyboard, value: 'N');
     }
   }
