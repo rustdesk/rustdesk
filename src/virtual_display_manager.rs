@@ -789,7 +789,18 @@ pub mod amyuni_idd {
             plug_monitor_(false, None)?;
             return Ok(());
         }
-        plug_out_monitor(PRIVACY_MONITOR_INDEX as _, false, false)
+        // Keep single-monitor safety checks here because plug_out_monitor
+        // discards driver errors in its bulk-removal loop.
+        if VIRTUAL_DISPLAY_COUNT.load(atomic::Ordering::Relaxed) == 0 {
+            bail!("The virtual display is managed by other processes.");
+        }
+        match windows::get_device_names(None).len() {
+            0 => return Ok(()),
+            1 => bail!("This only virtual display cannot be plugged out."),
+            _ => {}
+        }
+        plug_monitor_(false, None)?;
+        Ok(())
     }
 
     pub fn prepare_privacy_monitor(cancelled: impl Fn() -> bool) -> ResultType<Option<u32>> {
