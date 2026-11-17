@@ -160,7 +160,7 @@ target/release/rustdesk
 
 ## Структура файлов
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: видеокодек, конфигурация, враппер TCP/UDP и некоторые другие служебные функции, общие с сервером
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: видеокодек, конфигурация, враппер TCP/UDP и некоторые другие служебные функции, общие с сервером
 - **[libs/base](https://github.com/rustdesk/rustdesk/tree/master/libs/base)**: protobuf, функции файловой системы для передачи файлов, код для клавиатуры и платформ, который используется только этим приложением
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: захват экрана
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: специфичное для платформы управление клавиатурой/мышью

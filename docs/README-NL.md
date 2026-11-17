@@ -148,7 +148,7 @@ Zorg ervoor dat je deze commando's van de root van de RustDesk-repository uitvoe
 
 ## Bestandsstructuur
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: videocodec, configuratie, TCP/UDP-wrapper, protobuf, bestandssysteemfuncties voor bestandsoverdracht en nog wat andere nuttige functies
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: videocodec, configuratie, TCP/UDP-wrapper, protobuf, bestandssysteemfuncties voor bestandsoverdracht en nog wat andere nuttige functies
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: schermopname
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platformspecifieke muis- en toetsenbordbeheer
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI

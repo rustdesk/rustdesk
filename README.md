@@ -158,7 +158,7 @@ Please ensure that you run these commands from the root of the RustDesk reposito
 
 ## File Structure
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, and some other utility functions shared with the server
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: video codec, config, tcp/udp wrapper, and some other utility functions shared with the server
 - **[libs/base](https://github.com/rustdesk/rustdesk/tree/master/libs/base)**: protobuf, fs functions for file transfer, keyboard and platform code used only by this app
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: screen capture
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platform specific keyboard/mouse control

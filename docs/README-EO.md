@@ -128,7 +128,7 @@ Bonvolu certigi, ke vi plenumas tiujn komandojn el la radiko de la deponejo Rust
 
 ## Dosierstrukturo
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: videa kodeko, agordado, kovrilo tcp/udp, protobuf, funkcioj fs por dosiertransigo, kaj aliaj utilaĵaj funkcioj
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: videa kodeko, agordado, kovrilo tcp/udp, protobuf, funkcioj fs por dosiertransigo, kaj aliaj utilaĵaj funkcioj
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: ekrankaptado
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: operaciumspecifa kontrolo de klavaro/muso
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: interfaco

@@ -153,7 +153,7 @@ Harap pastikan bahwa kamu menjalankan perintah ini dari repositori root RustDesk
 
 ## Struktur File
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions untuk transfer file, dan beberapa fungsi utilitas lainnya
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions untuk transfer file, dan beberapa fungsi utilitas lainnya
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: screen capture
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: spesifikasi platform keyboard/mouse control
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI

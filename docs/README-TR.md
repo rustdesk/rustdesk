@@ -156,7 +156,7 @@ Lütfen bu komutları RustDesk reposunun root klasöründe çalıştırdığın�
  
 ## Dosya Yapısı
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, dosya transferi için fs fonksiyonları ve diğer bazı yardımcı işlevler
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, dosya transferi için fs fonksiyonları ve diğer bazı yardımcı işlevler
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: ekran yakalama
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platforma özgü klavye/fare kontrolü
 - **[libs/clipboard](https://github.com/rustdesk/rustdesk/tree/master/libs/clipboard)**: platforma özgü kopyala/yapıştır implementasyonları.
