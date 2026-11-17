@@ -625,6 +625,16 @@ pub fn session_handle_flutter_key_event(
 ) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         let keyboard_mode = session.get_keyboard_mode();
+        // `event_to_key_events` has no legacy encoder on mobile, so the key
+        // would be dropped.
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let keyboard_mode = if keyboard_mode == "legacy"
+            && session.is_keyboard_mode_supported("map".to_owned())
+        {
+            "map".to_owned()
+        } else {
+            keyboard_mode
+        };
         session.handle_flutter_key_event(
             session_id,
             &keyboard_mode,
