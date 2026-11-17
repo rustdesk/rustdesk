@@ -3607,7 +3607,10 @@ mod drm_capturer_tests {
 
     #[test]
     fn drm_capture_off_reports_unavailable_without_probing() {
-        assert!(!crate::platform::linux::drm_capture_enabled());
+        // Reads the real config and environment, which may have it on where the test runs.
+        if crate::platform::linux::drm_capture_enabled() {
+            return;
+        }
         assert!(availability() == Availability::Unavailable);
         assert!(availability_cached() == Availability::Unavailable);
     }
