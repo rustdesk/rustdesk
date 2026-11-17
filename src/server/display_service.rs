@@ -318,6 +318,70 @@ pub(super) fn remap_wayland_uinput_coord(x: i32, y: i32) -> (i32, i32) {
     scrap::wayland::display::remap_to_live_layout(x, y, &lock.baseline, &lock.live)
 }
 
+/// After this long without a peer move, the next one walks the pointer onto its target output
+/// again: someone at the machine may have moved it to another monitor meanwhile.
+#[cfg(target_os = "linux")]
+const COSMIC_STEER_IDLE: Duration = Duration::from_millis(1500);
+
+#[cfg(target_os = "linux")]
+#[derive(Default)]
+struct CosmicSteer {
+    target: Option<String>,
+    last_move: Option<std::time::Instant>,
+}
+
+/// What to send to the uinput device for a peer's absolute move to `(x, y)` (whole-desktop
+/// coordinates, already remapped onto the live layout) on a compositor that maps the device
+/// per output (see `cosmic_uinput`): the walk that puts the pointer on the target output, if
+/// one is due, then the absolute value. None when the compositor maps the device onto the
+/// whole desktop, or the layout or range is not known yet: send `(x, y)` unchanged then.
+/// `button_down` skips the idle re-walk, which would drag whatever the button holds.
+#[cfg(target_os = "linux")]
+pub(super) fn cosmic_uinput_move(
+    x: i32,
+    y: i32,
+    button_down: bool,
+) -> Option<(Vec<super::cosmic_uinput::Hop>, (i32, i32))> {
+    use super::cosmic_uinput as cu;
+    lazy_static::lazy_static! {
+        static ref STEER: Mutex<CosmicSteer> = Default::default();
+    }
+    if !cu::compositor_maps_abs_per_output() {
+        return None;
+    }
+    let range = WAYLAND_UINPUT_RECT.lock().unwrap().rect?;
+    let rects = {
+        let layout = WAYLAND_LAYOUT.lock().unwrap();
+        if layout.live.is_empty() {
+            layout.baseline.clone()
+        } else {
+            layout.live.clone()
+        }
+    };
+    let target = cu::target_index(&rects, x, y)?;
+    let abs = cu::abs_value_on(&rects[target], x, y, range);
+    let mut steer = STEER.lock().unwrap();
+    let now = std::time::Instant::now();
+    let name = Some(format!(
+        "{}@{},{}",
+        rects[target].name, rects[target].x, rects[target].y
+    ));
+    let idle = steer
+        .last_move
+        .map_or(true, |t| now.duration_since(t) >= COSMIC_STEER_IDLE);
+    let hops = if rects.len() > 1 && (steer.target != name || (idle && !button_down)) {
+        // Twice: a hop run while the pointer sits on an output it was not meant for can move
+        // it somewhere the earlier hops already went past.
+        let once = cu::steer_hops(&rects, target, range);
+        once.iter().chain(once.iter()).copied().collect()
+    } else {
+        Vec::new()
+    };
+    steer.target = name;
+    steer.last_move = Some(now);
+    Some((hops, abs))
+}
+
 // The uinput absolute range is set when the session inits. If the compositor layout
 // changes afterwards (monitor scale/position change, or a portal virtual output
 // appearing once the capture starts), injected coordinates get rescaled by the stale

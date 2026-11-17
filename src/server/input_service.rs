@@ -1120,6 +1120,45 @@ pub(crate) fn note_peer_absolute_move(x: i32, y: i32) {
         Some(((x, y), std::time::Instant::now(), seq, gen, map_epoch));
 }
 
+/// Peer buttons held (one bit per button), so the idle re-walk of `cosmic_uinput_move` never
+/// runs in the middle of a drag.
+#[cfg(target_os = "linux")]
+static UINPUT_BUTTONS_DOWN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+#[cfg(target_os = "linux")]
+fn note_uinput_button(button: i32, down: bool) {
+    if !(0..32).contains(&button) {
+        return;
+    }
+    if down {
+        UINPUT_BUTTONS_DOWN.fetch_or(1 << button, Ordering::Relaxed);
+    } else {
+        UINPUT_BUTTONS_DOWN.fetch_and(!(1 << button), Ordering::Relaxed);
+    }
+}
+
+/// An absolute move through the uinput device. On a compositor that maps the device onto the
+/// output under the pointer (COSMIC), the whole-desktop point is first converted to one relative
+/// to its output, and the pointer walked onto that output when needed. See `cosmic_uinput`.
+#[cfg(target_os = "linux")]
+fn uinput_move_to(en: &mut Enigo, x: i32, y: i32) {
+    if !wayland_use_uinput() {
+        en.mouse_move_to(x, y);
+        return;
+    }
+    let held = UINPUT_BUTTONS_DOWN.load(Ordering::Relaxed) != 0;
+    match super::display_service::cosmic_uinput_move(x, y, held) {
+        Some((hops, (ax, ay))) => {
+            for hop in hops {
+                en.mouse_move_to(hop.abs.0, hop.abs.1);
+                en.mouse_move_relative(hop.rel.0, hop.rel.1);
+            }
+            en.mouse_move_to(ax, ay);
+        }
+        None => en.mouse_move_to(x, y),
+    }
+}
+
 /// The pointer moved by a path that has no post-remap absolute position to offer: a relative
 /// delta from the peer, or a move this process made on its own. The last sample no longer says
 /// where the pointer is; forget it, the next absolute move restores it.
@@ -1314,6 +1353,10 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             }
         }
     }
+    #[cfg(target_os = "linux")]
+    if evt_type == MOUSE_TYPE_DOWN || evt_type == MOUSE_TYPE_UP {
+        note_uinput_button(buttons, evt_type == MOUSE_TYPE_DOWN);
+    }
     match evt_type {
         MOUSE_TYPE_MOVE => {
             // Switching back to absolute movement implicitly disables relative mouse mode.
@@ -1331,6 +1374,13 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             };
             #[cfg(not(target_os = "linux"))]
             let (mx, my) = (evt.x, evt.y);
+            #[cfg(target_os = "linux")]
+            if uinput {
+                uinput_move_to(&mut en, mx, my);
+            } else {
+                en.mouse_move_to(mx, my);
+            }
+            #[cfg(not(target_os = "linux"))]
             en.mouse_move_to(mx, my);
             // Only the uinput point is in the layout space the calibration measures in.
             #[cfg(all(target_os = "linux", feature = "drm"))]
@@ -2591,9 +2641,12 @@ impl TemporaryMouseMoveHandle {
             for (x, y) in rx {
                 // Not the peer's position: the calibration must not subtract from it.
                 #[cfg(feature = "drm")]
-                forget_sample_and_move(|| ENIGO.lock().unwrap(), |mut en| en.mouse_move_to(x, y));
+                forget_sample_and_move(
+                    || ENIGO.lock().unwrap(),
+                    |mut en| uinput_move_to(&mut en, x, y),
+                );
                 #[cfg(not(feature = "drm"))]
-                ENIGO.lock().unwrap().mouse_move_to(x, y);
+                uinput_move_to(&mut ENIGO.lock().unwrap(), x, y);
             }
             log::debug!("TemporaryMouseMoveHandle thread exiting");
         });
