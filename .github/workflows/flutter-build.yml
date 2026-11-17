@@ -2275,7 +2275,7 @@ jobs:
                 echo "::error::$1 has no /usr/lib/rustdesk/libdrmtap.so.0"
                 exit 1
               fi
-              if [[ "${{ matrix.job.arch }}" == "x86_64" ]] && rpm -qpR "$1" | grep -E 'GLIBC_2\.(2[89]|3[0-9])'; then
+              if [[ "${{ matrix.job.arch }}" == "x86_64" ]] && rpm -qpR "$1" | grep -E 'GLIBC_2\.(2[89]|[3-9][0-9])'; then
                 echo "::error::$1 requires a newer glibc than its build container; libdrmtap's requirements leaked in"
                 exit 1
               fi
