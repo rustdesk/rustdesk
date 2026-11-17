@@ -2250,21 +2250,22 @@ class _DisplayState extends State<_Display> {
       await bind.mainSetOption(key: key, value: value);
       setState(() {});
     }
+
     return _Card(
-      title: 'Privacy mode background',
+      title: translate('privacy-mode-background'),
       children: [
         _Radio(
           context,
           value: 'black',
           groupValue: groupValue,
-          label: 'Black',
+          label: translate('Black'),
           onChanged: onChanged,
         ),
         _Radio(
           context,
           value: 'desktop',
           groupValue: groupValue,
-          label: 'Desktop wallpaper and taskbar',
+          label: translate('Desktop wallpaper and taskbar'),
           onChanged: onChanged,
         ),
       ],
