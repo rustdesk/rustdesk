@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ListSearchActionListener extends StatelessWidget {
   final FocusNode node;
@@ -22,7 +23,7 @@ class ListSearchActionListener extends StatelessWidget {
         autofocus: true,
         onKeyEvent: (kv) {
           final ch = kv.character;
-          if (ch == null) {
+          if (ch == null || LogicalKeyboardKey.isControlCharacter(ch)) {
             return;
           }
           final action = buffer.input(ch);

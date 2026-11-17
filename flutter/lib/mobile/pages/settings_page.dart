@@ -359,11 +359,27 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           onToggle: isOptionFixed(kOptionEnableTrustedDevices)
               ? null
               : (v) async {
-                  mainSetBoolOption(kOptionEnableTrustedDevices, v);
-                  setState(() {
-                    _enableTrustedDevices = v;
-                  });
+                  try {
+                    await mainSetBoolOption(kOptionEnableTrustedDevices, v);
+                    if (!mounted) return;
+                    setState(() {
+                      _enableTrustedDevices = v;
+                    });
+                  } catch (error) {
+                    showToast(error.toString());
+                  }
                 },
+        ),
+      if (enable2fa && _enableTrustedDevices)
+        SettingsTile(
+          title: Text(translate('Trust duration (days)')),
+          trailing: trustedDeviceExpiration(
+            enabled: true,
+            showLabel: false,
+            onChanged: () {
+              if (mounted) setState(() {});
+            },
+          ),
         ),
       if (enable2fa && _enableTrustedDevices)
         SettingsTile(
@@ -1047,7 +1063,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 onPressed: (context) async {
                   await launchUrl(Uri.parse(url));
                 },
-                title: Text(translate("Version: ") + version),
+                title: Text('${translate('Version')}: $version'),
                 value: Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text('rustdesk.com',

@@ -1,0 +1,89 @@
+From: Martin Storsjö
+Subject: movenc: Make the hybrid_fragmented mode more robust
+Source: https://github.com/FFmpeg/FFmpeg/commit/36896af64a9ecf6835758186e7161a2e954c364d
+
+movenc: Make the hybrid_fragmented mode more robust
+
+Write the moov tag at the end first, before overwriting the mdat size
+at the start of the file.
+
+In case writing the final moov box fails (e.g. due to being out
+of disk), we haven't broken the initial moov box yet.
+
+Thus if writing stops between these steps, we could end up with
+a file with two moov boxes - which arguably is more feasible to
+recover from, than from a file with no moov boxes at all.
+
+diff --git a/libavformat/movenc.c b/libavformat/movenc.c
+--- a/libavformat/movenc.c
++++ b/libavformat/movenc.c
+@@ -8546,6 +8546,28 @@ static int shift_data(AVFormatContext *s)
+     return ff_format_shift_data(s, mov->reserved_header_pos, moov_size);
+ }
+ 
++static void mov_write_mdat_size(AVFormatContext *s)
++{
++    MOVMuxContext *mov = s->priv_data;
++    AVIOContext *pb = s->pb;
++
++    /* Write size of mdat tag */
++    if (mov->mdat_size + 8 <= UINT32_MAX) {
++        avio_seek(pb, mov->mdat_pos, SEEK_SET);
++        avio_wb32(pb, mov->mdat_size + 8);
++        if (mov->flags & FF_MOV_FLAG_HYBRID_FRAGMENTED)
++            ffio_wfourcc(pb, "mdat"); // overwrite the original moov into a mdat
++    } else {
++        /* overwrite 'wide' placeholder atom */
++        avio_seek(pb, mov->mdat_pos - 8, SEEK_SET);
++        /* special value: real atom size will be 64 bit value after
++         * tag field */
++        avio_wb32(pb, 1);
++        ffio_wfourcc(pb, "mdat");
++        avio_wb64(pb, mov->mdat_size + 16);
++    }
++}
++
+ static int mov_write_trailer(AVFormatContext *s)
+ {
+     MOVMuxContext *mov = s->priv_data;
+@@ -8605,21 +8627,9 @@ static int mov_write_trailer(AVFormatContext *s)
+ 
+         moov_pos = avio_tell(pb);
+ 
+-        /* Write size of mdat tag */
+-        if (mov->mdat_size + 8 <= UINT32_MAX) {
+-            avio_seek(pb, mov->mdat_pos, SEEK_SET);
+-            avio_wb32(pb, mov->mdat_size + 8);
+-            if (mov->flags & FF_MOV_FLAG_HYBRID_FRAGMENTED)
+-                ffio_wfourcc(pb, "mdat"); // overwrite the original moov into a mdat
+-        } else {
+-            /* overwrite 'wide' placeholder atom */
+-            avio_seek(pb, mov->mdat_pos - 8, SEEK_SET);
+-            /* special value: real atom size will be 64 bit value after
+-             * tag field */
+-            avio_wb32(pb, 1);
+-            ffio_wfourcc(pb, "mdat");
+-            avio_wb64(pb, mov->mdat_size + 16);
+-        }
++        if (!(mov->flags & FF_MOV_FLAG_HYBRID_FRAGMENTED))
++            mov_write_mdat_size(s);
++
+         avio_seek(pb, mov->reserved_moov_size > 0 ? mov->reserved_header_pos : moov_pos, SEEK_SET);
+ 
+         if (mov->flags & FF_MOV_FLAG_FASTSTART) {
+@@ -8647,6 +8657,15 @@ static int mov_write_trailer(AVFormatContext *s)
+             if ((res = mov_write_moov_tag(pb, mov, s)) < 0)
+                 return res;
+         }
++
++        if (mov->flags & FF_MOV_FLAG_HYBRID_FRAGMENTED) {
++            // With hybrid fragmentation, only write the mdat size (hiding
++            // the original moov and all the fragments within the mdat)
++            // after we've successfully written the complete moov, to avoid
++            // risk for an unreadable file if writing the final moov fails.
++            mov_write_mdat_size(s);
++        }
++
+         res = 0;
+     } else {
+         mov_auto_flush_fragment(s, 1);

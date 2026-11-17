@@ -30,6 +30,9 @@ vcpkg_from_github(
     patch/0010.disable-loading-DLLs-from-app-dir.patch
     patch/0011-android-mediacodec-encode-align-64.patch
     patch/0012-fix-macos-big-sur-CVBufferCopyAttachments.patch
+    patch/0013-fix-qsv-encode-timeouts.patch
+    patch/0014-fix-qsv-encode-buffer.patch
+    patch/0015-fix-hybrid-mp4-finalization.patch
 )
 
 if(SOURCE_PATH MATCHES " ")

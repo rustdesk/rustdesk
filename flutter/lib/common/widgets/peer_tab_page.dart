@@ -21,6 +21,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
@@ -549,6 +550,28 @@ class _PeerTabPageState extends State<PeerTabPage>
         });
   }
 
+  Widget _openWebConsole() {
+    return _hoverAction(
+        context: context,
+        toolTip: translate('ab_web_console_tip'),
+        child: Icon(
+          Icons.open_in_new,
+          size: 18,
+        ),
+        onTap: () async {
+          final url = await bind.mainGetApiServer();
+          if (await canLaunchUrlString(url)) {
+            launchUrlString(url);
+          }
+        });
+  }
+
+  bool _showWebConsole(PeerTabModel model) =>
+      model.currentTab == PeerTabIndex.ab.index &&
+      gFFI.userModel.isLogin &&
+      !gFFI.abModel.legacyMode.value &&
+      gFFI.abModel.current.canWrite();
+
   List<Widget> _landscapeRightActions(BuildContext context) {
     final model = Provider.of<PeerTabModel>(context);
     return [
@@ -565,6 +588,10 @@ class _PeerTabPageState extends State<PeerTabPage>
       Offstage(
         offstage: model.currentTab == PeerTabIndex.recent.index,
         child: PeerSortDropdown(),
+      ),
+      Offstage(
+        offstage: !_showWebConsole(model),
+        child: _openWebConsole(),
       ),
       Offstage(
         offstage: model.currentTab != PeerTabIndex.ab.index,
@@ -630,6 +657,7 @@ class _PeerTabPageState extends State<PeerTabPage>
     final List<Widget> dynamicActions = [
       if (model.currentTabCachedPeers.isNotEmpty) _createMultiSelection(),
       if (model.currentTab != PeerTabIndex.recent.index) PeerSortDropdown(),
+      if (_showWebConsole(model)) _openWebConsole(),
       if (model.currentTab == PeerTabIndex.ab.index) _toggleTags()
     ];
     final rightWidth = availableWidth -

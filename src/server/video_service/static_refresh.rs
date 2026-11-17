@@ -24,6 +24,7 @@ enum HardwareBackend {
     Amf,
     Vaapi,
     VideoToolbox,
+    MediaCodec,
     Other,
 }
 
@@ -44,6 +45,8 @@ fn max_repeat_frames(codec: CodecFormat, quality: f32, backend: HardwareBackend)
         (CodecFormat::H265, Amf) => (200, 200, 200, 120), // Original: (580, 200, 200, 120)
         // The capture loop already repeats ten frames to drain VideoToolbox latency.
         (CodecFormat::H265, VideoToolbox) => (90, 90, 50, 90), // Original: (230, 90, 50, 90)
+        (CodecFormat::H264, MediaCodec) => (50, 20, 20, 10),
+        (CodecFormat::H265, MediaCodec) => (90, 20, 20, 20),
         (CodecFormat::H264, _) => (90, 60, 60, 30),
         (CodecFormat::H265, _) => (90, 60, 60, 30),
         (CodecFormat::AV1 | CodecFormat::Unknown, _) => return 0,
@@ -78,6 +81,7 @@ pub(super) struct StaticRefresh<'a> {
     #[cfg(test)]
     elapsed_since_encode: Duration,
     repeat_output_counter: usize,
+    repeat_output_limit: usize,
     repeat_no_outputs: usize,
     repeat_failures: usize,
     source_ready: bool,
@@ -104,6 +108,7 @@ impl<'a> StaticRefresh<'a> {
                 "h264_amf" | "hevc_amf" => HardwareBackend::Amf,
                 "h264_vaapi" => HardwareBackend::Vaapi,
                 "hevc_videotoolbox" => HardwareBackend::VideoToolbox,
+                "h264_mediacodec" | "hevc_mediacodec" => HardwareBackend::MediaCodec,
                 _ => HardwareBackend::Other,
             },
             #[cfg(feature = "vram")]
@@ -129,6 +134,7 @@ impl<'a> StaticRefresh<'a> {
             #[cfg(test)]
             elapsed_since_encode: Duration::ZERO,
             repeat_output_counter: 0,
+            repeat_output_limit: 0,
             repeat_no_outputs: 0,
             repeat_failures: 0,
             source_ready: false,
@@ -139,6 +145,7 @@ impl<'a> StaticRefresh<'a> {
 
     pub(super) fn on_frame(&mut self, _frame: &EncodeInput) {
         self.repeat_output_counter = 0;
+        self.repeat_output_limit = 0;
         self.repeat_no_outputs = 0;
         self.source_ready = false;
         #[cfg(all(windows, feature = "vram"))]
@@ -182,6 +189,11 @@ impl<'a> StaticRefresh<'a> {
         frame_controller: &mut VideoFrameController,
     ) -> ResultType<()> {
         let spf = spf.max(Duration::from_secs(1) / MAX_REPEAT_FPS);
+        self.repeat_output_limit = self.repeat_output_limit.max(max_repeat_frames(
+            self.codec_format,
+            quality,
+            self.hardware_backend,
+        ));
         if !self.source.is_monitor()
             || self.codec_format == CodecFormat::AV1
             || !self.source_ready
@@ -191,8 +203,7 @@ impl<'a> StaticRefresh<'a> {
                     CodecFormat::VP8 | CodecFormat::VP9 | CodecFormat::AV1
                 ))
             || self.repeat_no_outputs >= MAX_REPEAT_NO_OUTPUTS
-            || self.repeat_output_counter
-                >= max_repeat_frames(self.codec_format, quality, self.hardware_backend)
+            || self.repeat_output_counter >= self.repeat_output_limit
             || {
                 #[cfg(not(test))]
                 let elapsed = self.last_encode.elapsed();
@@ -587,6 +598,56 @@ mod tests {
     }
 
     #[test]
+    fn quality_changes_preserve_the_largest_budget_until_a_new_frame() {
+        let sp = GenericService::new("repeat-quality-change-test".to_owned(), false);
+        let recorder = Arc::new(Mutex::new(None));
+        let mut refresh = new_refresh(
+            VideoSource::Monitor,
+            CodecFormat::H264,
+            &sp,
+            &recorder,
+            0,
+            1,
+            1,
+        );
+        refresh.hardware_backend = HardwareBackend::MediaCodec;
+        let (tx, rx) = mpsc::unbounded_channel();
+        sp.on_subscribe(ConnInner::new(1, None, Some(tx)));
+        let mut encoder = Encoder {
+            codec: Box::new(CountingEncoder(Rc::new(Cell::new(0)))),
+        };
+        for (new_frame, quality, attempts, expected) in [
+            (true, BR_BALANCED, 11, 11),
+            (false, BR_BEST, 20, 20),
+            (false, 0.1, 50, 50),
+            (false, BR_BEST, 50, 50),
+            (false, 0.1, 50, 50),
+            (true, BR_BEST, 20, 60),
+        ] {
+            if new_frame {
+                refresh.on_frame(&EncodeInput::YUV(&[1]));
+                refresh.on_encoded(true);
+            }
+            for _ in 0..attempts {
+                refresh.elapsed_since_encode = Duration::from_secs(1);
+                refresh
+                    .try_encode(
+                        &[1],
+                        Duration::from_millis(33),
+                        quality,
+                        Instant::now(),
+                        0,
+                        &mut encoder,
+                        &mut VideoFrameController::new(0),
+                    )
+                    .unwrap();
+            }
+            assert_eq!(rx.len(), expected);
+        }
+        sp.on_unsubscribe(1);
+    }
+
+    #[test]
     fn quality_bands_stop_each_backend_at_its_output_budget() {
         let sp = GenericService::new("repeat-quality-test".to_owned(), false);
         let recorder = Arc::new(Mutex::new(None));
@@ -594,6 +655,16 @@ mod tests {
             [0.1, BR_SPEED, BR_BALANCED, BR_BEST]
                 .map(|q| { max_repeat_frames(CodecFormat::H264, q, HardwareBackend::Vaapi) }),
             [150, 100, 90, 60]
+        );
+        assert_eq!(
+            [0.1, BR_SPEED, BR_BALANCED, BR_BEST]
+                .map(|q| { max_repeat_frames(CodecFormat::H264, q, HardwareBackend::MediaCodec) }),
+            [50, 20, 20, 10]
+        );
+        assert_eq!(
+            [0.1, BR_SPEED, BR_BALANCED, BR_BEST]
+                .map(|q| { max_repeat_frames(CodecFormat::H265, q, HardwareBackend::MediaCodec) }),
+            [90, 20, 20, 20]
         );
         for codec in [
             CodecFormat::VP8,
@@ -607,6 +678,7 @@ mod tests {
                 HardwareBackend::Amf,
                 HardwareBackend::Vaapi,
                 HardwareBackend::VideoToolbox,
+                HardwareBackend::MediaCodec,
                 HardwareBackend::Other,
             ] {
                 let mut refresh = new_refresh(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
@@ -640,6 +712,7 @@ mod tests {
                 HardwareBackend::Amf,
                 HardwareBackend::Vaapi,
                 HardwareBackend::VideoToolbox,
+                HardwareBackend::MediaCodec,
                 HardwareBackend::Other,
             ] {
                 assert_eq!(
@@ -667,6 +740,8 @@ mod tests {
             ("hevc_vaapi", HardwareBackend::Other),
             ("hevc_videotoolbox", HardwareBackend::VideoToolbox),
             ("h264_videotoolbox", HardwareBackend::Other),
+            ("h264_mediacodec", HardwareBackend::MediaCodec),
+            ("hevc_mediacodec", HardwareBackend::MediaCodec),
         ] {
             let config = EncoderCfg::HWRAM(scrap::hwcodec::HwRamEncoderConfig {
                 name: name.to_owned(),

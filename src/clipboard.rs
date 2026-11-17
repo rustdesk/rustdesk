@@ -281,10 +281,16 @@ fn do_update_clipboard_(mut to_update_data: Vec<ClipboardData>, side: ClipboardS
 
 #[cfg(not(target_os = "android"))]
 fn append_owner_marker(mut data: Vec<ClipboardData>, side: ClipboardSide) -> Vec<ClipboardData> {
-    data.push(ClipboardData::Special((
+    let marker = ClipboardData::Special((
         RUSTDESK_CLIPBOARD_OWNER_FORMAT.to_owned(),
         side.get_owner_data(),
-    )));
+    ));
+    // The Windows setter stops at the first format it fails to write, so a marker placed
+    // last can be skipped, leaving content RustDesk no longer recognizes as its own.
+    #[cfg(target_os = "windows")]
+    data.insert(0, marker);
+    #[cfg(not(target_os = "windows"))]
+    data.push(marker);
     data
 }
 

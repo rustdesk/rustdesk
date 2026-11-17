@@ -577,6 +577,8 @@ _registerEventHandler() {
 
 Widget keyListenerBuilder(BuildContext context, Widget? child) {
   return RawKeyboardListener(
+    // Keep this keyboard-only wrapper from taking focus away from web inputs.
+    includeSemantics: !isWeb,
     // `skipTraversal: isWeb` is to fix "Bad state: RenderBox was not laid out: minified:aeL#c19e4"
     focusNode: FocusNode(skipTraversal: isWeb),
     child: child ?? Container(),

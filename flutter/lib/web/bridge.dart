@@ -149,6 +149,7 @@ class RustdeskImpl {
       required String password,
       required bool isSharedPassword,
       String? connToken,
+      required String loginMethod,
       dynamic hint}) {
     return js.context.callMethod('setByName', [
       'session_add_sync',
@@ -156,6 +157,7 @@ class RustdeskImpl {
         'id': id,
         'password': password,
         'is_shared_password': isSharedPassword,
+        'login_method': loginMethod,
         'isFileTransfer': isFileTransfer,
         'isViewCamera': isViewCamera,
         'isTerminal': isTerminal
@@ -1834,6 +1836,10 @@ class RustdeskImpl {
     throw UnimplementedError("mainRemoveTrustedDevices");
   }
 
+  Future<void> mainRenewTrustedDevices({required String json, dynamic hint}) {
+    throw UnimplementedError("mainRenewTrustedDevices");
+  }
+
   Future<void> mainClearTrustedDevices({dynamic hint}) {
     throw UnimplementedError("mainClearTrustedDevices");
   }
@@ -1928,6 +1934,11 @@ class RustdeskImpl {
   }
 
   String mainGetCommonSync({required String key, dynamic hint}) {
+    const prefix = 'resolve-api-server:';
+    if (key.startsWith(prefix)) {
+      return js.context
+          .callMethod('getByName', ['api_server', key.substring(prefix.length)]);
+    }
     throw UnimplementedError("mainGetCommonSync");
   }
 
@@ -1955,6 +1966,9 @@ class RustdeskImpl {
       required String key,
       required String param,
       dynamic hint}) {
+    if (key == 'login_method') {
+      return js.context.callMethod('getByName', ['login_method']);
+    }
     throw UnimplementedError("sessionGetCommonSync");
   }
 

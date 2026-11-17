@@ -20,7 +20,7 @@ import 'package:xterm/xterm.dart';
 import '../../desktop/pages/terminal_connection_manager.dart';
 import '../../consts.dart';
 
-const _terminalBackgroundOpacity = 0.7;
+const _terminalBackgroundOpacity = 1.0;
 
 Widget _buildTerminalViewForPlatform({
   required bool reportMouseInput,
@@ -71,8 +71,10 @@ class TerminalPage extends StatefulWidget {
     required this.isSharedPassword,
     this.forceRelay,
     this.connToken,
+    this.loginMethod = '',
   }) : super(key: key);
   final String id;
+  final String loginMethod;
   final String? password;
   final bool? forceRelay;
   final bool? isSharedPassword;
@@ -141,6 +143,7 @@ class _TerminalPageState extends State<TerminalPage>
     // Use shared FFI instance from connection manager
     _ffi = TerminalConnectionManager.getConnection(
       peerId: widget.id,
+      loginMethod: widget.loginMethod,
       password: widget.password,
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,

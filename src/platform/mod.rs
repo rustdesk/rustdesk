@@ -23,6 +23,9 @@ pub mod linux;
 #[cfg(target_os = "linux")]
 pub mod gtk_sudo;
 
+#[cfg(target_os = "android")]
+pub mod android_log;
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use base::message_proto::CursorData;
 #[cfg(all(

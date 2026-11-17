@@ -13,6 +13,7 @@ class TerminalPage extends StatefulWidget {
     Key? key,
     required this.id,
     required this.password,
+    this.loginMethod = '',
     required this.tabController,
     required this.isSharedPassword,
     required this.terminalId,
@@ -24,6 +25,7 @@ class TerminalPage extends StatefulWidget {
   }) : super(key: key);
   final String id;
   final String? password;
+  final String loginMethod;
   final DesktopTabController tabController;
   final bool? forceRelay;
   final bool? isSharedPassword;
@@ -68,6 +70,7 @@ class _TerminalPageState extends State<TerminalPage>
     _ffi = TerminalConnectionManager.getConnection(
       peerId: widget.id,
       password: widget.password,
+      loginMethod: widget.loginMethod,
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
       connToken: widget.connToken,
@@ -209,7 +212,7 @@ class _TerminalPageState extends State<TerminalPage>
             focusNode: _terminalFocusNode,
             // Note: autofocus is not used here because focus is managed manually
             // via _onTabStateChanged() to handle tab switching properly.
-            backgroundOpacity: 0.7,
+            backgroundOpacity: 1.0,
             padding: _calculatePadding(heightPx),
             onSecondaryTapDown: (details, offset) async {
               final selection = _terminalModel.terminalController.selection;
