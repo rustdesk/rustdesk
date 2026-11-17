@@ -12,9 +12,15 @@
 //! Here a whole-desktop point is turned into a value of the uinput range relative to the
 //! output that contains it. Absolute motion cannot leave the active output on COSMIC, but
 //! relative motion can when one step lands inside another output (a larger step is clamped
-//! to the current output). So, when the target output may not be the active one, the pointer
-//! is first walked across the shared edges towards it: placed on the edge of a neighbouring
-//! output, then nudged over the edge.
+//! to the current output). So, when the pointer may not be on the target output, it is first
+//! walked there with hops: an absolute move onto the edge an output shares with a neighbour,
+//! then a small relative step over that edge.
+//!
+//! Which output holds the pointer is not observable, and a hop also runs on whichever output
+//! the pointer happens to be on, where it may move it elsewhere. So the hop sequence is
+//! planned by simulating cosmic-comp from every output at once: a breadth-first search over
+//! the sets of outputs the pointer may be on, for the shortest sequence that leaves only the
+//! target.
 
 use scrap::wayland::display::DisplayRect;
 
@@ -22,6 +28,13 @@ use scrap::wayland::display::DisplayRect;
 /// uinput service halves it into device units. The pointer sits on the edge itself, so any
 /// motion in the right direction crosses; the margin only absorbs acceleration below 1.
 pub const STEER_STEP: i32 = 16;
+
+/// Above this many outputs no walk is planned (the search runs over subsets of outputs).
+const MAX_PLANNED_OUTPUTS: usize = 16;
+
+/// The uinput absolute range: `(minx, maxx, miny, maxy)`, as passed to
+/// `update_mouse_resolution`.
+pub type Range = (i32, i32, i32, i32);
 
 /// Set `RUSTDESK_UINPUT_PER_OUTPUT=1` to force this mapping on another compositor that
 /// behaves like COSMIC, or `=0` to turn it off.
@@ -72,15 +85,18 @@ fn cosmic_comp_running(uid: u32) -> bool {
 }
 
 /// The output that contains `(x, y)`, or the nearest one for a point in a gap or outside.
+/// Computed in i64: the point comes from the peer unchecked.
 pub fn target_index(rects: &[DisplayRect], x: i32, y: i32) -> Option<usize> {
+    let (x, y) = (x as i64, y as i64);
     rects
         .iter()
         .enumerate()
         .filter(|(_, r)| r.w > 0 && r.h > 0)
         .min_by_key(|(_, r)| {
-            let dx = (r.x - x).max(0).max(x - (r.x + r.w - 1));
-            let dy = (r.y - y).max(0).max(y - (r.y + r.h - 1));
-            dx as i64 * dx as i64 + dy as i64 * dy as i64
+            let (rx, ry) = (r.x as i64, r.y as i64);
+            let dx = (rx - x).max(0).max(x - (rx + r.w as i64 - 1));
+            let dy = (ry - y).max(0).max(y - (ry + r.h as i64 - 1));
+            dx as i128 * dx as i128 + dy as i128 * dy as i128
         })
         .map(|(i, _)| i)
 }
@@ -89,30 +105,36 @@ pub fn target_index(rects: &[DisplayRect], x: i32, y: i32) -> Option<usize> {
 /// long, for a device whose range is `min..=max`. libinput scales a value as
 /// `(v - min) * size / (max - min + 1)`; rounding up keeps the result in
 /// `[offset, offset + 1)`, so the point never lands one pixel short.
-pub fn axis_value(offset: i32, size: i32, min: i32, max: i32) -> i32 {
+pub fn axis_value(offset: i64, size: i32, min: i32, max: i32) -> i32 {
     let range = (max as i64 - min as i64 + 1).max(1);
     let size = (size as i64).max(1);
-    let offset = (offset as i64).clamp(0, size - 1);
+    let offset = offset.clamp(0, size - 1);
     let v = min as i64 + (offset * range + size - 1) / size;
     v.clamp(min as i64, max as i64) as i32
 }
 
-/// `(x, y)` as a uinput value relative to the output `r`, for the uinput range `range`
-/// (`minx, maxx, miny, maxy`, as passed to `update_mouse_resolution`).
-pub fn abs_value_on(r: &DisplayRect, x: i32, y: i32, range: (i32, i32, i32, i32)) -> (i32, i32) {
+/// `(x, y)` as a uinput value relative to the output `r`.
+pub fn abs_value_on(r: &DisplayRect, x: i32, y: i32, range: Range) -> (i32, i32) {
     let (minx, maxx, miny, maxy) = range;
     (
-        axis_value(x - r.x, r.w, minx, maxx),
-        axis_value(y - r.y, r.h, miny, maxy),
+        axis_value(x as i64 - r.x as i64, r.w, minx, maxx),
+        axis_value(y as i64 - r.y as i64, r.h, miny, maxy),
     )
 }
 
-/// One hop of a walk: an absolute value that puts a pointer sitting on output `from` onto its
-/// edge shared with the next output, then the relative motion that crosses that edge.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// One hop of a walk: an absolute value that puts a pointer sitting on one output onto the
+/// edge it shares with a neighbour, then the relative motion that crosses that edge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Hop {
     pub abs: (i32, i32),
     pub rel: (i32, i32),
+}
+
+/// What to inject, in order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Step {
+    Abs(i32, i32),
+    Rel(i32, i32),
 }
 
 /// The edge `from` shares with `to`, as the point on `from` next to it (in desktop
@@ -138,44 +160,129 @@ fn shared_edge(from: &DisplayRect, to: &DisplayRect) -> Option<((i32, i32), (i32
     }
 }
 
-/// The hops that bring the pointer from any output onto `target`: for every other output,
-/// the hop to its neighbour one step closer to `target`, farthest outputs first, so a pointer
-/// moved one step closer is moved again by a later hop. A hop meant for another output also
-/// runs while the pointer sits elsewhere; it then only nudges the pointer from an edge point,
-/// which the relative step clamps at the edge of the output unless an output lies beyond it.
-pub fn steer_hops(rects: &[DisplayRect], target: usize, range: (i32, i32, i32, i32)) -> Vec<Hop> {
-    if target >= rects.len() {
-        return Vec::new();
-    }
-    // Breadth-first from the target over shared edges.
-    let mut parent: Vec<Option<usize>> = vec![None; rects.len()];
-    let mut dist: Vec<Option<usize>> = vec![None; rects.len()];
-    dist[target] = Some(0);
-    let mut queue = std::collections::VecDeque::from([target]);
-    while let Some(p) = queue.pop_front() {
-        for c in 0..rects.len() {
-            if dist[c].is_none() && shared_edge(&rects[c], &rects[p]).is_some() {
-                dist[c] = Some(dist[p].unwrap() + 1);
-                parent[c] = Some(p);
-                queue.push_back(c);
+/// Every hop over every shared edge, in both directions.
+fn candidate_hops(rects: &[DisplayRect], range: Range) -> Vec<Hop> {
+    let mut hops = Vec::new();
+    for (c, from) in rects.iter().enumerate() {
+        for (p, to) in rects.iter().enumerate() {
+            if c == p {
+                continue;
+            }
+            if let Some(((x, y), rel)) = shared_edge(from, to) {
+                let hop = Hop {
+                    abs: abs_value_on(from, x, y, range),
+                    rel,
+                };
+                if !hops.contains(&hop) {
+                    hops.push(hop);
+                }
             }
         }
     }
-    let mut order: Vec<usize> = (0..rects.len())
-        .filter(|&c| c != target && dist[c].is_some())
-        .collect();
-    order.sort_by_key(|&c| std::cmp::Reverse(dist[c]));
-    order
-        .into_iter()
-        .filter_map(|c| {
-            let from = &rects[c];
-            let ((x, y), rel) = shared_edge(from, &rects[parent[c]?])?;
-            Some(Hop {
-                abs: abs_value_on(from, x, y, range),
-                rel,
-            })
-        })
-        .collect()
+    hops
+}
+
+fn output_at(rects: &[DisplayRect], x: f64, y: f64) -> Option<usize> {
+    rects.iter().position(|r| {
+        x >= r.x as f64 && x < (r.x + r.w) as f64 && y >= r.y as f64 && y < (r.y + r.h) as f64
+    })
+}
+
+/// Where cosmic-comp puts the pointer for the absolute value `v` while `o` is active
+/// (libinput's transform onto that output).
+fn landing(o: &DisplayRect, v: (i32, i32), range: Range) -> (f64, f64) {
+    let (minx, maxx, miny, maxy) = range;
+    let sx = (maxx as i64 - minx as i64 + 1).max(1) as f64;
+    let sy = (maxy as i64 - miny as i64 + 1).max(1) as f64;
+    (
+        o.x as f64 + (v.0 as i64 - minx as i64) as f64 * o.w as f64 / sx,
+        o.y as f64 + (v.1 as i64 - miny as i64) as f64 * o.h as f64 / sy,
+    )
+}
+
+/// The outputs a pointer on output `o` may end on after `hop`. The relative step is scaled
+/// by acceleration we do not know, so it is tried from a pixel to twice its size; a step
+/// that lands outside every output is clamped to `o`.
+fn hop_results(rects: &[DisplayRect], o: usize, hop: &Hop, range: Range) -> u64 {
+    let (px, py) = landing(&rects[o], hop.abs, range);
+    let len = (hop.rel.0.abs() + hop.rel.1.abs()).max(1) as f64;
+    let (ux, uy) = (hop.rel.0 as f64 / len, hop.rel.1 as f64 / len);
+    let mut out = 0u64;
+    for s in [1.0, len, 2.0 * len] {
+        let at = output_at(rects, px + ux * s, py + uy * s).unwrap_or(o);
+        out |= 1 << at;
+    }
+    out
+}
+
+/// The shortest hop sequence that ends on `target` whichever output the pointer starts on.
+/// None when there is none (an output with no shared edge), or too many outputs to search.
+pub fn plan_walk(rects: &[DisplayRect], target: usize, range: Range) -> Option<Vec<Hop>> {
+    let n = rects.len();
+    if target >= n || n > MAX_PLANNED_OUTPUTS {
+        return None;
+    }
+    let all: u64 = (0..n)
+        .filter(|&i| rects[i].w > 0 && rects[i].h > 0)
+        .fold(0, |m, i| m | 1 << i);
+    let goal = 1u64 << target;
+    if all & goal == 0 {
+        return None;
+    }
+    if all == goal {
+        return Some(Vec::new());
+    }
+    let hops = candidate_hops(rects, range);
+    // Breadth-first over the sets of outputs the pointer may be on; `prev` keeps, for each
+    // set reached, the set it came from and the hop taken.
+    let mut prev: std::collections::HashMap<u64, (u64, usize)> = Default::default();
+    let mut queue = std::collections::VecDeque::from([all]);
+    while let Some(set) = queue.pop_front() {
+        for (h, hop) in hops.iter().enumerate() {
+            let next = (0..n)
+                .filter(|&o| set & (1 << o) != 0)
+                .fold(0u64, |m, o| m | hop_results(rects, o, hop, range));
+            if next == all || prev.contains_key(&next) {
+                continue;
+            }
+            prev.insert(next, (set, h));
+            if next == goal {
+                let mut walk = Vec::new();
+                let mut at = next;
+                while let Some(&(from, h)) = prev.get(&at) {
+                    walk.push(hops[h]);
+                    at = from;
+                }
+                walk.reverse();
+                return Some(walk);
+            }
+            queue.push_back(next);
+        }
+    }
+    None
+}
+
+/// Moves on the uinput device that put the pointer on `abs` of the target output: the walk,
+/// if any, then the absolute value. The kernel drops an absolute event that repeats the
+/// device's current value, even when relative steps moved the pointer since, so an absolute
+/// value equal to the previous one (`last`, None when unknown) is preceded by a one-unit nudge.
+pub fn steps(walk: &[Hop], abs: (i32, i32), last: Option<(i32, i32)>, range: Range) -> Vec<Step> {
+    let mut out = Vec::with_capacity(walk.len() * 3 + 2);
+    let mut last = last;
+    let mut push_abs = |out: &mut Vec<Step>, v: (i32, i32)| {
+        if last.map_or(true, |l| l == v) {
+            let nx = if v.0 > range.0 { v.0 - 1 } else { v.0 + 1 };
+            out.push(Step::Abs(nx, v.1));
+        }
+        out.push(Step::Abs(v.0, v.1));
+        last = Some(v);
+    };
+    for hop in walk {
+        push_abs(&mut out, hop.abs);
+        out.push(Step::Rel(hop.rel.0, hop.rel.1));
+    }
+    push_abs(&mut out, abs);
+    out
 }
 
 #[cfg(test)]
@@ -193,6 +300,14 @@ mod tests {
         }
     }
 
+    fn desktop(rects: &[DisplayRect]) -> Range {
+        let minx = rects.iter().map(|r| r.x).min().unwrap();
+        let maxx = rects.iter().map(|r| r.x + r.w).max().unwrap();
+        let miny = rects.iter().map(|r| r.y).min().unwrap();
+        let maxy = rects.iter().map(|r| r.y + r.h).max().unwrap();
+        (minx, maxx, miny, maxy)
+    }
+
     // The layout this was found on: a 4K monitor at the origin, a 1080p one below its right
     // half and a small one to its right. Desktop rect 4864x3240.
     fn layout() -> Vec<DisplayRect> {
@@ -202,21 +317,95 @@ mod tests {
             rect("HDMI-A-1", 0, 0, 3840, 2160),
         ]
     }
-    const RANGE: (i32, i32, i32, i32) = (0, 4864, 0, 3240);
 
-    // What cosmic-comp does with a value: libinput's transform onto the active output.
-    fn land(r: &DisplayRect, v: (i32, i32), range: (i32, i32, i32, i32)) -> (f64, f64) {
-        let sx = (range.1 - range.0 + 1) as f64;
-        let sy = (range.3 - range.2 + 1) as f64;
-        (
-            r.x as f64 + (v.0 - range.0) as f64 * r.w as f64 / sx,
-            r.y as f64 + (v.1 - range.2) as f64 * r.h as f64 / sy,
-        )
+    fn layouts() -> Vec<Vec<DisplayRect>> {
+        vec![
+            layout(),
+            // Three in a row: the middle target is the case a fixed hop order gets wrong.
+            vec![
+                rect("A", 0, 0, 1920, 1080),
+                rect("B", 1920, 0, 1920, 1080),
+                rect("C", 3840, 0, 1920, 1080),
+            ],
+            // Two by two.
+            vec![
+                rect("A", 0, 0, 1920, 1080),
+                rect("B", 1920, 0, 1920, 1080),
+                rect("C", 0, 1080, 1920, 1080),
+                rect("D", 1920, 1080, 1920, 1080),
+            ],
+            // A column of mixed sizes.
+            vec![
+                rect("A", 0, 0, 2560, 1440),
+                rect("B", 320, 1440, 1920, 1080),
+                rect("C", 0, 2520, 1024, 768),
+            ],
+        ]
+    }
+
+    /// An independent model of cosmic-comp: the kernel's dropping of repeated absolute
+    /// values, the absolute value mapped onto the active output, a relative step of half
+    /// its size switching output only when it lands inside another one.
+    fn replay(
+        rects: &[DisplayRect],
+        start: usize,
+        steps: &[Step],
+        range: Range,
+    ) -> (usize, f64, f64) {
+        let mut out = start;
+        let r = &rects[start];
+        let (mut x, mut y) = (r.x as f64 + 1.0, r.y as f64 + 1.0);
+        let mut dev: Option<(i32, i32)> = None;
+        for step in steps {
+            match *step {
+                Step::Abs(vx, vy) => {
+                    if dev == Some((vx, vy)) {
+                        continue;
+                    }
+                    dev = Some((vx, vy));
+                    let (lx, ly) = landing(&rects[out], (vx, vy), range);
+                    x = lx;
+                    y = ly;
+                }
+                Step::Rel(dx, dy) => {
+                    let (nx, ny) = (x + dx as f64 / 2.0, y + dy as f64 / 2.0);
+                    if let Some(o) = output_at(rects, nx, ny) {
+                        out = o;
+                        x = nx;
+                        y = ny;
+                    }
+                }
+            }
+        }
+        (out, x, y)
+    }
+
+    #[test]
+    fn from_every_output_the_walk_ends_on_the_target_pixel() {
+        for rects in layouts() {
+            let range = desktop(&rects);
+            for target in 0..rects.len() {
+                let walk = plan_walk(&rects, target, range).expect("a walk exists");
+                let t = &rects[target];
+                let (px, py) = (t.x + t.w / 3, t.y + t.h - 2);
+                let abs = abs_value_on(t, px, py, range);
+                for start in 0..rects.len() {
+                    for last in [None, Some(abs)] {
+                        let (o, x, y) =
+                            replay(&rects, start, &steps(&walk, abs, last, range), range);
+                        assert_eq!(o, target, "{rects:?} start {start} target {target}");
+                        assert!(x >= px as f64 && x < px as f64 + 1.0, "x {px} -> {x}");
+                        assert!(y >= py as f64 && y < py as f64 + 1.0, "y {py} -> {y}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]
     fn points_land_on_the_same_pixel_of_their_output() {
         let rects = layout();
+        let range = desktop(&rects);
         for &(x, y) in &[
             (0, 0),
             (1920, 1080),
@@ -226,7 +415,7 @@ mod tests {
             (4000, 300),
         ] {
             let i = target_index(&rects, x, y).unwrap();
-            let (lx, ly) = land(&rects[i], abs_value_on(&rects[i], x, y, RANGE), RANGE);
+            let (lx, ly) = landing(&rects[i], abs_value_on(&rects[i], x, y, range), range);
             assert!(lx >= x as f64 && lx < x as f64 + 1.0, "x {x} -> {lx}");
             assert!(ly >= y as f64 && ly < y as f64 + 1.0, "y {y} -> {ly}");
         }
@@ -240,55 +429,49 @@ mod tests {
         assert_eq!(target_index(&rects, 3840, 0), Some(1));
         // The empty corner below the 4K monitor's left half: its bottom edge is nearest.
         assert_eq!(target_index(&rects, 100, 3000), Some(2));
+        // Extreme peer values do not overflow.
+        assert_eq!(target_index(&rects, i32::MIN, i32::MIN), Some(2));
+        assert_eq!(target_index(&rects, i32::MAX, i32::MAX), Some(0));
     }
 
     #[test]
-    fn hops_cross_into_the_target_from_each_neighbour() {
-        let rects = layout();
-        let hops = steer_hops(&rects, 2, RANGE);
-        assert_eq!(hops.len(), 2);
-        for hop in &hops {
-            // Run the hop as if the pointer were on each neighbour; one of them must cross.
-            let crossed = [0usize, 1].iter().any(|&c| {
-                let (px, py) = land(&rects[c], hop.abs, RANGE);
-                let (nx, ny) = (px + hop.rel.0 as f64 / 4.0, py + hop.rel.1 as f64 / 4.0);
-                let t = &rects[2];
-                nx >= t.x as f64
-                    && nx < (t.x + t.w) as f64
-                    && ny >= t.y as f64
-                    && ny < (t.y + t.h) as f64
-            });
-            assert!(crossed, "{hop:?}");
-        }
-    }
-
-    #[test]
-    fn far_outputs_hop_first() {
-        // A row of three: the leftmost is two hops from the rightmost.
-        let rects = vec![
-            rect("A", 0, 0, 100, 100),
-            rect("B", 100, 0, 100, 100),
-            rect("C", 200, 0, 100, 100),
-        ];
-        let range = (0, 300, 0, 100);
-        let hops = steer_hops(&rects, 2, range);
-        assert_eq!(hops.len(), 2);
-        // First A -> B (A's right edge), then B -> C.
-        assert_eq!(land(&rects[0], hops[0].abs, range).0.floor(), 99.0);
-        assert_eq!(hops[0].rel, (STEER_STEP, 0));
-        assert_eq!(land(&rects[1], hops[1].abs, range).0.floor(), 199.0);
+    fn a_repeated_absolute_value_is_nudged_first() {
+        let range = (0, 100, 0, 100);
+        assert_eq!(
+            steps(&[], (5, 5), Some((5, 5)), range),
+            vec![Step::Abs(4, 5), Step::Abs(5, 5)]
+        );
+        assert_eq!(
+            steps(&[], (5, 5), Some((6, 5)), range),
+            vec![Step::Abs(5, 5)]
+        );
+        assert_eq!(
+            steps(&[], (0, 0), None, range),
+            vec![Step::Abs(1, 0), Step::Abs(0, 0)]
+        );
     }
 
     #[test]
     fn a_single_output_needs_no_walk() {
         let rects = vec![rect("A", 0, 0, 1920, 1080)];
-        assert!(steer_hops(&rects, 0, (0, 1920, 0, 1080)).is_empty());
+        assert_eq!(plan_walk(&rects, 0, (0, 1920, 0, 1080)), Some(Vec::new()));
     }
 
     #[test]
-    fn axis_value_stays_in_range() {
-        assert_eq!(axis_value(0, 3840, 0, 4864), 0);
-        assert_eq!(axis_value(5000, 3840, 0, 4864), 4864);
+    fn an_output_without_a_shared_edge_has_no_walk() {
+        let rects = vec![
+            rect("A", 0, 0, 1920, 1080),
+            rect("B", 1920, 1080, 1920, 1080),
+        ];
+        assert_eq!(plan_walk(&rects, 0, desktop(&rects)), None);
+    }
+
+    #[test]
+    fn values_stay_in_range() {
+        let r = rect("A", 0, 0, 3840, 2160);
+        let range = (0, 4864, 0, 3240);
+        assert_eq!(abs_value_on(&r, i32::MIN, i32::MIN, range), (0, 0));
+        assert_eq!(abs_value_on(&r, i32::MAX, i32::MAX, range).0 <= 4864, true);
         assert_eq!(axis_value(-5, 3840, 0, 4864), 0);
     }
 }

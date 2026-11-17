@@ -323,11 +323,20 @@ pub(super) fn remap_wayland_uinput_coord(x: i32, y: i32) -> (i32, i32) {
 #[cfg(target_os = "linux")]
 const COSMIC_STEER_IDLE: Duration = Duration::from_millis(1500);
 
+/// What the per-output mapping (see `cosmic_uinput`) remembers between peer moves.
 #[cfg(target_os = "linux")]
 #[derive(Default)]
 struct CosmicSteer {
+    /// The output the pointer was last put on; None when unknown, which forces a walk.
     target: Option<String>,
     last_move: Option<std::time::Instant>,
+    /// The absolute value last sent and the range it was sent under, so a repeat is nudged.
+    last_abs: Option<((i32, i32), (i32, i32, i32, i32))>,
+}
+
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
+    static ref COSMIC_STEER: Mutex<CosmicSteer> = Default::default();
 }
 
 /// What to send to the uinput device for a peer's absolute move to `(x, y)` (whole-desktop
@@ -341,11 +350,8 @@ pub(super) fn cosmic_uinput_move(
     x: i32,
     y: i32,
     button_down: bool,
-) -> Option<(Vec<super::cosmic_uinput::Hop>, (i32, i32))> {
+) -> Option<Vec<super::cosmic_uinput::Step>> {
     use super::cosmic_uinput as cu;
-    lazy_static::lazy_static! {
-        static ref STEER: Mutex<CosmicSteer> = Default::default();
-    }
     if !cu::compositor_maps_abs_per_output() {
         return None;
     }
@@ -360,7 +366,7 @@ pub(super) fn cosmic_uinput_move(
     };
     let target = cu::target_index(&rects, x, y)?;
     let abs = cu::abs_value_on(&rects[target], x, y, range);
-    let mut steer = STEER.lock().unwrap();
+    let mut steer = COSMIC_STEER.lock().unwrap();
     let now = std::time::Instant::now();
     let name = Some(format!(
         "{}@{},{}",
@@ -369,17 +375,25 @@ pub(super) fn cosmic_uinput_move(
     let idle = steer
         .last_move
         .map_or(true, |t| now.duration_since(t) >= COSMIC_STEER_IDLE);
-    let hops = if rects.len() > 1 && (steer.target != name || (idle && !button_down)) {
-        // Twice: a hop run while the pointer sits on an output it was not meant for can move
-        // it somewhere the earlier hops already went past.
-        let once = cu::steer_hops(&rects, target, range);
-        once.iter().chain(once.iter()).copied().collect()
+    let walk = if rects.len() > 1 && (steer.target != name || (idle && !button_down)) {
+        cu::plan_walk(&rects, target, range).unwrap_or_default()
     } else {
         Vec::new()
     };
+    // A value sent under another range went to a device since rebuilt: its value is unknown.
+    let last = steer.last_abs.filter(|(_, r)| *r == range).map(|(v, _)| v);
+    let steps = cu::steps(&walk, abs, last, range);
     steer.target = name;
     steer.last_move = Some(now);
-    Some((hops, abs))
+    steer.last_abs = Some((abs, range));
+    Some(steps)
+}
+
+/// The peer moved the pointer by a relative delta, which can cross onto another output: the
+/// next absolute move must walk again.
+#[cfg(target_os = "linux")]
+pub(super) fn cosmic_uinput_forget_target() {
+    COSMIC_STEER.lock().unwrap().target = None;
 }
 
 // The uinput absolute range is set when the session inits. If the compositor layout

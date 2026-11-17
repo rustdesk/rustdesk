@@ -1148,12 +1148,13 @@ fn uinput_move_to(en: &mut Enigo, x: i32, y: i32) {
     }
     let held = UINPUT_BUTTONS_DOWN.load(Ordering::Relaxed) != 0;
     match super::display_service::cosmic_uinput_move(x, y, held) {
-        Some((hops, (ax, ay))) => {
-            for hop in hops {
-                en.mouse_move_to(hop.abs.0, hop.abs.1);
-                en.mouse_move_relative(hop.rel.0, hop.rel.1);
+        Some(steps) => {
+            for step in steps {
+                match step {
+                    super::cosmic_uinput::Step::Abs(ax, ay) => en.mouse_move_to(ax, ay),
+                    super::cosmic_uinput::Step::Rel(dx, dy) => en.mouse_move_relative(dx, dy),
+                }
             }
-            en.mouse_move_to(ax, ay);
         }
         None => en.mouse_move_to(x, y),
     }
@@ -1413,6 +1414,12 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             // BEFORE the move, so no frame in between can measure the plane against it.
             #[cfg(all(target_os = "linux", feature = "drm"))]
             note_pointer_moved_without_absolute_sample();
+            // A delta can cross onto another output, which the per-output mapping must not
+            // assume it is still on.
+            #[cfg(target_os = "linux")]
+            if wayland_use_uinput() {
+                super::display_service::cosmic_uinput_forget_target();
+            }
             en.mouse_move_relative(dx, dy);
             // Get actual cursor position after relative movement for tracking
             if let Some((x, y)) = crate::get_cursor_pos() {
