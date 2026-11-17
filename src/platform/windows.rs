@@ -4968,7 +4968,9 @@ fn is_win_10_1607_or_greater() -> bool {
 /// Layout to type text with key presses: the foreground window's, unless an IME could take
 /// the keys or `ToUnicodeEx` cannot leave the keyboard state untouched.
 fn key_press_text_layout() -> Option<HKL> {
-    use winapi::um::winnt::{LANG_CHINESE, LANG_JAPANESE, LANG_KOREAN, PRIMARYLANGID};
+    use winapi::um::winnt::{
+        LANG_CHINESE, LANG_JAPANESE, LANG_KOREAN, LANG_VIETNAMESE, PRIMARYLANGID,
+    };
     if !is_win_10_1607_or_greater() {
         return None;
     }
@@ -4976,7 +4978,7 @@ fn key_press_text_layout() -> Option<HKL> {
     // An IME would take the key presses as composition input instead of text.
     if matches!(
         PRIMARYLANGID(layout as usize as u16),
-        LANG_CHINESE | LANG_JAPANESE | LANG_KOREAN
+        LANG_CHINESE | LANG_JAPANESE | LANG_KOREAN | LANG_VIETNAMESE
     ) {
         return None;
     }
