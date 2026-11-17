@@ -248,3 +248,12 @@ jobs:
         use-cross: ${{ matrix.job.use-cross }}
         command: test
         args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
+
+    # drm and unix-file-copy-paste are off by default, so the run above compiles none of their tests.
+    - name: Run drm and unix-file-copy-paste tests
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu'
+      shell: bash
+      run: |
+        cargo test --locked --target=${{ matrix.job.target }} --lib --features drm,drm-wake
+        cargo test --locked --target=${{ matrix.job.target }} -p scrap --features drm
+        cargo test --locked --target=${{ matrix.job.target }} -p clipboard --features unix-file-copy-paste
