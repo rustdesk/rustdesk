@@ -2372,6 +2372,17 @@ pub fn session_register_gpu_texture(
     ))
 }
 
+pub fn session_set_super_resolution(
+    session_id: SessionID,
+    display: usize,
+    width: u32,
+    height: u32,
+) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_set_super_resolution(
+        session_id, display, width, height,
+    ))
+}
+
 pub fn query_onlines(ids: Vec<String>) {
     let _ = flutter::async_tasks::query_onlines(ids);
 }

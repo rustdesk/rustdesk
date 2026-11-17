@@ -136,6 +136,13 @@ class PlatformFFI {
   void registerGpuTexture(SessionID sessionId, int display, int ptr) =>
       _ffiBind.sessionRegisterGpuTexture(
           sessionId: sessionId, display: display, ptr: ptr);
+  void setSuperResolution(
+          SessionID sessionId, int display, int width, int height) =>
+      _ffiBind.sessionSetSuperResolution(
+          sessionId: sessionId,
+          display: display,
+          width: width,
+          height: height);
 
   Future<void> init(String appType) async {
     Completer completer = Completer();

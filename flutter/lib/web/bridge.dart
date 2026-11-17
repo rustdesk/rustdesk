@@ -1551,6 +1551,13 @@ class RustdeskImpl {
       required int ptr,
       dynamic hint}) {}
 
+  void sessionSetSuperResolution(
+      {required UuidValue sessionId,
+      required int display,
+      required int width,
+      required int height,
+      dynamic hint}) {}
+
   Future<void> queryOnlines({required List<String> ids, dynamic hint}) {
     return Future(() =>
         js.context.callMethod('setByName', ['query_onlines', jsonEncode(ids)]));

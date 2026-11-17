@@ -3,6 +3,8 @@ use crate::{
     flutter_ffi::{EventToUI, SessionID},
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
+#[cfg(all(feature = "vram", target_os = "windows"))]
+use crate::platform::windows::super_resolution::PpeScaler;
 use flutter_rust_bridge::StreamSink;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::dlopen::{
@@ -305,6 +307,8 @@ struct DisplaySessionInfo {
     #[cfg(feature = "vram")]
     gpu_output_ptr: usize,
     notify_render_type: Option<RenderType>,
+    #[cfg(all(feature = "vram", target_os = "windows"))]
+    super_resolution: PpeScaler,
 }
 
 // Video Texture Renderer in Flutter
@@ -388,6 +392,8 @@ impl VideoRenderer {
                     #[cfg(feature = "vram")]
                     gpu_output_ptr: usize::default(),
                     notify_render_type: None,
+                    #[cfg(all(feature = "vram", target_os = "windows"))]
+                    super_resolution: Default::default(),
                 },
             );
         }
@@ -429,6 +435,8 @@ impl VideoRenderer {
                             #[cfg(feature = "vram")]
                             gpu_output_ptr: usize::default(),
                             notify_render_type: None,
+                            #[cfg(all(feature = "vram", target_os = "windows"))]
+                            super_resolution: Default::default(),
                         },
                     );
                 }
@@ -469,6 +477,8 @@ impl VideoRenderer {
                             size: (0, 0),
                             gpu_output_ptr: ptr,
                             notify_render_type: None,
+                            #[cfg(all(feature = "vram", target_os = "windows"))]
+                            super_resolution: Default::default(),
                         },
                     );
                 }
@@ -525,6 +535,25 @@ impl VideoRenderer {
         }
     }
 
+    #[cfg(all(feature = "vram", target_os = "windows"))]
+    pub fn set_super_resolution(&self, display: usize, width: u32, height: u32) {
+        let mut sessions_lock = self.map_display_sessions.write().unwrap();
+        if let Some(info) = sessions_lock.get_mut(&display) {
+            info.super_resolution.set_target(width, height);
+        } else {
+            sessions_lock.insert(
+                display,
+                DisplaySessionInfo {
+                    texture_rgba_ptr: usize::default(),
+                    size: (0, 0),
+                    gpu_output_ptr: usize::default(),
+                    notify_render_type: None,
+                    super_resolution: PpeScaler::new(width, height),
+                },
+            );
+        }
+    }
+
     #[cfg(feature = "vram")]
     pub fn on_texture(&self, display: usize, texture: *mut c_void) -> bool {
         let mut write_lock = self.map_display_sessions.write().unwrap();
@@ -539,6 +568,8 @@ impl VideoRenderer {
         if info.gpu_output_ptr == usize::default() {
             return false;
         }
+        #[cfg(target_os = "windows")]
+        let texture = info.super_resolution.process(texture);
         if let Some(func) = &self.on_texture_func {
             unsafe { func(info.gpu_output_ptr as _, texture) };
         }
@@ -1801,6 +1832,28 @@ pub fn session_register_gpu_texture(_session_id: SessionID, _display: usize, _ou
             .get(&_session_id)
         {
             h.renderer.register_gpu_output(_display, _output_ptr);
+            break;
+        }
+    }
+}
+
+#[inline]
+pub fn session_set_super_resolution(
+    _session_id: SessionID,
+    _display: usize,
+    _width: u32,
+    _height: u32,
+) {
+    #[cfg(all(feature = "vram", target_os = "windows"))]
+    for s in sessions::get_sessions() {
+        if let Some(h) = s
+            .ui_handler
+            .session_handlers
+            .read()
+            .unwrap()
+            .get(&_session_id)
+        {
+            h.renderer.set_super_resolution(_display, _width, _height);
             break;
         }
     }

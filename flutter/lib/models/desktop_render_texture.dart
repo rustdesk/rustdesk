@@ -64,12 +64,25 @@ class _GpuTexture {
   int _display = 0;
   int? _id;
   int? _output;
+  int _superResolutionWidth = 0;
+  int _superResolutionHeight = 0;
 
   int get display => _display;
 
   final gpuTextureRenderer = FlutterGpuTextureRenderer();
 
   _GpuTexture();
+
+  setSuperResolution(int width, int height) {
+    if (!support || !isWindows || _sessionId == null) return;
+    if (_superResolutionWidth == width &&
+        _superResolutionHeight == height) {
+      return;
+    }
+    _superResolutionWidth = width;
+    _superResolutionHeight = height;
+    platformFFI.setSuperResolution(_sessionId!, _display, width, height);
+  }
 
   create(int d, SessionID sessionId, FFI ffi) {
     if (support) {
@@ -144,6 +157,7 @@ class TextureModel {
   final Map<int, _Control> _control = {};
   final Map<int, _PixelbufferTexture> _pixelbufferRenderTextures = {};
   final Map<int, _GpuTexture> _gpuRenderTextures = {};
+  final Map<int, Size> _superResolutionSizes = {};
 
   TextureModel(this.parent);
 
@@ -180,6 +194,12 @@ class TextureModel {
     return _control[display]!.textureID;
   }
 
+  setSuperResolution(int display, int width, int height) {
+    _superResolutionSizes[display] =
+        Size(width.toDouble(), height.toDouble());
+    _gpuRenderTextures[display]?.setSuperResolution(width, height);
+  }
+
   updateCurrentDisplay(int curDisplay) {
     if (isWeb) return;
     final ffi = parent.target;
@@ -194,6 +214,11 @@ class TextureModel {
         final renderTexture = _GpuTexture();
         _gpuRenderTextures[idx] = renderTexture;
         renderTexture.create(idx, ffi.sessionId, ffi);
+        final size = _superResolutionSizes[idx];
+        if (size != null) {
+          renderTexture.setSuperResolution(
+              size.width.toInt(), size.height.toInt());
+        }
       }
     }
 

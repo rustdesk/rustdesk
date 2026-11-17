@@ -1305,11 +1305,20 @@ class _ImagePaintState extends State<ImagePaint> {
     final isPeerLinux = ffiModel.isPeerLinux;
     final curDisplay = ffiModel.pi.currentDisplay;
     for (var i = 0; i < displays.length; i++) {
-      final textureId = widget.ffi.textureModel
-          .getTextureId(curDisplay == kAllDisplayValue ? i : curDisplay);
+      final display = curDisplay == kAllDisplayValue ? i : curDisplay;
+      final textureId = widget.ffi.textureModel.getTextureId(display);
       if (true) {
         // both "textureId.value != -1" and "true" seems ok
         final sizeScale = isPeerLinux ? s / displays[i].scale : s;
+        if (isWindows) {
+          final width =
+              (displays[i].width * sizeScale * c.devicePixelRatio).round();
+          final height =
+              (displays[i].height * sizeScale * c.devicePixelRatio).round();
+          if (width > 0 && height > 0) {
+            widget.ffi.textureModel.setSuperResolution(display, width, height);
+          }
+        }
         children.add(Positioned(
           left: (displays[i].x - rect.left) * s + offset.dx,
           top: (displays[i].y - rect.top) * s + offset.dy,
