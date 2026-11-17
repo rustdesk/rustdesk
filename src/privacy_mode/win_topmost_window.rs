@@ -21,7 +21,10 @@ use winapi::{
             CreateProcessAsUserW, QueueUserAPC, ResumeThread, TerminateProcess,
             PROCESS_INFORMATION, STARTUPINFOW,
         },
-        winbase::{WTSGetActiveConsoleSessionId, CREATE_SUSPENDED, DETACHED_PROCESS},
+        synchapi::WaitForSingleObject,
+        winbase::{
+            WTSGetActiveConsoleSessionId, CREATE_SUSPENDED, DETACHED_PROCESS, WAIT_OBJECT_0,
+        },
         winnt::{MEM_COMMIT, PAGE_READWRITE},
         winuser::*,
     },
@@ -33,6 +36,8 @@ pub const ORIGIN_PROCESS_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBrok
 pub const WIN_TOPMOST_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
 pub const INJECTED_PROCESS_EXE: &'static str = WIN_TOPMOST_INJECTED_PROCESS_EXE;
 const PRIVACY_MODE_BACKGROUND_OPTION: &str = "privacy-mode-background";
+const WM_RUSTDESK_SHUTDOWN_WINDOWS: u32 = WM_APP + 2;
+const PRIVACY_WINDOW_SHUTDOWN_WAIT_MILLIS: u32 = 1_000;
 
 fn privacy_mode_background() -> &'static str {
     if crate::ui_interface::get_option(PRIVACY_MODE_BACKGROUND_OPTION.to_owned()) == "desktop" {
@@ -64,7 +69,23 @@ impl WindowHandlers {
     fn reset(&mut self) {
         unsafe {
             if self.hprocess != 0 {
-                let _res = TerminateProcess(self.hprocess as _, 0);
+                let shutdown_posted = match find_privacy_hwnds() {
+                    Ok(hwnds) => hwnds.into_iter().any(|hwnd| {
+                        PostMessageA(hwnd, WM_RUSTDESK_SHUTDOWN_WINDOWS, 0, 0) != FALSE
+                    }),
+                    Err(e) => {
+                        log::warn!("Failed to find privacy windows for graceful shutdown: {}", e);
+                        false
+                    }
+                };
+                let wait_result = if shutdown_posted {
+                    WaitForSingleObject(self.hprocess as _, PRIVACY_WINDOW_SHUTDOWN_WAIT_MILLIS)
+                } else {
+                    u32::MAX
+                };
+                if wait_result != WAIT_OBJECT_0 {
+                    let _res = TerminateProcess(self.hprocess as _, 0);
+                }
                 CloseHandle(self.hprocess as _);
             }
             self.hprocess = 0;

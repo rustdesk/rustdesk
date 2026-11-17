@@ -11,6 +11,14 @@ The desktop option captures the wallpaper path from the active Windows user when
 
 If the wallpaper cannot be loaded, Privacy Mode 1 falls back to pure black. Privacy Mode 2 is unchanged. This remains an overlay rather than a Windows security lock screen or a separate Windows virtual desktop.
 
+While the privacy windows are shown, `MagShowSystemCursor(FALSE)` suppresses the
+local system cursor. The overlay keeps its existing layered, transparent,
+non-activating styles; mouse injection and hit testing are unchanged. Hiding the
+windows, receiving a session-lock notification, or closing the privacy window
+restores cursor rendering and releases the magnification runtime. Unlocking hides
+the cursor again only if Privacy Mode 1 is still active. These calls run on the
+privacy-window thread, outside `DllMain`.
+
 ## Build
 
 The RustDesk workflow builds the pinned `RustDeskTempTopMostWindow` revision with
@@ -34,5 +42,12 @@ verify the local taskbar clock continues to update, test remote input, exit with
 `Ctrl+P`, disconnect while Privacy Mode is active, and exercise mixed-DPI and
 multi-monitor layouts. The existing capture exclusion, input hook and Mode 2
 paths are unchanged.
+
+For cursor validation, move over buttons and text from the controller while Mode
+1 is active: the host cursor should stay hidden, and the controller should retain
+the appropriate cursor shape. Check left/right clicks, dragging and scrolling,
+then check cursor restoration after `Ctrl+P` and disconnect. Test lock/unlock on
+the actual host as well; synthetic session messages do not validate the secure
+desktop transition. Unexpected broker termination also needs a runtime check.
 
 Reference: https://github.com/rustdesk/rustdesk/discussions/2919

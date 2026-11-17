@@ -1,14 +1,16 @@
 diff --git a/WindowInjection/dllmain.cpp b/WindowInjection/dllmain.cpp
-index 0f07aab..18ffa74 100644
+index 0f07aab..57963e3 100644
 --- a/WindowInjection/dllmain.cpp
 +++ b/WindowInjection/dllmain.cpp
-@@ -7,9 +7,13 @@
+@@ -7,9 +7,15 @@
  #include <memory>
  #include <type_traits>
  #include <vector>
 +#include <wtsapi32.h>
++#include <magnification.h>
 +
 +#pragma comment(lib, "Wtsapi32.lib")
++#pragma comment(lib, "Magnification.lib")
  
  #include "./img.h"
  #include "./bitmap_loader.h"
@@ -16,15 +18,16 @@ index 0f07aab..18ffa74 100644
  
  #pragma comment(lib, "gdi32.lib")
  
-@@ -98,6 +102,7 @@ bool g_refreshing_windows = false;
+@@ -98,6 +104,8 @@ bool g_refreshing_windows = false;
  bool g_shutting_down_windows = false;
  bool g_show_windows_after_refresh = false;
  bool g_privacy_windows_visible = false;
 +bool g_session_locked = false;
++bool g_cursor_magnification_initialized = false;
  
  // TODO: Read the register table to get the path.
  // Or use hard code bitmap data.
-@@ -111,6 +116,8 @@ BitmapLoader g_bitmapLoader(false);
+@@ -111,6 +119,8 @@ BitmapLoader g_bitmapLoader(false);
  BitmapLoader g_bitmapLoader(true);
  #endif
  
@@ -33,7 +36,15 @@ index 0f07aab..18ffa74 100644
  // Mainly from https://github.com/microsoft/Windows-classic-samples/blob/67a8cddc25880ebc64018e833f0bf51589fd4521/Samples/Win7Samples/winui/shell/appshellintegration/NotificationIcon/NotificationIcon.cpp#L360
  VOID OnPaintGdi(HWND hwnd, HDC hdc);
  
-@@ -147,6 +154,7 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+@@ -136,6 +146,7 @@ bool RemovePrivacyWindow(HWND hwnd);
+ bool DestroyPrivacyWindowsFrom(size_t begin);
+ HWND FailCreatedWindow(HWND hwnd, const TCHAR* caption);
+ void SetPrivacyWindowsVisible(bool visible);
++void SetPrivacyCursorHidden(bool hidden);
+ void DebugLogLastError(const TCHAR* caption);
+ DWORD FinishPrivacyThread(DWORD result);
+ 
+@@ -147,6 +158,7 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
  		break;
  
  	case WM_DESTROY:
@@ -41,14 +52,18 @@ index 0f07aab..18ffa74 100644
  		if (!g_refreshing_windows && !g_shutting_down_windows)
  		{
  			if (FALSE != IsWindowVisible(hwnd))
-@@ -168,9 +176,33 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+@@ -166,12 +178,32 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+ 	case WM_RUSTDESK_REFRESH_WINDOWS:
+ 	case WM_RUSTDESK_SHOW_WINDOWS:
  	case WM_RUSTDESK_HIDE_WINDOWS:
++	case WM_RUSTDESK_SHUTDOWN_WINDOWS:
  		(void)HandlePrivacyThreadMessage(message);
  		break;
 +	case WM_WTSSESSION_CHANGE:
 +		if (wParam == WTS_SESSION_LOCK)
 +		{
 +			g_session_locked = true;
++			SetPrivacyCursorHidden(false);
 +			for (auto window : g_hwnds) ShowWindow(window, SW_HIDE);
 +		}
 +		else if (wParam == WTS_SESSION_UNLOCK)
@@ -57,24 +72,19 @@ index 0f07aab..18ffa74 100644
 +			if (g_privacy_windows_visible)
 +			{
 +				for (auto window : g_hwnds) ShowWindow(window, SW_SHOW);
++				SetPrivacyCursorHidden(true);
 +			}
 +		}
 +		break;
  
  	case WM_WINDOWPOSCHANGING:
  		return 0;
-+	
-+	case WM_SETCURSOR:
-+		SetCursor(nullptr);
-+		return TRUE;
-+
-+	case WM_MOUSEMOVE:
-+		SetCursor(nullptr);
-+		break;
 +
  	case WM_CLOSE:
++		SetPrivacyCursorHidden(false);
  		HANDLE myself;
  		myself = OpenProcess(PROCESS_ALL_ACCESS, false, GetCurrentProcessId());
+ 		TerminateProcess(myself, 0);
 @@ -299,6 +331,11 @@ HWND CreateWin(HMODULE hModule, UINT zbid, const TCHAR* title, const TCHAR* clas
  		return FailCreatedWindow(hwnd, _T("SetWindowText"));
  	}
@@ -87,7 +97,42 @@ index 0f07aab..18ffa74 100644
  	//HRGN hrg = CreateRoundRectRgn(
  	//	mi.rcMonitor.left,
  	//	mi.rcMonitor.top,
-@@ -489,6 +526,10 @@ bool IsAnyPrivacyWindowVisible()
+@@ -486,9 +523,45 @@ bool IsAnyPrivacyWindowVisible()
+ 	return false;
+ }
+ 
++void SetPrivacyCursorHidden(bool hidden)
++{
++	if (hidden && !g_cursor_magnification_initialized)
++	{
++		if (!MagInitialize())
++		{
++			DebugLogLastError(_T("MagInitialize"));
++			return;
++		}
++		g_cursor_magnification_initialized = true;
++	}
++	if (!g_cursor_magnification_initialized)
++	{
++		return;
++	}
++	// Suppress local rendering without changing cursor shape, position or input routing.
++	if (!MagShowSystemCursor(hidden ? FALSE : TRUE))
++	{
++		DebugLogLastError(_T("MagShowSystemCursor"));
++		return;
++	}
++	if (!hidden)
++	{
++		if (!MagUninitialize())
++		{
++			DebugLogLastError(_T("MagUninitialize"));
++			return;
++		}
++		g_cursor_magnification_initialized = false;
++	}
++}
++
  void SetPrivacyWindowsVisible(bool visible)
  {
  	g_privacy_windows_visible = visible;
@@ -98,7 +143,15 @@ index 0f07aab..18ffa74 100644
  	if (!visible)
  	{
  		g_show_windows_after_refresh = false;
-@@ -602,7 +643,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
+@@ -497,6 +570,7 @@ void SetPrivacyWindowsVisible(bool visible)
+ 	{
+ 		ShowWindow(hwnd, visible ? SW_SHOW : SW_HIDE);
+ 	}
++	SetPrivacyCursorHidden(visible);
+ }
+ 
+ bool ResizePrivacyWindow(HWND hwnd, const RECT& monitorRect)
+@@ -602,7 +676,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
  		return false;
  	}
  
@@ -107,7 +160,23 @@ index 0f07aab..18ffa74 100644
  	const auto createdBegin = g_hwnds.size();
  	for (size_t i = 0; i < monitorRects.size(); ++i)
  	{
-@@ -806,6 +847,26 @@ VOID OnPaintGdiPlus(HWND hwnd, HDC hdc)
+@@ -657,6 +731,7 @@ bool HandlePrivacyThreadMessage(UINT message)
+ 		return true;
+ 	case WM_RUSTDESK_SHUTDOWN_WINDOWS:
+ 		g_shutting_down_windows = true;
++		SetPrivacyCursorHidden(false);
+ 		(void)DestroyPrivacyWindowsFrom(0);
+ 		PostQuitMessage(0);
+ 		return true;
+@@ -667,6 +742,7 @@ bool HandlePrivacyThreadMessage(UINT message)
+ 
+ DWORD FinishPrivacyThread(DWORD result)
+ {
++	SetPrivacyCursorHidden(false);
+ 	InterlockedExchange(&g_window_thread_id, 0);
+ 	return result;
+ }
+@@ -806,6 +882,26 @@ VOID OnPaintGdiPlus(HWND hwnd, HDC hdc)
  			return;
  		}
  
