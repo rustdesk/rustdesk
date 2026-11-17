@@ -2019,14 +2019,15 @@ fn refresh_available_async() {
 }
 
 pub(super) fn warm_availability() {
-    if !crate::platform::linux::drm_capture_enabled() {
-        return;
-    }
+    // The option is read INSIDE the loop too: this starts before the initial config sync from
+    // root, so an account whose own config does not hold it yet reads it as off at first.
+    let mut enabled = false;
     // The gate is INSIDE the loop because `get_display_server()` answers "x11" whenever loginctl
     // cannot yet name the seat0 session. `is_x11_for_drm()` is that form minus the greeter
     // blind spot, where plain `is_x11()` is permanently true.
     for _ in 0..10 {
-        if crate::platform::linux::is_x11_for_drm() {
+        enabled = crate::platform::linux::drm_capture_enabled();
+        if !enabled || crate::platform::linux::is_x11_for_drm() {
             std::thread::sleep(Duration::from_millis(300));
             continue;
         }
@@ -2054,7 +2055,9 @@ pub(super) fn warm_availability() {
             Err(_) => std::thread::sleep(Duration::from_millis(300)),
         }
     }
-    log::info!("drm: consumer cache warm found no producer at startup (will probe lazily)");
+    if enabled {
+        log::info!("drm: consumer cache warm found no producer at startup (will probe lazily)");
+    }
 }
 
 /// With no verdict yet, a login probes now instead of answering "not yet"; that may wake displays.

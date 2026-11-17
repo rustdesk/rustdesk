@@ -1073,6 +1073,10 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             log::warn!("drm: _drm peer no longer matches the active session (or it is unknown); closing");
             break;
         }
+        if !crate::platform::linux::drm_capture_enabled() {
+            log::info!("drm: allow-drm-capture turned off; closing this stream");
+            break;
+        }
         let gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
         if gen != seen_gen {
             seen_gen = gen;
