@@ -2893,6 +2893,7 @@ class _WaylandCardState extends State<WaylandCard> {
           if (isLinux &&
               bind.mainIsInstalled() &&
               !bind.isOutgoingOnly() &&
+              !bind.isDisableSettings() &&
               bind.mainGetCommonSync(key: 'is-drm-capture-supported') ==
                   'true') ...[
             _OptionCheckBox(
