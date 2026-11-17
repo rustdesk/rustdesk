@@ -1,8 +1,14 @@
 diff --git a/WindowInjection/dllmain.cpp b/WindowInjection/dllmain.cpp
-index 0f07aab..04832a4 100644
+index 0f07aab..18ffa74 100644
 --- a/WindowInjection/dllmain.cpp
 +++ b/WindowInjection/dllmain.cpp
-@@ -10,6 +10,7 @@
+@@ -7,9 +7,13 @@
+ #include <memory>
+ #include <type_traits>
+ #include <vector>
++#include <wtsapi32.h>
++
++#pragma comment(lib, "Wtsapi32.lib")
  
  #include "./img.h"
  #include "./bitmap_loader.h"
@@ -10,56 +16,121 @@ index 0f07aab..04832a4 100644
  
  #pragma comment(lib, "gdi32.lib")
  
-@@ -110,6 +111,24 @@ BitmapLoader g_bitmapLoader(false);
- #else
+@@ -98,6 +102,7 @@ bool g_refreshing_windows = false;
+ bool g_shutting_down_windows = false;
+ bool g_show_windows_after_refresh = false;
+ bool g_privacy_windows_visible = false;
++bool g_session_locked = false;
+ 
+ // TODO: Read the register table to get the path.
+ // Or use hard code bitmap data.
+@@ -111,6 +116,8 @@ BitmapLoader g_bitmapLoader(false);
  BitmapLoader g_bitmapLoader(true);
  #endif
-+PrivacyBackground g_background;
-+
-+void ReloadPrivacyBackground()
-+{
-+	std::vector<wchar_t> path(32768);
-+	const auto length = GetModuleFileNameW(g_module, path.data(), static_cast<DWORD>(path.size()));
-+	if (length == 0 || length >= path.size())
-+	{
-+		OutputDebugStringW(L"RustDesk: cannot locate privacy background configuration.\n");
-+		return;
-+	}
-+	const std::wstring filename(path.data(), length);
-+	const auto separator = filename.find_last_of(L"\\/");
-+	if (separator != std::wstring::npos)
-+	{
-+		g_background.Reload(filename.substr(0, separator));
-+	}
-+}
  
++PrivacyBackground g_privacyBackground;
++
  // Mainly from https://github.com/microsoft/Windows-classic-samples/blob/67a8cddc25880ebc64018e833f0bf51589fd4521/Samples/Win7Samples/winui/shell/appshellintegration/NotificationIcon/NotificationIcon.cpp#L360
  VOID OnPaintGdi(HWND hwnd, HDC hdc);
-@@ -650,6 +669,7 @@ bool HandlePrivacyThreadMessage(UINT message)
- 		(void)RefreshPrivacyWindows(g_module, g_zbid);
- 		return true;
- 	case WM_RUSTDESK_SHOW_WINDOWS:
-+		ReloadPrivacyBackground();
- 		SetPrivacyWindowsVisible(true);
- 		return true;
- 	case WM_RUSTDESK_HIDE_WINDOWS:
-@@ -719,6 +739,7 @@ DWORD WINAPI UwU(LPVOID lpParam)
- 	{
- 		return FinishPrivacyThread(0);
- 	}
-+	ReloadPrivacyBackground();
  
- #ifndef WINDOWINJECTION_EXPORTS
- 	for (auto hwnd : g_hwnds)
-@@ -796,6 +817,11 @@ VOID OnPaintGdiPlus(HWND hwnd, HDC hdc)
- 	{
- 		return;
+@@ -147,6 +154,7 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+ 		break;
+ 
+ 	case WM_DESTROY:
++		WTSUnRegisterSessionNotification(hwnd);
+ 		if (!g_refreshing_windows && !g_shutting_down_windows)
+ 		{
+ 			if (FALSE != IsWindowVisible(hwnd))
+@@ -168,9 +176,33 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+ 	case WM_RUSTDESK_HIDE_WINDOWS:
+ 		(void)HandlePrivacyThreadMessage(message);
+ 		break;
++	case WM_WTSSESSION_CHANGE:
++		if (wParam == WTS_SESSION_LOCK)
++		{
++			g_session_locked = true;
++			for (auto window : g_hwnds) ShowWindow(window, SW_HIDE);
++		}
++		else if (wParam == WTS_SESSION_UNLOCK)
++		{
++			g_session_locked = false;
++			if (g_privacy_windows_visible)
++			{
++				for (auto window : g_hwnds) ShowWindow(window, SW_SHOW);
++			}
++		}
++		break;
+ 
+ 	case WM_WINDOWPOSCHANGING:
+ 		return 0;
++	
++	case WM_SETCURSOR:
++		SetCursor(nullptr);
++		return TRUE;
++
++	case WM_MOUSEMOVE:
++		SetCursor(nullptr);
++		break;
++
+ 	case WM_CLOSE:
+ 		HANDLE myself;
+ 		myself = OpenProcess(PROCESS_ALL_ACCESS, false, GetCurrentProcessId());
+@@ -299,6 +331,11 @@ HWND CreateWin(HMODULE hModule, UINT zbid, const TCHAR* title, const TCHAR* clas
+ 		return FailCreatedWindow(hwnd, _T("SetWindowText"));
  	}
-+	RECT client;
-+	if (GetClientRect(hwnd, &client) && g_background.Paint(hdc, client))
+ 
++	if (WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) != TRUE)
++	{
++		return FailCreatedWindow(hwnd, _T("WTSRegisterSessionNotification"));
++	}
++
+ 	//HRGN hrg = CreateRoundRectRgn(
+ 	//	mi.rcMonitor.left,
+ 	//	mi.rcMonitor.top,
+@@ -489,6 +526,10 @@ bool IsAnyPrivacyWindowVisible()
+ void SetPrivacyWindowsVisible(bool visible)
+ {
+ 	g_privacy_windows_visible = visible;
++	if (g_session_locked)
++	{
++		visible = false;
++	}
+ 	if (!visible)
+ 	{
+ 		g_show_windows_after_refresh = false;
+@@ -602,7 +643,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
+ 		return false;
+ 	}
+ 
+-	const bool showWindows = g_show_windows_after_refresh || g_privacy_windows_visible || IsAnyPrivacyWindowVisible();
++	const bool showWindows = !g_session_locked && (g_show_windows_after_refresh || g_privacy_windows_visible || IsAnyPrivacyWindowVisible());
+ 	const auto createdBegin = g_hwnds.size();
+ 	for (size_t i = 0; i < monitorRects.size(); ++i)
+ 	{
+@@ -806,6 +847,26 @@ VOID OnPaintGdiPlus(HWND hwnd, HDC hdc)
+ 			return;
+ 		}
+ 
++	static bool background_initialized = false;
++	if (!background_initialized)
++	{
++		wchar_t module_path[MAX_PATH] = {};
++		GetModuleFileNameW(g_module, module_path, ARRAYSIZE(module_path));
++		std::wstring directory(module_path);
++		const auto separator = directory.find_last_of(L"\\/");
++		if (separator != std::wstring::npos)
++		{
++			directory.resize(separator);
++		}
++		g_privacyBackground.Reload(directory);
++		background_initialized = true;
++	}
++	if (g_privacyBackground.Paint(hdc, rcClient))
 +	{
 +		return;
 +	}
++
++
+ 		Gdiplus::Graphics graphics(hdc);
+ 		graphics.Clear(Gdiplus::Color::Black);
  
- 	auto bitmap = g_bitmapLoader.GetBitmap();
- 	if (bitmap)
