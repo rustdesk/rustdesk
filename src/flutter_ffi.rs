@@ -41,6 +41,8 @@ lazy_static::lazy_static! {
 }
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
+    // On mobile `global_init` below comes after the custom client's signature is verified.
+    crate::common::init_sodium();
     flutter::async_tasks::start_flutter_async_runner();
     // `APP_DIR` is set in `main_get_data_dir_ios()` on iOS.
     #[cfg(not(target_os = "ios"))]
@@ -3087,6 +3089,8 @@ pub mod server_side {
         custom_client_config: JString,
     ) {
         log::debug!("startServer from jvm");
+        // Started at boot, the service runs without the Flutter side and its `initialize`.
+        crate::common::init_sodium();
         let mut env = env;
         if let Ok(app_dir) = env.get_string(&app_dir) {
             *config::APP_DIR.write().unwrap() = app_dir.into();
