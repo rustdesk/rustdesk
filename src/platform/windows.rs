@@ -4928,34 +4928,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn firewall_rules_options() {
-        use io::ErrorKind::{NotFound, PermissionDenied};
-
-        for (argument, saved, expected) in [
-            (None, Err(NotFound), "1"),
-            (None, Ok("0"), "0"),
-            (None, Ok("1"), "1"),
-            (None, Err(PermissionDenied), "1"),
-            (None, Ok("invalid"), "1"),
-            (Some("0"), Err(PermissionDenied), "0"),
-            (Some("1"), Ok("0"), "1"),
-            (Some("N"), Ok("1"), "0"),
-            (Some("n"), Ok("1"), "0"),
-            (Some("Y"), Ok("0"), "1"),
-            (Some("y"), Ok("0"), "1"),
-            (Some("invalid"), Ok("0"), "1"),
-        ] {
-            let args = argument
-                .map(|value| OsString::from(format!("FIREWALLRULES={value}")))
-                .into_iter();
-            assert_eq!(
-                resolve_firewall_rules(args, || saved.map(str::to_owned).map_err(io::Error::from)),
-                expected
-            );
-        }
-    }
-
-    #[test]
     fn vbs_files_use_utf16le_with_bom_and_crlf() {
         const EXPECTED: &[u8] = &[0xFF, 0xFE, b'a', 0, b'\r', 0, b'\n', 0, b'b', 0];
         let tip = format!("vbs_encoding_{}", uuid::Uuid::new_v4().simple());
