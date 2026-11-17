@@ -115,6 +115,8 @@ pub struct Enigo {
     ignore_flags: bool,
     flags: CGEventFlags,
     char_to_vkey_map: Map<String, Map<char, CGKeyCode>>,
+    #[cfg(test)]
+    posted_events: std::cell::RefCell<Vec<CGEvent>>,
 }
 
 impl Enigo {
@@ -166,6 +168,9 @@ impl Enigo {
             event.set_flags(self.flags);
         }
         event.set_integer_value_field(EventField::EVENT_SOURCE_USER_DATA, ENIGO_INPUT_EXTRA_VALUE);
+        #[cfg(test)]
+        self.posted_events.borrow_mut().push(event);
+        #[cfg(not(test))]
         event.post(CGEventTapLocation::HID);
     }
 }
@@ -195,11 +200,14 @@ impl Default for Enigo {
             ignore_flags: false,
             flags: CGEventFlags::CGEventFlagNull,
             char_to_vkey_map: Default::default(),
+            #[cfg(test)]
+            posted_events: Default::default(),
         }
     }
 }
 
 fn key_sequence_events(source: &CGEventSource, cluster: &str) -> Result<[CGEvent; 2], ()> {
+    // Keep the legacy Unicode-injection keycode (0 is kVK_ANSI_A).
     let key_down = CGEvent::new_keyboard_event(source.clone(), 0, true)?;
     key_down.set_string(cluster);
     let key_up = CGEvent::new_keyboard_event(source.clone(), 0, false)?;
@@ -932,11 +940,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn key_sequence_creates_balanced_events() {
-        let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).unwrap();
-        let [key_down, key_up] = key_sequence_events(&source, "a").unwrap();
-
-        assert_eq!(key_down.get_type() as u32, CGEventType::KeyDown as u32);
-        assert_eq!(key_up.get_type() as u32, CGEventType::KeyUp as u32);
+    fn key_sequence_posts_balanced_events_per_grapheme() {
+        let mut enigo = Enigo::default();
+        enigo.key_sequence("a😀e\u{301}");
+        let events = enigo.posted_events.into_inner();
+        assert_eq!(events.len(), 6);
+        for pair in events.chunks_exact(2) {
+            assert_eq!(pair[0].get_type() as u32, CGEventType::KeyDown as u32);
+            assert_eq!(pair[1].get_type() as u32, CGEventType::KeyUp as u32);
+        }
     }
 }
