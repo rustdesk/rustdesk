@@ -411,7 +411,7 @@ pub mod amyuni_idd {
     // First-install traces show resets after PnP is idle and the monitor is visible.
     // This quiet interval is an empirical margin, not an initialization-complete signal.
     const PRIVACY_DISPLAY_STABLE_FOR: Duration = Duration::from_secs(5);
-    const PRIVACY_INITIALIZATION_POLL: Duration = Duration::from_millis(200);
+    const PRIVACY_INITIALIZATION_POLL: Duration = Duration::from_millis(300);
     const PRIVACY_MONITOR_TIMEOUT: Duration = Duration::from_secs(6);
     const PRIVACY_MONITOR_INDEX: u32 = 0;
 
@@ -810,48 +810,6 @@ pub mod amyuni_idd {
         Ok(Some(PRIVACY_MONITOR_INDEX))
     }
 
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-        use std::sync::mpsc::{channel, RecvTimeoutError};
-
-        #[test]
-        fn privacy_preparation_waits_and_can_be_cancelled() {
-            const PENDING_CHECK: Duration = Duration::from_millis(100);
-            const COMPLETION_TIMEOUT: Duration = Duration::from_secs(2);
-            for cancel in [false, true] {
-                let lock = Mutex::new(());
-                let mut held = Some(lock.lock().unwrap());
-                let cancelled = atomic::AtomicBool::new(false);
-                let (sender, receiver) = channel();
-                std::thread::scope(|scope| {
-                    scope.spawn(|| {
-                        let result = lock_privacy_preparation(&lock, || {
-                            cancelled.load(atomic::Ordering::Relaxed)
-                        })
-                        .map(|_| ());
-                        sender.send(result).unwrap();
-                    });
-                    assert!(matches!(
-                        receiver.recv_timeout(PENDING_CHECK),
-                        Err(RecvTimeoutError::Timeout)
-                    ));
-                    if cancel {
-                        cancelled.store(true, atomic::Ordering::Relaxed);
-                    } else {
-                        drop(held.take());
-                    }
-                    let result = receiver.recv_timeout(COMPLETION_TIMEOUT).unwrap();
-                    if cancel {
-                        assert!(result.unwrap_err().to_string().contains("cancelled"));
-                    } else {
-                        result.unwrap();
-                    }
-                });
-            }
-        }
-    }
-
     // `index` the display index to plug out. -1 means plug out all.
     // `force_all` is used to forcibly plug out all virtual displays.
     // `force_one` is used to forcibly plug out one virtual display managed by other processes
@@ -928,6 +886,48 @@ pub mod amyuni_idd {
         windows::get_device_names(Some(super::AMYUNI_IDD_DEVICE_STRING))
             .iter()
             .any(|s| windows::is_device_name(s, name))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::sync::mpsc::{channel, RecvTimeoutError};
+
+        #[test]
+        fn privacy_preparation_waits_and_can_be_cancelled() {
+            const PENDING_CHECK: Duration = Duration::from_millis(100);
+            const COMPLETION_TIMEOUT: Duration = Duration::from_secs(2);
+            for cancel in [false, true] {
+                let lock = Mutex::new(());
+                let mut held = Some(lock.lock().unwrap());
+                let cancelled = atomic::AtomicBool::new(false);
+                let (sender, receiver) = channel();
+                std::thread::scope(|scope| {
+                    scope.spawn(|| {
+                        let result = lock_privacy_preparation(&lock, || {
+                            cancelled.load(atomic::Ordering::Relaxed)
+                        })
+                        .map(|_| ());
+                        sender.send(result).unwrap();
+                    });
+                    assert!(matches!(
+                        receiver.recv_timeout(PENDING_CHECK),
+                        Err(RecvTimeoutError::Timeout)
+                    ));
+                    if cancel {
+                        cancelled.store(true, atomic::Ordering::Relaxed);
+                    } else {
+                        drop(held.take());
+                    }
+                    let result = receiver.recv_timeout(COMPLETION_TIMEOUT).unwrap();
+                    if cancel {
+                        assert!(result.unwrap_err().to_string().contains("cancelled"));
+                    } else {
+                        result.unwrap();
+                    }
+                });
+            }
+        }
     }
 }
 

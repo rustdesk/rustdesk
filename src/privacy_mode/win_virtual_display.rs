@@ -33,7 +33,6 @@ pub(super) const PRIVACY_MODE_IMPL: &str = super::PRIVACY_MODE_IMPL_WIN_VIRTUAL_
 
 const CONFIG_KEY_REG_RECOVERY: &str = "reg_recovery";
 const STATE_CHECK_LOG_INTERVAL: Duration = Duration::from_secs(60);
-const DIAGNOSTIC_LOG_INTERVAL: Duration = Duration::from_secs(1);
 
 fn check_active_displays(displays: impl Iterator<Item = DISPLAY_DEVICEW>) -> ResultType<()> {
     let device_string: Vec<u16> = virtual_display_manager::get_cur_device_string()
@@ -564,12 +563,6 @@ impl PrivacyMode for PrivacyModeImpl {
         }
 
         let is_async_mode = self.is_async_privacy_mode();
-        hbb_common::throttled_log!(
-            DIAGNOSTIC_LOG_INTERVAL,
-            debug,
-            "Privacy mode 2 activation started: conn_id={}",
-            conn_id
-        );
         let mut guard = TurnOnGuard {
             privacy_mode: self,
             succeeded: false,
@@ -612,13 +605,6 @@ impl PrivacyMode for PrivacyModeImpl {
 
         allow_err!(super::win_input::hook());
 
-        hbb_common::throttled_log!(
-            DIAGNOSTIC_LOG_INTERVAL,
-            debug,
-            "Privacy mode 2 activation completed: conn_id={}, virtual_display={}",
-            conn_id,
-            primary_display_name.trim_end_matches('\0')
-        );
         Ok(true)
     }
 
