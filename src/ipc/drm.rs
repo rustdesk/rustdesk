@@ -887,7 +887,8 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    // The producer stays up once started; turning allow-drm-capture off ends capture here.
+    // The producer stays up once started, so with allow-drm-capture off it takes no new consumer. A
+    // stream already running ends when the service loop restarts every --server on the change.
     if !crate::platform::linux::drm_capture_enabled() {
         log::trace!("drm: allow-drm-capture is off; dropping this connection");
         return Ok(());
@@ -1071,10 +1072,6 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         let peer_ok = drm_peer_authorized(peer_uid, active_uid_cached());
         if !peer_ok {
             log::warn!("drm: _drm peer no longer matches the active session (or it is unknown); closing");
-            break;
-        }
-        if !crate::platform::linux::drm_capture_enabled() {
-            log::info!("drm: allow-drm-capture turned off; closing this stream");
             break;
         }
         let gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
