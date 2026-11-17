@@ -672,17 +672,21 @@ pub mod amyuni_idd {
         use scrap::TraitCapturer;
 
         let started = Instant::now();
+        // DXGI allows one duplication per output per process. The video service
+        // may already own the physical output; observe the monitor we just created.
         let display = scrap::Display::all()?
             .into_iter()
-            .find(scrap::Display::is_primary)
+            .find(|display| is_my_display(&display.name()))
             .ok_or_else(|| {
-                hbb_common::anyhow::anyhow!("No primary display during initialization.")
+                hbb_common::anyhow::anyhow!("No active Amyuni display during initialization.")
             })?;
+        let display_name = display.name();
         let capturer = scrap::Capturer::new(display)?;
         hbb_common::throttled_log!(
             DIAGNOSTIC_LOG_INTERVAL,
             info,
-            "First-use DXGI probe created: reason={}, elapsed={:?}, gdi={}, pixel_readback=false",
+            "First-use DXGI probe created: display={}, reason={}, elapsed={:?}, gdi={}, pixel_readback=false",
+            display_name,
             reason,
             started.elapsed(),
             capturer.is_gdi()
@@ -702,16 +706,16 @@ pub mod amyuni_idd {
             let capture = match capturer.as_mut() {
                 Ok(capture) if !capture.is_gdi() => capture,
                 _ => {
-                    // GDI does not expose DXGI access loss, so it cannot establish early readiness.
                     hbb_common::throttled_log!(
                         DIAGNOSTIC_LOG_INTERVAL, warn,
-                        "Cannot observe DXGI initialization (GDI or error: {:?}); retaining {:?} first-install wait",
+                        "Cannot observe DXGI initialization (GDI or error: {:?}); retrying within {:?} first-install wait",
                         capturer.as_ref().err(), PRIVACY_INITIALIZATION_TIMEOUT
                     );
-                    std::thread::sleep(
-                        PRIVACY_INITIALIZATION_TIMEOUT.saturating_sub(started.elapsed()),
-                    );
-                    return Ok(());
+                    drop(capturer);
+                    std::thread::sleep(PRIVACY_INITIALIZATION_POLL);
+                    capturer = privacy_initialization_capturer("retry");
+                    stable_since = Instant::now();
+                    continue;
                 }
             };
             // A static desktop can time out without losing the duplication interface.
@@ -740,7 +744,22 @@ pub mod amyuni_idd {
             }
             std::thread::sleep(PRIVACY_INITIALIZATION_POLL);
         }
-        bail!("Timed out waiting for display initialization to stabilize.");
+        privacy_display_stability_timeout(&capturer)
+    }
+
+    fn privacy_display_stability_timeout(capturer: &ResultType<scrap::Capturer>) -> ResultType<()> {
+        use scrap::TraitCapturer;
+
+        if matches!(capturer, Ok(capture) if !capture.is_gdi()) {
+            bail!("Timed out waiting for display initialization to stabilize.");
+        }
+        // GDI cannot establish readiness; retain the full-wait fallback only at the deadline.
+        hbb_common::throttled_log!(
+            DIAGNOSTIC_LOG_INTERVAL, warn,
+            "Cannot observe DXGI initialization (GDI or error: {:?}); proceeding after {:?} first-install wait",
+            capturer.as_ref().err(), PRIVACY_INITIALIZATION_TIMEOUT
+        );
+        Ok(())
     }
 
     fn lock_privacy_preparation<'a>(
