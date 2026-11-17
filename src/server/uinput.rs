@@ -1510,8 +1510,8 @@ mod mouce {
             // behavior is the same on other projects that make use of
             // uinput. e.g. `ydotool`. When you try to move your mouse,
             // it will move 2x further pixels
-            self.emit(EV_REL, REL_X as c_int, (x as f32 / 2.).ceil() as c_int)?;
-            self.emit(EV_REL, REL_Y as c_int, (y as f32 / 2.).ceil() as c_int)?;
+            self.emit(EV_REL, REL_X as c_int, half_away_from_zero(x) as c_int)?;
+            self.emit(EV_REL, REL_Y as c_int, half_away_from_zero(y) as c_int)?;
             self.syncronize()
         }
 
@@ -1573,12 +1573,49 @@ mod mouce {
         }
     }
 
+    // `ceil(v / 2)` turned -1 into 0 but kept +1 as 1, so single-unit moves left or
+    // up were dropped while right or down were not and the pointer drifted toward
+    // the bottom-right. Rounding half away from zero keeps positive values as before
+    // and mirrors them for negative ones.
+    fn half_away_from_zero(v: i32) -> i32 {
+        let half = ((v.unsigned_abs() + 1) / 2) as i32;
+        if v < 0 {
+            -half
+        } else {
+            half
+        }
+    }
+
     impl Drop for UInputMouseManager {
         fn drop(&mut self) {
             let fd = self.uinput_file.as_raw_fd();
             unsafe {
                 // Destroy the device, the file is closed automatically by the File module
                 ioctl(fd, UI_DEV_DESTROY as c_ulong);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::half_away_from_zero;
+
+        #[test]
+        fn relative_moves_are_symmetric() {
+            for v in [1, 2, 3, 7, 100] {
+                assert_eq!(half_away_from_zero(-v), -half_away_from_zero(v), "v = {v}");
+            }
+            assert_eq!(half_away_from_zero(-1), -1);
+        }
+
+        #[test]
+        fn positive_moves_are_unchanged() {
+            for v in [0, 1, 2, 3, 7, 100] {
+                assert_eq!(
+                    half_away_from_zero(v),
+                    (v as f32 / 2.).ceil() as i32,
+                    "v = {v}"
+                );
             }
         }
     }
