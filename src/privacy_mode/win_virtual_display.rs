@@ -40,6 +40,8 @@ fn check_active_displays(displays: impl Iterator<Item = DISPLAY_DEVICEW>) -> Res
         .collect();
     let mut has_virtual_display = false;
     for display in displays {
+        // Inactive outputs are not part of the desktop. Mirror drivers expose
+        // invisible pseudo-monitors, not active physical screens.
         if display.StateFlags & DISPLAY_DEVICE_ACTIVE == 0
             || display.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER != 0
         {

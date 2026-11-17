@@ -668,14 +668,26 @@ pub mod amyuni_idd {
         plug_in_monitor_(true, is_async, None)
     }
 
-    fn privacy_initialization_capturer() -> ResultType<scrap::Capturer> {
+    fn privacy_initialization_capturer(reason: &str) -> ResultType<scrap::Capturer> {
+        use scrap::TraitCapturer;
+
+        let started = Instant::now();
         let display = scrap::Display::all()?
             .into_iter()
             .find(scrap::Display::is_primary)
             .ok_or_else(|| {
                 hbb_common::anyhow::anyhow!("No primary display during initialization.")
             })?;
-        Ok(scrap::Capturer::new(display)?)
+        let capturer = scrap::Capturer::new(display)?;
+        hbb_common::throttled_log!(
+            DIAGNOSTIC_LOG_INTERVAL,
+            info,
+            "First-use DXGI probe created: reason={}, elapsed={:?}, gdi={}, pixel_readback=false",
+            reason,
+            started.elapsed(),
+            capturer.is_gdi()
+        );
+        Ok(capturer)
     }
 
     // Observe independently: session capture may fall back to GDI during initialization.
@@ -684,7 +696,7 @@ pub mod amyuni_idd {
         use std::io::ErrorKind;
 
         let started = Instant::now();
-        let mut capturer = privacy_initialization_capturer();
+        let mut capturer = privacy_initialization_capturer("initial");
         let mut stable_since = Instant::now();
         while started.elapsed() < PRIVACY_INITIALIZATION_TIMEOUT {
             let capture = match capturer.as_mut() {
@@ -703,12 +715,12 @@ pub mod amyuni_idd {
                 }
             };
             // A static desktop can time out without losing the duplication interface.
-            match capture.frame(Duration::ZERO).map(|_| ()) {
+            match capture.probe_frame() {
                 Ok(()) => {}
                 Err(error) if error.kind() == ErrorKind::WouldBlock => {}
                 Err(error) if error.kind() == ErrorKind::ConnectionReset => {
                     drop(capturer);
-                    capturer = privacy_initialization_capturer();
+                    capturer = privacy_initialization_capturer("access_lost");
                     stable_since = Instant::now();
                 }
                 Err(error) => {
