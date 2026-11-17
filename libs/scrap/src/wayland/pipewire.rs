@@ -53,10 +53,12 @@ struct PipewireDisplayOffsetCache {
     offsets: Vec<(i32, i32)>,
 }
 
+// KDE Plasma may not provide position info
+static HAS_POSITION_ATTR: AtomicBool = AtomicBool::new(false);
 static IS_SERVER_RUNNING: AtomicU8 = AtomicU8::new(0); // 0: uninitialized, 1:true, 2: false
 
 impl PipewireDisplayOffsetCache {
-    fn displays_to_key(displays: &Displays) -> String {
+    fn displays_to_key(displays: &Arc<Displays>) -> String {
         displays
             .displays
             .iter()
@@ -70,6 +72,7 @@ impl PipewireDisplayOffsetCache {
 pub fn close_session() {
     let _ = RDP_SESSION_INFO.lock().unwrap().take();
     clear_wayland_displays_cache();
+    HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
 }
 
 #[inline]
@@ -91,6 +94,7 @@ pub fn try_close_session() {
     if close {
         *rdp_info = None;
         clear_wayland_displays_cache();
+        HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
     }
 }
 
@@ -101,14 +105,12 @@ pub struct RdpSessionInfo {
     pub session: dbus::Path<'static>,
     pub is_support_restore_token: bool,
     pub resolution: Arc<Mutex<Option<(usize, usize)>>>,
-    positions_filled: bool,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct PwStreamInfo {
     pub path: u64,
     source_type: u64,
     position: (i32, i32),
-    has_position: bool,
     size: (usize, usize),
 }
 
@@ -708,7 +710,6 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
                             .get("source_type")
                             .map_or(Some(0), |v| v.as_u64())?,
                         position: (0, 0),
-                        has_position: false,
                         size: (0, 0),
                     };
                     let v = attributes
@@ -743,7 +744,7 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
                             if v.len() == 2 {
                                 info.position.0 = v[0] as _;
                                 info.position.1 = v[1] as _;
-                                info.has_position = true;
+                                HAS_POSITION_ATTR.store(true, Ordering::SeqCst);
                             }
                         }
                     }
@@ -1151,7 +1152,6 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
             session,
             is_support_restore_token,
             resolution: Arc::new(Mutex::new(None)),
-            positions_filled: false,
         };
         *rdp_connection = Some(rdp_info);
     }
@@ -1284,8 +1284,8 @@ pub fn fill_displays(
     };
 
     let all_displays = get_displays();
-    if !rdp_info.positions_filled {
-        if all_displays.displays.len() > 1 && rdp_info.streams.iter().any(|s| !s.has_position) {
+    if !HAS_POSITION_ATTR.load(Ordering::SeqCst) {
+        if all_displays.displays.len() > 1 {
             debug!("Multiple Wayland displays detected, adjusting stream positions accordingly.");
             try_fill_positions(
                 mouse_move_to,
@@ -1295,7 +1295,7 @@ pub fn fill_displays(
                 &mut rdp_info.streams,
             )?;
         }
-        rdp_info.positions_filled = true;
+        HAS_POSITION_ATTR.store(true, Ordering::SeqCst);
     }
 
     if all_displays.displays.len() > 1 {
@@ -1396,11 +1396,7 @@ fn try_fill_positions(
     }
 
     let mut multi_matched_indices = Vec::new();
-    let mut all_matched = true;
     for (i, sd) in shared_displays.iter_mut().enumerate() {
-        if streams.get(i).is_some_and(|s| s.has_position) {
-            continue;
-        }
         if let crate::Display::WAYLAND(d) = sd {
             let capturable = &mut d.0;
             let mut match_count = 0;
@@ -1416,7 +1412,6 @@ fn try_fill_positions(
                 }
             }
             if match_count == 0 {
-                all_matched = false;
                 warn!(
                     "No matching display found for capturable with size {:?}.",
                     capturable.physical_size
@@ -1428,7 +1423,7 @@ fn try_fill_positions(
     }
 
     if !multi_matched_indices.is_empty() {
-        all_matched &= fill_multi_matched_positions(
+        fill_multi_matched_positions(
             mouse_move_to,
             get_cursor_pos,
             displays,
@@ -1438,42 +1433,8 @@ fn try_fill_positions(
         )?;
     }
 
-    // Do not cache unresolved positions: a default (0, 0) (e.g. a full-workspace stream), or
-    // the guess a failed disambiguation leaves.
-    if all_matched {
-        save_positions_to_cache(displays, shared_displays);
-    }
+    save_positions_to_cache(displays, shared_displays);
     Ok(())
-}
-
-fn validate_display_offset_cache(
-    cache_str: &str,
-    shared_len: usize,
-    displays: &Displays,
-    restore_token: &str,
-) -> Option<Vec<(i32, i32)>> {
-    let cache = serde_json::from_str::<PipewireDisplayOffsetCache>(cache_str).ok()?;
-    if cache.offsets.len() != shared_len {
-        return None;
-    }
-    if cache.display_key != PipewireDisplayOffsetCache::displays_to_key(displays)
-        || cache.restore_token != restore_token
-    {
-        return None;
-    }
-    // Each offset must name a current display of its own: a stale [0, 0] names none, and two
-    // streams left on one display by a failed disambiguation share it. Mirrored displays are
-    // separate entries at one origin, so they still pass.
-    let mut used = vec![false; displays.displays.len()];
-    for (x, y) in cache.offsets.iter() {
-        let i = displays
-            .displays
-            .iter()
-            .enumerate()
-            .position(|(i, wd)| !used[i] && wd.x == *x && wd.y == *y)?;
-        used[i] = true;
-    }
-    Some(cache.offsets)
 }
 
 fn try_fill_positions_from_cache(
@@ -1482,20 +1443,28 @@ fn try_fill_positions_from_cache(
     shared_displays: &mut Vec<crate::Display>,
     streams: &mut Vec<PwStreamInfo>,
 ) -> bool {
-    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
-    let Some(offsets) =
-        validate_display_offset_cache(&cache_str, shared_displays.len(), displays, &restore_token)
-    else {
+    let Ok(cache) = serde_json::from_str::<PipewireDisplayOffsetCache>(&cache_str) else {
         return false;
     };
 
+    if cache.offsets.len() != shared_displays.len() {
+        return false;
+    }
+
+    let display_key = PipewireDisplayOffsetCache::displays_to_key(displays);
+    if cache.display_key != display_key {
+        return false;
+    }
+
+    let restore_token = config::LocalConfig::get_option(RESTORE_TOKEN_CONF_KEY);
+    if cache.restore_token != restore_token {
+        return false;
+    }
+
     for (i, sd) in shared_displays.iter_mut().enumerate() {
-        if streams.get(i).is_some_and(|s| s.has_position) {
-            continue;
-        }
         if let crate::Display::WAYLAND(d) = sd {
             let capturable = &mut d.0;
-            if let Some((x_off, y_off)) = offsets.get(i) {
+            if let Some((x_off, y_off)) = cache.offsets.get(i) {
                 capturable.position = (*x_off, *y_off);
                 if let Some(pw_stream) = streams.get_mut(i) {
                     pw_stream.position = (*x_off, *y_off);
@@ -1583,12 +1552,12 @@ fn fill_multi_matched_positions(
     shared_displays: &mut Vec<crate::Display>,
     streams: &mut Vec<PwStreamInfo>,
     multi_matched_indices: Vec<usize>,
-) -> ResultType<bool> {
+) -> ResultType<()> {
     debug!(
         "Multiple capturables ({:?}) match the same display size, attempting to disambiguate positions.",
     &multi_matched_indices);
     if multi_matched_indices.is_empty() {
-        return Ok(true);
+        return Ok(());
     }
 
     let is_support_embeded_cursor = get_available_cursor_modes()
@@ -1596,17 +1565,17 @@ fn fill_multi_matched_positions(
         .map(|modes| modes & 0x2 != 0)
         .unwrap_or(false);
     if is_support_embeded_cursor {
-        return fill_multi_matched_positions_cursor(
+        fill_multi_matched_positions_cursor(
             mouse_move_to,
             get_cursor_pos,
             displays,
             shared_displays,
             streams,
             multi_matched_indices,
-        );
+        )?;
     }
 
-    Ok(false)
+    Ok(())
 }
 
 fn mouse_move_to_(
@@ -1639,7 +1608,7 @@ fn fill_multi_matched_positions_cursor(
     shared_displays: &mut Vec<crate::Display>,
     streams: &mut Vec<PwStreamInfo>,
     multi_matched_indices: Vec<usize>,
-) -> ResultType<bool> {
+) -> ResultType<()> {
     // This creates a new remote desktop session for cursor-based position detection.
     // The session is temporary, used only for disambiguation, and is dropped after detection completes.
     let (conn, fd, streams_with_cursor, _session, _is_support_restore_token) =
@@ -1647,7 +1616,6 @@ fn fill_multi_matched_positions_cursor(
     let conn = Arc::new(conn);
 
     let mut matched_indices = Vec::new();
-    let multi_matched_count = multi_matched_indices.len();
     const CAPTURE_TIMEOUT_MS: u64 = 1_000;
     for idx in multi_matched_indices {
         match (
@@ -1789,8 +1757,7 @@ fn fill_multi_matched_positions_cursor(
         }
     }
 
-    // Each resolved stream claims one display.
-    Ok(matched_indices.len() == multi_matched_count)
+    Ok(())
 }
 
 fn sort_streams(
@@ -1831,19 +1798,26 @@ fn sort_streams(
             }
         }
     }
-    // Preserve streams whose position matched no display origin (e.g. workspace or unpositioned).
-    sorted_streams.append(streams);
-    sorted_shared_displays.append(shared_displays);
+    // Keep a stream whose position names no display, e.g. a full-workspace stream at (0, 0) when
+    // no display sits there (#17027). A stream at an origin another stream already took is still
+    // dropped.
+    for (s, d) in streams.drain(..).zip(shared_displays.drain(..)) {
+        if !displays
+            .displays
+            .iter()
+            .any(|wd| (wd.x, wd.y) == s.position)
+        {
+            sorted_streams.push(s);
+            sorted_shared_displays.push(d);
+        }
+    }
     *streams = sorted_streams;
     *shared_displays = sorted_shared_displays;
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        corrected_origin, serde_json, validate_display_offset_cache, Displays,
-        PipewireDisplayOffsetCache, WaylandDisplayInfo,
-    };
+    use super::{corrected_origin, WaylandDisplayInfo};
 
     fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
         WaylandDisplayInfo {
@@ -1856,61 +1830,6 @@ mod tests {
             refresh_rate: 60,
             transform: 0,
         }
-    }
-
-    #[test]
-    fn offset_cache_rejects_stale_unmatched_origin() {
-        let displays = Displays {
-            primary: 1,
-            displays: vec![
-                WaylandDisplayInfo {
-                    name: "HDMI-A-1".into(),
-                    logical_size: Some((1344, 840)),
-                    ..output(0, 30, (1680, 1050))
-                },
-                WaylandDisplayInfo {
-                    name: "DP-1".into(),
-                    logical_size: Some((1920, 1080)),
-                    ..output(1680, 0, (1920, 1080))
-                },
-            ],
-        };
-        let key = PipewireDisplayOffsetCache::displays_to_key(&displays);
-        assert_eq!(key, "HDMI-A-1-0-30-1680-1050;DP-1-1680-0-1920-1080");
-
-        let stale = serde_json::to_string(&PipewireDisplayOffsetCache {
-            display_key: key.clone(),
-            restore_token: "tok".into(),
-            offsets: vec![(0, 0)],
-        })
-        .unwrap();
-        assert_eq!(
-            validate_display_offset_cache(&stale, 1, &displays, "tok"),
-            None
-        );
-
-        // Two streams left on one output by a failed disambiguation.
-        let repeated = serde_json::to_string(&PipewireDisplayOffsetCache {
-            display_key: key.clone(),
-            restore_token: "tok".into(),
-            offsets: vec![(1680, 0), (1680, 0)],
-        })
-        .unwrap();
-        assert_eq!(
-            validate_display_offset_cache(&repeated, 2, &displays, "tok"),
-            None
-        );
-
-        let valid = serde_json::to_string(&PipewireDisplayOffsetCache {
-            display_key: key,
-            restore_token: "tok".into(),
-            offsets: vec![(0, 30), (1680, 0)],
-        })
-        .unwrap();
-        assert_eq!(
-            validate_display_offset_cache(&valid, 2, &displays, "tok"),
-            Some(vec![(0, 30), (1680, 0)])
-        );
     }
 
     #[test]
