@@ -714,7 +714,8 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
                     if !img.is_null() {
                         // Hidden X11 cursors must leave the controller's previous shape visible.
                         let count = (*img).width as usize * (*img).height as usize;
-                        if !(*img).pixels.is_null()
+                        if count != 0
+                            && !(*img).pixels.is_null()
                             && cursor_image_has_visible_pixels(std::slice::from_raw_parts(
                                 (*img).pixels,
                                 count,
