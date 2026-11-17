@@ -158,7 +158,7 @@ Veillez à exécuter ces commandes depuis la racine du dépôt RustDesk, sinon l
 
 ## Structure du projet
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)** : codec vidéo, configuration, surcouche TCP/UDP et autres fonctions utilitaires partagées avec le serveur
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)** : codec vidéo, configuration, surcouche TCP/UDP et autres fonctions utilitaires partagées avec le serveur
 - **[libs/base](https://github.com/rustdesk/rustdesk/tree/master/libs/base)** : protobuf, fonctions de système de fichiers pour le transfert de fichiers, code clavier et code de plateforme utilisés uniquement par cette application
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)** : capture d'écran
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)** : contrôle du clavier et de la souris, spécifique à chaque plateforme

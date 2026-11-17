@@ -153,7 +153,7 @@ Venligst pass på att du kjører disse kommandoene fra roten av RustDesk reposit
 
 ## Fil Struktur
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video kodek, configurasjon, tcp/udp innpakning, protobuf, fs funksjon for fil overføring, og noen andre verktøy funksjoner
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: video kodek, configurasjon, tcp/udp innpakning, protobuf, fs funksjon for fil overføring, og noen andre verktøy funksjoner
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: skjermfangst
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platform spesefik keyboard/mus kontroll
 - **[libs/clipboard](https://github.com/rustdesk/rustdesk/tree/master/libs/clipboard)**: fil kopi og innliming implementasjon for Windows, Linux, macOS.
