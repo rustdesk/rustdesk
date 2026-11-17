@@ -11,8 +11,10 @@
 		</Property>
 		<SetProperty Id="SavedFirewallRulesCmdLineValue" Value="[FIREWALLRULES]" Before="AppSearch" Sequence="first" Condition="FIREWALLRULES" />
 		<SetProperty Action="RestoreSavedFirewallRulesValue" Id="FIREWALLRULES" Value="[SavedFirewallRulesCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedFirewallRulesCmdLineValue" />
+		<SetProperty Action="NormalizeFirewallRulesEnabled" Id="FIREWALLRULES" Value="1" After="RestoreSavedFirewallRulesValue" Sequence="first" Condition="FIREWALLRULES = &quot;Y&quot; OR FIREWALLRULES = &quot;y&quot;" />
+		<SetProperty Action="NormalizeFirewallRulesDisabled" Id="FIREWALLRULES" Value="0" After="NormalizeFirewallRulesEnabled" Sequence="first" Condition="FIREWALLRULES = &quot;N&quot; OR FIREWALLRULES = &quot;n&quot;" />
 		<!-- Apply the default only after checking the command line and saved installation choice. -->
-		<SetProperty Action="SetFirewallRulesDefault" Id="FIREWALLRULES" Value="1" After="RestoreSavedFirewallRulesValue" Sequence="first" Condition="NOT FIREWALLRULES" />
+		<SetProperty Action="SetFirewallRulesDefault" Id="FIREWALLRULES" Value="1" After="NormalizeFirewallRulesDisabled" Sequence="first" Condition="NOT FIREWALLRULES" />
 
 		<!-- Maintenance may leave the registry component unchanged; persist the resolved choice explicitly. -->
 		<CustomAction Id="PersistFirewallRulesEnabled" Directory="System64Folder" ExeCommand='"[System64Folder]reg.exe" add "HKLM\Software\Classes\$(var.RegKeyRoot)" /v FIREWALLRULES /t REG_SZ /d 1 /f' Execute="deferred" Impersonate="no" Return="ignore" />

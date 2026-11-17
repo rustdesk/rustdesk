@@ -33,11 +33,11 @@ fn resolve(
         None => read_saved()?,
     };
     match value.as_deref() {
-        None | Some("1") => Ok(true),
-        Some("0") => Ok(false),
+        None | Some("1" | "Y" | "y") => Ok(true),
+        Some("0" | "N" | "n") => Ok(false),
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "FIREWALLRULES must be 0 or 1",
+            "FIREWALLRULES must be 0, 1, Y, or N",
         )),
     }
 }
@@ -97,6 +97,12 @@ mod tests {
         assert!(enabled.contains("dir=out action=allow"));
         assert!(enabled.contains("dir=in action=allow"));
         assert!(enabled.contains(&format!("program=\"{exe}\"")));
+        for value in ["N", "n"] {
+            assert_eq!(generate(&format!("FIREWALLRULES={value}")), disabled);
+        }
+        for value in ["Y", "y"] {
+            assert_eq!(generate(&format!("FIREWALLRULES={value}")), enabled);
+        }
         let invalid = generate("FIREWALLRULES=invalid");
         assert!(invalid.contains("dir=in action=allow"));
     }
@@ -143,6 +149,10 @@ mod tests {
             (Some("FIREWALLRULES=0"), None, false),
             (Some("FIREWALLRULES=0"), Some("1"), false),
             (Some("FIREWALLRULES=1"), Some("0"), true),
+            (Some("FIREWALLRULES=N"), Some("1"), false),
+            (Some("FIREWALLRULES=n"), Some("1"), false),
+            (Some("FIREWALLRULES=Y"), Some("0"), true),
+            (Some("FIREWALLRULES=y"), Some("0"), true),
         ] {
             let args = argument.into_iter().map(OsString::from);
             assert_eq!(
