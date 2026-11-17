@@ -1,9 +1,11 @@
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub use linux::*;
 #[cfg(target_os = "macos")]
 pub use macos::*;
 #[cfg(windows)]
 pub use windows::*;
+#[cfg(target_env = "ohos")]
+pub use ohos::*;
 
 #[cfg(windows)]
 pub mod windows;
@@ -17,14 +19,16 @@ pub mod macos;
 #[cfg(target_os = "macos")]
 pub mod delegate;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod linux;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod gtk_sudo;
 
 #[cfg(target_os = "android")]
 pub mod android_log;
+#[cfg(target_env = "ohos")]
+pub mod ohos;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use base::message_proto::CursorData;
@@ -86,13 +90,13 @@ pub fn is_xfce() -> bool {
 }
 
 pub fn breakdown_callback() {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     crate::input_service::clear_remapped_keycode();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     crate::input_service::release_device_modifiers();
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
     let cur_resolution = current_resolution(name)?;
     // For MacOS
@@ -145,8 +149,10 @@ pub fn get_wakelock(_display: bool) -> WakeLock {
     // display: keep screen on
     // idle: keep cpu on
     // sleep: prevent system from sleeping, even manually
-    #[cfg(not(target_os = "android"))]
+    #[cfg(all(not(target_os = "android"), not(target_env = "ohos")))]
     return crate::platform::WakeLock::new(_display, true, false);
+    #[cfg(target_env = "ohos")]
+    return crate::platform::WakeLock::new("server");
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]

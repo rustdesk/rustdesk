@@ -1,9 +1,9 @@
 use crate::ipc::{Connection, ConnectionTmpl};
 #[cfg(all(windows, not(feature = "flutter")))]
 use hbb_common::sha2::{Digest, Sha256};
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos", target_os = "windows"))]
 use hbb_common::{anyhow, bail, log, ResultType};
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 use hbb_common::{
     libc,
     tokio::io::{AsyncRead, AsyncWrite},
@@ -16,7 +16,7 @@ use std::io;
 use std::io::Read;
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::MetadataExt;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 use std::os::unix::io::RawFd;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
@@ -185,7 +185,7 @@ fn active_uid_strict() -> Option<u32> {
     console_owner_uid()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn active_uid_strict() -> Option<u32> {
     let reported_uid_raw = crate::platform::linux::get_active_userid();
@@ -201,7 +201,7 @@ fn active_uid_strict() -> Option<u32> {
     None
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 #[inline]
 pub(crate) fn active_uid() -> Option<u32> {
     active_uid_strict()
@@ -212,16 +212,16 @@ pub(crate) fn active_uid() -> Option<u32> {
 /// thread (the `_drm` per-frame re-auth), where a blocking `loginctl` per frame would stall the stream.
 // Gated with the feature, not just the OS: the `_drm` per-frame re-auth is its only caller, so a
 // drm-off Linux build would carry it as dead code and warn about it.
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 #[inline]
 pub(crate) fn active_uid_cached() -> Option<u32> {
     crate::platform::linux::get_active_userid_cached()
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 #[inline]
 pub(crate) fn peer_uid_from_fd(fd: RawFd) -> Option<u32> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         return peer_cred_from_fd(fd).map(|cred| cred.uid as u32);
     }
@@ -237,10 +237,10 @@ pub(crate) fn peer_uid_from_fd(fd: RawFd) -> Option<u32> {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 #[inline]
 fn peer_pid_from_fd(fd: RawFd) -> Option<u32> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         return peer_cred_from_fd(fd).and_then(|cred| (cred.pid > 0).then_some(cred.pid as u32));
     }
@@ -265,7 +265,7 @@ fn peer_pid_from_fd(fd: RawFd) -> Option<u32> {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn peer_cred_from_fd(fd: RawFd) -> Option<libc::ucred> {
     let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
@@ -286,7 +286,7 @@ fn peer_cred_from_fd(fd: RawFd) -> Option<libc::ucred> {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos", target_os = "windows"))]
 #[inline]
 fn current_exe_canonical_path() -> ResultType<PathBuf> {
     let current = std::env::current_exe()
@@ -301,7 +301,7 @@ fn current_exe_canonical_path() -> ResultType<PathBuf> {
     })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 fn peer_exe_canonical_path_by_pid(peer_pid: u32) -> ResultType<PathBuf> {
     let proc_exe = PathBuf::from(format!("/proc/{peer_pid}/exe"));
@@ -363,7 +363,7 @@ fn peer_exe_canonical_path_by_pid(peer_pid: u32) -> ResultType<PathBuf> {
     })
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos", target_os = "windows"))]
 #[inline]
 pub(crate) fn executable_paths_match(left: &Path, right: &Path) -> bool {
     #[cfg(target_os = "windows")]
@@ -467,7 +467,7 @@ fn portable_service_helper_is_trusted(
     peer_hash == current_hash
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos", target_os = "windows"))]
 #[inline]
 fn ensure_peer_executable_matches_current_by_pid(peer_pid: u32, postfix: &str) -> ResultType<()> {
     let peer_exe = peer_exe_canonical_path_by_pid(peer_pid)?;
@@ -492,7 +492,7 @@ fn ensure_peer_executable_matches_current_by_pid(peer_pid: u32, postfix: &str) -
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos", target_os = "windows"))]
 #[inline]
 pub(crate) fn ensure_peer_executable_matches_current_by_pid_opt(
     peer_pid: Option<u32>,
@@ -504,7 +504,7 @@ pub(crate) fn ensure_peer_executable_matches_current_by_pid_opt(
     ensure_peer_executable_matches_current_by_pid(peer_pid, postfix)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 pub(crate) fn ensure_peer_executable_matches_current_by_fd(
     fd: RawFd,
@@ -519,7 +519,7 @@ pub(crate) fn ensure_peer_executable_matches_current_by_fd(
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 const UNAUTHORIZED_IPC_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 #[inline]
 fn log_rejected_service_connection(postfix: &str, peer_uid: Option<u32>, active_uid: Option<u32>) {
     hbb_common::throttled_log!(
@@ -532,7 +532,7 @@ fn log_rejected_service_connection(postfix: &str, peer_uid: Option<u32>, active_
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 pub(crate) fn log_rejected_uinput_connection(
     postfix: &str,
@@ -572,7 +572,7 @@ pub(crate) fn log_rejected_windows_ipc_connection(
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 pub(crate) fn authorize_service_scoped_ipc_connection(stream: &Connection, postfix: &str) -> bool {
     let peer_pid = stream.peer_pid();
     let (authorized, peer_uid, active_uid) = stream.service_authorization_status();
@@ -706,7 +706,7 @@ pub(crate) fn authorize_windows_portable_service_ipc_connection(
     true
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 impl<T> ConnectionTmpl<T>
 where
     T: AsyncRead + AsyncWrite + std::marker::Unpin + std::os::unix::io::AsRawFd,

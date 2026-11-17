@@ -1,0 +1,72 @@
+[package]
+authors = ["Nicolas Patry <patry.nicolas@protonmail.com>"]
+edition = "2018"
+name = "rdev"
+version = "0.5.0-2"
+
+categories = ["development-tools::testing", "api-bindings", "hardware-support"]
+description = "Listen and send keyboard and mouse events on Windows, Linux and MacOS."
+documentation = "https://docs.rs/rdev/"
+homepage = "https://github.com/Narsil/rdev"
+keywords = ["input", "mouse", "testing", "keyboard", "automation"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/Narsil/rdev"
+
+[dependencies]
+enum-map = "2.4.0"
+lazy_static = "1.4"
+serde = {version = "1.0", features = ["derive"], optional = true}
+strum = "0.24.1"
+strum_macros = "0.24"
+widestring = "1.0.2"
+log = "0.4"
+
+[features]
+serialize = ["serde"]
+# unstable_grab = ["evdev-rs", "epoll", "inotify"]
+# unstable_wayland = ["uinput"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.24.0"
+core-foundation = {version = "0.9.3"}
+core-foundation-sys = {version = "0.8.3"}
+core-graphics = {version = "0.22.3", features = ["highsierra"]}
+dispatch = "0.2"
+
+[target.'cfg(all(target_os = "linux", not(target_env = "ohos")))'.dependencies]
+epoll = {version = "4.1.0"}
+# evdev-rs = {version = "0.6.0"}
+inotify = {version = "0.10.0", default-features = false}
+libc = "0.2"
+x11 = {version = "2.18", features = ["xlib", "xrecord", "xinput"]}
+mio = {version = "0.8.4", features = ["os-poll", "os-ext"]}
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = {version = "0.3", features = ["winuser", "errhandlingapi", "processthreadsapi"]}
+
+[dev-dependencies]
+serde_json = "1.0"
+# Some tests interact with the real OS. We can't hit the OS in parallel
+# because that leads to unexpected behavior and flaky tests, so we need
+# to run thoses tests in sequence instead.
+lazy_static = "1.4"
+serial_test = "0.8.0"
+tokio = {version = "1.5", features = ["sync", "macros", "rt-multi-thread"]}
+
+[[example]]
+name = "serialize"
+required-features = ["serialize"]
+
+# [[example]]
+# name = "grab"
+# required-features = ["unstable_grab"]
+
+[[example]]
+name = "tokio_channel"
+required-features = ["unstable_grab"]
+
+[[test]]
+name = "grab"
+path = "tests/grab.rs"
+required-features = ["unstable_grab"]

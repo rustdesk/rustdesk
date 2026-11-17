@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <NoBuild>true</NoBuild>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>libsodium</PackageId>
+    <Version>1.0.18</Version>
+    <Authors>Frank Denis</Authors>
+    <Description>Internal implementation package not meant for direct consumption. Please do not reference directly.</Description>
+    <Copyright>&#169; $([System.DateTime]::UtcNow.ToString(yyyy)) Frank Denis</Copyright>
+    <PackageLicenseExpression>ISC</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageProjectUrl>https://libsodium.org/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jedisct1/libsodium.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <MinClientVersion>4.0</MinClientVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="LICENSE" PackagePath="" />
+    <Content Include="AUTHORS" PackagePath="" />
+    <Content Include="ChangeLog" PackagePath="" />
+    <Content Include="runtimes/win-x64/native/libsodium.dll" PackagePath="runtimes/win-x64/native/" />
+    <Content Include="runtimes/win-x86/native/libsodium.dll" PackagePath="runtimes/win-x86/native/" />
+    <Content Include="runtimes/linux-x64/native/libsodium.so" PackagePath="runtimes/linux-x64/native/" />
+    <Content Include="runtimes/linux-musl-x64/native/libsodium.so" PackagePath="runtimes/linux-musl-x64/native/" />
+    <Content Include="runtimes/osx-x64/native/libsodium.dylib" PackagePath="runtimes/osx-x64/native/" />
+  </ItemGroup>
+
+</Project>

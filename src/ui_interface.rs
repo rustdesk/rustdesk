@@ -1,5 +1,5 @@
 use base::config::keys::{self, *};
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 use hbb_common::password_security;
 use hbb_common::{
     allow_err,
@@ -27,7 +27,7 @@ use std::{
 use crate::common::SOFTWARE_UPDATE_URL;
 #[cfg(feature = "flutter")]
 use crate::hbbs_http::account;
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 use crate::ipc;
 
 type Message = RendezvousMessage;
@@ -73,7 +73,7 @@ lazy_static::lazy_static! {
     static ref IS_REMOTE_MODIFY_ENABLED_BY_CONTROL_PERMISSIONS : Arc<Mutex<Option<bool>>> = Arc::new(Mutex::new(None));
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 lazy_static::lazy_static! {
     static ref OPTION_SYNCED: Arc<Mutex<bool>> = Default::default();
     static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
@@ -88,12 +88,12 @@ lazy_static::lazy_static! {
 
 const INIT_ASYNC_JOB_STATUS: &str = " ";
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter"))]
 #[inline]
 pub fn get_id() -> String {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return Config::get_id();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     return ipc::get_id();
 }
 
@@ -163,7 +163,7 @@ pub fn get_license() -> String {
 
 #[inline]
 pub fn refresh_options() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         *OPTIONS.lock().unwrap() = Config::get_options();
     }
@@ -171,7 +171,7 @@ pub fn refresh_options() {
 
 #[inline]
 pub fn get_option<T: AsRef<str>>(key: T) -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let map = OPTIONS.lock().unwrap();
         if let Some(v) = map.get(key.as_ref()) {
@@ -180,7 +180,7 @@ pub fn get_option<T: AsRef<str>>(key: T) -> String {
             "".to_owned()
         }
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         Config::get_option(key.as_ref())
     }
@@ -346,11 +346,11 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 #[inline]
 pub fn get_options() -> String {
     let options = {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         {
             OPTIONS.lock().unwrap()
         }
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
         {
             Config::get_options()
         }
@@ -423,7 +423,7 @@ pub fn set_options(m: HashMap<String, String>) {
 }
 
 pub fn try_set_options(m: HashMap<String, String>) -> hbb_common::ResultType<()> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         if !crate::trusted_devices::config::changes_authentication(&m) {
             *OPTIONS.lock().unwrap() = m.clone();
@@ -433,7 +433,7 @@ pub fn try_set_options(m: HashMap<String, String>) -> hbb_common::ResultType<()>
         ipc::set_options(m.clone())?;
         *OPTIONS.lock().unwrap() = m;
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     crate::trusted_devices::config::set_options(m)?;
     Ok(())
 }
@@ -444,9 +444,9 @@ pub fn set_auth_option(key: String, value: String) -> hbb_common::ResultType<()>
     {
         hbb_common::bail!("Invalid trusted-device expiration period");
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let mut options = ipc::get_options();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let mut options = Config::get_options();
     if value.is_empty() {
         options.remove(&key);
@@ -473,7 +473,7 @@ pub fn set_option(key: String, value: String) {
                 return;
             }
         }
-        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        #[cfg(any(target_os = "windows", all(target_os = "linux", not(target_env = "ohos"))))]
         {
             if crate::platform::is_installed() {
                 if value == "Y" {
@@ -489,10 +489,10 @@ pub fn set_option(key: String, value: String) {
             }
         }
     } else if &key == "audio-input" {
-        #[cfg(not(target_os = "ios"))]
+        #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
         crate::audio_service::restart();
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let mut options = OPTIONS.lock().unwrap();
         if value.is_empty() {
@@ -502,7 +502,7 @@ pub fn set_option(key: String, value: String) {
         }
         ipc::set_options(options.clone()).ok();
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         let _nat = crate::CheckTestNatType::new();
         Config::set_option(key, value);
@@ -527,9 +527,9 @@ pub fn install_options() -> String {
 
 #[inline]
 pub fn get_socks() -> Vec<String> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let s = ipc::get_socks();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let s = Config::get_socks();
     match s {
         None => Vec::new(),
@@ -550,9 +550,9 @@ pub fn set_socks(proxy: String, username: String, password: String) {
         username,
         password,
     };
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     ipc::set_socks(socks).ok();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         let _nat = crate::CheckTestNatType::new();
         if socks.proxy.is_empty() {
@@ -579,13 +579,13 @@ pub fn get_proxy_status() -> bool {
     return false;
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[inline]
 pub fn is_installed() -> bool {
     crate::platform::is_installed()
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 #[inline]
 pub fn is_installed() -> bool {
     false
@@ -617,14 +617,14 @@ pub fn is_installed_lower_version() -> bool {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_mouse_time() -> f64 {
     UI_STATUS.lock().unwrap().mouse_time as f64
 }
 
 #[inline]
 pub fn check_mouse_time() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let sender = SENDER.lock().unwrap();
         allow_err!(sender.send(ipc::Data::MouseMoveTime(0)));
@@ -639,25 +639,25 @@ pub fn get_connect_status() -> UiStatus {
 
 #[inline]
 pub fn temporary_password() -> String {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return password_security::temporary_password();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     return TEMPORARY_PASSWD.lock().unwrap().clone();
 }
 
 #[inline]
 pub fn update_temporary_password() {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     password_security::update_temporary_password();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     allow_err!(ipc::update_temporary_password());
 }
 
 #[inline]
 pub fn is_permanent_password_set() -> bool {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return Config::has_permanent_password();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let daemon_is_set = ipc::is_permanent_password_set();
         // `daemon_is_set` is authoritative for the return value. Local storage is only used to
@@ -677,9 +677,9 @@ pub fn is_permanent_password_set() -> bool {
 
 #[inline]
 pub fn is_local_permanent_password_set() -> bool {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return Config::has_local_permanent_password();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         allow_err!(ipc::sync_permanent_password_storage_from_daemon());
         Config::has_local_permanent_password()
@@ -690,7 +690,7 @@ pub fn set_permanent_password_with_result(password: String) -> bool {
     if config::Config::is_disable_change_permanent_password() {
         return false;
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         return match crate::trusted_devices::config::set_password(&password) {
             Ok(updated) => updated,
@@ -700,7 +700,7 @@ pub fn set_permanent_password_with_result(password: String) -> bool {
             }
         };
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         match crate::ipc::set_permanent_password_with_ack(password) {
             Ok(ok) => ok,
@@ -762,7 +762,7 @@ pub fn is_can_input_monitoring(_prompt: bool) -> bool {
 
 #[inline]
 pub fn get_error() -> String {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         let dtype = crate::platform::linux::get_display_server();
         if crate::platform::linux::DISPLAY_SERVER_WAYLAND == dtype {
@@ -782,17 +782,17 @@ pub fn get_error() -> String {
 
 #[inline]
 pub fn is_login_wayland() -> bool {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     return crate::platform::linux::is_login_wayland();
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(not(target_os = "linux"), target_env = "ohos"))]
     return false;
 }
 
 #[inline]
 pub fn current_is_wayland() -> bool {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     return crate::platform::linux::current_is_wayland();
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(not(target_os = "linux"), target_env = "ohos"))]
     return false;
 }
 
@@ -1037,6 +1037,20 @@ pub fn video_save_directory(root: bool) -> String {
             return dir;
         }
     }
+    // ohos reads $HOME (set by the ArkTS sandbox home); there is no
+    // XDG video dir, so recordings land under <home>/<appname>/ScreenRecord.
+    #[cfg(target_env = "ohos")]
+    {
+        let mut path = match std::env::var("HOME") {
+            Ok(home) => home,
+            Err(_) => std::env::temp_dir().to_string_lossy().to_string(),
+        };
+        path.push_str(format!("/{appname}/ScreenRecord").as_str());
+        let dir = try_create(&std::path::Path::new(&path));
+        if !dir.is_empty() {
+            return dir;
+        }
+    }
 
     if let Some(user) = directories_next::UserDirs::new() {
         if let Some(video_dir) = user.video_dir() {
@@ -1060,7 +1074,7 @@ pub fn video_save_directory(root: bool) -> String {
     }
 
     // same order as above
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     if let Some(home) = crate::platform::get_active_user_home() {
         let name = if cfg!(target_os = "macos") {
             "Movies"
@@ -1138,9 +1152,9 @@ pub fn deploy_device(token: String, new_id: Option<String>) -> DeployResult {
     if token.is_empty() {
         return DeployResult::Error("token is required!".to_owned());
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let local_id = Config::get_id();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let local_id = ipc::get_id();
     let id_to_deploy = new_id.clone().unwrap_or_else(|| local_id.clone());
     let uuid = crate::encode64(hbb_common::get_uuid());
@@ -1161,12 +1175,12 @@ pub fn deploy_device(token: String, new_id: Option<String>) -> DeployResult {
         "OK" => {
             if let Some(new_id) = new_id {
                 if new_id != local_id {
-                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
                     {
                         Config::set_key_confirmed(false);
                         Config::set_id(&new_id);
                     }
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                     if let Err(err) = ipc::set_config("id", new_id) {
                         return DeployResult::Error(format!(
                             "Failed to persist deployed id locally: {}",
@@ -1175,7 +1189,7 @@ pub fn deploy_device(token: String, new_id: Option<String>) -> DeployResult {
                     }
                 }
             }
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
             if let Err(err) = ipc::notify_deployed() {
                 log::warn!("Failed to notify deployed state: {}", err);
             }
@@ -1233,13 +1247,13 @@ pub fn supported_hwdecodings() -> (bool, bool) {
     (h264, h265)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[inline]
 pub fn is_root() -> bool {
     crate::platform::is_root()
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 #[inline]
 pub fn is_root() -> bool {
     false
@@ -1254,7 +1268,7 @@ pub fn check_super_user_permission() -> bool {
     return true;
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter")))]
 pub fn check_zombie() {
     let mut deads = Vec::new();
     loop {
@@ -1278,7 +1292,7 @@ pub fn check_zombie() {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter")))]
 pub fn recent_sessions_updated() -> bool {
     let mut children = CHILDREN.lock().unwrap();
     if children.0 {
@@ -1289,7 +1303,7 @@ pub fn recent_sessions_updated() -> bool {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter")))]
 pub fn new_remote(id: String, remote_type: String, force_relay: bool) {
     let mut lock = CHILDREN.lock().unwrap();
     let mut args = vec![format!("--{}", remote_type), id.clone()];
@@ -1324,13 +1338,13 @@ pub fn new_remote(id: String, remote_type: String, force_relay: bool) {
 
 // Make sure `SENDER` is inited here.
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn start_option_status_sync() {
     let _sender = SENDER.lock().unwrap();
 }
 
 // not call directly
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     std::thread::spawn(move || check_connect_status_(reconnect, rx));
@@ -1365,13 +1379,13 @@ pub fn get_user_default_option(key: String) -> String {
 }
 
 pub fn get_fingerprint() -> String {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     if Config::get_key_confirmed() {
         return crate::common::pk_to_fingerprint(Config::get_key_pair().1);
     } else {
         return "".to_owned();
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     return ipc::get_fingerprint();
 }
 
@@ -1392,7 +1406,7 @@ pub fn get_login_device_info_json() -> String {
 
 // notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
     #[cfg(not(feature = "flutter"))]
@@ -1519,11 +1533,11 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
 
 #[allow(dead_code)]
 pub fn option_synced() -> bool {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         OPTION_SYNCED.lock().unwrap().clone()
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         true
     }
@@ -1561,14 +1575,14 @@ pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
         return INVALID_FORMAT;
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let uuid = Bytes::from(
         hbb_common::machine_uid::get()
             .unwrap_or("".to_owned())
             .as_bytes()
             .to_vec(),
     );
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let uuid = Bytes::from(hbb_common::get_uuid());
 
     if uuid.is_empty() {
@@ -1576,9 +1590,9 @@ pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
         return UNKNOWN_ERROR;
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let rendezvous_servers = crate::ipc::get_rendezvous_servers(1_000).await;
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let rendezvous_servers = Config::get_rendezvous_servers();
 
     let mut futs = Vec::new();
@@ -1598,9 +1612,9 @@ pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
     join_all(futs).await;
     let err = *err.lock().unwrap();
     if err.is_empty() {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         crate::ipc::set_config_async("id", id.to_owned()).await.ok();
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
         {
             Config::set_key_confirmed(false);
             Config::set_id(&id);
@@ -1680,9 +1694,12 @@ pub fn handle_relay_id(id: &str) -> &str {
 }
 
 pub fn support_remove_wallpaper() -> bool {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", all(target_os = "linux", not(target_env = "ohos"))))]
     return crate::platform::WallPaperRemover::support();
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(any(
+        not(any(target_os = "windows", target_os = "linux")),
+        target_env = "ohos"
+    ))]
     return false;
 }
 

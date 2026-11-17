@@ -1,0 +1,48 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ${{matrix.os}}
+    env:
+      DISPLAY: ':99'
+    strategy:
+      fail-fast: false
+      matrix: 
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+        - os: ubuntu-latest
+          headless: Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        - os: ubuntu-latest
+          dependencies: sudo apt-get install libxtst-dev libevdev-dev --assume-yes
+        - os: macos-latest
+          # TODO: We can't test this on github, we can't set accessibility yet.
+          test: cargo test --verbose --all-features -- --skip test_listen_and_simulate --skip test_grab
+        - os: ubuntu-latest
+          # TODO unstable_grab feature is not supported on Linux.
+          test: cargo test --verbose --features=serialize
+        - os: windows-latest
+          test: cargo test --verbose --all-features
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: CargoFmt
+      run: rustup component add rustfmt
+    - name: Dependencies
+      run: ${{matrix.dependencies}}
+    - name: Setup headless environment
+      run: ${{matrix.headless}}
+    - name: Check formatting
+      run: |
+        rustup component add rustfmt
+        cargo fmt -- --check
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: ${{matrix.test}}
+    - name: Linter
+      run: |
+        rustup component add clippy
+        cargo clippy --all-features --verbose -- -Dwarnings

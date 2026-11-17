@@ -1,0 +1,8 @@
+{
+  "modelVersion": "5.0.0",
+  "description": "RustDesk HarmonyOS controller (main/controlling side UI shell).",
+  "dependencies": {
+  },
+  "devDependencies": {
+  }
+}

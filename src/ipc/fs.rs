@@ -1,4 +1,4 @@
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use super::ipc_auth::active_uid;
 use crate::ipc::{connect, Data};
 use hbb_common::{config, log, ResultType};
@@ -18,7 +18,7 @@ impl Drop for FdGuard {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 #[inline]
 pub(crate) fn terminal_count_candidate_uids(effective_uid: u32) -> Vec<u32> {
     if effective_uid != 0 {

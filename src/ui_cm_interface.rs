@@ -1,4 +1,4 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
 use crate::ipc::{self, Data};
@@ -15,7 +15,7 @@ use base::{
 };
 #[cfg(target_os = "windows")]
 use clipboard::ContextSend;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 #[cfg(target_os = "windows")]
 use hbb_common::tokio::sync::Mutex as TokioMutex;
@@ -154,7 +154,7 @@ pub struct Client {
     tx: UnboundedSender<Data>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 struct IpcTaskRunner<T: InvokeUiCM> {
     stream: Connection,
     cm: ConnectionManager<T>,
@@ -316,12 +316,12 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         self.ui_handler.remove_connection(id, close);
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn show_elevation(&self, show: bool) {
         self.ui_handler.show_elevation(show);
     }
 
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios")))]
     fn voice_call_started(&self, id: i32) {
         if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
             client.incoming_voice_call = false;
@@ -330,7 +330,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
     }
 
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios")))]
     fn voice_call_incoming(&self, id: i32) {
         if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
             client.incoming_voice_call = true;
@@ -339,7 +339,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         }
     }
 
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios")))]
     fn voice_call_closed(&self, id: i32, _reason: &str) {
         if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
             client.incoming_voice_call = false;
@@ -379,9 +379,23 @@ pub fn close(id: i32) {
     };
 }
 
+// A voice call offered from the controlled side: the connection manager asks
+// the connection to offer it to the controlling peer. Returns false when the
+// connection id is unknown so the caller can report the failure.
+#[inline]
+#[cfg(not(any(target_os = "ios")))]
+pub fn request_voice_call(id: i32) -> bool {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        allow_err!(client.tx.send(Data::NewVoiceCall));
+        true
+    } else {
+        false
+    }
+}
+
 /// Like `close`, but says the CM's WINDOW closed rather than a person disconnecting this peer.
 /// See `ipc::Data::CmWindowClosed`.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn close_window(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::CmWindowClosed));
@@ -406,9 +420,9 @@ pub fn send_chat(id: i32, text: String) {
 #[inline]
 #[cfg(not(any(target_os = "ios")))]
 pub fn switch_permission(id: i32, name: String, enabled: bool) {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     let is_keyboard_permission = name == "keyboard";
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     let is_keyboard_permission = false;
     if !option2bool(
         OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
@@ -429,7 +443,7 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
 }
 
 #[inline]
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub fn switch_permission_all(name: String, enabled: bool) {
     if name != "keyboard"
         && !option2bool(
@@ -452,7 +466,12 @@ pub fn switch_permission_all(name: String, enabled: bool) {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+))]
 #[inline]
 pub fn get_clients_state() -> String {
     let clients = CLIENTS.read().unwrap();
@@ -475,14 +494,14 @@ pub fn has_active_clients() -> bool {
 
 #[inline]
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn switch_back(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchSidesBack));
     };
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 impl<T: InvokeUiCM> IpcTaskRunner<T> {
     async fn run(&mut self) {
         use hbb_common::config::LocalConfig;
@@ -842,7 +861,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     #[cfg(target_os = "windows")]
@@ -878,7 +897,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     quit_cm();
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_listen<T: InvokeUiCM>(
     cm: ConnectionManager<T>,
@@ -968,6 +987,8 @@ pub async fn start_listen<T: InvokeUiCM>(
         }
     }
     cm.remove_connection(current_id, true);
+    // TransferJob::cancel_document only exists where SAF document transfers do.
+    #[cfg(target_os = "android")]
     for job in &mut write_jobs {
         if let Err(error) = job.cancel_document().await {
             const CLEANUP_ERROR_LOG_INTERVAL: std::time::Duration =
@@ -992,10 +1013,11 @@ async fn handle_fs(
     tx_log: Option<&UnboundedSender<String>>,
     _conn_id: i32,
 ) {
-    // Android is scoped-storage only, so every peer supplied path has to stay inside the
-    // app workspace. This is the filesystem boundary, keep it enforced here even though
-    // `Connection` rejects out-of-workspace requests earlier as well.
-    #[cfg(target_os = "android")]
+    // Android is scoped-storage only and ohos shares the same workspace model, so
+    // every peer supplied path has to stay inside the app workspace. This is the
+    // filesystem boundary, keep it enforced here even though `Connection` rejects
+    // out-of-workspace requests earlier as well.
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     {
         // (path, job id, file num, allow empty) of the peer supplied path this message
         // acts on.
@@ -1796,7 +1818,12 @@ pub fn elevate_portable(_id: i32) {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+))]
 #[inline]
 pub fn handle_incoming_voice_call(id: i32, accept: bool) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
@@ -1806,7 +1833,12 @@ pub fn handle_incoming_voice_call(id: i32, accept: bool) {
     };
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+))]
 #[inline]
 pub fn close_voice_call(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
@@ -1816,7 +1848,7 @@ pub fn close_voice_call(id: i32) {
     };
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn quit_cm() {
     // in case of std::process::exit not work
     log::info!("quit cm");

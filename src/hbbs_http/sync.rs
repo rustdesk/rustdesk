@@ -30,7 +30,7 @@ pub fn start() {
     let _sender = SENDER.lock().unwrap();
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios")))]
 pub fn signal_receiver() -> broadcast::Receiver<Vec<i32>> {
     SENDER.lock().unwrap().subscribe()
 }

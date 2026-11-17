@@ -1,0 +1,31 @@
+name: "CodeQL scan"
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 17 * * 2'
+
+jobs:
+  CodeQL-Build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:      
+        fetch-depth: 2
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v1
+      with:
+        languages: cpp
+  
+    - run: |
+       ./autogen.sh -s
+       env CPPFLAGS="-DDEV_MODE=1" ./configure --disable-dependency-tracking
+       make -j $(nproc) check
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v1
