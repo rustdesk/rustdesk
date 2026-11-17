@@ -43,6 +43,9 @@ fn finish_macos_update(result: hbb_common::ResultType<()>) -> Option<CoreMainAct
 /// If it returns [`Some`], the action determines whether to start the UI or report failure.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<CoreMainAction> {
+    // The probe child must not get past this, custom client included; global_init repeats it.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    crate::platform::linux::dispatch_wayland_display_probe();
     // Before global_init: on Linux its is_x11() can read Config (allow-drm-capture), and Config
     // loads from a path named after the custom client's app name.
     crate::load_custom_client();

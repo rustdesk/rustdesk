@@ -509,8 +509,10 @@ mod tty_greeter_tests {
 #[cfg(feature = "drm")]
 pub(crate) const ENV_DRM_CAPTURE: &str = "RUSTDESK_DRM_CAPTURE";
 
-/// DRM capture is compiled in and `allow-drm-capture` is on. While it is off, every path the drm
-/// feature changes runs as a build without it.
+/// DRM capture is compiled in and `allow-drm-capture` is on. While it is off, the drm paths in
+/// this crate run as a build without it. The Wayland enumeration in `base` and `scrap` does not
+/// read it: with no compositor named in the environment it probes the seat's socket and backs
+/// off after a failure, and it logs an enumeration failure once until the next success.
 pub fn drm_capture_enabled() -> bool {
     #[cfg(feature = "drm")]
     {
