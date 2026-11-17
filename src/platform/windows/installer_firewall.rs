@@ -1,3 +1,4 @@
+use hbb_common::log;
 use std::{ffi::OsString, io};
 use winreg::{enums::HKEY_CLASSES_ROOT, RegKey};
 
@@ -7,10 +8,13 @@ pub(super) fn install_commands(
     exe: &str,
     app_name: &str,
     args: impl Iterator<Item = OsString>,
-) -> io::Result<String> {
+) -> String {
     // Resolve the saved choice before the reinstall script deletes its registry key.
-    let enabled = resolve(args, || read_saved(app_name))?;
-    Ok(commands(exe, app_name, enabled))
+    let enabled = resolve(args, || read_saved(app_name)).unwrap_or_else(|error| {
+        log::warn!("Failed to resolve FIREWALLRULES: {error}; using the default value 1 and continuing installation");
+        true
+    });
+    commands(exe, app_name, enabled)
 }
 
 fn resolve(
@@ -65,7 +69,7 @@ fn commands(exe: &str, app_name: &str, enabled: bool) -> String {
     };
     format!(
         "reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {FIREWALL_RULES} /t REG_SZ /d \"{value}\"\n\
-         if not \"%errorlevel%\"==\"0\" exit /b %errorlevel%\n\
+         if not \"%errorlevel%\"==\"0\" echo WARNING: Failed to save FIREWALLRULES. Continuing installation; future upgrades may use the default. 1>&2\n\
          {rules}"
     )
 }
@@ -73,14 +77,18 @@ fn commands(exe: &str, app_name: &str, enabled: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{ffi::OsString, io};
+    use std::{
+        ffi::OsString,
+        fs,
+        io::{self, Write},
+        process::Command,
+    };
 
     #[test]
     fn firewall_commands_follow_installation_choice() {
         let exe = r"C:\Program Files\RustDesk\RustDesk.exe";
-        let generate = |value: &str| {
-            install_commands(exe, "RustDesk", [OsString::from(value)].into_iter()).unwrap()
-        };
+        let generate =
+            |value: &str| install_commands(exe, "RustDesk", [OsString::from(value)].into_iter());
         let disabled = generate("FIREWALLRULES=0");
         assert!(disabled.contains("/v FIREWALLRULES /t REG_SZ /d \"0\""));
         assert!(!disabled.contains("netsh"));
@@ -89,6 +97,41 @@ mod tests {
         assert!(enabled.contains("dir=out action=allow"));
         assert!(enabled.contains("dir=in action=allow"));
         assert!(enabled.contains(&format!("program=\"{exe}\"")));
+        let invalid = generate("FIREWALLRULES=invalid");
+        assert!(invalid.contains("dir=in action=allow"));
+    }
+
+    #[test]
+    fn firewall_registry_failure_does_not_stop_installation() {
+        let path = std::env::temp_dir().join(format!(
+            "rustdesk-firewall-regression-{}.bat",
+            std::process::id()
+        ));
+        let script = commands("RustDesk.exe", "RustDesk", false)
+            .replace("HKEY_CLASSES_ROOT", "HKEY_INVALID")
+            .replace('\n', "\r\n");
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        write!(
+            file,
+            "@echo off\r\n{script}\r\necho INSTALLATION_CONTINUED\r\nexit /b 0\r\n"
+        )
+        .unwrap();
+        drop(file);
+        let output = Command::new("cmd.exe")
+            .args(["/D", "/C"])
+            .arg(&path)
+            .env_remove("ERRORLEVEL")
+            .output();
+        fs::remove_file(path).unwrap();
+        let output = output.unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(String::from_utf8_lossy(&output.stdout).contains("INSTALLATION_CONTINUED"));
+        assert!(String::from_utf8_lossy(&output.stderr)
+            .contains("WARNING: Failed to save FIREWALLRULES."));
     }
 
     #[test]
