@@ -74,7 +74,10 @@ impl WindowHandlers {
                         PostMessageA(hwnd, WM_RUSTDESK_SHUTDOWN_WINDOWS, 0, 0) != FALSE
                     }),
                     Err(e) => {
-                        log::warn!("Failed to find privacy windows for graceful shutdown: {}", e);
+                        log::warn!(
+                            "Failed to find privacy windows for graceful shutdown: {}",
+                            e
+                        );
                         false
                     }
                 };
@@ -164,12 +167,20 @@ impl PrivacyMode for PrivacyModeImpl {
         state: Option<PrivacyModeState>,
     ) -> ResultType<()> {
         self.check_off_conn_id(conn_id)?;
-        super::win_input::unhook()?;
-        let hwnds = find_privacy_hwnds()?;
-        let hide_result = set_privacy_windows_visible(&hwnds, false);
-        if hide_result.is_err() {
-            self.stop();
-        }
+        let unhook_result = super::win_input::unhook();
+        let hwnds = match find_privacy_hwnds() {
+            Ok(hwnds) => hwnds,
+            Err(e) => {
+                self.stop();
+                return Err(e);
+            }
+        };
+        let hide_result = set_privacy_windows_visible(&hwnds, false, false);
+        // LockWorkStation is called immediately after this function returns. Stop the
+        // broker here so its window thread and cursor state are gone before the desktop
+        // switches to the secure lock screen.
+        self.stop();
+        unhook_result?;
 
         // Continue local state cleanup even after stop(); the broker has
         // been torn down, so keeping conn_id/hwnd would leave stale state.
@@ -378,21 +389,46 @@ impl PrivacyModeImpl {
         if hook_input {
             super::win_input::hook()?;
         }
-        match set_privacy_windows_visible(&hwnds, true) {
+        let defer_until_unlock = crate::platform::is_logon_screen();
+        match set_privacy_windows_visible(&hwnds, true, defer_until_unlock) {
             Ok(_) => {
-                let visible_hwnds =
+                let mut deferred = defer_until_unlock;
+                let visible_hwnds = if deferred {
+                    Vec::new()
+                } else {
                     match wait_find_visible_privacy_hwnds(PRIVACY_WINDOW_WAIT_MILLIS) {
                         Ok(hwnds) => hwnds,
+                        Err(e) if crate::platform::is_logon_screen() => {
+                            log::info!(
+                                "Privacy mode display deferred until Windows session unlock: {}",
+                                e
+                            );
+                            deferred = true;
+                            Vec::new()
+                        }
                         Err(e) => {
-                            allow_err!(set_privacy_windows_visible(&hwnds, false));
+                            allow_err!(set_privacy_windows_visible(&hwnds, false, false));
                             if hook_input {
                                 allow_err!(super::win_input::unhook());
                             }
                             return Err(e);
                         }
-                    };
+                    }
+                };
                 let Some(hwnd) = visible_hwnds.first() else {
-                    allow_err!(set_privacy_windows_visible(&hwnds, false));
+                    if deferred {
+                        let Some(hwnd) = hwnds.first() else {
+                            allow_err!(set_privacy_windows_visible(&hwnds, false, false));
+                            if hook_input {
+                                allow_err!(super::win_input::unhook());
+                            }
+                            bail!("No privacy window created");
+                        };
+                        self.conn_id = conn_id;
+                        self.hwnd = *hwnd as _;
+                        return Ok(());
+                    }
+                    allow_err!(set_privacy_windows_visible(&hwnds, false, false));
                     if hook_input {
                         allow_err!(super::win_input::unhook());
                     }
@@ -403,7 +439,7 @@ impl PrivacyModeImpl {
                 Ok(())
             }
             Err(e) => {
-                allow_err!(set_privacy_windows_visible(&hwnds, false));
+                allow_err!(set_privacy_windows_visible(&hwnds, false, false));
                 if hook_input {
                     allow_err!(super::win_input::unhook());
                 }
@@ -562,7 +598,11 @@ fn filter_visible_hwnds(hwnds: &[HWND]) -> Vec<HWND> {
         .collect()
 }
 
-fn set_privacy_windows_visible(hwnds: &[HWND], show: bool) -> ResultType<usize> {
+fn set_privacy_windows_visible(
+    hwnds: &[HWND],
+    show: bool,
+    defer_until_unlock: bool,
+) -> ResultType<usize> {
     if hwnds.is_empty() {
         return Ok(0);
     };
@@ -575,7 +615,8 @@ fn set_privacy_windows_visible(hwnds: &[HWND], show: bool) -> ResultType<usize> 
     let mut first_error = None;
     for &hwnd in hwnds {
         unsafe {
-            if FALSE == PostMessageA(hwnd, message, 0, 0) {
+            let wparam = if show && defer_until_unlock { 1 } else { 0 };
+            if FALSE == PostMessageA(hwnd, message, wparam, 0) {
                 if first_error.is_none() {
                     first_error = Some(Error::last_os_error());
                 }

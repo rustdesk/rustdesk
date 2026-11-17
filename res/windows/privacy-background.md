@@ -19,6 +19,13 @@ restores cursor rendering and releases the magnification runtime. Unlocking hide
 the cursor again only if Privacy Mode 1 is still active. These calls run on the
 privacy-window thread, outside `DllMain`.
 
+The connection lifecycle is synchronized with Windows locking. When a session
+ends, RustDesk posts the hide request and waits for the privacy broker process
+to exit before it calls `LockWorkStation()`. If a new connection arrives while
+the session is already locked, the broker keeps its windows hidden and waits
+for `WTS_SESSION_UNLOCK`; disconnecting that connection cancels the pending
+display before the broker is stopped.
+
 ## Build
 
 The RustDesk workflow builds the pinned `RustDeskTempTopMostWindow` revision with

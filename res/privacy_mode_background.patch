@@ -1,5 +1,5 @@
 diff --git a/WindowInjection/dllmain.cpp b/WindowInjection/dllmain.cpp
-index 0f07aab..57963e3 100644
+index 0f07aab..0138919 100644
 --- a/WindowInjection/dllmain.cpp
 +++ b/WindowInjection/dllmain.cpp
 @@ -7,9 +7,15 @@
@@ -36,15 +36,25 @@ index 0f07aab..57963e3 100644
  // Mainly from https://github.com/microsoft/Windows-classic-samples/blob/67a8cddc25880ebc64018e833f0bf51589fd4521/Samples/Win7Samples/winui/shell/appshellintegration/NotificationIcon/NotificationIcon.cpp#L360
  VOID OnPaintGdi(HWND hwnd, HDC hdc);
  
-@@ -136,6 +146,7 @@ bool RemovePrivacyWindow(HWND hwnd);
+@@ -129,13 +139,15 @@ HWND CreateWin(HMODULE hModule, UINT zbid, const TCHAR* title, const TCHAR* clas
+ bool CreatePrivacyWindows(HMODULE hModule, UINT zbid, bool showWindows);
+ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid);
+ void SchedulePrivacyWindowRefresh();
+-bool HandlePrivacyThreadMessage(UINT message);
++bool HandlePrivacyThreadMessage(UINT message, WPARAM wParam = 0);
+ bool PostPrivacyThreadMessage(UINT message, bool reportError);
+ DWORD GetPrivacyWindowThreadId();
+ bool RemovePrivacyWindow(HWND hwnd);
  bool DestroyPrivacyWindowsFrom(size_t begin);
  HWND FailCreatedWindow(HWND hwnd, const TCHAR* caption);
- void SetPrivacyWindowsVisible(bool visible);
+-void SetPrivacyWindowsVisible(bool visible);
++void SetPrivacyWindowsVisible(bool visible, bool deferUntilUnlock = false);
 +void SetPrivacyCursorHidden(bool hidden);
++bool IsSessionLocked();
  void DebugLogLastError(const TCHAR* caption);
  DWORD FinishPrivacyThread(DWORD result);
  
-@@ -147,6 +158,7 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+@@ -147,6 +159,7 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
  		break;
  
  	case WM_DESTROY:
@@ -52,13 +62,14 @@ index 0f07aab..57963e3 100644
  		if (!g_refreshing_windows && !g_shutting_down_windows)
  		{
  			if (FALSE != IsWindowVisible(hwnd))
-@@ -166,12 +178,32 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+@@ -166,12 +179,32 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
  	case WM_RUSTDESK_REFRESH_WINDOWS:
  	case WM_RUSTDESK_SHOW_WINDOWS:
  	case WM_RUSTDESK_HIDE_WINDOWS:
+-		(void)HandlePrivacyThreadMessage(message);
 +	case WM_RUSTDESK_SHUTDOWN_WINDOWS:
- 		(void)HandlePrivacyThreadMessage(message);
- 		break;
++		(void)HandlePrivacyThreadMessage(message, wParam);
++		break;
 +	case WM_WTSSESSION_CHANGE:
 +		if (wParam == WTS_SESSION_LOCK)
 +		{
@@ -75,7 +86,7 @@ index 0f07aab..57963e3 100644
 +				SetPrivacyCursorHidden(true);
 +			}
 +		}
-+		break;
+ 		break;
  
  	case WM_WINDOWPOSCHANGING:
  		return 0;
@@ -85,7 +96,7 @@ index 0f07aab..57963e3 100644
  		HANDLE myself;
  		myself = OpenProcess(PROCESS_ALL_ACCESS, false, GetCurrentProcessId());
  		TerminateProcess(myself, 0);
-@@ -299,6 +331,11 @@ HWND CreateWin(HMODULE hModule, UINT zbid, const TCHAR* title, const TCHAR* clas
+@@ -299,6 +332,11 @@ HWND CreateWin(HMODULE hModule, UINT zbid, const TCHAR* title, const TCHAR* clas
  		return FailCreatedWindow(hwnd, _T("SetWindowText"));
  	}
  
@@ -97,10 +108,11 @@ index 0f07aab..57963e3 100644
  	//HRGN hrg = CreateRoundRectRgn(
  	//	mi.rcMonitor.left,
  	//	mi.rcMonitor.top,
-@@ -486,9 +523,45 @@ bool IsAnyPrivacyWindowVisible()
+@@ -486,9 +524,73 @@ bool IsAnyPrivacyWindowVisible()
  	return false;
  }
  
+-void SetPrivacyWindowsVisible(bool visible)
 +void SetPrivacyCursorHidden(bool hidden)
 +{
 +	if (hidden && !g_cursor_magnification_initialized)
@@ -133,9 +145,37 @@ index 0f07aab..57963e3 100644
 +	}
 +}
 +
- void SetPrivacyWindowsVisible(bool visible)
++bool IsSessionLocked()
++{
++	PWTSINFOEXW info = nullptr;
++	DWORD bytes = 0;
++	if (WTSQuerySessionInformationW(
++		WTS_CURRENT_SERVER_HANDLE,
++		WTS_CURRENT_SESSION,
++		WTSSessionInfoEx,
++		reinterpret_cast<LPWSTR*>(&info),
++		&bytes) == FALSE)
++	{
++		return false;
++	}
++
++	const bool locked = info != nullptr
++		&& info->Level == 1
++		&& info->Data.WTSInfoExLevel1.SessionFlags == WTS_SESSIONSTATE_LOCK;
++	if (info != nullptr)
++	{
++		WTSFreeMemory(info);
++	}
++	return locked;
++}
++
++void SetPrivacyWindowsVisible(bool visible, bool deferUntilUnlock)
  {
  	g_privacy_windows_visible = visible;
++	if (visible && deferUntilUnlock && IsSessionLocked())
++	{
++		g_session_locked = true;
++	}
 +	if (g_session_locked)
 +	{
 +		visible = false;
@@ -143,7 +183,7 @@ index 0f07aab..57963e3 100644
  	if (!visible)
  	{
  		g_show_windows_after_refresh = false;
-@@ -497,6 +570,7 @@ void SetPrivacyWindowsVisible(bool visible)
+@@ -497,6 +599,7 @@ void SetPrivacyWindowsVisible(bool visible)
  	{
  		ShowWindow(hwnd, visible ? SW_SHOW : SW_HIDE);
  	}
@@ -151,7 +191,7 @@ index 0f07aab..57963e3 100644
  }
  
  bool ResizePrivacyWindow(HWND hwnd, const RECT& monitorRect)
-@@ -602,7 +676,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
+@@ -602,7 +705,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
  		return false;
  	}
  
@@ -160,7 +200,25 @@ index 0f07aab..57963e3 100644
  	const auto createdBegin = g_hwnds.size();
  	for (size_t i = 0; i < monitorRects.size(); ++i)
  	{
-@@ -657,6 +731,7 @@ bool HandlePrivacyThreadMessage(UINT message)
+@@ -641,7 +744,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
+ 	return true;
+ }
+ 
+-bool HandlePrivacyThreadMessage(UINT message)
++bool HandlePrivacyThreadMessage(UINT message, WPARAM wParam)
+ {
+ 	switch (message)
+ 	{
+@@ -650,13 +753,14 @@ bool HandlePrivacyThreadMessage(UINT message)
+ 		(void)RefreshPrivacyWindows(g_module, g_zbid);
+ 		return true;
+ 	case WM_RUSTDESK_SHOW_WINDOWS:
+-		SetPrivacyWindowsVisible(true);
++		SetPrivacyWindowsVisible(true, wParam != 0);
+ 		return true;
+ 	case WM_RUSTDESK_HIDE_WINDOWS:
+-		SetPrivacyWindowsVisible(false);
++		SetPrivacyWindowsVisible(false, false);
  		return true;
  	case WM_RUSTDESK_SHUTDOWN_WINDOWS:
  		g_shutting_down_windows = true;
@@ -168,7 +226,7 @@ index 0f07aab..57963e3 100644
  		(void)DestroyPrivacyWindowsFrom(0);
  		PostQuitMessage(0);
  		return true;
-@@ -667,6 +742,7 @@ bool HandlePrivacyThreadMessage(UINT message)
+@@ -667,6 +771,7 @@ bool HandlePrivacyThreadMessage(UINT message)
  
  DWORD FinishPrivacyThread(DWORD result)
  {
@@ -176,7 +234,7 @@ index 0f07aab..57963e3 100644
  	InterlockedExchange(&g_window_thread_id, 0);
  	return result;
  }
-@@ -806,6 +882,26 @@ VOID OnPaintGdiPlus(HWND hwnd, HDC hdc)
+@@ -806,6 +911,26 @@ VOID OnPaintGdiPlus(HWND hwnd, HDC hdc)
  			return;
  		}
  
@@ -203,3 +261,95 @@ index 0f07aab..57963e3 100644
  		Gdiplus::Graphics graphics(hdc);
  		graphics.Clear(Gdiplus::Color::Black);
  
+diff --git a/WindowInjection/privacy_background.h b/WindowInjection/privacy_background.h
+new file mode 100644
+index 0000000..b9093b3
+--- /dev/null
++++ b/WindowInjection/privacy_background.h
+@@ -0,0 +1,86 @@
++#pragma once
++
++#include <windows.h>
++#include <gdiplus.h>
++#include <algorithm>
++#include <memory>
++#include <string>
++
++// Loaded by the existing privacy window thread, after GDI+ initialization.
++// The broker is launched in the active user's session, so it can resolve the
++// selected desktop wallpaper without copying it through the controller.
++class PrivacyBackground
++{
++public:
++	void Reload(const std::wstring& directory)
++	{
++		image_.reset();
++		custom_ = true;
++		wchar_t environment[32] = {};
++		GetEnvironmentVariableW(L"RUSTDESK_PRIVACY_BACKGROUND", environment, ARRAYSIZE(environment));
++		if (_wcsicmp(environment, L"wallpaper") == 0)
++		{
++			wchar_t wallpaper[MAX_PATH] = {};
++			if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, ARRAYSIZE(wallpaper), wallpaper, 0) != FALSE)
++			{
++				LoadImage(wallpaper);
++			}
++			return;
++		}
++		if (_wcsicmp(environment, L"black") == 0)
++		{
++			return;
++		}
++
++		wchar_t mode[32] = {};
++		const auto config = directory + L"\\privacy-background.ini";
++		GetPrivateProfileStringW(L"Privacy", L"Background", L"black", mode,
++			ARRAYSIZE(mode), config.c_str());
++		custom_ = _wcsicmp(mode, L"notice") != 0;
++		if (_wcsicmp(mode, L"wallpaper") == 0)
++		{
++			LoadImage(directory + L"\\privacy-wallpaper.png");
++		}
++	}
++
++	// Return false to leave the original privacy notice painting path untouched.
++	bool Paint(HDC hdc, const RECT& client) const
++	{
++		if (!custom_)
++		{
++			return false;
++		}
++		FillRect(hdc, &client, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
++		if (image_)
++		{
++			const float width = static_cast<float>(client.right - client.left);
++			const float height = static_cast<float>(client.bottom - client.top);
++			const float scale = (std::max)(width / image_->GetWidth(), height / image_->GetHeight());
++			const float imageWidth = image_->GetWidth() * scale;
++			const float imageHeight = image_->GetHeight() * scale;
++			Gdiplus::Graphics graphics(hdc);
++			graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
++			graphics.DrawImage(image_.get(), Gdiplus::RectF(
++				client.left + (width - imageWidth) / 2, client.top + (height - imageHeight) / 2,
++				imageWidth, imageHeight));
++		}
++		return true;
++	}
++
++private:
++	void LoadImage(const std::wstring& path)
++	{
++		auto image = std::make_unique<Gdiplus::Bitmap>(path.c_str());
++		if (image->GetLastStatus() == Gdiplus::Ok && image->GetWidth() && image->GetHeight())
++		{
++			image_ = std::move(image);
++		}
++		else
++		{
++			OutputDebugStringW(L"RustDesk: privacy wallpaper unavailable; using black.\n");
++		}
++	}
++
++	bool custom_ = false;
++	std::unique_ptr<Gdiplus::Bitmap> image_;
++};
