@@ -714,8 +714,7 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
                     if !img.is_null() {
                         // Hidden X11 cursors must leave the controller's previous shape visible.
                         let count = (*img).width as usize * (*img).height as usize;
-                        if count != 0
-                            && !(*img).pixels.is_null()
+                        if !(*img).pixels.is_null()
                             && cursor_image_has_visible_pixels(std::slice::from_raw_parts(
                                 (*img).pixels,
                                 count,
@@ -738,16 +737,17 @@ fn cursor_image_has_visible_pixels(pixels: &[c_long]) -> bool {
 
 #[cfg(test)]
 mod cursor_image_tests {
-    use super::cursor_image_has_visible_pixels;
+    use super::{c_long, cursor_image_has_visible_pixels};
 
     #[test]
     fn only_nonzero_alpha_makes_a_cursor_visible() {
         assert!(!cursor_image_has_visible_pixels(&[]));
         assert!(!cursor_image_has_visible_pixels(&[0, 0x00ff_ffff]));
         assert!(cursor_image_has_visible_pixels(&[0, 0x0100_0000]));
-        assert!(cursor_image_has_visible_pixels(&[
-            0xff00_0000_u32 as std::os::raw::c_long,
-        ]));
+        let opaque = 0xff00_0000_u32;
+        assert!(cursor_image_has_visible_pixels(&[opaque as c_long]));
+        // 64-bit Xlib sign-extends each 32-bit pixel, so an opaque pixel arrives negative.
+        assert!(cursor_image_has_visible_pixels(&[opaque as i32 as c_long]));
     }
 }
 
