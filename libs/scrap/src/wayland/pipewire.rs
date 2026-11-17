@@ -53,7 +53,6 @@ struct PipewireDisplayOffsetCache {
     offsets: Vec<(i32, i32)>,
 }
 
-// KDE Plasma may not provide position info
 static IS_SERVER_RUNNING: AtomicU8 = AtomicU8::new(0); // 0: uninitialized, 1:true, 2: false
 
 impl PipewireDisplayOffsetCache {
@@ -1454,7 +1453,7 @@ fn validate_display_offset_cache(
     restore_token: &str,
 ) -> Option<Vec<(i32, i32)>> {
     let cache = serde_json::from_str::<PipewireDisplayOffsetCache>(cache_str).ok()?;
-    if cache.offsets.len() != shared_len || restore_token.is_empty() {
+    if cache.offsets.len() != shared_len {
         return None;
     }
     if cache.display_key != PipewireDisplayOffsetCache::displays_to_key(displays)
@@ -1816,8 +1815,8 @@ fn sort_streams(
         }
     }
 
-    let mut sorted_streams = Vec::with_capacity(streams.len());
-    let mut sorted_shared_displays = Vec::with_capacity(shared_displays.len());
+    let mut sorted_streams = Vec::new();
+    let mut sorted_shared_displays = Vec::new();
     // Move matching items in order without cloning
     for (x, y) in display_order.into_iter() {
         for i in 0..streams.len() {
