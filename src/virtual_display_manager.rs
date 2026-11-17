@@ -751,6 +751,16 @@ pub mod amyuni_idd {
         }
     }
 
+    fn cleanup_prepared_monitor() -> ResultType<()> {
+        if get_monitor_count() == 0 {
+            // The driver can create an inactive monitor that enumeration misses.
+            // Undo its request directly; normal unplug may reject a physical-only layout.
+            plug_monitor_(false, None)?;
+            return Ok(());
+        }
+        plug_out_monitor(PRIVACY_MONITOR_INDEX as _, false, false)
+    }
+
     pub fn prepare_privacy_monitor(cancelled: impl Fn() -> bool) -> ResultType<Option<u32>> {
         static PREPARATION_LOCK: Mutex<()> = Mutex::new(());
         let _preparation = lock_privacy_preparation(&PREPARATION_LOCK, &cancelled)?;
@@ -773,7 +783,7 @@ pub mod amyuni_idd {
         // see an installed driver and skip this wait.
         if installed {
             if let Err(error) = wait_for_privacy_display_stability() {
-                let cleanup = plug_out_monitor(PRIVACY_MONITOR_INDEX as _, false, false);
+                let cleanup = cleanup_prepared_monitor();
                 hbb_common::throttled_log!(
                     DIAGNOSTIC_LOG_INTERVAL,
                     error,
@@ -785,12 +795,16 @@ pub mod amyuni_idd {
             }
         }
         if cancelled() {
-            if get_monitor_count() > 0 {
-                plug_out_monitor(PRIVACY_MONITOR_INDEX as _, false, false)?;
-            }
+            cleanup_prepared_monitor()?;
             bail!("Privacy mode preparation cancelled.");
         }
         if get_monitor_count() == 0 {
+            if let Err(error) = cleanup_prepared_monitor() {
+                bail!(
+                    "No active virtual displays; preparation cleanup failed: {}",
+                    error
+                );
+            }
             bail!("No active virtual displays after privacy mode preparation.");
         }
         Ok(Some(PRIVACY_MONITOR_INDEX))
