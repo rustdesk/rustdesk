@@ -5357,7 +5357,16 @@ impl Connection {
 
     async fn turn_off_privacy(&mut self, impl_key: String) {
         #[cfg(windows)]
-        self.privacy_preparation.take();
+        if self.privacy_preparation.take().is_some() && !privacy_mode::is_in_privacy_mode() {
+            // The worker cleans up preparation. Restoring an inactive Mode 2 here
+            // would unplug all virtual displays and race that cleanup.
+            self.send(crate::common::make_privacy_mode_msg(
+                back_notification::PrivacyModeState::PrvOffSucceeded,
+                impl_key,
+            ))
+            .await;
+            return;
+        }
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
                 back_notification::PrivacyModeState::PrvNotSupported,
