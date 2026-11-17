@@ -456,11 +456,10 @@ pub(super) async fn check_init() -> ResultType<()> {
                         miny,
                         maxy
                     );
-                    let drm_capture = crate::platform::linux::drm_capture_enabled();
                     // A display that falls back to PipeWire in a DRM session runs this apply
                     // too: it goes through the uinput apply thread, in turn with the DRM paths.
                     #[cfg(feature = "drm")]
-                    if drm_capture {
+                    if crate::platform::linux::drm_capture_enabled() {
                         let job = move |rt: &tokio::runtime::Runtime| {
                             super::display_service::note_input_map_unknown();
                             match rt.block_on(async {
@@ -495,10 +494,8 @@ pub(super) async fn check_init() -> ResultType<()> {
                                 "Failed to update mouse resolution: the uinput apply thread is gone"
                             );
                         }
-                    }
-                    // Bound the IPC wait like the periodic refresh does, so a hung
-                    // response can't stall session init.
-                    if !drm_capture {
+                    } else {
+                        // allow-drm-capture off: the not(drm) apply below, kept in step with it.
                         match timeout(
                             3_000,
                             input_service::update_mouse_resolution(minx, maxx, miny, maxy),
@@ -509,9 +506,6 @@ pub(super) async fn check_init() -> ResultType<()> {
                                 super::display_service::set_wayland_uinput_rect((
                                     minx, maxx, miny, maxy,
                                 ));
-                                // Snapshot the per-display layout the client's coordinates
-                                // will be based on, so the mouse path can correct them if
-                                // the compositor moves a monitor mid-session.
                                 super::display_service::set_wayland_layout_baseline(
                                     scrap::wayland::display::get_display_rects_for_uinput(),
                                 );
@@ -521,6 +515,29 @@ pub(super) async fn check_init() -> ResultType<()> {
                             }
                             Err(err) => log::error!("Failed to update mouse resolution: {}", err),
                         }
+                    }
+                    // Bound the IPC wait like the periodic refresh does, so a hung
+                    // response can't stall session init.
+                    #[cfg(not(feature = "drm"))]
+                    match timeout(
+                        3_000,
+                        input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {
+                            super::display_service::set_wayland_uinput_rect((
+                                minx, maxx, miny, maxy,
+                            ));
+                            // Snapshot the per-display layout the client's coordinates
+                            // will be based on, so the mouse path can correct them if
+                            // the compositor moves a monitor mid-session.
+                            super::display_service::set_wayland_layout_baseline(
+                                scrap::wayland::display::get_display_rects_for_uinput(),
+                            );
+                        }
+                        Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
+                        Err(err) => log::error!("Failed to update mouse resolution: {}", err),
                     }
                 } else {
                     log::warn!("Failed to get desktop rect for uinput");

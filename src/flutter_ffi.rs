@@ -2781,7 +2781,11 @@ pub fn main_get_common(key: String) -> String {
         #[cfg(not(target_os = "windows"))]
         return false.to_string();
     } else if key == "is-drm-capture-supported" {
-        return cfg!(all(target_os = "linux", feature = "drm")).to_string();
+        // The bundled libdrmtap may not load (a glibc older than its build): then DRM cannot work.
+        #[cfg(all(target_os = "linux", feature = "drm"))]
+        return scrap::drmtap_dl::get().is_some().to_string();
+        #[cfg(not(all(target_os = "linux", feature = "drm")))]
+        return false.to_string();
     } else if key == "transfer-job-id" {
         return base::fs::get_next_job_id().to_string();
     } else if key == "is-remote-modify-enabled-by-control-permissions" {
