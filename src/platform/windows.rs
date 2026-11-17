@@ -98,7 +98,6 @@ use winreg::{enums::*, RegKey};
 
 mod acl;
 pub(crate) mod installer_files;
-mod installer_firewall;
 mod installer_handoff;
 mod installer_shell;
 mod verified_update;
@@ -1564,6 +1563,30 @@ pub fn remove_meta_toml_cmd(is_msi: bool, path: &str) -> String {
     }
 }
 
+fn resolve_firewall_rules(
+    args: impl Iterator<Item = OsString>,
+    read_saved: impl FnOnce() -> io::Result<String>,
+) -> &'static str {
+    let value = args
+        .filter_map(|arg| {
+            arg.to_string_lossy()
+                .strip_prefix("FIREWALLRULES=")
+                .map(str::to_owned)
+        })
+        .last()
+        .map(Ok)
+        .unwrap_or_else(read_saved);
+    let error = match value.as_deref() {
+        Ok("0" | "N" | "n") => return "0",
+        Ok("1" | "Y" | "y") => return "1",
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return "1",
+        Err(error) => error.to_string(),
+        _ => "FIREWALLRULES must be 0, 1, Y, or N".to_owned(),
+    };
+    log::warn!("Failed to resolve FIREWALLRULES: {error}; using the default value 1 and continuing installation");
+    "1"
+}
+
 fn get_after_install(
     exe: &str,
     reg_value_start_menu_shortcuts: Option<String>,
@@ -1571,9 +1594,13 @@ fn get_after_install(
     reg_value_printer: Option<String>,
 ) -> String {
     let app_name = crate::get_app_name();
-    let firewall_rules =
-        installer_firewall::install_commands(exe, &app_name, std::env::args_os().skip(1));
     let ext = app_name.to_lowercase();
+    // Resolve the saved choice before the reinstall script deletes its registry key.
+    let firewall_rules = resolve_firewall_rules(std::env::args_os().skip(1), || {
+        RegKey::predef(HKEY_CLASSES_ROOT)
+            .open_subkey(format!(".{ext}"))?
+            .get_value("FIREWALLRULES")
+    });
     let nested_exe = escape_nested_cmd_ampersands(exe);
 
     // reg delete HKEY_CURRENT_USER\Software\Classes for
@@ -1621,7 +1648,12 @@ fn get_after_install(
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{nested_exe}\\\" \\\"%%1\\\"\"
-    {firewall_rules}
+    reg add HKEY_CLASSES_ROOT\\.{ext} /f /v FIREWALLRULES /t REG_SZ /d \"{firewall_rules}\"
+    if not \"%errorlevel%\"==\"0\" echo WARNING: Failed to save FIREWALLRULES. Continuing installation; future upgrades may use the default. 1>&2
+    if \"{firewall_rules}\"==\"1\" (
+    netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=out action=allow program=\"{exe}\" enable=yes
+    netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=in action=allow program=\"{exe}\" enable=yes
+    )
     {create_service}
     reg add HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /f /v SoftwareSASGeneration /t REG_DWORD /d 1
     ", create_service=get_create_service(&exe))
@@ -4894,6 +4926,34 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn firewall_rules_options() {
+        use io::ErrorKind::{NotFound, PermissionDenied};
+
+        for (argument, saved, expected) in [
+            (None, Err(NotFound), "1"),
+            (None, Ok("0"), "0"),
+            (None, Ok("1"), "1"),
+            (None, Err(PermissionDenied), "1"),
+            (None, Ok("invalid"), "1"),
+            (Some("0"), Err(PermissionDenied), "0"),
+            (Some("1"), Ok("0"), "1"),
+            (Some("N"), Ok("1"), "0"),
+            (Some("n"), Ok("1"), "0"),
+            (Some("Y"), Ok("0"), "1"),
+            (Some("y"), Ok("0"), "1"),
+            (Some("invalid"), Ok("0"), "1"),
+        ] {
+            let args = argument
+                .map(|value| OsString::from(format!("FIREWALLRULES={value}")))
+                .into_iter();
+            assert_eq!(
+                resolve_firewall_rules(args, || saved.map(str::to_owned).map_err(io::Error::from)),
+                expected
+            );
+        }
+    }
 
     #[test]
     fn vbs_files_use_utf16le_with_bom_and_crlf() {
