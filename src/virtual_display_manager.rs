@@ -414,6 +414,8 @@ pub mod amyuni_idd {
     const PRIVACY_INITIALIZATION_POLL: Duration = Duration::from_millis(300);
     const PRIVACY_MONITOR_TIMEOUT: Duration = Duration::from_secs(6);
     const PRIVACY_MONITOR_INDEX: u32 = 0;
+    // Accessed under PREPARATION_LOCK; failed first-install work must survive retries.
+    static PRIVACY_INITIALIZATION_PENDING: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
     lazy_static::lazy_static! {
         static ref LOCK: Arc<Mutex<()>> = Default::default();
@@ -762,6 +764,15 @@ pub mod amyuni_idd {
         Ok(())
     }
 
+    fn finish_privacy_initialization() -> ResultType<()> {
+        if PRIVACY_INITIALIZATION_PENDING.load(atomic::Ordering::Relaxed) {
+            wait_for_privacy_display_stability()?;
+            // Ok also includes the existing full-wait fallback, not only observed stability.
+            PRIVACY_INITIALIZATION_PENDING.store(false, atomic::Ordering::Relaxed);
+        }
+        Ok(())
+    }
+
     fn lock_privacy_preparation<'a>(
         lock: &'a Mutex<()>,
         cancelled: impl Fn() -> bool,
@@ -810,31 +821,31 @@ pub mod amyuni_idd {
             bail!("Privacy mode preparation cancelled.");
         }
         if get_monitor_count() > 0 {
+            finish_privacy_initialization()?;
             return Ok(None);
         }
         if windows::get_device_names(None).is_empty() {
             bail!(crate::privacy_mode::NO_PHYSICAL_DISPLAYS);
         }
         let mut is_async = false;
-        let installed = check_install_driver(&mut is_async)?;
+        if check_install_driver(&mut is_async)? {
+            PRIVACY_INITIALIZATION_PENDING.store(true, atomic::Ordering::Relaxed);
+        }
         if get_monitor_count() == VIRTUAL_DISPLAY_MAX_COUNT {
             bail!("There are already {VIRTUAL_DISPLAY_MAX_COUNT} monitors plugged in.");
         }
         plug_in_monitor_(true, is_async, Some(PRIVACY_MONITOR_TIMEOUT))?;
-        // Finish first-install initialization even if cancelled; a retry would otherwise
-        // see an installed driver and skip this wait.
-        if installed {
-            if let Err(error) = wait_for_privacy_display_stability() {
-                let cleanup = cleanup_prepared_monitor();
-                hbb_common::throttled_log!(
-                    DIAGNOSTIC_LOG_INTERVAL,
-                    error,
-                    "First-use display initialization failed: {}; cleanup: {:?}",
-                    error,
-                    cleanup
-                );
-                return Err(error);
-            }
+        // Complete observation even if cancelled, so a retry can reuse the result.
+        if let Err(error) = finish_privacy_initialization() {
+            let cleanup = cleanup_prepared_monitor();
+            hbb_common::throttled_log!(
+                DIAGNOSTIC_LOG_INTERVAL,
+                error,
+                "First-use display initialization failed: {}; cleanup: {:?}",
+                error,
+                cleanup
+            );
+            return Err(error);
         }
         if cancelled() {
             cleanup_prepared_monitor()?;
