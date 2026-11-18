@@ -1422,8 +1422,94 @@ class InputModel {
             .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
 
+  bool _appSwitchModifierHeld = false;
+
+  Future<void> triggerShowAllApps() async {
+    if (!keyboardPerm || isViewOnly || isViewCamera) return;
+    await endAppSwitch();
+    if (peerPlatform == kPeerPlatformWindows) {
+      await bind.sessionInputKey(
+        sessionId: sessionId,
+        name: 'VK_TAB',
+        down: false,
+        press: true,
+        alt: false,
+        ctrl: false,
+        shift: false,
+        command: true,
+      );
+    } else if (peerPlatform == kPeerPlatformMacOS) {
+      await bind.sessionInputKey(
+        sessionId: sessionId,
+        name: 'VK_UP',
+        down: false,
+        press: true,
+        alt: false,
+        ctrl: true,
+        shift: false,
+        command: false,
+      );
+    } else {
+      await bind.sessionInputKey(
+        sessionId: sessionId,
+        name: 'VK_S',
+        down: false,
+        press: true,
+        alt: false,
+        ctrl: false,
+        shift: false,
+        command: true,
+      );
+    }
+  }
+
+  Future<void> stepAppSwitch({required bool forward}) async {
+    if (!keyboardPerm || isViewOnly || isViewCamera) return;
+    final isMac = peerPlatform == kPeerPlatformMacOS;
+    if (!_appSwitchModifierHeld) {
+      _appSwitchModifierHeld = true;
+      await bind.sessionInputKey(
+        sessionId: sessionId,
+        name: isMac ? 'Meta' : 'VK_MENU',
+        down: true,
+        press: false,
+        alt: !isMac,
+        ctrl: false,
+        shift: false,
+        command: isMac,
+      );
+    }
+    await bind.sessionInputKey(
+      sessionId: sessionId,
+      name: 'VK_TAB',
+      down: false,
+      press: true,
+      alt: !isMac,
+      ctrl: false,
+      shift: !forward,
+      command: isMac,
+    );
+  }
+
+  Future<void> endAppSwitch() async {
+    if (!_appSwitchModifierHeld) return;
+    _appSwitchModifierHeld = false;
+    final isMac = peerPlatform == kPeerPlatformMacOS;
+    await bind.sessionInputKey(
+      sessionId: sessionId,
+      name: isMac ? 'Meta' : 'VK_MENU',
+      down: false,
+      press: false,
+      alt: false,
+      ctrl: false,
+      shift: false,
+      command: false,
+    );
+  }
+
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   void resetModifiers() {
+    unawaited(endAppSwitch());
     shift = ctrl = alt = command = false;
     if (parent.target?.closed == true) _localFlutterShortcuts.clear();
   }
