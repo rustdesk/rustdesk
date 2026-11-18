@@ -6,7 +6,7 @@ License:    GPL-3.0
 URL:        https://rustdesk.com
 Vendor:     rustdesk <info@rustdesk.com>
 Requires:   gtk3 libxcb libXfixes alsa-lib libva gstreamer1-plugins-base
-Recommends: libayatana-appindicator-gtk3 libxdo
+Recommends: libayatana-appindicator-gtk3 libxdo libdrm.so.2()(64bit) libEGL.so.1()(64bit) libGLESv2.so.2()(64bit)
 Provides:   libdesktop_drop_plugin.so()(64bit), libdesktop_multi_window_plugin.so()(64bit), libfile_selector_linux_plugin.so()(64bit), libflutter_custom_cursor_plugin.so()(64bit), libflutter_linux_gtk.so()(64bit), libscreen_retriever_plugin.so()(64bit), libtray_manager_plugin.so()(64bit), liburl_launcher_linux_plugin.so()(64bit), libwindow_manager_plugin.so()(64bit), libwindow_size_plugin.so()(64bit), libtexture_rgba_renderer_plugin.so()(64bit)
 # libdrmtap is dlopen-ed by the root service only when DRM capture is on, and falls back if it cannot
 # load, so its own dependencies (newer glibc, EGL, libdrm) must not become requirements of the package.
