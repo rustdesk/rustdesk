@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 class _Binding extends Fake implements RustdeskImpl {
   String hidePasswordLogin = '';
   String? authenticatedProvider;
+  Future<String?>? loginOptionsResponse;
 
   @override
   String translate(
@@ -54,6 +56,7 @@ class _Binding extends Fake implements RustdeskImpl {
   @override
   Future<String?> mainGetHttpStatus(
           {required String url, dynamic hint}) async =>
+      await loginOptionsResponse ??
       jsonEncode({'body': '["oidc/azure"]', 'headers': {}, 'status_code': 200});
 
   @override
@@ -110,4 +113,38 @@ void main() {
       await tester.pumpAndSettle();
     });
   }
+
+  testWidgets('OIDC-only login shows loading before an empty provider response',
+      (tester) async {
+    binding.hidePasswordLogin = 'Y';
+    final response = Completer<String?>();
+    binding.loginOptionsResponse = response.future;
+    addTearDown(() async {
+      binding.loginOptionsResponse = null;
+      gFFI.dialogManager.dismissAll();
+      await tester.pumpAndSettle();
+    });
+    await tester.pumpWidget(MaterialApp(
+      navigatorKey: globalKey,
+      home: const Scaffold(),
+    ));
+    loginDialog();
+    final unavailable = find.text('username-login-disabled-oidc-unavailable');
+
+    // Render the first frame before the zero-delay fetch timer runs.
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(unavailable, findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(unavailable, findsNothing);
+
+    response.complete(
+        jsonEncode({'body': '[]', 'headers': {}, 'status_code': 200}));
+    await tester.pumpAndSettle();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(unavailable, findsOneWidget);
+    expect(find.text('Retry'), findsNothing);
+  });
 }
