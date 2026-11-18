@@ -3599,7 +3599,7 @@ exit:
  * @return 0 on success, otherwise a Win32 error code
  */
 static UINT
-wf_cliprdr_server_format_data_response_impl(CliprdrClientContext *context,
+wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 									   const CLIPRDR_FORMAT_DATA_RESPONSE *formatDataResponse)
 {
 	UINT rc = ERROR_INTERNAL_ERROR;
@@ -3621,6 +3621,14 @@ wf_cliprdr_server_format_data_response_impl(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
+		AcquireSRWLockExclusive(&clipboard->format_data_lock);
+		if (!clipboard->format_data_pending ||
+			clipboard->format_data_conn_id != formatDataResponse->connID)
+		{
+			ReleaseSRWLockExclusive(&clipboard->format_data_lock);
+			return ERROR_INVALID_DATA;
+		}
+		clipboard->format_data_pending = FALSE;
 		clipboard->hmem = NULL;
 		clipboard->hmem_data_len = 0;
 
@@ -3676,25 +3684,6 @@ wf_cliprdr_server_format_data_response_impl(CliprdrClientContext *context,
 		DEBUG_CLIPRDR("wf_cliprdr_server_format_data_response(), SetEvent failed with 0x%x", GetLastError());
 		clipboard->formatDataRespReceived = TRUE;
 		rc = ERROR_INTERNAL_ERROR;
-	}
-	return rc;
-}
-
-static UINT wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
-													  const CLIPRDR_FORMAT_DATA_RESPONSE *response)
-{
-	UINT rc = ERROR_INVALID_DATA;
-	wfClipboard *clipboard;
-
-	if (!context || !response || !context->Custom)
-		return ERROR_INTERNAL_ERROR;
-	clipboard = (wfClipboard *)context->Custom;
-	AcquireSRWLockExclusive(&clipboard->format_data_lock);
-	if (clipboard->format_data_pending &&
-		clipboard->format_data_conn_id == response->connID)
-	{
-		clipboard->format_data_pending = FALSE;
-		rc = wf_cliprdr_server_format_data_response_impl(context, response);
 	}
 	ReleaseSRWLockExclusive(&clipboard->format_data_lock);
 	return rc;
