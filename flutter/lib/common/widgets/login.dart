@@ -742,7 +742,7 @@ Future<bool?> _openLoginDialog() async {
 
   final loginOptions = [].obs;
   final loginOptionsError = Rxn<Object>();
-  final loginOptionsInProgress = false.obs;
+  final loginOptionsInProgress = hideAccountPasswordLogin.obs;
   fetchLoginOptions() async {
     loginOptionsInProgress.value = true;
     try {
