@@ -827,5 +827,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Goedkeuring aanvragen"),
         ("Forever", "Voor altijd"),
         ("username-login-disabled-oidc-unavailable", "Inloggen met gebruikersnaam en wachtwoord is uitgeschakeld en er zijn geen OIDC-inlogmethoden beschikbaar."),
+        ("privacy-mode-background", ""),
+        ("Black", ""),
+        ("Desktop wallpaper and taskbar", ""),
     ].iter().cloned().collect();
 }

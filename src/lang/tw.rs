@@ -827,5 +827,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "請求批准"),
         ("Forever", "永久"),
         ("username-login-disabled-oidc-unavailable", "使用者名稱和密碼登入已停用，且沒有可用的 OIDC 登入方式。"),
+        ("privacy-mode-background", "隱私模式背景"),
+        ("Black", "純黑"),
+        ("Desktop wallpaper and taskbar", "桌面桌布與工作列"),
     ].iter().cloned().collect();
 }

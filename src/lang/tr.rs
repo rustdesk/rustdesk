@@ -827,5 +827,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Onay iste"),
         ("Forever", "Sonsuza dek"),
         ("username-login-disabled-oidc-unavailable", "Kullanıcı adı ve parola ile giriş devre dışı bırakılmış ve kullanılabilir OIDC giriş yöntemi yok."),
+        ("privacy-mode-background", ""),
+        ("Black", ""),
+        ("Desktop wallpaper and taskbar", ""),
     ].iter().cloned().collect();
 }
