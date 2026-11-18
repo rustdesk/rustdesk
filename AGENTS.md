@@ -194,6 +194,7 @@ A refactor added to cover a corner case rarely converges. Each new counter, time
 * When the number of tests needed to describe the behavior keeps growing, the implementation is too complex: simplify it instead of adding tests.
 * Dart tests go in `flutter/test/*_test.dart`, nowhere else: CI runs `flutter test` over that directory and nothing outside it. It runs on the VM, so a `@TestOn('browser')` suite runs in no CI job.
 * Rust unit tests go in a `#[cfg(test)]` module beside the code. CI runs `cargo test --workspace` with the default features on x86_64 Linux, `cargo test --lib` on the root package with the release feature set on macOS and Windows plus `-p clipboard` there, and on x86_64 Linux also the root package with `drm,drm-wake`, `scrap` with `drm` and `clipboard` with `unix-file-copy-paste`. On macOS and Windows, a platform-gated test in another workspace crate runs only if that platform's job names the crate with `-p`. Gate a test module on a feature or `target_os` only when the code under test is gated; a pure helper that only a gated path calls gets `#[cfg(any(feature = "...", test))]`, so its tests run everywhere.
+* A test behind a feature that no CI build enables needs a `cargo test` line that names it in a CI workflow, such as the Linux one in `.github/workflows/ci.yml`.
 * Web core tests are `flutter/web/js/src/*.test.ts`, run by jest in that repository's own CI.
 
 ## Reviewing a PR
