@@ -767,7 +767,10 @@ pub mod amyuni_idd {
     fn finish_privacy_initialization() -> ResultType<()> {
         if PRIVACY_INITIALIZATION_PENDING.load(atomic::Ordering::Relaxed) {
             wait_for_privacy_display_stability()?;
-            // Ok also includes the existing full-wait fallback, not only observed stability.
+            // The full-wait fallback can finish after reset_all removed the output.
+            if get_monitor_count() == 0 {
+                bail!("No active virtual displays after privacy mode preparation.");
+            }
             PRIVACY_INITIALIZATION_PENDING.store(false, atomic::Ordering::Relaxed);
         }
         Ok(())
@@ -794,7 +797,8 @@ pub mod amyuni_idd {
     }
 
     fn cleanup_prepared_monitor() -> ResultType<()> {
-        if get_monitor_count() == 0 {
+        let monitor_count = get_monitor_count();
+        if monitor_count == 0 {
             // The driver can create an inactive monitor that enumeration misses.
             // Undo its request directly; normal unplug may reject a physical-only layout.
             plug_monitor_(false, None)?;
@@ -810,7 +814,11 @@ pub mod amyuni_idd {
             1 => bail!("This only virtual display cannot be plugged out."),
             _ => {}
         }
-        plug_monitor_(false, None)?;
+        // Keep preparation serialized until removal is visible to the next attempt.
+        plug_monitor_(false, Some(PRIVACY_MONITOR_TIMEOUT))?;
+        if get_monitor_count() >= monitor_count {
+            bail!("Virtual display count did not decrease after preparation cleanup.");
+        }
         Ok(())
     }
 

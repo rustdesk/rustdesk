@@ -5259,6 +5259,13 @@ impl Connection {
             Ok(std::task::Poll::Pending) => return,
             Ok(std::task::Poll::Ready(display)) => display,
             Err(error) => {
+                const LOG_INTERVAL: Duration = Duration::from_secs(1);
+                hbb_common::throttled_log!(
+                    LOG_INTERVAL,
+                    error,
+                    "Failed to prepare privacy mode: {}",
+                    error
+                );
                 self.send(crate::common::make_privacy_mode_msg_with_details(
                     back_notification::PrivacyModeState::PrvOnFailed,
                     error.to_string(),

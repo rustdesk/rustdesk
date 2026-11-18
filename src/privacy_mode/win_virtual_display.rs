@@ -86,7 +86,20 @@ fn notify_privacy_mode_exit<'a>(
 }
 
 pub fn check_privacy_mode() {
-    let mut privacy_mode = super::PRIVACY_MODE.lock().unwrap();
+    // Retry next tick while another thread activates or restores privacy mode.
+    let mut privacy_mode = match super::PRIVACY_MODE.try_lock() {
+        Ok(privacy_mode) => privacy_mode,
+        Err(std::sync::TryLockError::WouldBlock) => return,
+        Err(error) => {
+            hbb_common::throttled_log!(
+                STATE_CHECK_LOG_INTERVAL,
+                error,
+                "Cannot check privacy mode: {}",
+                error
+            );
+            return;
+        }
+    };
     let Some(privacy_mode) = privacy_mode.as_mut() else {
         return;
     };
