@@ -54,6 +54,7 @@ jobs:
           git checkout ecd8d6a139eee76845ea66423fb739af450fda90
           git apply "${{ github.workspace }}/res/privacy_mode_background.patch"
           Copy-Item "${{ github.workspace }}/res/windows/privacy_background.h" WindowInjection/
+          Copy-Item "${{ github.workspace }}/res/windows/privacy_taskbar.h" WindowInjection/
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Test privacy backgrounds
@@ -62,7 +63,7 @@ jobs:
           $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
           $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           $arch = if ('${{ inputs.platform }}' -eq 'ARM64') { 'arm64' } else { 'x64' }
-          cmd /c "`"$vs/VC/Auxiliary/Build/vcvarsall.bat`" $arch && cl /nologo /EHsc /std:c++14 res/windows/privacy_background_test.cpp /Fe:privacy_background_test.exe /link gdiplus.lib user32.lib gdi32.lib"
+          cmd /c "`"$vs/VC/Auxiliary/Build/vcvarsall.bat`" $arch && cl /nologo /EHsc /std:c++14 res/windows/privacy_background_test.cpp /Fe:privacy_background_test.exe /link gdiplus.lib user32.lib gdi32.lib advapi32.lib"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./privacy_background_test.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

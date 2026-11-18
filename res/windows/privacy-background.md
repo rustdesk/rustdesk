@@ -3,11 +3,17 @@
 RustDesk now controls the Windows Privacy Mode 1 background from its own Display settings. On Windows, open **Settings → Display → Privacy mode background** and choose:
 
 - **Black**: an opaque black local screen.
-- **Desktop wallpaper and taskbar**: the current Windows wallpaper plus the real Windows taskbar. The taskbar clock and notification area keep updating, so the visible result follows a newly created virtual desktop more closely than a static image.
+- **Desktop wallpaper and taskbar**: the current Windows wallpaper, an idle taskbar containing pinned shortcut icons, and a live notification area with its clock.
 
 The choice is saved as the local `privacy-mode-background` option. When Privacy Mode 1 starts, RustDesk passes the choice to its Windows privacy-window broker. No PowerShell command, extra configuration file, or modified controller client is required. The Mac controller can use the same mode as any other controller; `Ctrl+P` continues to exit through the existing Windows keyboard hook.
 
-The desktop option captures the wallpaper path from the active Windows user when the privacy window is created. It does not copy desktop icons or application windows. The existing Privacy Mode 1 z-order leaves the real taskbar available, while the overlay covers the original desktop contents. Multi-monitor coverage and DPI scaling continue to use the existing privacy-window geometry.
+The desktop option reads the user's wallpaper path and Windows `WallpaperStyle` / `TileWallpaper` settings. Fit preserves the whole image and the desktop background color in the remaining space; fill crops the image. Center, stretch, tile and span also follow their respective layouts. It does not copy desktop icons or application windows. Different wallpaper images on different monitors and slideshow updates have not been validated.
+
+Privacy Mode 1 covers the real taskbar as well as the desktop. The DLL paints the taskbar background, a Windows start symbol, and icons loaded from the current user's pinned `.lnk` shortcuts. Shortcut targets or explicit icon resources supply the icons without shortcut arrows or running-state indicators. The application area never copies pixels from the real taskbar, so starting another application does not add its icon to the privacy background.
+
+Only the `TrayNotifyWnd` region is copied through a cropped DWM thumbnail. DWM updates the clock and notification icons continuously; a one-second geometry check handles taskbar movement and shell recreation. Hiding or destroying the overlay releases its thumbnail, icon handles and timer. The real taskbar keeps its original window position and input behavior.
+
+This is a rendered idle taskbar rather than a new Windows virtual desktop. Light/dark system themes and the Windows 11 alignment preference are read from Windows settings. Pinned shortcuts are read when the overlay starts; their enumeration order may differ from a manually rearranged native taskbar. Pins stored without `.lnk` shortcuts, search/widgets/task-view controls, custom taskbar styling and secondary-monitor notification areas are not fully reproduced. Auto-hidden or unavailable taskbars may remain hidden; the wallpaper still covers the screen. Multi-monitor coverage and DPI scaling use the existing privacy-window geometry.
 
 If the wallpaper cannot be loaded, Privacy Mode 1 falls back to pure black. Privacy Mode 2 is unchanged. This remains an overlay rather than a Windows security lock screen or a separate Windows virtual desktop.
 
@@ -29,21 +35,22 @@ display before the broker is stopped.
 ## Build
 
 The RustDesk workflow builds the pinned `RustDeskTempTopMostWindow` revision with
-`res/privacy_mode_background.patch` and `res/windows/privacy_background.h`.
+`res/privacy_mode_background.patch`, `res/windows/privacy_background.h` and
+`res/windows/privacy_taskbar.h`.
 Both x64 and ARM64 Windows DLL jobs use the same source. The Rust and Flutter
 settings select the background at runtime; the controller does not need a custom
 build.
 
 For a local DLL build, clone `https://github.com/rustdesk-org/RustDeskTempTopMostWindow`,
 checkout `ecd8d6a139eee76845ea66423fb739af450fda90`, apply the patch with `git apply`,
-and copy `res/windows/privacy_background.h` to `WindowInjection/`. Build the DLL
+and copy both headers to `WindowInjection/`. Build the DLL
 with the installed Visual Studio C++ toolset and place it beside the RustDesk
 executable. The regular RustDesk build downloads this artifact automatically.
 
 ## Validation
 
 The Windows workflow runs `privacy_background_test.cpp` for the black, wallpaper,
-reload and missing-image paths, and rebuilds `WindowInjection.dll`. A hardware
+reload, fit/fill layout and missing-image paths, and rebuilds `WindowInjection.dll`. A hardware
 check should still cover a real Windows host controlled from macOS: enter Mode 1,
 verify the local taskbar clock continues to update, test remote input, exit with
 `Ctrl+P`, disconnect while Privacy Mode is active, and exercise mixed-DPI and
@@ -58,3 +65,7 @@ the actual host as well; synthetic session messages do not validate the secure
 desktop transition. Unexpected broker termination also needs a runtime check.
 
 Reference: https://github.com/rustdesk/rustdesk/discussions/2919
+
+Windows layout values: https://learn.microsoft.com/en-us/windows/win32/controls/themesfileformat-overview
+
+Live thumbnails: https://learn.microsoft.com/en-us/windows/win32/dwm/thumbnail-ovw

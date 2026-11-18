@@ -1,9 +1,12 @@
 diff --git a/WindowInjection/dllmain.cpp b/WindowInjection/dllmain.cpp
-index 0f07aab..0138919 100644
+index 0f07aab..79c909e 100644
 --- a/WindowInjection/dllmain.cpp
 +++ b/WindowInjection/dllmain.cpp
-@@ -7,9 +7,15 @@
+@@ -5,11 +5,19 @@
+ #include <algorithm>
+ #include <tchar.h>
  #include <memory>
++#include <map>
  #include <type_traits>
  #include <vector>
 +#include <wtsapi32.h>
@@ -15,28 +18,90 @@ index 0f07aab..0138919 100644
  #include "./img.h"
  #include "./bitmap_loader.h"
 +#include "./privacy_background.h"
++#include "./privacy_taskbar.h"
  
  #pragma comment(lib, "gdi32.lib")
  
-@@ -98,6 +104,8 @@ bool g_refreshing_windows = false;
+@@ -48,34 +56,7 @@ constexpr UINT WM_RUSTDESK_REFRESH_WINDOWS = WM_APP + 1;
+ constexpr UINT WM_RUSTDESK_SHUTDOWN_WINDOWS = WM_APP + 2;
+ constexpr UINT WM_RUSTDESK_SHOW_WINDOWS = WM_APP + 3;
+ constexpr UINT WM_RUSTDESK_HIDE_WINDOWS = WM_APP + 4;
+-
+-typedef enum tagDWMWINDOWATTRIBUTE {
+-	DWMWA_NCRENDERING_ENABLED = 1,
+-	DWMWA_NCRENDERING_POLICY,
+-	DWMWA_TRANSITIONS_FORCEDISABLED,
+-	DWMWA_ALLOW_NCPAINT,
+-	DWMWA_CAPTION_BUTTON_BOUNDS,
+-	DWMWA_NONCLIENT_RTL_LAYOUT,
+-	DWMWA_FORCE_ICONIC_REPRESENTATION,
+-	DWMWA_FLIP3D_POLICY,
+-	DWMWA_EXTENDED_FRAME_BOUNDS,
+-	DWMWA_HAS_ICONIC_BITMAP,
+-	DWMWA_DISALLOW_PEEK,
+-	DWMWA_EXCLUDED_FROM_PEEK,
+-	DWMWA_CLOAK,
+-	DWMWA_CLOAKED,
+-	DWMWA_FREEZE_REPRESENTATION,
+-	DWMWA_PASSIVE_UPDATE_MODE,
+-	DWMWA_USE_HOSTBACKDROPBRUSH,
+-	DWMWA_USE_IMMERSIVE_DARK_MODE = 20,
+-	DWMWA_WINDOW_CORNER_PREFERENCE = 33,
+-	DWMWA_BORDER_COLOR,
+-	DWMWA_CAPTION_COLOR,
+-	DWMWA_TEXT_COLOR,
+-	DWMWA_VISIBLE_FRAME_BORDER_THICKNESS,
+-	DWMWA_SYSTEMBACKDROP_TYPE,
+-	DWMWA_LAST,
+-} DWMWINDOWATTRIBUTE;
++constexpr UINT_PTR PRIVACY_TASKBAR_TIMER = 1;
+ 
+ typedef HWND(WINAPI* CreateWindowInBand)(_In_ DWORD dwExStyle, _In_opt_ ATOM atom, _In_opt_ LPCWSTR lpWindowName, _In_ DWORD dwStyle, _In_ int X, _In_ int Y, _In_ int nWidth, _In_ int nHeight, _In_opt_ HWND hWndParent, _In_opt_ HMENU hMenu, _In_opt_ HINSTANCE hInstance, _In_opt_ LPVOID lpParam, DWORD band);
+ typedef BOOL(WINAPI* SetWindowBand)(HWND hWnd, HWND hwndInsertAfter, DWORD dwBand);
+@@ -98,6 +79,9 @@ bool g_refreshing_windows = false;
  bool g_shutting_down_windows = false;
  bool g_show_windows_after_refresh = false;
  bool g_privacy_windows_visible = false;
 +bool g_session_locked = false;
 +bool g_cursor_magnification_initialized = false;
++bool g_privacy_background_initialized = false;
  
  // TODO: Read the register table to get the path.
  // Or use hard code bitmap data.
-@@ -111,6 +119,8 @@ BitmapLoader g_bitmapLoader(false);
+@@ -111,6 +95,32 @@ BitmapLoader g_bitmapLoader(false);
  BitmapLoader g_bitmapLoader(true);
  #endif
  
 +PrivacyBackground g_privacyBackground;
++std::map<HWND, std::unique_ptr<PrivacyTaskbar>> g_privacyTaskbars;
++
++void RemovePrivacyTaskbar(HWND hwnd)
++{
++	KillTimer(hwnd, PRIVACY_TASKBAR_TIMER);
++	g_privacyTaskbars.erase(hwnd);
++}
++
++void UpdatePrivacyTaskbar(HWND hwnd)
++{
++	if (!g_privacyBackground.ShowsTaskbar() || !IsWindowVisible(hwnd))
++	{
++		RemovePrivacyTaskbar(hwnd);
++		return;
++	}
++	auto& taskbar = g_privacyTaskbars[hwnd];
++	if (!taskbar)
++	{
++		taskbar = std::make_unique<PrivacyTaskbar>();
++		// DWM updates the pixels. Poll only to handle shell restarts and geometry.
++		SetTimer(hwnd, PRIVACY_TASKBAR_TIMER, 1000, nullptr);
++	}
++	taskbar->Update(hwnd);
++}
 +
  // Mainly from https://github.com/microsoft/Windows-classic-samples/blob/67a8cddc25880ebc64018e833f0bf51589fd4521/Samples/Win7Samples/winui/shell/appshellintegration/NotificationIcon/NotificationIcon.cpp#L360
  VOID OnPaintGdi(HWND hwnd, HDC hdc);
  
-@@ -129,13 +139,15 @@ HWND CreateWin(HMODULE hModule, UINT zbid, const TCHAR* title, const TCHAR* clas
+@@ -129,13 +139,16 @@ HWND CreateWin(HMODULE hModule, UINT zbid, const TCHAR* title, const TCHAR* clas
  bool CreatePrivacyWindows(HMODULE hModule, UINT zbid, bool showWindows);
  bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid);
  void SchedulePrivacyWindowRefresh();
@@ -51,18 +116,36 @@ index 0f07aab..0138919 100644
 +void SetPrivacyWindowsVisible(bool visible, bool deferUntilUnlock = false);
 +void SetPrivacyCursorHidden(bool hidden);
 +bool IsSessionLocked();
++void ReloadPrivacyBackground();
  void DebugLogLastError(const TCHAR* caption);
  DWORD FinishPrivacyThread(DWORD result);
  
-@@ -147,6 +159,7 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+@@ -147,6 +160,8 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
  		break;
  
  	case WM_DESTROY:
++		RemovePrivacyTaskbar(hwnd);
 +		WTSUnRegisterSessionNotification(hwnd);
  		if (!g_refreshing_windows && !g_shutting_down_windows)
  		{
  			if (FALSE != IsWindowVisible(hwnd))
-@@ -166,12 +179,32 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+@@ -160,18 +175,49 @@ LRESULT CALLBACK TrashParentWndProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
+ 		}
+ 		break;
+ 	case WM_DISPLAYCHANGE:
++		SchedulePrivacyWindowRefresh();
++		break;
+ 	case WM_SETTINGCHANGE:
++		if (!g_session_locked && g_privacy_background_initialized) ReloadPrivacyBackground();
+ 		SchedulePrivacyWindowRefresh();
+ 		break;
++	case WM_SHOWWINDOW:
++		if (!wParam) RemovePrivacyTaskbar(hwnd);
++		else UpdatePrivacyTaskbar(hwnd);
++		break;
++	case WM_TIMER:
++		if (wParam == PRIVACY_TASKBAR_TIMER) UpdatePrivacyTaskbar(hwnd);
++		break;
  	case WM_RUSTDESK_REFRESH_WINDOWS:
  	case WM_RUSTDESK_SHOW_WINDOWS:
  	case WM_RUSTDESK_HIDE_WINDOWS:
@@ -82,6 +165,7 @@ index 0f07aab..0138919 100644
 +			g_session_locked = false;
 +			if (g_privacy_windows_visible)
 +			{
++				ReloadPrivacyBackground();
 +				for (auto window : g_hwnds) ShowWindow(window, SW_SHOW);
 +				SetPrivacyCursorHidden(true);
 +			}
@@ -96,7 +180,7 @@ index 0f07aab..0138919 100644
  		HANDLE myself;
  		myself = OpenProcess(PROCESS_ALL_ACCESS, false, GetCurrentProcessId());
  		TerminateProcess(myself, 0);
-@@ -299,6 +332,11 @@ HWND CreateWin(HMODULE hModule, UINT zbid, const TCHAR* title, const TCHAR* clas
+@@ -299,6 +345,11 @@ HWND CreateWin(HMODULE hModule, UINT zbid, const TCHAR* title, const TCHAR* clas
  		return FailCreatedWindow(hwnd, _T("SetWindowText"));
  	}
  
@@ -108,7 +192,7 @@ index 0f07aab..0138919 100644
  	//HRGN hrg = CreateRoundRectRgn(
  	//	mi.rcMonitor.left,
  	//	mi.rcMonitor.top,
-@@ -486,9 +524,73 @@ bool IsAnyPrivacyWindowVisible()
+@@ -486,9 +537,99 @@ bool IsAnyPrivacyWindowVisible()
  	return false;
  }
  
@@ -169,6 +253,32 @@ index 0f07aab..0138919 100644
 +	return locked;
 +}
 +
++void ReloadPrivacyBackground()
++{
++	if (g_module == nullptr)
++	{
++		return;
++	}
++	wchar_t module_path[MAX_PATH] = {};
++	if (GetModuleFileNameW(g_module, module_path, ARRAYSIZE(module_path)) == 0)
++	{
++		return;
++	}
++	std::wstring directory(module_path);
++	const auto separator = directory.find_last_of(L"\\/");
++	if (separator == std::wstring::npos)
++	{
++		return;
++	}
++	directory.resize(separator);
++	g_privacyBackground.Reload(directory);
++	g_privacy_background_initialized = true;
++	for (auto window : g_hwnds)
++	{
++		InvalidateRect(window, nullptr, TRUE);
++	}
++}
++
 +void SetPrivacyWindowsVisible(bool visible, bool deferUntilUnlock)
  {
  	g_privacy_windows_visible = visible;
@@ -183,7 +293,7 @@ index 0f07aab..0138919 100644
  	if (!visible)
  	{
  		g_show_windows_after_refresh = false;
-@@ -497,6 +599,7 @@ void SetPrivacyWindowsVisible(bool visible)
+@@ -497,6 +638,7 @@ void SetPrivacyWindowsVisible(bool visible)
  	{
  		ShowWindow(hwnd, visible ? SW_SHOW : SW_HIDE);
  	}
@@ -191,7 +301,7 @@ index 0f07aab..0138919 100644
  }
  
  bool ResizePrivacyWindow(HWND hwnd, const RECT& monitorRect)
-@@ -602,7 +705,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
+@@ -602,7 +744,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
  		return false;
  	}
  
@@ -200,7 +310,7 @@ index 0f07aab..0138919 100644
  	const auto createdBegin = g_hwnds.size();
  	for (size_t i = 0; i < monitorRects.size(); ++i)
  	{
-@@ -641,7 +744,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
+@@ -641,7 +783,7 @@ bool RefreshPrivacyWindows(HMODULE hModule, UINT zbid)
  	return true;
  }
  
@@ -209,7 +319,7 @@ index 0f07aab..0138919 100644
  {
  	switch (message)
  	{
-@@ -650,13 +753,14 @@ bool HandlePrivacyThreadMessage(UINT message)
+@@ -650,13 +792,14 @@ bool HandlePrivacyThreadMessage(UINT message)
  		(void)RefreshPrivacyWindows(g_module, g_zbid);
  		return true;
  	case WM_RUSTDESK_SHOW_WINDOWS:
@@ -226,7 +336,7 @@ index 0f07aab..0138919 100644
  		(void)DestroyPrivacyWindowsFrom(0);
  		PostQuitMessage(0);
  		return true;
-@@ -667,6 +771,7 @@ bool HandlePrivacyThreadMessage(UINT message)
+@@ -667,6 +810,7 @@ bool HandlePrivacyThreadMessage(UINT message)
  
  DWORD FinishPrivacyThread(DWORD result)
  {
@@ -234,26 +344,19 @@ index 0f07aab..0138919 100644
  	InterlockedExchange(&g_window_thread_id, 0);
  	return result;
  }
-@@ -806,6 +911,26 @@ VOID OnPaintGdiPlus(HWND hwnd, HDC hdc)
+@@ -806,6 +950,19 @@ VOID OnPaintGdiPlus(HWND hwnd, HDC hdc)
  			return;
  		}
  
-+	static bool background_initialized = false;
-+	if (!background_initialized)
++	if (!g_privacy_background_initialized)
 +	{
-+		wchar_t module_path[MAX_PATH] = {};
-+		GetModuleFileNameW(g_module, module_path, ARRAYSIZE(module_path));
-+		std::wstring directory(module_path);
-+		const auto separator = directory.find_last_of(L"\\/");
-+		if (separator != std::wstring::npos)
-+		{
-+			directory.resize(separator);
-+		}
-+		g_privacyBackground.Reload(directory);
-+		background_initialized = true;
++		ReloadPrivacyBackground();
 +	}
-+	if (g_privacyBackground.Paint(hdc, rcClient))
++	if (g_privacyBackground.Paint(hdc, rcClient, hwnd))
 +	{
++		UpdatePrivacyTaskbar(hwnd);
++		const auto taskbar = g_privacyTaskbars.find(hwnd);
++		if (taskbar != g_privacyTaskbars.end()) taskbar->second->Paint(hdc);
 +		return;
 +	}
 +
@@ -263,10 +366,10 @@ index 0f07aab..0138919 100644
  
 diff --git a/WindowInjection/privacy_background.h b/WindowInjection/privacy_background.h
 new file mode 100644
-index 0000000..b9093b3
+index 0000000..f0a4b07
 --- /dev/null
 +++ b/WindowInjection/privacy_background.h
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,180 @@
 +#pragma once
 +
 +#include <windows.h>
@@ -274,6 +377,42 @@ index 0000000..b9093b3
 +#include <algorithm>
 +#include <memory>
 +#include <string>
++
++inline void PaintPrivacyWallpaper(HDC hdc, const RECT& bounds, Gdiplus::Bitmap& image,
++	int style, bool tile)
++{
++	Gdiplus::Graphics graphics(hdc);
++	graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
++	if (tile)
++	{
++		Gdiplus::TextureBrush brush(&image, Gdiplus::WrapModeTile);
++		brush.TranslateTransform(static_cast<float>(bounds.left), static_cast<float>(bounds.top));
++		graphics.FillRectangle(&brush, Gdiplus::Rect(
++			static_cast<int>(bounds.left), static_cast<int>(bounds.top),
++			static_cast<int>(bounds.right - bounds.left), static_cast<int>(bounds.bottom - bounds.top)));
++		return;
++	}
++	const float width = static_cast<float>(bounds.right - bounds.left);
++	const float height = static_cast<float>(bounds.bottom - bounds.top);
++	float imageWidth = static_cast<float>(image.GetWidth());
++	float imageHeight = static_cast<float>(image.GetHeight());
++	if (style == 2)
++	{
++		imageWidth = width;
++		imageHeight = height;
++	}
++	else if (style != 0)
++	{
++		const float scale = style == 6
++			? (std::min)(width / imageWidth, height / imageHeight)
++			: (std::max)(width / imageWidth, height / imageHeight);
++		imageWidth *= scale;
++		imageHeight *= scale;
++	}
++	graphics.DrawImage(&image, Gdiplus::RectF(
++		bounds.left + (width - imageWidth) / 2, bounds.top + (height - imageHeight) / 2,
++		imageWidth, imageHeight));
++}
 +
 +// Loaded by the existing privacy window thread, after GDI+ initialization.
 +// The broker is launched in the active user's session, so it can resolve the
@@ -285,14 +424,63 @@ index 0000000..b9093b3
 +	{
 +		image_.reset();
 +		custom_ = true;
++		taskbar_ = false;
++		wallpaper_style_ = 10;
++		tile_wallpaper_ = false;
 +		wchar_t environment[32] = {};
 +		GetEnvironmentVariableW(L"RUSTDESK_PRIVACY_BACKGROUND", environment, ARRAYSIZE(environment));
 +		if (_wcsicmp(environment, L"wallpaper") == 0)
 +		{
++			taskbar_ = true;
++			wchar_t style[16] = {};
++			DWORD bytes = sizeof(style);
++			if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"WallpaperStyle",
++				RRF_RT_REG_SZ, nullptr, style, &bytes) == ERROR_SUCCESS)
++			{
++				wallpaper_style_ = _wtoi(style);
++			}
++			bytes = sizeof(style);
++			if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"TileWallpaper",
++				RRF_RT_REG_SZ, nullptr, style, &bytes) == ERROR_SUCCESS)
++			{
++				tile_wallpaper_ = _wtoi(style) == 1;
++			}
 +			wchar_t wallpaper[MAX_PATH] = {};
 +			if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, ARRAYSIZE(wallpaper), wallpaper, 0) != FALSE)
 +			{
-+				LoadImage(wallpaper);
++				if (TryLoadImage(wallpaper))
++				{
++					return;
++				}
++			}
++
++			// SPI_GETDESKWALLPAPER can be unavailable while the process is on the
++			// secure lock desktop. The per-user registry value remains available
++			// and lets us retry after WTS_SESSION_UNLOCK.
++			HKEY key = nullptr;
++			if (RegOpenKeyExW(
++				HKEY_CURRENT_USER,
++				L"Control Panel\\Desktop",
++				0,
++				KEY_READ,
++				&key) == ERROR_SUCCESS)
++			{
++				DWORD type = 0;
++				DWORD size = sizeof(wallpaper);
++				if (RegQueryValueExW(
++					key,
++					L"WallPaper",
++					nullptr,
++					&type,
++					reinterpret_cast<LPBYTE>(wallpaper),
++					&size) == ERROR_SUCCESS
++					&& (type == REG_SZ || type == REG_EXPAND_SZ)
++					&& wallpaper[0] != L'\0'
++				)
++				{
++					TryLoadImage(wallpaper);
++				}
++				RegCloseKey(key);
 +			}
 +			return;
 +		}
@@ -308,48 +496,295 @@ index 0000000..b9093b3
 +		custom_ = _wcsicmp(mode, L"notice") != 0;
 +		if (_wcsicmp(mode, L"wallpaper") == 0)
 +		{
-+			LoadImage(directory + L"\\privacy-wallpaper.png");
++			taskbar_ = true;
++			TryLoadImage(directory + L"\\privacy-wallpaper.png");
 +		}
 +	}
 +
++	bool ShowsTaskbar() const { return taskbar_; }
++
 +	// Return false to leave the original privacy notice painting path untouched.
-+	bool Paint(HDC hdc, const RECT& client) const
++	bool Paint(HDC hdc, const RECT& client, HWND window = nullptr) const
 +	{
 +		if (!custom_)
 +		{
 +			return false;
 +		}
-+		FillRect(hdc, &client, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
++		FillRect(hdc, &client, image_ ? GetSysColorBrush(COLOR_DESKTOP)
++			: static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
 +		if (image_)
 +		{
-+			const float width = static_cast<float>(client.right - client.left);
-+			const float height = static_cast<float>(client.bottom - client.top);
-+			const float scale = (std::max)(width / image_->GetWidth(), height / image_->GetHeight());
-+			const float imageWidth = image_->GetWidth() * scale;
-+			const float imageHeight = image_->GetHeight() * scale;
-+			Gdiplus::Graphics graphics(hdc);
-+			graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-+			graphics.DrawImage(image_.get(), Gdiplus::RectF(
-+				client.left + (width - imageWidth) / 2, client.top + (height - imageHeight) / 2,
-+				imageWidth, imageHeight));
++			RECT bounds = client;
++			if (window && (wallpaper_style_ == 22 || tile_wallpaper_))
++			{
++				bounds.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
++				bounds.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
++				bounds.right = bounds.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
++				bounds.bottom = bounds.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
++				MapWindowPoints(nullptr, window, reinterpret_cast<POINT*>(&bounds), 2);
++			}
++			PaintPrivacyWallpaper(hdc, bounds, *image_, wallpaper_style_, tile_wallpaper_);
 +		}
 +		return true;
 +	}
 +
 +private:
-+	void LoadImage(const std::wstring& path)
++	bool TryLoadImage(const std::wstring& path)
 +	{
 +		auto image = std::make_unique<Gdiplus::Bitmap>(path.c_str());
 +		if (image->GetLastStatus() == Gdiplus::Ok && image->GetWidth() && image->GetHeight())
 +		{
 +			image_ = std::move(image);
++			return true;
 +		}
 +		else
 +		{
 +			OutputDebugStringW(L"RustDesk: privacy wallpaper unavailable; using black.\n");
 +		}
++		return false;
 +	}
 +
 +	bool custom_ = false;
++	bool taskbar_ = false;
++	int wallpaper_style_ = 10;
++	bool tile_wallpaper_ = false;
 +	std::unique_ptr<Gdiplus::Bitmap> image_;
++};
+diff --git a/WindowInjection/privacy_taskbar.h b/WindowInjection/privacy_taskbar.h
+new file mode 100644
+index 0000000..a5940ed
+--- /dev/null
++++ b/WindowInjection/privacy_taskbar.h
+@@ -0,0 +1,232 @@
++#pragma once
++
++#include <windows.h>
++#include <dwmapi.h>
++#include <shlobj.h>
++#include <shellapi.h>
++#include <algorithm>
++#include <string>
++#include <vector>
++
++#pragma comment(lib, "dwmapi.lib")
++#pragma comment(lib, "shell32.lib")
++#pragma comment(lib, "ole32.lib")
++
++// Only the notification area is live. Application icons come from pinned
++// shortcuts, so running applications and their activity cannot enter the image.
++class PrivacyTaskbar
++{
++public:
++	PrivacyTaskbar() { LoadPinnedIcons(); }
++	PrivacyTaskbar(const PrivacyTaskbar&) = delete;
++	PrivacyTaskbar& operator=(const PrivacyTaskbar&) = delete;
++	~PrivacyTaskbar()
++	{
++		Reset();
++		for (auto icon : icons_) DestroyIcon(icon);
++	}
++
++	bool Update(HWND destination)
++	{
++		Search search = { MonitorFromWindow(destination, MONITOR_DEFAULTTONULL), nullptr };
++		EnumWindows(FindTaskbar, reinterpret_cast<LPARAM>(&search));
++		RECT screen = {};
++		if (!search.window || !IsWindowVisible(search.window) || !GetWindowRect(search.window, &screen))
++		{
++			if (!IsRectEmpty(&bounds_)) InvalidateRect(destination, &bounds_, FALSE);
++			Reset();
++			return false;
++		}
++		RECT bounds = screen;
++		MapWindowPoints(nullptr, destination, reinterpret_cast<POINT*>(&bounds), 2);
++		if (!EqualRect(&bounds_, &bounds))
++		{
++			InvalidateRect(destination, &bounds_, FALSE);
++			bounds_ = bounds;
++			InvalidateRect(destination, &bounds_, FALSE);
++		}
++		dpi_ = GetDpiForWindow(search.window);
++		if (!dpi_) dpi_ = 96;
++		tray_ = {};
++		const auto trayWindow = FindWindowExW(search.window, nullptr, L"TrayNotifyWnd", nullptr);
++		if (!trayWindow || !GetWindowRect(trayWindow, &tray_))
++		{
++			ResetThumbnail();
++			return true;
++		}
++		MapWindowPoints(nullptr, destination, reinterpret_cast<POINT*>(&tray_), 2);
++		if (source_ != search.window || !thumbnail_)
++		{
++			ResetThumbnail();
++			if (FAILED(DwmRegisterThumbnail(destination, search.window, &thumbnail_)))
++			{
++				OutputDebugStringW(L"RustDesk: cannot register privacy system tray thumbnail.\n");
++				return true;
++			}
++			source_ = search.window;
++		}
++		DWM_THUMBNAIL_PROPERTIES properties = {};
++		properties.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_RECTSOURCE
++			| DWM_TNP_VISIBLE | DWM_TNP_OPACITY | DWM_TNP_SOURCECLIENTAREAONLY;
++		properties.rcDestination = tray_;
++		properties.rcSource = tray_;
++		OffsetRect(&properties.rcSource, -bounds_.left, -bounds_.top);
++		properties.fVisible = TRUE;
++		properties.opacity = 255;
++		properties.fSourceClientAreaOnly = FALSE;
++		if (FAILED(DwmUpdateThumbnailProperties(thumbnail_, &properties)))
++		{
++			OutputDebugStringW(L"RustDesk: cannot update privacy system tray thumbnail.\n");
++			ResetThumbnail();
++		}
++		return true;
++	}
++
++	void Paint(HDC dc) const
++	{
++		if (IsRectEmpty(&bounds_)) return;
++		DWORD light = 1, bytes = sizeof(light);
++		RegGetValueW(HKEY_CURRENT_USER,
++			L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
++			L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &bytes);
++		const auto brush = CreateSolidBrush(light ? RGB(243, 243, 243) : RGB(32, 32, 32));
++		FillRect(dc, &bounds_, brush);
++		DeleteObject(brush);
++
++		const bool horizontal = bounds_.right - bounds_.left >= bounds_.bottom - bounds_.top;
++		const int slot = MulDiv(44, dpi_, 96);
++		const int iconSize = MulDiv(24, dpi_, 96);
++		const int padding = MulDiv(12, dpi_, 96);
++		int start = (horizontal ? bounds_.left : bounds_.top) + padding;
++		const int end = horizontal
++			? (IsRectEmpty(&tray_) ? bounds_.right : tray_.left)
++			: (IsRectEmpty(&tray_) ? bounds_.bottom : tray_.top);
++		DWORD centered = 0;
++		bytes = sizeof(centered);
++		RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
++			L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &centered, &bytes);
++		if (centered && horizontal)
++		{
++			const int group = slot * static_cast<int>(icons_.size() + 1);
++			start = (std::max)(start, (std::min)(static_cast<int>((bounds_.left + bounds_.right - group) / 2), end - group));
++		}
++		const int cross = horizontal
++			? (bounds_.top + bounds_.bottom - iconSize) / 2
++			: (bounds_.left + bounds_.right - iconSize) / 2;
++		const auto logo = CreateSolidBrush(RGB(0, 120, 215));
++		const int square = (iconSize - MulDiv(2, dpi_, 96)) / 2;
++		for (int y = 0; y < 2; ++y)
++			for (int x = 0; x < 2; ++x)
++			{
++				RECT rect = { (horizontal ? start + (slot - iconSize) / 2 : cross) + x * (iconSize - square),
++					(horizontal ? cross : start + (slot - iconSize) / 2) + y * (iconSize - square), 0, 0 };
++				rect.right = rect.left + square;
++				rect.bottom = rect.top + square;
++				FillRect(dc, &rect, logo);
++			}
++		DeleteObject(logo);
++		start += slot;
++		for (auto icon : icons_)
++		{
++			if (start + slot > end) break;
++			DrawIconEx(dc, horizontal ? start + (slot - iconSize) / 2 : cross,
++				horizontal ? cross : start + (slot - iconSize) / 2,
++				icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
++			start += slot;
++		}
++	}
++
++private:
++	static HICON LoadPinnedIcon(const std::wstring& path)
++	{
++		IShellLinkW* link = nullptr;
++		if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))))
++			return nullptr;
++		IPersistFile* file = nullptr;
++		HICON icon = nullptr;
++		if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&file))))
++		{
++			if (SUCCEEDED(file->Load(path.c_str(), STGM_READ)))
++			{
++				wchar_t location[MAX_PATH] = {}, expanded[MAX_PATH] = {};
++				int index = 0;
++				if (SUCCEEDED(link->GetIconLocation(location, ARRAYSIZE(location), &index)) && location[0])
++				{
++					ExpandEnvironmentStringsW(location, expanded, ARRAYSIZE(expanded));
++					ExtractIconExW(expanded, index, &icon, nullptr, 1);
++				}
++				if (!icon)
++				{
++					PIDLIST_ABSOLUTE target = nullptr;
++					if (SUCCEEDED(link->GetIDList(&target)) && target)
++					{
++						SHFILEINFOW info = {};
++						if (SHGetFileInfoW(reinterpret_cast<LPCWSTR>(target), 0, &info, sizeof(info),
++							SHGFI_PIDL | SHGFI_ICON | SHGFI_LARGEICON)) icon = info.hIcon;
++						CoTaskMemFree(target);
++					}
++				}
++			}
++			file->Release();
++		}
++		link->Release();
++		return icon;
++	}
++
++	void LoadPinnedIcons()
++	{
++		const auto initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
++		PWSTR roaming = nullptr;
++		if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming)))
++		{
++			const auto directory = std::wstring(roaming)
++				+ L"\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\";
++			CoTaskMemFree(roaming);
++			WIN32_FIND_DATAW data = {};
++			const auto find = FindFirstFileW((directory + L"*.lnk").c_str(), &data);
++			if (find != INVALID_HANDLE_VALUE)
++			{
++				do
++				{
++					const auto icon = LoadPinnedIcon(directory + data.cFileName);
++					if (icon) icons_.push_back(icon);
++				} while (FindNextFileW(find, &data));
++				FindClose(find);
++			}
++		}
++		if (SUCCEEDED(initialized)) CoUninitialize();
++	}
++
++	struct Search { HMONITOR monitor; HWND window; };
++	static BOOL CALLBACK FindTaskbar(HWND window, LPARAM parameter)
++	{
++		wchar_t name[64] = {};
++		GetClassNameW(window, name, ARRAYSIZE(name));
++		if (wcscmp(name, L"Shell_TrayWnd") != 0
++			&& wcscmp(name, L"Shell_SecondaryTrayWnd") != 0) return TRUE;
++		auto& search = *reinterpret_cast<Search*>(parameter);
++		if (MonitorFromWindow(window, MONITOR_DEFAULTTONULL) != search.monitor) return TRUE;
++		search.window = window;
++		return FALSE;
++	}
++
++	void ResetThumbnail()
++	{
++		if (thumbnail_) DwmUnregisterThumbnail(thumbnail_);
++		thumbnail_ = nullptr;
++		source_ = nullptr;
++	}
++	void Reset()
++	{
++		ResetThumbnail();
++		bounds_ = {};
++		tray_ = {};
++	}
++
++	HWND source_ = nullptr;
++	HTHUMBNAIL thumbnail_ = nullptr;
++	RECT bounds_ = {};
++	RECT tray_ = {};
++	UINT dpi_ = 96;
++	std::vector<HICON> icons_;
 +};

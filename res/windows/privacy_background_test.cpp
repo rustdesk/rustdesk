@@ -57,6 +57,17 @@ int wmain()
 		Check(GetPixel(dc, 40, 30) == RGB(0, 0, 0), "black center pixel");
 		Check(GetPixel(dc, 0, 0) == RGB(0, 0, 0), "black corner pixel");
 		std::puts("PASS black background");
+		{
+			Gdiplus::Bitmap image(20, 40, static_cast<Gdiplus::PixelFormat>(0x26200A));
+			{ Gdiplus::Graphics graphics(&image); graphics.Clear(Gdiplus::Color::Red); }
+			FillRect(dc, &client, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+			PaintPrivacyWallpaper(dc, client, image, 6, false);
+			Check(GetPixel(dc, 40, 30) == RGB(255, 0, 0), "fit keeps image center");
+			Check(GetPixel(dc, 5, 30) == RGB(0, 0, 0), "fit preserves letterbox instead of cropping");
+			PaintPrivacyWallpaper(dc, client, image, 10, false);
+			Check(GetPixel(dc, 5, 30) == RGB(255, 0, 0), "fill covers the letterbox");
+			std::puts("PASS Windows fit and fill produce different visible layouts");
+		}
 
 		{
 			Gdiplus::Bitmap image(20, 40, static_cast<Gdiplus::PixelFormat>(0x26200A));
