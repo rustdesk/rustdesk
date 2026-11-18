@@ -38,6 +38,8 @@ use std::iter::FromIterator;
 use std::path::PathBuf;
 #[cfg(target_os = "windows")]
 use std::sync::Arc;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use std::sync::atomic::AtomicBool;
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
@@ -176,6 +178,8 @@ lazy_static::lazy_static! {
 }
 
 static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+static CM_INPUT_BLOCKED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct ConnectionManager<T: InvokeUiCM> {
@@ -266,7 +270,12 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             .write()
             .unwrap()
             .retain(|_, c| !(c.disconnected && c.peer_id == client.peer_id));
-        CLIENTS.write().unwrap().insert(id, client.clone());
+        {
+            let mut clients = CLIENTS.write().unwrap();
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            send_cm_input_blocked(&client, CM_INPUT_BLOCKED.load(Ordering::SeqCst));
+            clients.insert(id, client.clone());
+        }
         self.ui_handler.add_connection(&client);
     }
 
@@ -346,6 +355,23 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             client.in_voice_call = false;
             self.ui_handler.update_voice_call_state(client);
         }
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn set_cm_input_blocked(blocked: bool) {
+    // Serialize publication with connection registration, including its initial state.
+    let clients = CLIENTS.write().unwrap();
+    CM_INPUT_BLOCKED.store(blocked, Ordering::SeqCst);
+    for client in clients.values() {
+        send_cm_input_blocked(client, blocked);
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn send_cm_input_blocked(client: &Client, blocked: bool) {
+    if let Err(err) = client.tx.send(Data::CmInputBlocked(blocked)) {
+        log::trace!("CM input protection update for closed connection: {err}");
     }
 }
 

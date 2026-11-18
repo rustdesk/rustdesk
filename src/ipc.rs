@@ -371,6 +371,10 @@ pub enum Data {
     SystemInfo(Option<String>),
     ClickTime(i64),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    CmInputBlocked(bool),
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    CmInputDisconnected,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     MouseMoveTime(i64),
     Authorize,
     Close,

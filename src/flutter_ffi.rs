@@ -2302,6 +2302,12 @@ pub fn cm_get_click_time() -> f64 {
     return 0 as _;
 }
 
+pub fn cm_set_input_blocked(_blocked: bool) -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::ui_cm_interface::set_cm_input_blocked(_blocked);
+    SyncReturn(())
+}
+
 pub fn cm_switch_permission(conn_id: i32, name: String, enabled: bool) {
     #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::switch_permission(conn_id, name, enabled)

@@ -151,6 +151,7 @@ class ConnectionManagerState extends State<ConnectionManager>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    _updateRemoteInputProtection(state);
     if (state == AppLifecycleState.resumed) {
       if (!allowRemoteCMModification()) {
         shouldBeBlocked(_controlPageBlock, null);
@@ -163,13 +164,21 @@ class ConnectionManagerState extends State<ConnectionManager>
   void initState() {
     gFFI.serverModel.updateClientState();
     WidgetsBinding.instance.addObserver(this);
+    _updateRemoteInputProtection(WidgetsBinding.instance.lifecycleState);
     super.initState();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    bind.cmSetInputBlocked(blocked: false);
     super.dispose();
+  }
+
+  void _updateRemoteInputProtection(AppLifecycleState? state) {
+    bind.cmSetInputBlocked(
+        blocked: state == AppLifecycleState.resumed &&
+            !allowRemoteCMModification());
   }
 
   @override

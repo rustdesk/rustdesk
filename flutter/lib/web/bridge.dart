@@ -1495,6 +1495,10 @@ class RustdeskImpl {
     throw UnimplementedError("cmGetClickTime");
   }
 
+  void cmSetInputBlocked({required bool blocked, dynamic hint}) {
+    throw UnimplementedError("cmSetInputBlocked");
+  }
+
   Future<void> cmSwitchPermission(
       {required int connId,
       required String name,
