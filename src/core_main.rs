@@ -528,7 +528,11 @@ pub fn core_main() -> Option<CoreMainAction> {
                     let options = crate::ipc::get_options();
                     println!("{}", options.get(&args[1]).unwrap_or(&"".to_owned()));
                 } else if args.len() == 3 {
+                    #[cfg(all(target_os = "linux", feature = "drm"))]
+                    let drm_capture_was_on = crate::platform::linux::drm_capture_enabled();
                     crate::ipc::set_option(&args[1], &args[2]);
+                    #[cfg(all(target_os = "linux", feature = "drm"))]
+                    crate::ipc::sync_drm_capture_to_service_blocking(drm_capture_was_on);
                 }
             } else {
                 println!("Installation and administrative privileges required!");

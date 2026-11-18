@@ -1476,8 +1476,9 @@ impl DrmCaptureSwitch {
 }
 
 /// The service acts on `allow-drm-capture` from its own copy of the config, which only a non-root
-/// `--server` syncs. A root process that changed the option (the CLI, a root `--server` at a
-/// login screen applying a strategy) hands its config over itself, or the change never takes effect.
+/// `--server` syncs. A root `--server` that applied a change to the option hands its config over
+/// itself, and so does the CLI, or the change never takes effect. The UI does not: `SyncConfig`
+/// carries the whole config, and a long-lived process may hold an older copy of the rest.
 #[cfg(feature = "drm")]
 pub async fn sync_drm_capture_to_service(was_on: bool) {
     use crate::ipc::{connect_trusted_device_service, Data};
