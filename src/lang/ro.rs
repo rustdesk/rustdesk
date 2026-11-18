@@ -826,5 +826,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Folderul selectat nu este gol. Instalarea poate șterge datele existente. Ia în considerare alegerea altui folder."),
         ("Request approval", "Solicită aprobarea"),
         ("Forever", "Pentru totdeauna"),
+        ("username-login-disabled-oidc-unavailable", "Autentificarea cu nume de utilizator și parolă este dezactivată și nu sunt disponibile metode de autentificare OIDC."),
     ].iter().cloned().collect();
 }
