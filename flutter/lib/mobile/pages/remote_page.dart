@@ -89,7 +89,10 @@ class RemotePage extends StatefulWidget {
 
 class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Timer? _timer;
+  Timer? _barAutoHideTimer;
   bool _showBar = !isWebDesktop;
+  bool _isPointerOnBlueBar = false;
+  bool _isSupportVoiceCall = false;
   bool _showGestureHelp = false;
   String _value = '';
   Orientation? _currentOrientation;
@@ -165,8 +168,17 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         registerSessionShortcutActions(gFFI);
         _registerMobileChatShortcut();
         registerToolbarShortcuts(context, widget.id, gFFI);
+        _resetBarAutoHideTimer();
       }
     });
+    _resetBarAutoHideTimer();
+    if (!isWeb) {
+      gFFI.invokeMethod("get_value", "KEY_IS_SUPPORT_VOICE_CALL").then((v) {
+        if (mounted) {
+          setState(() => _isSupportVoiceCall = v == true);
+        }
+      });
+    }
     WidgetsBinding.instance.addObserver(this);
 
     inputModel.keyboardInputAllowed = true;
@@ -184,8 +196,39 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     }
   }
 
+  bool _isCursorTouchingBlueBar() {
+    if (_isPointerOnBlueBar) return true;
+    final c = gFFI.canvasModel;
+    final m = gFFI.cursorModel;
+    final displayHeight = c.getDisplayHeight().toDouble();
+    if (displayHeight > 0 && m.y >= displayHeight - 36.0) {
+      return true;
+    }
+    final canvasHeight = c.size.height;
+    if (canvasHeight <= 0) return false;
+    final cursorScreenY = m.y * c.scale + c.y + c.getAdjustY();
+    return cursorScreenY >= canvasHeight - 64.0;
+  }
+
+  void _resetBarAutoHideTimer() {
+    _barAutoHideTimer?.cancel();
+    if (!_showBar) return;
+    _barAutoHideTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (!mounted || !_showBar) return;
+      if (gFFI.ffiModel.waitForFirstImage.isFalse &&
+          !_isCursorTouchingBlueBar()) {
+        setState(() {
+          _showBar = false;
+        });
+      } else {
+        _resetBarAutoHideTimer();
+      }
+    });
+  }
+
   @override
   Future<void> dispose() async {
+    _barAutoHideTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_handleLocalKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
@@ -499,7 +542,30 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         clientClose(sessionId, gFFI);
         return false;
       },
-      child: Scaffold(
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (event) {
+          if (_showBar) {
+            final screenHeight = MediaQuery.of(context).size.height;
+            _isPointerOnBlueBar = event.position.dy >= screenHeight - 80.0;
+            _resetBarAutoHideTimer();
+          }
+        },
+        onPointerMove: (event) {
+          if (_showBar) {
+            final screenHeight = MediaQuery.of(context).size.height;
+            _isPointerOnBlueBar = event.position.dy >= screenHeight - 80.0;
+            _resetBarAutoHideTimer();
+          }
+        },
+        onPointerUp: (event) {
+          if (_showBar) {
+            final screenHeight = MediaQuery.of(context).size.height;
+            _isPointerOnBlueBar = event.position.dy >= screenHeight - 80.0;
+            _resetBarAutoHideTimer();
+          }
+        },
+        child: Scaffold(
           // workaround for https://github.com/rustdesk/rustdesk/issues/3131
           floatingActionButtonLocation: keyboardIsVisible
               ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
@@ -526,6 +592,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         _showGestureHelp = false;
                       } else {
                         _showBar = !_showBar;
+                        _isPointerOnBlueBar = false;
+                        if (_showBar) {
+                          _resetBarAutoHideTimer();
+                        } else {
+                          _barAutoHideTimer?.cancel();
+                        }
                       }
                     });
                   }),
@@ -579,7 +651,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 })
               ],
             )),
-          )),
+          ))),
     );
   }
 
@@ -591,6 +663,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     return RawPointerMouseRegion(
       cursor: ffiModel.keyboard ? SystemMouseCursors.none : MouseCursor.defer,
       inputModel: inputModel,
+      onPointerDown: (_) {
+        _isPointerOnBlueBar = false;
+        if (_showBar) _resetBarAutoHideTimer();
+      },
       // Disable RawKeyFocusScope before the connecting is established.
       // The "Delete" key on the soft keyboard may be grabbed when inputting the password dialog.
       child: gFFI.ffiModel.pi.isSet.isTrue
@@ -604,7 +680,30 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   Widget getBottomAppBar() {
     final ffiModel = Provider.of<FfiModel>(context);
-    return BottomAppBar(
+    return MouseRegion(
+      onEnter: (_) {
+        _isPointerOnBlueBar = true;
+        _resetBarAutoHideTimer();
+      },
+      onHover: (_) {
+        _isPointerOnBlueBar = true;
+        _resetBarAutoHideTimer();
+      },
+      onExit: (_) {
+        _isPointerOnBlueBar = false;
+        _resetBarAutoHideTimer();
+      },
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) {
+          _isPointerOnBlueBar = true;
+          _resetBarAutoHideTimer();
+        },
+        onPointerMove: (_) {
+          _isPointerOnBlueBar = true;
+          _resetBarAutoHideTimer();
+        },
+        child: BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
       child: Row(
@@ -661,21 +760,17 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   (isWeb
                       ? []
                       : <Widget>[
-                          futureBuilder(
-                              future: gFFI.invokeMethod(
-                                  "get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
-                              hasData: (isSupportVoiceCall) => IconButton(
-                                    color: Colors.white,
-                                    icon: isAndroid && isSupportVoiceCall
-                                        ? SvgPicture.asset('assets/chat.svg',
-                                            colorFilter: ColorFilter.mode(
-                                                Colors.white, BlendMode.srcIn))
-                                        : Icon(Icons.message),
-                                    onPressed: () =>
-                                        isAndroid && isSupportVoiceCall
-                                            ? showChatOptions(widget.id)
-                                            : onPressedTextChat(widget.id),
-                                  ))
+                          IconButton(
+                            color: Colors.white,
+                            icon: isAndroid && _isSupportVoiceCall
+                                ? SvgPicture.asset('assets/chat.svg',
+                                    colorFilter: ColorFilter.mode(
+                                        Colors.white, BlendMode.srcIn))
+                                : Icon(Icons.message),
+                            onPressed: () => isAndroid && _isSupportVoiceCall
+                                ? showChatOptions(widget.id)
+                                : onPressedTextChat(widget.id),
+                          )
                         ]) +
                   [
                     IconButton(
@@ -693,12 +788,20 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
                     ? null
                     : () {
-                        setState(() => _showBar = !_showBar);
+                        setState(() {
+                          _showBar = !_showBar;
+                          _isPointerOnBlueBar = false;
+                          if (_showBar) {
+                            _resetBarAutoHideTimer();
+                          } else {
+                            _barAutoHideTimer?.cancel();
+                          }
+                        });
                       },
               )),
         ],
       ),
-    );
+    )));
   }
 
   bool get showCursorPaint =>
