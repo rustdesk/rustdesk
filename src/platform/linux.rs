@@ -1475,6 +1475,35 @@ impl DrmCaptureSwitch {
     }
 }
 
+/// The service acts on `allow-drm-capture` from its own copy of the config, which only a non-root
+/// `--server` syncs. A root process that changed the option (the CLI, a root `--server` at a
+/// login screen applying a strategy) hands its config over itself, or the change never takes effect.
+#[cfg(feature = "drm")]
+pub async fn sync_drm_capture_to_service(was_on: bool) {
+    use crate::ipc::{connect_trusted_device_service, Data};
+    use hbb_common::config::Config2;
+    if !is_root() || drm_capture_enabled() == was_on {
+        return;
+    }
+    let result = async {
+        let mut conn = connect_trusted_device_service(1000).await?;
+        let configs = Box::new((Config::get(), Config2::get()));
+        conn.send(&Data::SyncConfig(Some(configs))).await?;
+        conn.next_timeout(1000).await
+    }
+    .await;
+    match result {
+        Ok(Some(Data::SyncConfig(None))) => {
+            log::info!("allow-drm-capture changed as root, config synced to the service")
+        }
+        Ok(Some(Data::SecurityConfigError(err))) => {
+            log::warn!("the service rejected the allow-drm-capture sync: {err}")
+        }
+        Ok(_) => log::warn!("the service did not confirm the allow-drm-capture sync"),
+        Err(err) => log::warn!("failed to sync allow-drm-capture to the service: {err}"),
+    }
+}
+
 #[inline]
 /// Returns the cached active `(uid, username)` snapshot when available.
 /// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
