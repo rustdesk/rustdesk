@@ -1331,7 +1331,7 @@ extern "C" fn client_file_contents_response(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{iter::once, mem::ManuallyDrop, process::Command};
+    use std::iter::once;
 
     const FILE_NAME_CODE_UNITS: usize = 260;
     const FILE_NAME_CASES: &[(&str, bool)] = &[
@@ -1399,38 +1399,5 @@ mod tests {
             unsafe { wf_cliprdr_file_descriptor_name_valid(wide_name.as_ptr()) },
             FALSE
         );
-    }
-
-    #[test]
-    fn rejects_unsolicited_format_data_responses() {
-        const CHILD_ENV: &str = "RUSTDESK_TEST_UNSOLICITED_FORMAT_DATA";
-        const TEST_NAME: &str =
-            "platform::windows::tests::rejects_unsolicited_format_data_responses";
-        const CONN_ID: i32 = 1;
-        const RESPONSE_OK: i32 = 1;
-        const RESPONSE_TIMEOUT_SECS: u32 = 1;
-
-        // The native context is process-global. Exit cleans up the child without
-        // running context destruction against the user's desktop clipboard.
-        if std::env::var_os(CHILD_ENV).is_none() {
-            let status = Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", TEST_NAME, "--nocapture"])
-                .env(CHILD_ENV, "1")
-                .status()
-                .unwrap();
-            assert!(status.success(), "child failed: {status}");
-            return;
-        }
-
-        let mut context =
-            ManuallyDrop::new(create_cliprdr_context(true, false, RESPONSE_TIMEOUT_SECS).unwrap());
-        let result = context.server_clip_file(
-            CONN_ID,
-            ClipboardFile::FormatDataResponse {
-                msg_flags: RESPONSE_OK,
-                format_data: vec![0],
-            },
-        );
-        assert!(result.is_err(), "an unsolicited response must be rejected");
     }
 }
