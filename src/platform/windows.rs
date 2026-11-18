@@ -1569,9 +1569,10 @@ fn resolve_firewall_rules(
 ) -> &'static str {
     let value = args
         .filter_map(|arg| {
-            arg.to_string_lossy()
-                .strip_prefix("FIREWALLRULES=")
-                .map(str::to_owned)
+            let arg = arg.to_string_lossy();
+            let (key, value) = arg.split_once('=')?;
+            key.eq_ignore_ascii_case("FIREWALLRULES")
+                .then(|| value.to_owned())
         })
         .last()
         .map(Ok)

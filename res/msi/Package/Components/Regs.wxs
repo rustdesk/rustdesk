@@ -5,6 +5,9 @@
 	<Fragment>
 		<Property Id="FIREWALLRULES" Secure="yes" />
 		<Property Id="PREVIOUSFIREWALLRULES" Secure="yes">
+			<!-- For this per-machine MSI, Root="HKLM" Key="Software\Classes\$(var.RegKeyRoot)" reads the machine-stored value directly.
+				 Keep Root="HKCR" Key="$(var.RegKeyRoot)" for consistency with existing shortcut/printer searches.
+				 https://learn.microsoft.com/en-us/windows/win32/msi/registry-table -->
 			<RegistrySearch Id="FirewallRulesSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="FIREWALLRULES" Type="raw" />
 		</Property>
 		<SetProperty Action="SetSavedFirewallRulesValue" Id="FIREWALLRULES" Value="[PREVIOUSFIREWALLRULES]" After="AppSearch" Sequence="first" Condition="NOT FIREWALLRULES AND PREVIOUSFIREWALLRULES" />
