@@ -1495,10 +1495,6 @@ class RustdeskImpl {
     throw UnimplementedError("cmGetClickTime");
   }
 
-  void cmSetInputBlocked({required bool blocked, dynamic hint}) {
-    throw UnimplementedError("cmSetInputBlocked");
-  }
-
   Future<void> cmSwitchPermission(
       {required int connId,
       required String name,
@@ -1949,6 +1945,11 @@ class RustdeskImpl {
   Future<void> mainSetCommon(
       {required String key, required String value, dynamic hint}) {
     throw UnimplementedError("mainSetCommon");
+  }
+
+  void mainSetCommonSync(
+      {required String key, required String value, dynamic hint}) {
+    throw UnimplementedError("mainSetCommonSync");
   }
 
   Future<String> sessionHandleScreenshot(

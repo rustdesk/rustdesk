@@ -2302,12 +2302,6 @@ pub fn cm_get_click_time() -> f64 {
     return 0 as _;
 }
 
-pub fn cm_set_input_blocked(_blocked: bool) -> SyncReturn<()> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::ui_cm_interface::set_cm_input_blocked(_blocked);
-    SyncReturn(())
-}
-
 pub fn cm_switch_permission(conn_id: i32, name: String, enabled: bool) {
     #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::switch_permission(conn_id, name, enabled)
@@ -2875,6 +2869,18 @@ fn verified_update_artifact_for_release_page_url(
     let update_msi = false;
     let query = crate::updater::current_update_artifact_query(update_msi);
     crate::updater::verified_update_artifact_for_release_page_url(release_page_url, query)
+}
+
+pub fn main_set_common_sync(
+    key: String,
+    _value: String,
+) -> hbb_common::anyhow::Result<SyncReturn<()>> {
+    match key.as_str() {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        "cm-input-blocked" => crate::ui_cm_interface::set_cm_input_blocked(_value.parse()?),
+        _ => hbb_common::bail!("Unsupported synchronous command: {key}"),
+    }
+    Ok(SyncReturn(()))
 }
 
 pub fn main_set_common(_key: String, _value: String) {

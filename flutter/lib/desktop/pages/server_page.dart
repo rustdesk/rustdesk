@@ -171,14 +171,14 @@ class ConnectionManagerState extends State<ConnectionManager>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    bind.cmSetInputBlocked(blocked: false);
+    bind.mainSetCommonSync(key: 'cm-input-blocked', value: 'false');
     super.dispose();
   }
 
   void _updateRemoteInputProtection(AppLifecycleState? state) {
-    bind.cmSetInputBlocked(
-        blocked: state == AppLifecycleState.resumed &&
-            !allowRemoteCMModification());
+    final blocked =
+        state == AppLifecycleState.resumed && !allowRemoteCMModification();
+    bind.mainSetCommonSync(key: 'cm-input-blocked', value: blocked.toString());
   }
 
   @override
