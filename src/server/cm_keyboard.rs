@@ -4,15 +4,15 @@ use hbb_common::{tokio::sync::mpsc::UnboundedSender, ResultType};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Default)]
-pub(super) struct CmInputGate {
+pub(super) struct CmKeyboardGate {
     blocked: AtomicBool,
 }
 
-impl CmInputGate {
-    pub(super) fn disconnect(&self, tx: &UnboundedSender<Data>) -> ResultType<()> {
+impl CmKeyboardGate {
+    pub(super) fn on_cm_ipc_disconnect(&self, tx: &UnboundedSender<Data>) -> ResultType<()> {
         // Block before notifying the connection loop, which may await network I/O.
         self.set_blocked(true);
-        tx.send(Data::CmInputDisconnected)?;
+        tx.send(Data::CmIpcDisconnected)?;
         Ok(())
     }
 
@@ -48,7 +48,7 @@ mod tests {
 
     #[test]
     fn focused_cm_blocks_queued_keys_and_text_until_blur() {
-        let gate = CmInputGate::default();
+        let gate = CmKeyboardGate::default();
         let mut key = KeyEvent::new();
         key.down = true;
         key.set_chr(u32::from('a'));
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn blocked_cm_allows_key_releases_but_not_commands() {
-        let gate = CmInputGate::default();
+        let gate = CmKeyboardGate::default();
         gate.set_blocked(true);
         let mut key = KeyEvent::new();
         key.set_control_key(ControlKey::Control);
@@ -95,17 +95,17 @@ mod tests {
     }
 
     #[test]
-    fn cm_disconnect_blocks_before_connection_receiver_runs() {
+    fn cm_ipc_disconnect_blocks_before_connection_receiver_runs() {
         for blocked in [false, true] {
-            let gate = CmInputGate::default();
+            let gate = CmKeyboardGate::default();
             gate.set_blocked(blocked);
             let (tx, mut rx) = mpsc::unbounded_channel();
             let mut key = KeyEvent::new();
             key.set_seq("queued text".to_owned());
 
-            gate.disconnect(&tx).unwrap();
+            gate.on_cm_ipc_disconnect(&tx).unwrap();
             assert!(!gate.allows(&key));
-            assert!(matches!(rx.try_recv().unwrap(), Data::CmInputDisconnected));
+            assert!(matches!(rx.try_recv().unwrap(), Data::CmIpcDisconnected));
         }
     }
 }

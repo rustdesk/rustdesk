@@ -2877,7 +2877,7 @@ pub fn main_set_common_sync(
 ) -> hbb_common::anyhow::Result<SyncReturn<()>> {
     match key.as_str() {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        "cm-input-blocked" => crate::ui_cm_interface::set_cm_input_blocked(_value.parse()?),
+        "cm-keyboard-blocked" => crate::ui_cm_interface::set_cm_keyboard_blocked(_value.parse()?),
         _ => hbb_common::bail!("Unsupported synchronous command: {key}"),
     }
     Ok(SyncReturn(()))

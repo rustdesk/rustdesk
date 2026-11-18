@@ -179,7 +179,7 @@ lazy_static::lazy_static! {
 
 static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-static CM_INPUT_BLOCKED: AtomicBool = AtomicBool::new(false);
+static CM_KEYBOARD_BLOCKED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct ConnectionManager<T: InvokeUiCM> {
@@ -273,7 +273,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         {
             let mut clients = CLIENTS.write().unwrap();
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            send_cm_input_blocked(&client, CM_INPUT_BLOCKED.load(Ordering::SeqCst));
+            send_cm_keyboard_blocked(&client, CM_KEYBOARD_BLOCKED.load(Ordering::SeqCst));
             clients.insert(id, client.clone());
         }
         self.ui_handler.add_connection(&client);
@@ -359,19 +359,19 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn set_cm_input_blocked(blocked: bool) {
+pub fn set_cm_keyboard_blocked(blocked: bool) {
     // Serialize publication with connection registration, including its initial state.
     let clients = CLIENTS.write().unwrap();
-    CM_INPUT_BLOCKED.store(blocked, Ordering::SeqCst);
+    CM_KEYBOARD_BLOCKED.store(blocked, Ordering::SeqCst);
     for client in clients.values() {
-        send_cm_input_blocked(client, blocked);
+        send_cm_keyboard_blocked(client, blocked);
     }
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn send_cm_input_blocked(client: &Client, blocked: bool) {
-    if let Err(err) = client.tx.send(Data::CmInputBlocked(blocked)) {
-        log::trace!("CM input protection update for closed connection: {err}");
+fn send_cm_keyboard_blocked(client: &Client, blocked: bool) {
+    if let Err(err) = client.tx.send(Data::CmKeyboardBlocked(blocked)) {
+        log::trace!("CM keyboard protection update for closed connection: {err}");
     }
 }
 
