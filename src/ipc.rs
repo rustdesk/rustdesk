@@ -2047,6 +2047,8 @@ pub fn set_option(key: &str, value: &str) {
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     let _nat = CheckTestNatType::new();
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    let drm_capture_was_on = crate::platform::linux::drm_capture_enabled();
     let affected = crate::trusted_devices::config::changes_authentication(&value);
     let connection = connect(1000, "").await;
     if affected && connection.is_err() {
@@ -2068,6 +2070,8 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
         }
     }
     Config::set_options(value);
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    crate::platform::linux::sync_drm_capture_to_service(drm_capture_was_on).await;
     Ok(())
 }
 
