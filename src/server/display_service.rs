@@ -716,6 +716,9 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
             Ok(())
         })?;
 
+        #[cfg(windows)]
+        crate::privacy_mode::check_privacy_mode();
+
         if let Some(msg_out) = check_get_displays_changed_msg() {
             sp.send(msg_out);
             log::info!("Displays changed");

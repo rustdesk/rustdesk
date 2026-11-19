@@ -1,6 +1,8 @@
 use super::{PrivacyMode, PrivacyModeState, INVALID_PRIVACY_MODE_CONN_ID, NO_PHYSICAL_DISPLAYS};
 use crate::{platform::windows::reg_display_settings, virtual_display_manager};
-use hbb_common::{allow_err, bail, config::Config, log, ResultType};
+use hbb_common::{
+    allow_err, bail, config::Config, log, tokio::sync::mpsc::UnboundedSender, ResultType,
+};
 use std::{
     io::Error,
     ops::{Deref, DerefMut},
@@ -30,6 +32,104 @@ use winapi::{
 pub(super) const PRIVACY_MODE_IMPL: &str = super::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY;
 
 const CONFIG_KEY_REG_RECOVERY: &str = "reg_recovery";
+const STATE_CHECK_LOG_INTERVAL: Duration = Duration::from_secs(60);
+
+fn check_active_displays(displays: impl Iterator<Item = DISPLAY_DEVICEW>) -> ResultType<()> {
+    let device_string: Vec<u16> = virtual_display_manager::get_cur_device_string()
+        .encode_utf16()
+        .collect();
+    let mut has_virtual_display = false;
+    for display in displays {
+        // Inactive outputs are not part of the desktop. Mirror drivers expose
+        // invisible pseudo-monitors, not active physical screens.
+        if display.StateFlags & DISPLAY_DEVICE_ACTIVE == 0
+            || display.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER != 0
+        {
+            continue;
+        }
+        if !display.DeviceString.starts_with(&device_string) {
+            bail!("Physical display is still active.");
+        }
+        has_virtual_display = true;
+    }
+    if !has_virtual_display {
+        bail!("No active virtual displays.");
+    }
+    Ok(())
+}
+
+fn check_current_displays() -> ResultType<()> {
+    check_active_displays((0..).map_while(|index| {
+        let mut display: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
+        display.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as _;
+        let result = unsafe { EnumDisplayDevicesW(std::ptr::null(), index, &mut display, 0) };
+        (result != FALSE).then_some(display)
+    }))
+}
+
+fn notify_privacy_mode_exit<'a>(
+    connections: impl IntoIterator<Item = (i32, &'a UnboundedSender<crate::ipc::Data>)>,
+    owner_id: i32,
+) -> ResultType<()> {
+    let Some((_, sender)) = connections
+        .into_iter()
+        .find(|(conn_id, _)| *conn_id == owner_id)
+    else {
+        bail!("Privacy mode owner connection {} is unavailable.", owner_id);
+    };
+    sender.send(crate::ipc::Data::PrivacyModeState((
+        owner_id,
+        PrivacyModeState::OffUnknown,
+        PRIVACY_MODE_IMPL.to_owned(),
+    )))?;
+    Ok(())
+}
+
+pub fn check_privacy_mode() {
+    // Retry next tick while another thread activates or restores privacy mode.
+    let mut privacy_mode = match super::PRIVACY_MODE.try_lock() {
+        Ok(privacy_mode) => privacy_mode,
+        Err(std::sync::TryLockError::WouldBlock) => return,
+        Err(error) => {
+            hbb_common::throttled_log!(
+                STATE_CHECK_LOG_INTERVAL,
+                error,
+                "Cannot check privacy mode: {}",
+                error
+            );
+            return;
+        }
+    };
+    let Some(privacy_mode) = privacy_mode.as_mut() else {
+        return;
+    };
+    let conn_id = privacy_mode.pre_conn_id();
+    if conn_id == INVALID_PRIVACY_MODE_CONN_ID || privacy_mode.get_impl_key() != PRIVACY_MODE_IMPL {
+        return;
+    }
+    let Err(error) = check_current_displays() else {
+        return;
+    };
+
+    let cleanup = privacy_mode.turn_off_privacy(conn_id, None);
+    // The connection manager may be absent; notify the owner through its server channel.
+    let notification = {
+        let connections = crate::server::AUTHED_CONNS.lock().unwrap();
+        notify_privacy_mode_exit(
+            connections.iter().map(|conn| (conn.conn_id, &conn.sender)),
+            conn_id,
+        )
+    };
+    hbb_common::throttled_log!(
+        STATE_CHECK_LOG_INTERVAL,
+        error,
+        "Privacy mode is no longer active: {}; conn_id: {}; cleanup: {:?}; notification: {:?}",
+        error,
+        conn_id,
+        cleanup,
+        notification
+    );
+}
 
 struct Display {
     dm: DEVMODEW,
@@ -444,6 +544,12 @@ impl PrivacyModeImpl {
 }
 
 impl PrivacyMode for PrivacyModeImpl {
+    fn add_prepared_virtual_display(&mut self, index: u32) -> ResultType<()> {
+        // Preparation created this monitor before ensure_virtual_display could record it.
+        self.virtual_displays_added.push(index);
+        Ok(())
+    }
+
     fn is_async_privacy_mode(&self) -> bool {
         virtual_display_manager::is_amyuni_idd()
     }
@@ -505,6 +611,8 @@ impl PrivacyMode for PrivacyModeImpl {
         } else {
             reset_config_reg_connectivity();
         };
+
+        check_current_displays()?;
 
         // OpenInputDesktop and block the others' input ?
         guard.conn_id = conn_id;
@@ -583,4 +691,65 @@ pub fn restore_reg_connectivity(plug_out_monitors: bool, force: bool) {
         }
     }
     reset_config_reg_connectivity();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hbb_common::tokio::sync::mpsc::{error::TryRecvError, unbounded_channel};
+
+    #[test]
+    fn privacy_mode_checks_active_displays() {
+        let virtual_name = virtual_display_manager::get_cur_device_string();
+        let active = DISPLAY_DEVICE_ACTIVE;
+        let mirror = active | DISPLAY_DEVICE_MIRRORING_DRIVER;
+        for (devices, expected) in [
+            (
+                vec![(virtual_name, active), ("Physical display\0", active)],
+                false,
+            ),
+            (
+                vec![
+                    (virtual_name, active),
+                    ("Physical display\0", 0),
+                    ("Mirror display\0", mirror),
+                ],
+                true,
+            ),
+            (vec![(virtual_name, 0)], false),
+        ] {
+            let displays = devices.into_iter().map(|(name, flags)| {
+                let mut display: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
+                display.StateFlags = flags;
+                for (target, value) in display.DeviceString.iter_mut().zip(name.encode_utf16()) {
+                    *target = value;
+                }
+                display
+            });
+            assert_eq!(check_active_displays(displays).is_ok(), expected);
+        }
+    }
+
+    #[test]
+    fn privacy_mode_exit_uses_owner_channel_without_cm() {
+        const OWNER_CONN_ID: i32 = 1;
+        const OTHER_CONN_ID: i32 = 2;
+        let (owner_sender, mut owner_receiver) = unbounded_channel();
+        let (other_sender, mut other_receiver) = unbounded_channel();
+        let connections = [
+            (OWNER_CONN_ID, &owner_sender),
+            (OTHER_CONN_ID, &other_sender),
+        ];
+
+        assert!(notify_privacy_mode_exit([], OWNER_CONN_ID).is_err());
+        notify_privacy_mode_exit(connections, OWNER_CONN_ID).unwrap();
+        assert!(matches!(
+            owner_receiver.try_recv().unwrap(),
+            crate::ipc::Data::PrivacyModeState((OWNER_CONN_ID, PrivacyModeState::OffUnknown, impl_key))
+                if impl_key == PRIVACY_MODE_IMPL
+        ));
+        assert_eq!(other_receiver.try_recv().err(), Some(TryRecvError::Empty));
+        drop(owner_receiver);
+        assert!(notify_privacy_mode_exit(connections, OWNER_CONN_ID).is_err());
+    }
 }
