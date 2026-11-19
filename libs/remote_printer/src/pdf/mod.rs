@@ -32,6 +32,14 @@ pub struct Queue {
     pub port: String,
 }
 
+pub fn remove_unused_port(port: &str) -> ResultType<()> {
+    let Some(identifier) = port.strip_prefix(PIPE_PREFIX) else {
+        bail!("The saved PDF port is outside the protected printer namespace");
+    };
+    port_name(identifier)?;
+    ports::remove(port)
+}
+
 pub(crate) fn display_name(app_name: &str) -> ResultType<String> {
     validate_app_name(app_name)?;
     Ok(format!("{app_name} Printer"))

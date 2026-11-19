@@ -1912,7 +1912,6 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> ResultType<String>
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
-    crate::remote_print::setup::uninstall_if_owned()?;
     if is_self_service_running() {
         // This CLI entry is synchronous. Portable builds reuse the retained user configuration.
         let result = tokio::runtime::Builder::new_current_thread()

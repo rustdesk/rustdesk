@@ -12,6 +12,8 @@ use windows::{
     },
 };
 
+mod removal;
+
 pub(crate) const INSTALL: &str = "--install-remote-printer";
 pub(crate) const UNINSTALL: &str = "--uninstall-remote-printer";
 const INSTALL_MARKER: &str = "PDFPRINTER";
@@ -73,17 +75,10 @@ pub(crate) fn execute(command: &str) -> ResultType<()> {
             })?;
         }
         UNINSTALL => {
-            remote_printer::pdf::uninstall(&crate::get_app_name())?;
+            removal::uninstall()?;
             write_marker(false)?;
         }
         _ => bail!("Unknown PDF printer setup operation"),
-    }
-    Ok(())
-}
-
-pub(crate) fn uninstall_if_owned() -> ResultType<()> {
-    if installed_marker()? {
-        request(UNINSTALL)?;
     }
     Ok(())
 }

@@ -92,6 +92,7 @@
     <ClInclude Include="Common.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="PrinterServiceState.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CustomActions.cpp" />
