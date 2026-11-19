@@ -443,6 +443,10 @@ struct wf_clipboard
 	HANDLE thread;
 	HANDLE formatDataRespEvent;
 	BOOL formatDataRespReceived;
+	/* Only the pending request may publish hmem; the STA owns it after the response. */
+	SRWLOCK format_data_lock;
+	BOOL format_data_pending;
+	UINT32 format_data_conn_id;
 
 	LPDATAOBJECT data_obj;
 	HANDLE data_obj_mutex;
@@ -2045,12 +2049,22 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 	if (!clipboard || !clipboard->context || !clipboard->context->ClientFormatDataRequest)
 		return ERROR_INTERNAL_ERROR;
 
+	AcquireSRWLockExclusive(&clipboard->format_data_lock);
+	if (clipboard->format_data_pending || clipboard->hmem)
+	{
+		ReleaseSRWLockExclusive(&clipboard->format_data_lock);
+		return ERROR_BUSY;
+	}
 	rc = try_reset_event(clipboard->formatDataRespEvent);
 	if (rc != ERROR_SUCCESS)
 	{
+		ReleaseSRWLockExclusive(&clipboard->format_data_lock);
 		return rc;
 	}
 	clipboard->formatDataRespReceived = FALSE;
+	clipboard->format_data_conn_id = connID;
+	clipboard->format_data_pending = TRUE;
+	ReleaseSRWLockExclusive(&clipboard->format_data_lock);
 
 	remoteFormatId = get_remote_format_id(clipboard, formatId);
 
@@ -2058,12 +2072,26 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 	formatDataRequest.requestedFormatId = remoteFormatId;
 	clipboard->requestedFormatId = formatId;
 	rc = clipboard->context->ClientFormatDataRequest(clipboard->context, &formatDataRequest);
-	if (rc != ERROR_SUCCESS)
+	if (rc == ERROR_SUCCESS)
 	{
-		return rc;
+		rc = wait_response_event(connID, clipboard, clipboard->formatDataRespEvent,
+			&clipboard->formatDataRespReceived, &clipboard->hmem);
 	}
 
-	return wait_response_event(connID, clipboard, clipboard->formatDataRespEvent, &clipboard->formatDataRespReceived, &clipboard->hmem);
+	AcquireSRWLockExclusive(&clipboard->format_data_lock);
+	clipboard->format_data_pending = FALSE;
+	if (rc != ERROR_SUCCESS)
+	{
+		if (clipboard->hmem && GlobalFree(clipboard->hmem))
+			rc = ERROR_INTERNAL_ERROR;
+		else
+		{
+			clipboard->hmem = NULL;
+			clipboard->hmem_data_len = 0;
+		}
+	}
+	ReleaseSRWLockExclusive(&clipboard->format_data_lock);
+	return rc;
 }
 
 static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
@@ -3625,6 +3653,14 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
+		AcquireSRWLockExclusive(&clipboard->format_data_lock);
+		if (!clipboard->format_data_pending ||
+			clipboard->format_data_conn_id != formatDataResponse->connID)
+		{
+			ReleaseSRWLockExclusive(&clipboard->format_data_lock);
+			return ERROR_INVALID_DATA;
+		}
+		clipboard->format_data_pending = FALSE;
 		clipboard->hmem = NULL;
 		clipboard->hmem_data_len = 0;
 
@@ -3681,6 +3717,7 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 		clipboard->formatDataRespReceived = TRUE;
 		rc = ERROR_INTERNAL_ERROR;
 	}
+	ReleaseSRWLockExclusive(&clipboard->format_data_lock);
 	return rc;
 }
 
@@ -4118,6 +4155,8 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 	clipboard->data_obj = NULL;
 	clipboard->copied = FALSE;
 	InitializeSRWLock(&clipboard->format_map_lock);
+	InitializeSRWLock(&clipboard->format_data_lock);
+	clipboard->format_data_pending = FALSE;
 
 	if (clipboard->hUser32)
 	{
