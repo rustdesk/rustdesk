@@ -826,5 +826,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Таңдалған бума бос емес. Орнату бар деректерді жоюы мүмкін. Басқа буманы таңдаған жөн."),
         ("Request approval", "Мақұлдауды сұрау"),
         ("Forever", "Мәңгі"),
+        ("username-login-disabled-oidc-unavailable", "Пайдаланушы аты мен құпиясөз арқылы кіру өшірілген және қолжетімді OIDC кіру әдістері жоқ."),
     ].iter().cloned().collect();
 }

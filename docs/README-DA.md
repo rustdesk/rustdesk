@@ -129,7 +129,7 @@ Sørg for, at du kører disse kommandoer fra roden af RustDesk-lageret, ellers k
 
 ## Filstruktur
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs funktioner til filoverførsel og nogle andre hjælpefunktioner
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs funktioner til filoverførsel og nogle andre hjælpefunktioner
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: Skærmbillede
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platform specifik tastatur/mus kontrol
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI

@@ -254,6 +254,7 @@ class MainService : Service() {
         val homePath = applicationContext.getExternalFilesDir(null)?.absolutePath
             ?: applicationContext.filesDir.absolutePath
         FFI.startServer(configPath, homePath, "")
+        FFI.setInputServiceOpen(InputService.isOpen)
 
         createForegroundNotification()
     }

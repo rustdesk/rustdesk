@@ -595,7 +595,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep screen on", "Διατήρηση οθόνης Ανοιχτή"),
         ("Never", "Ποτέ"),
         ("During controlled", "Κατα την διάρκεια απομακρυσμένου ελέγχου"),
-        ("During service is on", "Κατα την εκκίνηση της υπηρεσίας Rustdesk"),
+        ("During service is on", "Κατα την εκκίνηση της υπηρεσίας RustDesk"),
         ("Capture screen using DirectX", "Καταγραφή οθόνης με χρήση DirectX"),
         ("Back", "Πίσω"),
         ("Apps", "Εφαρμογές"),
@@ -826,5 +826,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Ο επιλεγμένος φάκελος δεν είναι κενός. Η εγκατάσταση ενδέχεται να διαγράψει υπάρχοντα δεδομένα. Εξετάστε το ενδεχόμενο να επιλέξετε διαφορετικό φάκελο."),
         ("Request approval", "Αίτημα έγκρισης"),
         ("Forever", "Για πάντα"),
+        ("username-login-disabled-oidc-unavailable", "Η σύνδεση με όνομα χρήστη και κωδικό πρόσβασης είναι απενεργοποιημένη και δεν υπάρχουν διαθέσιμες μέθοδοι σύνδεσης OIDC."),
     ].iter().cloned().collect();
 }

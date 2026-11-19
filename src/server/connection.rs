@@ -802,10 +802,15 @@ impl Connection {
                         }
                         ipc::Data::SwitchPermission{name, enabled} => {
                             log::info!("Change permission {} -> {}", name, enabled);
+                            // Android broadcasts these to every connection; only remote sessions use them.
+                            if (&name == "keyboard" || &name == "clipboard") && !conn.is_remote() {
+                                continue;
+                            }
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
                                 conn.send_permission(Permission::Keyboard, enabled).await;
-                                if let Some(s) = conn.server.upgrade() {
+                                // Until authorized, only record the value; try_sub_monitor_services subscribes from it.
+                                if let Some(s) = conn.server.upgrade().filter(|_| conn.authorized) {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
                                         conn.inner.clone(), conn.can_sub_clipboard_service());
@@ -822,7 +827,7 @@ impl Connection {
                             } else if &name == "clipboard" {
                                 conn.clipboard = enabled;
                                 conn.send_permission(Permission::Clipboard, enabled).await;
-                                if let Some(s) = conn.server.upgrade() {
+                                if let Some(s) = conn.server.upgrade().filter(|_| conn.authorized) {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
                                         conn.inner.clone(), conn.can_sub_clipboard_service());
@@ -853,7 +858,7 @@ impl Connection {
                                     conn.try_empty_file_clipboard();
                                 }
                                 #[cfg(feature = "unix-file-copy-paste")]
-                                if let Some(s) = conn.server.upgrade() {
+                                if let Some(s) = conn.server.upgrade().filter(|_| conn.authorized) {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::FILE_NAME,
                                         conn.inner.clone(),
@@ -3202,6 +3207,11 @@ impl Connection {
                     if self.is_authed_view_camera_conn() {
                         return true;
                     }
+                    #[cfg(target_os = "android")]
+                    if !self.peer_keyboard_enabled() {
+                        self.update_auto_disconnect_timer();
+                        return true;
+                    }
                     #[cfg(any(target_os = "android", target_os = "ios"))]
                     if let Err(e) = call_main_service_pointer_input("mouse", me.mask, me.x, me.y) {
                         log::debug!("call_main_service_pointer_input fail:{}", e);
@@ -3239,6 +3249,11 @@ impl Connection {
                 }
                 Some(message::Union::PointerDeviceEvent(pde)) => {
                     if self.is_authed_view_camera_conn() {
+                        return true;
+                    }
+                    #[cfg(target_os = "android")]
+                    if !self.peer_keyboard_enabled() {
+                        self.update_auto_disconnect_timer();
                         return true;
                     }
                     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -3281,6 +3296,9 @@ impl Connection {
                 #[cfg(any(target_os = "android"))]
                 Some(message::Union::KeyEvent(mut me)) => {
                     if self.is_authed_view_camera_conn() {
+                        return true;
+                    }
+                    if !self.peer_keyboard_enabled() {
                         return true;
                     }
                     let key = match me.mode.enum_value() {
@@ -5331,6 +5349,8 @@ impl Connection {
             && self.keyboard
             && !raii::AuthedConnID::session_reconnected(self.inner.id(), &self.session_key())
         {
+            #[cfg(target_os = "macos")]
+            privacy_mode::macos::turn_off_before_lock(self.inner.id());
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             lock_screen().await;
         }
