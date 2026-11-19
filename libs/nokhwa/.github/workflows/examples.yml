@@ -1,0 +1,32 @@
+# Based on https://github.com/actions-rs/meta/blob/master/recipes/quickstart.md
+#
+# While our "example" application has the platform-specific code,
+# for simplicity we are compiling and testing everything on the Ubuntu environment only.
+# For multi-OS testing see the `cross.yml` workflow.
+
+on:
+  pull_request: {}
+    
+
+name: Compile all examples
+
+# We specify the examples individually since they might need a different environment
+jobs:
+  compile_example_threaded_capture:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install nightly toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+
+      - name: Cargo Check 
+        run: |
+          cd examples/threaded-capture
+          cargo check

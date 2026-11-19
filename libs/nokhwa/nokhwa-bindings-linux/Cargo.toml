@@ -1,0 +1,23 @@
+[package]
+name = "nokhwa-bindings-linux"
+version = "0.1.1"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/l1npengtul/nokhwa"
+description = "The V4L2 bindings crate for `nokhwa`"
+keywords = ["v4l", "v4l2", "linux", "capture", "webcam"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+# Disable arena buffer of v4l2 for the crate to work on raspberry pi with faulty v4l2 driver
+# https://github.com/l1npengtul/nokhwa/pull/121
+no-arena-buffer = []
+
+[dependencies]
+
+[dependencies.nokhwa-core]
+version = "0.1"
+path = "../nokhwa-core"
+
+[target.'cfg(target_os="linux")'.dependencies]
+v4l = { version = "0.14", features = ["v4l2-sys"] }

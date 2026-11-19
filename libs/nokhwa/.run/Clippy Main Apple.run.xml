@@ -1,0 +1,19 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Clippy Main Apple" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+    <option name="command" value="clippy --features &quot;output-wgpu, input-avfoundation&quot;" />
+    <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+    <option name="channel" value="STABLE" />
+    <option name="requiredFeatures" value="true" />
+    <option name="allFeatures" value="false" />
+    <option name="emulateTerminal" value="true" />
+    <option name="withSudo" value="false" />
+    <option name="buildTarget" value="REMOTE" />
+    <option name="backtrace" value="SHORT" />
+    <envs />
+    <option name="isRedirectInput" value="false" />
+    <option name="redirectInputPath" value="" />
+    <method v="2">
+      <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+    </method>
+  </configuration>
+</component>

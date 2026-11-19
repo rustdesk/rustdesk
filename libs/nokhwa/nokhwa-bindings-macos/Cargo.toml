@@ -1,0 +1,26 @@
+[package]
+name = "nokhwa-bindings-macos"
+version = "0.2.2"
+edition = "2021"
+authors = ["l1npengtul"]
+license = "Apache-2.0"
+repository = "https://github.com/l1npengtul/nokhwa"
+description = "The AVFoundation bindings crate for `nokhwa`"
+keywords = ["avfoundation", "macos", "capture", "webcam"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[dependencies.nokhwa-core]
+version = "0.1"
+path = "../nokhwa-core"
+
+[target.'cfg(any(target_os="macos",target_os="ios"))'.dependencies]
+core-media-sys = "0.1"
+core-video-sys = "0.1"
+cocoa-foundation = "0.1"
+core-foundation = "0.9"
+objc = { version = "0.2", features = ["exception"] }
+block = "0.1"
+flume = "0.11"
+once_cell = "1.16"

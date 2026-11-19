@@ -1,0 +1,23 @@
+/target
+Cargo.lock
+
+.idea
+nokhwa.iml
+.vs
+
+.vscode
+
+/pkg
+
+target
+
+.DS_STORE
+# Devenv
+.devenv*
+devenv.local.nix
+
+# direnv
+.direnv
+
+# pre-commit
+.pre-commit-config.yaml
