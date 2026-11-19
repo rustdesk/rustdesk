@@ -757,8 +757,7 @@ impl Connection {
                 Some(data) = rx_from_cm.recv() => {
                     match data {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        ipc::Data::CmIpcDisconnected
-                            if super::cm_keyboard::should_close_on_disconnect(conn.is_remote(), &conn.lr) => {
+                        ipc::Data::CmIpcDisconnected if conn.is_remote() => {
                             conn.on_close("Connection manager IPC disconnected", false).await;
                             break;
                         }

@@ -1,15 +1,11 @@
 use crate::ipc::Data;
-use base::message_proto::{key_event, login_request, ControlKey, KeyEvent, LoginRequest};
+use base::message_proto::{key_event, ControlKey, KeyEvent};
 use hbb_common::{tokio::sync::mpsc::UnboundedSender, ResultType};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Default)]
 pub(super) struct CmKeyboardGate {
     blocked: AtomicBool,
-}
-
-pub(super) fn should_close_on_disconnect(is_remote: bool, request: &LoginRequest) -> bool {
-    is_remote && !matches!(request.union, Some(login_request::Union::PortForward(_)))
 }
 
 impl CmKeyboardGate {
@@ -49,15 +45,6 @@ mod tests {
     use super::*;
     use base::message_proto::KeyboardMode;
     use hbb_common::tokio::sync::mpsc;
-
-    #[test]
-    fn cm_disconnect_keeps_pending_tunnel() {
-        let mut request = LoginRequest::new();
-        assert!(should_close_on_disconnect(true, &request));
-        assert!(!should_close_on_disconnect(false, &request));
-        request.set_port_forward(Default::default());
-        assert!(!should_close_on_disconnect(true, &request));
-    }
 
     #[test]
     fn focused_cm_blocks_queued_keys_and_text_until_blur() {

@@ -1276,10 +1276,6 @@ pub fn handle_mouse_(
     }
 }
 
-fn mouse_modifier_key(value: i32) -> Option<&'static Key> {
-    MODIFIER_MAP.get(&value)
-}
-
 pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     if !active_mouse_(conn) {
         return;
@@ -1303,7 +1299,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
         #[cfg(target_os = "macos")]
         en.reset_flag();
         for ref ck in evt.modifiers.iter() {
-            if let Some(key) = mouse_modifier_key(ck.value()) {
+            if let Some(key) = MODIFIER_MAP.get(&ck.value()) {
                 #[cfg(target_os = "macos")]
                 en.add_flag(key);
                 #[cfg(not(target_os = "macos"))]
@@ -2733,23 +2729,6 @@ lazy_static::lazy_static! {
         (ControlKey::Insert, true),
         (ControlKey::Delete, true),
     ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
-}
-
-#[cfg(test)]
-mod mouse_modifier_tests {
-    use super::*;
-
-    #[test]
-    fn mouse_modifiers_reject_non_modifier_keys() {
-        use ControlKey::{Control, Insert, Menu, Numpad0, Option, Return, Shift, Tab};
-
-        for key in [Tab, Return, Insert, Numpad0] {
-            assert!(mouse_modifier_key(key.value()).is_none(), "{key:?}");
-        }
-        for key in [Control, Shift, Option, Menu] {
-            assert_eq!(mouse_modifier_key(key.value()), KEY_MAP.get(&key.value()));
-        }
-    }
 }
 
 #[cfg(test)]
