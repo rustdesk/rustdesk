@@ -1563,6 +1563,31 @@ pub fn remove_meta_toml_cmd(is_msi: bool, path: &str) -> String {
     }
 }
 
+fn resolve_firewall_rules(
+    args: impl Iterator<Item = OsString>,
+    read_saved: impl FnOnce() -> io::Result<String>,
+) -> &'static str {
+    let value = args
+        .filter_map(|arg| {
+            let arg = arg.to_string_lossy();
+            let (key, value) = arg.split_once('=')?;
+            key.eq_ignore_ascii_case("FIREWALLRULES")
+                .then(|| value.to_owned())
+        })
+        .last()
+        .map(Ok)
+        .unwrap_or_else(read_saved);
+    let error = match value.as_deref() {
+        Ok("0" | "N" | "n") => return "0",
+        Ok("1" | "Y" | "y") => return "1",
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return "1",
+        Err(error) => error.to_string(),
+        _ => "FIREWALLRULES must be 0, 1, Y, or N".to_owned(),
+    };
+    log::warn!("Failed to resolve FIREWALLRULES: {error}; using the default value 1 and continuing installation");
+    "1"
+}
+
 fn get_after_install(
     exe: &str,
     reg_value_start_menu_shortcuts: Option<String>,
@@ -1571,6 +1596,12 @@ fn get_after_install(
 ) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
+    // Resolve the saved choice before the reinstall script deletes its registry key.
+    let firewall_rules = resolve_firewall_rules(std::env::args_os().skip(1), || {
+        RegKey::predef(HKEY_CLASSES_ROOT)
+            .open_subkey(format!(".{ext}"))?
+            .get_value("FIREWALLRULES")
+    });
     let nested_exe = escape_nested_cmd_ampersands(exe);
 
     // reg delete HKEY_CURRENT_USER\Software\Classes for
@@ -1618,8 +1649,12 @@ fn get_after_install(
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{nested_exe}\\\" \\\"%%1\\\"\"
+    reg add HKEY_CLASSES_ROOT\\.{ext} /f /v FIREWALLRULES /t REG_SZ /d \"{firewall_rules}\"
+    if not \"%errorlevel%\"==\"0\" echo WARNING: Failed to save FIREWALLRULES. Continuing installation; future upgrades may use the default. 1>&2
+    if \"{firewall_rules}\"==\"1\" (
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=out action=allow program=\"{exe}\" enable=yes
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=in action=allow program=\"{exe}\" enable=yes
+    )
     {create_service}
     reg add HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /f /v SoftwareSASGeneration /t REG_DWORD /d 1
     ", create_service=get_create_service(&exe))
