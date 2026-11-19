@@ -223,7 +223,7 @@ exclude = ["vdi/host"]
 # Patch libxdo-sys to use a stub implementation that doesn't require libxdo
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
 # nokhwa's macOS backend returns wrongly sized frames for bi-planar (NV12) camera buffers.
-# Fix submitted upstream: https://github.com/rustdesk-org/nokhwa/pull/REPLACE_ME
+# Fix submitted upstream: https://github.com/rustdesk-org/nokhwa/pull/7
 # Points at the fix branch until that PR is merged into rustdesk-org/nokhwa's fix_from_raw_parts.
 [patch."https://github.com/rustdesk-org/nokhwa.git"]
 nokhwa = { git = "https://github.com/filipklein5/nokhwa.git", branch = "macos-nv12-fix" }
