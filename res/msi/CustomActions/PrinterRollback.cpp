@@ -159,8 +159,12 @@ HRESULT StartOriginalService(LPCWSTR product, const std::wstring& app) {
     Service service(CreateServiceW(manager.get(), app.c_str(), display.c_str(), SERVICE_START,
         SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START, SERVICE_ERROR_NORMAL,
         binary.c_str(), nullptr, nullptr, nullptr, nullptr, nullptr), CloseServiceHandle);
-    if (!service && GetLastError() == ERROR_SERVICE_EXISTS)
-        service.reset(OpenServiceW(manager.get(), app.c_str(), SERVICE_START));
+    if (!service && GetLastError() == ERROR_SERVICE_EXISTS) {
+        service.reset(OpenServiceW(manager.get(), app.c_str(), SERVICE_START | SERVICE_CHANGE_CONFIG));
+        if (service && !ChangeServiceConfigW(service.get(), SERVICE_NO_CHANGE, SERVICE_NO_CHANGE,
+            SERVICE_NO_CHANGE, binary.c_str(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr))
+            return HRESULT_FROM_WIN32(GetLastError());
+    }
     if (!service) return HRESULT_FROM_WIN32(GetLastError());
     if (!StartServiceW(service.get(), 0, nullptr) && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING)
         return HRESULT_FROM_WIN32(GetLastError());

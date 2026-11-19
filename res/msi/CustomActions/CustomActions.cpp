@@ -609,6 +609,12 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stopped.", svcName);
     }
 
+    // Rollback releases the new binaries without marking the service for deletion.
+    if (MsiGetMode(hInstall, MSIRUNMODE_ROLLBACK)) {
+        WcaLog(LOGMSG_STANDARD, "Preserving service registration during rollback: %ls", svcName);
+        goto LTerminate;
+    }
+
     if (MyDeleteServiceW(svcName)) {
         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" deletion is completed without errors.", svcName);
     }
@@ -637,6 +643,7 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
     // Sleep(300);
 
     // Or we can terminate the process
+LTerminate:
     hr = StringCchPrintfW(szExeFile, cchExeFile, L"%ls.exe", svcName);
     ExitOnFailure(hr, "Failed to compose a resource identifier string");
     TerminateProcessesByNameW(szExeFile, L"--not-in-use");

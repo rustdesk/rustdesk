@@ -32,7 +32,7 @@
 		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER_INNER]" />
 		<InstallExecuteSequence>
 			<!-- Capture running state before Restart Manager shuts services down in InstallValidate. -->
-			<Custom Action="ScheduleUpgradePrinterRecovery" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE AND (PREVIOUSPRINTER &lt;&gt; &quot;0&quot; OR PDFPRINTER_INSTALLED = 1 OR PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
+			<Custom Action="ScheduleUpgradePrinterRecovery" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE AND ((PREVIOUSPRINTER AND PREVIOUSPRINTER &lt;&gt; &quot;0&quot;) OR PDFPRINTER_INSTALLED = 1 OR PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
 			<Custom Action="RestoreUpgradePrinter" After="InstallInitialize" Condition="WIX_UPGRADE_DETECTED AND RestoreUpgradePrinter AND NOT REMOVE" />
 			<Custom Action="StopUpgradePrinterService" After="RestoreUpgradePrinter" Condition="WIX_UPGRADE_DETECTED AND StopUpgradePrinterService AND NOT REMOVE" />
 			<Custom Action="CheckPdfPrinter" After="RemoveExistingProducts" Condition="(PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE" />
