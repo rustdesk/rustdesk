@@ -147,7 +147,7 @@ HRESULT InstallOriginalQueue(LPCWSTR product, const std::wstring& app) {
     return result;
 }
 
-HRESULT StartOriginalService(LPCWSTR product, const std::wstring& app) {
+HRESULT RestoreOriginalService(LPCWSTR product, const std::wstring& app, bool running) {
     std::wstring exe;
     HRESULT result = OriginalExecutable(product, app, exe);
     if (FAILED(result)) return result;
@@ -166,7 +166,7 @@ HRESULT StartOriginalService(LPCWSTR product, const std::wstring& app) {
             return HRESULT_FROM_WIN32(GetLastError());
     }
     if (!service) return HRESULT_FROM_WIN32(GetLastError());
-    if (!StartServiceW(service.get(), 0, nullptr) && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING)
+    if (running && !StartServiceW(service.get(), 0, nullptr) && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING)
         return HRESULT_FROM_WIN32(GetLastError());
     return S_OK;
 }
@@ -211,7 +211,7 @@ HRESULT ScheduleRecovery() {
     SERVICE_STATUS_PROCESS service{};
     if (!QueryServiceStatusExW(appName.c_str(), &service) && GetLastError() != ERROR_SERVICE_DOES_NOT_EXIST)
         return HRESULT_FROM_WIN32(GetLastError());
-    const int running = service.dwCurrentState == SERVICE_RUNNING;
+    const int serviceState = static_cast<int>(service.dwCurrentState);
     std::vector<BYTE> bytes;
     result = ReadQueue(name, bytes);
     if (FAILED(result)) return result;
@@ -223,12 +223,12 @@ HRESULT ScheduleRecovery() {
     result = Rebase(bytes.data(), bytes.size(), false);
     if (FAILED(result)) return result;
     result = WcaWriteStringToCaData(product.value, &actionData.value);
-    if (SUCCEEDED(result)) result = WcaWriteIntegerToCaData(running, &actionData.value);
+    if (SUCCEEDED(result)) result = WcaWriteIntegerToCaData(serviceState, &actionData.value);
     if (SUCCEEDED(result)) result = WcaWriteStreamToCaData(bytes.data(), bytes.size(), &actionData.value);
     if (FAILED(result)) return result;
     WcaLog(LOGMSG_STANDARD, "Scheduling upgrade printer recovery for %ls", name.c_str());
     result = WcaSetProperty(kRestoreAction, actionData.value);
-    if (SUCCEEDED(result) && running)
+    if (SUCCEEDED(result) && serviceState != 0)
         result = WcaSetProperty(L"StopUpgradePrinterService", appName.c_str());
     return result;
 }
@@ -239,8 +239,8 @@ HRESULT RestoreRecovery() {
     if (FAILED(result)) return result;
     LPWSTR cursor = actionData.value;
     result = WcaReadStringFromCaData(&cursor, &product.value);
-    int running = 0;
-    if (SUCCEEDED(result)) result = WcaReadIntegerFromCaData(&cursor, &running);
+    int serviceState = 0;
+    if (SUCCEEDED(result)) result = WcaReadIntegerFromCaData(&cursor, &serviceState);
     CaBuffer data;
     if (SUCCEEDED(result)) result = WcaReadStreamFromCaData(&cursor, &data.value, &data.size);
     if (SUCCEEDED(result)) result = Rebase(data.value, data.size, true);
@@ -255,8 +255,8 @@ HRESULT RestoreRecovery() {
         if (result == S_FALSE) result = HRESULT_FROM_WIN32(ERROR_PRINTER_NOT_FOUND);
     }
     if (SUCCEEDED(result)) result = ApplyQueue(name, *reinterpret_cast<PRINTER_INFO_2W*>(data.value));
-    if (running) {
-        const HRESULT service = StartOriginalService(product.value, app);
+    if (serviceState != 0) {
+        const HRESULT service = RestoreOriginalService(product.value, app, serviceState == SERVICE_RUNNING);
         if (FAILED(service)) WcaLog(LOGMSG_STANDARD, "Restoring the original service failed: 0x%08lx", service);
         if (SUCCEEDED(result)) result = service;
     }
