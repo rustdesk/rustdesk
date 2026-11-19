@@ -21,7 +21,7 @@ Mais uma solução de desktop remoto, escrita em Rust. Funciona imediatamente, s
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-O RustDesk acolhe a contribuição de todos. Veja [CONTRIBUTING.md](docs/CONTRIBUTING.md) para ajuda em como começar.
+O RustDesk acolhe a contribuição de todos. Veja [CONTRIBUTING.md](CONTRIBUTING.md) para ajuda em como começar.
 
 [**Perguntas Frequentes (FAQ)**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 
