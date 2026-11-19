@@ -1,5 +1,4 @@
 use crate::{quartz, Frame, Pixfmt};
-use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, TryLockError};
 use std::{io, mem};
 
@@ -55,12 +54,11 @@ impl crate::TraitCapturer for Capturer {
                     Some(mut frame) => {
                         crate::would_block_if_equal(&mut self.saved_raw_data, frame.inner())?;
                         frame.surface_to_bgra(self.height());
-                        Ok(Frame::PixelBuffer(PixelBuffer {
+                        Ok(Frame::PixelBuffer(PixelBuffer::from_frame(
                             frame,
-                            data: PhantomData,
-                            width: self.width(),
-                            height: self.height(),
-                        }))
+                            self.width(),
+                            self.height(),
+                        )))
                     }
 
                     None => Err(io::ErrorKind::WouldBlock.into()),
@@ -74,16 +72,50 @@ impl crate::TraitCapturer for Capturer {
     }
 }
 
+enum PixelSource<'a> {
+    Screen(quartz::Frame),
+    Bytes {
+        data: &'a [u8],
+        pixfmt: Pixfmt,
+        stride: usize,
+    },
+}
+
 pub struct PixelBuffer<'a> {
-    frame: quartz::Frame,
-    data: PhantomData<&'a [u8]>,
+    source: PixelSource<'a>,
     width: usize,
     height: usize,
 }
 
+impl<'a> PixelBuffer<'a> {
+    /// Wraps tightly packed 4-bytes-per-pixel data (e.g. RGBA from a camera).
+    pub fn new(data: &'a [u8], pixfmt: Pixfmt, width: usize, height: usize) -> Self {
+        PixelBuffer {
+            source: PixelSource::Bytes {
+                data,
+                pixfmt,
+                stride: width * 4,
+            },
+            width,
+            height,
+        }
+    }
+
+    fn from_frame(frame: quartz::Frame, width: usize, height: usize) -> Self {
+        PixelBuffer {
+            source: PixelSource::Screen(frame),
+            width,
+            height,
+        }
+    }
+}
+
 impl<'a> crate::TraitPixelBuffer for PixelBuffer<'a> {
     fn data(&self) -> &[u8] {
-        &*self.frame
+        match &self.source {
+            PixelSource::Screen(frame) => &**frame,
+            PixelSource::Bytes { data, .. } => data,
+        }
     }
 
     fn width(&self) -> usize {
@@ -95,13 +127,17 @@ impl<'a> crate::TraitPixelBuffer for PixelBuffer<'a> {
     }
 
     fn stride(&self) -> Vec<usize> {
-        let mut v = Vec::new();
-        v.push(self.frame.stride());
-        v
+        match &self.source {
+            PixelSource::Screen(frame) => vec![frame.stride()],
+            PixelSource::Bytes { stride, .. } => vec![*stride],
+        }
     }
 
     fn pixfmt(&self) -> Pixfmt {
-        Pixfmt::BGRA
+        match &self.source {
+            PixelSource::Screen(_) => Pixfmt::BGRA,
+            PixelSource::Bytes { pixfmt, .. } => *pixfmt,
+        }
     }
 }
 
