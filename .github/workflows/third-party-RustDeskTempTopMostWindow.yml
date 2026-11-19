@@ -52,7 +52,9 @@ jobs:
         run: |
           cd RustDeskTempTopMostWindow
           git checkout ecd8d6a139eee76845ea66423fb739af450fda90
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git apply "${{ github.workspace }}/res/privacy_mode_background.patch"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item "${{ github.workspace }}/res/windows/privacy_background.h" WindowInjection/
           Copy-Item "${{ github.workspace }}/res/windows/privacy_taskbar.h" WindowInjection/
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}

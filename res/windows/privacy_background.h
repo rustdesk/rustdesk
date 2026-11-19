@@ -85,30 +85,12 @@ public:
 			// SPI_GETDESKWALLPAPER can be unavailable while the process is on the
 			// secure lock desktop. The per-user registry value remains available
 			// and lets us retry after WTS_SESSION_UNLOCK.
-			HKEY key = nullptr;
-			if (RegOpenKeyExW(
-				HKEY_CURRENT_USER,
-				L"Control Panel\\Desktop",
-				0,
-				KEY_READ,
-				&key) == ERROR_SUCCESS)
+			DWORD size = sizeof(wallpaper);
+			if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"WallPaper",
+				RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, wallpaper, &size) == ERROR_SUCCESS
+				&& wallpaper[0] != L'\0')
 			{
-				DWORD type = 0;
-				DWORD size = sizeof(wallpaper);
-				if (RegQueryValueExW(
-					key,
-					L"WallPaper",
-					nullptr,
-					&type,
-					reinterpret_cast<LPBYTE>(wallpaper),
-					&size) == ERROR_SUCCESS
-					&& (type == REG_SZ || type == REG_EXPAND_SZ)
-					&& wallpaper[0] != L'\0'
-				)
-				{
-					TryLoadImage(wallpaper);
-				}
-				RegCloseKey(key);
+				TryLoadImage(wallpaper);
 			}
 			return;
 		}
@@ -129,7 +111,7 @@ public:
 		}
 	}
 
-	bool ShowsTaskbar() const { return taskbar_; }
+	bool ShowsTaskbar() const { return taskbar_ && image_; }
 
 	// Return false to leave the original privacy notice painting path untouched.
 	bool Paint(HDC hdc, const RECT& client, HWND window = nullptr) const
