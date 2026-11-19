@@ -36,9 +36,32 @@ pub fn primary_camera_exists() -> bool {
     Cameras::exists(PRIMARY_CAMERA_IDX)
 }
 
+/// AVFoundation requires the camera permission to be requested (and granted) before any
+/// other nokhwa call. Blocks up to 30s while the system prompt is shown.
+#[cfg(target_os = "macos")]
+fn ensure_macos_camera_permission() -> ResultType<()> {
+    if nokhwa::nokhwa_check() {
+        return Ok(());
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let tx = Mutex::new(tx);
+    nokhwa::nokhwa_initialize(move |granted| {
+        if let Ok(tx) = tx.lock() {
+            let _ = tx.send(granted);
+        }
+    });
+    match rx.recv_timeout(std::time::Duration::from_secs(30)) {
+        Ok(true) => Ok(()),
+        Ok(false) => bail!("Camera permission denied"),
+        Err(_) => bail!("Timed out waiting for camera permission"),
+    }
+}
+
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 impl Cameras {
     pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
+        #[cfg(target_os = "macos")]
+        ensure_macos_camera_permission()?;
         match query(ApiBackend::Auto) {
             Ok(cameras) => {
                 let mut camera_displays = SYNC_CAMERA_DISPLAYS.lock().unwrap();
