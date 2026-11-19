@@ -127,8 +127,31 @@ async fn start_hbbs_sync_async() {
                 let sys_username = v["username"].as_str().unwrap_or_default().to_string();
                 // Though the username comparison is only necessary on Windows,
                 // we still keep the comparison on other platforms for consistency.
-                let need_upload = (!info_uploaded.uploaded || info_uploaded.username.as_ref() != Some(&sys_username)) &&
-                    info_uploaded.last_uploaded.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true);
+                let mut need_upload = (!info_uploaded.uploaded
+                    || info_uploaded.username.as_ref() != Some(&sys_username))
+                    && info_uploaded
+                        .last_uploaded
+                        .map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT)
+                        .unwrap_or(true);
+                let ab_password = if need_upload {
+                    Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD)
+                } else {
+                    String::new()
+                };
+                if need_upload
+                    && !ab_password.is_empty()
+                    && !url::Url::parse(&url)
+                        .map(|url| url.scheme() == "https" && url.has_host())
+                        .unwrap_or(false)
+                {
+                    hbb_common::throttled_log!(
+                        API_LOG_INTERVAL,
+                        warn,
+                        "Skipping sysinfo upload because the preset address book password requires an HTTPS API endpoint"
+                    );
+                    info_uploaded.last_uploaded = Some(Instant::now());
+                    need_upload = false;
+                }
                 if need_upload {
                     v["version"] = json!(crate::VERSION);
                     v["id"] = json!(id);
@@ -145,7 +168,6 @@ async fn start_hbbs_sync_async() {
                     if !ab_alias.is_empty() {
                         v[keys::OPTION_PRESET_ADDRESS_BOOK_ALIAS] = json!(ab_alias);
                     }
-                    let ab_password = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD);
                     if !ab_password.is_empty() {
                         v[keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD] = json!(ab_password);
                     }
