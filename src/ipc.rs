@@ -796,6 +796,8 @@ pub struct CheckIfRestart {
     stop_service: String,
     rendezvous_servers: Vec<String>,
     audio_input: String,
+    #[cfg(windows)]
+    remote_only_audio_device: String,
     voice_call_input: String,
     ws: String,
     disable_udp: String,
@@ -809,6 +811,8 @@ impl CheckIfRestart {
             stop_service: Config::get_option("stop-service"),
             rendezvous_servers: Config::get_rendezvous_servers(),
             audio_input: Config::get_option("audio-input"),
+            #[cfg(windows)]
+            remote_only_audio_device: Config::get_option(keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE),
             voice_call_input: Config::get_option("voice-call-input"),
             ws: Config::get_option(OPTION_ALLOW_WEBSOCKET),
             disable_udp: Config::get_option(keys::OPTION_DISABLE_UDP),
@@ -839,6 +843,10 @@ impl Drop for CheckIfRestart {
             RendezvousMediator::restart();
         }
         if self.audio_input != Config::get_option("audio-input") {
+            crate::audio_service::restart();
+        }
+        #[cfg(windows)]
+        if self.remote_only_audio_device != Config::get_option(keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE) {
             crate::audio_service::restart();
         }
         if self.voice_call_input != Config::get_option("voice-call-input") {

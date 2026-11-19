@@ -398,6 +398,12 @@ mod cpal_impl {
 
     #[cfg(windows)]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
+        if super::get_voice_call_input_device().is_none() {
+            if let Some(device) = crate::platform::windows::audio_output::capture_device()? {
+                let format = device.default_output_config()?;
+                return Ok((device, format));
+            }
+        }
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
             return get_audio_input(&audio_input);

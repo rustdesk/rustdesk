@@ -456,6 +456,19 @@ pub fn set_auth_option(key: String, value: String) -> hbb_common::ResultType<()>
     try_set_options(options)
 }
 
+#[cfg(windows)]
+pub(crate) fn set_audio_output_config(device: &str) -> hbb_common::ResultType<()> {
+    let mut options = ipc::get_options();
+    if device.is_empty() {
+        options.remove(keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE);
+    } else {
+        options.insert(keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE.to_owned(), device.to_owned());
+    }
+    ipc::set_options(options.clone())?;
+    *OPTIONS.lock().unwrap() = options;
+    Ok(())
+}
+
 #[inline]
 pub fn set_option(key: String, value: String) {
     if key == "2fa"

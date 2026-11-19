@@ -995,6 +995,13 @@ pub fn main_get_sound_inputs() -> Vec<String> {
     vec![String::from("")]
 }
 
+pub fn main_get_audio_outputs() -> hbb_common::ResultType<String> {
+    #[cfg(windows)]
+    return crate::platform::windows::audio_output::devices_json();
+    #[cfg(not(windows))]
+    Ok("{\"devices\":[],\"selected\":\"\",\"can_restore\":false}".to_owned())
+}
+
 pub fn main_get_login_device_info() -> SyncReturn<String> {
     SyncReturn(get_login_device_info_json())
 }
@@ -1024,6 +1031,10 @@ pub fn main_get_error() -> String {
 }
 
 pub fn main_set_option(key: String, value: String) -> hbb_common::anyhow::Result<()> {
+    #[cfg(windows)]
+    if key == keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE {
+        return crate::platform::windows::audio_output::set_device(&value);
+    }
     if key == "2fa"
         || key == keys::OPTION_ENABLE_TRUSTED_DEVICES
         || key == keys::OPTION_TRUSTED_DEVICE_EXPIRATION

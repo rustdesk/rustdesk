@@ -97,6 +97,7 @@ use windows_service::{
 use winreg::{enums::*, RegKey};
 
 mod acl;
+pub(crate) mod audio_output;
 pub(crate) mod installer_files;
 mod installer_handoff;
 mod installer_shell;

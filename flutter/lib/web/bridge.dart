@@ -790,6 +790,10 @@ class RustdeskImpl {
     throw UnimplementedError("mainGetSoundInputs");
   }
 
+  Future<String> mainGetAudioOutputs({dynamic hint}) async {
+    return '{"devices":[],"selected":"","can_restore":false}';
+  }
+
   Future<String?> mainGetDefaultSoundInput({dynamic hint}) {
     throw UnimplementedError("mainGetDefaultSoundInput");
   }
