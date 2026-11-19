@@ -5046,6 +5046,7 @@ dependencies = [
 [[package]]
 name = "nokhwa"
 version = "0.10.7"
+source = "git+https://github.com/filipklein5/nokhwa.git?branch=macos-nv12-fix#ccdc9f57a1bdc53755c58b4ecf451b02505331d6"
 dependencies = [
  "flume",
  "image 0.25.1",
@@ -5060,6 +5061,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-linux"
 version = "0.1.1"
+source = "git+https://github.com/filipklein5/nokhwa.git?branch=macos-nv12-fix#ccdc9f57a1bdc53755c58b4ecf451b02505331d6"
 dependencies = [
  "nokhwa-core",
  "v4l",
@@ -5068,6 +5070,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-macos"
 version = "0.2.2"
+source = "git+https://github.com/filipklein5/nokhwa.git?branch=macos-nv12-fix#ccdc9f57a1bdc53755c58b4ecf451b02505331d6"
 dependencies = [
  "block",
  "cocoa-foundation",
@@ -5083,6 +5086,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-bindings-windows"
 version = "0.4.2"
+source = "git+https://github.com/filipklein5/nokhwa.git?branch=macos-nv12-fix#ccdc9f57a1bdc53755c58b4ecf451b02505331d6"
 dependencies = [
  "dlopen",
  "lazy_static",
@@ -5094,6 +5098,7 @@ dependencies = [
 [[package]]
 name = "nokhwa-core"
 version = "0.1.5"
+source = "git+https://github.com/filipklein5/nokhwa.git?branch=macos-nv12-fix#ccdc9f57a1bdc53755c58b4ecf451b02505331d6"
 dependencies = [
  "bytes",
  "image 0.25.1",

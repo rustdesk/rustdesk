@@ -218,17 +218,15 @@ android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/base", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
-exclude = ["vdi/host", "libs/nokhwa"]
+exclude = ["vdi/host"]
 
 # Patch libxdo-sys to use a stub implementation that doesn't require libxdo
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
-# nokhwa's macOS backend returns wrongly sized frames for bi-planar (NV12) camera buffers; see libs/nokhwa.
+# nokhwa's macOS backend returns wrongly sized frames for bi-planar (NV12) camera buffers.
+# Fix submitted upstream: https://github.com/rustdesk-org/nokhwa/pull/REPLACE_ME
+# Points at the fix branch until that PR is merged into rustdesk-org/nokhwa's fix_from_raw_parts.
 [patch."https://github.com/rustdesk-org/nokhwa.git"]
-nokhwa = { path = "libs/nokhwa" }
-nokhwa-core = { path = "libs/nokhwa/nokhwa-core" }
-nokhwa-bindings-macos = { path = "libs/nokhwa/nokhwa-bindings-macos" }
-nokhwa-bindings-linux = { path = "libs/nokhwa/nokhwa-bindings-linux" }
-nokhwa-bindings-windows = { path = "libs/nokhwa/nokhwa-bindings-windows" }
+nokhwa = { git = "https://github.com/filipklein5/nokhwa.git", branch = "macos-nv12-fix" }
 
 [patch.crates-io]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
