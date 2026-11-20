@@ -37,6 +37,8 @@ use crate::{
     server::{check_zombie, new as new_server, ConnectionMeta, ServerPtr},
 };
 
+mod seal_state;
+
 type Message = RendezvousMessage;
 
 fn connection_meta(
@@ -414,6 +416,12 @@ impl RendezvousMediator {
             host_prefix: Self::get_host_prefix(&host),
             keep_alive: crate::DEFAULT_KEEP_ALIVE,
         };
+        let mut seal = seal_state::SealState::new(
+            &rz.host,
+            &crate::get_key(true).await,
+            crate::using_public_server(),
+            seal_state::device_key(),
+        );
 
         let mut timer = crate::rustdesk_interval(interval(crate::TIMER_OUT));
         const MIN_REG_TIMEOUT: i64 = 3_000;
@@ -460,8 +468,15 @@ impl RendezvousMediator {
                 n = socket.next() => {
                     match n {
                         Some(Ok((bytes, _))) => {
+                            if seal.on_cookie(&bytes, &mut socket, &addr).await? { continue; }
+                            let Some((bytes, sealed)) = seal.open(bytes) else { continue };
                             if let Ok(msg) = Message::parse_from_bytes(&bytes) {
-                                rz.handle_resp(msg.union, Sink::Framed(&mut socket, &addr), &server, &mut update_latency).await?;
+                                if sealed && bytes.is_empty() {
+                                    rz.register_peer(seal.round_sink(&mut socket, &addr)).await?;
+                                    last_register_sent = Some(Instant::now());
+                                } else if seal.on_message(sealed, &msg.union) {
+                                    rz.handle_resp(msg.union, seal.reply_sink(&mut socket, &addr, sealed), &server, &mut update_latency).await?;
+                                }
                             } else {
                                 log::debug!("Non-protobuf message bytes received: {:?}", bytes);
                             }
@@ -495,6 +510,7 @@ impl RendezvousMediator {
                         }
                     }
                     if timeout || (last_register_sent.is_none() && expired) {
+                        seal.on_round(timeout);
                         if timeout {
                             fails += 1;
                             if fails >= MAX_FAILS2 {
@@ -507,6 +523,7 @@ impl RendezvousMediator {
                                         socket = s;
                                         rz.addr = new_addr.clone();
                                         addr = new_addr;
+                                        seal.on_rebind();
                                     }
                                     last_dns_check = Instant::now();
                                 }
@@ -515,7 +532,7 @@ impl RendezvousMediator {
                                 old_latency = 0;
                             }
                         }
-                        rz.register_peer(Sink::Framed(&mut socket, &addr)).await?;
+                        rz.register_peer(seal.round_sink(&mut socket, &addr)).await?;
                         last_register_sent = now;
                     }
                 }
@@ -1252,7 +1269,7 @@ impl RendezvousMediator {
         let mut msg_out = Message::new();
         msg_out.set_punch_hole_sent(msg_punch);
         let (socket, addr) = new_direct_udp_for(&self.host).await?;
-        let data = msg_out.write_to_bytes()?;
+        let data = seal_state::seal_one_shot(&self.host, msg_out.write_to_bytes()?);
         socket.send_to(&data, addr).await?;
         // The reply is out, and with it the answer and the v6 address: declined is the listen
         // alone, and the socket goes at once - a declined request is not worth one kept for its
@@ -1471,6 +1488,17 @@ async fn direct_server(server: ServerPtr) {
 enum Sink<'a> {
     Framed(&'a mut FramedSocket, &'a TargetAddr<'a>),
     Stream(&'a mut Stream),
+    Sealed(
+        &'a mut FramedSocket,
+        &'a TargetAddr<'a>,
+        &'a mut hbb_common::udp_seal::ClientSeal,
+        bool,
+    ),
+    Probe(
+        &'a mut FramedSocket,
+        &'a TargetAddr<'a>,
+        &'a mut hbb_common::udp_seal::ClientSeal,
+    ),
 }
 
 impl Sink<'_> {
@@ -1478,6 +1506,17 @@ impl Sink<'_> {
         match self {
             Sink::Framed(socket, addr) => socket.send(msg, addr.to_owned()).await,
             Sink::Stream(stream) => stream.send(msg).await,
+            Sink::Sealed(socket, addr, seal, rehello) => {
+                for bytes in seal_state::seal_round(seal, msg, rehello, seal_state::device_key)? {
+                    socket.send_bytes(bytes.into(), addr.to_owned()).await?;
+                }
+                Ok(())
+            }
+            Sink::Probe(socket, addr, seal) => {
+                socket.send(msg, addr.to_owned()).await?;
+                let hello = seal_state::probe(seal)?;
+                socket.send_bytes(hello.into(), addr.to_owned()).await
+            }
         }
     }
 }
