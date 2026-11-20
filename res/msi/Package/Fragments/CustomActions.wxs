@@ -33,6 +33,6 @@
 		<CustomAction Id="RollbackPrinter" FileRef="App.exe" ExeCommand="--uninstall-remote-printer" Impersonate="no" Execute="rollback" Return="check" />
 		<!-- Printer cleanup failures stay logged and retryable; they must not roll back final app removal. -->
 		<CustomAction Id="UninstallPrinter" FileRef="App.exe" ExeCommand="--uninstall-remote-printer" Impersonate="no" Execute="deferred" Return="ignore" />
-		<CustomAction Id="DisablePrinter" FileRef="App.exe" ExeCommand="--uninstall-remote-printer" Impersonate="no" Execute="deferred" Return="check" />
+		<CustomAction Id="DisablePrinter" FileRef="App.exe" ExeCommand="--disable-remote-printer" Impersonate="no" Execute="deferred" Return="check" />
 	</Fragment>
 </Wix>

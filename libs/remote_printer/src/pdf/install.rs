@@ -54,8 +54,12 @@ pub fn install(app_name: &str, instance_id: &str) -> ResultType<Queue> {
     Ok(queue)
 }
 
-pub fn uninstall(app_name: &str) -> ResultType<()> {
+pub fn uninstall(
+    app_name: &str,
+    remember_pdf_port: impl FnOnce(&str) -> ResultType<()>,
+) -> ResultType<()> {
     let queue = if let Some(queue) = queues::installed(app_name)? {
+        remember_pdf_port(&queue.port)?;
         queue
     } else {
         let Some(info) =
@@ -201,7 +205,7 @@ mod tests {
             assert_eq!(queues::get(&queue.name).unwrap().unwrap().jobs, 1);
             let capture = Printer::open(&queue.name, PRINTER_ALL_ACCESS).unwrap();
             let removing_app = app.clone();
-            let removal = thread::spawn(move || uninstall(&removing_app));
+            let removal = thread::spawn(move || uninstall(&removing_app, |_| Ok(())));
             thread::sleep(CAPTURE_HANDLE_RELEASE_DELAY);
             drop(capture);
             removal.join().unwrap().unwrap();

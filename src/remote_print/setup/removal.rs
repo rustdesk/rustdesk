@@ -1,45 +1,81 @@
-use hbb_common::ResultType;
+use hbb_common::{anyhow::Context, bail, ResultType};
+use remote_printer::pdf;
+use std::io;
 use winreg::{
-    enums::{HKEY_LOCAL_MACHINE, KEY_SET_VALUE},
-    RegKey,
+    enums::{HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_SET_VALUE},
+    types::FromRegValue,
+    RegKey, RegValue,
 };
 
-const REMOVAL_PORT: &str = "PDFPRINTER_REMOVAL_PORT";
+const OLD_PORT_VALUE: &str = "PDFPRINTER_REMOVAL_PORT";
+
+pub(super) fn disable() -> ResultType<()> {
+    let app = crate::get_app_name();
+    let mut record = None;
+    pdf::uninstall(&app, |port| {
+        // DeletePrinter can succeed while the port is busy. A reinstall gets a different port.
+        let (key, _) = RegKey::predef(HKEY_LOCAL_MACHINE).create_subkey(super::marker_key(&app))?;
+        key.set_value(port, &1u32)?;
+        record = Some((key, port.to_owned()));
+        Ok(())
+    })?;
+    super::write_marker(false)?;
+    if let Some((key, port)) = record {
+        forget(&key, &port)?;
+    }
+    Ok(())
+}
 
 pub(super) fn uninstall() -> ResultType<()> {
-    let app = crate::get_app_name();
-    let root = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let path = super::marker_key(&app);
-    let pending = pending_port(&root, &path)?;
-    let queue = remote_printer::pdf::installed(&app)?;
-    if let Some(port) = &pending {
-        if queue.as_ref().map(|queue| queue.port.as_str()) != Some(port.as_str()) {
-            remote_printer::pdf::remove_unused_port(port)?;
-        }
-    }
-    if let Some(queue) = queue {
-        // DeletePrinter can remove the queue before its port is released.
-        let (key, _) = root.create_subkey(&path)?;
-        key.set_value(REMOVAL_PORT, &queue.port)?;
-    }
-    remote_printer::pdf::uninstall(&app)?;
-    let result = root
-        .open_subkey_with_flags(&path, KEY_SET_VALUE)
-        .and_then(|key| key.delete_value(REMOVAL_PORT));
-    match result {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.into()),
+    let queue = disable();
+    let ports = retry_ports();
+    match (queue, ports) {
+        (Err(queue), Err(ports)) => bail!("{queue:#}; {ports:#}"),
+        (queue, ports) => queue.and(ports),
     }
 }
 
-fn pending_port(root: &RegKey, path: &str) -> ResultType<Option<String>> {
-    match root
-        .open_subkey(path)
-        .and_then(|key| key.get_value(REMOVAL_PORT))
-    {
-        Ok(port) => Ok(Some(port)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.into()),
+fn retry_ports() -> ResultType<()> {
+    let key = match RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey_with_flags(
+        super::marker_key(&crate::get_app_name()),
+        KEY_QUERY_VALUE | KEY_SET_VALUE,
+    ) {
+        Ok(key) => key,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    // Deleting values during enumeration can skip the next entry.
+    let records = key.enum_values().collect::<io::Result<Vec<_>>>()?;
+    let mut errors = Vec::new();
+    for (name, value) in records {
+        if let Err(error) = retry_port(&key, &name, &value) {
+            errors.push(format!("{error:#}"));
+        }
+    }
+    if !errors.is_empty() {
+        bail!(
+            "Pending PDF printer port cleanup failed: {}",
+            errors.join("; ")
+        );
+    }
+    Ok(())
+}
+
+fn retry_port(key: &RegKey, name: &str, value: &RegValue) -> ResultType<()> {
+    let port = if name.eq_ignore_ascii_case(OLD_PORT_VALUE) {
+        String::from_reg_value(value).context("Invalid saved PDF printer port")?
+    } else if name.starts_with(pdf::PIPE_PREFIX) {
+        name.to_owned()
+    } else {
+        return Ok(());
+    };
+    pdf::remove_unused_port(&port).with_context(|| format!("Removing {port}"))?;
+    forget(key, name)
+}
+
+fn forget(key: &RegKey, name: &str) -> ResultType<()> {
+    match key.delete_value(name) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        result => Ok(result?),
     }
 }

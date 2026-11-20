@@ -330,7 +330,9 @@ pub fn core_main() -> Option<CoreMainAction> {
                 return None;
             } else if matches!(
                 args[0].as_str(),
-                crate::remote_print::setup::INSTALL | crate::remote_print::setup::UNINSTALL
+                crate::remote_print::setup::INSTALL
+                    | crate::remote_print::setup::UNINSTALL
+                    | crate::remote_print::setup::DISABLE
             ) {
                 return match crate::remote_print::setup::execute(&args[0]) {
                     Ok(()) => None,
