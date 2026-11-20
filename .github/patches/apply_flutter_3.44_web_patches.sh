@@ -11,7 +11,8 @@
 #   (cd flutter && flutter build web --release)   # or ./web/js/flutter_build.py
 #
 # Idempotent. To undo the source changes locally:
-#   git checkout -- flutter/lib/common.dart flutter/pubspec.yaml flutter/pubspec.lock
+#   git checkout -- flutter/lib/common.dart flutter/lib/common/widgets/dialog.dart \
+#     flutter/pubspec.yaml flutter/pubspec.lock
 set -euo pipefail
 
 flutter --version | grep -q "Flutter 3\.44\." || {
