@@ -2152,16 +2152,22 @@ impl Connection {
             log::info!("peer info supported_encoding: {:?}", supported_encoding);
             pi.encoding = Some(supported_encoding).into();
 
-            // On macOS this can block for up to 30s waiting on the camera permission
-            // prompt (see camera::ensure_macos_camera_permission); run it off this
-            // Tokio worker so heartbeats/input on this connection keep flowing.
-            pi.displays = tokio::task::spawn_blocking(camera::Cameras::all_info)
-                .await
-                .unwrap_or_else(|e| {
-                    log::error!("camera all_info task panicked: {}", e);
-                    Ok(Vec::new())
-                })
-                .unwrap_or_default();
+            // On macOS this can block for up to 30s waiting on the camera permission prompt, so
+            // keep it off the Tokio worker.
+            #[cfg(target_os = "macos")]
+            {
+                pi.displays = tokio::task::spawn_blocking(camera::Cameras::all_info)
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::error!("camera all_info task panicked: {}", e);
+                        Ok(Vec::new())
+                    })
+                    .unwrap_or_default();
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                pi.displays = camera::Cameras::all_info().unwrap_or(Vec::new());
+            }
             pi.current_display = camera::PRIMARY_CAMERA_IDX as _;
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {

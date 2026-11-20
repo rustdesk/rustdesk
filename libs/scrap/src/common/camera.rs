@@ -105,18 +105,12 @@ impl Cameras {
                             ..Default::default()
                         });
                     } else {
-                        // Collect into a local vector first: if `create_camera` fails partway
-                        // through, `?` must not leave SYNC_CAMERA_DISPLAYS holding only the
-                        // cameras enumerated so far, inconsistent with the Err this function
-                        // returns (and with `all_info`'s caller, which treats Err as "no
-                        // cameras").
                         let mut x = 0;
-                        let mut displays = Vec::with_capacity(cameras.len());
                         for info in &cameras {
                             let camera = Self::create_camera(info.index())?;
                             let resolution = camera.resolution();
                             let (width, height) = (resolution.width() as i32, resolution.height() as i32);
-                            displays.push(DisplayInfo {
+                            camera_displays.push(DisplayInfo {
                                 x,
                                 y: 0,
                                 name: info.human_name().clone(),
@@ -134,7 +128,6 @@ impl Cameras {
                             });
                             x += width;
                         }
-                        *camera_displays = displays;
                     }
                 }
                 Ok(camera_displays.clone())
