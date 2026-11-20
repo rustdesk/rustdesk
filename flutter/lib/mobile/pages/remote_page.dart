@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/mobile/widgets/android_mac_keyboard_input.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
@@ -113,6 +114,17 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   final TextEditingController _textController =
       TextEditingController(text: initText);
 
+  bool get _usesAndroidMacKeyboardInput =>
+      isAndroid && gFFI.ffiModel.pi.platform == kPeerPlatformMacOS;
+
+  bool get _canSendAndroidMacKeyboardInput => inputModel.keyboardInputAllowed &&
+      inputModel.keyboardPerm &&
+      !inputModel.isViewOnly;
+
+  Future<void> _pendingAndroidMacKeyboardEdit = Future<void>.value();
+  late final _androidMacKeyboardInput =
+      AndroidMacKeyboardInput(onEdit: _sendAndroidMacKeyboardEdit);
+
   _RemotePageState(String id) {
     initSharedStates(id);
     gFFI.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
@@ -186,6 +198,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   Future<void> dispose() async {
+    if (_usesAndroidMacKeyboardInput) _androidMacKeyboardInput.reset();
     HardwareKeyboard.instance.removeHandler(_handleLocalKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
@@ -439,6 +452,57 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     inputModel.inputKey(char);
   }
 
+  void _sendAndroidMacKeyboardEdit(int backspaces, String text) {
+    if (!_canSendAndroidMacKeyboardInput) return;
+    final target = sessionId;
+    final alt = inputModel.alt;
+    final ctrl = inputModel.ctrl;
+    final shift = inputModel.shift;
+    final command = inputModel.command;
+
+    // The bridge calls run asynchronously. Finish each replacement before
+    // sending the next edit so a delayed Backspace can't erase newer text.
+    _pendingAndroidMacKeyboardEdit =
+        _pendingAndroidMacKeyboardEdit.then((_) async {
+      if (!mounted || sessionId != target || !_canSendAndroidMacKeyboardInput) {
+        return;
+      }
+      for (var i = 0; i < backspaces; i++) {
+        await bind.sessionInputKey(
+          sessionId: target,
+          name: 'VK_BACK',
+          down: false,
+          press: true,
+          alt: false,
+          ctrl: false,
+          shift: false,
+          command: false,
+        );
+      }
+      if (text.isEmpty) return;
+      if (text == '\n' || ((alt || ctrl || command) && text.runes.length == 1)) {
+        await bind.sessionInputKey(
+          sessionId: target,
+          name: text == '\n' ? 'VK_RETURN' : (text == ' ' ? 'VK_SPACE' : text),
+          down: false,
+          press: true,
+          alt: alt,
+          ctrl: ctrl,
+          shift: shift,
+          command: command,
+        );
+      } else {
+        await bind.sessionInputString(sessionId: target, value: text);
+      }
+    }).catchError((Object error, StackTrace stack) {
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        context: ErrorDescription('while forwarding Android keyboard input'),
+      ));
+    });
+  }
+
   void openKeyboard() {
     final allowWaylandKeyboard =
         mainGetPeerBoolOptionSync(widget.id, kPeerOptionAllowWaylandKeyboard);
@@ -466,7 +530,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
-    _textController.text = _value;
+    if (_usesAndroidMacKeyboardInput) {
+      _androidMacKeyboardInput.reset();
+      _textController.value = AndroidMacKeyboardInput.initialValue;
+    } else {
+      _textController.text = _value;
+    }
     setState(() => _showEdit = false);
     _timer?.cancel();
     _timer = Timer(kMobileDelaySoftKeyboard, () {
@@ -752,7 +821,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       //      2. The button will trigger `onKeyEvent` if the text field is empty.
                       // ko/zh/ja input method: the button will trigger `onKeyEvent`
                       //                     and the event will not popup if `KeyEventResult.handled` is returned.
-                      onChanged: handleSoftKeyboardInput,
+                      inputFormatters: _usesAndroidMacKeyboardInput
+                          ? [_androidMacKeyboardInput]
+                          : null,
+                      onChanged: _usesAndroidMacKeyboardInput
+                          ? null
+                          : handleSoftKeyboardInput,
                     ).workaroundFreezeLinuxMint(),
             ),
           ];
