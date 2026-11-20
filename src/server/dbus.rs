@@ -18,6 +18,9 @@ const DBUS_METHOD_RETURN: &str = "ret";
 const DBUS_METHOD_RETURN_SUCCESS: &str = "ok";
 const DBUS_TIMEOUT: Duration = Duration::from_secs(5);
 
+// Unique bus name of the connection `start_dbus_server` serves on.
+static SERVER_CONNECTION: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
 #[derive(Debug)]
 struct DbusError(String);
 
@@ -56,11 +59,33 @@ pub fn invoke_new_connection(uni_links: String) -> Result<(), Box<dyn Error>> {
 pub fn start_dbus_server() -> Result<(), Box<dyn Error>> {
     let conn: Connection = Connection::new_session()?;
     let _ = conn.request_name(DBUS_NAME, false, true, false)?;
+    *SERVER_CONNECTION.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some(conn.unique_name().to_string());
     let mut cr = Crossroads::new();
     let token = cr.register(DBUS_NAME, handle_client_message);
     cr.insert(DBUS_PREFIX, &[token], ());
     cr.serve(&conn)?;
     Ok(())
+}
+
+/// Whether `org.rustdesk.rustdesk` is owned by the server this process started. It may be queued
+/// behind another process that still owns the name.
+pub fn owns_dbus_name(conn: &Connection) -> bool {
+    let Some(ours) = SERVER_CONNECTION
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+    else {
+        return false;
+    };
+    let proxy = conn.with_proxy(
+        "org.freedesktop.DBus",
+        "/org/freedesktop/DBus",
+        Duration::from_secs(1),
+    );
+    let owner: Result<(String,), _> =
+        proxy.method_call("org.freedesktop.DBus", "GetNameOwner", (DBUS_NAME,));
+    matches!(owner, Ok((owner,)) if owner == ours)
 }
 
 fn handle_client_message(builder: &mut IfaceBuilder<()>) {
