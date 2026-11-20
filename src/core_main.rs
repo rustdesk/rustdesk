@@ -776,6 +776,11 @@ fn core_main_invoke_new_connection(mut args: std::env::Args) -> Option<Vec<Strin
             "--relay" => {
                 param_array.push(format!("relay=true"));
             }
+            "--display" => {
+                if let Some(display) = args.next() {
+                    param_array.push(format!("display={display}"));
+                }
+            }
             "--request-approval" => {
                 param_array.push("request-approval=true".to_owned());
             }

@@ -2286,6 +2286,7 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
   String? password;
   String? switchUuid;
   bool? forceRelay;
+  int? display;
   var loginMethod = '';
   for (int i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -2340,6 +2341,13 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
       case '--relay':
         forceRelay = true;
         break;
+      case '--display':
+        if (i + 1 < args.length) {
+          final value = int.tryParse(args[i + 1]);
+          display = value != null && value > 0 ? value : null;
+          i++;
+        }
+        break;
       default:
         break;
     }
@@ -2355,7 +2363,8 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
               loginMethod: loginMethod,
               password: password,
               switchUuid: switchUuid,
-              forceRelay: forceRelay);
+              forceRelay: forceRelay,
+              initialDisplay: display);
         });
         break;
       case UriLinkType.fileTransfer:
@@ -2540,6 +2549,8 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     String? switch_uuid = param["switch_uuid"];
     if (switch_uuid != null) args.addAll(['--switch_uuid', switch_uuid]);
     if (param["relay"] != null) args.add("--relay");
+    String? display = param["display"];
+    if (display != null) args.addAll(['--display', display]);
     return args;
   }
 

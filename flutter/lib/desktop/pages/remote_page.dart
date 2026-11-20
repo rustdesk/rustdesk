@@ -48,6 +48,7 @@ class RemotePage extends StatefulWidget {
     this.switchUuid,
     this.forceRelay,
     this.isSharedPassword,
+    this.initialDisplay,
   }) : super(key: key) {
     initSharedStates(id);
   }
@@ -63,6 +64,8 @@ class RemotePage extends StatefulWidget {
   final String? switchUuid;
   final bool? forceRelay;
   final bool? isSharedPassword;
+  // 1-based, as shown in the toolbar.
+  final int? initialDisplay;
   final SimpleWrapper<State<RemotePage>?> _lastState = SimpleWrapper(null);
   final DesktopTabController? tabController;
 
@@ -190,6 +193,10 @@ class _RemotePageState extends State<RemotePage>
       display: widget.display,
       displays: widget.displays,
     );
+    // Reuses the reconnect monitor-restore path, which range-checks the value.
+    if (widget.tabWindowId == null && widget.initialDisplay != null) {
+      _ffi.ffiModel.lastUserDisplay = widget.initialDisplay! - 1;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager
