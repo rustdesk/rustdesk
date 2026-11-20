@@ -2053,8 +2053,12 @@ impl Connection {
             platform_additions.insert("has_file_clipboard".into(), json!(has_file_clipboard));
         }
 
-        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
+            platform_additions.insert("support_view_camera".into(), json!(true));
+        }
+        #[cfg(target_os = "macos")]
+        if camera::is_camera_supported() {
             platform_additions.insert("support_view_camera".into(), json!(true));
         }
 

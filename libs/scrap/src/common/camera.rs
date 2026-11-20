@@ -36,6 +36,13 @@ pub fn primary_camera_exists() -> bool {
     Cameras::exists(PRIMARY_CAMERA_IDX)
 }
 
+/// nokhwa's AVFoundation query uses `AVCaptureDeviceDiscoverySession`, which exists only on
+/// macOS 10.15+. Without it `class!` panics, and the release profile aborts the process.
+#[cfg(target_os = "macos")]
+pub fn is_camera_supported() -> bool {
+    objc::runtime::Class::get("AVCaptureDeviceDiscoverySession").is_some()
+}
+
 /// AVFoundation requires the camera permission to be requested (and granted) before any
 /// other nokhwa call. Blocks up to 30s while the system prompt is shown.
 #[cfg(target_os = "macos")]
@@ -60,6 +67,10 @@ fn ensure_macos_camera_permission() -> ResultType<()> {
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 impl Cameras {
     pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
+        #[cfg(target_os = "macos")]
+        if !is_camera_supported() {
+            return Ok(Vec::new());
+        }
         #[cfg(target_os = "macos")]
         ensure_macos_camera_permission()?;
         match query(ApiBackend::Auto) {
@@ -139,6 +150,10 @@ impl Cameras {
     }
 
     pub fn exists(index: usize) -> bool {
+        #[cfg(target_os = "macos")]
+        if !is_camera_supported() {
+            return false;
+        }
         match query(ApiBackend::Auto) {
             Ok(cameras) => index < cameras.len(),
             _ => return false,
@@ -146,6 +161,10 @@ impl Cameras {
     }
 
     fn create_camera(index: &CameraIndex) -> ResultType<Camera> {
+        #[cfg(target_os = "macos")]
+        if !is_camera_supported() {
+            bail!("Camera is not supported on this macOS version");
+        }
         let format_type = if cfg!(target_os = "linux") {
             RequestedFormatType::None
         } else {
