@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A34F1E0D52E74F83813670C2 /* IosWindowGeometryStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34F1E0D52E74F83813670C1 /* IosWindowGeometryStream.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
@@ -31,6 +32,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A34F1E0D52E74F83813670C1 /* IosWindowGeometryStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosWindowGeometryStream.swift; sourceTree = "<group>"; };
 		0A3A301029F021DD0095DDA5 /* liblibrustdesk.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = liblibrustdesk.a; path = "../../target/aarch64-apple-ios/release/liblibrustdesk.a"; sourceTree = "<group>"; };
 		0A3A301329F0AB660095DDA5 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
@@ -107,6 +109,7 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				5CE7AD002EB4000000A1B2C3 /* SceneDelegate.swift */,
+				A34F1E0D52E74F83813670C1 /* IosWindowGeometryStream.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -283,6 +286,7 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				5CE7AD012EB4000000A1B2C3 /* SceneDelegate.swift in Sources */,
+				A34F1E0D52E74F83813670C2 /* IosWindowGeometryStream.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

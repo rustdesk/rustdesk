@@ -397,7 +397,9 @@ class _RawTouchGestureDetectorRegionState
       final cursorY = offset.dy;
       final visible =
           ffi.cursorModel.getVisibleRect().inflate(1); // extend edges
-      final size = MediaQueryData.fromView(View.of(context)).size;
+      final size = isIOS && ffi.canvasModel.mobileControlsOutsideCanvas
+          ? ffi.canvasModel.getSize()
+          : MediaQueryData.fromView(View.of(context)).size;
       if (!visible.contains(Offset(cursorX, cursorY))) {
         await ffi.cursorModel.move(size.width / 2, size.height / 2);
       }
