@@ -1940,10 +1940,12 @@ class InputModel {
     }
     final mediaData = MediaQueryData.fromView(
         WidgetsBinding.instance.platformDispatcher.views.first);
+    final padding =
+        parent.target?.canvasModel.mobileCanvasPadding ?? mediaData.padding;
     final adjustY = parent.target?.canvasModel.getAdjustY() ?? 0.0;
     return Offset(
-      event.localPosition.dx - mediaData.padding.left,
-      event.localPosition.dy - mediaData.padding.top - adjustY,
+      event.localPosition.dx - padding.left,
+      event.localPosition.dy - padding.top - adjustY,
     );
   }
 
