@@ -1768,7 +1768,7 @@ fn get_control_key_value(key_event: &KeyEvent) -> i32 {
 }
 
 #[inline]
-fn has_hotkey_modifiers(key_event: &KeyEvent) -> bool {
+pub(super) fn has_hotkey_modifiers(key_event: &KeyEvent) -> bool {
     key_event.modifiers.iter().any(|ck| {
         let v = ck.value();
         v == ControlKey::Control.value()
