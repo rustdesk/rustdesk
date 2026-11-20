@@ -1169,6 +1169,12 @@ impl Connection {
                 },
                 Some(data) = rx_from_authed.recv() => {
                     match data {
+                        #[cfg(target_os = "linux")]
+                        ipc::Data::SessionHandover if conn.authorized && conn.is_remote() => {
+                            allow_err!(crate::platform::linux::session_handover::notify_peer(&mut conn.stream).await);
+                            conn.on_close("session handover", false).await;
+                            break;
+                        }
                         ipc::Data::Close => {
                             conn.send(crate::common::make_privacy_mode_msg(
                                 back_notification::PrivacyModeState::PrvOnByOther,

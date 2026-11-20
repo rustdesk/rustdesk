@@ -2354,6 +2354,14 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(misc::Union::CloseReason(c)) => {
+                        let handover = self.handler.lc.write().unwrap().handle_session_handover(&c);
+                        if handover {
+                            // Acknowledge before reconnecting so the service can stop the old
+                            // server without losing its last packet on buffered transports.
+                            allow_err!(timeout(1000, self.send_close_reason(peer, &c)).await);
+                            self.handler.msgbox("restarting", "Restarting remote device", "Connection in progress. Please wait.", "");
+                            return false;
+                        }
                         self.sent_close_reason = true; // The controlled end will close, no need to send close reason
                         self.handler.msgbox("error", "Connection Error", &c, "");
                         return false;

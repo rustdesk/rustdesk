@@ -57,6 +57,7 @@ pub const PLATFORM_WINDOWS: &str = "Windows";
 pub const PLATFORM_LINUX: &str = "Linux";
 pub const PLATFORM_MACOS: &str = "Mac OS";
 pub const PLATFORM_ANDROID: &str = "Android";
+pub(crate) const SESSION_HANDOVER_CLOSE_REASON: &str = "Remote session is changing";
 
 pub const TIMER_OUT: Duration = Duration::from_secs(1);
 pub(crate) const API_LOG_INTERVAL: Duration = Duration::from_secs(600);

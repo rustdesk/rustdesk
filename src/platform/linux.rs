@@ -1,5 +1,6 @@
 use super::{gtk_sudo, CursorData, ResultType};
 use desktop::Desktop;
+pub(crate) mod session_handover;
 pub use base::platform::linux::*;
 
 #[cfg(feature = "drm")]
@@ -1325,8 +1326,26 @@ pub fn start_os_service() {
             stop_server(&mut user_server);
             force_stop_server();
         }
+        let greeter_uid = desktop.is_login_wayland().then(|| desktop.uid.clone());
         desktop.refresh();
         update_active_user_lookup_cache(&desktop);
+
+        if let Some(greeter_uid) = greeter_uid.filter(|_| {
+            server.is_some()
+                && sid != desktop.sid
+                && !desktop.sid.is_empty()
+                && !desktop.username.is_empty()
+                && desktop.username != "root"
+                && !desktop.is_login_wayland()
+        }) {
+            match hbb_common::tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(runtime) => runtime.block_on(session_handover::prepare(&greeter_uid)),
+                Err(err) => log::warn!("Could not prepare session handover: {err}"),
+            }
+        }
 
         // Duplicate logic here with should_start_server.
         if desktop.username == "root" || desktop.is_login_wayland() {

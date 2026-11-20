@@ -3929,6 +3929,14 @@ impl LoginConfigHandler {
         self.restart_remote_device_at = Some(Instant::now());
     }
 
+    pub(super) fn handle_session_handover(&mut self, reason: &str) -> bool {
+        if reason != crate::common::SESSION_HANDOVER_CLOSE_REASON {
+            return false;
+        }
+        self.mark_restarting_remote_device();
+        true
+    }
+
     pub fn clear_restarting_remote_device(&mut self) {
         self.restarting_remote_device = false;
         self.restart_remote_device_at = None;
@@ -5250,7 +5258,18 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
 
 #[cfg(test)]
 mod retry_tests {
-    use super::check_if_retry;
+    use super::{check_if_retry, LoginConfigHandler};
+
+    #[test]
+    fn session_handover_enters_restart_grace_only_for_the_explicit_notice() {
+        let mut lc = LoginConfigHandler::default();
+        for reason in ["Reset by the peer", "Closed manually by the peer", "Timeout"] {
+            assert!(!lc.handle_session_handover(reason));
+            assert!(!lc.is_restarting_remote_device());
+        }
+        assert!(lc.handle_session_handover(crate::common::SESSION_HANDOVER_CLOSE_REASON));
+        assert!(lc.is_restarting_remote_device());
+    }
 
     #[test]
     fn incoming_only_error_is_not_retryable() {

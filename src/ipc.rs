@@ -531,6 +531,8 @@ pub enum Data {
     /// explicit Disconnect button keeps sending `Close` and kicking for good.
     #[cfg(target_os = "linux")]
     CmWindowClosed,
+    #[cfg(target_os = "linux")]
+    SessionHandover,
     // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
     // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
     // to upstream. `_drm` protocol: the client sends `DrmHello`, the service `DrmDisplayList`, the
@@ -852,6 +854,13 @@ impl Drop for CheckIfRestart {
 
 async fn handle(data: Data, stream: &mut Connection) {
     match data {
+        #[cfg(target_os = "linux")]
+        Data::SessionHandover if is_server() && stream.peer_uid() == Some(0) => {
+            match crate::platform::linux::session_handover::notify_clients().await {
+                Ok(()) => allow_err!(stream.send(&Data::SessionHandover).await),
+                Err(err) => log::warn!("Session handover: {err}"),
+            }
+        }
         Data::SystemInfo(_) => {
             let info = format!(
                 "log_path: {}, config: {}, username: {}",
