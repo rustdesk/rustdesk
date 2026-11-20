@@ -757,10 +757,7 @@ impl Connection {
                 Some(data) = rx_from_cm.recv() => {
                     match data {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        ipc::Data::CmIpcDisconnected if conn.is_remote() => {
-                            conn.on_close("Connection manager IPC disconnected", false).await;
-                            break;
-                        }
+                        ipc::Data::CmIpcDisconnected if conn.is_remote() => break,
                         ipc::Data::Authorize => {
                             conn.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::Click);
                             conn.trusted_device = None;
