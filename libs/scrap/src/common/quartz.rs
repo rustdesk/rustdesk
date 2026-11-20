@@ -54,11 +54,11 @@ impl crate::TraitCapturer for Capturer {
                     Some(mut frame) => {
                         crate::would_block_if_equal(&mut self.saved_raw_data, frame.inner())?;
                         frame.surface_to_bgra(self.height());
-                        Ok(Frame::PixelBuffer(PixelBuffer::from_frame(
-                            frame,
-                            self.width(),
-                            self.height(),
-                        )))
+                        Ok(Frame::PixelBuffer(PixelBuffer {
+                            source: PixelSource::Screen(frame),
+                            width: self.width(),
+                            height: self.height(),
+                        }))
                     }
 
                     None => Err(io::ErrorKind::WouldBlock.into()),
@@ -96,14 +96,6 @@ impl<'a> PixelBuffer<'a> {
                 pixfmt,
                 stride: width * 4,
             },
-            width,
-            height,
-        }
-    }
-
-    fn from_frame(frame: quartz::Frame, width: usize, height: usize) -> Self {
-        PixelBuffer {
-            source: PixelSource::Screen(frame),
             width,
             height,
         }
