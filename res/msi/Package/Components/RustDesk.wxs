@@ -30,12 +30,13 @@
 		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
 		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
 		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER_INNER]" />
-		<!-- VersionNT can report 603 on Windows 10, so check the system DLL's version directly. -->
-		<Property Id="PDFPRINTER_OS_SUPPORTED" Secure="yes">
-			<DirectorySearch Id="PdfPrinterSystemFolder" Path="[SystemFolder]" Depth="0">
-				<FileSearch Id="PdfPrinterWindows10Kernel" Name="kernel32.dll" MinVersion="10.0.0.0" />
-			</DirectorySearch>
+		<!-- VersionNT can report 603 on Windows 10. Read the actual build during AppSearch. -->
+		<?define Windows10FirstBuild="10240" ?>
+		<Property Id="PDFPRINTER_WINDOWS_BUILD">
+			<RegistrySearch Id="PdfPrinterWindowsBuildSearch" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" Type="raw" />
 		</Property>
+		<Property Id="PDFPRINTER_OS_SUPPORTED" Secure="yes" />
+		<SetProperty Id="PDFPRINTER_OS_SUPPORTED" Value="1" After="AppSearch" Sequence="first" Condition="PDFPRINTER_WINDOWS_BUILD &gt;= $(var.Windows10FirstBuild)" />
 		<InstallExecuteSequence>
 			<!-- Capture running state before Restart Manager shuts services down in InstallValidate. -->
 			<Custom Action="ScheduleUpgradePrinterRecovery" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE AND ((PREVIOUSPRINTER AND PREVIOUSPRINTER &lt;&gt; &quot;0&quot;) OR PDFPRINTER_INSTALLED = 1 OR (PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)))" />
