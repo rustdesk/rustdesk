@@ -1,31 +1,14 @@
 import 'dart:async';
 
-class MobileInputKey {
-  const MobileInputKey(this.name,
-      {this.alt = false,
-      this.ctrl = false,
-      this.shift = false,
-      this.command = false});
-
-  final String name;
-  final bool alt;
-  final bool ctrl;
-  final bool shift;
-  final bool command;
-}
-
 class MobileInputSession {
   MobileInputSession({
     required bool Function() canSend,
     required Future<void> Function(String) sendText,
-    required Future<void> Function(MobileInputKey) sendKey,
   })  : _canSend = canSend,
-        _sendText = sendText,
-        _sendKey = sendKey;
+        _sendText = sendText;
 
   final bool Function() _canSend;
   final Future<void> Function(String) _sendText;
-  final Future<void> Function(MobileInputKey) _sendKey;
   Future<void> _pending = Future.value();
   int _generation = 0;
 
@@ -37,15 +20,6 @@ class MobileInputSession {
         }
       });
 
-  Future<void> key(MobileInputKey key) => dispatch(() => _sendKey(key));
-
-  void _check(int generation, {bool isKeyRelease = false}) {
-    if (isKeyRelease) return;
-    if (generation != _generation || !_canSend()) {
-      throw StateError('Connection not allowed');
-    }
-  }
-
   Future<void> dispatch(Future<void> Function() send,
       {bool isKeyRelease = false}) async {
     final generation = _generation;
@@ -54,7 +28,9 @@ class MobileInputSession {
     _pending = completed.future;
     try {
       await previous;
-      _check(generation, isKeyRelease: isKeyRelease);
+      if (!isKeyRelease && (generation != _generation || !_canSend())) {
+        throw StateError('Connection not allowed');
+      }
       await send();
     } catch (_) {
       // Cancel dependent commands, but retain releases for keys already sent.

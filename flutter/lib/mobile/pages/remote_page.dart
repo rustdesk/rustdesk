@@ -367,15 +367,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         }
         return bind.sessionSubmitText(sessionId: id, value: text);
       },
-      sendKey: (key) => bind.sessionInputKey(
-          sessionId: id,
-          name: key.name,
-          down: false,
-          press: true,
-          alt: key.alt,
-          ctrl: key.ctrl,
-          shift: key.shift,
-          command: key.command),
     );
   }
 
@@ -389,11 +380,24 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     return _mobileInput.submit(text);
   }
 
-  Future<void> _mobileKey(String name) => _mobileInput.key(MobileInputKey(name,
+  Future<void> _mobileKey(String name) {
+    final id = sessionId;
+    final modifiers = (
       alt: inputModel.alt,
       ctrl: inputModel.ctrl,
       shift: inputModel.shift,
-      command: inputModel.command));
+      command: inputModel.command
+    );
+    return _mobileInput.dispatch(() => bind.sessionInputKey(
+        sessionId: id,
+        name: name,
+        down: false,
+        press: true,
+        alt: modifiers.alt,
+        ctrl: modifiers.ctrl,
+        shift: modifiers.shift,
+        command: modifiers.command));
+  }
 
   void _reportMobileInputError(Object error, StackTrace stack) {
     debugPrint('Mobile input failed: $error\n$stack');

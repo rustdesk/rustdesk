@@ -10,7 +10,6 @@ void main() {
     final session = MobileInputSession(
       canSend: () => true,
       sendText: (text) async => calls.add(text),
-      sendKey: (key) async => calls.add(key.name),
     );
     await session.submit('mañana\r\n日本\r\n\n끝');
     expect(calls, ['mañana\n日本\n\n끝']);
@@ -26,11 +25,10 @@ void main() {
         calls.add(text);
         await textDone.future;
       },
-      sendKey: (key) async => calls.add(key.name),
     );
     final text = session.submit('你好😀');
-    final enter = session.key(const MobileInputKey('VK_RETURN'));
-    final key = session.key(const MobileInputKey('VK_BACK'));
+    final enter = session.dispatch(() async => calls.add('VK_RETURN'));
+    final key = session.dispatch(() async => calls.add('VK_BACK'));
     await Future<void>.delayed(Duration.zero);
     expect(calls, ['你好😀']);
     textDone.complete();
@@ -45,10 +43,9 @@ void main() {
     final session = MobileInputSession(
       canSend: () => true,
       sendText: (_) => textDone.future,
-      sendKey: (key) async => calls.add(key.name),
     );
     final text = session.submit('draft');
-    final key = session.key(const MobileInputKey('VK_RETURN'));
+    final key = session.dispatch(() async => calls.add('VK_RETURN'));
     final failures = Future.wait([
       expectLater(text, throwsStateError),
       expectLater(key, throwsStateError),
@@ -56,7 +53,7 @@ void main() {
     textDone.completeError(StateError('send failed'));
     await failures;
     expect(calls, isEmpty);
-    await session.key(const MobileInputKey('VK_BACK'));
+    await session.dispatch(() async => calls.add('VK_BACK'));
     expect(calls, ['VK_BACK'], reason: 'A new explicit action can recover');
   });
 
@@ -68,7 +65,6 @@ void main() {
     final session = MobileInputSession(
       canSend: () => allowed,
       sendText: (_) => textDone.future,
-      sendKey: (_) async {},
     );
     await session.dispatch(() async => calls.add('Ctrl down'));
     final text = session.submit('draft');
@@ -90,10 +86,9 @@ void main() {
     final session = MobileInputSession(
       canSend: () => allowed,
       sendText: (_) => textDone.future,
-      sendKey: (key) async => calls.add(key.name),
     );
     final text = session.submit('draft');
-    final key = session.key(const MobileInputKey('VK_RETURN'));
+    final key = session.dispatch(() async => calls.add('VK_RETURN'));
     final failed = expectLater(key, throwsStateError);
     await Future<void>.delayed(Duration.zero);
     session.invalidate();
@@ -102,6 +97,6 @@ void main() {
     await Future.wait([text, failed]);
     expect(calls, isEmpty);
     await expectLater(
-        session.key(const MobileInputKey('VK_BACK')), throwsStateError);
+        session.dispatch(() async => calls.add('VK_BACK')), throwsStateError);
   });
 }

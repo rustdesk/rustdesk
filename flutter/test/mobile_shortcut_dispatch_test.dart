@@ -106,9 +106,7 @@ Future<void> verifyShortcutOrder(
     ..keyboardMode = kKeyLegacyMode;
   final accepted = Completer<void>();
   final mobile = MobileInputSession(
-      canSend: () => !session.closed,
-      sendText: (_) => accepted.future,
-      sendKey: (_) async {});
+      canSend: () => !session.closed, sendText: (_) => accepted.future);
   input.mobileKeyboardDispatcher = (send, {isKeyRelease = false}) =>
       mobile.dispatch(send, isKeyRelease: isKeyRelease);
   addTearDown(() => _disposeInput(session, input));
