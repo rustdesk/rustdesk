@@ -79,3 +79,13 @@ impl Drop for PrivacyModeImpl {
         self.clear();
     }
 }
+
+/// Most closes lock before the connection loop turns privacy mode off, and a lock shortcut
+/// injected while the tap and the blackout are torn down can be lost (#15875).
+pub fn turn_off_before_lock(conn_id: i32) {
+    if super::get_privacy_mode_conn_id() == Some(conn_id) {
+        if let Some(Err(e)) = super::turn_off_privacy(conn_id, None) {
+            hbb_common::log::error!("Failed to turn off privacy mode before locking: {}", e);
+        }
+    }
+}

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:core';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderListBody;
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -283,7 +285,7 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
     );
     onPressed() {
       if (opt.dismissOnClicked && Navigator.canPop(context)) {
-        Navigator.pop(context);
+        if (!_SubmenuScope.dismiss(context)) Navigator.pop(context);
         if (opt.dismissCallback != null) {
           opt.dismissCallback!();
         }
@@ -291,7 +293,7 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
       setOption(opt.value);
     }
 
-    return mod_menu.PopupMenuItem(
+    return _MenuEntryButtonItem<T>(
       padding: EdgeInsets.zero,
       height: conf.height,
       child: Container(
@@ -355,7 +357,7 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
 
   mod_menu.PopupMenuEntry<T> _buildSecondMenu(
       BuildContext context, MenuConfig conf, MenuEntryRadioOption opt) {
-    return mod_menu.PopupMenuItem(
+    return _MenuEntryButtonItem<T>(
       padding: EdgeInsets.zero,
       height: conf.height,
       child: Container(
@@ -397,7 +399,7 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
             ),
             onPressed: () {
               if (opt.dismissOnClicked && Navigator.canPop(context)) {
-                Navigator.pop(context);
+                if (!_SubmenuScope.dismiss(context)) Navigator.pop(context);
                 if (opt.dismissCallback != null) {
                   opt.dismissCallback!();
                 }
@@ -476,7 +478,7 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
 
   tryPop(BuildContext context) {
     if (dismissOnClicked && Navigator.canPop(context)) {
-      Navigator.pop(context);
+      if (!_SubmenuScope.dismiss(context)) Navigator.pop(context);
       super.dismissCallback?.call();
     }
   }
@@ -490,7 +492,7 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
             fontWeight: FontWeight.normal)
         .obs;
     return [
-      mod_menu.PopupMenuItem(
+      _MenuEntryButtonItem<T>(
         padding: EdgeInsets.zero,
         height: conf.height,
         child: Container(
@@ -687,18 +689,26 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
     super.enabled ??= true.obs;
+    final theme = Theme.of(context);
+    final checkboxTheme = CheckboxTheme.of(context);
+    final checkboxWidth =
+        ((checkboxTheme.materialTapTargetSize ?? theme.materialTapTargetSize) ==
+                    MaterialTapTargetSize.padded
+                ? kMinInteractiveDimension
+                : kMinInteractiveDimension - 8) +
+            (checkboxTheme.visualDensity ?? theme.visualDensity)
+                .baseSizeAdjustment
+                .dx;
+    final arrowInset = (checkboxWidth - (IconTheme.of(context).size ?? 24)) / 2;
     return [
-      PopupMenuChildrenItem(
-        enabled: super.enabled,
+      _PopupSubMenuItem<T>(
+        enabled: super.enabled!,
         height: conf.height,
-        padding: padding,
+        padding: (padding ?? EdgeInsets.zero)
+            .copyWith(right: (padding?.right ?? 0) + arrowInset),
         dismissParentOnCanceled: dismissParentOnCanceled,
-        useButtonLayout: true,
-        position: mod_menu.PopupMenuPosition.overSide,
-        itemBuilder: (BuildContext context) => entries
-            .map((entry) => entry.build(context, conf))
-            .expand((i) => i)
-            .toList(),
+        entries: entries,
+        config: conf,
         child: Row(children: [
           Obx(() => Text(
                 text,
@@ -723,6 +733,242 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
       )
     ];
   }
+}
+
+class _PopupSubMenuItem<T> extends mod_menu.PopupMenuEntry<T> {
+  const _PopupSubMenuItem({
+    required this.height,
+    required this.padding,
+    required this.child,
+    required this.entries,
+    required this.config,
+    required this.enabled,
+    required this.dismissParentOnCanceled,
+  });
+
+  @override
+  final double height;
+  final EdgeInsets padding;
+  final Widget child;
+  final RxBool enabled;
+  final bool dismissParentOnCanceled;
+  final List<MenuEntryBase<T>> entries;
+  final MenuConfig config;
+
+  @override
+  bool represents(T? value) => false;
+
+  @override
+  State<_PopupSubMenuItem<T>> createState() => _PopupSubMenuItemState<T>();
+}
+
+class _PopupSubMenuItemState<T> extends State<_PopupSubMenuItem<T>> {
+  Timer? _hoverTimer;
+  final _submenuController = OverlayPortalController();
+  bool get _submenuOpen => _submenuController.isShowing;
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    super.dispose();
+  }
+
+  void _hoverTrigger(bool hovered) {
+    if (_submenuOpen || !widget.enabled.value) return;
+    _hoverTimer?.cancel();
+    if (hovered) {
+      _hoverTimer = Timer(const Duration(milliseconds: 200), _openSubmenu);
+    }
+  }
+
+  void _openSubmenu() {
+    _hoverTimer?.cancel();
+    if (!mounted ||
+        !widget.enabled.value ||
+        widget.entries.isEmpty ||
+        _submenuOpen ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    setState(_submenuController.show);
+  }
+
+  void _closeSubmenu() {
+    _hoverTimer?.cancel();
+    if (mounted && _submenuOpen) setState(_submenuController.hide);
+  }
+
+  void _dismissSubmenu() {
+    _closeSubmenu();
+    if (widget.dismissParentOnCanceled &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      Navigator.pop(context);
+    }
+  }
+
+  Widget _buildSubmenu(BuildContext overlayContext) {
+    final button = context.findRenderObject();
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (button is! RenderBox || overlay is! RenderBox) {
+      return const SizedBox.shrink();
+    }
+    final anchor =
+        button.localToGlobal(Offset.zero, ancestor: overlay) & button.size;
+    final parentMenu = Scrollable.maybeOf(context)?.context.findRenderObject();
+    final parentItems =
+        context.findAncestorRenderObjectOfType<RenderListBody>();
+    final parentBounds = parentMenu is RenderBox && parentItems != null
+        ? (parentMenu.localToGlobal(Offset.zero, ancestor: overlay) &
+                parentMenu.size)
+            .intersect(
+                parentItems.localToGlobal(Offset.zero, ancestor: overlay) &
+                    parentItems.size)
+        : Rect.zero;
+    return Stack(children: [
+      Positioned.fill(
+          child: MouseRegion(
+        opaque: false,
+        hitTestBehavior: HitTestBehavior.translucent,
+        onExit: (_) => _hoverTimer?.cancel(),
+        onHover: (event) {
+          final position = overlay.globalToLocal(event.position);
+          if (parentBounds.contains(position) && !anchor.contains(position)) {
+            // Allow crossing parent rows on the way to the submenu.
+            if (_hoverTimer?.isActive != true) {
+              _hoverTimer =
+                  Timer(const Duration(milliseconds: 400), _closeSubmenu);
+            }
+          } else {
+            _hoverTimer?.cancel();
+          }
+        },
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (event) {
+            final position = overlay.globalToLocal(event.position);
+            if (parentBounds.contains(position) && !anchor.contains(position)) {
+              _closeSubmenu();
+            }
+          },
+          child: const SizedBox.expand(),
+        ),
+      )),
+      if (!widget.dismissParentOnCanceled)
+        Positioned.fill(
+            child: ClipPath(
+          clipper: _OutsideParentMenuClipper(parentBounds),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _closeSubmenu,
+          ),
+        )),
+      _SubmenuScope(
+        onDismiss: _dismissSubmenu,
+        child: Actions(
+          actions: {
+            DismissIntent: CallbackAction<DismissIntent>(onInvoke: (_) {
+              _dismissSubmenu();
+              return null;
+            }),
+          },
+          child: FocusScope(
+            // Autofocus inside the new scope so the focused trigger cannot block it.
+            child: Focus(
+              autofocus: true,
+              skipTraversal: true,
+              child: Builder(
+                  builder: (context) => mod_menu.PopupMenuOverlay<T>(
+                        anchor: anchor,
+                        items: widget.entries
+                            .expand(
+                                (entry) => entry.build(context, widget.config))
+                            .toList(),
+                      )),
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final highlight = Theme.of(context).colorScheme.onSurface.withOpacity(0.08);
+    final trigger = Obx(() => MouseRegion(
+          onEnter: (_) => _hoverTrigger(true),
+          onExit: (_) => _hoverTrigger(false),
+          child: TextButton(
+            onPressed: widget.enabled.value ? _openSubmenu : null,
+            style: ButtonStyle(
+              shape: const MaterialStatePropertyAll(RoundedRectangleBorder()),
+              backgroundColor: MaterialStateProperty.resolveWith((states) =>
+                  !states.contains(MaterialState.disabled) &&
+                          (_submenuOpen ||
+                              states.contains(MaterialState.hovered) ||
+                              states.contains(MaterialState.focused) ||
+                              states.contains(MaterialState.pressed))
+                      ? highlight
+                      : Colors.transparent),
+              overlayColor: const MaterialStatePropertyAll(Colors.transparent),
+            ),
+            // Retain the old spacing, with one focus stop and one hover highlight.
+            child: ExcludeFocus(
+              child: TextButton(
+                onPressed: widget.enabled.value ? _openSubmenu : null,
+                style: const ButtonStyle(
+                  overlayColor: MaterialStatePropertyAll(Colors.transparent),
+                  splashFactory: NoSplash.splashFactory,
+                ),
+                child: Container(
+                  alignment: AlignmentDirectional.centerStart,
+                  height: widget.height,
+                  padding: widget.padding,
+                  child: widget.child,
+                ),
+              ),
+            ),
+          ),
+        ));
+    return OverlayPortal(
+      controller: _submenuController,
+      overlayChildBuilder: _buildSubmenu,
+      child: trigger,
+    );
+  }
+}
+
+class _SubmenuScope extends InheritedWidget {
+  const _SubmenuScope({required this.onDismiss, required super.child});
+
+  final VoidCallback onDismiss;
+
+  static bool dismiss(BuildContext context) {
+    final scope = context.getInheritedWidgetOfExactType<_SubmenuScope>();
+    if (scope == null || ModalRoute.of(context)?.isCurrent != true) {
+      return false;
+    }
+    scope.onDismiss();
+    return true;
+  }
+
+  @override
+  bool updateShouldNotify(_SubmenuScope oldWidget) => false;
+}
+
+class _OutsideParentMenuClipper extends CustomClipper<Path> {
+  const _OutsideParentMenuClipper(this.parentBounds);
+
+  final Rect parentBounds;
+
+  @override
+  Path getClip(Size size) => Path()
+    ..fillType = PathFillType.evenOdd
+    ..addRect(Offset.zero & size)
+    ..addRect(parentBounds);
+
+  @override
+  bool shouldReclip(_OutsideParentMenuClipper oldClipper) =>
+      parentBounds != oldClipper.parentBounds;
 }
 
 class MenuEntryButton<T> extends MenuEntryBase<T> {
@@ -751,7 +997,7 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
           onPressed: super.enabled!.value
               ? () {
                   if (super.dismissOnClicked && Navigator.canPop(context)) {
-                    Navigator.pop(context);
+                    if (!_SubmenuScope.dismiss(context)) Navigator.pop(context);
                     if (super.dismissCallback != null) {
                       super.dismissCallback!();
                     }
@@ -774,12 +1020,37 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
     return [
-      mod_menu.PopupMenuItem(
+      _MenuEntryButtonItem<T>(
         padding: EdgeInsets.zero,
         height: conf.height,
         child: _buildChild(context, conf),
       )
     ];
+  }
+}
+
+class _MenuEntryButtonItem<T> extends mod_menu.PopupMenuItem<T> {
+  const _MenuEntryButtonItem({super.padding, super.height, required super.child});
+
+  @override
+  _MenuEntryButtonItemState<T> createState() => _MenuEntryButtonItemState<T>();
+}
+
+class _MenuEntryButtonItemState<T>
+    extends mod_menu.PopupMenuItemState<T, _MenuEntryButtonItem<T>> {
+  // The inner button already handles keyboard activation.
+  @override
+  final FocusNode focusNode = FocusNode(skipTraversal: true);
+
+  @override
+  void handleTap() {
+    if (!_SubmenuScope.dismiss(context)) super.handleTap();
+  }
+
+  @override
+  void dispose() {
+    focusNode.dispose();
+    super.dispose();
   }
 }
 

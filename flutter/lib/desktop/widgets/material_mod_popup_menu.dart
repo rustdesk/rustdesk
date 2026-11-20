@@ -323,6 +323,9 @@ class PopupMenuItem<T> extends PopupMenuEntry<T> {
 /// [PopupMenuItem]. The first, `T`, must match the type argument of that widget
 /// class, and is the type of values returned from this menu.
 class PopupMenuItemState<T, W extends PopupMenuItem<T>> extends State<W> {
+  @protected
+  FocusNode? get focusNode => null;
+
   /// The menu item contents.
   ///
   /// Used by the [build] method.
@@ -388,8 +391,35 @@ class PopupMenuItemState<T, W extends PopupMenuItem<T>> extends State<W> {
         //   child: item,
         // ),
         child: TextButton(
+          focusNode: focusNode,
           onPressed: widget.enabled ? handleTap : null,
-          child: item,
+          style: ButtonStyle(
+            shape: const MaterialStatePropertyAll(RoundedRectangleBorder()),
+            overlayColor: MaterialStateProperty.resolveWith((states) {
+              final color = theme.colorScheme.onSurface;
+              if (states.contains(MaterialState.pressed)) {
+                return color.withOpacity(0.1);
+              }
+              if (states.contains(MaterialState.hovered)) {
+                return color.withOpacity(0.08);
+              }
+              if (states.contains(MaterialState.focused)) {
+                return color.withOpacity(0.1);
+              }
+              return Colors.transparent;
+            }),
+          ),
+          child: TextButtonTheme(
+            data: TextButtonThemeData(
+              // Inner buttons keep their layout and callbacks; the row paints feedback.
+              style: (TextButtonTheme.of(context).style ?? const ButtonStyle())
+                  .copyWith(
+                overlayColor: const MaterialStatePropertyAll(Colors.transparent),
+                splashFactory: NoSplash.splashFactory,
+              ),
+            ),
+            child: item,
+          ),
         ),
       ),
     );
@@ -797,6 +827,62 @@ class _PopupMenuRouteLayout extends SingleChildLayoutDelegate {
         !listEquals(itemSizes, oldDelegate.itemSizes) ||
         padding != oldDelegate.padding ||
         !setEquals(avoidBounds, oldDelegate.avoidBounds);
+  }
+}
+
+class PopupMenuOverlay<T> extends StatelessWidget {
+  const PopupMenuOverlay({
+    required this.anchor,
+    required this.items,
+    super.key,
+  });
+
+  final Rect anchor;
+  final List<PopupMenuEntry<T>> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final theme = PopupMenuTheme.of(context);
+    return MediaQuery.removePadding(
+      context: context,
+      removeTop: true,
+      removeBottom: true,
+      removeLeft: true,
+      removeRight: true,
+      child: LayoutBuilder(builder: (context, constraints) {
+        return CustomSingleChildLayout(
+          delegate: _PopupMenuRouteLayout(
+            RelativeRect.fromRect(anchor.shift(Offset(anchor.width, 0)),
+                Offset.zero & constraints.biggest),
+            const [],
+            null,
+            Directionality.of(context),
+            mediaQuery.padding,
+            DisplayFeatureSubScreen.avoidBounds(mediaQuery).toSet(),
+            submenuAnchor: anchor,
+          ),
+          child: Material(
+            shape: theme.shape,
+            color: theme.color,
+            type: MaterialType.card,
+            elevation: theme.elevation ?? 8.0,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                  minWidth: _kMenuMinWidth, maxWidth: _kMenuMaxWidth),
+              child: IntrinsicWidth(
+                stepWidth: _kMenuWidthStep,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: _kMenuVerticalPadding),
+                  child: ListBody(children: items),
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
   }
 }
 

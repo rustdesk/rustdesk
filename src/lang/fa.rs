@@ -805,12 +805,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Set shortcut", "تنظیم میانبر"),
         ("shortcut-recording-instruction", "کلیدهای میانبر مورد نظر را فشار دهید."),
         ("shortcut-recording-press-keys-tip", "کلیدها را فشار دهید..."),
-        ("shortcut-must-include-modifiers", "میانبر باید شامل حداقل یک کلید تغییردهنده (Ctrl، Alt، Shift یا Meta) باشد."),
+        ("shortcut-must-include-modifiers", "میانبر باید شامل حداقل یک کلید تغییردهنده باشد: {}"),
         ("shortcut-already-bound-to", "این میانبر قبلاً به عملکرد دیگری اختصاص داده شده است."),
         ("Replace", "جایگزینی"),
         ("Valid", "معتبر"),
         ("shortcut-mobile-physical-keyboard-tip", "این میانبرها فقط با صفحه کلید فیزیکی متصل کار می‌کنند."),
-        ("shortcut-key-not-supported", "این کلید برای میانبر پشتیبانی نمی‌شود."),
+        ("shortcut-key-not-supported", "\"{}\" را نمی‌توان به‌عنوان میانبر استفاده کرد."),
         ("On", "روشن"),
         ("Off", "خاموش"),
         ("api_server_connection_tip", "سرور سفارشی شما از HTTP رمزنگاری‌نشده استفاده می‌کند. برای فعال‌سازی HTTPS با مدیر سیستم خود تماس بگیرید."),
@@ -826,5 +826,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "پوشه انتخاب‌شده خالی نیست. نصب ممکن است داده‌های موجود را حذف کند. بهتر است پوشه دیگری انتخاب کنید."),
         ("Request approval", "درخواست تأیید"),
         ("Forever", "برای همیشه"),
+        ("username-login-disabled-oidc-unavailable", "ورود با نام کاربری و گذرواژه غیرفعال است و هیچ روش ورود OIDC در دسترس نیست."),
     ].iter().cloned().collect();
 }

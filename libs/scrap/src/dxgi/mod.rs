@@ -437,6 +437,24 @@ impl Capturer {
         self.output_texture = texture;
     }
 
+    /// Probe duplication access without copying or mapping desktop pixels.
+    pub fn probe_frame(&mut self) -> io::Result<()> {
+        const NO_WAIT: UINT = 0;
+        if self.is_gdi() || self.duplication.is_null() {
+            return Err(io::ErrorKind::AddrNotAvailable.into());
+        }
+        // Release just before acquiring again to avoid redundant DXGI copies between polls.
+        self.release_frame()?;
+        let mut info = mem::MaybeUninit::<DXGI_OUTDUPL_FRAME_INFO>::uninit();
+        let mut frame = ptr::null_mut();
+        wrap_hresult(unsafe {
+            (*self.duplication.0).AcquireNextFrame(NO_WAIT, info.as_mut_ptr(), &mut frame)
+        })?;
+        self.frame_state = FrameState::Acquired;
+        drop(ComPtr(frame));
+        Ok(())
+    }
+
     unsafe fn load_frame(&mut self, timeout: UINT) -> io::Result<(*const u8, i32)> {
         if self.duplication.0.is_null() {
             return Err(io::ErrorKind::AddrNotAvailable.into());

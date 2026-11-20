@@ -123,6 +123,8 @@ pub const OPTION_HIDE_PROXY_SETTINGS: &str = "hide-proxy-settings";
 pub const OPTION_HIDE_REMOTE_PRINTER_SETTINGS: &str = "hide-remote-printer-settings";
 pub const OPTION_HIDE_WEBSOCKET_SETTINGS: &str = "hide-websocket-settings";
 pub const OPTION_HIDE_STOP_SERVICE: &str = "hide-stop-service";
+pub const OPTION_HIDE_ACCOUNT_PASSWORD_LOGIN: &str = "hide-account-password-login";
+pub const OPTION_QUIT_BUTTON_TEXT: &str = "quit-button-text";
 pub const OPTION_ALLOW_COMMAND_LINE_SETTINGS_WHEN_SETTINGS_DISABLED: &str =
     "allow-command-line-settings-when-settings-disabled";
 
@@ -351,6 +353,7 @@ pub const KEYS_BUILDIN_SETTINGS: &[&str] = &[
     OPTION_HIDE_REMOTE_PRINTER_SETTINGS,
     OPTION_HIDE_WEBSOCKET_SETTINGS,
     OPTION_HIDE_STOP_SERVICE,
+    OPTION_HIDE_ACCOUNT_PASSWORD_LOGIN,
     OPTION_HIDE_USERNAME_ON_CARD,
     OPTION_HIDE_HELP_CARDS,
     OPTION_DEFAULT_CONNECT_PASSWORD,
@@ -373,6 +376,7 @@ pub const KEYS_BUILDIN_SETTINGS: &[&str] = &[
     OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
     OPTION_HIDE_ELEVATE_BUTTON_IN_ACCEPT_WINDOW,
     OPTION_ALLOW_COMMAND_LINE_SETTINGS_WHEN_SETTINGS_DISABLED,
+    OPTION_QUIT_BUTTON_TEXT,
 ];
 
 #[cfg(test)]

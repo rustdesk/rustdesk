@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.5.1"
+version = "1.5.3"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -73,7 +73,7 @@ libsamplerate-sys = { version = "0.1.12", optional = true }
 uuid = { version = "1.3", features = ["v4"] }
 num_cpus = "1.15"
 bytes = { version = "1.4", features = ["serde"] }
-default-net = "0.14"
+default-net = { git = "https://github.com/rustdesk-org/netdev", branch = "rustdesk-0.22" }
 wol-rs = "1.0"
 flutter_rust_bridge = { version = "=1.80", features = ["uuid"], optional = true}
 errno = "0.3"
@@ -295,3 +295,8 @@ rpath = true
 
 [profile.dev]
 debug = 1
+
+# sciter-rs transmutes OR'ed flags into fieldless enums; rustc's debug-build
+# enum check aborts on them (release builds never had the check).
+[profile.dev.package.sciter-rs]
+debug-assertions = false

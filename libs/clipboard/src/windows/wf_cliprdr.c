@@ -2750,14 +2750,15 @@ static FILEDESCRIPTORW *wf_cliprdr_get_file_descriptor(WCHAR *file_name, size_t 
 		return NULL;
 	}
 
-	// to-do: use `fd->dwFlags = FD_ATTRIBUTES | FD_FILESIZE | FD_WRITESTIME | FD_PROGRESSUI`.
-	// We keep `fd->dwFlags = FD_ATTRIBUTES | FD_WRITESTIME | FD_PROGRESSUI` for compatibility.
-	// fd->dwFlags = FD_ATTRIBUTES | FD_FILESIZE | FD_WRITESTIME | FD_PROGRESSUI;
 	fd->dwFlags = FD_ATTRIBUTES | FD_WRITESTIME | FD_PROGRESSUI;
 	fd->dwFileAttributes = GetFileAttributesW(file_name);
 	if (fd->dwFileAttributes == INVALID_FILE_ATTRIBUTES)
 	{
-		// TODO: debug handle some errors
+		// INVALID_FILE_ATTRIBUTES has FILE_ATTRIBUTE_DIRECTORY set, so the entry would go out as
+		// an empty directory in place of the file.
+		CloseHandle(hFile);
+		free(fd);
+		return NULL;
 	}
 
 	if (!GetFileTime(hFile, NULL, NULL, &fd->ftLastWriteTime))
@@ -2765,7 +2766,34 @@ static FILEDESCRIPTORW *wf_cliprdr_get_file_descriptor(WCHAR *file_name, size_t 
 		fd->dwFlags &= ~FD_WRITESTIME;
 	}
 
-	fd->nFileSizeLow = GetFileSize(hFile, &fd->nFileSizeHigh);
+	// Announce the size in the file list. Without FD_FILESIZE the receiving side cannot
+	// trust the size fields, so CliprdrStream_New() asks for each file's size with its own
+	// FILECONTENTS_SIZE request and blocks on the reply. Those requests are made for every
+	// entry up front, while the shell is inside IDataObject::GetData(), so the cost grows
+	// with the number of files and not with their size.
+	//
+	// GetFileSize() reports failure as INVALID_FILE_SIZE, which cannot be told apart from a
+	// genuine 4GB-1 file without GetLastError(). A directory gets no size: whatever the
+	// handle FILE_FLAG_BACKUP_SEMANTICS lets us open above reports is not a file size. A
+	// file whose size cannot be read is rejected rather than sent with the flag off: the
+	// Unix receiver reads the size fields whether or not the flag is set, for compatibility
+	// with older Windows senders, and would take the zero for an empty file.
+	if ((fd->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+	{
+		LARGE_INTEGER file_size = {0};
+
+		if (!GetFileSizeEx(hFile, &file_size) || file_size.QuadPart < 0)
+		{
+			CloseHandle(hFile);
+			free(fd);
+			return NULL;
+		}
+
+		fd->nFileSizeLow = file_size.LowPart;
+		fd->nFileSizeHigh = (DWORD)file_size.HighPart;
+		fd->dwFlags |= FD_FILESIZE;
+	}
+
 	if ((wcslen(file_name + pathLen) + 1) > sizeof(fd->cFileName) / sizeof(fd->cFileName[0]))
 	{
 		// The file name is too long, which is not a normal case.
@@ -2843,8 +2871,12 @@ static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_fi
 		return FALSE;
 	}
 
+	// Receivers never read an empty file, so the audit waits for the first file with content.
 	if ((clipboard->fileDescriptor[clipboard->nFiles]->dwFileAttributes &
-		 FILE_ATTRIBUTE_DIRECTORY) == 0) {
+		 FILE_ATTRIBUTE_DIRECTORY) == 0 &&
+		(clipboard->fileDescriptor[clipboard->nFiles]->nFileSizeLow |
+		 clipboard->fileDescriptor[clipboard->nFiles]->nFileSizeHigh) != 0 &&
+		clipboard->first_file_index == (size_t)-1) {
 		clipboard->first_file_index = clipboard->nFiles;
 	}
 

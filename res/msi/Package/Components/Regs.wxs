@@ -3,6 +3,31 @@
 	<?include ../Includes.wxi?>
 
 	<Fragment>
+		<Property Id="FIREWALLRULES" Secure="yes" />
+		<Property Id="PREVIOUSFIREWALLRULES" Secure="yes">
+			<!-- For this per-machine MSI, Root="HKLM" Key="Software\Classes\$(var.RegKeyRoot)" reads the machine-stored value directly.
+				 Keep Root="HKCR" Key="$(var.RegKeyRoot)" for consistency with existing shortcut/printer searches.
+				 https://learn.microsoft.com/en-us/windows/win32/msi/registry-table -->
+			<RegistrySearch Id="FirewallRulesSearch" Root="HKCR" Key="$(var.RegKeyRoot)" Name="FIREWALLRULES" Type="raw" />
+		</Property>
+		<SetProperty Action="SetSavedFirewallRulesValue" Id="FIREWALLRULES" Value="[PREVIOUSFIREWALLRULES]" After="AppSearch" Sequence="first" Condition="NOT FIREWALLRULES AND PREVIOUSFIREWALLRULES" />
+		<SetProperty Action="NormalizeFirewallRulesEnabled" Id="FIREWALLRULES" Value="1" After="SetSavedFirewallRulesValue" Sequence="first" Condition="NOT (FIREWALLRULES = &quot;0&quot; OR FIREWALLRULES ~= &quot;N&quot;)" />
+		<SetProperty Action="NormalizeFirewallRulesDisabled" Id="FIREWALLRULES" Value="0" After="NormalizeFirewallRulesEnabled" Sequence="first" Condition="FIREWALLRULES ~= &quot;N&quot;" />
+
+		<!-- Maintenance may leave the registry component unchanged; persist the resolved choice explicitly. -->
+		<CustomAction Id="PersistFirewallRulesEnabled" Directory="System64Folder" ExeCommand='"[System64Folder]reg.exe" add "HKLM\Software\Classes\$(var.RegKeyRoot)" /v FIREWALLRULES /t REG_SZ /d 1 /f' Execute="deferred" Impersonate="no" Return="ignore" />
+		<CustomAction Id="PersistFirewallRulesDisabled" Directory="System64Folder" ExeCommand='"[System64Folder]reg.exe" add "HKLM\Software\Classes\$(var.RegKeyRoot)" /v FIREWALLRULES /t REG_SZ /d 0 /f' Execute="deferred" Impersonate="no" Return="ignore" />
+		<CustomAction Id="RollbackFirewallRulesEnabled" Directory="System64Folder" ExeCommand='"[System64Folder]reg.exe" add "HKLM\Software\Classes\$(var.RegKeyRoot)" /v FIREWALLRULES /t REG_SZ /d 1 /f' Execute="rollback" Impersonate="no" Return="ignore" />
+		<CustomAction Id="RollbackFirewallRulesDisabled" Directory="System64Folder" ExeCommand='"[System64Folder]reg.exe" add "HKLM\Software\Classes\$(var.RegKeyRoot)" /v FIREWALLRULES /t REG_SZ /d 0 /f' Execute="rollback" Impersonate="no" Return="ignore" />
+		<CustomAction Id="RollbackFirewallRulesAbsent" Directory="System64Folder" ExeCommand='"[System64Folder]reg.exe" delete "HKLM\Software\Classes\$(var.RegKeyRoot)" /v FIREWALLRULES /f' Execute="rollback" Impersonate="no" Return="ignore" />
+		<InstallExecuteSequence>
+			<Custom Action="RollbackFirewallRulesAbsent" After="WriteRegistryValues" Condition="Installed AND NOT REMOVE AND NOT PREVIOUSFIREWALLRULES AND (FIREWALLRULES = 0 OR FIREWALLRULES = 1)" />
+			<Custom Action="RollbackFirewallRulesDisabled" After="RollbackFirewallRulesAbsent" Condition="Installed AND NOT REMOVE AND PREVIOUSFIREWALLRULES = 0 AND (FIREWALLRULES = 0 OR FIREWALLRULES = 1)" />
+			<Custom Action="RollbackFirewallRulesEnabled" After="RollbackFirewallRulesDisabled" Condition="Installed AND NOT REMOVE AND PREVIOUSFIREWALLRULES = 1 AND (FIREWALLRULES = 0 OR FIREWALLRULES = 1)" />
+			<Custom Action="PersistFirewallRulesEnabled" After="RollbackFirewallRulesEnabled" Condition="Installed AND NOT REMOVE AND FIREWALLRULES = 1" />
+			<Custom Action="PersistFirewallRulesDisabled" After="PersistFirewallRulesEnabled" Condition="Installed AND NOT REMOVE AND FIREWALLRULES = 0" />
+		</InstallExecuteSequence>
+
 		<!-- Regs for shortcuts are defined in "Fragments/ShortcutProperties.wxs" -->
 		<!-- Component that persists the property values to the registry so they are available during an upgrade/modify -->
 		<Property Id="CURRENT_SHARE_RDP" Secure="yes">
@@ -26,6 +51,7 @@
 			<Component Id="Product.Registry.InstallFolder" Guid="3196EDA7-9AEF-4705-A0C8-E3F3ECCCB153">
 				<RegistryKey Root="HKCR" Key="$(var.RegKeyRoot)">
 					<RegistryValue Type="string" Name="INSTALLFOLDER" Value="[INSTALLFOLDER_INNER]" />
+					<RegistryValue Type="string" Name="FIREWALLRULES" Value="[FIREWALLRULES]" />
 				</RegistryKey>
 			</Component>
 

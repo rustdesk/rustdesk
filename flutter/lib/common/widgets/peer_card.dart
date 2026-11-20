@@ -15,7 +15,6 @@ import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 import '../../desktop/widgets/popup_menu.dart';
-import 'request_approval_menu.dart';
 import 'dart:math' as math;
 
 typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
@@ -658,8 +657,10 @@ abstract class BasePeerCard extends StatelessWidget {
           loginMethod: 'request-approval',
         );
 
-    return RequestApprovalMenu(
-      title: translate('Request approval'),
+    return MenuEntrySubMenu<String>(
+      text: translate('Request approval'),
+      dismissParentOnCanceled: true,
+      arrowScale: 1.0,
       padding: menuPadding,
       entries: [
         action('Connect'),
