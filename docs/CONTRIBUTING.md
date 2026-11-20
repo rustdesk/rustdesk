@@ -25,7 +25,7 @@ efforts from contributors on the same issue.
   correct independently (i.e., each commit should compile and pass tests).
 
 - Commits should be accompanied by a Developer Certificate of Origin
-  (http://developercertificate.org) sign-off, which indicates that you (and
+  (https://developercertificate.org) sign-off, which indicates that you (and
   your employer if applicable) agree to be bound by the terms of the
   [project license](../LICENCE). In git, this is the `-s` option to `git commit`
 
