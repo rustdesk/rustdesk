@@ -412,6 +412,8 @@ class InputModel {
   String keyboardMode = '';
 
   // keyboard
+  Future<void> Function(Future<void> Function(), {bool isKeyRelease})?
+      mobileKeyboardDispatcher;
   var shift = false;
   var ctrl = false;
   var alt = false;
@@ -972,28 +974,32 @@ class InputModel {
       PhysicalKeyboardKey physical, LogicalKeyboardKey logical,
       {required bool down, required bool up, bool mapMode = false}) {
     if ((!down && !up) || (down && !keyboardPerm)) return;
+    final dispatch = mobileKeyboardDispatcher;
+    Future<void> release() => mapMode
+        ? bind.sessionHandleFlutterKeyEvent(
+            sessionId: sessionId,
+            character: '',
+            usbHid: physical.usbHidUsage & 0xFFFF,
+            lockModes: _buildLockModes(false),
+            downOrUp: false,
+          )
+        : bind.sessionInputKey(
+            sessionId: sessionId,
+            name: physicalKeyMap[physical.usbHidUsage] ??
+                logicalKeyMap[logical.keyId] ??
+                logical.keyLabel,
+            down: false,
+            press: false,
+            alt: false,
+            ctrl: false,
+            shift: false,
+            command: false,
+          );
     _localFlutterShortcuts.recordForwardedKey(physical,
         down: down,
-        release: () => mapMode
-            ? bind.sessionHandleFlutterKeyEvent(
-                sessionId: sessionId,
-                character: '',
-                usbHid: physical.usbHidUsage & 0xFFFF,
-                lockModes: _buildLockModes(false),
-                downOrUp: false,
-              )
-            : bind.sessionInputKey(
-                sessionId: sessionId,
-                name: physicalKeyMap[physical.usbHidUsage] ??
-                    logicalKeyMap[logical.keyId] ??
-                    logical.keyLabel,
-                down: false,
-                press: false,
-                alt: false,
-                ctrl: false,
-                shift: false,
-                command: false,
-              ));
+        release: dispatch == null
+            ? release
+            : () => dispatch(release, isKeyRelease: true));
   }
 
   bool _tryDispatchFlutterShortcut(KeyEvent e, {bool releaseModifiers = true}) {
@@ -1053,6 +1059,13 @@ class InputModel {
     final swapCtrlCmd = peerPlatform == kPeerPlatformWindows &&
         bind.sessionGetToggleOptionSync(
             sessionId: sessionId, arg: 'allow_swap_key');
+    final dispatch = mobileKeyboardDispatcher;
+    if (dispatch != null) {
+      final modifiers = pressed.toSet();
+      return dispatch(
+          () => _releaseMobileShortcutModifiers(modifiers, swapCtrlCmd),
+          isKeyRelease: true);
+    }
     final neutralizeMenu = _needsShortcutMenuGuard(pressed, swapCtrlCmd);
     if (neutralizeMenu)
       await _sendShortcutMenuControl(true, pressed, swapCtrlCmd);
@@ -1096,6 +1109,42 @@ class InputModel {
     await Future.wait(releases).whenComplete(() => neutralizeMenu
         ? _sendShortcutMenuControl(false, pressed, swapCtrlCmd)
         : null);
+  }
+
+  Future<void> _releaseMobileShortcutModifiers(
+      Set<LogicalKeyboardKey> pressed, bool swapCtrlCmd) async {
+    final neutralizeMenu = _needsShortcutMenuGuard(pressed, swapCtrlCmd);
+    if (neutralizeMenu) {
+      await _sendShortcutMenuControl(true, pressed, swapCtrlCmd);
+    }
+    try {
+      for (final entry in {
+        LogicalKeyboardKey.controlLeft: PhysicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.controlRight: PhysicalKeyboardKey.controlRight,
+        LogicalKeyboardKey.altLeft: PhysicalKeyboardKey.altLeft,
+        LogicalKeyboardKey.altRight: PhysicalKeyboardKey.altRight,
+        LogicalKeyboardKey.shiftLeft: PhysicalKeyboardKey.shiftLeft,
+        LogicalKeyboardKey.shiftRight: PhysicalKeyboardKey.shiftRight,
+        LogicalKeyboardKey.metaLeft: PhysicalKeyboardKey.metaLeft,
+        LogicalKeyboardKey.metaRight: PhysicalKeyboardKey.metaRight,
+      }.entries) {
+        if (!pressed.contains(entry.key)) continue;
+        await bind.sessionInputKey(
+          sessionId: sessionId,
+          name: physicalKeyMap[entry.value.usbHidUsage] ?? entry.key.keyLabel,
+          down: false,
+          press: false,
+          alt: false,
+          ctrl: false,
+          shift: false,
+          command: false,
+        );
+      }
+    } finally {
+      if (neutralizeMenu) {
+        await _sendShortcutMenuControl(false, pressed, swapCtrlCmd);
+      }
+    }
   }
 
   bool _needsShortcutMenuGuard(
@@ -1241,6 +1290,19 @@ class InputModel {
   void newKeyboardMode(
       String character, int usbHid, bool down, bool iosCapsLock) {
     final lockModes = _buildLockModes(iosCapsLock);
+    final dispatch = mobileKeyboardDispatcher;
+    if (dispatch != null) {
+      final id = sessionId;
+      dispatch(
+          () => bind.sessionHandleFlutterKeyEvent(
+              sessionId: id,
+              character: character,
+              usbHid: usbHid,
+              lockModes: lockModes,
+              downOrUp: down),
+          isKeyRelease: !down);
+      return;
+    }
     bind.sessionHandleFlutterKeyEvent(
         sessionId: sessionId,
         character: character,
@@ -1342,6 +1404,23 @@ class InputModel {
   void inputKey(String name, {bool? down, bool? press}) {
     if (!keyboardPerm) return;
     if (isViewCamera) return;
+    final dispatch = mobileKeyboardDispatcher;
+    if (dispatch != null) {
+      final id = sessionId;
+      final modifiers = (alt: alt, ctrl: ctrl, shift: shift, command: command);
+      dispatch(
+          () => bind.sessionInputKey(
+              sessionId: id,
+              name: name,
+              down: down ?? false,
+              press: press ?? true,
+              alt: modifiers.alt,
+              ctrl: modifiers.ctrl,
+              shift: modifiers.shift,
+              command: modifiers.command),
+          isKeyRelease: !(down ?? false) && !(press ?? true));
+      return;
+    }
     bind.sessionInputKey(
         sessionId: sessionId,
         name: name,
