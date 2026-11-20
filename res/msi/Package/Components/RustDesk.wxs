@@ -30,16 +30,22 @@
 		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
 		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
 		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER_INNER]" />
+		<!-- VersionNT can report 603 on Windows 10, so check the system DLL's version directly. -->
+		<Property Id="PDFPRINTER_OS_SUPPORTED" Secure="yes">
+			<DirectorySearch Id="PdfPrinterSystemFolder" Path="[SystemFolder]" Depth="0">
+				<FileSearch Id="PdfPrinterWindows10Kernel" Name="kernel32.dll" MinVersion="10.0.0.0" />
+			</DirectorySearch>
+		</Property>
 		<InstallExecuteSequence>
 			<!-- Capture running state before Restart Manager shuts services down in InstallValidate. -->
-			<Custom Action="ScheduleUpgradePrinterRecovery" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE AND ((PREVIOUSPRINTER AND PREVIOUSPRINTER &lt;&gt; &quot;0&quot;) OR PDFPRINTER_INSTALLED = 1 OR PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
+			<Custom Action="ScheduleUpgradePrinterRecovery" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE AND ((PREVIOUSPRINTER AND PREVIOUSPRINTER &lt;&gt; &quot;0&quot;) OR PDFPRINTER_INSTALLED = 1 OR (PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)))" />
 			<Custom Action="RestoreUpgradePrinter" After="InstallInitialize" Condition="WIX_UPGRADE_DETECTED AND RestoreUpgradePrinter AND NOT REMOVE" />
 			<Custom Action="StopUpgradePrinterService" After="RestoreUpgradePrinter" Condition="WIX_UPGRADE_DETECTED AND StopUpgradePrinterService AND NOT REMOVE" />
-			<Custom Action="CheckPdfPrinter" After="RemoveExistingProducts" Condition="(PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE" />
-			<Custom Action="RollbackPrinter" Before="InstallPrinter" Condition="(PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE AND NOT PDFPRINTER_PRESENT" />
-			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="(PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE" />
-			<Custom Action="UninstallPrinter" Before="RemoveRuntimeGeneratedFiles" Condition="PDFPRINTER_INSTALLED = 1 AND Installed AND REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
-			<Custom Action="DisablePrinter" Before="InstallFinalize" Condition="PDFPRINTER_INSTALLED = 1 AND NOT REMOVE AND NOT (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
+			<Custom Action="CheckPdfPrinter" After="RemoveExistingProducts" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE" />
+			<Custom Action="RollbackPrinter" Before="InstallPrinter" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE AND NOT PDFPRINTER_PRESENT" />
+			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE" />
+			<Custom Action="UninstallPrinter" Before="RemoveRuntimeGeneratedFiles" Condition="PDFPRINTER_OS_SUPPORTED AND PDFPRINTER_INSTALLED = 1 AND Installed AND REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+			<Custom Action="DisablePrinter" Before="InstallFinalize" Condition="PDFPRINTER_OS_SUPPORTED AND PDFPRINTER_INSTALLED = 1 AND NOT REMOVE AND NOT (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
 
 			<Custom Action="SetPropertyIsServiceRunning" After="InstallInitialize" Condition="Installed" />
 			<Custom Action="SetPropertyIsServiceRunning.SetParam.AppName" Before="SetPropertyIsServiceRunning" Condition="Installed" />
