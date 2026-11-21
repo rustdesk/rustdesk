@@ -1716,6 +1716,27 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn close_success(&self);
     fn update_quality_status(&self, qs: QualityStatus);
     fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str);
+
+    /// The switch this session's video decoder consults before handing out a
+    /// decoded GPU frame.
+    ///
+    /// It belongs to the session: two sessions can render differently (one
+    /// through the plugin texture, one through RGBA), so a process-wide flag
+    /// makes them fight over one switch. `None` means this UI never asked for
+    /// GPU frames, and the decoder keeps producing software frames.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    fn gpu_frames_wanted(&self) -> Option<std::sync::Arc<std::sync::atomic::AtomicBool>> {
+        None
+    }
+
+    /// Called when the render path kept refusing decoded GPU frames.
+    ///
+    /// The decoder skips its software transfer for every frame it hands out, so a
+    /// refusal streak means the picture is frozen rather than merely degraded.
+    /// Implementations switch this session back to software frames instead of
+    /// waiting for a restart.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    fn disable_gpu_frames(&self) {}
     fn set_fingerprint(&self, fingerprint: String);
     fn job_error(&self, id: i32, err: String, file_num: i32);
     fn job_done(&self, id: i32, file_num: i32);
@@ -1758,6 +1779,18 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn next_rgba(&self, display: usize);
     #[cfg(all(feature = "vram", feature = "flutter"))]
     fn on_texture(&self, display: usize, texture: *mut c_void);
+    /// Deliver a decoded GPU frame (a macOS `CVPixelBuffer`) to the UI.
+    ///
+    /// Returns true when a UI session took the frame over; the caller then pushes
+    /// no pixels for that same frame. `false` means the frame is dropped rather
+    /// than shown as bytes, because the decoder already skipped its software
+    /// transfer when it handed the surface out. A backend that cannot present GPU
+    /// frames never receives one: the app derives the decoder's own flag from
+    /// those gates, so it keeps getting software frames.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    fn on_pixelbuffer(&self, _display: usize, _pixelbuffer: &scrap::PixelBufferFrame) -> bool {
+        false
+    }
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>);
     fn set_current_display(&self, disp_idx: i32);
     #[cfg(feature = "flutter")]
