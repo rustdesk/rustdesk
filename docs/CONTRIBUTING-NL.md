@@ -28,7 +28,7 @@ inspanningen van medewerkers aan hetzelfde issue te voorkomen.
   toezegging moet compileren en testen doorstaan).
 
 - Toezeggingen moeten vergezeld gaan van een Certificaat van Oorsprong 
-  van de Ontwikkelaar (http://developercertificate.org) ondertekening, die aangeeft 
+  van de Ontwikkelaar (https://developercertificate.org) ondertekening, die aangeeft 
   dat u (en uw werkgever indien van toepassing) akkoord gaat met de 
   voorwaarden van het [project licentie](../LICENCE). 
   In git is dit de `-s` optie van `git commit`

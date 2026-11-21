@@ -14,7 +14,7 @@ Eğer bir konu üzerinde çalışmak isterseniz, önce üzerinde çalışmak ist
 
 - Her bir commit mümkün olduğunca küçük olmalıdır, ancak her commit'in bağımsız olarak doğru olduğundan emin olun (örneğin, her commit derlenebilir ve testleri geçmelidir).
 
-- Commit'ler, bir Geliştirici Sertifikası ile desteklenmelidir (http://developercertificate.org). Bu, [proje lisansının](../LICENCE) koşullarına uymayı kabul ettiğinizi gösteren bir onaydır. Git'te bunu `git commit` seçeneği olarak `-s` seçeneği ile yapabilirsiniz.
+- Commit'ler, bir Geliştirici Sertifikası ile desteklenmelidir (https://developercertificate.org). Bu, [proje lisansının](../LICENCE) koşullarına uymayı kabul ettiğinizi gösteren bir onaydır. Git'te bunu `git commit` seçeneği olarak `-s` seçeneği ile yapabilirsiniz.
 
 - Yamalarınız gözden geçirilmiyorsa veya belirli bir kişinin gözden geçirmesine ihtiyacınız varsa, çekme isteği veya yorum içinde bir gözden geçirmeyi istemek için bir inceleyiciyi @etiketleyebilir veya inceleme için [e-posta](mailto:info@rustdesk.com) ile talep edebilirsiniz.
 
