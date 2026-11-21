@@ -826,6 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Valitud kaust ei ole tühi. Paigaldamine võib olemasolevad andmed kustutada. Kaalu teise kausta valimist."),
         ("Request approval", "Küsi heakskiitu"),
         ("Forever", "Igavesti"),
+        ("username-login-disabled-oidc-unavailable", "Kasutajanime ja parooliga sisselogimine on keelatud ja ühtegi OIDC sisselogimisviisi pole saadaval."),
         ("Enable Unicode input", "Luba Unicode'i sisestus"),
         ("unicode-input-tip", "Püüa kinni selliste tööriistade nagu KeePassXC Auto-Type saadetud Unicode'i tekst. Nõuab sisendallikat 1."),
     ].iter().cloned().collect();

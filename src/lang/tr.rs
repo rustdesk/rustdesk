@@ -369,7 +369,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Write a message", "Bir mesaj yazın"),
         ("Prompt", "İstem"),
         ("Please wait for confirmation of UAC...", "UAC onayı için lütfen bekleyiniz..."),
-        ("elevated_foreground_window_tip", "elevated_foreground_window_tip"),
+        ("elevated_foreground_window_tip", "Uzak masaüstündeki geçerli pencere daha yüksek yetki gerektirdiği için fare ve klavye geçici olarak kullanılamıyor. Uzak kullanıcıdan geçerli pencereyi simge durumuna küçültmesini isteyebilir veya bağlantı yönetimi penceresindeki yükseltme düğmesine tıklayabilirsiniz. Bu sorunu önlemek için yazılımın uzak cihaza kurulması önerilir."),
         ("Disconnected", "Bağlantı Kesildi"),
         ("Other", "Diğer"),
         ("Confirm before closing multiple tabs", "Çoklu sekmeleri kapatmadan önce onayla"),
@@ -826,6 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Seçilen klasör boş değil. Kurulum mevcut verileri silebilir. Farklı bir klasör seçmeyi düşünün."),
         ("Request approval", "Onay iste"),
         ("Forever", "Sonsuza dek"),
+        ("username-login-disabled-oidc-unavailable", "Kullanıcı adı ve parola ile giriş devre dışı bırakılmış ve kullanılabilir OIDC giriş yöntemi yok."),
         ("Enable Unicode input", "Unicode girişini etkinleştir"),
         ("unicode-input-tip", "KeePassXC Auto-Type gibi araçların gönderdiği Unicode metnini yakalar. Giriş kaynağı 1 gerektirir."),
     ].iter().cloned().collect();

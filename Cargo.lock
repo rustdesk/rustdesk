@@ -6762,7 +6762,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/rustdesk-org/rdev#0904f23ce496e255461a98848b85c11fa5a62eab"
+source = "git+https://github.com/rustdesk-org/rdev#bfb285414f04be94a98063e645c334a9966758ea"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",

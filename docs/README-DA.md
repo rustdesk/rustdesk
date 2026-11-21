@@ -13,7 +13,7 @@ Chat med os: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitte
 
 [![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Avancerede%20Funktioner-blue)](https://rustdesk.com/pricing.html)
 
-Endnu en fjernskrivebordssoftware, skrevet i Rust. Fungerer ud af æsken, ingen konfiguration påkrævet. Du har fuld kontrol over dine data uden bekymringer om sikkerhed. Du kan bruge vores rendezvous/relay-server, [opsætte din egen](https://rustdesk.com/server), eller [skrive din egen rendezvous/relay-server](https://github.com/rustdesk/rustdesk- server-demo).
+Endnu en fjernskrivebordssoftware, skrevet i Rust. Fungerer ud af æsken, ingen konfiguration påkrævet. Du har fuld kontrol over dine data uden bekymringer om sikkerhed. Du kan bruge vores rendezvous/relay-server, [opsætte din egen](https://rustdesk.com/server), eller [skrive din egen rendezvous/relay-server](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDesk hilser bidrag fra alle velkommen. Se [`docs/CONTRIBUTING.md`](CONTRIBUTING.md) for at få hjælp til at komme i gang.
 
@@ -129,7 +129,7 @@ Sørg for, at du kører disse kommandoer fra roden af RustDesk-lageret, ellers k
 
 ## Filstruktur
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs funktioner til filoverførsel og nogle andre hjælpefunktioner
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs funktioner til filoverførsel og nogle andre hjælpefunktioner
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: Skærmbillede
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platform specifik tastatur/mus kontrol
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI

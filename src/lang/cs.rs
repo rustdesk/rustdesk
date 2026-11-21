@@ -826,6 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "Vybraná složka není prázdná. Instalace může odstranit existující data. Zvažte výběr jiné složky."),
         ("Request approval", "Požádat o schválení"),
         ("Forever", "Navždy"),
+        ("username-login-disabled-oidc-unavailable", "Přihlášení uživatelským jménem a heslem je zakázáno a nejsou k dispozici žádné metody přihlášení přes OIDC."),
         ("Enable Unicode input", "Povolit vstup Unicode"),
         ("unicode-input-tip", "Zachytávat text Unicode odesílaný nástroji, jako je KeePassXC Auto-Type. Vyžaduje zdroj vstupu 1."),
     ].iter().cloned().collect();

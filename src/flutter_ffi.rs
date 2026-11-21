@@ -41,6 +41,8 @@ lazy_static::lazy_static! {
 }
 
 fn initialize(app_dir: &str, custom_client_config: &str) {
+    // On mobile `global_init` below comes after the custom client's signature is verified.
+    crate::common::init_sodium();
     flutter::async_tasks::start_flutter_async_runner();
     // `APP_DIR` is set in `main_get_data_dir_ios()` on iOS.
     #[cfg(not(target_os = "ios"))]
@@ -3087,6 +3089,8 @@ pub mod server_side {
         custom_client_config: JString,
     ) {
         log::debug!("startServer from jvm");
+        // Started at boot, the service runs without the Flutter side and its `initialize`.
+        crate::common::init_sodium();
         let mut env = env;
         if let Ok(app_dir) = env.get_string(&app_dir) {
             *config::APP_DIR.write().unwrap() = app_dir.into();
@@ -3185,5 +3189,23 @@ pub mod server_side {
         _class: JClass,
     ) -> jboolean {
         jboolean::from(crate::server::is_clipboard_service_ok())
+    }
+
+    /// Keeps `enable-keyboard` in step with InputService when the Flutter UI is not running.
+    #[no_mangle]
+    pub unsafe extern "system" fn Java_ffi_FFI_setInputServiceOpen(
+        _env: JNIEnv,
+        _class: JClass,
+        open: jboolean,
+    ) {
+        // Config must not load before startServer sets APP_DIR; MainService syncs again after it.
+        if config::APP_DIR.read().unwrap().is_empty() {
+            return;
+        }
+        let key = super::keys::OPTION_ENABLE_KEYBOARD;
+        let value = if open == 0 { "N" } else { "Y" };
+        if let Err(e) = super::main_set_option(key.to_owned(), value.to_owned()) {
+            log::error!("Failed to sync input service state: {}", e);
+        }
     }
 }

@@ -826,6 +826,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("install-directory-not-empty-tip", "არჩეული საქაღალდე ცარიელი არ არის. ინსტალაციამ შეიძლება წაშალოს არსებული მონაცემები. რეკომენდებულია სხვა საქაღალდის არჩევა."),
         ("Request approval", "დამტკიცების მოთხოვნა"),
         ("Forever", "სამუდამოდ"),
+        ("username-login-disabled-oidc-unavailable", "მომხმარებლის სახელითა და პაროლით შესვლა გამორთულია და OIDC-ით შესვლის მეთოდები ხელმისაწვდომი არ არის."),
         ("Enable Unicode input", "Unicode შეყვანის ჩართვა"),
         ("unicode-input-tip", "Unicode ტექსტის მიღება, რომელსაც აგზავნიან ისეთი ხელსაწყოები, როგორიცაა KeePassXC Auto-Type. საჭიროა შეყვანის წყარო 1."),
     ].iter().cloned().collect();

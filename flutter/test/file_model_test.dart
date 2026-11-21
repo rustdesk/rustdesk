@@ -168,6 +168,21 @@ void main() {
     expect(controller.selectedItems.items, isEmpty);
   });
 
+  test('the Windows drive list keeps its drives under every sort', () {
+    for (final sort in SortBy.values) {
+      final directory = FileDirectory()
+        ..entries = ['C:', 'D:']
+            .map((name) => Entry()
+              ..name = name
+              ..entryType = 3)
+            .toList();
+      directory.changeSortStyle(sort);
+      expect(directory.entries.map((entry) => entry.name),
+          unorderedEquals(['C:', 'D:']),
+          reason: '$sort');
+    }
+  });
+
   test('a fast remote response is matched after registration', () async {
     late final FileFetcher fileFetcher;
     fileFetcher = FileFetcher(

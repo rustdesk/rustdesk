@@ -158,7 +158,7 @@ Asigură-te că rulezi aceste comenzi din rădăcina repository-ului RustDesk, a
 
 ## Structura fișierelor
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: codec video, config, wrapper tcp/udp, protobuf, funcții fs pentru transfer de fișiere și alte funcții utilitare
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: codec video, config, wrapper tcp/udp, protobuf, funcții fs pentru transfer de fișiere și alte funcții utilitare
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: capturare ecran
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: control tastatură/mouse specific platformei
 - **[libs/clipboard](https://github.com/rustdesk/rustdesk/tree/master/libs/clipboard)**: implementare copy/paste pentru fișiere pentru Windows, Linux, macOS.

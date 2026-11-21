@@ -156,7 +156,7 @@ Certifique-se de que executa estes comandos a partir da raiz do repositório do 
 
 ## Estrutura de Ficheiros
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: codec de vídeo, configuração, wrapper TCP/UDP e algumas outras funções utilitárias partilhadas com o servidor
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: codec de vídeo, configuração, wrapper TCP/UDP e algumas outras funções utilitárias partilhadas com o servidor
 - **[libs/base](https://github.com/rustdesk/rustdesk/tree/master/libs/base)**: protobuf, funções fs para transferência de ficheiros, código relacionado com o teclado e com a plataforma utilizado exclusivamente por esta aplicação
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: captura de ecrã
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: controlo de teclado/rato específico da plataforma.

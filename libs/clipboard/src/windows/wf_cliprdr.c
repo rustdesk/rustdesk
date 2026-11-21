@@ -443,6 +443,10 @@ struct wf_clipboard
 	HANDLE thread;
 	HANDLE formatDataRespEvent;
 	BOOL formatDataRespReceived;
+	/* Only the pending request may publish hmem; the STA owns it after the response. */
+	SRWLOCK format_data_lock;
+	BOOL format_data_pending;
+	UINT32 format_data_conn_id;
 
 	LPDATAOBJECT data_obj;
 	HANDLE data_obj_mutex;
@@ -2045,12 +2049,22 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 	if (!clipboard || !clipboard->context || !clipboard->context->ClientFormatDataRequest)
 		return ERROR_INTERNAL_ERROR;
 
+	AcquireSRWLockExclusive(&clipboard->format_data_lock);
+	if (clipboard->format_data_pending || clipboard->hmem)
+	{
+		ReleaseSRWLockExclusive(&clipboard->format_data_lock);
+		return ERROR_BUSY;
+	}
 	rc = try_reset_event(clipboard->formatDataRespEvent);
 	if (rc != ERROR_SUCCESS)
 	{
+		ReleaseSRWLockExclusive(&clipboard->format_data_lock);
 		return rc;
 	}
 	clipboard->formatDataRespReceived = FALSE;
+	clipboard->format_data_conn_id = connID;
+	clipboard->format_data_pending = TRUE;
+	ReleaseSRWLockExclusive(&clipboard->format_data_lock);
 
 	remoteFormatId = get_remote_format_id(clipboard, formatId);
 
@@ -2058,12 +2072,26 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 	formatDataRequest.requestedFormatId = remoteFormatId;
 	clipboard->requestedFormatId = formatId;
 	rc = clipboard->context->ClientFormatDataRequest(clipboard->context, &formatDataRequest);
-	if (rc != ERROR_SUCCESS)
+	if (rc == ERROR_SUCCESS)
 	{
-		return rc;
+		rc = wait_response_event(connID, clipboard, clipboard->formatDataRespEvent,
+			&clipboard->formatDataRespReceived, &clipboard->hmem);
 	}
 
-	return wait_response_event(connID, clipboard, clipboard->formatDataRespEvent, &clipboard->formatDataRespReceived, &clipboard->hmem);
+	AcquireSRWLockExclusive(&clipboard->format_data_lock);
+	clipboard->format_data_pending = FALSE;
+	if (rc != ERROR_SUCCESS)
+	{
+		if (clipboard->hmem && GlobalFree(clipboard->hmem))
+			rc = ERROR_INTERNAL_ERROR;
+		else
+		{
+			clipboard->hmem = NULL;
+			clipboard->hmem_data_len = 0;
+		}
+	}
+	ReleaseSRWLockExclusive(&clipboard->format_data_lock);
+	return rc;
 }
 
 static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
@@ -2750,14 +2778,15 @@ static FILEDESCRIPTORW *wf_cliprdr_get_file_descriptor(WCHAR *file_name, size_t 
 		return NULL;
 	}
 
-	// to-do: use `fd->dwFlags = FD_ATTRIBUTES | FD_FILESIZE | FD_WRITESTIME | FD_PROGRESSUI`.
-	// We keep `fd->dwFlags = FD_ATTRIBUTES | FD_WRITESTIME | FD_PROGRESSUI` for compatibility.
-	// fd->dwFlags = FD_ATTRIBUTES | FD_FILESIZE | FD_WRITESTIME | FD_PROGRESSUI;
 	fd->dwFlags = FD_ATTRIBUTES | FD_WRITESTIME | FD_PROGRESSUI;
 	fd->dwFileAttributes = GetFileAttributesW(file_name);
 	if (fd->dwFileAttributes == INVALID_FILE_ATTRIBUTES)
 	{
-		// TODO: debug handle some errors
+		// INVALID_FILE_ATTRIBUTES has FILE_ATTRIBUTE_DIRECTORY set, so the entry would go out as
+		// an empty directory in place of the file.
+		CloseHandle(hFile);
+		free(fd);
+		return NULL;
 	}
 
 	if (!GetFileTime(hFile, NULL, NULL, &fd->ftLastWriteTime))
@@ -2765,7 +2794,34 @@ static FILEDESCRIPTORW *wf_cliprdr_get_file_descriptor(WCHAR *file_name, size_t 
 		fd->dwFlags &= ~FD_WRITESTIME;
 	}
 
-	fd->nFileSizeLow = GetFileSize(hFile, &fd->nFileSizeHigh);
+	// Announce the size in the file list. Without FD_FILESIZE the receiving side cannot
+	// trust the size fields, so CliprdrStream_New() asks for each file's size with its own
+	// FILECONTENTS_SIZE request and blocks on the reply. Those requests are made for every
+	// entry up front, while the shell is inside IDataObject::GetData(), so the cost grows
+	// with the number of files and not with their size.
+	//
+	// GetFileSize() reports failure as INVALID_FILE_SIZE, which cannot be told apart from a
+	// genuine 4GB-1 file without GetLastError(). A directory gets no size: whatever the
+	// handle FILE_FLAG_BACKUP_SEMANTICS lets us open above reports is not a file size. A
+	// file whose size cannot be read is rejected rather than sent with the flag off: the
+	// Unix receiver reads the size fields whether or not the flag is set, for compatibility
+	// with older Windows senders, and would take the zero for an empty file.
+	if ((fd->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+	{
+		LARGE_INTEGER file_size = {0};
+
+		if (!GetFileSizeEx(hFile, &file_size) || file_size.QuadPart < 0)
+		{
+			CloseHandle(hFile);
+			free(fd);
+			return NULL;
+		}
+
+		fd->nFileSizeLow = file_size.LowPart;
+		fd->nFileSizeHigh = (DWORD)file_size.HighPart;
+		fd->dwFlags |= FD_FILESIZE;
+	}
+
 	if ((wcslen(file_name + pathLen) + 1) > sizeof(fd->cFileName) / sizeof(fd->cFileName[0]))
 	{
 		// The file name is too long, which is not a normal case.
@@ -2843,8 +2899,12 @@ static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_fi
 		return FALSE;
 	}
 
+	// Receivers never read an empty file, so the audit waits for the first file with content.
 	if ((clipboard->fileDescriptor[clipboard->nFiles]->dwFileAttributes &
-		 FILE_ATTRIBUTE_DIRECTORY) == 0) {
+		 FILE_ATTRIBUTE_DIRECTORY) == 0 &&
+		(clipboard->fileDescriptor[clipboard->nFiles]->nFileSizeLow |
+		 clipboard->fileDescriptor[clipboard->nFiles]->nFileSizeHigh) != 0 &&
+		clipboard->first_file_index == (size_t)-1) {
 		clipboard->first_file_index = clipboard->nFiles;
 	}
 
@@ -3593,6 +3653,14 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
+		AcquireSRWLockExclusive(&clipboard->format_data_lock);
+		if (!clipboard->format_data_pending ||
+			clipboard->format_data_conn_id != formatDataResponse->connID)
+		{
+			ReleaseSRWLockExclusive(&clipboard->format_data_lock);
+			return ERROR_INVALID_DATA;
+		}
+		clipboard->format_data_pending = FALSE;
 		clipboard->hmem = NULL;
 		clipboard->hmem_data_len = 0;
 
@@ -3649,6 +3717,7 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 		clipboard->formatDataRespReceived = TRUE;
 		rc = ERROR_INTERNAL_ERROR;
 	}
+	ReleaseSRWLockExclusive(&clipboard->format_data_lock);
 	return rc;
 }
 
@@ -4086,6 +4155,8 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 	clipboard->data_obj = NULL;
 	clipboard->copied = FALSE;
 	InitializeSRWLock(&clipboard->format_map_lock);
+	InitializeSRWLock(&clipboard->format_data_lock);
+	clipboard->format_data_pending = FALSE;
 
 	if (clipboard->hUser32)
 	{

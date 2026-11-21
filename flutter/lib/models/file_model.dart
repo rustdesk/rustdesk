@@ -2116,7 +2116,9 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType, bool ascending) {
     return ascending ? list : list.reversed.toList();
   } else if (sortType == SortBy.type) {
     // making list of only folders.
-    final dirs = list.where((element) => element.isDirectory).toList();
+    final dirs = list
+        .where((element) => element.isDirectory || element.isDrive)
+        .toList();
 
     // sorting folders by name.
     dirs.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -2141,7 +2143,9 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType, bool ascending) {
     }
 
     // making list of only folders.
-    final dirs = list.where((element) => element.isDirectory).toList();
+    final dirs = list
+        .where((element) => element.isDirectory || element.isDrive)
+        .toList();
     // sorting folder list by name.
     dirs.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
