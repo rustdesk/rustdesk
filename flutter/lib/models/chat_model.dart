@@ -19,6 +19,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../consts.dart';
 import '../common.dart';
 import '../common/widgets/overlay.dart';
+import '../desktop/pages/server_page.dart' show checkClickTime;
 import '../main.dart';
 import 'model.dart';
 
@@ -142,8 +143,15 @@ class ChatModel with ChangeNotifier {
             user: me,
             createdAt: DateTime.now(),
           );
-          send(message);
-          textController.clear();
+          if (isConnManager) {
+            checkSend(() {
+              send(message);
+              textController.clear();
+            });
+          } else {
+            send(message);
+            textController.clear();
+          }
           return KeyEventResult.handled;
         }
 
@@ -467,6 +475,20 @@ class ChatModel with ChangeNotifier {
     }
     latestReceivedKey = messagekey;
     notifyListeners();
+  }
+
+  void checkSend(VoidCallback callback) {
+    final id = _currentKey.connId;
+    final text = textController.text;
+    checkClickTime(id, () {
+      if (_currentKey.connId == id &&
+          textController.text == text &&
+          parent.target?.serverModel.clients
+                  .any((client) => client.id == id && !client.disconnected) ==
+              true) {
+        callback();
+      }
+    });
   }
 
   send(ChatMessage message) {

@@ -1798,6 +1798,19 @@ fn sort_streams(
             }
         }
     }
+    // Keep a stream whose position names no display, e.g. a full-workspace stream at (0, 0) when
+    // no display sits there (#17027). A stream at an origin another stream already took is still
+    // dropped.
+    for (s, d) in streams.drain(..).zip(shared_displays.drain(..)) {
+        if !displays
+            .displays
+            .iter()
+            .any(|wd| (wd.x, wd.y) == s.position)
+        {
+            sorted_streams.push(s);
+            sorted_shared_displays.push(d);
+        }
+    }
     *streams = sorted_streams;
     *shared_displays = sorted_shared_displays;
 }

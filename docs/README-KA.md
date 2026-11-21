@@ -158,7 +158,7 @@ target/release/rustdesk
 
 ## ფაილების სტრუქტურა
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: ვიდეოკოდეკი, კონფიგურაცია, tcp/udp-ის ვრაპერი და სერვერთან გაზიარებული ზოგიერთი სხვა დამხმარე ფუნქცია
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: ვიდეოკოდეკი, კონფიგურაცია, tcp/udp-ის ვრაპერი და სერვერთან გაზიარებული ზოგიერთი სხვა დამხმარე ფუნქცია
 - **[libs/base](https://github.com/rustdesk/rustdesk/tree/master/libs/base)**: protobuf, ფაილური სისტემის ფუნქციები ფაილების გადასაცემად, კლავიატურისა და პლატფორმის კოდი, რომელსაც მხოლოდ ეს აპლიკაცია იყენებს
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: ეკრანის გადაღება
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: კლავიატურის/მაუსის მართვა კონკრეტული პლატფორმისთვის

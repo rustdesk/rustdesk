@@ -25,7 +25,7 @@ Dette er for å hindre duplikat innsats på samme problem.
   (hver commit burde kompilere og bestå tester).
 
 - Commits burde være akkopaniert med en Developer Certificate of Origin
-  (http://developercertificate.org), som indikerer att du (og din arbeidsgiver
+  (https://developercertificate.org), som indikerer att du (og din arbeidsgiver
   i det tilfellet) godkjenner å bli knyttet til vilkårene av [prosjekt lisensen](../LICENCE).
   Ved bruk av git er dette `-s` opsjonen til `git commit`.
 
