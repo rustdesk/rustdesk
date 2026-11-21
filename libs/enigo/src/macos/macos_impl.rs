@@ -118,6 +118,19 @@ pub struct Enigo {
 }
 
 impl Enigo {
+    /// Constructs a counted mouse event without posting it to the session.
+    fn new_mouse_event(
+        &self,
+        source: CGEventSource,
+        event_type: CGEventType,
+        position: CGPoint,
+        button: CGMouseButton,
+    ) -> Result<CGEvent, ()> {
+        let event = CGEvent::new_mouse_event(source, event_type, position, button)?;
+        event.set_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE, self.multiple_click);
+        Ok(event)
+    }
+
     /// Set if ignore flags when posting events.
     pub fn set_ignore_flags(&mut self, ignore: bool) {
         self.ignore_flags = ignore;
@@ -261,6 +274,7 @@ impl MouseControllable for Enigo {
         self.mouse_move_to_impl(new_x, new_y, Some((x, y)));
     }
 
+    /// Posts a press with an explicit count, including the first click in a sequence.
     fn mouse_down(&mut self, button: MouseButton) -> crate::ResultType {
         let now = std::time::Instant::now();
         if let Some(t) = self.last_click_time {
@@ -293,13 +307,7 @@ impl MouseControllable for Enigo {
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {
-            if let Ok(event) = CGEvent::new_mouse_event(src.clone(), event_type, dest, button) {
-                if self.multiple_click > 1 {
-                    event.set_integer_value_field(
-                        EventField::MOUSE_EVENT_CLICK_STATE,
-                        self.multiple_click,
-                    );
-                }
+            if let Ok(event) = self.new_mouse_event(src.clone(), event_type, dest, button) {
                 if let Some(v) = btn_value {
                     event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
                 }
@@ -309,6 +317,7 @@ impl MouseControllable for Enigo {
         Ok(())
     }
 
+    /// Posts a counted release so AppKit can recognize single-click actions.
     fn mouse_up(&mut self, button: MouseButton) {
         let (current_x, current_y) = Self::mouse_location();
         let (button, event_type, btn_value) = match button {
@@ -332,13 +341,7 @@ impl MouseControllable for Enigo {
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
         if let Some(src) = self.event_source.as_ref() {
-            if let Ok(event) = CGEvent::new_mouse_event(src.clone(), event_type, dest, button) {
-                if self.multiple_click > 1 {
-                    event.set_integer_value_field(
-                        EventField::MOUSE_EVENT_CLICK_STATE,
-                        self.multiple_click,
-                    );
-                }
+            if let Ok(event) = self.new_mouse_event(src.clone(), event_type, dest, button) {
                 if let Some(v) = btn_value {
                     event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
                 }
@@ -917,3 +920,34 @@ fn get_map(name: &str, layout: *const u8) -> Map<char, CGKeyCode> {
     map
 }
 unsafe impl Send for Enigo {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Keeps single-click releases and multi-click pairs recognizable to AppKit.
+    #[test]
+    fn mouse_events_preserve_click_count() {
+        let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).unwrap();
+        for count in [1, 2, 3] {
+            let enigo = Enigo {
+                multiple_click: count,
+                ..Default::default()
+            };
+            for event_type in [CGEventType::LeftMouseDown, CGEventType::LeftMouseUp] {
+                let event = enigo
+                    .new_mouse_event(
+                        source.clone(),
+                        event_type,
+                        CGPoint::new(0.0, 0.0),
+                        CGMouseButton::Left,
+                    )
+                    .unwrap();
+                assert_eq!(
+                    event.get_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE),
+                    count
+                );
+            }
+        }
+    }
+}
