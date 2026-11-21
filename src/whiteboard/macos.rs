@@ -8,12 +8,16 @@ use piet::{
     FontFamily, RenderContext, Text, TextLayout, TextLayoutBuilder,
 };
 use piet_coregraphics::{CoreGraphicsContext, CoreGraphicsTextLayout};
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tao::{
     dpi::{LogicalSize, PhysicalPosition},
     event::{Event, StartCause, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
-    platform::macos::MonitorHandleExtMacOS,
+    platform::macos::{MonitorHandleExtMacOS, WindowExtMacOS},
     rwh_06::{HasWindowHandle, RawWindowHandle},
     window::{Window, WindowBuilder, WindowId},
 };
@@ -28,6 +32,16 @@ struct WindowState {
     outer_position: PhysicalPosition<i32>,
     // A simple workaround to the (logical) cursor position.
     display_origin: (f64, f64),
+}
+
+impl WindowState {
+    fn invalidate(&self) {
+        // Let AppKit deliver drawRect: with this window's graphics context.
+        unsafe {
+            let view = self.window.ns_view() as *mut Object;
+            let _: () = msg_send![view, setNeedsDisplay: true];
+        }
+    }
 }
 
 struct CursorInfo {
@@ -112,7 +126,7 @@ fn create_windows(event_loop: &EventLoop<(String, CustomEvent)>) -> ResultType<V
 fn draw_cursors(
     windows: &Vec<WindowState>,
     window_id: WindowId,
-    window_ripples: &mut HashMap<WindowId, Vec<Ripple>>,
+    window_ripples: &HashMap<WindowId, Vec<Ripple>>,
     last_cursors: &HashMap<String, CursorInfo>,
     map_cursor_text: &mut HashMap<(String, u32), CoreGraphicsTextLayout>,
 ) {
@@ -122,9 +136,8 @@ fn draw_cursors(
         }
 
         if let Ok(handle) = window.window.window_handle() {
-            if let RawWindowHandle::AppKit(appkit_handle) = handle.as_raw() {
+            if let RawWindowHandle::AppKit(_) = handle.as_raw() {
                 unsafe {
-                    let ns_view = appkit_handle.ns_view.as_ptr() as *mut Object;
                     let current_context: *mut Object =
                         msg_send![class!(NSGraphicsContext), currentContext];
                     if !current_context.is_null() {
@@ -140,8 +153,7 @@ fn draw_cursors(
                             );
                             context.clear(None, piet::Color::TRANSPARENT);
 
-                            if let Some(ripples) = window_ripples.get_mut(&window_id) {
-                                Ripple::retain_active(ripples);
+                            if let Some(ripples) = window_ripples.get(&window_id) {
                                 for ripple in ripples.iter() {
                                     let (radius, alpha) = ripple.get_radius_alpha();
                                     let color = piet::Color::rgba(1.0, 0.25, 0.25, alpha * 0.5);
@@ -209,11 +221,32 @@ fn draw_cursors(
                             log::warn!("CGContext is null");
                         }
                     }
-                    let _: () = msg_send![ns_view, setNeedsDisplay:true];
                 }
             }
         }
     }
+}
+
+fn animate_ripples(
+    ripples: &mut HashMap<WindowId, Vec<Ripple>>,
+    control_flow: &mut ControlFlow,
+    mut invalidate: impl FnMut(WindowId),
+) {
+    let now = Instant::now();
+    if matches!(control_flow, ControlFlow::WaitUntil(deadline) if *deadline > now) {
+        return;
+    }
+    ripples.retain(|id, active| {
+        Ripple::retain_active(active);
+        // The last frame clears the expired ripple from the overlay.
+        invalidate(*id);
+        !active.is_empty()
+    });
+    *control_flow = if ripples.is_empty() {
+        ControlFlow::Wait
+    } else {
+        ControlFlow::WaitUntil(now + Duration::from_millis(16))
+    };
 }
 
 pub(super) fn create_event_loop() -> ResultType<()> {
@@ -236,13 +269,17 @@ pub(super) fn create_event_loop() -> ResultType<()> {
     let mut map_cursor_text: HashMap<(String, u32), CoreGraphicsTextLayout> = HashMap::new();
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
+        let invalidate = |id| {
+            if let Some(window) = windows.iter().find(|w| w.window.id() == id) {
+                window.invalidate();
+            }
+        };
 
         match event {
             Event::NewEvents(StartCause::Init) => {
                 for window in windows.iter() {
                     window.window.set_outer_position(window.outer_position);
-                    window.window.request_redraw();
+                    window.invalidate();
                 }
                 crate::platform::hide_dock();
             }
@@ -256,15 +293,13 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                 draw_cursors(
                     &windows,
                     window_id,
-                    &mut window_ripples,
+                    &window_ripples,
                     &last_cursors,
                     &mut map_cursor_text,
                 );
             }
             Event::MainEventsCleared => {
-                for window in windows.iter() {
-                    window.window.request_redraw();
-                }
+                animate_ripples(&mut window_ripples, control_flow, invalidate);
             }
             Event::UserEvent((k, evt)) => match evt {
                 CustomEvent::Cursor(cursor) => {
@@ -296,7 +331,7 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                                 window_ripples.insert(window_id, vec![ripple]);
                             }
                         }
-                        last_cursors.insert(
+                        let previous = last_cursors.insert(
                             k,
                             CursorInfo {
                                 window_id: window.window.id(),
@@ -308,16 +343,56 @@ pub(super) fn create_event_loop() -> ResultType<()> {
                                 },
                             },
                         );
-                        window.window.request_redraw();
+                        if let Some(previous) = previous {
+                            if previous.window_id != window.window.id() {
+                                invalidate(previous.window_id);
+                            }
+                        }
+                        window.invalidate();
                         break;
                     }
                 }
                 CustomEvent::Exit => {
                     *control_flow = ControlFlow::Exit;
                 }
-                _ => {}
+                CustomEvent::Clear => {
+                    if let Some(previous) = last_cursors.remove(&k) {
+                        invalidate(previous.window_id);
+                    }
+                }
             },
             _ => (),
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn idle_whiteboard_waits_after_clearing_the_last_ripple() {
+        let id = unsafe { WindowId::dummy() };
+        let click = Ripple {
+            x: 0.,
+            y: 0.,
+            start_time: Instant::now(),
+        };
+        let mut ripples = HashMap::from([(id, vec![click])]);
+        let mut flow = ControlFlow::Wait;
+        let mut redraws = Vec::new();
+
+        animate_ripples(&mut ripples, &mut flow, |id| redraws.push(id));
+        assert!(matches!(flow, ControlFlow::WaitUntil(_)));
+        assert_eq!(redraws, [id]);
+
+        ripples.get_mut(&id).unwrap()[0].start_time -= Duration::from_secs(1);
+        flow = ControlFlow::WaitUntil(Instant::now());
+        animate_ripples(&mut ripples, &mut flow, |id| redraws.push(id));
+        assert_eq!(redraws, [id, id]);
+        assert_eq!(flow, ControlFlow::Wait);
+
+        animate_ripples(&mut ripples, &mut flow, |_| panic!("idle redraw"));
+        assert_eq!(flow, ControlFlow::Wait);
+    }
 }
