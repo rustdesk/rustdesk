@@ -481,7 +481,11 @@ class ChatModel with ChangeNotifier {
     final id = _currentKey.connId;
     final text = textController.text;
     checkClickTime(id, () {
-      if (_currentKey.connId == id && textController.text == text) {
+      if (_currentKey.connId == id &&
+          textController.text == text &&
+          parent.target?.serverModel.clients
+                  .any((client) => client.id == id && !client.disconnected) ==
+              true) {
         callback();
       }
     });
