@@ -831,7 +831,10 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
             {
                 log::trace!("No existing --server IPC pipe before launch: session_id={session_id}");
             } else {
-                log::warn!(
+                const CLOSE_FAILURE_LOG_INTERVAL: Duration = Duration::from_secs(5);
+                hbb_common::throttled_log!(
+                    CLOSE_FAILURE_LOG_INTERVAL,
+                    warn,
                     "Failed to request existing --server shutdown before launch: session_id={session_id}, error={err:#}"
                 );
             }
