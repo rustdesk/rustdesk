@@ -1378,6 +1378,14 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
           }
         },
         child: Text(translate('Relative mouse mode'))));
+    if (isWindows && ffi.inputModel.gameMouse.visible != null) {
+      v.add(TToggleMenu(
+          value: ffi.inputModel.gameMouse.enabled,
+          onChanged: (value) {
+            if (value != null) ffi.inputModel.setAutoGameMouse(value, remember: true);
+          },
+          child: Text(translate('Automatic game mouse'))));
+    }
   }
 
   // reverse mouse wheel

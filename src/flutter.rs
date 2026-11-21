@@ -688,6 +688,12 @@ impl InvokeUiSession for FlutterHandler {
         }
     }
 
+    #[cfg(windows)]
+    fn set_remote_cursor_visible(&self, visible: bool) {
+        let visible = if visible { "true" } else { "false" };
+        self.push_event("windows_cursor_visible", &[("visible", visible)], &[]);
+    }
+
     fn set_cursor_id(&self, id: String) {
         self.push_event("cursor_id", &[("id", &id.to_string())], &[]);
     }

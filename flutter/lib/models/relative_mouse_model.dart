@@ -379,7 +379,7 @@ class RelativeMouseModel {
     setRelativeMouseMode(!enabled.value);
   }
 
-  bool setRelativeMouseMode(bool value) {
+  bool setRelativeMouseMode(bool value, {bool showHint = true}) {
     // Web is not supported due to Pointer Lock API integration complexity with Flutter's input system
     if (isWeb) {
       return false;
@@ -417,7 +417,7 @@ class RelativeMouseModel {
                 return;
               }
               if (success) {
-                _completeEnableRelativeMouseMode();
+                _completeEnableRelativeMouseMode(showHint);
               }
               // Note: _enableNativeRelativeMouseMode already handles its own cleanup on failure
             });
@@ -431,7 +431,7 @@ class RelativeMouseModel {
               if (_enableRequestId != requestId) {
                 return;
               }
-              _completeEnableRelativeMouseMode();
+              _completeEnableRelativeMouseMode(showHint);
             }).catchError((e) {
               if (_enableRequestId != requestId) {
                 return;
@@ -442,7 +442,7 @@ class RelativeMouseModel {
           }
         } else {
           // Mobile: enable immediately (no platform-specific setup needed)
-          _completeEnableRelativeMouseMode();
+          _completeEnableRelativeMouseMode(showHint);
         }
       } catch (e) {
         _disableWithCleanup();
@@ -479,11 +479,11 @@ class RelativeMouseModel {
   }
 
   /// Called when platform setup completes successfully to finalize enabling relative mouse mode.
-  void _completeEnableRelativeMouseMode() {
+  void _completeEnableRelativeMouseMode(bool showHint) {
     enabled.value = true;
 
-    // Show toast notification so user knows how to exit relative mouse mode (desktop only).
-    if (isDesktop) {
+    // Manual capture shows the release shortcut. Automatic transitions can be frequent.
+    if (isDesktop && showHint) {
       showToast(
           translate('rel-mouse-exit-{${isMacOS ? "Cmd+G" : "Ctrl+Alt"}}-tip'),
           alignment: Alignment.center);
@@ -983,6 +983,7 @@ class RelativeMouseModel {
   }
 
   void _resetState() {
+    ++_enableRequestId;
     // Flush any pending delta before clearing state.
     // This ensures the last buffered movement is sent before values are zeroed.
     // Fire-and-forget: we don't wait for the async send to complete.

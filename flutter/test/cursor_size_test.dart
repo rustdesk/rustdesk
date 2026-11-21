@@ -1,3 +1,5 @@
+import 'package:flutter_hbb/common.dart' show gameCursorSizePixels;
+import 'package:flutter_hbb/utils/game_mouse_follow.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -52,6 +54,10 @@ class _Image extends ChangeNotifier implements ImageModel {
 }
 
 class _Input extends Fake implements InputModel {
+  @override
+  final showGameMenuPointer = false.obs;
+  @override
+  final gameMouse = GameMouseFollow();
   @override
   final relativeMouseMode = false.obs;
 }
@@ -126,6 +132,9 @@ void main() {
     test('Windows peer cursor alpha survives resizing $pattern',
         () => _checkWindowsPeerAlpha(pattern, registrations));
   }
+  testWidgets('game menu uses the remote shape at local cursor size',
+      (tester) => _checkView(tester, (kRemoteViewStyleAdaptive, true),
+          registrations, gameMenu: true));
   for (final (style, zoom) in [
     (kRemoteViewStyleOriginal, false),
     (kRemoteViewStyleAdaptive, false),
@@ -283,10 +292,14 @@ const _viewCases = [
 ];
 
 Future<void> _checkView(WidgetTester tester, (String, bool) mode,
-    List<Map<dynamic, dynamic>> registrations) async {
+    List<Map<dynamic, dynamic>> registrations, {bool gameMenu = false}) async {
   const sourceSize = 64, customScale = 4.0;
   final canvas = _Canvas(mode.$1);
   final ffi = _FFI(canvas);
+  if (gameMenu) {
+    ffi.inputModel.gameMouse.updateVisibility(true);
+    ffi.inputModel.showGameMenuPointer.value = true;
+  }
   final display = _Display();
   ffi.ffiModel.pi.displays.addAll([Display(), display]);
   ffi.ffiModel.pi.currentDisplay = 1;
@@ -331,7 +344,8 @@ Future<void> _checkView(WidgetTester tester, (String, bool) mode,
         ? (sourceSize * (Platform.isWindows ? dpr : 1.0)).ceil()
         : (size * scale * (Platform.isWindows ? dpr : 1.0)).ceil();
     final key = cursor.nativeKey(cursor.cache, cursor.cache.scale);
-    _expectSize(registrations.singleWhere((v) => v['name'] == key), (w, w));
+    final expected = gameMenu ? gameCursorSizePixels() : w;
+    _expectSize(registrations.singleWhere((v) => v['name'] == key), (expected, expected));
   }
   await tester.pumpWidget(const SizedBox.shrink());
 }

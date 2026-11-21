@@ -21,6 +21,7 @@ import '../common/widgets/keyboard_shortcuts/shortcut_utils.dart';
 import 'input_modifier_utils.dart';
 import 'local_flutter_shortcuts.dart';
 import 'relative_mouse_model.dart';
+import '../utils/game_mouse_follow.dart';
 import '../common.dart';
 import '../consts.dart';
 
@@ -474,6 +475,72 @@ class InputModel {
 
   // Relative mouse mode (for games/3D apps).
   final relativeMouseMode = false.obs;
+  static const _autoMouseKey = 'automatic-game-mouse';
+  late final gameMouse = GameMouseFollow(
+    readPreference: () => id.isNotEmpty &&
+        bind.mainGetPeerFlutterOptionSync(id: id, k: _autoMouseKey) == 'Y',
+    writePreference: (value) {
+      if (id.isNotEmpty) {
+        bind.mainSetPeerFlutterOptionSync(id: id, k: _autoMouseKey, v: value ? 'Y' : '');
+      }
+    },
+  );
+  final showGameMenuPointer = false.obs;
+  Timer? _gameMenuTimer;
+  bool Function()? canAutoCaptureMouse;
+  void resetAutoMouse() {
+    if (gameMouse.enabled) setAutoGameMouse(false);
+    gameMouse.reset();
+  }
+
+  void setAutoGameMouse(bool value, {bool remember = false}) {
+    _gameMenuTimer?.cancel();
+    _gameMenuTimer = null;
+    gameMouse.enable(value, remember: remember);
+    showGameMenuPointer.value = value && gameMouse.wantsPointer;
+    if (!value || gameMouse.wantsPointer) _relativeMouse.setRelativeMouseMode(false);
+    if (value && isWindows) {
+      _gameMenuTimer = Timer.periodic(const Duration(milliseconds: 32), (_) {
+        if (canAutoCaptureMouse?.call() != true || !keyboardPerm || isViewOnly) return;
+        final modifier = gameMenuModifier();
+        if (modifier == 2) {
+          // Ctrl+Alt is RustDesk's emergency release. Never recapture on its key-up.
+          setAutoGameMouse(false);
+        } else if (gameMouse.updateAlt(modifier == 1)) {
+          _applyGameMouse();
+        }
+      });
+    }
+    _engageAutoMouse();
+  }
+
+  void onRemoteCursorVisibility(bool visible) {
+    if (!isWindows || parent.target?.connType != ConnType.defaultConn ||
+        isViewOnly || !keyboardPerm) return;
+    final firstSignal = gameMouse.visible == null;
+    if (!gameMouse.updateVisibility(visible)) return;
+    if (firstSignal) {
+      // Start the Alt timer only once the connected host advertises support.
+      setAutoGameMouse(true);
+    } else {
+      _applyGameMouse();
+    }
+  }
+
+  void _applyGameMouse() {
+    showGameMenuPointer.value = gameMouse.wantsPointer;
+    if (gameMouse.wantsPointer) {
+      _relativeMouse.setRelativeMouseMode(false);
+    } else {
+      _engageAutoMouse();
+    }
+  }
+
+  void _engageAutoMouse() {
+    if (!gameMouse.pending || canAutoCaptureMouse?.call() != true ||
+        !keyboardPerm || isViewOnly || isViewCamera || imageWidgetSize == null) return;
+    if (_relativeMouse.setRelativeMouseMode(true, showHint: false)) gameMouse.engaged();
+  }
   late final RelativeMouseModel _relativeMouse;
   // Callback to cancel external throttle timer when relative mouse mode is disabled.
   VoidCallback? onRelativeMouseModeDisabled;
@@ -1458,6 +1525,7 @@ class InputModel {
     toReleaseRawKeys.release(handleRawKeyEvent);
     _pointerMovedAfterEnter = false;
     _pointerInsideImage = enter;
+    if (enter) _engageAutoMouse();
     _lastWheelTsUs = 0;
 
     // Track active model for side button events (Linux).
@@ -1533,10 +1601,17 @@ class InputModel {
   }
 
   void toggleRelativeMouseMode() {
+    final wasEnabled = relativeMouseMode.value;
+    if (gameMouse.enabled) {
+      setAutoGameMouse(false);
+      if (!wasEnabled) _relativeMouse.setRelativeMouseMode(true);
+      return;
+    }
     _relativeMouse.toggleRelativeMouseMode();
   }
 
   bool setRelativeMouseMode(bool enabled) {
+    if (gameMouse.enabled) setAutoGameMouse(false);
     return _relativeMouse.setRelativeMouseMode(enabled);
   }
 
@@ -1578,10 +1653,16 @@ class InputModel {
     resetModifiers();
 
     // Now exit relative mouse mode
-    _relativeMouse.setRelativeMouseMode(false);
+    if (gameMouse.enabled) {
+      setAutoGameMouse(false);
+    } else {
+      _relativeMouse.setRelativeMouseMode(false);
+    }
   }
 
   void disposeRelativeMouseMode() {
+    _gameMenuTimer?.cancel();
+    _gameMenuTimer = null;
     _relativeMouse.dispose();
     onRelativeMouseModeDisabled = null;
     // Cancel the relative mouse mode observer and clean up global state.
@@ -1602,6 +1683,7 @@ class InputModel {
   }
 
   void onPointHoverImage(PointerHoverEvent e) {
+    _engageAutoMouse();
     _stopFling = true;
     if (isViewOnly && !showMyCursor) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;

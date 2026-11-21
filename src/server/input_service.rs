@@ -35,6 +35,8 @@ const INVALID_DISPLAY_IDX: i32 = -1;
 #[derive(Default)]
 struct StateCursor {
     hcursor: u64,
+    #[cfg(windows)]
+    visible: Option<bool>,
     cursor_data: Arc<Message>,
     cached_cursor_data: HashMap<u64, Arc<Message>>,
 }
@@ -393,7 +395,19 @@ fn run_pos(sp: EmptyExtraFieldService, state: &mut StatePos) -> ResultType<()> {
 }
 
 fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()> {
-    if let Some(hcursor) = crate::get_cursor()? {
+    let cursor = crate::get_cursor()?;
+    #[cfg(windows)]
+    let cursor_visible = |visible| {
+        let mut msg = Message::new();
+        msg.set_windows_cursor_visible(visible);
+        msg
+    };
+    #[cfg(windows)]
+    if state.visible != Some(cursor.is_some()) {
+        sp.send(cursor_visible(cursor.is_some()));
+        state.visible = Some(cursor.is_some());
+    }
+    if let Some(hcursor) = cursor {
         if hcursor != state.hcursor {
             let msg;
             // On the DRM path get_cursor_data() may return a snapshot whose id has advanced past the
@@ -466,6 +480,8 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
     }
     sp.snapshot(|sps| {
         sps.send_shared(state.cursor_data.clone());
+        #[cfg(windows)]
+        sps.send(cursor_visible(cursor.is_some()));
         Ok(())
     })?;
     Ok(())

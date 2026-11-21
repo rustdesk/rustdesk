@@ -827,5 +827,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", ""),
         ("Forever", ""),
         ("username-login-disabled-oidc-unavailable", ""),
+        ("Automatic game mouse", ""),
     ].iter().cloned().collect();
 }

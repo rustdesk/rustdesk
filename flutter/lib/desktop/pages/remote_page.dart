@@ -227,6 +227,10 @@ class _RemotePageState extends State<RemotePage>
     });
 
     // Register callback to cancel debounce timer when relative mouse mode is disabled
+    _ffi.inputModel.canAutoCaptureMouse = () =>
+        mounted && !_isWindowBlur && _cursorOverImage.value &&
+        _windowsCanFocusRemoteInput &&
+        stateGlobal.isFocused.value;
     _ffi.inputModel.onRelativeMouseModeDisabled =
         _cancelPointerLockCenterDebounceTimer;
 
@@ -674,6 +678,7 @@ class _RemotePageState extends State<RemotePage>
     _pointerLockCenterDebounceTimer = null;
     _waylandKeyboardModeWorker?.dispose();
     // Clear callback reference to prevent memory leaks and stale references
+    _ffi.inputModel.canAutoCaptureMouse = null;
     _ffi.inputModel.onRelativeMouseModeDisabled = null;
     // Relative mouse mode cleanup is centralized in FFI.close(closeSession: ...).
     _ffi.textureModel.onRemotePageDispose(closeSession);
@@ -1136,10 +1141,13 @@ class _ImagePaintState extends State<ImagePaint> {
             }
           }
 
+          final menuPointer = widget.ffi.inputModel.showGameMenuPointer.value;
           return MouseRegion(
-              cursor: cursorOverImage.isTrue
-                  ? c.cursorEmbedded
-                      ? SystemMouseCursors.none
+              cursor: cursorOverImage.isTrue && menuPointer && !c.cursorEmbedded
+                  ? _buildGameMenuCursor(context)
+                  : cursorOverImage.isTrue
+                      ? c.cursorEmbedded
+                          ? SystemMouseCursors.none
                       // Hide cursor when relative mouse mode is active
                       : widget.ffi.inputModel.relativeMouseMode.value
                           ? SystemMouseCursors.none
@@ -1345,6 +1353,18 @@ class _ImagePaintState extends State<ImagePaint> {
       onHover: (_) => _cursorDisplayScale.value = display.scale,
       child: child,
     );
+  }
+
+  MouseCursor _buildGameMenuCursor(BuildContext context) {
+    final cursor = Provider.of<CursorModel>(context);
+    final shape = cursor.cache;
+    if (shape == null || widget.ffi.inputModel.gameMouse.visible != true) {
+      return SystemMouseCursors.basic;
+    }
+    final size = gameCursorSizePixels();
+    final longest = shape.width > shape.height ? shape.width : shape.height;
+    final scale = size > 0 && longest > 0 ? size / longest : 1.0;
+    return buildCursorOfCache(cursor, scale, shape);
   }
 
   MouseCursor _buildCustomCursor(BuildContext context, double scale) {

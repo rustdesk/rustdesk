@@ -2948,6 +2948,10 @@ int getWindowsTargetBuildNumber() {
   return getWindowsTargetBuildNumber_();
 }
 
+int gameCursorSizePixels() => isWindows ? gameCursorSizePixels_() : 32;
+
+int gameMenuModifier() => isWindows ? gameMenuModifier_() : 0;
+
 /// Indicating we need to use compatible ui mode.
 ///
 /// [Conditions]

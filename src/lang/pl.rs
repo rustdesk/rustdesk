@@ -827,5 +827,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Poproś o zatwierdzenie"),
         ("Forever", "Na zawsze"),
         ("username-login-disabled-oidc-unavailable", "Logowanie za pomocą nazwy użytkownika i hasła jest wyłączone i nie ma dostępnych metod logowania OIDC."),
+        ("Automatic game mouse", ""),
     ].iter().cloned().collect();
 }

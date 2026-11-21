@@ -1704,6 +1704,8 @@ impl<T: InvokeUiSession> Session<T> {
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
+    #[cfg(all(windows, feature = "flutter"))]
+    fn set_remote_cursor_visible(&self, visible: bool);
     fn set_cursor_position(&self, cp: CursorPosition);
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32, cursor_embedded: bool, scale: f64);
     fn switch_display(&self, display: &SwitchDisplay);

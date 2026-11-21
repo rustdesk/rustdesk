@@ -344,12 +344,15 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'sync_platform_additions') {
         handlePlatformAdditions(evt, sessionId, peerId);
       } else if (name == 'connection_ready') {
+        parent.target?.inputModel.resetAutoMouse();
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
         resetRestartReconnectState();
       } else if (name == 'switch_display') {
         // switch display is kept for backward compatibility
         handleSwitchDisplay(evt, sessionId, peerId);
+      } else if (name == 'windows_cursor_visible') {
+        parent.target?.inputModel.onRemoteCursorVisibility(evt['visible'] == 'true');
       } else if (name == 'cursor_id') {
         updateLastCursorId(evt);
         handleCursorId(evt);

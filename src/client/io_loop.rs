@@ -1824,6 +1824,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     _ => {}
                 },
+                #[cfg(all(windows, feature = "flutter"))]
+                Some(message::Union::WindowsCursorVisible(visible)) => {
+                    self.handler.set_remote_cursor_visible(visible);
+                }
                 Some(message::Union::CursorData(cd)) if self.dedupes_cursors() => {
                     self.set_cursor_data_by_content(cd);
                 }
