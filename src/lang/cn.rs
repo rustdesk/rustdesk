@@ -827,5 +827,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "请求批准"),
         ("Forever", "永久"),
         ("username-login-disabled-oidc-unavailable", "用户名和密码登录已禁用，且没有可用的 OIDC 登录方式。"),
+        ("Screen frame color", "边框颜色"),
+        ("Width", "宽度"),
+        ("Opacity", "不透明度"),
+        ("Enable screen frame", "启用屏幕边框"),
+        ("Viewed", "被查看"),
+        ("Unviewed", "未被查看"),
+        ("Privacy", "隐私"),
+        ("Frame color", "边框颜色"),
+        ("Viewed display frame color", "被查看显示器的边框颜色"),
+        ("Unviewed display frame color", "未被查看显示器的边框颜色"),
     ].iter().cloned().collect();
 }

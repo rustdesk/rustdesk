@@ -184,9 +184,25 @@ mod pa_impl {
 #[inline]
 #[cfg(feature = "screencapturekit")]
 pub fn is_screen_capture_kit_available() -> bool {
+    // CPAL constructs this class while enumerating hosts and assumes it exists.
+    // With a weak framework dependency, older macOS must skip that call entirely.
+    if objc::runtime::Class::get("SCStreamConfiguration").is_none() {
+        return false;
+    }
     cpal::available_hosts()
         .iter()
         .any(|host| *host == cpal::HostId::ScreenCaptureKit)
+}
+
+#[cfg(all(test, target_os = "macos", feature = "screencapturekit"))]
+mod sck_tests {
+    #[test]
+    fn audio_availability_handles_missing_framework() {
+        let available = super::is_screen_capture_kit_available();
+        if objc::runtime::Class::get("SCStreamConfiguration").is_none() {
+            assert!(!available);
+        }
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
