@@ -1299,7 +1299,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
         #[cfg(target_os = "macos")]
         en.reset_flag();
         for ref ck in evt.modifiers.iter() {
-            if let Some(key) = KEY_MAP.get(&ck.value()) {
+            if let Some(key) = MODIFIER_MAP.get(&ck.value()) {
                 #[cfg(target_os = "macos")]
                 en.add_flag(key);
                 #[cfg(not(target_os = "macos"))]
@@ -1525,16 +1525,6 @@ fn handle_scale(scale: i32) {
             en.mouse_scroll_y(scale);
         }
     }
-}
-
-pub fn is_enter(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
-        if ck.value() == ControlKey::Return.value() || ck.value() == ControlKey::NumpadEnter.value()
-        {
-            return true;
-        }
-    }
-    return false;
 }
 
 pub async fn lock_screen() {
@@ -2628,6 +2618,8 @@ impl Drop for TemporaryMouseMoveHandle {
 lazy_static::lazy_static! {
     static ref MODIFIER_MAP: HashMap<i32, Key> = [
         (ControlKey::Alt, Key::Alt),
+        (ControlKey::Menu, Key::Alt),
+        (ControlKey::Option, Key::Option),
         (ControlKey::RAlt, Key::RightAlt),
         (ControlKey::Control, Key::Control),
         (ControlKey::RControl, Key::RightControl),

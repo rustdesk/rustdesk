@@ -1313,6 +1313,7 @@ impl Connection {
                         if press {
                             msg.down = true;
                         }
+                        CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         handle_key(&msg);
                         if press {
                             msg.down = false;
@@ -3382,9 +3383,6 @@ impl Connection {
                         return true;
                     }
                     if self.peer_keyboard_enabled() {
-                        if is_enter(&me) {
-                            CLICK_TIME.store(get_time(), Ordering::SeqCst);
-                        }
                         // https://github.com/rustdesk/rustdesk/issues/8633
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
 
