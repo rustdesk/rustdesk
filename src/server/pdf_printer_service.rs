@@ -61,12 +61,26 @@ fn capture_queue(service: &EmptyExtraFieldService) -> ResultType<()> {
     Ok(())
 }
 
+fn spooler_pid() -> ResultType<u32> {
+    use windows_service::{
+        service::{ServiceAccess, ServiceState},
+        service_manager::{ServiceManager, ServiceManagerAccess},
+    };
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
+    let service = manager.open_service("Spooler", ServiceAccess::QUERY_STATUS)?;
+    let status = service.query_status()?;
+    match (status.current_state, status.process_id) {
+        (ServiceState::Running, Some(pid)) if pid != 0 => Ok(pid),
+        _ => bail!("The Windows Print Spooler is not running"),
+    }
+}
+
 fn capture_connection(
     service: &EmptyExtraFieldService,
     queue: &Queue,
     pipe: &Pipe,
 ) -> ResultType<()> {
-    if pipe.client_pid()? != pdf::spooler_pid()? {
+    if pipe.client_pid()? != spooler_pid()? {
         bail!("The PDF pipe client is not the Windows Print Spooler");
     }
     let owner = pdf::controlled_user_sid()?;

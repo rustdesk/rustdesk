@@ -4,9 +4,9 @@ use super::{
     security::Descriptor,
 };
 use hbb_common::{anyhow::Context, bail, ResultType};
-use std::{mem::size_of, path::Path, time::Duration};
+use std::path::Path;
 use windows::{
-    core::{w, HSTRING, PCWSTR, PWSTR},
+    core::{HSTRING, PCWSTR, PWSTR},
     Win32::{
         Foundation::{LocalFree, HANDLE, HLOCAL},
         Security::{
@@ -18,11 +18,6 @@ use windows::{
             RemoteDesktop::{
                 ProcessIdToSessionId, WTSDomainName, WTSFreeMemory, WTSQuerySessionInformationW,
                 WTSUserName, WTS_INFO_CLASS,
-            },
-            Services::{
-                CloseServiceHandle, OpenSCManagerW, OpenServiceW, QueryServiceStatusEx, SC_HANDLE,
-                SC_MANAGER_CONNECT, SC_STATUS_PROCESS_INFO, SERVICE_QUERY_STATUS, SERVICE_RUNNING,
-                SERVICE_STATUS_PROCESS,
             },
             Threading::{GetCurrentProcess, GetCurrentProcessId, OpenProcessToken},
         },
@@ -128,41 +123,6 @@ pub fn create_private_directory(path: &Path) -> ResultType<()> {
     let path = HSTRING::from(path.as_os_str());
     unsafe { CreateDirectoryW(PCWSTR(path.as_ptr()), Some(&descriptor.attributes()))? };
     Ok(())
-}
-
-pub fn spooler_pid() -> ResultType<u32> {
-    let manager = ServiceHandle(unsafe {
-        OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT)?
-    });
-    let service =
-        ServiceHandle(unsafe { OpenServiceW(manager.0, w!("Spooler"), SERVICE_QUERY_STATUS)? });
-    let mut status = SERVICE_STATUS_PROCESS::default();
-    let bytes = unsafe {
-        std::slice::from_raw_parts_mut(
-            (&mut status as *mut SERVICE_STATUS_PROCESS).cast::<u8>(),
-            size_of::<SERVICE_STATUS_PROCESS>(),
-        )
-    };
-    let mut needed = 0;
-    unsafe { QueryServiceStatusEx(service.0, SC_STATUS_PROCESS_INFO, Some(bytes), &mut needed)? };
-    if status.dwCurrentState != SERVICE_RUNNING || status.dwProcessId == 0 {
-        bail!("The Windows Print Spooler is not running");
-    }
-    Ok(status.dwProcessId)
-}
-
-struct ServiceHandle(SC_HANDLE);
-
-impl Drop for ServiceHandle {
-    fn drop(&mut self) {
-        if let Err(error) = unsafe { CloseServiceHandle(self.0) } {
-            hbb_common::throttled_log!(
-                Duration::from_secs(60),
-                warn,
-                "PDF service handle cleanup failed: {error}"
-            );
-        }
-    }
 }
 
 #[cfg(test)]

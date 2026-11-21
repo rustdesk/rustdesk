@@ -131,19 +131,16 @@ fn set_marker(root: &winreg::RegKey, name: &str, installed: bool) -> ResultType<
     }
 }
 
-pub(crate) fn request(command: &str) -> ResultType<()> {
-    if command != INSTALL && command != UNINSTALL {
-        bail!("Unknown PDF printer setup operation");
-    }
+fn request_install() -> ResultType<()> {
     if !crate::platform::is_installed() {
         bail!("Install the application before configuring PDF capture");
     }
-    check_install_source(command)?;
+    check_install_source(INSTALL)?;
     if remote_printer::pdf::is_elevated()? {
-        return execute(command);
+        return execute(INSTALL);
     }
     let exe = HSTRING::from(std::env::current_exe()?.as_os_str());
-    let parameters = HSTRING::from(command);
+    let parameters = HSTRING::from(INSTALL);
     let mut execution = SHELLEXECUTEINFOW {
         cbSize: size_of::<SHELLEXECUTEINFOW>() as u32,
         fMask: SEE_MASK_NOCLOSEPROCESS,
@@ -175,7 +172,7 @@ struct Process(HANDLE);
 #[cfg(feature = "flutter")]
 pub(crate) fn request_from_ui() {
     std::thread::spawn(move || {
-        let result = request(INSTALL).and_then(|()| {
+        let result = request_install().and_then(|()| {
             crate::ipc::set_install_option(
                 crate::platform::REG_NAME_INSTALL_PRINTER.to_owned(),
                 "1".to_owned(),

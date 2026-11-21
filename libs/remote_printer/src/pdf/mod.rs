@@ -12,7 +12,7 @@ mod queues;
 mod raster;
 mod security;
 
-pub use identity::{controlled_user_sid, create_private_directory, spooler_pid};
+pub use identity::{controlled_user_sid, create_private_directory};
 pub use install::{install, uninstall};
 pub use jobs::Job;
 pub use namespace::verify_namespace;
