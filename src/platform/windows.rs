@@ -641,11 +641,11 @@ fn authorize_service_scoped_ipc_connection(
         ipc::ensure_peer_executable_matches_current_by_pid_opt(peer_pid, crate::POSTFIX_SERVICE)
     {
         log::warn!(
-                "Rejected unauthorized connection on protected service-scoped IPC channel due to executable mismatch: postfix={}, peer_pid={:?}, err={}",
-                crate::POSTFIX_SERVICE,
-                peer_pid,
-                err
-            );
+            "Rejected service-scoped IPC connection: executable verification failed: postfix={}, peer_pid={:?}, err={}",
+            crate::POSTFIX_SERVICE,
+            peer_pid,
+            err
+        );
         return false;
     }
     true
@@ -824,7 +824,18 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
 async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDLE> {
     if close_first {
         // in case started some elsewhere
-        send_close_async("").await.ok();
+        if let Err(err) = send_close_async("").await {
+            if err
+                .downcast_ref::<io::Error>()
+                .is_some_and(|err| err.kind() == io::ErrorKind::NotFound)
+            {
+                log::trace!("No existing --server IPC pipe before launch: session_id={session_id}");
+            } else {
+                log::warn!(
+                    "Failed to request existing --server shutdown before launch: session_id={session_id}, error={err:#}"
+                );
+            }
+        }
     }
     let cmd = format!(
         "\"{}\" --server",
