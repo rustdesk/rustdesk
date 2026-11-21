@@ -13,6 +13,16 @@ class WindowsRelativePointer {
     return previous == null || current == null ? null : current - previous;
   }
 
+  void handleMove(Offset localPosition, void Function(Offset) sendDelta,
+      void Function(Offset) checkEdge) {
+    final delta = movement();
+    if (delta != null && delta != Offset.zero) {
+      sendDelta(delta);
+    }
+    // A queued notification may reach the edge after all motion was sent.
+    checkEdge(localPosition);
+  }
+
   // Windows may clamp SetCursorPos to the clip rectangle.
   void didWarp() => _last = readPosition();
   void reset() => _last = null;

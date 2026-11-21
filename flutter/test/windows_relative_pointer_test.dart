@@ -31,4 +31,41 @@ void main() {
     os = const Offset(0, 0);
     expect(pointer.movement(), isNull);
   });
+  test('a queued edge notification recenters without another delta or flush',
+      () {
+    const inside = Offset(95, 50),
+        edge = Offset(100, 50),
+        center = Offset(50, 50);
+    Offset? os;
+    final pointer = WindowsRelativePointer(() => os);
+    final sent = <Offset>[];
+    var warps = 0;
+    void checkEdge(Offset local) {
+      if (local != edge) return;
+      warps++;
+      os = center;
+      pointer.didWarp();
+    }
+
+    // Seed the baseline, then deliver an older interior notification after
+    // the OS cursor already reached the edge.
+    os = inside;
+    pointer.handleMove(inside, sent.add, checkEdge);
+    os = edge;
+    pointer.handleMove(inside, sent.add, checkEdge);
+    expect(sent, [const Offset(5, 0)]);
+    expect(warps, 0);
+
+    // The earlier delta can already have been flushed. This notification
+    // has zero sampled movement and must trigger the warp on its own.
+    pointer.handleMove(edge, sent.add, checkEdge);
+    expect(warps, 1);
+    pointer.handleMove(center, sent.add, checkEdge);
+    expect(sent, [const Offset(5, 0)]);
+
+    os = null;
+    pointer.handleMove(edge, sent.add, checkEdge);
+    expect(warps, 2);
+    expect(sent, [const Offset(5, 0)]);
+  });
 }

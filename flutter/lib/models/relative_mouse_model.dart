@@ -530,12 +530,10 @@ class RelativeMouseModel {
     _ensurePointerLockEngaged();
 
     if (isWindows) {
-      final delta = _windowsPointer.movement();
-      if (delta != null && delta != Offset.zero) {
-        _lastPointerLocalPos = localPosition;
+      _windowsPointer.handleMove(localPosition, (delta) {
         final dpr = ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
         sendRelativeMouseMove(delta.dx / dpr, delta.dy / dpr);
-      }
+      }, _recenterIfNearEdge);
       return true;
     }
 
@@ -621,7 +619,7 @@ class RelativeMouseModel {
 
     // Only recenter when mouse is near the edge of the image widget.
     // This allows smooth mouse movement without constant recentering.
-    _recenterIfNearEdge();
+    if (!isWindows) _recenterIfNearEdge(_lastPointerLocalPos);
   }
 
   // Edge threshold parameters for recenter detection.
@@ -657,8 +655,7 @@ class RelativeMouseModel {
   }
 
   /// Recenter the cursor only if it's near the edge of the image widget.
-  void _recenterIfNearEdge() {
-    final lastPos = _lastPointerLocalPos;
+  void _recenterIfNearEdge(Offset? lastPos) {
     final size = _imageWidgetSize;
     if (lastPos == null || size == null) return;
 
@@ -761,7 +758,6 @@ class RelativeMouseModel {
         if (ok) {
           if (isWindows) {
             _windowsPointer.didWarp();
-            _lastPointerLocalPos = _pointerLockCenterLocal;
           } else {
             // The recenter itself generates a move notification.
             _skipNextMouseMove = true;
