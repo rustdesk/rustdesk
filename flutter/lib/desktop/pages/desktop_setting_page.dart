@@ -76,7 +76,7 @@ class DesktopSettingPage extends StatefulWidget {
       SettingsTabKey.network,
     if (!bind.isIncomingOnly()) SettingsTabKey.display,
     if (!bind.isDisableAccount()) SettingsTabKey.account,
-    if (isWindows &&
+    if ((isWindows || isLinux || isMacOS) &&
         !bind.isDisableSettings() &&
         bind.mainGetBuildinOption(key: kOptionHideRemotePrinterSetting) != 'Y')
       SettingsTabKey.printer,
@@ -2423,16 +2423,46 @@ class _Printer extends StatefulWidget {
 }
 
 class __PrinterState extends State<_Printer> {
+  late Future<PdfPrinterList> _pdfPrinters;
+  late Future<String> _printerStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _pdfPrinters = PdfPrinterList.load();
+    if (isWindows) {
+      _printerStatus = bind.mainGetCommon(key: 'is-pdf-printer-installed');
+    }
+  }
+
+  @override
+  void dispose() {
+    platformFFI.unregisterEventHandler(
+        'install-printer-res', 'install-printer-res');
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final scrollController = ScrollController();
     return ListView(controller: scrollController, children: [
-      outgoing(context),
-      incoming(context),
+      if (isWindows)
+        FutureBuilder<String>(
+          future: _printerStatus,
+          builder: (context, snapshot) => outgoing(context, snapshot),
+        ),
+      FutureBuilder<PdfPrinterList>(
+        future: _pdfPrinters,
+        builder: (context, snapshot) => snapshot.hasData
+            ? incoming(context, snapshot.requireData)
+            : _Card(title: 'Incoming Print Jobs', children: [
+                const LinearProgressIndicator(),
+              ]),
+      ),
     ]).marginOnly(bottom: _kListViewBottomMargin);
   }
 
-  Widget outgoing(BuildContext context) {
+  Widget outgoing(BuildContext context, AsyncSnapshot<String> status) {
     final isSupportPrinterDriver =
         bind.mainGetCommonSync(key: 'is-support-printer-driver') == 'true';
 
@@ -2455,8 +2485,12 @@ class __PrinterState extends State<_Printer> {
       final failedMsg = ''.obs;
       platformFFI.registerEventHandler(
           'install-printer-res', 'install-printer-res', (evt) async {
+        if (!mounted) return;
         if (evt['success'] as bool) {
-          setState(() {});
+          setState(() {
+            _printerStatus =
+                bind.mainGetCommon(key: 'is-pdf-printer-installed');
+          });
         } else {
           failedMsg.value = evt['msg'] as String;
         }
@@ -2497,10 +2531,11 @@ class __PrinterState extends State<_Printer> {
     }
 
     final installed = bind.mainIsInstalled();
-    // `is-printer-installed` may fail, but it's rare case.
-    // Add additional error message here if it's really needed.
-    final isPrinterInstalled =
-        bind.mainGetCommonSync(key: 'is-printer-installed') == 'true';
+    final isPrinterInstalled = status.data == 'true';
+    final error = status.error?.toString() ??
+        (status.hasData && status.data != 'true' && status.data != 'false'
+            ? status.data!
+            : '');
 
     final List<Widget> children = [];
     if (!isSupportPrinterDriver) {
@@ -2508,22 +2543,46 @@ class __PrinterState extends State<_Printer> {
     } else {
       children.addAll([
         if (!installed) tipClientNotInstalled(),
-        if (installed && !isPrinterInstalled) tipPrinterNotInstalled(),
+        if (installed && !status.hasData && !status.hasError)
+          const LinearProgressIndicator(),
+        if (installed && error.isNotEmpty)
+          Text(error,
+              style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        if (installed && status.data == 'false') tipPrinterNotInstalled(),
         if (installed && isPrinterInstalled) tipReady()
       ]);
     }
     return _Card(title: 'Outgoing Print Jobs', children: children);
   }
 
-  Widget incoming(BuildContext context) {
+  Widget incoming(BuildContext context, PdfPrinterList pdfPrinters) {
     onRadioChanged(String value) async {
       await bind.mainSetLocalOption(
           key: kKeyPrinterIncomingJobAction, value: value);
       setState(() {});
     }
 
-    PrinterOptions printerOptions = PrinterOptions.load();
-    return _Card(title: 'Incoming Print Jobs', children: [
+    PrinterOptions printerOptions =
+        PrinterOptions.load(pdfPrinters: pdfPrinters);
+    final printerNames = [
+      if (!printerOptions.printerNames.contains(printerOptions.printerName))
+        printerOptions.printerName,
+      ...printerOptions.printerNames,
+    ];
+    return _Card(title: 'Incoming Print Jobs', title_suffix: [
+      IconButton(
+        tooltip: translate('Refresh'),
+        icon: const Icon(Icons.refresh),
+        onPressed: () {
+          setState(() {
+            _pdfPrinters = PdfPrinterList.load();
+          });
+        },
+      ),
+    ], children: [
+      if (printerOptions.error.isNotEmpty)
+        Text(printerOptions.error,
+            style: TextStyle(color: Theme.of(context).colorScheme.error)),
       _Radio(context,
           value: kValuePrinterIncomingJobDismiss,
           groupValue: printerOptions.action,
@@ -2542,8 +2601,10 @@ class __PrinterState extends State<_Printer> {
       if (printerOptions.printerNames.isNotEmpty)
         ComboBox(
           initialKey: printerOptions.printerName,
-          keys: printerOptions.printerNames,
-          values: printerOptions.printerNames,
+          keys: printerNames,
+          values: printerNames
+              .map((name) => name.isEmpty ? translate('Select') : name)
+              .toList(),
           enabled: printerOptions.action == kValuePrinterIncomingJobSelected,
           onChanged: (value) async {
             await bind.mainSetLocalOption(

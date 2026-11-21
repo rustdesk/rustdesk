@@ -71,6 +71,8 @@ use std::{
     },
 };
 
+mod pdf;
+
 pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
     audio_sender: MediaSender,
@@ -81,6 +83,7 @@ pub struct Remote<T: InvokeUiSession> {
     voice_call_request_timestamp: Option<NonZeroI64>,
     read_jobs: Vec<fs::TransferJob>,
     write_jobs: Vec<fs::TransferJob>,
+    pdf_jobs: crate::remote_print::job::Offers,
     remove_jobs: HashMap<i32, RemoveJob>,
     timer: crate::RustDeskInterval,
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
@@ -136,6 +139,7 @@ impl<T: InvokeUiSession> Remote<T> {
             sender,
             read_jobs: Vec::new(),
             write_jobs: Vec::new(),
+            pdf_jobs: Default::default(),
             remove_jobs: Default::default(),
             timer: crate::rustdesk_interval(time::interval(SEC30)),
             last_update_jobs_status: (Instant::now(), Default::default()),
@@ -463,7 +467,8 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
-    fn handle_disconnected(&self, round: u32) {
+    fn handle_disconnected(&mut self, round: u32) {
+        self.clear_pdf_jobs();
         // set_disconnected_ok is used to check if new connection round is started.
         let _set_disconnected_ok = self
             .handler
@@ -850,6 +855,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 allow_err!(peer.send(&msg).await);
             }
             Data::SendFiles((id, r#type, path, to, file_num, include_hidden, is_remote)) => {
+                if r#type == fs::JobType::Printer && is_remote && !self.approve_pdf(id, &path) {
+                    return true;
+                }
                 log::info!("send files, is remote {}", is_remote);
                 let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
@@ -1433,6 +1441,7 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     async fn cancel_transfer_job(&mut self, id: i32, peer: &mut Stream) {
+        self.discard_pdf(id);
         let mut msg_out = Message::new();
         let mut file_action = FileAction::new();
         file_action.set_cancel(FileTransferCancel {
@@ -1996,6 +2005,11 @@ impl<T: InvokeUiSession> Remote<T> {
                                     .update_folder_files(fd.id, &entries, fd.path, false, false);
                             }
                             if let Some(err) = set_files_err {
+                                if self.pdf_jobs.contains(fd.id) {
+                                    self.cancel_transfer_job(fd.id, peer).await;
+                                    self.pdf_error(hbb_common::anyhow::anyhow!(err));
+                                    return true;
+                                }
                                 log::warn!(
                                     "Rejected unsafe file list from remote peer for job {}: {}",
                                     fd.id,
@@ -2159,20 +2173,31 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         Some(file_response::Union::Block(block)) => {
                             let id = block.id;
+                            let is_pdf = self.pdf_jobs.contains(id);
                             let mut write_error = None;
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                                 let result = job.write(block).await;
                                 if job.r#type == fs::JobType::Generic {
                                     write_error = result.err().map(|err| err.to_string());
                                     self.update_jobs_status();
+                                } else if is_pdf {
+                                    write_error = result.err().map(|err| err.to_string());
                                 }
                             }
                             if let Some(err) = write_error {
                                 self.cancel_transfer_job(id, peer).await;
+                                if is_pdf {
+                                    self.pdf_error(hbb_common::anyhow::anyhow!(err));
+                                    return true;
+                                }
                                 self.handle_job_status(id, -1, Some(err));
                             }
                         }
                         Some(file_response::Union::Done(d)) => {
+                            if self.pdf_jobs.contains(d.id) {
+                                self.finish_pdf(d.id).await;
+                                return true;
+                            }
                             let mut err: Option<String> = None;
                             let mut job_type = fs::JobType::Generic;
                             let mut printer_data = None;
@@ -2235,6 +2260,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Error(e)) => {
+                            if self.pdf_jobs.contains(e.id) {
+                                self.discard_pdf(e.id);
+                                fs::remove_job(e.id, &mut self.write_jobs);
+                                self.pdf_error(hbb_common::anyhow::anyhow!(e.error));
+                                return true;
+                            }
                             #[cfg(target_os = "android")]
                             if let Some(job) = fs::get_job(e.id, &mut self.write_jobs) {
                                 if let Err(error) = job.cancel_document().await {
@@ -2487,6 +2518,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::FileAction(action)) => match action.union {
+                    Some(file_action::Union::Send(request)) if pdf::is_explicit_format(&request) => {
+                        self.pdf_offer(request);
+                    }
                     Some(file_action::Union::Send(_s)) => match _s.file_type.enum_value() {
                         #[cfg(target_os = "windows")]
                         Ok(file_transfer_send_request::FileType::Printer) => {

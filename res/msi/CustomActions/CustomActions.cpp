@@ -609,6 +609,12 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stopped.", svcName);
     }
 
+    // Rollback releases the new binaries without marking the service for deletion.
+    if (MsiGetMode(hInstall, MSIRUNMODE_ROLLBACK)) {
+        WcaLog(LOGMSG_STANDARD, "Preserving service registration during rollback: %ls", svcName);
+        goto LTerminate;
+    }
+
     if (MyDeleteServiceW(svcName)) {
         WcaLog(LOGMSG_STANDARD, "Service \"%ls\" deletion is completed without errors.", svcName);
     }
@@ -637,6 +643,7 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
     // Sleep(300);
 
     // Or we can terminate the process
+LTerminate:
     hr = StringCchPrintfW(szExeFile, cchExeFile, L"%ls.exe", svcName);
     ExitOnFailure(hr, "Failed to compose a resource identifier string");
     TerminateProcessesByNameW(szExeFile, L"--not-in-use");
@@ -1012,87 +1019,4 @@ void TryStopDeleteServiceByShell(LPWSTR svcName)
     else {
         WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\" with shell, current status: %d.", svcName, svcStatus.dwCurrentState);
     }
-}
-
-UINT __stdcall InstallPrinter(
-    __in MSIHANDLE hInstall)
-{
-    HRESULT hr = S_OK;
-    DWORD er = ERROR_SUCCESS;
-
-    int nResult = 0;
-    LPWSTR pwzData = NULL;
-    std::wstring appNameValue;
-    std::wstring installFolderValue;
-
-    hr = WcaInitialize(hInstall, "InstallPrinter");
-    ExitOnFailure(hr, "Failed to initialize");
-
-    hr = WcaGetProperty(L"CustomActionData", &pwzData);
-    ExitOnFailure(hr, "failed to get CustomActionData");
-
-    // "<app name>|<install folder>". Split here rather than through
-    // WcaReadStringFromCaData, whose delimiter is a literal wide char 128 that a
-    // Formatted property value cannot carry.
-    {
-        std::wstring data(pwzData);
-        size_t separator = data.find(L'|');
-        if (separator == std::wstring::npos)
-        {
-            // A package built before the name was passed in; keep the stock name.
-            appNameValue.clear();
-            installFolderValue = data;
-        }
-        else
-        {
-            appNameValue = data.substr(0, separator);
-            installFolderValue = data.substr(separator + 1);
-        }
-    }
-
-    WcaLog(LOGMSG_STANDARD, "Try to install RD printer in : %ls", installFolderValue.c_str());
-    RemotePrinter::installUpdatePrinter(installFolderValue, appNameValue);
-    WcaLog(LOGMSG_STANDARD, "Install RD printer done");
-
-LExit:
-    if (pwzData) {
-        ReleaseStr(pwzData);
-    }
-
-    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
-    return WcaFinalize(er);
-}
-
-UINT __stdcall UninstallPrinter(
-    __in MSIHANDLE hInstall)
-{
-    HRESULT hr = S_OK;
-    DWORD er = ERROR_SUCCESS;
-
-    LPWSTR pwzData = NULL;
-    std::wstring appNameValue;
-
-    hr = WcaInitialize(hInstall, "UninstallPrinter");
-    ExitOnFailure(hr, "Failed to initialize");
-
-    // Must match the name install used, otherwise the printer is left behind. Absent
-    // on packages built before this was passed in, where it was the stock name.
-    hr = WcaGetProperty(L"CustomActionData", &pwzData);
-    ExitOnFailure(hr, "failed to get CustomActionData");
-    if (pwzData)
-    {
-        appNameValue = pwzData;
-    }
-
-    WcaLog(LOGMSG_STANDARD, "Try to uninstall RD printer");
-    RemotePrinter::uninstallPrinter(appNameValue);
-    WcaLog(LOGMSG_STANDARD, "Uninstall RD printer done");
-
-LExit:
-    if (pwzData) {
-        ReleaseStr(pwzData);
-    }
-
-    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
-    return WcaFinalize(er);
 }

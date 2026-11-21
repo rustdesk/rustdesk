@@ -1,4 +1,8 @@
-use super::service::{EmptyExtraFieldService, GenericService, Service};
+use super::{
+    service::{EmptyExtraFieldService, GenericService, Service},
+    Server,
+};
+use crate::remote_print::legacy;
 use hbb_common::{bail, dlopen::symbor::Library, log, ResultType};
 use std::{
     sync::{Arc, Mutex},
@@ -7,8 +11,6 @@ use std::{
 };
 
 pub const NAME: &'static str = "remote-printer";
-
-const LIB_NAME_PRINTER_DRIVER_ADAPTER: &str = "printer_driver_adapter";
 
 // Return 0 if success, otherwise return error code.
 pub type Init = fn(tag_name: *const i8) -> i32;
@@ -88,20 +90,26 @@ lazy_static::lazy_static! {
 }
 
 fn get_lib_name() -> ResultType<String> {
-    let exe_file = std::env::current_exe()?;
-    if let Some(cur_dir) = exe_file.parent() {
-        let dll_name = format!("{}.dll", LIB_NAME_PRINTER_DRIVER_ADAPTER);
-        let full_path = cur_dir.join(dll_name);
-        if !full_path.exists() {
-            bail!("{} not found", full_path.to_string_lossy().as_ref());
-        } else {
-            Ok(full_path.to_string_lossy().into_owned())
+    Ok(legacy::adapter_path(&std::env::current_exe()?)?
+        .to_string_lossy()
+        .into_owned())
+}
+
+pub(super) fn register(server: &mut Server) {
+    if !crate::is_server() || !crate::platform::is_cur_exe_the_installed() {
+        return;
+    }
+    let result = (|| -> ResultType<()> {
+        if !legacy::installed()? {
+            return Ok(());
         }
-    } else {
-        bail!(
-            "Invalid exe parent for {}",
-            exe_file.to_string_lossy().as_ref()
-        );
+        init(&crate::get_app_name())?;
+        server.add_service(Box::new(new(NAME.to_owned())));
+        log::info!("Using the existing custom MSI XPS printer");
+        Ok(())
+    })();
+    if let Err(error) = result {
+        log::error!("Legacy MSI printer capture is unavailable: {error:#}");
     }
 }
 
@@ -154,7 +162,7 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
     while sp.ok() {
         let bytes = get_prn_data(1000)?;
         if !bytes.is_empty() {
-            log::info!("Got prn data, data len: {}", bytes.len());
+            log::trace!("Got prn data, data len: {}", bytes.len());
             crate::server::on_printer_data(bytes);
         }
         thread::sleep(Duration::from_millis(300));

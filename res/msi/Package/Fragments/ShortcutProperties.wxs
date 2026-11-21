@@ -74,13 +74,13 @@
 		<SetProperty Action="RestoreSavedDesktopShortcutsValue" Id="CREATEDESKTOPSHORTCUTS" Value="[SavedDesktopShortcutsCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedDesktopShortcutsCmdLineValue" />
 		<SetProperty Action="RestoreSavedPrinterValue" Id="INSTALLPRINTER" Value="[SavedPrinterCmdLineValue]" After="AppSearch" Sequence="first" Condition="SavedPrinterCmdLineValue" />
 
-		<!-- Check before the old product removes its printer. firstSequence preserves later UI choices. -->
+		<!-- Check saved installation preferences against actual queues before removing the old product. firstSequence preserves later UI choices. -->
 		<CustomAction Id="SetPrinterInstallDefault" DllEntry="SetPrinterInstallDefault" Execute="firstSequence" Return="check" BinaryRef="Custom_Actions_Dll" />
 		<InstallUISequence>
-			<Custom Action="SetPrinterInstallDefault" After="RestoreSavedPrinterValue" Condition="WIX_UPGRADE_DETECTED AND NOT SavedPrinterCmdLineValue AND (INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;)" />
+			<Custom Action="SetPrinterInstallDefault" After="RestoreSavedPrinterValue" Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE AND NOT SavedPrinterCmdLineValue AND (INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;)" />
 		</InstallUISequence>
 		<InstallExecuteSequence>
-			<Custom Action="SetPrinterInstallDefault" After="RestoreSavedPrinterValue" Condition="WIX_UPGRADE_DETECTED AND NOT SavedPrinterCmdLineValue AND (INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;)" />
+			<Custom Action="SetPrinterInstallDefault" After="RestoreSavedPrinterValue" Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE AND NOT SavedPrinterCmdLineValue AND (INSTALLPRINTER = 1 OR INSTALLPRINTER = &quot;Y&quot; OR INSTALLPRINTER = &quot;y&quot;)" />
 		</InstallExecuteSequence>
 
 		<!-- If a command line value or registry value was set, update the main properties with the value -->

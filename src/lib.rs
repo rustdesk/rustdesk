@@ -14,6 +14,7 @@ mod server;
 #[cfg(not(any(target_os = "ios")))]
 pub use self::server::*;
 mod client;
+mod remote_print;
 mod lan;
 #[cfg(not(any(target_os = "ios")))]
 mod rendezvous_mediator;

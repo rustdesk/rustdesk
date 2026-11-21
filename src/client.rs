@@ -3868,6 +3868,7 @@ impl LoginConfigHandler {
             os_login,
             hwid,
             avatar,
+            pdf_printing_supported: crate::remote_print::receiver::available(),
             ..Default::default()
         };
         if self.skips_saved_password() {

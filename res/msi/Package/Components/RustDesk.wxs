@@ -30,15 +30,24 @@
 		<CustomAction Id="SetPropertyServiceStop.SetParam.PropertyName" Return="check" Property="PropertyName" Value="STOP_SERVICE" />
 		<CustomAction Id="TryDeleteStartupShortcut.SetParam" Return="check" Property="ShortcutName" Value="$(var.Product) Tray" />
 		<CustomAction Id="RemoveAmyuniIdd.SetParam" Return="check" Property="RemoveAmyuniIdd" Value="[INSTALLFOLDER_INNER]" />
-		<!-- The app name comes first and is separated by '|', which cannot occur in a
-		     Windows path nor in a validated app name. wcautil's own delimiter is a
-		     literal wide char 128 that a Formatted value cannot carry, and [~] is
-		     MSI's NUL escape rather than that delimiter, so the action parses this
-		     itself. Passing the name keeps the dll free of it, so one build serves
-		     every custom client. -->
-		<CustomAction Id="InstallPrinter.SetParam" Return="check" Property="InstallPrinter" Value="[ProductName]|[INSTALLFOLDER_INNER]" />
-		<CustomAction Id="UninstallPrinter.SetParam" Return="check" Property="UninstallPrinter" Value="[ProductName]" />
+		<!-- VersionNT can report 603 on Windows 10. Read the actual build during AppSearch. -->
+		<?define Windows10FirstBuild="10240" ?>
+		<Property Id="PDFPRINTER_WINDOWS_BUILD">
+			<RegistrySearch Id="PdfPrinterWindowsBuildSearch" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" Type="raw" />
+		</Property>
+		<Property Id="PDFPRINTER_OS_SUPPORTED" Secure="yes" />
+		<SetProperty Id="PDFPRINTER_OS_SUPPORTED" Value="1" After="AppSearch" Sequence="first" Condition="PDFPRINTER_WINDOWS_BUILD &gt;= $(var.Windows10FirstBuild)" />
 		<InstallExecuteSequence>
+			<!-- Capture running state before Restart Manager shuts services down in InstallValidate. -->
+			<Custom Action="ScheduleUpgradePrinterRecovery" Before="InstallValidate" Condition="WIX_UPGRADE_DETECTED AND NOT REMOVE AND ((PREVIOUSPRINTER AND PREVIOUSPRINTER &lt;&gt; &quot;0&quot;) OR PDFPRINTER_INSTALLED = 1 OR (PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)))" />
+			<Custom Action="RestoreUpgradePrinter" After="InstallInitialize" Condition="WIX_UPGRADE_DETECTED AND RestoreUpgradePrinter AND NOT REMOVE" />
+			<Custom Action="StopUpgradePrinterService" After="RestoreUpgradePrinter" Condition="WIX_UPGRADE_DETECTED AND StopUpgradePrinterService AND NOT REMOVE" />
+			<Custom Action="CheckPdfPrinter" After="RemoveExistingProducts" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE" />
+			<!-- A successful queue check sets PDFPRINTER_PRESENT to 0 or 1. An unset value skips both actions. -->
+			<Custom Action="RollbackPrinter" Before="InstallPrinter" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE AND PDFPRINTER_PRESENT = &quot;0&quot;" />
+			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE AND PDFPRINTER_PRESENT" />
+			<Custom Action="UninstallPrinter" Before="RemoveRuntimeGeneratedFiles" Condition="PDFPRINTER_OS_SUPPORTED AND PDFPRINTER_INSTALLED = 1 AND Installed AND REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+			<Custom Action="DisablePrinter" Before="InstallFinalize" Condition="PDFPRINTER_OS_SUPPORTED AND PDFPRINTER_INSTALLED = 1 AND NOT REMOVE AND NOT (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
 
 			<Custom Action="SetPropertyIsServiceRunning" After="InstallInitialize" Condition="Installed" />
 			<Custom Action="SetPropertyIsServiceRunning.SetParam.AppName" Before="SetPropertyIsServiceRunning" Condition="Installed" />
@@ -65,18 +74,6 @@
 			<Custom Action="LaunchApp" After="InstallFinalize" Condition="(NOT UILevel=2) AND (NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) "/>
 			<Custom Action="LaunchAppTray" After="InstallFinalize" Condition="(LAUNCH_TRAY_APP=&quot;Y&quot; OR LAUNCH_TRAY_APP=&quot;1&quot;) AND (NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)) AND (NOT STOP_SERVICE=&quot;&apos;Y&apos;&quot;) AND (NOT CC_CONNECTION_TYPE=&quot;outgoing&quot;)"/>
 
-			<!-- https://learn.microsoft.com/en-us/windows/win32/msi/operating-system-property-values -->
-			<!-- We have to use `VersionNT` to instead of `IsWindows10OrGreater()` in the custom action.
-			Because `IsWindows10OrGreater()` requires the manifest file to be embedded in the executable/dll file.
-			Even I have embedded the manifest file, it still does not work correctly in my case.
-			https://learn.microsoft.com/en-us/windows/win32/sysinfo/version-helper-apis -->
-			<!-- VersionNT >= 603 means can't differentiate between Windows 8.1 and Windows 10.
-			Some msi packages reset the `VersionNT` value to 1000 on Windows 10.
-			https://www.advancedinstaller.com/user-guide/qa-OS-dependent-install.html -->
-			<!-- Remote printer also works on Win8.1 in my test. -->
-			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="VersionNT &gt;= 603 AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
-			<Custom Action="InstallPrinter.SetParam" Before="InstallPrinter" Condition="VersionNT &gt;= 603" />
-
 			<!--Workaround of "fire:FirewallException". If Outbound="Yes" or Outbound="true", the following error occurs.-->
 			<!--ExecFirewallExceptions: Error 0x80070057: failed to add app to the authorized apps list-->
 			<Custom Action="AddFirewallRules" Before="InstallFinalize" Condition="FIREWALLRULES = 1 AND NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE)"/>
@@ -92,8 +89,6 @@
 			<Custom Action="RemoveFirewallRules" Before="RemoveFiles"/>
 			<Custom Action="RemoveFirewallRules.SetParam" Before="RemoveFirewallRules"/>
 
-			<Custom Action="UninstallPrinter" Before="RemoveRuntimeGeneratedFiles" Condition="VersionNT &gt;= 603" />
-			<Custom Action="UninstallPrinter.SetParam" Before="UninstallPrinter" Condition="VersionNT &gt;= 603" />
 
 			<Custom Action="TerminateProcesses" Before="RemoveRuntimeGeneratedFiles"/>
 			<Custom Action="TerminateProcesses.SetParam" Before="TerminateProcesses"/>

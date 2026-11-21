@@ -345,32 +345,27 @@ jobs:
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
           mv -Force .\usbmmidd_v2 ./rustdesk
 
-          # Download printer driver files and extract them to ./rustdesk
-          try {
-            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
-            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
-            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums
-
-            # Check and move the files
-            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1.4\.zip$').Matches.Groups[1].Value
-            $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256
-            $checksum_adapter = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
-            $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
-            if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
-                Write-Output "rustdesk_printer_driver_v4-1.4, checksums match, extract the file."
-                Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
-                mkdir ./rustdesk/drivers
-                mv -Force .\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver
-                Expand-Archive printer_driver_adapter.zip -DestinationPath .
-                mv -Force .\printer_driver_adapter.dll ./rustdesk
-            } elseif ($checksum_driver -ne $downloadsum_driver.Hash) {
-                Write-Output "rustdesk_printer_driver_v4-1.4, checksums do not match, ignore the file."
-            } else {
-                Write-Output "printer_driver_adapter.dll, checksums do not match, ignore the file."
+      - name: Check PDF imports for Windows 7 compatibility
+        if: ${{ matrix.job.arch == 'x86_64' }}
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -products '*' -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          $imports = & $dumpbin /nologo /imports ./rustdesk/librustdesk.dll
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($line in $imports) {
+            if ($line -match 'following delay load imports:') { break }
+            if ($line -match '\b(api-ms-win-core-winrt-l1-1-0\.dll|RoInitialize|RoUninitialize|RoGetActivationFactory|CoIncrementMTAUsage)\s*$') {
+              throw "PDF backend requires a startup import unavailable on Windows 7: $($Matches[1])"
             }
-          } catch {
-              Write-Host "Ingore the printer driver error."
           }
+
+      - name: Test PDF printer native APIs
+        if: ${{ !inputs.upload-artifact }}
+        shell: bash
+        run: |
+          cargo test --locked --release -p remote_printer --lib --no-run
+          python3 -c 'import pathlib, subprocess; binaries = list(pathlib.Path("target/release/deps").glob("remote_printer-*.exe")); assert len(binaries) == 1, binaries; result = subprocess.run([str(binaries[0]), "pdf::", "--nocapture"], check=True, timeout=60, capture_output=True, text=True); print(result.stdout); assert "protected_namespace_rejects_an_unprivileged_creator ... ok" in result.stdout; assert "windows_pdf_renderer_initializes ... ok" in result.stdout'
 
       - name: Run the Rust tests
         # x86_64 only: the tests are the same code on arm64, and that runner is the slow one.
@@ -437,7 +432,7 @@ jobs:
         shell: powershell
         run: |
           Get-ChildItem ./rustdesk -Recurse -File -ErrorAction Stop |
-            Where-Object { $_.Extension -eq '.exe' -or ($_.Extension -eq '.dll' -and $_.FullName -notmatch 'RustDeskPrinterDriver|usbmmidd_v2') } |
+            Where-Object { $_.Extension -eq '.exe' -or ($_.Extension -eq '.dll' -and $_.FullName -notmatch 'usbmmidd_v2') } |
             ForEach-Object {
               $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName -ErrorAction Stop
               if ($signature.Status -ne 'Valid') { throw "Invalid template payload signature: $($_.FullName) ($($signature.Status))" }
@@ -510,8 +505,7 @@ jobs:
         # cannot rewrite a truncated placeholder, leaving short names pointing at it.
         #
         # It still has to be unique, which is why "RustDesk" itself cannot be used:
-        # it also names payload that must never be renamed, such as librustdesk.dll
-        # and drivers\RustDeskPrinterDriver.
+        # it also names payload that must never be renamed, such as librustdesk.dll.
         #
         #
         # Building the arm64 template on the native arm64 runner makes the ARM
@@ -732,7 +726,7 @@ jobs:
         shell: powershell
         run: |
           Get-ChildItem ./Release -Recurse -File -ErrorAction Stop |
-            Where-Object { $_.Extension -eq '.exe' -or ($_.Extension -eq '.dll' -and $_.FullName -notmatch 'RustDeskPrinterDriver|usbmmidd_v2') } |
+            Where-Object { $_.Extension -eq '.exe' -or ($_.Extension -eq '.dll' -and $_.FullName -notmatch 'usbmmidd_v2') } |
             ForEach-Object {
               $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName -ErrorAction Stop
               if ($signature.Status -ne 'Valid') { throw "Invalid template payload signature: $($_.FullName) ($($signature.Status))" }
