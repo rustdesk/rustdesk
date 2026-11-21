@@ -827,5 +827,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "承認を要求"),
         ("Forever", "無期限"),
         ("username-login-disabled-oidc-unavailable", "ユーザー名とパスワードによるログインは無効になっており、利用可能な OIDC ログイン方法がありません。"),
+        ("Enable Unicode input", "Unicode 入力を有効にする"),
+        ("unicode-input-tip", "KeePassXC Auto-Type などのツールが送信する Unicode テキストを取り込みます。入力ソース 1 が必要です。"),
     ].iter().cloned().collect();
 }

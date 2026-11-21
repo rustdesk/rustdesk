@@ -527,6 +527,14 @@ class _GeneralState extends State<_General> {
     final showAutoUpdate = (isWindows && bind.mainIsInstalled()) ||
     (isMacOS && bind.mainIsInstalled() && bind.mainIsInstalledDaemon(prompt: false) && !bind.isCustomClient());
     final children = <Widget>[
+      if (!isWeb && isWindows && !incomingOnly)
+        _OptionCheckBox(
+          context,
+          'Enable Unicode input',
+          kOptionAllowUnicodeInput,
+          isServer: false,
+          trailing: const InfoTooltipIcon(tipKey: 'unicode-input-tip'),
+        ),
       if (!isWeb && !incomingOnly)
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             kOptionEnableConfirmClosingTabs,

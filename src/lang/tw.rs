@@ -827,5 +827,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "請求批准"),
         ("Forever", "永久"),
         ("username-login-disabled-oidc-unavailable", "使用者名稱和密碼登入已停用，且沒有可用的 OIDC 登入方式。"),
+        ("Enable Unicode input", "啟用 Unicode 輸入"),
+        ("unicode-input-tip", "擷取 KeePassXC 自動輸入等工具傳送的 Unicode 文字。需要使用輸入來源 1。"),
     ].iter().cloned().collect();
 }
