@@ -1,4 +1,5 @@
 import 'dart:ffi' hide Size;
+import 'dart:ui' show Offset;
 
 import 'package:ffi/ffi.dart';
 
@@ -38,4 +39,14 @@ Pointer<win32.OSVERSIONINFOEX> _getOSVERSIONINFOEXPointer() {
     ..wProductType = 0
     ..wReserved = 0;
   return pointer;
+}
+
+Offset? readWindowsCursorPosition() {
+  final point = calloc<win32.POINT>();
+  try {
+    if (win32.GetCursorPos(point) == 0) return null;
+    return Offset(point.ref.x.toDouble(), point.ref.y.toDouble());
+  } finally {
+    calloc.free(point);
+  }
 }

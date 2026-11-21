@@ -12,6 +12,9 @@ import 'package:get/get.dart';
 
 import '../common.dart';
 import '../consts.dart';
+import '../native/win32.dart' if (dart.library.html) '../web/win32.dart'
+    show readWindowsCursorPosition;
+import '../utils/windows_relative_pointer.dart';
 import 'platform_model.dart';
 
 class RelativeMouseModel {
@@ -150,6 +153,7 @@ class RelativeMouseModel {
   Offset? _pointerRegionTopLeftGlobal;
   // Last pointer position in LOCAL widget coordinates (fallback when center is not ready).
   Offset? _lastPointerLocalPos;
+  final _windowsPointer = WindowsRelativePointer(readWindowsCursorPosition);
 
   // Track whether we currently have an OS-level cursor clip active (Windows only).
   // TODO(accuracy): Revisit window/client/border clipping math if users report misaligned
@@ -313,6 +317,7 @@ class RelativeMouseModel {
 
     // Keep the shared pointer-in-image flag in sync.
     setPointerInsideImage(enter);
+    if (isWindows && !enter) _windowsPointer.reset();
 
     // macOS native mode: cursor is locked by CGAssociateMouseAndMouseCursorPosition,
     // no need for recenter logic.
@@ -333,6 +338,7 @@ class RelativeMouseModel {
   }
 
   void onWindowBlur() {
+    if (isWindows) _windowsPointer.reset();
     if (!enabled.value) return;
 
     // Focus can change while the pointer is outside the window (e.g. taskbar activation).
@@ -522,6 +528,16 @@ class RelativeMouseModel {
 
     // Pointer move/hover implies we're inside the remote image.
     _ensurePointerLockEngaged();
+
+    if (isWindows) {
+      final delta = _windowsPointer.movement();
+      if (delta != null && delta != Offset.zero) {
+        _lastPointerLocalPos = localPosition;
+        final dpr = ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
+        sendRelativeMouseMove(delta.dx / dpr, delta.dy / dpr);
+      }
+      return true;
+    }
 
     // Skip the mouse move event triggered by recenter operation itself.
     if (_skipNextMouseMove) {
@@ -743,8 +759,13 @@ class RelativeMouseModel {
           y: center.dy.toInt(),
         );
         if (ok) {
-          // Skip the next mouse move event - it's triggered by the recenter itself.
-          _skipNextMouseMove = true;
+          if (isWindows) {
+            _windowsPointer.didWarp();
+            _lastPointerLocalPos = _pointerLockCenterLocal;
+          } else {
+            // The recenter itself generates a move notification.
+            _skipNextMouseMove = true;
+          }
           return;
         }
 
@@ -1007,6 +1028,7 @@ class RelativeMouseModel {
     _pointerLockCenterScreen = null;
     _pointerRegionTopLeftGlobal = null;
     _lastPointerLocalPos = null;
+    _windowsPointer.reset();
     _skipNextMouseMove = false;
     setPointerInsideImage(false);
     _cursorClipApplied = false;
