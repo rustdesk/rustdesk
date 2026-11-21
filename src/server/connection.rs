@@ -284,7 +284,6 @@ struct Session {
 struct StartCmIpcPara {
     rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
-    cm_keyboard_gate: Arc<super::cm_keyboard::CmKeyboardGate>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -556,8 +555,6 @@ impl Connection {
         let (tx, mut rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_input, _rx_input) = std_mpsc::channel();
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let cm_keyboard_gate = Arc::new(super::cm_keyboard::CmKeyboardGate::default());
         let (tx_from_authed, mut rx_from_authed) = mpsc::unbounded_channel::<ipc::Data>();
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
         let (tx_post_seq, rx_post_seq) = mpsc::unbounded_channel();
@@ -644,7 +641,6 @@ impl Connection {
             start_cm_ipc_para: Some(StartCmIpcPara {
                 rx_to_cm,
                 tx_from_cm,
-                cm_keyboard_gate: cm_keyboard_gate.clone(),
             }),
             auto_disconnect_timer: None,
             authed_conn_id: None,
@@ -714,7 +710,7 @@ impl Connection {
         conn.stream.set_send_timeout(SEND_TIMEOUT_VIDEO);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned, cm_keyboard_gate));
+        std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned));
         let mut second_timer = crate::rustdesk_interval(time::interval(Duration::from_secs(1)));
 
         #[cfg(feature = "unix-file-copy-paste")]
@@ -756,8 +752,6 @@ impl Connection {
                 }
                 Some(data) = rx_from_cm.recv() => {
                     match data {
-                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        ipc::Data::CmIpcDisconnected if conn.is_remote() => break,
                         ipc::Data::Authorize => {
                             conn.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::Click);
                             conn.trusted_device = None;
@@ -1262,11 +1256,7 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn handle_input(
-        receiver: std_mpsc::Receiver<MessageInput>,
-        tx: Sender,
-        cm_keyboard_gate: Arc<super::cm_keyboard::CmKeyboardGate>,
-    ) {
+    fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
         let mut block_input_mode = false;
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         {
@@ -1289,14 +1279,12 @@ impl Connection {
                         );
                     }
                     MessageInput::Key((mut msg, press)) => {
-                        if !cm_keyboard_gate.allows(&msg) {
-                            continue;
-                        }
                         // Set the press state to false, use `down` only in `handle_key()`.
                         msg.press = false;
                         if press {
                             msg.down = true;
                         }
+                        CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         handle_key(&msg);
                         if press {
                             msg.down = false;
@@ -2882,7 +2870,7 @@ impl Connection {
             tokio::spawn(async move {
                 #[cfg(windows)]
                 let tx_from_cm_clone = p.tx_from_cm.clone();
-                if let Err(err) = start_ipc(p.rx_to_cm, p.tx_from_cm, p.cm_keyboard_gate).await {
+                if let Err(err) = start_ipc(p.rx_to_cm, p.tx_from_cm).await {
                     log::warn!("ipc to connection manager exit: {}", err);
                     // https://github.com/rustdesk/rustdesk-server-pro/discussions/382#discussioncomment-10525725, cm may start failed
                     #[cfg(windows)]
@@ -3366,9 +3354,6 @@ impl Connection {
                         return true;
                     }
                     if self.peer_keyboard_enabled() {
-                        if is_enter(&me) {
-                            CLICK_TIME.store(get_time(), Ordering::SeqCst);
-                        }
                         // https://github.com/rustdesk/rustdesk/issues/8633
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
 
@@ -6438,7 +6423,6 @@ pub fn claim_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
 async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
-    cm_keyboard_gate: Arc<super::cm_keyboard::CmKeyboardGate>,
 ) -> ResultType<()> {
     use hbb_common::anyhow::anyhow;
 
@@ -6501,20 +6485,6 @@ async fn start_ipc(
     }
 
     let mut stream = stream.ok_or(anyhow!("none stream"))?;
-    // Only established transports block keyboard input on exit; startup failures keep their policy.
-    #[cfg(feature = "flutter")]
-    let _cm_ipc_disconnect = {
-        let tx_from_cm = tx_from_cm.clone();
-        let cm_keyboard_gate = cm_keyboard_gate.clone();
-        crate::SimpleCallOnReturn {
-            b: true,
-            f: Box::new(move || {
-                if let Err(err) = cm_keyboard_gate.on_cm_ipc_disconnect(&tx_from_cm) {
-                    log::trace!("CM IPC disconnect notification for closed connection: {err}");
-                }
-            }),
-        }
-    };
     loop {
         tokio::select! {
             res = stream.next() => {
@@ -6524,12 +6494,6 @@ async fn start_ipc(
                     }
                     Ok(Some(data)) => {
                         match data {
-                            ipc::Data::CmKeyboardBlocked(blocked) => {
-                                cm_keyboard_gate.set_blocked(blocked);
-                            }
-                            ipc::Data::CmIpcDisconnected => {
-                                cm_keyboard_gate.on_cm_ipc_disconnect(&tx_from_cm)?;
-                            }
                             ipc::Data::ClickTime(_)=> {
                                 let ct = CLICK_TIME.load(Ordering::SeqCst);
                                 let data = ipc::Data::ClickTime(ct);

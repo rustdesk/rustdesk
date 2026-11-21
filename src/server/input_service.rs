@@ -1527,16 +1527,6 @@ fn handle_scale(scale: i32) {
     }
 }
 
-pub fn is_enter(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
-        if ck.value() == ControlKey::Return.value() || ck.value() == ControlKey::NumpadEnter.value()
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
 pub async fn lock_screen() {
     cfg_if::cfg_if! {
     if #[cfg(target_os = "linux")] {
@@ -1768,7 +1758,7 @@ fn get_control_key_value(key_event: &KeyEvent) -> i32 {
 }
 
 #[inline]
-pub(super) fn has_hotkey_modifiers(key_event: &KeyEvent) -> bool {
+fn has_hotkey_modifiers(key_event: &KeyEvent) -> bool {
     key_event.modifiers.iter().any(|ck| {
         let v = ck.value();
         v == ControlKey::Control.value()

@@ -2871,18 +2871,6 @@ fn verified_update_artifact_for_release_page_url(
     crate::updater::verified_update_artifact_for_release_page_url(release_page_url, query)
 }
 
-pub fn main_set_common_sync(
-    key: String,
-    _value: String,
-) -> hbb_common::anyhow::Result<SyncReturn<()>> {
-    match key.as_str() {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        "cm-keyboard-blocked" => crate::ui_cm_interface::set_cm_keyboard_blocked(_value.parse()?),
-        _ => hbb_common::bail!("Unsupported synchronous command: {key}"),
-    }
-    Ok(SyncReturn(()))
-}
-
 pub fn main_set_common(_key: String, _value: String) {
     #[cfg(target_os = "windows")]
     if _key == "install-printer" && crate::platform::is_win_10_or_greater() {

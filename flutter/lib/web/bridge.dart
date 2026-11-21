@@ -1947,11 +1947,6 @@ class RustdeskImpl {
     throw UnimplementedError("mainSetCommon");
   }
 
-  void mainSetCommonSync(
-      {required String key, required String value, dynamic hint}) {
-    throw UnimplementedError("mainSetCommonSync");
-  }
-
   Future<String> sessionHandleScreenshot(
       {required UuidValue sessionId, required String action, dynamic hint}) {
     throw UnimplementedError("sessionHandleScreenshot");

@@ -123,12 +123,14 @@ class ChatPage extends StatelessWidget implements PageShape {
                           ),
                         ),
                       ),
-                      sendButtonBuilder: defaultSendButton(
+                      sendButtonBuilder: (send) => defaultSendButton(
                         padding:
                             EdgeInsets.symmetric(horizontal: 6, vertical: 0),
                         color: MyTheme.accent,
                         icon: Icons.send_rounded,
-                      ),
+                      )(chatModel.isConnManager
+                          ? () => chatModel.checkSend(send)
+                          : send),
                     ),
                     messageOptions: MessageOptions(
                       showOtherUsersAvatar: false,

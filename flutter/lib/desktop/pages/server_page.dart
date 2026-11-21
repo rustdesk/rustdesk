@@ -151,7 +151,6 @@ class ConnectionManagerState extends State<ConnectionManager>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    _updateRemoteKeyboardProtection(state);
     if (state == AppLifecycleState.resumed) {
       if (!allowRemoteCMModification()) {
         shouldBeBlocked(_controlPageBlock, null);
@@ -164,21 +163,13 @@ class ConnectionManagerState extends State<ConnectionManager>
   void initState() {
     gFFI.serverModel.updateClientState();
     WidgetsBinding.instance.addObserver(this);
-    _updateRemoteKeyboardProtection(WidgetsBinding.instance.lifecycleState);
     super.initState();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    bind.mainSetCommonSync(key: 'cm-keyboard-blocked', value: 'false');
     super.dispose();
-  }
-
-  void _updateRemoteKeyboardProtection(AppLifecycleState? state) {
-    final blocked = state == AppLifecycleState.resumed;
-    bind.mainSetCommonSync(
-        key: 'cm-keyboard-blocked', value: blocked.toString());
   }
 
   @override

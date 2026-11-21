@@ -71,8 +71,6 @@ pub mod input_service {
 }
 
 mod connection;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-mod cm_keyboard;
 mod login_failure_check;
 pub(crate) mod port_forward_mux;
 pub mod display_service;
