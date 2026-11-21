@@ -120,6 +120,8 @@ pub struct Decoder {
     valid: bool,
     #[cfg(feature = "hwcodec")]
     i420: Vec<u8>,
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    output_cv_pixel_buffer: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -616,6 +618,8 @@ impl Decoder {
             valid,
             #[cfg(feature = "hwcodec")]
             i420: vec![],
+            #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+            output_cv_pixel_buffer: false,
         }
     }
 
@@ -625,6 +629,17 @@ impl Decoder {
 
     pub fn valid(&self) -> bool {
         self.valid
+    }
+
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    pub fn set_output_cv_pixel_buffer(&mut self, enable: bool) {
+        self.output_cv_pixel_buffer = enable;
+        if let Some(decoder) = self.h264_ram.as_mut() {
+            decoder.set_output_cv_pixel_buffer(enable);
+        }
+        if let Some(decoder) = self.h265_ram.as_mut() {
+            decoder.set_output_cv_pixel_buffer(enable);
+        }
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb
@@ -668,6 +683,17 @@ impl Decoder {
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h264_ram {
+                    #[cfg(target_os = "macos")]
+                    if self.output_cv_pixel_buffer {
+                        return Decoder::handle_hwram_video_frame_macos(
+                            decoder,
+                            h264s,
+                            rgb,
+                            _texture,
+                            _pixelbuffer,
+                            &mut self.i420,
+                        );
+                    }
                     return Decoder::handle_hwram_video_frame(decoder, h264s, rgb, &mut self.i420);
                 }
                 Err(anyhow!("don't support h264!"))
@@ -682,6 +708,17 @@ impl Decoder {
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h265_ram {
+                    #[cfg(target_os = "macos")]
+                    if self.output_cv_pixel_buffer {
+                        return Decoder::handle_hwram_video_frame_macos(
+                            decoder,
+                            h265s,
+                            rgb,
+                            _texture,
+                            _pixelbuffer,
+                            &mut self.i420,
+                        );
+                    }
                     return Decoder::handle_hwram_video_frame(decoder, h265s, rgb, &mut self.i420);
                 }
                 Err(anyhow!("don't support h265!"))
@@ -780,6 +817,48 @@ impl Decoder {
             }
         }
         return Ok(ret);
+    }
+
+    // A VideoToolbox frame that can be rendered directly goes out as a
+    // CVPixelBufferRef in `texture`. The decoder owns it until the next decode.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    fn handle_hwram_video_frame_macos(
+        decoder: &mut HwRamDecoder,
+        frames: &EncodedVideoFrames,
+        rgb: &mut ImageRgb,
+        texture: &mut ImageTexture,
+        pixelbuffer: &mut bool,
+        i420: &mut Vec<u8>,
+    ) -> ResultType<bool> {
+        let mut ret = false;
+        for h26x in frames.frames.iter() {
+            let images = decoder.decode(&h26x.data)?;
+            if !*pixelbuffer {
+                // This decode released the previous packet's buffer.
+                *texture = ImageTexture::default();
+                *pixelbuffer = true;
+                ret = false;
+            }
+            for image in images {
+                if let Some(pixel_buffer) = image.cv_pixel_buffer() {
+                    *texture = ImageTexture {
+                        texture: pixel_buffer,
+                        w: image.width(),
+                        h: image.height(),
+                    };
+                    // A later frame that fails to decode leaves pixelbuffer
+                    // true, and VideoHandler then records with rgb's size.
+                    rgb.w = image.width();
+                    rgb.h = image.height();
+                    *pixelbuffer = false;
+                    ret = true;
+                } else if image.to_fmt(rgb, i420).is_ok() {
+                    *pixelbuffer = true;
+                    ret = true;
+                }
+            }
+        }
+        Ok(ret)
     }
 
     #[cfg(feature = "vram")]

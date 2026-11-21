@@ -296,6 +296,40 @@ pub type FlutterGpuTextureRendererPluginCApiSetTexture =
 #[cfg(feature = "vram")]
 pub type FlutterGpuTextureRendererPluginCApiGetAdapterLuid = unsafe extern "C" fn() -> i64;
 
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
+pub type FlutterRgbaRendererPluginOnCVPixelBuffer =
+    unsafe extern "C" fn(texture_rgba: *mut c_void, pixel_buffer: *mut c_void);
+
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
+#[link(name = "CoreVideo", kind = "framework")]
+extern "C" {
+    fn CVPixelBufferGetWidth(pixel_buffer: *mut c_void) -> usize;
+    fn CVPixelBufferGetHeight(pixel_buffer: *mut c_void) -> usize;
+}
+
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
+lazy_static::lazy_static! {
+    static ref ON_CV_PIXEL_BUFFER_FUNC: Option<Symbol<'static, FlutterRgbaRendererPluginOnCVPixelBuffer>> = {
+        const NAME: &str = "FlutterRgbaRendererPluginOnCVPixelBuffer";
+        match &*TEXTURE_RGBA_RENDERER_PLUGIN {
+            Ok(lib) => match unsafe { lib.symbol::<FlutterRgbaRendererPluginOnCVPixelBuffer>(NAME) } {
+                Ok(sym) => Some(sym),
+                Err(e) => {
+                    log::warn!("Failed to find symbol {NAME}, {e}");
+                    None
+                }
+            },
+            Err(_) => None,
+        }
+    };
+}
+
+// An older texture_rgba_renderer plugin without the symbol keeps the RGBA path.
+#[cfg(all(target_os = "macos", feature = "hwcodec"))]
+pub fn cv_pixel_buffer_render_enabled() -> bool {
+    crate::ui_interface::use_texture_render() && ON_CV_PIXEL_BUFFER_FUNC.is_some()
+}
+
 pub(super) type TextureRgbaPtr = usize;
 
 struct DisplaySessionInfo {
@@ -517,6 +551,53 @@ impl VideoRenderer {
                 )
             };
         }
+        if info.notify_render_type != Some(RenderType::PixelBuffer) {
+            info.notify_render_type = Some(RenderType::PixelBuffer);
+            true
+        } else {
+            false
+        }
+    }
+
+    // Same texture and checks as `on_rgba`, so the UI keeps the pixel buffer texture.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    pub fn on_cv_pixel_buffer(&self, display: usize, pixel_buffer: *mut c_void) -> bool {
+        let Some(func) = &*ON_CV_PIXEL_BUFFER_FUNC else {
+            return false;
+        };
+        let mut write_lock = self.map_display_sessions.write().unwrap();
+        let opt_info = if !self.is_support_multi_ui_session {
+            write_lock.values_mut().next()
+        } else {
+            write_lock.get_mut(&display)
+        };
+        let Some(info) = opt_info else {
+            return false;
+        };
+        if info.texture_rgba_ptr == usize::default() {
+            return false;
+        }
+        let (w, h) = unsafe {
+            (
+                CVPixelBufferGetWidth(pixel_buffer),
+                CVPixelBufferGetHeight(pixel_buffer),
+            )
+        };
+        if info.size != (w, h) {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(10),
+                error,
+                "width/height mismatch: ({},{}) != ({},{})",
+                info.size.0,
+                info.size.1,
+                w,
+                h
+            );
+            if info.size != (0, 0) {
+                return false;
+            }
+        }
+        unsafe { func(info.texture_rgba_ptr as _, pixel_buffer) };
         if info.notify_render_type != Some(RenderType::PixelBuffer) {
             info.notify_render_type = Some(RenderType::PixelBuffer);
             true
@@ -880,6 +961,21 @@ impl InvokeUiSession for FlutterHandler {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
         self.on_rgba_soft_render(display, rgba);
+    }
+
+    #[inline]
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    fn on_cv_pixel_buffer(&self, display: usize, pixel_buffer: *mut c_void) {
+        if !self.use_texture_render.load(Ordering::Relaxed) {
+            return;
+        }
+        for (_, session) in self.session_handlers.read().unwrap().iter() {
+            if session.renderer.on_cv_pixel_buffer(display, pixel_buffer) {
+                if let Some(stream) = &session.event_stream {
+                    stream.add(EventToUI::Texture(display, false));
+                }
+            }
+        }
     }
 
     #[inline]
