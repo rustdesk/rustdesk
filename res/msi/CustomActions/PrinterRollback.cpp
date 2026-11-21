@@ -205,21 +205,9 @@ HRESULT ApplyQueue(const std::wstring& name, const PRINTER_INFO_2W& info) {
     return S_OK;
 }
 
-HRESULT ScheduleRecovery() {
-    CaString product, actionData;
-    HRESULT result = WcaGetProperty(L"WIX_UPGRADE_DETECTED", &product.value);
-    if (FAILED(result)) return result;
-    if (!product.value || !*product.value) return S_OK;
-    std::wstring appName, name;
-    result = ProductProperty(product.value, INSTALLPROPERTY_INSTALLEDPRODUCTNAME, appName);
-    if (FAILED(result)) return result;
-    result = FindQueue(appName, name);
-    if (result != S_OK) return result;
-    PrinterServiceState service;
-    result = ReadPrinterServiceState(appName.c_str(), service);
-    if (FAILED(result)) return result;
+HRESULT AppendQueueSnapshot(const std::wstring& name, LPWSTR* actionData) {
     std::vector<BYTE> bytes;
-    result = ReadQueue(name, bytes);
+    HRESULT result = ReadQueue(name, bytes);
     if (FAILED(result)) return result;
     auto info = reinterpret_cast<const PRINTER_INFO_2W*>(bytes.data());
     SECURITY_DESCRIPTOR_CONTROL control = 0;
@@ -228,12 +216,28 @@ HRESULT ScheduleRecovery() {
         || !(control & SE_SELF_RELATIVE)) return E_INVALIDARG;
     result = Rebase(bytes.data(), bytes.size(), false);
     if (FAILED(result)) return result;
+    return WcaWriteStreamToCaData(bytes.data(), bytes.size(), actionData);
+}
+
+HRESULT ScheduleRecovery() {
+    CaString product, actionData;
+    HRESULT result = WcaGetProperty(L"WIX_UPGRADE_DETECTED", &product.value);
+    if (FAILED(result)) return result;
+    if (!product.value || !*product.value) return S_OK;
+    std::wstring appName, name;
+    result = ProductProperty(product.value, INSTALLPROPERTY_INSTALLEDPRODUCTNAME, appName);
+    if (SUCCEEDED(result)) result = FindQueue(appName, name);
+    if (FAILED(result)) return result;
+    PrinterServiceState service;
+    result = ReadPrinterServiceState(appName.c_str(), service);
+    if (FAILED(result)) return result;
+    if (name.empty() && service.current == 0) return S_OK;
     result = WcaWriteStringToCaData(product.value, &actionData.value);
     if (SUCCEEDED(result)) result = WcaWriteIntegerToCaData(service.current, &actionData.value);
     if (SUCCEEDED(result)) result = WcaWriteIntegerToCaData(service.startType, &actionData.value);
-    if (SUCCEEDED(result)) result = WcaWriteStreamToCaData(bytes.data(), bytes.size(), &actionData.value);
+    if (SUCCEEDED(result) && !name.empty()) result = AppendQueueSnapshot(name, &actionData.value);
     if (FAILED(result)) return result;
-    WcaLog(LOGMSG_STANDARD, "Scheduling upgrade printer recovery for %ls", name.c_str());
+    WcaLog(LOGMSG_STANDARD, "Scheduling upgrade recovery for %ls", appName.c_str());
     result = WcaSetProperty(kRestoreAction, actionData.value);
     if (SUCCEEDED(result) && service.current != 0)
         result = WcaSetProperty(L"StopUpgradePrinterService", appName.c_str());
@@ -249,12 +253,14 @@ HRESULT RestoreRecovery() {
     PrinterServiceState original;
     if (SUCCEEDED(result)) result = WcaReadIntegerFromCaData(&cursor, &original.current);
     if (SUCCEEDED(result)) result = WcaReadIntegerFromCaData(&cursor, &original.startType);
-    CaBuffer data;
-    if (SUCCEEDED(result)) result = WcaReadStreamFromCaData(&cursor, &data.value, &data.size);
-    if (SUCCEEDED(result)) result = Rebase(data.value, data.size, true);
-    if (FAILED(result)) return result;
     std::wstring app, name;
-    result = ProductProperty(product.value, INSTALLPROPERTY_INSTALLEDPRODUCTNAME, app);
+    if (SUCCEEDED(result)) result = ProductProperty(product.value, INSTALLPROPERTY_INSTALLEDPRODUCTNAME, app);
+    if (FAILED(result)) return result;
+    // With no old queue, the service state is the last field in the rollback data.
+    if (!cursor) return original.current ? RestoreOriginalService(product.value, app, original) : E_INVALIDARG;
+    CaBuffer data;
+    result = WcaReadStreamFromCaData(&cursor, &data.value, &data.size);
+    if (SUCCEEDED(result)) result = Rebase(data.value, data.size, true);
     if (FAILED(result)) return result;
     result = FindQueue(app, name);
     if (result == S_FALSE) {
