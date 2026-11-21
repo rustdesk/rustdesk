@@ -658,7 +658,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     );
     let client_record = video_qos.record();
     drop(video_qos);
-    let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
+    let (mut encoder, encoder_cfg, codecs, use_i444, recorder) = match setup_encoder(
         &c,
         sp.name(),
         quality,
@@ -733,9 +733,10 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut encoder_warmed_up = false;
     let capture_width = c.width;
     let capture_height = c.height;
+    let (negotiated_codec, stream_codec) = codecs;
     let mut static_refresh = static_refresh::StaticRefresh::new(
         vs.source,
-        codec_format,
+        stream_codec,
         &encoder_cfg,
         &sp,
         &recorder,
@@ -769,10 +770,10 @@ fn run(vs: VideoService) -> ResultType<()> {
             log::info!("switch to refresh");
             bail!("SWITCH");
         }
-        if codec_format != Encoder::negotiated_codec() {
+        if negotiated_codec != Encoder::negotiated_codec() {
             log::info!(
                 "switch due to codec changed, {:?} -> {:?}",
-                codec_format,
+                negotiated_codec,
                 Encoder::negotiated_codec()
             );
             bail!("SWITCH");
@@ -1076,7 +1077,7 @@ fn setup_encoder(
 ) -> ResultType<(
     Encoder,
     EncoderCfg,
-    CodecFormat,
+    (CodecFormat, CodecFormat),
     bool,
     Arc<Mutex<Option<Recorder>>>,
 )> {
@@ -1089,11 +1090,40 @@ fn setup_encoder(
         source,
     );
     Encoder::set_fallback(&encoder_cfg);
-    let codec_format = Encoder::negotiated_codec();
+    let negotiated_codec = Encoder::negotiated_codec();
+    let (encoder_cfg, stream_codec) = encoder_for_capture_size(encoder_cfg, negotiated_codec);
     let recorder = get_recorder(record_incoming, display_idx, source == VideoSource::Camera);
     let use_i444 = Encoder::use_i444(&encoder_cfg);
     let encoder = Encoder::new(encoder_cfg.clone(), use_i444)?;
-    Ok((encoder, encoder_cfg, codec_format, use_i444, recorder))
+    Ok((
+        encoder,
+        encoder_cfg,
+        (negotiated_codec, stream_codec),
+        use_i444,
+        recorder,
+    ))
+}
+
+fn encoder_for_capture_size(
+    config: EncoderCfg,
+    negotiated: CodecFormat,
+) -> (EncoderCfg, CodecFormat) {
+    match config {
+        // hwcodec rejects odd dimensions before opening VideoToolbox. Fall back for
+        // this capture only, so other displays can keep using the negotiated codec.
+        #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+        EncoderCfg::HWRAM(hw) if hw.width % 2 != 0 || hw.height % 2 != 0 => (
+            EncoderCfg::VPX(VpxEncoderConfig {
+                width: hw.width as _,
+                height: hw.height as _,
+                quality: hw.quality,
+                codec: VpxVideoCodecId::VP9,
+                keyframe_interval: hw.keyframe_interval,
+            }),
+            CodecFormat::VP9,
+        ),
+        config => (config, negotiated),
+    }
 }
 
 fn get_encoder_config(
@@ -1576,6 +1606,35 @@ fn handle_screenshot(screenshot: Screenshot, msg: String, w: usize, h: usize, da
 #[cfg(test)]
 mod tests {
     use super::refresh_allowed;
+
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    #[test]
+    fn videotoolbox_fallback_is_local_to_the_capture_size() {
+        use super::{encoder_for_capture_size, CodecFormat, EncoderCfg, HwRamEncoderConfig};
+
+        for (width, height, expected) in [
+            (1147, 746, CodecFormat::VP9),
+            (1148, 745, CodecFormat::VP9),
+            (1147, 745, CodecFormat::VP9),
+            (1280, 720, CodecFormat::H265),
+        ] {
+            let hw = HwRamEncoderConfig {
+                name: "hevc_videotoolbox".into(),
+                mc_name: None,
+                width,
+                height,
+                quality: 1.0,
+                keyframe_interval: None,
+            };
+            let (config, format) =
+                encoder_for_capture_size(EncoderCfg::HWRAM(hw), CodecFormat::H265);
+            assert_eq!(format, expected);
+            assert_eq!(
+                matches!(config, EncoderCfg::HWRAM(_)),
+                expected == CodecFormat::H265
+            );
+        }
+    }
 
     #[test]
     fn refresh_waits_for_hw_encoder_warmup() {
