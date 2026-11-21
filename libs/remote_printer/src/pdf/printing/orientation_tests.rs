@@ -19,7 +19,6 @@ const JOB_INFO_LEVEL: u32 = 1;
 #[test]
 #[ignore = "Requires Microsoft Print to PDF; run explicitly on Windows"]
 fn printed_pdf_preserves_mixed_page_orientations() {
-    let _apartment = Apartment::initialize().unwrap();
     let directory = std::env::temp_dir().join(format!(
         "rustdesk-pdf-orientation-{}",
         hbb_common::uuid::Uuid::new_v4()
@@ -28,11 +27,16 @@ fn printed_pdf_preserves_mixed_page_orientations() {
     let input = directory.join("input.pdf");
     let output = directory.join("output.pdf");
     std::fs::write(&input, mixed_pdf()).unwrap();
-    let document = load_pdf(&input);
-    assert_eq!(orientations(&document), [true, false, true, false]);
-    print_to_file(&document, &output);
-    drop(document);
-    let printed = load_pdf(&output);
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            let apartment = Apartment::initialize().unwrap();
+            let document = apartment.load_pdf(&input).unwrap();
+            assert_eq!(orientations(&document), [true, false, true, false]);
+            print_to_file(&document, &output);
+        });
+    });
+    let apartment = Apartment::initialize().unwrap();
+    let printed = apartment.load_pdf(&output).unwrap();
     let actual = orientations(&printed);
     drop(printed);
     std::fs::remove_file(input).unwrap();
@@ -92,17 +96,6 @@ fn wait_for_job(id: u32) {
         assert!(Instant::now() < deadline, "Print job did not complete");
         std::thread::sleep(OUTPUT_POLL);
     }
-}
-
-fn load_pdf(path: &Path) -> PdfDocument {
-    let file = StorageFile::GetFileFromPathAsync(&HSTRING::from(path.as_os_str()))
-        .unwrap()
-        .get()
-        .unwrap();
-    PdfDocument::LoadFromFileAsync(&file)
-        .unwrap()
-        .get()
-        .unwrap()
 }
 
 fn orientations(document: &PdfDocument) -> Vec<bool> {

@@ -5,8 +5,6 @@ use std::{mem::size_of, path::Path};
 use windows::{
     core::{w, HSTRING, PCWSTR, PWSTR},
     Data::Pdf::{PdfDocument, PdfPage},
-    Foundation::Metadata::ApiInformation,
-    Storage::StorageFile,
     Win32::{
         Graphics::Gdi::{
             CreateDCW, DeleteDC, GetDeviceCaps, StretchDIBits, BITMAPINFO, BITMAPINFOHEADER,
@@ -33,7 +31,7 @@ struct Layout {
 
 pub fn print_file(input: &Path, printer: &str) -> ResultType<u32> {
     super::identity::require_printing_user()?;
-    let _apartment = Apartment::initialize()?;
+    let apartment = Apartment::initialize()?;
     let target = if printer.is_empty() {
         default_printer()?
     } else {
@@ -48,8 +46,7 @@ pub fn print_file(input: &Path, printer: &str) -> ResultType<u32> {
     } else {
         std::env::current_dir()?.join(input)
     };
-    let file = StorageFile::GetFileFromPathAsync(&HSTRING::from(input.as_os_str()))?.get()?;
-    let document = PdfDocument::LoadFromFileAsync(&file)?.get()?;
+    let document = apartment.load_pdf(&input)?;
     if document.PageCount()? == 0 {
         bail!("The PDF has no pages");
     }
@@ -208,8 +205,8 @@ fn check_gdi(value: i32, operation: &str) -> ResultType<()> {
 
 pub fn available() -> ResultType<bool> {
     super::identity::require_printing_user()?;
-    let _apartment = Apartment::initialize()?;
-    if !ApiInformation::IsTypePresent(&HSTRING::from("Windows.Data.Pdf.PdfDocument"))? {
+    let apartment = Apartment::initialize()?;
+    if !apartment.pdf_type_present()? {
         return Ok(false);
     }
     super::raster::load_pdf_library()?;

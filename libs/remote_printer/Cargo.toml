@@ -7,6 +7,8 @@ edition = "2021"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 hbb_common = { version = "0.1.0", path = "../hbb_common" }
+once_cell = "1"
+windows-future = "0.2"
 windows = { version = "0.61", features = [
     "Data_Pdf",
     "Foundation_Metadata",

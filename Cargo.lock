@@ -6861,7 +6861,9 @@ name = "remote_printer"
 version = "0.1.0"
 dependencies = [
  "hbb_common",
+ "once_cell",
  "windows 0.61.1",
+ "windows-future",
 ]
 
 [[package]]

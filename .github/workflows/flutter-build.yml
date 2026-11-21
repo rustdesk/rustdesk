@@ -345,6 +345,21 @@ jobs:
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
           mv -Force .\usbmmidd_v2 ./rustdesk
 
+      - name: Check PDF imports for Windows 7 compatibility
+        if: ${{ matrix.job.arch == 'x86_64' }}
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -products '*' -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          $imports = & $dumpbin /nologo /imports ./rustdesk/librustdesk.dll
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($line in $imports) {
+            if ($line -match 'following delay load imports:') { break }
+            if ($line -match '\b(api-ms-win-core-winrt-l1-1-0\.dll|RoInitialize|RoUninitialize|RoGetActivationFactory|CoIncrementMTAUsage)\s*$') {
+              throw "PDF backend requires a startup import unavailable on Windows 7: $($Matches[1])"
+            }
+          }
+
       - name: Test PDF printer native APIs
         if: ${{ !inputs.upload-artifact }}
         shell: bash
