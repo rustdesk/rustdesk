@@ -6,7 +6,7 @@ use crate::{
 #[cfg(target_os = "linux")]
 use crate::platform::linux::is_x11;
 use crate::{
-    client::file_trait::FileManager,
+    client::{file_trait::FileManager, Data},
     common::{make_fd_to_json, make_vec_fd_to_json},
     flutter::{
         self, session_add, session_add_existed, session_start_, sessions, try_sync_peer_option,
@@ -24,6 +24,7 @@ use hbb_common::{
 use base::{
     config::keys,
     fs,
+    message_proto::{KeyEvent, Message},
 };
 use std::{
     collections::HashMap,
@@ -707,6 +708,30 @@ pub fn session_input_string(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         // #[cfg(any(target_os = "android", target_os = "ios"))]
         session.input_string(&value);
+    }
+}
+
+pub fn session_submit_text(session_id: SessionID, value: String) -> ResultType<()> {
+    let session = sessions::get_session_by_session_id(&session_id)
+        .ok_or_else(|| hbb_common::anyhow::anyhow!("Session has closed"))?;
+    let mut event = KeyEvent::new();
+    event.set_seq(value);
+    let mut message = Message::new();
+    message.set_key_event(event);
+    let sender = session.sender.read().unwrap();
+    let sender = sender
+        .as_ref()
+        .ok_or_else(|| hbb_common::anyhow::anyhow!("Connection is not ready"))?;
+    sender
+        .send(Data::Message(message))
+        .map_err(|_| hbb_common::anyhow::anyhow!("Connection closed while sending text"))
+}
+
+#[cfg(test)]
+mod mobile_input_tests {
+    #[test]
+    fn submitting_to_a_closed_session_reports_failure() {
+        assert!(super::session_submit_text(super::SessionID::nil(), "hello".into()).is_err());
     }
 }
 
