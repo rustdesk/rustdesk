@@ -1484,6 +1484,19 @@ pub fn current_is_wayland() -> bool {
     return is_desktop_wayland() && unsafe { UNMODIFIED };
 }
 
+#[cfg(feature = "flutter")]
+pub fn prepare_cm_banner_backend() {
+    use base::config::keys::OPTION_ALLOW_ACCEPT_WINDOW_BANNER;
+
+    if Config::get_option(OPTION_ALLOW_ACCEPT_WINDOW_BANNER) == "Y" {
+        // Wayland toplevels have no global placement API. Prefer XWayland for
+        // the banner's edge positioning, before the Flutter runner opens GTK.
+        // Keep the normal GTK fallback if X11 is unavailable; do not change the
+        // environment inherited by processes launched from CM.
+        gtk::gdk::set_allowed_backends("x11,*");
+    }
+}
+
 // to-do: test the other display manager
 fn _get_display_manager() -> String {
     if let Ok(x) = std::fs::read_to_string("/etc/X11/default-display-manager") {

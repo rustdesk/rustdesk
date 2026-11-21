@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include "bump_mouse.h"
+#include "cm_banner.h"
 
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
@@ -242,6 +243,40 @@ MyApplication* my_application_new() {
 
 void host_channel_call_handler(FlMethodChannel* channel, FlMethodCall* method_call, gpointer user_data)
 {
+  if (strcmp(fl_method_call_get_name(method_call), "isCmBannerSupported") == 0) {
+    g_autoptr(FlValue) result =
+        fl_value_new_bool(is_cm_banner_supported(gIsConnectionManager));
+    g_autoptr(GError) error = nullptr;
+    if (!fl_method_call_respond_success(method_call, result, &error)) {
+      g_warning("Failed to send CM banner support response: %s", error->message);
+    }
+    return;
+  }
+  if (gIsConnectionManager &&
+      strcmp(fl_method_call_get_name(method_call), "setCmBannerBounds") == 0) {
+    auto* app = GTK_APPLICATION(user_data);
+    FlValue* args = fl_method_call_get_args(method_call);
+    set_cm_banner_bounds(gtk_application_get_active_window(app),
+        fl_value_get_float(fl_value_lookup_string(args, "x")),
+        fl_value_get_float(fl_value_lookup_string(args, "y")),
+        fl_value_get_float(fl_value_lookup_string(args, "width")),
+        fl_value_get_float(fl_value_lookup_string(args, "height")));
+    g_autoptr(GError) error = nullptr;
+    if (!fl_method_call_respond_success(method_call, nullptr, &error)) {
+      g_warning("Failed to send CM banner bounds response: %s", error->message);
+    }
+    return;
+  }
+  if (gIsConnectionManager &&
+      strcmp(fl_method_call_get_name(method_call), "setCmBannerWindow") == 0) {
+    auto* app = GTK_APPLICATION(user_data);
+    set_cm_banner_window(gtk_application_get_active_window(app));
+    g_autoptr(GError) error = nullptr;
+    if (!fl_method_call_respond_success(method_call, nullptr, &error)) {
+      g_warning("Failed to send CM banner response: %s", error->message);
+    }
+    return;
+  }
   if (strcmp(fl_method_call_get_name(method_call), "bumpMouse") == 0) {
     FlValue *args = fl_method_call_get_args(method_call);
 
