@@ -76,6 +76,8 @@ use crate::virtual_display_manager;
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 mod trusted_devices;
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+mod screen_frame;
 
 const FAILURE_IDX_ID_WHITELIST: usize = 2;
 // How long a rejection counts, so also how long a blocked address stays blocked. Longer
@@ -771,6 +773,10 @@ impl Connection {
                                 break;
                             }
                         }
+                        #[cfg(target_os = "macos")]
+                        ipc::Data::ScreenFrameWindowIds(window_ids) => {
+                            scrap::set_excluded_window_ids(window_ids);
+                        }
                         ipc::Data::Close => {
                             conn.chat_unanswered = false; // seen
                             conn.file_transferred = false; //seen
@@ -1199,6 +1205,8 @@ impl Connection {
                     }
                 }
                 _ = second_timer.tick() => {
+                    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+                    conn.send_screen_frame_displays();
                     #[cfg(windows)]
                     conn.portable_check();
                     #[cfg(windows)]

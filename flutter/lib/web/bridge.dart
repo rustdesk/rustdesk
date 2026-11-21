@@ -1666,6 +1666,10 @@ class RustdeskImpl {
     return false;
   }
 
+  Future<bool> mainIsScreenFrameSupported({dynamic hint}) async {
+    return false;
+  }
+
   bool mainIsLoginWayland({dynamic hint}) {
     return false;
   }

@@ -7398,6 +7398,7 @@ dependencies = [
  "base",
  "bindgen 0.72.1",
  "block",
+ "cc",
  "cfg-if 1.0.0",
  "dbus",
  "docopt",

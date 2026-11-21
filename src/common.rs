@@ -134,6 +134,7 @@ pub fn global_init() -> bool {
     crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(target_os = "linux")]
     {
+        crate::platform::linux::dispatch_wayland_screen_frame();
         if !crate::platform::linux::is_x11() {
             crate::server::wayland::init();
         }

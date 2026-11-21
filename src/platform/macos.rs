@@ -2,12 +2,18 @@
 // https://github.com/servo/core-foundation-rs
 // https://github.com/rust-windowing/winit
 
+mod screen_frame;
 mod update_temp;
 mod verified_dmg;
 
 #[cfg(test)]
 #[path = "macos/verified_dmg_tests.rs"]
 mod verified_dmg_tests;
+
+pub(crate) use screen_frame::set_visible as set_screen_frame_visible;
+pub(crate) use screen_frame::refresh as refresh_screen_frame;
+pub(crate) use screen_frame::refresh_colors as refresh_screen_frame_colors;
+pub(crate) use screen_frame::window_ids as screen_frame_window_ids;
 
 use super::{validate_install_app_name, CursorData, ResultType};
 use cocoa::{

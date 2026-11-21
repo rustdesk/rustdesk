@@ -233,6 +233,21 @@ fn main() {
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
 
+    // Ship both macOS capture backends; runtime availability selects which one to use.
+    if target_os == "macos" {
+        println!("cargo:rerun-if-changed=src/quartz/sck_capture.m");
+        cc::Build::new()
+            .file("src/quartz/sck_capture.m")
+            .flag("-fobjc-arc")
+            .flag("-fblocks")
+            .flag("-Wno-unguarded-availability-new")
+            .compile("scrap_sck_capture");
+        println!("cargo:rustc-link-lib=framework=Foundation");
+        println!("cargo:rustc-link-lib=framework=CoreMedia");
+        println!("cargo:rustc-link-lib=framework=CoreVideo");
+        println!("cargo:rustc-link-lib=framework=IOSurface");
+    }
+
     // note: all link symbol names in x86 (32-bit) are prefixed wth "_".
     // run "rustup show" to show current default toolchain, if it is stable-x86-pc-windows-msvc,
     // please install x64 toolchain by "rustup toolchain install stable-x86_64-pc-windows-msvc",

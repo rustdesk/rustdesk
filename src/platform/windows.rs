@@ -105,7 +105,11 @@ mod installer_handoff;
 mod installer_shell;
 mod verified_update;
 mod msi_registry;
+mod screen_frame;
 pub(crate) use acl::current_process_user_sid_string;
+pub(crate) use screen_frame::set_visible as set_screen_frame_visible;
+pub(crate) use screen_frame::refresh as refresh_screen_frame;
+pub(crate) use screen_frame::refresh_colors as refresh_screen_frame_colors;
 pub use acl::{
     set_path_permission, set_path_permission_for_portable_service_shmem_dir,
     set_path_permission_for_portable_service_shmem_file,
