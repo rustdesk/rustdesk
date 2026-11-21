@@ -150,13 +150,24 @@ pub fn get_wakelock(_display: bool) -> WakeLock {
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
-pub(crate) struct InstallingService; // please use new
+pub(crate) struct InstallingService; // please use a constructor
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 impl InstallingService {
+    #[cfg(target_os = "linux")]
     pub fn new() -> Self {
         *INSTALLING_SERVICE.lock().unwrap() = true;
         Self
+    }
+
+    #[cfg(windows)]
+    pub fn try_new() -> Option<Self> {
+        let mut installing = INSTALLING_SERVICE.lock().unwrap();
+        if *installing {
+            return None;
+        }
+        *installing = true;
+        Some(Self)
     }
 }
 
