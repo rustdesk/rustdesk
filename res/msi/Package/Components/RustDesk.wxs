@@ -43,8 +43,9 @@
 			<Custom Action="RestoreUpgradePrinter" After="InstallInitialize" Condition="WIX_UPGRADE_DETECTED AND RestoreUpgradePrinter AND NOT REMOVE" />
 			<Custom Action="StopUpgradePrinterService" After="RestoreUpgradePrinter" Condition="WIX_UPGRADE_DETECTED AND StopUpgradePrinterService AND NOT REMOVE" />
 			<Custom Action="CheckPdfPrinter" After="RemoveExistingProducts" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE" />
-			<Custom Action="RollbackPrinter" Before="InstallPrinter" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE AND NOT PDFPRINTER_PRESENT" />
-			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE" />
+			<!-- A successful queue check sets PDFPRINTER_PRESENT to 0 or 1. An unset value skips both actions. -->
+			<Custom Action="RollbackPrinter" Before="InstallPrinter" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE AND PDFPRINTER_PRESENT = &quot;0&quot;" />
+			<Custom Action="InstallPrinter" Before="InstallFinalize" Condition="PDFPRINTER_OS_SUPPORTED AND (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;) AND NOT REMOVE AND PDFPRINTER_PRESENT" />
 			<Custom Action="UninstallPrinter" Before="RemoveRuntimeGeneratedFiles" Condition="PDFPRINTER_OS_SUPPORTED AND PDFPRINTER_INSTALLED = 1 AND Installed AND REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
 			<Custom Action="DisablePrinter" Before="InstallFinalize" Condition="PDFPRINTER_OS_SUPPORTED AND PDFPRINTER_INSTALLED = 1 AND NOT REMOVE AND NOT (PRINTER = 1 OR PRINTER = &quot;Y&quot; OR PRINTER = &quot;y&quot;)" />
 

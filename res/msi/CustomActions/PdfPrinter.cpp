@@ -59,7 +59,12 @@ extern "C" UINT __stdcall CheckPdfPrinter(MSIHANDLE installer) {
     if (FAILED(result)) return ERROR_INSTALL_FAILURE;
     bool present = false;
     result = ReadPrinterPresence(present);
-    if (SUCCEEDED(result)) result = WcaSetProperty(L"PDFPRINTER_PRESENT", present ? L"1" : L"");
+    if (SUCCEEDED(result)) {
+        result = WcaSetProperty(L"PDFPRINTER_PRESENT", present ? L"1" : L"0");
+    } else if (MsiEvaluateConditionW(installer, L"NOT Installed AND NOT WIX_UPGRADE_DETECTED") == MSICONDITION_TRUE) {
+        WcaLog(LOGMSG_STANDARD, "Skipping optional PDF printer setup on fresh install: queue detection failed (0x%08lx)", result);
+        result = WcaSetProperty(L"PDFPRINTER_PRESENT", L"");
+    }
     if (FAILED(result)) WcaLog(LOGMSG_STANDARD, "PDF printer detection failed: 0x%08lx", result);
     return WcaFinalize(SUCCEEDED(result) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE);
 }

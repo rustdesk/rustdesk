@@ -29,7 +29,8 @@
 		<CustomAction Id="StopUpgradePrinterService" DllEntry="TryStopDeleteService" Impersonate="no" Execute="rollback" Return="check" BinaryRef="Custom_Actions_Dll" />
 		<CustomAction Id="ScheduleUpgradePrinterRecovery" DllEntry="ScheduleUpgradePrinterRecovery" Execute="immediate" Return="check" BinaryRef="Custom_Actions_Dll" />
 		<CustomAction Id="RestoreUpgradePrinter" DllEntry="RestoreUpgradePrinter" Impersonate="no" Execute="rollback" Return="check" HideTarget="yes" BinaryRef="Custom_Actions_Dll" />
-		<CustomAction Id="InstallPrinter" FileRef="App.exe" ExeCommand="--install-remote-printer" Impersonate="no" Execute="deferred" Return="check" />
+		<!-- The optional printer can be installed later from Settings if setup fails. -->
+		<CustomAction Id="InstallPrinter" FileRef="App.exe" ExeCommand="--install-remote-printer" Impersonate="no" Execute="deferred" Return="ignore" />
 		<CustomAction Id="RollbackPrinter" FileRef="App.exe" ExeCommand="--uninstall-remote-printer" Impersonate="no" Execute="rollback" Return="check" />
 		<!-- Printer cleanup failures stay logged and retryable; they must not roll back final app removal. -->
 		<CustomAction Id="UninstallPrinter" FileRef="App.exe" ExeCommand="--uninstall-remote-printer" Impersonate="no" Execute="deferred" Return="ignore" />
