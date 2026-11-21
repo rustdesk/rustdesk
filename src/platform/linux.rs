@@ -1488,7 +1488,8 @@ pub async fn sync_drm_capture_to_service(was_on: bool) {
     }
     let result = async {
         let mut conn = connect_trusted_device_service(1000).await?;
-        let configs = Box::new((Config::get(), Config2::get()));
+        let config2 = crate::trusted_devices::config::update(Config2::get_for_sync).await?;
+        let configs = Box::new((Config::get(), config2));
         conn.send(&Data::SyncConfig(Some(configs))).await?;
         conn.next_timeout(1000).await
     }
