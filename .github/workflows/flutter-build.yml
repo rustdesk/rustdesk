@@ -119,6 +119,14 @@ jobs:
           syft dir:. \
             -o cyclonedx-json=rustdesk.sbom.json
 
+      - name: Audit SBOM against Cargo.lock and the crate graph
+        uses: Mattbusel/sbom-attest@2d5a65bb0977b99cc3c4d1a85b593c5dd5376397 # v0.3.0
+        continue-on-error: true
+        with:
+          sbom: rustdesk.sbom.json
+          package: rustdesk
+          target: all
+
       - name: Publish Release
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         if: env.UPLOAD_ARTIFACT == 'true'
