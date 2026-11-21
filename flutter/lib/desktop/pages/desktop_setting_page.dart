@@ -2890,6 +2890,19 @@ class _WaylandCardState extends State<WaylandCard> {
                 "true";
 
         final children = [
+          if (isLinux &&
+              bind.mainIsInstalled() &&
+              !bind.isOutgoingOnly() &&
+              !bind.isDisableSettings() &&
+              bind.mainGetCommonSync(key: 'is-drm-capture-supported') ==
+                  'true') ...[
+            _OptionCheckBox(
+                context, 'Use DRM screen capture', kOptionAllowDrmCapture),
+            Align(
+              alignment: Alignment.topLeft,
+              child: Text(translate('drm-capture-tip')),
+            ).marginOnly(left: _kCardLeftMargin),
+          ],
           if (restoreToken.isNotEmpty)
             _buildClearScreenSelection(context, restoreToken),
           if (hasShortcutsPermission)

@@ -293,5 +293,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android-logs-folder-tip", "Choose Android → media to store log files."),
         ("install-directory-not-empty-tip", "The selected folder is not empty. Installation may delete existing data. Consider choosing a different folder."),
         ("username-login-disabled-oidc-unavailable", "Username and password login is disabled, and no OIDC login methods are available."),
+        ("drm-capture-tip", "Captures the screen directly from the graphics card through the RustDesk service, without the Wayland screen sharing prompt, including at the login screen. It may not work on every device; if connections still ask to share the screen, turn this off or use X11. Changing this disconnects current sessions."),
+        ("wayland-drm-tip", "For unattended access on Wayland, try DRM screen capture, or use X11 if it does not work."),
+        ("login-wayland-drm-tip", "To access the Wayland login screen, try DRM screen capture or switch it to X11."),
     ].iter().cloned().collect();
 }

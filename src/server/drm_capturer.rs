@@ -1769,6 +1769,9 @@ pub(crate) enum Availability {
 /// blocking pool). This blocking form serves the capture-side callers through
 /// `is_available`, where waiting out a settle is acceptable.
 fn availability() -> Availability {
+    if !crate::platform::linux::drm_capture_enabled() {
+        return Availability::Unavailable;
+    }
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
         // Keep a settled "no" while an off-thread probe re-verifies it, avoiding a transient
@@ -1808,6 +1811,9 @@ fn availability() -> Availability {
 /// Non-blocking login-path assessment.
 /// Unknown starts a probe off-thread; callers require `Available` before admitting a session.
 pub(crate) fn availability_cached() -> Availability {
+    if !crate::platform::linux::drm_capture_enabled() {
+        return Availability::Unavailable;
+    }
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
         let stale_no =
@@ -2013,11 +2019,15 @@ fn refresh_available_async() {
 }
 
 pub(super) fn warm_availability() {
+    // The option is read INSIDE the loop too: this starts before the initial config sync from
+    // root, so an account whose own config does not hold it yet reads it as off at first.
+    let mut enabled = false;
     // The gate is INSIDE the loop because `get_display_server()` answers "x11" whenever loginctl
     // cannot yet name the seat0 session. `is_x11_for_drm()` is that form minus the greeter
     // blind spot, where plain `is_x11()` is permanently true.
     for _ in 0..10 {
-        if crate::platform::linux::is_x11_for_drm() {
+        enabled = crate::platform::linux::drm_capture_enabled();
+        if !enabled || crate::platform::linux::is_x11_for_drm() {
             std::thread::sleep(Duration::from_millis(300));
             continue;
         }
@@ -2045,7 +2055,9 @@ pub(super) fn warm_availability() {
             Err(_) => std::thread::sleep(Duration::from_millis(300)),
         }
     }
-    log::info!("drm: consumer cache warm found no producer at startup (will probe lazily)");
+    if enabled {
+        log::info!("drm: consumer cache warm found no producer at startup (will probe lazily)");
+    }
 }
 
 /// With no verdict yet, a login probes now instead of answering "not yet"; that may wake displays.
@@ -3591,5 +3603,15 @@ mod drm_capturer_tests {
             sum_master / n,
             sum_now / n
         );
+    }
+
+    #[test]
+    fn drm_capture_off_reports_unavailable_without_probing() {
+        // Reads the real config and environment, which may have it on where the test runs.
+        if crate::platform::linux::drm_capture_enabled() {
+            return;
+        }
+        assert!(availability() == Availability::Unavailable);
+        assert!(availability_cached() == Availability::Unavailable);
     }
 }
