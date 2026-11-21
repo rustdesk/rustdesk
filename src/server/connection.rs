@@ -6859,11 +6859,15 @@ fn start_wakelock_thread() -> std::sync::mpsc::Sender<(usize, usize)> {
 
 #[cfg(all(target_os = "windows", feature = "flutter"))]
 pub fn on_printer_data(data: Vec<u8>) {
-    if let Some(connection) = AUTHED_CONNS.lock().unwrap().iter().find(|c| c.printer) {
-        if let Err(error) = connection.sender.send(Data::PrinterData(data)) {
-            log::trace!("The legacy printer receiver disconnected: {error}");
-        }
-    }
+    crate::server::AUTHED_CONNS
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|c| c.printer)
+        .next()
+        .map(|c| {
+            c.sender.send(Data::PrinterData(data)).ok();
+        });
 }
 
 #[cfg(windows)]
