@@ -5041,6 +5041,7 @@ fn input_char_as_key_presses(c: char, layout: HKL) -> bool {
     }
     unsafe {
         let keys = checked_key(utf16[0], VkKeyScanExW(utf16[0], layout), false, layout)
+            .or_else(|| main_keyboard_key(utf16[0], layout))
             .map(|keys| (keys, false))
             .or_else(|| caps_lock_key(c, utf16[0], layout).map(|keys| (keys, true)));
         let Some(((scan, shift, altgr, dead), caps)) = keys else {
@@ -5090,6 +5091,25 @@ fn input_char_as_key_presses(c: char, layout: HKL) -> bool {
         }
         sent > key_down
     }
+}
+
+/// VkKeyScanEx can return a numpad key for a character the main keyboard also types, e.g.
+/// VK_DECIMAL for '.' on the Italian layout. Looks for a key, with or without Shift, whose VK
+/// maps back to its scan code instead. `checked_key` rejects numpad VKs, and the numpad '.' scan
+/// code maps to VK_DELETE, which does not map back.
+unsafe fn main_keyboard_key(c16: u16, layout: HKL) -> Option<(u16, bool, bool, bool)> {
+    const SHIFT: i16 = 1;
+
+    let code = VkKeyScanExW(c16, layout);
+    if code == -1 || !matches!((code & 0xFF) as i32, VK_NUMPAD0..=VK_DIVIDE) {
+        return None;
+    }
+    [0, SHIFT].into_iter().find_map(|mods| {
+        (0x01..=0x7F).find_map(|scan: u16| {
+            let vk = MapVirtualKeyExW(scan as _, MAPVK_VSC_TO_VK_EX, layout) as i16;
+            checked_key(c16, (mods << 8) | vk, false, layout).filter(|keys| keys.0 == scan)
+        })
+    })
 }
 
 /// Some capitals are typed with Caps Lock on and the key of the lowercase letter, e.g. 'Ě' on
@@ -5233,6 +5253,27 @@ fn undo_partial_key_presses(sent: &[INPUT], dead_key_sent: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn italian_period_uses_main_keyboard_key() {
+        let mut layouts = [null_mut(); 64];
+        let len = unsafe { GetKeyboardLayoutList(layouts.len() as _, layouts.as_mut_ptr()) };
+        // Unload Italian afterwards only if the full list shows it was not loaded before.
+        let listed = len > 0 && (len as usize) < layouts.len();
+        let loaded = &layouts[..len.max(0) as usize];
+        let layout =
+            unsafe { LoadKeyboardLayoutW(wide_string("00000410").as_ptr(), KLF_NOTELLSHELL) };
+        assert!(!layout.is_null());
+        let c16 = '.' as u16;
+        let keys = unsafe {
+            checked_key(c16, VkKeyScanExW(c16, layout), false, layout)
+                .or_else(|| main_keyboard_key(c16, layout))
+        };
+        if listed && !loaded.contains(&layout) {
+            unsafe { UnloadKeyboardLayout(layout) };
+        }
+        assert_eq!(keys, Some((0x34, false, false, false)));
+    }
 
     #[test]
     fn vbs_files_use_utf16le_with_bom_and_crlf() {
