@@ -270,7 +270,14 @@ pub struct PipeWireRecorder {
     width: usize,
     height: usize,
     saved_raw_data: Vec<u8>, // for faster compare and copy
+    dmabuf_frame: Vec<u8>,   // last frame read from a linear DMA-BUF, rows packed to width * 4
 }
+
+// Compositors such as niri offer screencast buffers only as DMA-BUF, so the system-memory
+// pipeline never negotiates ("no more input formats"). Linear DMA-BUF can be read by the CPU,
+// so the fallback pipeline accepts it and `read_linear_dmabuf` copies the frame out.
+// A drm-format without a ":0x<modifier>" suffix means the linear modifier.
+const DMABUF_CAPS: &str = "video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format={XR24,XB24}";
 
 // Element creation fails the same way for a plugin that is not installed as for one that is
 // broken, so the tag does not claim which. Only the name travels to the peer -- it is what
@@ -283,7 +290,10 @@ fn gst_element(name: &str) -> ResultType<gst::Element> {
 }
 
 impl PipeWireRecorder {
-    pub fn new(capturable: PipeWireCapturable) -> ResultType<Self> {
+    fn build_pipeline(
+        capturable: &PipeWireCapturable,
+        dmabuf: bool,
+    ) -> ResultType<(gst::Pipeline, AppSink)> {
         let pipeline = gst::Pipeline::new(None);
         // Clock waits on stale capture timestamps can exhaust the compositor's buffers.
         pipeline.use_clock(None::<&gst::Clock>);
@@ -293,38 +303,49 @@ impl PipeWireRecorder {
         src.set_property("path", &format!("{}", capturable.path))?;
         src.set_property("keepalive_time", &1_000.as_raw_fd())?;
 
-        // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
-        // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
-        src.set_property("always-copy", &true)?;
-
-        // COSMIC/Wayland fix: insert videoconvert between pipewiresrc and appsink.
-        // xdg-desktop-portal-cosmic's modifier negotiation fails when the downstream
-        // format set is too narrow (appsink only accepts BGRx/RGBx), producing
-        // "no more output formats" / not-negotiated (-4). videoconvert accepts any
-        // system-memory video/x-raw format, widening negotiation so the portal can
-        // settle on a format it can deliver via its SHM path.
-        let convert = gst_element("videoconvert")?;
-
         let sink = gst_element("appsink")?;
         sink.set_property("drop", &true)?;
         sink.set_property("max-buffers", &1u32)?;
 
-        pipeline.add_many(&[&src, &convert, &sink])?;
-        src.link(&convert)?;
-        convert.link(&sink)?;
+        let caps = if dmabuf {
+            // No always-copy here: it copies only the PipeWire chunk, which for DMA-BUF is a
+            // placeholder size (1 byte on niri), not the frame. The frame is read through the fd.
+            pipeline.add_many(&[&src, &sink])?;
+            src.link(&sink)?;
+            DMABUF_CAPS
+                .parse::<gst::Caps>()
+                .map_err(|_| GStreamerError("Invalid DMA-BUF caps".into()))?
+        } else {
+            // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
+            // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
+            src.set_property("always-copy", &true)?;
+
+            // COSMIC/Wayland fix: insert videoconvert between pipewiresrc and appsink.
+            // xdg-desktop-portal-cosmic's modifier negotiation fails when the downstream
+            // format set is too narrow (appsink only accepts BGRx/RGBx), producing
+            // "no more output formats" / not-negotiated (-4). videoconvert accepts any
+            // system-memory video/x-raw format, widening negotiation so the portal can
+            // settle on a format it can deliver via its SHM path.
+            let convert = gst_element("videoconvert")?;
+            pipeline.add_many(&[&src, &convert, &sink])?;
+            src.link(&convert)?;
+            convert.link(&sink)?;
+
+            let mut caps = gst::Caps::new_empty();
+            caps.merge_structure(gst::structure::Structure::new(
+                "video/x-raw",
+                &[("format", &"BGRx")],
+            ));
+            caps.merge_structure(gst::structure::Structure::new(
+                "video/x-raw",
+                &[("format", &"RGBx")],
+            ));
+            caps
+        };
 
         let appsink = sink
             .dynamic_cast::<AppSink>()
             .map_err(|_| GStreamerError("Sink element is expected to be an appsink!".into()))?;
-        let mut caps = gst::Caps::new_empty();
-        caps.merge_structure(gst::structure::Structure::new(
-            "video/x-raw",
-            &[("format", &"BGRx")],
-        ));
-        caps.merge_structure(gst::structure::Structure::new(
-            "video/x-raw",
-            &[("format", &"RGBx")],
-        ));
         appsink.set_caps(Some(&caps));
 
         // [Workaround]
@@ -333,10 +354,29 @@ impl PipeWireRecorder {
         // but cannot completely resolve this issue.
         // Adding a short sleep period can also reduce the probability of crashes.
         debug!(
-            "[gstreamer] Setting pipeline {} to PLAYING state...",
-            capturable.fd.as_raw_fd()
+            "[gstreamer] Setting pipeline {} to PLAYING state (dmabuf: {})...",
+            capturable.fd.as_raw_fd(),
+            dmabuf
         );
-        pipeline.set_state(gst::State::Playing)?;
+        if let Err(e) = pipeline.set_state(gst::State::Playing) {
+            let _ = pipeline.set_state(gst::State::Null);
+            return Err(e.into());
+        }
+        Ok((pipeline, appsink))
+    }
+
+    pub fn new(capturable: PipeWireCapturable) -> ResultType<Self> {
+        let (pipeline, appsink) = match Self::build_pipeline(&capturable, false) {
+            Ok(p) => p,
+            Err(e) => {
+                warn!(
+                    "[gstreamer] System-memory pipeline {} failed ({}), retrying with linear DMA-BUF",
+                    capturable.fd.as_raw_fd(),
+                    e
+                );
+                Self::build_pipeline(&capturable, true)?
+            }
+        };
 
         // If `is_server_running()` is false, it means using remote_desktop_portal,
         // which does not use multiple streams, so no need to wait for state change.
@@ -371,8 +411,93 @@ impl PipeWireRecorder {
             buffer_cropped: vec![],
             is_cropped: false,
             saved_raw_data: Vec::new(),
+            dmabuf_frame: Vec::new(),
         })
     }
+}
+
+// libgstallocators is part of gst-plugins-base, which pipewiresrc and gstreamer-video need anyway.
+#[link(name = "gstallocators-1.0")]
+extern "C" {
+    fn gst_is_dmabuf_memory(mem: *mut std::ffi::c_void) -> std::os::raw::c_int;
+    fn gst_dmabuf_memory_get_fd(mem: *mut std::ffi::c_void) -> std::os::raw::c_int;
+}
+
+/// Copy a linear BGRx/RGBx DMA-BUF frame into `out` as packed rows of `w * 4` bytes.
+/// A normal map of such a buffer covers only the PipeWire chunk size, so read through the fd.
+fn read_linear_dmabuf(
+    buf: &gst::Buffer,
+    w: usize,
+    h: usize,
+    out: &mut Vec<u8>,
+) -> Result<(), Box<dyn Error>> {
+    use hbb_common::libc;
+    #[repr(C)]
+    struct DmaBufSync {
+        flags: u64,
+    }
+    // _IOW('b', 0, struct dma_buf_sync)
+    const DMA_BUF_IOCTL_SYNC: libc::c_ulong = 0x4008_6200;
+    const DMA_BUF_SYNC_READ: u64 = 1;
+    const DMA_BUF_SYNC_END: u64 = 4;
+
+    if buf.n_memory() != 1 {
+        return Err(GStreamerError(format!("DMA-BUF with {} memories", buf.n_memory())).into());
+    }
+    let mem = buf.peek_memory(0);
+    let mem_ptr = unsafe { mem.as_ptr() } as *mut std::ffi::c_void;
+    if unsafe { gst_is_dmabuf_memory(mem_ptr) } == 0 {
+        return Err(GStreamerError("Buffer memory is not DMA-BUF".into()).into());
+    }
+    let fd = unsafe { gst_dmabuf_memory_get_fd(mem_ptr) };
+    let (stride, plane_offset) = match buf.get_meta::<gstreamer_video::VideoMeta>() {
+        Some(m) => (m.get_stride()[0] as usize, m.get_offset()[0]),
+        None => (w * 4, 0),
+    };
+    if fd < 0 || stride < w * 4 {
+        return Err(GStreamerError(format!("Bad DMA-BUF fd {} or stride {}", fd, stride)).into());
+    }
+    let start = mem.get_offset() + plane_offset;
+    let len = start + stride * (h.max(1) - 1) + w * 4;
+    // The size comes from the dmabuf itself, so a bad stride/offset errors instead of SIGBUS.
+    let size = unsafe { libc::lseek(fd, 0, libc::SEEK_END) };
+    if size >= 0 && len > size as usize {
+        return Err(
+            GStreamerError(format!("DMA-BUF of {} bytes, frame needs {}", size, len)).into(),
+        );
+    }
+
+    let map = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            len,
+            libc::PROT_READ,
+            libc::MAP_SHARED,
+            fd,
+            0,
+        )
+    };
+    if map == libc::MAP_FAILED {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    // Sync makes the CPU view coherent with the GPU; exporters without it just return an error.
+    let mut sync = DmaBufSync {
+        flags: DMA_BUF_SYNC_READ,
+    };
+    unsafe { libc::ioctl(fd, DMA_BUF_IOCTL_SYNC, &mut sync) };
+    let src = unsafe { std::slice::from_raw_parts(map as *const u8, len) };
+    out.clear();
+    out.reserve(w * h * 4);
+    for y in 0..h {
+        let row = start + y * stride;
+        out.extend_from_slice(&src[row..row + w * 4]);
+    }
+    sync.flags = DMA_BUF_SYNC_READ | DMA_BUF_SYNC_END;
+    unsafe {
+        libc::ioctl(fd, DMA_BUF_IOCTL_SYNC, &mut sync);
+        libc::munmap(map, len);
+    }
+    Ok(())
 }
 
 impl Recorder for PipeWireRecorder {
@@ -381,19 +506,33 @@ impl Recorder for PipeWireRecorder {
             .appsink
             .try_pull_sample(gst::ClockTime::from_mseconds(timeout_ms))
         {
-            let cap = sample
-                .get_caps()
-                .ok_or("Failed get caps")?
-                .get_structure(0)
-                .ok_or("Failed to get structure")?;
+            let caps = sample.get_caps().ok_or("Failed get caps")?;
+            let is_dmabuf = caps
+                .get_features(0)
+                .map_or(false, |f| f.contains("memory:DMABuf"));
+            let cap = caps.get_structure(0).ok_or("Failed to get structure")?;
             let w: i32 = cap.get_value("width")?.get_some()?;
             let h: i32 = cap.get_value("height")?.get_some()?;
             let w = w as usize;
             let h = h as usize;
-            self.pix_fmt = cap
-                .get::<&str>("format")?
-                .ok_or("Failed to get pixel format")?
-                .to_string();
+            self.pix_fmt = if is_dmabuf {
+                // DRM fourcc names for the same byte order as GStreamer's BGRx / RGBx.
+                match cap.get::<&str>("drm-format")? {
+                    Some("XR24") => "BGRx".to_string(),
+                    Some("XB24") => "RGBx".to_string(),
+                    other => {
+                        return Err(GStreamerError(format!(
+                            "Unsupported DMA-BUF format {:?}",
+                            other
+                        ))
+                        .into())
+                    }
+                }
+            } else {
+                cap.get::<&str>("format")?
+                    .ok_or("Failed to get pixel format")?
+                    .to_string()
+            };
 
             let buf = sample
                 .get_buffer_owned()
@@ -405,13 +544,23 @@ impl Recorder for PipeWireRecorder {
             if Some((0, 0, w as u32, h as u32)) == crop {
                 crop = None;
             }
-            let buf = buf
-                .into_mapped_buffer_readable()
-                .map_err(|_| GStreamerError("Failed to map buffer.".into()))?;
-            if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, buf.as_slice()) {
+            let buf = if is_dmabuf {
+                read_linear_dmabuf(&buf, w, h, &mut self.dmabuf_frame)?;
+                None
+            } else {
+                Some(
+                    buf.into_mapped_buffer_readable()
+                        .map_err(|_| GStreamerError("Failed to map buffer.".into()))?,
+                )
+            };
+            let data: &[u8] = match &buf {
+                Some(b) => b.as_slice(),
+                None => &self.dmabuf_frame,
+            };
+            if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, data) {
                 return Ok(PixelProvider::NONE);
             }
-            let buf_size = buf.get_size();
+            let buf_size = data.len();
             // BGRx is 4 bytes per pixel
             if buf_size != (w * h * 4) {
                 // for some reason the width and height of the caps do not guarantee correct buffer
@@ -433,7 +582,6 @@ impl Recorder for PipeWireRecorder {
                     let w_crop = w_crop as usize;
                     let h_crop = h_crop as usize;
                     self.buffer_cropped.clear();
-                    let data = buf.as_slice();
                     // BGRx is 4 bytes per pixel
                     self.buffer_cropped.reserve(w_crop * h_crop * 4);
                     for y in y_off..(y_off + h_crop) {
@@ -447,21 +595,20 @@ impl Recorder for PipeWireRecorder {
                     self.height = h;
                 }
                 self.is_cropped = crop.is_some();
-                self.buffer = Some(buf);
+                self.buffer = buf;
             }
         } else {
             return Ok(PixelProvider::NONE);
         }
-        if self.buffer.is_none() {
+        if self.buffer.is_none() && self.dmabuf_frame.is_empty() {
             return Err(Box::new(GStreamerError("No buffer available!".into())));
         }
         let buf = if self.is_cropped {
             self.buffer_cropped.as_slice()
+        } else if let Some(b) = self.buffer.as_ref() {
+            b.as_slice()
         } else {
-            self.buffer
-                .as_ref()
-                .ok_or("Failed to get buffer as ref")?
-                .as_slice()
+            self.dmabuf_frame.as_slice()
         };
         match self.pix_fmt.as_str() {
             "BGRx" => Ok(PixelProvider::BGR0(self.width, self.height, buf)),
