@@ -151,7 +151,7 @@ impl Cameras {
 
     pub fn exists(index: usize) -> bool {
         #[cfg(target_os = "macos")]
-        if !is_camera_supported() {
+        if !is_camera_supported() || !nokhwa::nokhwa_check() {
             return false;
         }
         match query(ApiBackend::Auto) {
@@ -164,6 +164,10 @@ impl Cameras {
         #[cfg(target_os = "macos")]
         if !is_camera_supported() {
             bail!("Camera is not supported on this macOS version");
+        }
+        #[cfg(target_os = "macos")]
+        if !nokhwa::nokhwa_check() {
+            bail!("Camera permission not granted");
         }
         let format_type = if cfg!(target_os = "linux") {
             RequestedFormatType::None
@@ -270,7 +274,6 @@ impl TraitCapturer for CameraCapturer {
                     Ok(decoded) => {
                         self.data = decoded.as_raw().to_vec();
                         crate::would_block_if_equal(&mut self.last_data, &self.data)?;
-                        // FIXME: macos's PixelBuffer cannot be directly created from bytes slice.
                         cfg_if::cfg_if! {
                             if #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))] {
                                 Ok(Frame::PixelBuffer(PixelBuffer::new(

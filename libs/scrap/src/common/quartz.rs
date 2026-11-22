@@ -88,13 +88,14 @@ pub struct PixelBuffer<'a> {
 }
 
 impl<'a> PixelBuffer<'a> {
-    /// Wraps tightly packed 4-bytes-per-pixel data (e.g. RGBA from a camera).
+    /// Wraps tightly packed data (e.g. RGBA from a camera).
     pub fn new(data: &'a [u8], pixfmt: Pixfmt, width: usize, height: usize) -> Self {
+        let stride = width * pixfmt.bytes_per_pixel();
         PixelBuffer {
             source: PixelSource::Bytes {
                 data,
                 pixfmt,
-                stride: width * 4,
+                stride,
             },
             width,
             height,

@@ -2166,7 +2166,10 @@ impl Connection {
                         log::error!("camera all_info task panicked: {}", e);
                         Ok(Vec::new())
                     })
-                    .unwrap_or_default();
+                    .unwrap_or_else(|e| {
+                        log::error!("camera all_info error: {}", e);
+                        Vec::new()
+                    });
             }
             #[cfg(not(target_os = "macos"))]
             {
