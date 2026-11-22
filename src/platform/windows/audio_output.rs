@@ -36,6 +36,7 @@ use windows::{
 
 const RESTORE_KEY: &str = "audio-output-restore";
 const STATE_FILE: &str = "audio-output-state.json";
+const AUTO_DEVICE: &str = "__rustdesk_auto_vb_cable__";
 const ROLES: [ERole; 3] = [eConsole, eMultimedia, eCommunications];
 
 #[derive(Serialize)]
@@ -652,13 +653,20 @@ fn configure_output(state: &mut WorkerState, id: &str) -> ResultType<()> {
 
     let _com = ComApartment::new()?;
     let enumerator = enumerator()?;
-    let target = validate_target(&enumerator, id)?;
-    state.selected = id.to_owned();
+    let effective_id = if id == AUTO_DEVICE {
+        auto_selected_device(&enumerator)?
+            .map(|(id, _)| id)
+            .context("No usable VB-CABLE playback endpoint is available")?
+    } else {
+        id.to_owned()
+    };
+    let target = validate_target(&enumerator, &effective_id)?;
+    state.selected = effective_id.clone();
     if state.connection_count > 0 {
         let policy = policy()?;
-        activate_output(&enumerator, &policy, id, &target)?;
+        activate_output(&enumerator, &policy, &effective_id, &target)?;
     }
-    log::info!("Audio output mode changed to Remote only: {id}");
+    log::info!("Audio output mode changed to Remote only: {effective_id}");
     Ok(())
 }
 
@@ -730,7 +738,7 @@ fn status_json(state: &WorkerState) -> ResultType<String> {
 /// Queue an endpoint change. COM and PolicyConfig calls run only on the worker.
 pub(crate) fn set_device(id: &str) -> ResultType<()> {
     send_sync(|reply| Command::Configure(id.to_owned(), reply))?;
-    crate::ui_interface::set_audio_output_config(id)?;
+    crate::ui_interface::set_audio_output_config(if id == AUTO_DEVICE { "" } else { id })?;
     crate::audio_service::restart();
     Ok(())
 }

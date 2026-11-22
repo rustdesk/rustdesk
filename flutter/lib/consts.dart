@@ -146,6 +146,7 @@ const String kOptionShowQualityMonitor = "show_quality_monitor";
 const String kOptionDisableAudio = "disable_audio";
 const String kOptionRemoteOnlyAudioDevice = "remote-only-audio-device";
 const String kOptionRemoteOnlyAudioPreview = "remote-only-audio-preview";
+const String kOptionRemoteOnlyAudioAuto = "__rustdesk_auto_vb_cable__";
 const String kOptionEnableFileCopyPaste = "enable-file-copy-paste";
 // "Settings -> Display -> Other default options"
 const String kOptionDisableClipboard = "disable_clipboard";

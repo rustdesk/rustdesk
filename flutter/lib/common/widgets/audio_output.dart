@@ -73,7 +73,9 @@ class _AudioOutputState extends State<AudioOutput> with WidgetsBindingObserver {
     try {
       await bind.mainSetOption(
         key: kOptionRemoteOnlyAudioDevice,
-        value: mode == 'normal' ? '' : _selected,
+        value: mode == 'normal'
+            ? ''
+            : (_selected.isEmpty ? kOptionRemoteOnlyAudioAuto : _selected),
       );
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -83,7 +85,7 @@ class _AudioOutputState extends State<AudioOutput> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final canRemote = _hasCable && _selected.isNotEmpty;
+    final canRemote = _hasCable;
     final textColor = disabledTextColor(context, true);
     final errorColor = Theme.of(context).colorScheme.error.withOpacity(0.75);
     return Focus(
