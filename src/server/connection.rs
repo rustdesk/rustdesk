@@ -2549,7 +2549,8 @@ impl Connection {
                 break;
             }
             if attempt + 1 < MAX_ATTEMPTS {
-                sleep(RETRY_DELAY).await;
+                // `hbb_common::sleep` takes seconds as f32, so use the tokio helper for a Duration.
+                time::sleep(RETRY_DELAY).await;
             }
         }
         if !at_logon_screen {
