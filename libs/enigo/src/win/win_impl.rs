@@ -61,6 +61,12 @@ fn keybd_event(mut flags: u32, vk: u16, scan: u16) -> DWORD {
                 LAYOUT = GetKeyboardLayout(current_window_thread_id);
             }
             scan = MapVirtualKeyExW(vk as _, 0, LAYOUT) as _;
+            // Without the extended flag, VM consoles and DirectX games read the navigation
+            // keys as the numpad keys that share their scan codes, and VM consoles ignore the
+            // Windows and Menu keys.
+            if matches!(vk, EVK_PRIOR..=EVK_DOWN | EVK_INSERT | EVK_DELETE | EVK_LWIN..=EVK_APPS) {
+                flags |= KEYEVENTF_EXTENDEDKEY;
+            }
         }
     }
 
