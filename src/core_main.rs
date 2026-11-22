@@ -43,17 +43,21 @@ fn finish_macos_update(result: hbb_common::ResultType<()>) -> Option<CoreMainAct
 /// If it returns [`Some`], the action determines whether to start the UI or report failure.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<CoreMainAction> {
-    // global_init's first two steps, run early for the custom client: its signature check uses
-    // libsodium, and the probe child must not get past its dispatch. global_init repeats both.
-    crate::common::init_sodium();
+    // Before global_init: with drm its is_x11() can read Config (allow-drm-capture), and Config
+    // loads from a path named after the custom client's app name. global_init's first two steps
+    // run first, for the custom client: its signature check uses libsodium, and the probe child
+    // must not get past its dispatch. global_init repeats both.
     #[cfg(all(target_os = "linux", feature = "drm"))]
-    crate::platform::linux::dispatch_wayland_display_probe();
-    // Before global_init: on Linux its is_x11() can read Config (allow-drm-capture), and Config
-    // loads from a path named after the custom client's app name.
-    crate::load_custom_client();
+    {
+        crate::common::init_sodium();
+        crate::platform::linux::dispatch_wayland_display_probe();
+        crate::load_custom_client();
+    }
     if !crate::common::global_init() {
         return None;
     }
+    #[cfg(not(all(target_os = "linux", feature = "drm")))]
+    crate::load_custom_client();
     #[cfg(windows)]
     if !crate::platform::windows::bootstrap() {
         // return None to terminate the process
