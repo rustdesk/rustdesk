@@ -388,6 +388,13 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
 
                 }
+                "session_keep_alive_start" -> {
+                    result.success(SessionKeepAliveService.start(this))
+                }
+                "session_keep_alive_stop" -> {
+                    SessionKeepAliveService.stop(this)
+                    result.success(true)
+                }
                 "try_sync_clipboard" -> {
                     rdClipboardManager?.syncClipboard(true)
                     result.success(true)
@@ -1024,6 +1031,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onStop() {
         super.onStop()
+        SessionKeepAliveService.setAppHidden(true)
         val disableFloatingWindow = FFI.getLocalOption("disable-floating-window") == "Y"
         if (!disableFloatingWindow && MainService.isReady) {
             startService(Intent(this, FloatingWindowService::class.java))
@@ -1032,6 +1040,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onStart() {
         super.onStart()
+        SessionKeepAliveService.setAppHidden(false)
         stopService(Intent(this, FloatingWindowService::class.java))
     }
 }
