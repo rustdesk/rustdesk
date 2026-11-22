@@ -571,6 +571,12 @@ fn pack_rows(
     true
 }
 
+/// Whether a `VideoCropMeta` rectangle `(x, y, width, height)` lies inside a `w` x `h` frame.
+fn crop_fits((x, y, crop_w, crop_h): (u32, u32, u32, u32), w: usize, h: usize) -> bool {
+    x.checked_add(crop_w).map_or(false, |r| r as usize <= w)
+        && y.checked_add(crop_h).map_or(false, |b| b as usize <= h)
+}
+
 /// GStreamer pixel format for a DRM fourcc name with the same byte order.
 fn drm_format_pix_fmt(drm_format: Option<&str>) -> Option<&'static str> {
     match drm_format {
@@ -613,6 +619,16 @@ impl PipeWireRecorder {
         // only crop if necessary
         if Some((0, 0, w as u32, h as u32)) == crop {
             crop = None;
+        }
+        // The compositor sets the crop; one left from an old allocation must not slice past the frame.
+        if let Some(c) = crop.filter(|&c| !crop_fits(c, w, h)) {
+            trace!(
+                "DMA-BUF crop {:?} does not fit {}x{}, dropping it!",
+                c,
+                w,
+                h
+            );
+            return Ok(PixelProvider::NONE);
         }
         if !read_linear_dmabuf(&buf, w, h, &mut self.dmabuf_frame)? {
             return Ok(PixelProvider::NONE);
@@ -2093,7 +2109,7 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::{corrected_origin, drm_format_pix_fmt, pack_rows, WaylandDisplayInfo};
+    use super::{corrected_origin, crop_fits, drm_format_pix_fmt, pack_rows, WaylandDisplayInfo};
 
     #[test]
     fn a_strided_dmabuf_frame_comes_out_as_packed_rows() {
@@ -2116,6 +2132,15 @@ mod tests {
         assert!(!pack_rows(&[2; 64], 0, usize::MAX / 2, 8, 3, &mut out));
         // A dropped frame leaves the last good one in place.
         assert_eq!(out, frame);
+    }
+
+    #[test]
+    fn a_crop_past_the_frame_does_not_fit() {
+        assert!(crop_fits((0, 0, 2, 1), 4, 1));
+        assert!(crop_fits((2, 0, 2, 1), 4, 1));
+        assert!(!crop_fits((3, 0, 2, 1), 4, 1));
+        assert!(!crop_fits((0, 0, 1, 2), 4, 1));
+        assert!(!crop_fits((u32::MAX, 0, 2, 1), 4, 1));
     }
 
     #[test]
