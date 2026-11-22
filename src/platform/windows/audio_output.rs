@@ -261,8 +261,71 @@ fn saved_output() -> ResultType<Option<SavedOutput>> {
     Ok(Some(serde_json::from_str(&json).context("Cannot read saved audio output settings")?))
 }
 
+fn endpoint_priority(name: &str, channels: u16) -> u8 {
+    let lower = name.to_ascii_lowercase();
+    if (lower.contains("speakers") || name.contains("扬声器")) && channels == 2 {
+        0
+    } else if lower.contains("cable in 16 ch") || lower.contains("cable input") {
+        1
+    } else {
+        2
+    }
+}
+
+fn auto_selected_device(enumerator: &IMMDeviceEnumerator) -> ResultType<Option<(String, String)>> {
+    let mut candidates = Vec::new();
+    for device in outputs(enumerator)? {
+        if !virtual_output(&device)? {
+            continue;
+        }
+        let id = device_id(&device)?;
+        let name = property(&device, &PKEY_Device_FriendlyName)?;
+        let capture = match capture_device_for(&device) {
+            Ok(capture) => capture,
+            Err(err) => {
+                log::warn!("Skipping unusable VB-CABLE endpoint {name}: {err}");
+                continue;
+            }
+        };
+        let channels = capture.default_output_config()?.channels();
+        candidates.push((endpoint_priority(&name, channels), id, name));
+    }
+    candidates.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then_with(|| left.2.cmp(&right.2))
+    });
+    if let Some((_, id, name)) = candidates.into_iter().next() {
+        return Ok(Some((id, name)));
+    }
+    Ok(None)
+}
+
 fn selected_device() -> String {
-    crate::ui_interface::get_option(OPTION_REMOTE_ONLY_AUDIO_DEVICE)
+    let configured = {
+        let value = crate::ui_interface::get_option(OPTION_REMOTE_ONLY_AUDIO_DEVICE);
+        if value.is_empty() {
+            Config::get_option(OPTION_REMOTE_ONLY_AUDIO_DEVICE)
+        } else {
+            value
+        }
+    };
+    let result = (|| {
+        let _com = ComApartment::new()?;
+        let device_enumerator = enumerator()?;
+        auto_selected_device(&device_enumerator)
+    })();
+    match result {
+        Ok(Some((id, name))) => {
+            log::debug!("Selected VB-CABLE endpoint automatically: {name} ({id})");
+            id
+        }
+        Ok(None) => configured,
+        Err(err) => {
+            log::warn!("Cannot enumerate VB-CABLE endpoints: {err}");
+            configured
+        }
+    }
 }
 
 fn worker_sender() -> &'static mpsc::Sender<Command> {
@@ -649,6 +712,7 @@ fn status_json(state: &WorkerState) -> ResultType<String> {
     }
     Ok(serde_json::json!({
         "devices": devices,
+        "available": auto_selected_device(&enumerator)?.is_some(),
         "selected": if state.audition_until.is_some() {
             state.preview_selected.clone()
         } else {
@@ -715,7 +779,7 @@ fn capture_device_for(endpoint: &IMMDevice) -> ResultType<cpal::Device> {
 }
 
 pub(crate) fn capture_device() -> ResultType<Option<cpal::Device>> {
-    let id = Config::get_option(OPTION_REMOTE_ONLY_AUDIO_DEVICE);
+    let id = selected_device();
     if id.is_empty() {
         return Ok(None);
     }
@@ -744,6 +808,16 @@ mod tests {
         ] {
             assert!(!supported_driver(name));
         }
+    }
+
+    #[test]
+    fn preferred_vb_cable_endpoint_names_are_ranked_first() {
+        assert_eq!(endpoint_priority("扬声器 (VB-Audio Virtual Cable)", 2), 0);
+        assert_eq!(endpoint_priority("Speakers (VB-Audio Virtual Cable)", 2), 0);
+        assert_eq!(endpoint_priority("Speakers (VB-Audio Virtual Cable)", 6), 2);
+        assert_eq!(endpoint_priority("CABLE In 16 Ch (VB-Audio Virtual Cable)", 16), 1);
+        assert_eq!(endpoint_priority("CABLE Input (VB-Audio Virtual Cable)", 2), 1);
+        assert_eq!(endpoint_priority("VB-Audio Cable A", 2), 2);
     }
 
     #[test]

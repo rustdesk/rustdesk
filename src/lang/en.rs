@@ -299,8 +299,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Install VB-CABLE to use remote-only audio.", "Install VB-CABLE to use remote-only audio."),
         ("Get VB-CABLE", "Get VB-CABLE"),
         ("remote-only-audio-tip", "Applies while a remote session is active. After disconnect, the physical output, volume, and mute state are restored."),
-        ("Audio preview", "Audio preview"),
-        ("Stop audio preview", "Stop audio preview"),
+        ("VB-CABLE is required for Remote only.", "VB-CABLE is required for Remote only."),
         ("Audio output will be restored automatically.", "Audio output will be restored automatically."),
     ].iter().cloned().collect();
 }

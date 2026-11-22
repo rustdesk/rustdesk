@@ -833,8 +833,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Install VB-CABLE to use remote-only audio.", "請安裝 VB-CABLE 以使用僅遠端音訊。"),
         ("Get VB-CABLE", "取得 VB-CABLE"),
         ("remote-only-audio-tip", "僅在遠端連線期間生效。中斷連線後還原連線前的實體輸出、音量和靜音狀態。"),
-        ("Audio preview", "試聽"),
-        ("Stop audio preview", "停止試聽"),
+        ("VB-CABLE is required for Remote only.", "僅遠端播放需要 VB-CABLE。"),
         ("Audio output will be restored automatically.", "本機音訊輸出會在沒有連線時自動還原。"),
     ].iter().cloned().collect();
 }

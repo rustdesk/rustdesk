@@ -13,52 +13,59 @@ class AudioOutput extends StatefulWidget {
   State<AudioOutput> createState() => _AudioOutputState();
 }
 
-class _AudioOutputState extends State<AudioOutput> {
-  List<Map<String, dynamic>> _devices = [];
+class _AudioOutputState extends State<AudioOutput> with WidgetsBindingObserver {
   String _selected = '';
   String _mode = 'normal';
   String? _error;
-  bool _auditioning = false;
-  int _connectedCount = 0;
-  bool _canRestore = false;
+  bool _hasCable = false;
   bool _busy = true;
+  bool _refreshing = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refresh();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refresh();
+    }
+  }
+
   Future<void> _refresh() async {
+    if (_refreshing) return;
+    _refreshing = true;
     try {
       final data =
           jsonDecode(await bind.mainGetAudioOutputs()) as Map<String, dynamic>;
       if (!mounted) return;
-      final devices = (data['devices'] as List? ?? const [])
-          .map((item) => Map<String, dynamic>.from(item as Map))
-          .toList();
+      final devices = data['devices'] as List? ?? const [];
       setState(() {
-        _devices = devices;
+        _hasCable = data['available'] == true || devices.isNotEmpty;
         _mode = (data['mode'] as String?) ?? 'normal';
         _selected = (data['selected'] as String?) ?? '';
-        _connectedCount = (data['connected_count'] as num?)?.toInt() ?? 0;
-        _auditioning = data['auditioning'] == true;
-        _canRestore = data['can_restore'] == true;
         final workerError = (data['error'] as String?) ?? '';
         _error = workerError.isEmpty ? null : workerError;
-        if (!_devices.any((d) => d['id'] == _selected)) {
-          _selected = _devices.isEmpty ? '' : _devices.first['id'] as String;
-        }
       });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
+      _refreshing = false;
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _setMode(String? mode) async {
-    if (mode == null || (mode == 'remote' && _selected.isEmpty)) return;
+    if (mode == null || (mode == 'remote' && !_hasCable)) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -74,104 +81,96 @@ class _AudioOutputState extends State<AudioOutput> {
     await _refresh();
   }
 
-  Future<void> _selectDevice(String? value) async {
-    if (value == null) return;
-    setState(() {
-      _selected = value;
-      _error = null;
-    });
-    if (_mode == 'remote' && _connectedCount > 0) {
-      setState(() => _busy = true);
-      try {
-        await bind.mainSetOption(
-            key: kOptionRemoteOnlyAudioDevice, value: value);
-      } catch (e) {
-        if (mounted) setState(() => _error = e.toString());
-      }
-      await _refresh();
-    }
-  }
-
-  Future<void> _toggleAudition() async {
-    if (_selected.isEmpty) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await bind.mainSetOption(
-        key: kOptionRemoteOnlyAudioPreview,
-        value: _auditioning ? '' : _selected,
-      );
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    }
-    await _refresh();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      RadioListTile<String>(
-        title: Text(translate('Normal')),
-        value: 'normal',
-        groupValue: _mode,
-        onChanged: _busy ? null : _setMode,
-      ),
-      RadioListTile<String>(
-        title: Text(translate('Remote only')),
-        value: 'remote',
-        groupValue: _mode,
-        onChanged: _busy || _selected.isEmpty ? null : _setMode,
-      ),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (_devices.isNotEmpty)
-            DropdownButton<String>(
-              isExpanded: true,
-              value: _selected.isEmpty ? null : _selected,
-              items: _devices
-                  .map((d) => DropdownMenuItem<String>(
-                      value: d['id'] as String,
-                      child: Text(d['name'] as String,
-                          overflow: TextOverflow.ellipsis)))
-                  .toList(),
-              onChanged: _busy ? null : _selectDevice,
+    final canRemote = _hasCable && _selected.isNotEmpty;
+    final textColor = disabledTextColor(context, true);
+    final errorColor = Theme.of(context).colorScheme.error.withOpacity(0.75);
+    return Focus(
+      canRequestFocus: false,
+      onFocusChange: (focused) {
+        if (focused) _refresh();
+      },
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _audioRadio(
+          context,
+          value: 'normal',
+          groupValue: _mode,
+          label: 'Normal',
+          onChanged: _busy ? null : _setMode,
+        ),
+        _audioRadio(
+          context,
+          value: 'remote',
+          groupValue: _mode,
+          label: 'Remote only',
+          onChanged: _busy || !canRemote ? null : _setMode,
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 15, top: 4),
+          child: Text(
+            translate(_hasCable
+                ? 'remote-only-audio-tip'
+                : 'VB-CABLE is required for Remote only.'),
+            style: TextStyle(fontSize: 15, color: textColor),
+          ),
+        ),
+        if (!_hasCable && !_busy)
+          Padding(
+            padding: const EdgeInsets.only(left: 15),
+            child: TextButton(
+              style: TextButton.styleFrom(padding: EdgeInsets.zero),
+              onPressed: () =>
+                  launchUrl(Uri.parse('https://vb-audio.com/Cable/')),
+              child: Text(translate('Get VB-CABLE')),
             ),
-          if (_devices.isNotEmpty)
-            TextButton(
-              onPressed: _busy || _connectedCount > 0 ? null : _toggleAudition,
-              child: Text(translate(
-                  _auditioning ? 'Stop audio preview' : 'Audio preview')),
+          ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 15),
+            child: SelectableText(
+              _error!,
+              style: TextStyle(fontSize: 15, color: errorColor),
             ),
-          Text(translate('remote-only-audio-tip')),
-          if (_devices.isEmpty && !_busy)
-            Text(translate('Install VB-CABLE to use remote-only audio.')),
-          if (_canRestore && _connectedCount == 0)
-            Text(translate('Audio output will be restored automatically.')),
-          Wrap(children: [
-            TextButton(
-                onPressed: () =>
-                    launchUrl(Uri.parse('https://vb-audio.com/Cable/')),
-                child: Text(translate('Get VB-CABLE'))),
-            TextButton(
-                onPressed: _busy
-                    ? null
-                    : () {
-                        setState(() {
-                          _busy = true;
-                          _error = null;
-                        });
-                        _refresh();
-                      },
-                child: Text(translate('Refresh'))),
-          ]),
-          if (_error != null)
-            SelectableText(_error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
-        ]),
-      ),
-    ]);
+          ),
+      ]),
+    );
   }
+}
+
+Widget _audioRadio<T>(
+  BuildContext context, {
+  required T value,
+  required T groupValue,
+  required String label,
+  required ValueChanged<T>? onChanged,
+}) {
+  return GestureDetector(
+    onTap: onChanged == null ? null : () => onChanged(value),
+    child: Padding(
+      padding: const EdgeInsets.only(left: 10),
+      child: Row(
+        children: [
+          Radio<T>(
+            value: value,
+            groupValue: groupValue,
+            onChanged: onChanged == null
+                ? null
+                : (next) {
+                    if (next != null) onChanged(next);
+                  },
+          ),
+          Expanded(
+            child: Text(
+              translate(label),
+              style: TextStyle(
+                fontSize: 15,
+                color: disabledTextColor(context, onChanged != null),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
