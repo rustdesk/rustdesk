@@ -447,12 +447,13 @@ extern "C" {
 
 /// Copy a linear BGRx/RGBx DMA-BUF frame into `out` as packed rows of `w * 4` bytes.
 /// A normal map of such a buffer covers only the PipeWire chunk size, so read through the fd.
+/// Returns `Ok(false)`, with `out` unchanged, for a frame that does not fit its dmabuf.
 fn read_linear_dmabuf(
     buf: &gst::Buffer,
     w: usize,
     h: usize,
     out: &mut Vec<u8>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<bool, Box<dyn Error>> {
     use hbb_common::libc;
     #[repr(C)]
     struct DmaBufSync {
@@ -514,9 +515,21 @@ fn read_linear_dmabuf(
     };
     let copied = sync(DMA_BUF_SYNC_READ).and_then(|_| {
         let src = unsafe { std::slice::from_raw_parts(map as *const u8, len) };
-        let packed = pack_rows(src, mem.get_offset() + plane_offset, stride, w * 4, h, out);
-        let ended = sync(DMA_BUF_SYNC_READ | DMA_BUF_SYNC_END);
-        packed.and(ended)
+        let start = mem.get_offset() + plane_offset;
+        let packed = pack_rows(src, start, stride, w * 4, h, out);
+        if !packed {
+            // Caps can carry a new size while the buffer is still from the old allocation,
+            // like the system-memory size mismatch (pipewire#985): drop the frame.
+            trace!(
+                "DMA-BUF frame of {}x{} at offset {} and stride {} does not fit {} bytes, dropping it!",
+                w,
+                h,
+                start,
+                stride,
+                len
+            );
+        }
+        sync(DMA_BUF_SYNC_READ | DMA_BUF_SYNC_END).map(|_| packed)
     });
     if unsafe { libc::munmap(map, len) } != 0 {
         let err = std::io::Error::last_os_error();
@@ -532,6 +545,7 @@ fn read_linear_dmabuf(
 }
 
 /// Copy `h` rows of `row_len` bytes that start `stride` bytes apart at `start` into `out`.
+/// Returns false, with `out` unchanged, when the rows do not fit in `src`.
 fn pack_rows(
     src: &[u8],
     start: usize,
@@ -539,21 +553,14 @@ fn pack_rows(
     row_len: usize,
     h: usize,
     out: &mut Vec<u8>,
-) -> Result<(), Box<dyn Error>> {
+) -> bool {
     // Checked: stride and offset come from the compositor, and a wrapped sum would pass the guard.
     let end = stride
         .checked_mul(h.saturating_sub(1))
         .and_then(|n| n.checked_add(start))
         .and_then(|n| n.checked_add(row_len));
     if stride < row_len || end.map_or(true, |end| end > src.len()) {
-        return Err(GStreamerError(format!(
-            "Frame of {} rows at offset {} and stride {} does not fit {} bytes",
-            h,
-            start,
-            stride,
-            src.len()
-        ))
-        .into());
+        return false;
     }
     out.clear();
     out.reserve(row_len * h);
@@ -561,7 +568,7 @@ fn pack_rows(
         let row = start + y * stride;
         out.extend_from_slice(&src[row..row + row_len]);
     }
-    Ok(())
+    true
 }
 
 /// GStreamer pixel format for a DRM fourcc name with the same byte order.
@@ -573,33 +580,96 @@ fn drm_format_pix_fmt(drm_format: Option<&str>) -> Option<&'static str> {
     }
 }
 
+fn is_dmabuf_sample(sample: &gst::Sample) -> bool {
+    sample
+        .get_caps()
+        .and_then(|caps| caps.get_features(0))
+        .map_or(false, |f| f.contains("memory:DMABuf"))
+}
+
+impl PipeWireRecorder {
+    // Same steps as `capture` for system memory, with the frame read through the dmabuf fd.
+    fn capture_dmabuf(&mut self, sample: gst::Sample) -> Result<PixelProvider<'_>, Box<dyn Error>> {
+        let cap = sample
+            .get_caps()
+            .ok_or("Failed get caps")?
+            .get_structure(0)
+            .ok_or("Failed to get structure")?;
+        let w: i32 = cap.get_value("width")?.get_some()?;
+        let h: i32 = cap.get_value("height")?.get_some()?;
+        let w = w as usize;
+        let h = h as usize;
+        let drm_format = cap.get::<&str>("drm-format")?;
+        let pix_fmt = drm_format_pix_fmt(drm_format).ok_or_else(|| {
+            GStreamerError(format!("Unsupported DMA-BUF format {:?}", drm_format))
+        })?;
+
+        let buf = sample
+            .get_buffer_owned()
+            .ok_or_else(|| GStreamerError("Failed to get owned buffer.".into()))?;
+        let mut crop = buf
+            .get_meta::<gstreamer_video::VideoCropMeta>()
+            .map(|m| m.get_rect());
+        // only crop if necessary
+        if Some((0, 0, w as u32, h as u32)) == crop {
+            crop = None;
+        }
+        if !read_linear_dmabuf(&buf, w, h, &mut self.dmabuf_frame)? {
+            return Ok(PixelProvider::NONE);
+        }
+        if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, &self.dmabuf_frame) {
+            return Ok(PixelProvider::NONE);
+        }
+        let (width, height, data) = if let Some((x_off, y_off, w_crop, h_crop)) = crop {
+            let x_off = x_off as usize;
+            let y_off = y_off as usize;
+            let w_crop = w_crop as usize;
+            let h_crop = h_crop as usize;
+            self.buffer_cropped.clear();
+            // BGRx is 4 bytes per pixel
+            self.buffer_cropped.reserve(w_crop * h_crop * 4);
+            for y in y_off..(y_off + h_crop) {
+                let i = 4 * (w * y + x_off);
+                self.buffer_cropped
+                    .extend(&self.dmabuf_frame[i..i + 4 * w_crop]);
+            }
+            (w_crop, h_crop, self.buffer_cropped.as_slice())
+        } else {
+            (w, h, self.dmabuf_frame.as_slice())
+        };
+        match pix_fmt {
+            "BGRx" => Ok(PixelProvider::BGR0(width, height, data)),
+            "RGBx" => Ok(PixelProvider::RGB0(width, height, data)),
+            _ => Err(Box::new(GStreamerError(format!(
+                "Unreachable! Unknown pix_fmt, {}",
+                pix_fmt
+            )))),
+        }
+    }
+}
+
 impl Recorder for PipeWireRecorder {
     fn capture(&mut self, timeout_ms: u64) -> Result<PixelProvider<'_>, Box<dyn Error>> {
         if let Some(sample) = self
             .appsink
             .try_pull_sample(gst::ClockTime::from_mseconds(timeout_ms))
         {
-            let caps = sample.get_caps().ok_or("Failed get caps")?;
-            let is_dmabuf = caps
-                .get_features(0)
-                .map_or(false, |f| f.contains("memory:DMABuf"));
-            let cap = caps.get_structure(0).ok_or("Failed to get structure")?;
+            if is_dmabuf_sample(&sample) {
+                return self.capture_dmabuf(sample);
+            }
+            let cap = sample
+                .get_caps()
+                .ok_or("Failed get caps")?
+                .get_structure(0)
+                .ok_or("Failed to get structure")?;
             let w: i32 = cap.get_value("width")?.get_some()?;
             let h: i32 = cap.get_value("height")?.get_some()?;
             let w = w as usize;
             let h = h as usize;
-            self.pix_fmt = if is_dmabuf {
-                let drm_format = cap.get::<&str>("drm-format")?;
-                drm_format_pix_fmt(drm_format)
-                    .ok_or_else(|| {
-                        GStreamerError(format!("Unsupported DMA-BUF format {:?}", drm_format))
-                    })?
-                    .to_string()
-            } else {
-                cap.get::<&str>("format")?
-                    .ok_or("Failed to get pixel format")?
-                    .to_string()
-            };
+            self.pix_fmt = cap
+                .get::<&str>("format")?
+                .ok_or("Failed to get pixel format")?
+                .to_string();
 
             let buf = sample
                 .get_buffer_owned()
@@ -611,23 +681,13 @@ impl Recorder for PipeWireRecorder {
             if Some((0, 0, w as u32, h as u32)) == crop {
                 crop = None;
             }
-            let buf = if is_dmabuf {
-                read_linear_dmabuf(&buf, w, h, &mut self.dmabuf_frame)?;
-                None
-            } else {
-                Some(
-                    buf.into_mapped_buffer_readable()
-                        .map_err(|_| GStreamerError("Failed to map buffer.".into()))?,
-                )
-            };
-            let data: &[u8] = match &buf {
-                Some(b) => b.as_slice(),
-                None => &self.dmabuf_frame,
-            };
-            if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, data) {
+            let buf = buf
+                .into_mapped_buffer_readable()
+                .map_err(|_| GStreamerError("Failed to map buffer.".into()))?;
+            if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, buf.as_slice()) {
                 return Ok(PixelProvider::NONE);
             }
-            let buf_size = data.len();
+            let buf_size = buf.get_size();
             // BGRx is 4 bytes per pixel
             if buf_size != (w * h * 4) {
                 // for some reason the width and height of the caps do not guarantee correct buffer
@@ -649,6 +709,7 @@ impl Recorder for PipeWireRecorder {
                     let w_crop = w_crop as usize;
                     let h_crop = h_crop as usize;
                     self.buffer_cropped.clear();
+                    let data = buf.as_slice();
                     // BGRx is 4 bytes per pixel
                     self.buffer_cropped.reserve(w_crop * h_crop * 4);
                     for y in y_off..(y_off + h_crop) {
@@ -662,20 +723,21 @@ impl Recorder for PipeWireRecorder {
                     self.height = h;
                 }
                 self.is_cropped = crop.is_some();
-                self.buffer = buf;
+                self.buffer = Some(buf);
             }
         } else {
             return Ok(PixelProvider::NONE);
         }
-        if self.buffer.is_none() && self.dmabuf_frame.is_empty() {
+        if self.buffer.is_none() {
             return Err(Box::new(GStreamerError("No buffer available!".into())));
         }
         let buf = if self.is_cropped {
             self.buffer_cropped.as_slice()
-        } else if let Some(b) = self.buffer.as_ref() {
-            b.as_slice()
         } else {
-            self.dmabuf_frame.as_slice()
+            self.buffer
+                .as_ref()
+                .ok_or("Failed to get buffer as ref")?
+                .as_slice()
         };
         match self.pix_fmt.as_str() {
             "BGRx" => Ok(PixelProvider::BGR0(self.width, self.height, buf)),
@@ -2040,17 +2102,20 @@ mod tests {
         src[3..11].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
         src[15..23].copy_from_slice(&[9, 10, 11, 12, 13, 14, 15, 16]);
         let mut out = Vec::new();
-        pack_rows(&src, 3, 12, 8, 2, &mut out).unwrap();
+        assert!(pack_rows(&src, 3, 12, 8, 2, &mut out));
         assert_eq!(out, (1..=16).collect::<Vec<u8>>());
     }
 
     #[test]
-    fn a_dmabuf_too_small_for_its_stride_is_an_error() {
+    fn a_dmabuf_too_small_for_its_stride_is_dropped() {
         let mut out = Vec::new();
-        assert!(pack_rows(&[0; 20], 0, 12, 8, 2, &mut out).is_ok());
-        assert!(pack_rows(&[0; 19], 0, 12, 8, 2, &mut out).is_err());
+        assert!(pack_rows(&[1; 20], 0, 12, 8, 2, &mut out));
+        let frame = out.clone();
+        assert!(!pack_rows(&[2; 19], 0, 12, 8, 2, &mut out));
         // A stride whose frame end overflows usize must not wrap into a small, passing size.
-        assert!(pack_rows(&[0; 64], 0, usize::MAX / 2, 8, 3, &mut out).is_err());
+        assert!(!pack_rows(&[2; 64], 0, usize::MAX / 2, 8, 3, &mut out));
+        // A dropped frame leaves the last good one in place.
+        assert_eq!(out, frame);
     }
 
     #[test]
