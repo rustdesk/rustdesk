@@ -519,9 +519,13 @@ fn read_linear_dmabuf(
         packed.and(ended)
     });
     if unsafe { libc::munmap(map, len) } != 0 {
-        warn!(
+        let err = std::io::Error::last_os_error();
+        // Runs once per frame, so a persistent failure must not write a line per frame.
+        hbb_common::throttled_log!(
+            Duration::from_secs(60),
+            warn,
             "[gstreamer] Failed to unmap DMA-BUF frame: {}",
-            std::io::Error::last_os_error()
+            err
         );
     }
     copied
