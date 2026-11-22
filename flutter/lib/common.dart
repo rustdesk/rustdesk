@@ -9,6 +9,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
+import 'package:flutter_hbb/common/multi_display_placement.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
@@ -1925,6 +1926,40 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
           k: windowFramePrefix + windowType.name,
           v: getPeerPos(peerId));
     }
+  }
+  if (windowType == WindowType.RemoteDesktop) {
+    await _saveRemoteDisplayScreens(windowId);
+  }
+}
+
+Future<void> _saveRemoteDisplayScreens(int windowId) async {
+  final Rect frame;
+  try {
+    frame = await WindowController.fromWindowId(windowId).getFrame();
+  } catch (e) {
+    debugPrint('Failed to read remote window frame: $e');
+    return;
+  }
+  final screens = await getScreenRectList();
+  final screen = screenForWindow(
+    [
+      for (final s in screens) DisplayRect(s.left, s.top, s.right, s.bottom),
+    ],
+    DisplayRect(frame.left, frame.top, frame.right, frame.bottom),
+  );
+  if (screen == null) return;
+  final raw = await DesktopMultiWindow.invokeMethod(
+      windowId, kWindowEventGetRemoteDisplayList, null);
+  if (raw is! String || raw.isEmpty) return;
+  final origin = encodeScreenOrigin(screen.left, screen.top);
+  for (final part in raw.split(';')) {
+    final entry = parseRemoteDisplayEntry(part);
+    if (entry == null) continue;
+    bind.mainSetPeerFlutterOptionSync(
+      id: entry.peerId,
+      k: remoteDisplayScreenKey(entry.display),
+      v: origin,
+    );
   }
 }
 

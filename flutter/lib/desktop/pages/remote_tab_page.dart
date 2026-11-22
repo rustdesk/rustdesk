@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/multi_display_placement.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/input_model.dart';
@@ -505,6 +506,26 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           .map((e) => e.key)
           .toList()
           .join(',');
+    } else if (call.method == kWindowEventGetRemoteDisplayList) {
+      return tabController.state.value.tabs.map((e) {
+        final page = e.page;
+        if (page is! RemotePage) return null;
+        var peerReady = false;
+        var currentDisplay = -1;
+        try {
+          final ffi = page.ffi;
+          peerReady = ffi.ffiModel.pi.isSet.isTrue;
+          currentDisplay = ffi.ffiModel.pi.currentDisplay;
+        } catch (_) {}
+        return remoteDisplayEntry(
+          peerId: e.key,
+          display: shownRemoteDisplay(
+            peerReady: peerReady,
+            currentDisplay: currentDisplay,
+            initialDisplay: page.display,
+          ),
+        );
+      }).whereType<String>().join(';');
     } else if (call.method == kWindowEventGetSessionIdList) {
       return tabController.state.value.tabs
           .map((e) => '${e.key},${(e.page as RemotePage).ffi.sessionId}')

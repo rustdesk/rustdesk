@@ -39,6 +39,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:vector_math/vector_math.dart' show Vector2;
 
 import '../common.dart';
+import '../common/multi_display_placement.dart';
 import '../utils/image.dart' as img;
 import '../common/widgets/dialog.dart';
 import 'input_model.dart';
@@ -1549,12 +1550,24 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
-    // to-do: peer currentDisplay is the primary display, but the primary display may not be the first display.
-    // local primary display also may not be the first display.
-    //
-    // 0 is assumed to be the primary display here, for now.
+    final length = _pi.displays.length < screenRectList.length
+        ? _pi.displays.length
+        : screenRectList.length;
+    final placement = assignRemoteDisplaysToLocalScreens(
+      remoteCount: length,
+      localScreens: [
+        for (final screen in screenRectList)
+          DisplayRect(screen.left, screen.top, screen.right, screen.bottom),
+      ],
+      savedOrigins: _savedRemoteDisplayOrigins(peerId, length),
+    );
+    if (placement.isEmpty || placement[0] == null) {
+      return;
+    }
+    Rect toRect(DisplayRect screen) =>
+        Rect.fromLTRB(screen.left, screen.top, screen.right, screen.bottom);
 
-    // move to the first display and set fullscreen
+    // This window keeps remote display 0. Later windows open the rest.
     bind.sessionSwitchDisplay(
       isDesktop: isDesktop,
       sessionId: sessionId,
@@ -1566,15 +1579,23 @@ class FfiModel with ChangeNotifier {
     } catch (e) {
       //
     }
-    await tryMoveToScreenAndSetFullscreen(screenRectList[0]);
+    await tryMoveToScreenAndSetFullscreen(toRect(placement[0]!));
 
-    final length = _pi.displays.length < screenRectList.length
-        ? _pi.displays.length
-        : screenRectList.length;
-    for (var i = 1; i < length; i++) {
-      openMonitorInNewTabOrWindow(i, peerId, _pi,
-          screenRect: screenRectList[i]);
+    for (var i = 1; i < placement.length; i++) {
+      final rect = placement[i];
+      if (rect == null) continue;
+      openMonitorInNewTabOrWindow(i, peerId, _pi, screenRect: toRect(rect));
     }
+  }
+
+  Map<int, ScreenOrigin> _savedRemoteDisplayOrigins(String peerId, int count) {
+    final saved = <int, ScreenOrigin>{};
+    for (var i = 0; i < count; i++) {
+      final origin = decodeScreenOrigin(bind.mainGetPeerFlutterOptionSync(
+          id: peerId, k: remoteDisplayScreenKey(i)));
+      if (origin != null) saved[i] = origin;
+    }
+    return saved;
   }
 
   tryShowAndroidActionsOverlay({int delayMSecs = 10}) {
