@@ -1076,6 +1076,45 @@ pub fn check_software_update() {
     }
 }
 
+/// Source repository that publishes the builds this client updates from.
+///
+/// Every URL used for checking and downloading updates is derived from these two
+/// values, so the client can never fall back to the upstream repository. Change
+/// them in one place to move the whole update channel.
+pub const UPDATE_REPO_OWNER: &str = "recallmc";
+pub const UPDATE_REPO_NAME: &str = "rustdesk";
+
+/// `owner/repo` of the update source.
+pub fn update_repo_slug() -> String {
+    format!("{}/{}", UPDATE_REPO_OWNER, UPDATE_REPO_NAME)
+}
+
+/// Release page URL for a release id such as `v1.5.3`.
+pub fn update_release_page_url(release_id: &str) -> String {
+    format!(
+        "https://github.com/{}/releases/tag/{}",
+        update_repo_slug(),
+        release_id
+    )
+}
+
+/// Prefix shared by every download asset of a release.
+pub fn update_asset_url_prefix(release_id: &str) -> String {
+    format!(
+        "https://github.com/{}/releases/download/{}/",
+        update_repo_slug(),
+        release_id
+    )
+}
+
+/// GitHub API endpoint returning the newest published release of the update source.
+pub fn update_latest_release_api_url() -> String {
+    format!(
+        "https://api.github.com/repos/{}/releases/latest",
+        update_repo_slug()
+    )
+}
+
 pub(crate) fn release_id_from_update_url(update_url: &str) -> ResultType<String> {
     let url = url::Url::parse(update_url)?;
     if url.scheme() != "https" || url.host_str() != Some("github.com") {
@@ -1106,10 +1145,19 @@ pub(crate) fn release_id_from_update_url(update_url: &str) -> ResultType<String>
     };
     let segments = segments.collect::<Vec<_>>();
     let release_id = match segments.as_slice() {
-        ["rustdesk", "rustdesk", "releases", "tag", release_id] => *release_id,
-        ["rustdesk", "rustdesk", "releases", "tag", release_id, ""] => *release_id,
+        [owner, repo, "releases", "tag", release_id]
+            if *owner == UPDATE_REPO_OWNER && *repo == UPDATE_REPO_NAME =>
+        {
+            *release_id
+        }
+        [owner, repo, "releases", "tag", release_id, ""]
+            if *owner == UPDATE_REPO_OWNER && *repo == UPDATE_REPO_NAME =>
+        {
+            *release_id
+        }
         _ => bail!(
-            "Update URL is not a RustDesk release tag URL: {}",
+            "Update URL is not a release tag URL of {}: {}",
+            update_repo_slug(),
             update_url
         ),
     };
@@ -1159,9 +1207,7 @@ fn clear_software_update_url() {
     *update_url = String::new();
 }
 
-fn process_software_update_check_response(bytes: Bytes) -> ResultType<()> {
-    let resp: hbb_common::VersionCheckResponse = serde_json::from_slice(&bytes)?;
-    let response_url = resp.url;
+fn apply_software_update_url(response_url: String) -> ResultType<()> {
     let release_id = release_id_from_update_url(&response_url)?;
     let latest_release_version = display_version_from_release_id(&release_id)?;
 
@@ -1182,26 +1228,47 @@ fn process_software_update_check_response(bytes: Bytes) -> ResultType<()> {
     Ok(())
 }
 
-// No need to check `danger_accept_invalid_cert` for now.
-// Because the url is always `https://api.rustdesk.com/version/latest`.
+// The update channel is the repository configured by `UPDATE_REPO_OWNER` / `UPDATE_REPO_NAME`.
+// We ask that repository's releases API directly instead of the official endpoint, so a build made
+// from a fork can never be sent back to the upstream release feed.
 #[tokio::main(flavor = "current_thread")]
 pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
-    let (request, url) =
-        hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+    let result = fetch_latest_release_tag()
+        .await
+        .and_then(|release_id| apply_software_update_url(update_release_page_url(&release_id)));
+    if result.is_err() {
+        clear_software_update_url();
+    }
+    result
+}
+
+async fn fetch_latest_release_tag() -> ResultType<String> {
+    let url = update_latest_release_api_url();
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(&url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
     let is_tls_not_cached = tls_type.is_none();
     let tls_type = tls_type.unwrap_or(TlsType::Rustls);
     let client = create_http_client_async(tls_type, false);
-    let latest_release_response: ResultType<_> = match client.post(&url).json(&request).send().await
+    let latest_release_response: ResultType<_> = match client
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "rustdesk-update-check")
+        .send()
+        .await
     {
         Ok(resp) => Ok((tls_type, resp)),
         Err(err) => {
             if is_tls_not_cached && err.is_request() {
                 let tls_type = TlsType::NativeTls;
                 let client = create_http_client_async(tls_type, false);
-                match client.post(&url).json(&request).send().await {
+                match client
+                    .get(&url)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "rustdesk-update-check")
+                    .send()
+                    .await
+                {
                     Ok(resp) => Ok((tls_type, resp)),
                     Err(err) => Err(err.into()),
                 }
@@ -1223,12 +1290,19 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
             }
         }
         Err(err) => Err(err),
-    };
-    let result = response_bytes.and_then(process_software_update_check_response);
-    if result.is_err() {
-        clear_software_update_url();
+    }?;
+    let json: Value = serde_json::from_slice(&response_bytes)
+        .with_context(|| format!("Invalid update check response from {}", url))?;
+    let release_id = json
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    if release_id.is_empty() {
+        bail!("Update source {} returned no release tag", url);
     }
-    result
+    Ok(release_id)
 }
 
 #[inline]
@@ -3129,34 +3203,51 @@ mod tests {
 
     #[test]
     fn parses_stable_rustdesk_release_url() {
-        let update_url = "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6";
+        let update_url = update_release_page_url("v1.4.6");
+        assert_eq!(
+            update_url,
+            format!(
+                "https://github.com/{}/releases/tag/v1.4.6",
+                update_repo_slug()
+            )
+        );
 
-        assert_eq!(release_id_from_update_url(update_url).unwrap(), "v1.4.6");
+        assert_eq!(release_id_from_update_url(&update_url).unwrap(), "v1.4.6");
         assert_eq!(display_version_from_release_id("v1.4.6").unwrap(), "1.4.6");
         assert_eq!(
             release_id_from_update_url(&format!("{update_url}/")).unwrap(),
             "v1.4.6"
         );
+        assert!(update_latest_release_api_url().ends_with("/releases/latest"));
+        assert!(update_asset_url_prefix("v1.4.6").ends_with("/releases/download/v1.4.6/"));
     }
 
     #[test]
     fn rejects_untrusted_release_urls_and_unstable_versions() {
+        let slug = update_repo_slug();
+        let other_owner = format!("{}-mirror", UPDATE_REPO_OWNER);
+        let other_repo = format!("{}-mirror", UPDATE_REPO_NAME);
         for update_url in [
-            "http://github.com/rustdesk/rustdesk/releases/tag/v1.4.6",
-            "https://github.com:8443/rustdesk/rustdesk/releases/tag/v1.4.6",
-            "https://github.com:443/rustdesk/rustdesk/releases/tag/v1.4.6",
-            "https://user@github.com/rustdesk/rustdesk/releases/tag/v1.4.6",
-            "https://example.com/rustdesk/rustdesk/releases/tag/v1.4.6",
-            "https://github.com/other/rustdesk/releases/tag/v1.4.6",
-            "https://github.com/rustdesk/other/releases/tag/v1.4.6",
-            "https://github.com/rustdesk/rustdesk/releases/download/v1.4.6/rustdesk.exe",
-            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6?x=1",
-            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6#asset",
-            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6/extra",
-            "https://github.com/rustdesk/rustdesk/releases/tag/v1%2F4%2F6",
-            "https://github.com/rustdesk/rustdesk/releases/tag/%2e%2e",
+            format!("http://github.com/{slug}/releases/tag/v1.4.6"),
+            format!("https://github.com:8443/{slug}/releases/tag/v1.4.6"),
+            format!("https://github.com:443/{slug}/releases/tag/v1.4.6"),
+            format!("https://user@github.com/{slug}/releases/tag/v1.4.6"),
+            "https://example.com/rustdesk/rustdesk/releases/tag/v1.4.6".to_owned(),
+            format!("https://github.com/{other_owner}/{UPDATE_REPO_NAME}/releases/tag/v1.4.6"),
+            format!("https://github.com/{UPDATE_REPO_OWNER}/{other_repo}/releases/tag/v1.4.6"),
+            // The upstream repository must not be accepted once the channel is moved.
+            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6".to_owned(),
+            format!("https://github.com/{slug}/releases/download/v1.4.6/rustdesk.exe"),
+            format!("https://github.com/{slug}/releases/tag/v1.4.6?x=1"),
+            format!("https://github.com/{slug}/releases/tag/v1.4.6#asset"),
+            format!("https://github.com/{slug}/releases/tag/v1.4.6/extra"),
+            format!("https://github.com/{slug}/releases/tag/v1%2F4%2F6"),
+            format!("https://github.com/{slug}/releases/tag/%2e%2e"),
         ] {
-            assert!(release_id_from_update_url(update_url).is_err());
+            assert!(
+                release_id_from_update_url(&update_url).is_err(),
+                "accepted {update_url:?}"
+            );
         }
         for release_id in ["v1.4.6-rc1", "nightly", "v9223372036854775807.1.1"] {
             assert!(display_version_from_release_id(release_id).is_err());

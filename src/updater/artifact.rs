@@ -106,8 +106,7 @@ pub(super) fn verified_update_artifact_from_release_page_url(
 ) -> ResultType<VerifiedUpdateArtifact> {
     let release_id = release_id_from_update_url(update_url)?;
     let display_version = display_version_from_release_id(&release_id)?;
-    let expected_artifact_url_prefix =
-        format!("https://github.com/rustdesk/rustdesk/releases/download/{release_id}/");
+    let expected_artifact_url_prefix = crate::common::update_asset_url_prefix(&release_id);
     let metadata_url = format!("{expected_artifact_url_prefix}rustdesk-update.json");
     let signature_url = format!("{metadata_url}.sig");
     let metadata_bytes = fetch_update_sidecar_bytes(&metadata_url)?;
@@ -177,8 +176,8 @@ pub fn get_update_download_file_from_url(url: &str) -> Option<PathBuf> {
     let tag = segments.next()?;
     let filename = segments.next()?;
 
-    if owner != "rustdesk"
-        || repo != "rustdesk"
+    if owner != crate::common::UPDATE_REPO_OWNER
+        || repo != crate::common::UPDATE_REPO_NAME
         || releases != "releases"
         || download != "download"
         || tag.is_empty()
@@ -213,10 +212,10 @@ mod tests {
 
     #[test]
     fn update_download_file_accepts_expected_github_asset_urls() {
-        let file = get_update_download_file_from_url(
-            "https://github.com/rustdesk/rustdesk/releases/download/1.4.0/rustdesk-1.4.0-x86_64.dmg",
-        )
-        .expect("valid GitHub release asset URL");
+        let prefix = crate::common::update_asset_url_prefix("1.4.0");
+        let file =
+            get_update_download_file_from_url(&format!("{prefix}rustdesk-1.4.0-x86_64.dmg"))
+                .expect("valid GitHub release asset URL");
 
         assert_eq!(
             file.file_name().and_then(|name| name.to_str()),
@@ -226,20 +225,29 @@ mod tests {
 
     #[test]
     fn update_download_file_rejects_untrusted_or_malformed_urls() {
+        let slug = crate::common::update_repo_slug();
+        let other_owner = format!("{}-mirror", crate::common::UPDATE_REPO_OWNER);
+        let other_repo = format!("{}-mirror", crate::common::UPDATE_REPO_NAME);
         for url in [
-            "http://github.com/rustdesk/rustdesk/releases/download/1/rustdesk.exe",
-            "https://example.com/rustdesk.exe",
-            "https://github.com/other/project/releases/download/1/rustdesk.exe",
-            "https://github.com/rustdesk/rustdesk/releases/download/1/",
-            "https://github.com/rustdesk/rustdesk/releases/download/1/nested/rustdesk.exe",
-            "https://github.com/rustdesk/rustdesk/releases/download/1/C:rustdesk.exe",
-            "https://user@github.com/rustdesk/rustdesk/releases/download/1/rustdesk.exe",
-            "https://github.com:443/rustdesk/rustdesk/releases/download/1/rustdesk.exe",
-            "https://github.com/rustdesk/rustdesk/releases/download/1/rustdesk.exe?download=1",
-            "https://github.com/rustdesk/rustdesk/releases/download/1/rustdesk.exe#download",
-            "not a url",
+            format!("http://github.com/{slug}/releases/download/1/rustdesk.exe"),
+            "https://example.com/rustdesk.exe".to_owned(),
+            format!("https://github.com/{other_owner}/rustdesk/releases/download/1/rustdesk.exe"),
+            format!("https://github.com/{slug}/{other_repo}/releases/download/1/rustdesk.exe"),
+            // The upstream repository must not be accepted once the channel is moved.
+            "https://github.com/rustdesk/rustdesk/releases/download/1/rustdesk.exe".to_owned(),
+            format!("https://github.com/{slug}/releases/download/1/"),
+            format!("https://github.com/{slug}/releases/download/1/nested/rustdesk.exe"),
+            format!("https://github.com/{slug}/releases/download/1/C:rustdesk.exe"),
+            format!("https://user@github.com/{slug}/releases/download/1/rustdesk.exe"),
+            format!("https://github.com:443/{slug}/releases/download/1/rustdesk.exe"),
+            format!("https://github.com/{slug}/releases/download/1/rustdesk.exe?download=1"),
+            format!("https://github.com/{slug}/releases/download/1/rustdesk.exe#download"),
+            "not a url".to_owned(),
         ] {
-            assert!(get_update_download_file_from_url(url).is_none(), "{url}");
+            assert!(
+                get_update_download_file_from_url(&url).is_none(),
+                "{url}"
+            );
         }
     }
 }

@@ -1282,7 +1282,7 @@ jobs:
             --artifact macos x86_64 dmg "./artifacts/rustdesk-${VERSION}-x86_64.dmg" \
             --version "$VERSION" --release-id "$TAG_NAME" \
             --package-id rustdesk \
-            --release-base-url https://github.com/rustdesk/rustdesk/releases/download \
+            --release-base-url https://github.com/${{ github.repository }}/releases/download \
             --published-at "$(git log -1 --format=%cI)" \
             --metadata-out ./rustdesk-update.json \
             --signature-out ./rustdesk-update.json.sig
@@ -1303,7 +1303,7 @@ jobs:
             --artifact "./artifacts/rustdesk-${VERSION}-x86_64.dmg" \
             --version "$VERSION" --release-id "$TAG_NAME" \
             --package-id rustdesk \
-            --release-base-url https://github.com/rustdesk/rustdesk/releases/download
+            --release-base-url https://github.com/${{ github.repository }}/releases/download
 
       - name: Upload signed update artifacts
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1

@@ -2520,20 +2520,38 @@ impl Connection {
 
     // Auto Login: the password and Return the client would otherwise type itself, typed only if a
     // check right before finds the logon or lock screen.
+    //
+    // The client sends this as soon as the peer info arrives, which can be before Windows has
+    // finished painting the logon UI. A single check therefore dropped the password often enough
+    // to look like "auto login does nothing", so we poll for a short while before giving up.
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     async fn type_auto_login_password(&self, password: String) {
-        // A peer can send this at any rate, hence the throttled logs.
-        let at_logon_screen = tokio::task::spawn_blocking(crate::platform::is_logon_screen)
-            .await
-            .unwrap_or_else(|e| {
-                hbb_common::throttled_log!(
-                    Duration::from_secs(60),
-                    error,
-                    "Failed to check the logon screen: {}",
-                    e
-                );
-                false
-            });
+        if password.is_empty() {
+            log::warn!("Auto login dropped: the stored OS password is empty");
+            return;
+        }
+        const MAX_ATTEMPTS: usize = 6;
+        const RETRY_DELAY: Duration = Duration::from_millis(500);
+        let mut at_logon_screen = false;
+        for attempt in 0..MAX_ATTEMPTS {
+            at_logon_screen = tokio::task::spawn_blocking(crate::platform::is_logon_screen)
+                .await
+                .unwrap_or_else(|e| {
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(60),
+                        error,
+                        "Failed to check the logon screen: {}",
+                        e
+                    );
+                    false
+                });
+            if at_logon_screen {
+                break;
+            }
+            if attempt + 1 < MAX_ATTEMPTS {
+                sleep(RETRY_DELAY).await;
+            }
+        }
         if !at_logon_screen {
             hbb_common::throttled_log!(
                 Duration::from_secs(60),

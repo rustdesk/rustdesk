@@ -27,6 +27,15 @@ const METADATA_SCHEMA_VERSION: u32 = 1;
 const SIGNATURE_SCHEMA_VERSION: u32 = 1;
 const SIGNATURE_ALGORITHM: &str = "ed25519";
 
+// Update metadata (`rustdesk-update.json` + `.sig`) is Ed25519 signed and checked against the
+// keys below, so a build only accepts updates that were signed for it.
+//
+// A fork that publishes its own releases MUST replace this entry with its own public key,
+// otherwise every release it publishes is rejected by the signature check. Generate the pair,
+// store the seed as the repository secret `RUSTDESK_UPDATE_ED25519_SEED` and the public key as
+// the repository variable `RUSTDESK_UPDATE_ED25519_PUBLIC_KEY`, then paste that same public key
+// here. `python res/update/generate_update_metadata.py check-key` fails the release workflow if
+// the embedded key, the variable and the seed disagree.
 const TRUSTED_UPDATE_KEYS: &[TrustedUpdateKey] = &[TrustedUpdateKey {
     key_id: "2026-ed25519-main",
     algorithm: SIGNATURE_ALGORITHM,

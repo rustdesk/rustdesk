@@ -3037,12 +3037,18 @@ impl LoginConfigHandler {
 
     /// Check if the client should auto login.
     /// Return password if the client should auto login, otherwise return empty string.
+    ///
+    /// Auto login depends only on the user enabling it for this peer and on a password
+    /// being stored. It deliberately does not depend on `lock-after-session-end`: a
+    /// machine can sit at the logon screen after a reboot without that option ever
+    /// being involved, and requiring it made the "Auto Login" checkbox look inert.
+    /// Typing the password outside the logon or lock screen is already refused by the
+    /// controlled side, so the extra condition bought nothing.
     pub fn should_auto_login(&self) -> String {
-        let l = self.lock_after_session_end.v;
-        let a = !self.get_option("auto-login").is_empty();
-        let p = self.get_option("os-password");
-        if !p.is_empty() && l && a {
-            p
+        let enabled = !self.get_option("auto-login").is_empty();
+        let password = self.get_option("os-password");
+        if enabled && !password.is_empty() {
+            password
         } else {
             "".to_owned()
         }
