@@ -1032,6 +1032,10 @@ pub fn main_get_error() -> String {
 
 pub fn main_set_option(key: String, value: String) -> hbb_common::anyhow::Result<()> {
     #[cfg(windows)]
+    if key == keys::OPTION_REMOTE_ONLY_AUDIO_PREVIEW {
+        return crate::platform::windows::audio_output::preview_device(&value);
+    }
+    #[cfg(windows)]
     if key == keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE {
         return crate::platform::windows::audio_output::set_device(&value);
     }

@@ -43,6 +43,7 @@ pub const OPTION_ENABLE_TERMINAL: &str = "enable-terminal";
 pub const OPTION_TERMINAL_PERSISTENT: &str = "terminal-persistent";
 pub const OPTION_ENABLE_AUDIO: &str = "enable-audio";
 pub const OPTION_REMOTE_ONLY_AUDIO_DEVICE: &str = "remote-only-audio-device";
+pub const OPTION_REMOTE_ONLY_AUDIO_PREVIEW: &str = "remote-only-audio-preview";
 pub const OPTION_ENABLE_TUNNEL: &str = "enable-tunnel";
 pub const OPTION_ENABLE_REMOTE_RESTART: &str = "enable-remote-restart";
 pub const OPTION_ENABLE_RECORD_SESSION: &str = "enable-record-session";

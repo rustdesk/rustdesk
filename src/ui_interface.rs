@@ -1453,15 +1453,15 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                             }
                             #[cfg(feature = "flutter")]
                             Ok(Some(ipc::Data::VideoConnCount(Some(n)))) => {
-                                let was_active = video_conn_count > 0;
                                 video_conn_count = n;
+                            }
+                            #[cfg(feature = "flutter")]
+                            Ok(Some(ipc::Data::AudioConnCount(Some(n)))) => {
                                 #[cfg(target_os = "windows")]
-                                if !crate::common::is_server() && (n > 0 || was_active) {
-                                    allow_err!(
-                                        crate::platform::windows::audio_output::set_remote_connection_state(
-                                            n > 0
-                                        )
-                                    );
+                                if crate::common::is_server()
+                                    || !crate::common::check_process("--server", false)
+                                {
+                                    crate::platform::windows::audio_output::set_remote_connection_state(n);
                                 }
                             }
                             Ok(Some(ipc::Data::OnlineStatus(Some((mut x, _c))))) => {
@@ -1510,6 +1510,8 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                         c.send(&ipc::Data::Config(("temporary-password".to_owned(), None))).await.ok();
                         #[cfg(feature = "flutter")]
                         c.send(&ipc::Data::VideoConnCount(None)).await.ok();
+                        #[cfg(feature = "flutter")]
+                        c.send(&ipc::Data::AudioConnCount(None)).await.ok();
                         c.send(&ipc::Data::ControlPermissionsRemoteModify(None)).await.ok();
                         #[cfg(target_os = "windows")]
                         c.send(&ipc::Data::FileTransferEnabledState(None)).await.ok();

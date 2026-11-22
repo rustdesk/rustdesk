@@ -496,6 +496,8 @@ pub enum Data {
     CheckHwcodec,
     #[cfg(feature = "flutter")]
     VideoConnCount(Option<usize>),
+    #[cfg(feature = "flutter")]
+    AudioConnCount(Option<usize>),
     // Although the key is not necessary, it is used to avoid hardcoding the key.
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
@@ -966,6 +968,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                 .filter(|x| x.conn_type == crate::server::AuthConnType::Remote)
                 .count();
             allow_err!(stream.send(&Data::VideoConnCount(Some(n))).await);
+        }
+        #[cfg(feature = "flutter")]
+        Data::AudioConnCount(None) => {
+            let n = crate::server::AUTHED_CONNS
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|x| x.conn_type == crate::server::AuthConnType::Remote)
+                .count();
+            allow_err!(stream.send(&Data::AudioConnCount(Some(n))).await);
         }
         Data::Config((name, value)) => match value {
             None => {

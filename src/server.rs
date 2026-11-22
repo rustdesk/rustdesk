@@ -677,6 +677,14 @@ pub async fn start_server(is_server: bool, no_server: bool) {
 
     if is_server {
         #[cfg(windows)]
+        if crate::is_server() {
+            // Keep audio endpoint changes in the per-session --server process.
+            // The service runs in Session 0 and cannot change the interactive
+            // user's default render endpoint.
+            crate::platform::windows::audio_output::initialize();
+            crate::ui_interface::start_option_status_sync();
+        }
+        #[cfg(windows)]
         if !crate::is_server() {
             if let Err(err) = start_gui_ipc().await {
                 log::error!("Local hosting unavailable: failed to start GUI IPC listener: {err:#}");
