@@ -1500,6 +1500,8 @@ class FfiModel with ChangeNotifier {
 
     if (!isCache) {
       tryUseAllMyDisplaysForTheRemoteSession(peerId);
+    } else {
+      releaseRemoteDisplayScreenSave();
     }
   }
 
@@ -1535,6 +1537,16 @@ class FfiModel with ChangeNotifier {
   }
 
   tryUseAllMyDisplaysForTheRemoteSession(String peerId) async {
+    final saved = _savedRemoteDisplayOrigins(peerId, 16);
+    try {
+      await _placeAllMyDisplays(peerId, saved);
+    } finally {
+      releaseRemoteDisplayScreenSave();
+    }
+  }
+
+  Future<void> _placeAllMyDisplays(
+      String peerId, Map<int, ScreenOrigin> saved) async {
     if (bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
             sessionId: sessionId) !=
         'Y') {
@@ -1559,7 +1571,10 @@ class FfiModel with ChangeNotifier {
         for (final screen in screenRectList)
           DisplayRect(screen.left, screen.top, screen.right, screen.bottom),
       ],
-      savedOrigins: _savedRemoteDisplayOrigins(peerId, length),
+      savedOrigins: {
+        for (final entry in saved.entries)
+          if (entry.key < length) entry.key: entry.value,
+      },
     );
     if (placement.isEmpty || placement[0] == null) {
       return;

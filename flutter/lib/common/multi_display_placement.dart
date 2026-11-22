@@ -62,11 +62,11 @@ int? shownRemoteDisplay({
   required int currentDisplay,
   required int? initialDisplay,
 }) {
-  if (!peerReady && initialDisplay != null && initialDisplay >= 0) {
-    return initialDisplay;
+  if (!peerReady) {
+    if (initialDisplay != null && initialDisplay >= 0) return initialDisplay;
+    return null;
   }
   if (currentDisplay >= 0) return currentDisplay;
-  if (initialDisplay != null && initialDisplay >= 0) return initialDisplay;
   return null;
 }
 

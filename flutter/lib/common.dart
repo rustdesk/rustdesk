@@ -1779,6 +1779,16 @@ typedef WindowKey = ({WindowType type, int? windowId});
 
 LastWindowPosition? _lastWindowPosition = null;
 final Debouncer _saveWindowDebounce = Debouncer(delay: Duration(seconds: 1));
+final Debouncer _saveRemoteDisplayDebounce =
+    Debouncer(delay: Duration(seconds: 1));
+
+// The restored window can move before peer info applies the saved map.
+// Writes during that gap would replace the map with the restored screen.
+var allowRemoteDisplayScreenSave = false;
+
+void releaseRemoteDisplayScreenSave() {
+  allowRemoteDisplayScreenSave = true;
+}
 
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
@@ -1876,6 +1886,17 @@ Future<void> saveWindowPosition(WindowType type,
       _saveWindowDebounce.call(() => _saveWindowPositionActual(key));
     }
   }
+  // Fullscreen keeps the stored frame, so the check above skips the move.
+  // The screen origin still has to be saved from the live frame.
+  if (type == WindowType.RemoteDesktop && windowId != null) {
+    final id = windowId;
+    if (flush ?? false) {
+      _saveRemoteDisplayDebounce.cancel();
+      await _saveRemoteDisplayScreens(id);
+    } else {
+      _saveRemoteDisplayDebounce.call(() => _saveRemoteDisplayScreens(id));
+    }
+  }
 }
 
 Future<void> _saveWindowPositionActual(WindowKey key) async {
@@ -1927,12 +1948,10 @@ Future _saveSessionWindowPosition(WindowType windowType, int windowId,
           v: getPeerPos(peerId));
     }
   }
-  if (windowType == WindowType.RemoteDesktop) {
-    await _saveRemoteDisplayScreens(windowId);
-  }
 }
 
 Future<void> _saveRemoteDisplayScreens(int windowId) async {
+  if (!allowRemoteDisplayScreenSave) return;
   final Rect frame;
   try {
     frame = await WindowController.fromWindowId(windowId).getFrame();
@@ -1955,6 +1974,11 @@ Future<void> _saveRemoteDisplayScreens(int windowId) async {
   for (final part in raw.split(';')) {
     final entry = parseRemoteDisplayEntry(part);
     if (entry == null) continue;
+    if (bind.mainGetPeerFlutterOptionSync(
+            id: entry.peerId, k: remoteDisplayScreenKey(entry.display)) ==
+        origin) {
+      continue;
+    }
     bind.mainSetPeerFlutterOptionSync(
       id: entry.peerId,
       k: remoteDisplayScreenKey(entry.display),

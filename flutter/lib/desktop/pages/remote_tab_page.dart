@@ -402,6 +402,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       }
     }
     if (connLength <= 1) {
+      await _flushRemoteDisplayScreens();
       tabController.clear();
       return true;
     } else {
@@ -413,11 +414,17 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         res = await closeConfirmDialog();
       }
       if (res) {
+        await _flushRemoteDisplayScreens();
         tabController.clear();
       }
       return res;
     }
   }
+
+  Future<void> _flushRemoteDisplayScreens() => saveWindowPosition(
+      WindowType.RemoteDesktop,
+      windowId: windowId(),
+      flush: true);
 
   _update_remote_count() =>
       RemoteCountState.find().value = tabController.length;

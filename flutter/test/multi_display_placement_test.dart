@@ -86,6 +86,16 @@ void main() {
       shownRemoteDisplay(peerReady: true, currentDisplay: 0, initialDisplay: 1),
       0,
     );
+    expect(
+      shownRemoteDisplay(
+          peerReady: true, currentDisplay: -1, initialDisplay: 1),
+      isNull,
+    );
+    expect(
+      shownRemoteDisplay(
+          peerReady: false, currentDisplay: 0, initialDisplay: null),
+      isNull,
+    );
     expect(parseRemoteDisplayEntry('277161259:1')?.display, 1);
     expect(parseRemoteDisplayEntry('277161259:1')?.peerId, '277161259');
     expect(parseRemoteDisplayEntry('bad'), isNull);
