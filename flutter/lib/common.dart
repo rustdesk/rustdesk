@@ -3537,11 +3537,18 @@ tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
   final frame =
       Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
   if (stateGlobal.fullscreen.isTrue &&
-      curFrame.left <= frame.left &&
-      curFrame.top <= frame.top &&
-      curFrame.width >= frame.width &&
-      curFrame.height >= frame.height) {
+      fullscreenFrameAlreadyOnScreen(
+        DisplayRect(
+            curFrame.left, curFrame.top, curFrame.right, curFrame.bottom),
+        DisplayRect(
+            screenRect.left, screenRect.top, screenRect.right, screenRect.bottom),
+      )) {
     return;
+  }
+  // setFrame is ignored while the window stays fullscreen on another monitor.
+  if (stateGlobal.fullscreen.isTrue) {
+    stateGlobal.setFullscreen(false);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
   }
   await wc.setFrame(frame);
   // An duration is needed to avoid the window being restored after fullscreen.

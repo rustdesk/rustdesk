@@ -85,6 +85,21 @@ String? remoteDisplayEntry({required String peerId, required int? display}) {
   return (peerId: peerId, display: display);
 }
 
+/// True when a fullscreen frame already covers [screen].
+///
+/// A large frame whose top-left is merely above and left of the target is not
+/// enough: a fullscreen window on the left monitor satisfies that for a screen
+/// on the right, and the move is then skipped.
+bool fullscreenFrameAlreadyOnScreen(DisplayRect frame, DisplayRect screen) {
+  if (frame.width < 600 || frame.height < 400) return false;
+  final cx = (screen.left + screen.right) / 2;
+  final cy = (screen.top + screen.bottom) / 2;
+  return frame.left <= cx &&
+      cx < frame.right &&
+      frame.top <= cy &&
+      cy < frame.bottom;
+}
+
 /// Screen that owns most of [window]. A fullscreen window matches its monitor
 /// even when the frame is a pixel outside the reported bounds.
 DisplayRect? screenForWindow(List<DisplayRect> screens, DisplayRect window) {

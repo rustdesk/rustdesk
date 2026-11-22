@@ -50,6 +50,17 @@ void main() {
     expect(placed, [right, left]);
   });
 
+  test('a left fullscreen frame does not count as covering the right screen',
+      () {
+    const leftFrame = DisplayRect(0, 0, 1920, 1080);
+    expect(fullscreenFrameAlreadyOnScreen(leftFrame, left), isTrue);
+    expect(fullscreenFrameAlreadyOnScreen(leftFrame, right), isFalse);
+    expect(
+      fullscreenFrameAlreadyOnScreen(const DisplayRect(1920, 0, 3840, 1080), right),
+      isTrue,
+    );
+  });
+
   test('screen origin round trip and window overlap', () {
     expect(
       decodeScreenOrigin(encodeScreenOrigin(1920, 0)),
