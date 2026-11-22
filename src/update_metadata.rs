@@ -30,18 +30,21 @@ const SIGNATURE_ALGORITHM: &str = "ed25519";
 // Update metadata (`rustdesk-update.json` + `.sig`) is Ed25519 signed and checked against the
 // keys below, so a build only accepts updates that were signed for it.
 //
-// A fork that publishes its own releases MUST replace this entry with its own public key,
-// otherwise every release it publishes is rejected by the signature check. Generate the pair,
-// store the seed as the repository secret `RUSTDESK_UPDATE_ED25519_SEED` and the public key as
-// the repository variable `RUSTDESK_UPDATE_ED25519_PUBLIC_KEY`, then paste that same public key
-// here. `python res/update/generate_update_metadata.py check-key` fails the release workflow if
-// the embedded key, the variable and the seed disagree.
+// This fork publishes its own update channel, so the entry below is the fork's key, not the
+// upstream one. The matching seed lives only in the repository secret
+// `RUSTDESK_UPDATE_ED25519_SEED`; the base64 public key must also be stored as the repository
+// variable `RUSTDESK_UPDATE_ED25519_PUBLIC_KEY`. `python res/update/generate_update_metadata.py
+// check-key` fails the release workflow if the embedded key, the variable and the seed disagree.
+//
+// `KEY_ID` in res/update/generate_update_metadata.py is fixed to `2026-ed25519-main` and the
+// signer always emits that id, so the key must be *replaced*, never appended under a new id:
+// the client looks the key up by id and would never reach a second entry.
 const TRUSTED_UPDATE_KEYS: &[TrustedUpdateKey] = &[TrustedUpdateKey {
     key_id: "2026-ed25519-main",
     algorithm: SIGNATURE_ALGORITHM,
     public_key: [
-        52, 214, 32, 65, 191, 134, 137, 75, 157, 74, 67, 221, 150, 161, 118, 215, 218, 35, 236,
-        156, 127, 120, 133, 156, 197, 141, 37, 22, 47, 106, 181, 177,
+        31, 245, 77, 105, 88, 168, 28, 222, 154, 182, 6, 188, 155, 121, 174, 26, 106, 178, 88,
+        157, 9, 14, 41, 56, 176, 209, 227, 122, 225, 116, 189, 238,
     ],
 }];
 
