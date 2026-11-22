@@ -1,11 +1,11 @@
 name: Update signing key check
 
 # Verifies that the seed (secret), the public key (variable) and the key embedded in
-# src/update_metadata.rs all agree. This is the same check the release pipeline runs, but
-# without building anything, so it takes seconds instead of an hour.
+# src/update_metadata.rs all agree. Same check the release pipeline runs, without building
+# anything.
 #
-# The checks are split into separate named steps on purpose: when one fails, the step name
-# alone says what is wrong. No key material is ever printed.
+# The checks live in separate jobs so that one run reports every problem at once, and each
+# job/step name states what is wrong. No key material is ever printed (only its length).
 on:
   workflow_dispatch:
   push:
@@ -21,11 +21,64 @@ permissions:
   contents: read
 
 jobs:
-  check-key:
+  # 44 characters is the base64 form of a 32-byte key.
+  secret-seed:
     runs-on: ubuntu-22.04
-    env:
-      RUSTDESK_UPDATE_ED25519_SEED: ${{ secrets.RUSTDESK_UPDATE_ED25519_SEED }}
-      RUSTDESK_UPDATE_ED25519_PUBLIC_KEY: ${{ vars.RUSTDESK_UPDATE_ED25519_PUBLIC_KEY }}
+    steps:
+      - name: FAILED HERE - secret RUSTDESK_UPDATE_ED25519_SEED is not set at all
+        shell: python
+        env:
+          VALUE: ${{ secrets.RUSTDESK_UPDATE_ED25519_SEED }}
+        run: |
+          import os
+          value = os.environ.get("VALUE", "")
+          print(f"length: {len(value)}")
+          if not value:
+              print("hint: it must be a repository SECRET, not a variable")
+              raise SystemExit(1)
+
+      - name: FAILED HERE - secret RUSTDESK_UPDATE_ED25519_SEED is set but not 44 chars (newline/space, or truncated)
+        shell: python
+        env:
+          VALUE: ${{ secrets.RUSTDESK_UPDATE_ED25519_SEED }}
+        run: |
+          import os
+          value = os.environ.get("VALUE", "")
+          print(f"length: {len(value)}")
+          if len(value) != 44:
+              print("hint: 32-byte key -> 44 base64 chars ending with '='; strip any trailing newline")
+              raise SystemExit(1)
+
+  variable-public-key:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: FAILED HERE - variable RUSTDESK_UPDATE_ED25519_PUBLIC_KEY is not set at all
+        shell: python
+        env:
+          VALUE: ${{ vars.RUSTDESK_UPDATE_ED25519_PUBLIC_KEY }}
+        run: |
+          import os
+          value = os.environ.get("VALUE", "")
+          print(f"length: {len(value)}")
+          if not value:
+              print("hint: it must be a repository VARIABLE (Settings -> Variables), not a secret")
+              raise SystemExit(1)
+
+      - name: FAILED HERE - variable RUSTDESK_UPDATE_ED25519_PUBLIC_KEY is set but not 44 chars
+        shell: python
+        env:
+          VALUE: ${{ vars.RUSTDESK_UPDATE_ED25519_PUBLIC_KEY }}
+        run: |
+          import os
+          value = os.environ.get("VALUE", "")
+          print(f"length: {len(value)}")
+          if len(value) != 44:
+              print("hint: 32-byte key -> 44 base64 chars ending with '='; strip any trailing newline")
+              raise SystemExit(1)
+
+  key-pair-matches:
+    needs: [secret-seed, variable-public-key]
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -40,35 +93,18 @@ jobs:
       - name: Install Python dependencies
         run: 'python -m pip install --only-binary=:all: --require-hashes -r res/update/update_metadata_requirements.txt'
 
-      # 44 characters is the base64 form of a 32-byte key; anything else means the value was
-      # truncated, wrapped, or empty (a variable stored as a secret, or vice versa).
-      - name: FAILED HERE - secret RUSTDESK_UPDATE_ED25519_SEED is missing or not 44 chars
+      - name: FAILED HERE - secret does not match the public key (wrong seed, or two different pairs)
         shell: python
-        run: |
-          import os
-          value = os.environ.get("RUSTDESK_UPDATE_ED25519_SEED", "")
-          print(f"seed length: {len(value)}")
-          if len(value) != 44:
-              raise SystemExit(1)
-
-      - name: FAILED HERE - variable RUSTDESK_UPDATE_ED25519_PUBLIC_KEY is missing or not 44 chars
-        shell: python
-        run: |
-          import os
-          value = os.environ.get("RUSTDESK_UPDATE_ED25519_PUBLIC_KEY", "")
-          print(f"public key length: {len(value)}")
-          if len(value) != 44:
-              raise SystemExit(1)
-
-      - name: FAILED HERE - secret does not match the public key (wrong seed, or keys from different pairs)
-        shell: python
+        env:
+          SEED: ${{ secrets.RUSTDESK_UPDATE_ED25519_SEED }}
+          PUB: ${{ vars.RUSTDESK_UPDATE_ED25519_PUBLIC_KEY }}
         run: |
           import base64, os
           from cryptography.hazmat.primitives import serialization
           from cryptography.hazmat.primitives.asymmetric import ed25519
 
-          seed = base64.b64decode(os.environ["RUSTDESK_UPDATE_ED25519_SEED"], validate=True)
-          public_key = base64.b64decode(os.environ["RUSTDESK_UPDATE_ED25519_PUBLIC_KEY"], validate=True)
+          seed = base64.b64decode(os.environ["SEED"], validate=True)
+          public_key = base64.b64decode(os.environ["PUB"], validate=True)
           derived = (
               ed25519.Ed25519PrivateKey.from_private_bytes(seed)
               .public_key()
@@ -80,10 +116,12 @@ jobs:
 
       - name: FAILED HERE - variable does not match the key embedded in src/update_metadata.rs
         shell: python
+        env:
+          PUB: ${{ vars.RUSTDESK_UPDATE_ED25519_PUBLIC_KEY }}
         run: |
           import base64, os, pathlib, re
 
-          public_key = base64.b64decode(os.environ["RUSTDESK_UPDATE_ED25519_PUBLIC_KEY"], validate=True)
+          public_key = base64.b64decode(os.environ["PUB"], validate=True)
           source = pathlib.Path("src/update_metadata.rs").read_text(encoding="utf-8")
           match = re.search(
               r'key_id:\s*"2026-ed25519-main".*?public_key:\s*\[([^\]]+)\]', source, re.S
@@ -96,5 +134,8 @@ jobs:
           if embedded != public_key:
               raise SystemExit(1)
 
-      - name: Validate update metadata keys (authoritative)
+      - name: Validate update metadata keys (authoritative, same command as the release)
+        env:
+          RUSTDESK_UPDATE_ED25519_SEED: ${{ secrets.RUSTDESK_UPDATE_ED25519_SEED }}
+          RUSTDESK_UPDATE_ED25519_PUBLIC_KEY: ${{ vars.RUSTDESK_UPDATE_ED25519_PUBLIC_KEY }}
         run: python res/update/generate_update_metadata.py check-key
