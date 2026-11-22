@@ -152,6 +152,7 @@ type FnPlaneRotation = unsafe extern "C" fn(*mut drmtap_ctx, *mut u32) -> c_int;
 type FnCrtcRefresh = unsafe extern "C" fn(*mut drmtap_ctx, *mut u64, *mut u64) -> c_int;
 type FnConvertDmabuf =
     unsafe extern "C" fn(*mut drmtap_ctx, *const drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
+type FnSetOutputBuffer = unsafe extern "C" fn(*mut drmtap_ctx, *mut c_void, usize) -> c_int;
 
 /// The dlopen'd libdrmtap; the `Library` is kept alive for the process lifetime, so the raw fn pointers stay valid.
 pub struct DrmtapLib {
@@ -171,6 +172,7 @@ pub struct DrmtapLib {
     pub grab_desc: FnGrabDesc,
     pub open_render: FnOpenRender,
     pub convert_dmabuf: FnConvertDmabuf,
+    pub set_output_buffer: FnSetOutputBuffer,
     pub render_node: Option<FnRenderNode>,
     /// Optional: it only exists from libdrmtap 0.5.8. Absent means the library cannot say whether
     /// the plane rotated the scanout, and the consumer keeps the pre-0.5.8 rule for that case.
@@ -212,6 +214,13 @@ impl DrmtapLib {
         ) -> c_int {
             -1
         }
+        unsafe extern "C" fn set_output_buffer(
+            _: *mut drmtap_ctx,
+            _: *mut c_void,
+            _: usize,
+        ) -> c_int {
+            0
+        }
         DrmtapLib {
             _lib: hbb_common::libloading::os::unix::Library::this().into(),
             open,
@@ -226,6 +235,7 @@ impl DrmtapLib {
             grab_desc,
             open_render,
             convert_dmabuf,
+            set_output_buffer,
             render_node: None,
             plane_rotation: Some(plane_rotation),
             crtc_refresh: None,
@@ -333,28 +343,34 @@ impl DrmtapLib {
             let open_r: Option<FnOpenRender> = lib.get(b"drmtap_open_render").ok().map(|s| *s);
             let conv: Option<FnConvertDmabuf> =
                 lib.get(b"drmtap_convert_dmabuf").ok().map(|s| *s);
-            let (grab_desc, open_render, convert_dmabuf) = match (grab, open_r, conv) {
-                (Some(g), Some(o), Some(c)) => (g, o, c),
-                (grab, open_r, conv) => {
-                    let mut missing = Vec::new();
-                    if grab.is_none() {
-                        missing.push("drmtap_grab_desc");
+            let set_output_buffer: Option<FnSetOutputBuffer> =
+                lib.get(b"drmtap_set_output_buffer").ok().map(|s| *s);
+            let (grab_desc, open_render, convert_dmabuf, set_output_buffer) =
+                match (grab, open_r, conv, set_output_buffer) {
+                    (Some(g), Some(o), Some(c), Some(s)) => (g, o, c, s),
+                    (grab, open_r, conv, set_output_buffer) => {
+                        let mut missing = Vec::new();
+                        if grab.is_none() {
+                            missing.push("drmtap_grab_desc");
+                        }
+                        if open_r.is_none() {
+                            missing.push("drmtap_open_render");
+                        }
+                        if conv.is_none() {
+                            missing.push("drmtap_convert_dmabuf");
+                        }
+                        if set_output_buffer.is_none() {
+                            missing.push("drmtap_set_output_buffer");
+                        }
+                        log::warn!(
+                            "libdrmtap {name} reports v{major}.{minor}.{patch} but does not export \
+                             {}: it is a stale or pre-release build, not the version it claims. \
+                             Refusing to load; falling back to PipeWire/portal.",
+                            missing.join(", ")
+                        );
+                        return None;
                     }
-                    if open_r.is_none() {
-                        missing.push("drmtap_open_render");
-                    }
-                    if conv.is_none() {
-                        missing.push("drmtap_convert_dmabuf");
-                    }
-                    log::warn!(
-                        "libdrmtap {name} reports v{major}.{minor}.{patch} but does not export \
-                         {}: it is a stale or pre-release build, not the version it claims. \
-                         Refusing to load; falling back to PipeWire/portal.",
-                        missing.join(", ")
-                    );
-                    return None;
-                }
-            };
+                };
             let render_node: Option<FnRenderNode> =
                 lib.get(b"drmtap_render_node").ok().map(|s| *s);
             let cursor_hotspot_valid: Option<FnCursorHotspotValid> =
@@ -436,6 +452,7 @@ impl DrmtapLib {
                 grab_desc,
                 open_render,
                 convert_dmabuf,
+                set_output_buffer,
                 render_node,
                 plane_rotation,
                 crtc_refresh,
