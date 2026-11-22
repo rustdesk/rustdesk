@@ -85,6 +85,7 @@ class RawTouchGestureDetectorRegion extends StatefulWidget {
 /// mouseMode only:
 ///   DoubleFiner -> right click
 ///   HoldDrag -> left drag
+///   LongPress -> left drag instead of right click, with kOptionLongPressDrag
 class _RawTouchGestureDetectorRegionState
     extends State<RawTouchGestureDetectorRegion> {
   Offset _cacheLongPressPosition = Offset(0, 0);
@@ -104,6 +105,11 @@ class _RawTouchGestureDetectorRegionState
   bool _touchModePanStarted = false;
   Offset _doubleFinerTapPosition = Offset.zero;
 
+  // Mouse mode with kOptionLongPressDrag: the left button is held from the
+  // long press until the finger lifts.
+  bool _mouseModeLongPressDragging = false;
+  Offset _mouseModeLongPressOffset = Offset.zero;
+
   // For mouse mode, we need to block the events when the cursor is in a blocked area.
   // So we need to cache the last tap down position.
   Offset? _lastTapDownPositionForMouseMode;
@@ -116,6 +122,16 @@ class _RawTouchGestureDetectorRegionState
   bool get handleTouch => (isDesktop || isWebDesktop) || ffiModel.touchMode;
   SessionID get sessionId => ffi.sessionId;
   bool get canvasLocked => isMobile && ffi.canvasModel.locked;
+
+  @override
+  void dispose() {
+    // A drag cut off by a mode switch or disconnect must not leave left held.
+    if (_mouseModeLongPressDragging) {
+      _mouseModeLongPressDragging = false;
+      inputModel.tapUp(MouseButtons.left);
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -252,12 +268,27 @@ class _RawTouchGestureDetectorRegionState
   }
 
   onLongPressUp() async {
+    if (_mouseModeLongPressDragging) {
+      _mouseModeLongPressDragging = false;
+      await inputModel.tapUp(MouseButtons.left);
+      return;
+    }
     if (isNotTouchBasedDevice()) {
       return;
     }
     if (handleTouch) {
       await inputModel.tapUp(MouseButtons.left);
     }
+  }
+
+  bool _isLongPressDragEnabled() =>
+      bind.mainGetLocalOption(key: kOptionLongPressDrag) == 'Y';
+
+  Future<void> _startMouseModeLongPressDrag() async {
+    _mouseModeLongPressDragging = true;
+    _mouseModeLongPressOffset = Offset.zero;
+    HapticFeedback.mediumImpact();
+    await inputModel.tapDown(MouseButtons.left);
   }
 
   // for mobiles
@@ -276,6 +307,10 @@ class _RawTouchGestureDetectorRegionState
         if (shouldBlockMouseModeEvent()) {
           return;
         }
+        if (_isLongPressDragEnabled()) {
+          await _startMouseModeLongPressDrag();
+          return;
+        }
       }
       await inputModel.tap(MouseButtons.right);
     } else {
@@ -286,6 +321,12 @@ class _RawTouchGestureDetectorRegionState
   }
 
   onLongPressMoveUpdate(LongPressMoveUpdateDetails d) async {
+    if (_mouseModeLongPressDragging) {
+      final delta = d.offsetFromOrigin - _mouseModeLongPressOffset;
+      _mouseModeLongPressOffset = d.offsetFromOrigin;
+      await ffi.cursorModel.updatePan(delta, d.localPosition, false);
+      return;
+    }
     if (!ffiModel.isPeerMobile || isNotTouchBasedDevice()) {
       return;
     }

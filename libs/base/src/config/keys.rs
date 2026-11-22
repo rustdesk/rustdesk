@@ -105,6 +105,8 @@ pub const OPTION_SHOW_VIRTUAL_MOUSE: &str = "show-virtual-mouse";
 // joystick is the virtual mouse.
 // So `OPTION_SHOW_VIRTUAL_MOUSE` should also be set if `OPTION_SHOW_VIRTUAL_JOYSTICK` is set.
 pub const OPTION_SHOW_VIRTUAL_JOYSTICK: &str = "show-virtual-joystick";
+// Mobile mouse mode: a long press holds the left button (drag) instead of right-clicking.
+pub const OPTION_LONG_PRESS_DRAG: &str = "long-press-drag";
 pub const OPTION_ENABLE_FLUTTER_HTTP_ON_RUST: &str = "enable-flutter-http-on-rust";
 pub const OPTION_ALLOW_ASK_FOR_NOTE: &str = "allow-ask-for-note";
 
@@ -268,6 +270,7 @@ pub const KEYS_LOCAL_SETTINGS: &[&str] = &[
     OPTION_TOUCH_MODE,
     OPTION_SHOW_VIRTUAL_MOUSE,
     OPTION_SHOW_VIRTUAL_JOYSTICK,
+    OPTION_LONG_PRESS_DRAG,
     OPTION_ENABLE_FLUTTER_HTTP_ON_RUST,
     OPTION_ALLOW_ASK_FOR_NOTE,
 ];

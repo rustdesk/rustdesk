@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
@@ -65,6 +67,15 @@ class _GestureHelpState extends State<GestureHelp> {
     _selectedIndex = _touchMode ? 1 : 0;
   }
 
+  bool _longPressDrag =
+      bind.mainGetLocalOption(key: kOptionLongPressDrag) == 'Y';
+
+  void _setLongPressDrag(bool value) {
+    bind.mainSetLocalOption(
+        key: kOptionLongPressDrag, value: value ? 'Y' : 'N');
+    setState(() => _longPressDrag = value);
+  }
+
   /// Helper to exit relative mouse mode when certain conditions are met.
   /// This reduces code duplication across multiple UI callbacks.
   void _exitRelativeMouseModeIf(bool condition) {
@@ -121,6 +132,26 @@ class _GestureHelpState extends State<GestureHelp> {
                           });
                         },
                       ),
+                      if (!_touchMode)
+                        Transform.translate(
+                          offset: const Offset(-10.0, 0.0),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Checkbox(
+                                value: _longPressDrag,
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  _setLongPressDrag(value);
+                                },
+                              ),
+                              InkWell(
+                                onTap: () => _setLongPressDrag(!_longPressDrag),
+                                child: Text(translate("Long press to drag")),
+                              ),
+                            ],
+                          ),
+                        ),
                       Transform.translate(
                         offset: const Offset(-10.0, 0.0),
                         child: Row(
@@ -322,7 +353,9 @@ class _GestureHelpState extends State<GestureHelp> {
                               width,
                               GestureIcons.iconGesturePressHold,
                               translate("One-Long Tap"),
-                              translate("Right Mouse")),
+                              translate(_longPressDrag
+                                  ? "Mouse Drag"
+                                  : "Right Mouse")),
                           GestureInfo(
                               width,
                               GestureIcons.iconGestureFSwipeRight,
