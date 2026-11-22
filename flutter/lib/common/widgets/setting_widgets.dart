@@ -81,16 +81,18 @@ customImageQualityWidget(
               if (showMoreQuality && !isMobile)
                 Expanded(
                     flex: 1,
-                    child: Row(
-                      children: [
-                        Checkbox(
-                          value: moreQualityChecked.value,
-                          onChanged: onMoreChanged,
-                        ),
-                        Expanded(
-                          child: Text(translate('More')),
-                        )
-                      ],
+                    child: MergeSemantics(
+                      child: Row(
+                        children: [
+                          Checkbox(
+                            value: moreQualityChecked.value,
+                            onChanged: onMoreChanged,
+                          ),
+                          Expanded(
+                            child: Text(translate('More')),
+                          )
+                        ],
+                      ),
                     ))
             ],
           )),

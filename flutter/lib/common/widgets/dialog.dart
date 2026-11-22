@@ -1217,6 +1217,7 @@ void showRequestElevationDialog(
       ],
     ),
   );
+  OptionRequestPermissions = MergeSemantics(child: OptionRequestPermissions);
 
   Widget OptionCredentials = Obx(
     () => Row(
@@ -1240,6 +1241,7 @@ void showRequestElevationDialog(
       ],
     ),
   );
+  OptionCredentials = MergeSemantics(child: OptionCredentials);
 
   Widget UacNote = Container(
     padding: EdgeInsets.fromLTRB(10, 8, 8, 8),
@@ -1780,28 +1782,31 @@ Future<bool?> _showConnEndAuditDialogCloseCanceled({
               if (!isOptFixed) ...[
                 const SizedBox(height: 8),
                 InkWell(
+                  excludeFromSemantics: true,
                   onTap: () {
                     setState(() {
                       askForNote = !askForNote;
                     });
                   },
-                  child: Row(
-                    children: [
-                      Checkbox(
-                        value: askForNote,
-                        onChanged: (value) {
-                          setState(() {
-                            askForNote = value ?? false;
-                          });
-                        },
-                      ),
-                      Expanded(
-                        child: Text(
-                          translate('note-at-conn-end-tip'),
-                          style: const TextStyle(fontSize: 13),
+                  child: MergeSemantics(
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: askForNote,
+                          onChanged: (value) {
+                            setState(() {
+                              askForNote = value ?? false;
+                            });
+                          },
                         ),
-                      ),
-                    ],
+                        Expanded(
+                          child: Text(
+                            translate('note-at-conn-end-tip'),
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

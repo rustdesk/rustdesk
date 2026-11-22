@@ -262,7 +262,7 @@ class KeyboardShortcutsPageBodyState extends State<KeyboardShortcutsPageBody> {
   Widget _toggleRow(
       bool value, String labelKey, Future<void> Function(bool) onChanged,
       {String? tooltipKey}) {
-    return Row(
+    final row = Row(
       children: [
         Checkbox(
           value: value,
@@ -275,6 +275,7 @@ class KeyboardShortcutsPageBodyState extends State<KeyboardShortcutsPageBody> {
         Expanded(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            excludeFromSemantics: true,
             onTap: () => onChanged(!value),
             child: Text(translate(labelKey)),
           ),
@@ -282,6 +283,7 @@ class KeyboardShortcutsPageBodyState extends State<KeyboardShortcutsPageBody> {
         if (tooltipKey != null) InfoTooltipIcon(tipKey: tooltipKey),
       ],
     );
+    return MergeSemantics(child: row);
   }
 
   // One indent unit per nesting level. Both "top item under top heading"

@@ -1078,7 +1078,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         }
       }
 
-      final tfa = GestureDetector(
+      final tfaRow = GestureDetector(
+        excludeFromSemantics: true,
         child: InkWell(
           child: Obx(() => Row(
                 children: [
@@ -1099,6 +1100,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           onChanged(!has2fa.value);
         },
       ).marginOnly(left: _kCheckBoxLeftMargin);
+      final tfa = MergeSemantics(child: tfaRow);
       if (!has2fa.value) {
         return tfa;
       }
@@ -1118,7 +1120,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         }
       }
 
-      final bot = GestureDetector(
+      final botRow = GestureDetector(
+        excludeFromSemantics: true,
         child: Tooltip(
           waitDuration: Duration(milliseconds: 300),
           message: translate("enable-bot-tip"),
@@ -1142,6 +1145,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           onChangedBot(!hasBot.value);
         },
       ).marginOnly(left: _kCheckBoxLeftMargin + 30);
+      final bot = MergeSemantics(child: botRow);
 
       final trust = Row(
         children: [
@@ -1364,6 +1368,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               : null;
           List<Widget> lengthRadios = ['6', '8', '10']
               .map((value) => GestureDetector(
+                    excludeFromSemantics: true,
                     child: Row(
                       children: [
                         Radio(
@@ -1380,12 +1385,14 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     ).paddingOnly(right: 10),
                     onTap: () => onChanged?.call(value),
                   ))
+              .map<Widget>((radio) => MergeSemantics(child: radio))
               .toList();
 
           final isOptFixedNumOTP =
               isOptionFixed(kOptionAllowNumericOneTimePassword);
           final isNumOPTChangable = !isOptFixedNumOTP && tmpEnabled && !locked;
-          final numericOneTimePassword = GestureDetector(
+          final numericOneTimePasswordRow = GestureDetector(
+            excludeFromSemantics: true,
             child: InkWell(
                 child: Row(
               children: [
@@ -1409,6 +1416,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 ? () => model.switchAllowNumericOneTimePassword()
                 : null,
           ).marginOnly(left: _kContentHSubMargin - 5);
+          final numericOneTimePassword =
+              MergeSemantics(child: numericOneTimePasswordRow);
 
           final modeKeys = <String>[
             'password',
@@ -1486,9 +1495,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     }
 
     bool value = bind.mainIsShareRdp();
-    return Offstage(
+    final offstage = Offstage(
       offstage: !(isWindows && bind.mainIsInstalled()),
       child: GestureDetector(
+          excludeFromSemantics: true,
           child: Row(
             children: [
               Checkbox(
@@ -1504,6 +1514,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           ).marginOnly(left: _kCheckBoxLeftMargin),
           onTap: enabled ? () => onChanged(!value) : null),
     );
+    return MergeSemantics(child: offstage);
   }
 
   List<Widget> directIp(BuildContext context) {
@@ -1586,7 +1597,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       }
 
       final isOptFixed = isOptionFixed(kOptionWhitelist);
-      return GestureDetector(
+      final row = GestureDetector(
+        excludeFromSemantics: true,
         child: Tooltip(
           message: translate('whitelist_tip'),
           child: Obx(() => Row(
@@ -1619,6 +1631,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               }
             : null,
       ).marginOnly(left: _kCheckBoxLeftMargin);
+      return MergeSemantics(child: row);
     }
 
     return tmpWrapper();
@@ -1636,7 +1649,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     }
 
     final isOptFixed = isOptionFixed(kOptionIdWhitelist);
-    return GestureDetector(
+    final row = GestureDetector(
+      excludeFromSemantics: true,
       child: Tooltip(
         message: translate('id_whitelist_tip'),
         child: Obx(() => Row(
@@ -1668,6 +1682,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             }
           : null,
     ).marginOnly(left: _kCheckBoxLeftMargin);
+    return MergeSemantics(child: row);
   }
 
   Widget hide_cm(bool enabled) {
@@ -1782,7 +1797,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     }
 
     final isOptFixed = isOptionFixed(kOptionWhitelist);
-    return GestureDetector(
+    final row = GestureDetector(
+      excludeFromSemantics: true,
       child: Obx(() => Row(
             children: [
               Checkbox(
@@ -1802,6 +1818,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             }
           : null,
     ).marginOnly(left: _kCheckBoxLeftMargin);
+    return MergeSemantics(child: row);
   }
 }
 
@@ -2256,7 +2273,8 @@ class _DisplayState extends State<_Display> {
       setState(() {});
     }
 
-    return GestureDetector(
+    final row = GestureDetector(
+        excludeFromSemantics: true,
         child: Row(
           children: [
             Checkbox(
@@ -2269,6 +2287,7 @@ class _DisplayState extends State<_Display> {
           ],
         ).marginOnly(left: _kCheckBoxLeftMargin),
         onTap: isOptFixed ? null : () => onChanged(!value));
+    return MergeSemantics(child: row);
   }
 
   Widget other(BuildContext context) {
@@ -2760,7 +2779,8 @@ Widget _OptionCheckBox(
     enabled = false;
   }
 
-  return GestureDetector(
+  final row = GestureDetector(
+    excludeFromSemantics: true,
     child: Obx(
       () => Row(
         children: [
@@ -2798,6 +2818,7 @@ Widget _OptionCheckBox(
           }
         : null,
   );
+  return MergeSemantics(child: row);
 }
 
 // ignore: non_constant_identifier_names
@@ -2814,7 +2835,8 @@ Widget _Radio<T>(BuildContext context,
           }
         }
       : null;
-  return GestureDetector(
+  final row = GestureDetector(
+    excludeFromSemantics: true,
     child: Row(
       children: [
         Radio<T>(value: value, groupValue: groupValue, onChanged: onChange2),
@@ -2830,6 +2852,7 @@ Widget _Radio<T>(BuildContext context,
     ).marginOnly(left: _kRadioLeftMargin),
     onTap: () => onChange2?.call(value),
   );
+  return MergeSemantics(child: row);
 }
 
 class WaylandCard extends StatefulWidget {

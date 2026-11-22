@@ -134,21 +134,24 @@ class _InstallPageBodyState extends State<_InstallPageBody>
     return InkWell(
       // todo mouseCursor: "SystemMouseCursors.forbidden" or no cursor on btnEnabled == false
       borderRadius: BorderRadius.circular(6),
+      excludeFromSemantics: true,
       onTap: () => btnEnabled.value ? option.value = !option.value : null,
-      child: Row(
-        children: [
-          Obx(
-            () => Checkbox(
-              visualDensity: VisualDensity(horizontal: -4, vertical: -4),
-              value: option.value,
-              onChanged: (v) =>
-                  btnEnabled.value ? option.value = !option.value : null,
-            ).marginOnly(right: 8),
-          ),
-          Expanded(
-            child: Text(translate(label)),
-          ),
-        ],
+      child: MergeSemantics(
+        child: Row(
+          children: [
+            Obx(
+              () => Checkbox(
+                visualDensity: VisualDensity(horizontal: -4, vertical: -4),
+                value: option.value,
+                onChanged: (v) =>
+                    btnEnabled.value ? option.value = !option.value : null,
+              ).marginOnly(right: 8),
+            ),
+            Expanded(
+              child: Text(translate(label)),
+            ),
+          ],
+        ),
       ),
     );
   }

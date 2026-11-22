@@ -627,9 +627,10 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   Widget buildPermissionIcon(bool enabled, IconData iconData,
       Function(bool)? onTap, String tooltipText,
       {required bool canModify}) {
-    return Tooltip(
+    final tooltip = Tooltip(
       message: "$tooltipText: ${enabled ? "ON" : "OFF"}",
       waitDuration: Duration.zero,
+      excludeFromSemantics: true,
       child: Container(
         decoration: BoxDecoration(
           color: enabled
@@ -656,6 +657,12 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
           ),
         ),
       ),
+    );
+    return Semantics(
+      label: tooltipText,
+      toggled: enabled,
+      enabled: canModify,
+      child: tooltip,
     );
   }
 
