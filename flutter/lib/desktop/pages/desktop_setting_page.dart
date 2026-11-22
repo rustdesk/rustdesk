@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
+import 'package:flutter_hbb/common/widgets/offstage_focus_policy.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
@@ -282,21 +283,27 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
         children: <Widget>[
           SizedBox(
             width: _kTabWidth,
-            child: Column(
-              children: [
-                _header(context),
-                Flexible(child: _listView(tabs: _settingTabs())),
-              ],
+            child: FocusTraversalGroup(
+              policy: SkipOffstageTraversalPolicy(),
+              child: Column(
+                children: [
+                  _header(context),
+                  Flexible(child: _listView(tabs: _settingTabs())),
+                ],
+              ),
             ),
           ),
           const VerticalDivider(width: 1),
           Expanded(
-            child: Container(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              child: PageView(
-                controller: controller,
-                physics: NeverScrollableScrollPhysics(),
-                children: _children(),
+            child: FocusTraversalGroup(
+              policy: SkipOffstageTraversalPolicy(),
+              child: Container(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: PageView(
+                  controller: controller,
+                  physics: NeverScrollableScrollPhysics(),
+                  children: _children(),
+                ),
               ),
             ),
           )

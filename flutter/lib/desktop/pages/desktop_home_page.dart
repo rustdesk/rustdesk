@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/animated_rotation_widget.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
+import 'package:flutter_hbb/common/widgets/offstage_focus_policy.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
@@ -63,9 +64,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        buildLeftPane(context),
+        FocusTraversalGroup(
+            policy: SkipOffstageTraversalPolicy(),
+            child: buildLeftPane(context)),
         if (!isIncomingOnly) const VerticalDivider(width: 1),
-        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+        if (!isIncomingOnly)
+          Expanded(
+              child: FocusTraversalGroup(
+                  policy: SkipOffstageTraversalPolicy(),
+                  child: buildRightPane(context))),
       ],
     ));
   }

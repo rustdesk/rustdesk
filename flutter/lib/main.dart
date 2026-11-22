@@ -6,6 +6,7 @@ import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/common/widgets/offstage_focus_policy.dart';
 import 'package:flutter_hbb/common/widgets/overlay.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
@@ -377,6 +378,8 @@ void _runApp(
       ],
       builder: (context, child) {
         child = _keepScaleBuilder(context, child);
+        child = FocusTraversalGroup(
+            policy: SkipOffstageTraversalPolicy(), child: child);
         child = botToastBuilder(context, child);
         return child;
       },
@@ -527,6 +530,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                   )
               : (context, child) {
                   child = _keepScaleBuilder(context, child);
+                  child = FocusTraversalGroup(
+                      policy: SkipOffstageTraversalPolicy(), child: child);
                   child = botToastBuilder(context, child);
                   if ((isDesktop && desktopType == DesktopType.main) ||
                       isWebDesktop) {
