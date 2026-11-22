@@ -293,5 +293,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android-logs-folder-tip", "Choose Android → media to store log files."),
         ("install-directory-not-empty-tip", "The selected folder is not empty. Installation may delete existing data. Consider choosing a different folder."),
         ("username-login-disabled-oidc-unavailable", "Username and password login is disabled, and no OIDC login methods are available."),
+        ("physical_key_text_input_tip", "Text typed or pasted on a phone, or sent with \"Send clipboard keystrokes\", is sent as presses of this computer's keys, so virtual machine consoles and windows run as administrator receive it. Characters the keyboard layout cannot type are still sent as Unicode. A virtual machine must use the same keyboard layout as this computer. Line breaks and tabs are sent as Enter and Tab key presses."),
     ].iter().cloned().collect();
 }
