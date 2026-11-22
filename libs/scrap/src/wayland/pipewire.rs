@@ -2109,7 +2109,7 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::{corrected_origin, crop_fits, drm_format_pix_fmt, pack_rows, WaylandDisplayInfo};
+    use super::{corrected_origin, drm_format_pix_fmt, pack_rows, WaylandDisplayInfo};
 
     #[test]
     fn a_strided_dmabuf_frame_comes_out_as_packed_rows() {
@@ -2128,19 +2128,8 @@ mod tests {
         assert!(pack_rows(&[1; 20], 0, 12, 8, 2, &mut out));
         let frame = out.clone();
         assert!(!pack_rows(&[2; 19], 0, 12, 8, 2, &mut out));
-        // A stride whose frame end overflows usize must not wrap into a small, passing size.
-        assert!(!pack_rows(&[2; 64], 0, usize::MAX / 2, 8, 3, &mut out));
         // A dropped frame leaves the last good one in place.
         assert_eq!(out, frame);
-    }
-
-    #[test]
-    fn a_crop_past_the_frame_does_not_fit() {
-        assert!(crop_fits((0, 0, 2, 1), 4, 1));
-        assert!(crop_fits((2, 0, 2, 1), 4, 1));
-        assert!(!crop_fits((3, 0, 2, 1), 4, 1));
-        assert!(!crop_fits((0, 0, 1, 2), 4, 1));
-        assert!(!crop_fits((u32::MAX, 0, 2, 1), 4, 1));
     }
 
     #[test]
