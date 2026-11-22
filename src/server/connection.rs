@@ -2058,6 +2058,10 @@ impl Connection {
         {
             platform_additions.insert("support_view_camera".into(), json!(true));
         }
+        #[cfg(target_os = "macos")]
+        if camera::is_camera_supported() {
+            platform_additions.insert("support_view_camera".into(), json!(true));
+        }
 
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         if !platform_additions.is_empty() {
@@ -2153,7 +2157,25 @@ impl Connection {
             log::info!("peer info supported_encoding: {:?}", supported_encoding);
             pi.encoding = Some(supported_encoding).into();
 
-            pi.displays = camera::Cameras::all_info().unwrap_or(Vec::new());
+            // On macOS this can block for up to 30s waiting on the camera permission prompt, so
+            // keep it off the Tokio worker.
+            #[cfg(target_os = "macos")]
+            {
+                pi.displays = tokio::task::spawn_blocking(camera::Cameras::all_info)
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::error!("camera all_info task panicked: {}", e);
+                        Ok(Vec::new())
+                    })
+                    .unwrap_or_else(|e| {
+                        log::error!("camera all_info error: {}", e);
+                        Vec::new()
+                    });
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                pi.displays = camera::Cameras::all_info().unwrap_or(Vec::new());
+            }
             pi.current_display = camera::PRIMARY_CAMERA_IDX as _;
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {

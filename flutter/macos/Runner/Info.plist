@@ -41,6 +41,8 @@
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Capture video from the camera for the purpose of remote camera viewing.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Record the sound from microphone for the purpose of the remote desktop.</string>
 	<key>NSPrincipalClass</key>
