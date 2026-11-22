@@ -12,6 +12,12 @@ on:
       publish-update-metadata:
         type: boolean
         default: false
+      # macOS is off by default on this fork: the update channel and the release pipeline
+      # target Windows only, and a macOS build needs Apple signing material we do not have.
+      # Set it to true only when Apple credentials are configured.
+      build-macos:
+        type: boolean
+        default: false
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
@@ -918,6 +924,8 @@ jobs:
     name: ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
+    # Disabled unless requested: see the `build-macos` input.
+    if: ${{ inputs.build-macos }}
     strategy:
       fail-fast: false
       matrix:
@@ -1205,7 +1213,8 @@ jobs:
             rustdesk*-${{ matrix.job.arch }}.dmg
 
   publish-signed-update-metadata:
-    needs: [build-for-windows-flutter, build-for-windows-sciter, build-for-macOS]
+    # Windows only: macOS builds are off on this fork, so the metadata must not wait for them.
+    needs: [build-for-windows-flutter, build-for-windows-sciter]
     runs-on: ubuntu-22.04
     # NOTE: no `github.repository == 'rustdesk/rustdesk'` guard here. This fork publishes its own
     # update channel, so pinning the job to the upstream repository would silently skip signing
@@ -1264,13 +1273,6 @@ jobs:
           path: ./artifacts/
           merge-multiple: true
 
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: macos-*
-          path: ./artifacts/
-          merge-multiple: true
-
       - name: Sign update metadata
         env:
           RUSTDESK_UPDATE_ED25519_SEED: ${{ secrets.RUSTDESK_UPDATE_ED25519_SEED }}
@@ -1281,8 +1283,6 @@ jobs:
             --artifact windows aarch64 exe "./artifacts/rustdesk-${VERSION}-aarch64.exe" \
             --artifact windows aarch64 msi "./artifacts/rustdesk-${VERSION}-aarch64.msi" \
             --artifact windows x86 exe "./artifacts/rustdesk-${VERSION}-x86-sciter.exe" \
-            --artifact macos aarch64 dmg "./artifacts/rustdesk-${VERSION}-aarch64.dmg" \
-            --artifact macos x86_64 dmg "./artifacts/rustdesk-${VERSION}-x86_64.dmg" \
             --version "$VERSION" --release-id "$TAG_NAME" \
             --package-id rustdesk \
             --release-base-url https://github.com/${{ github.repository }}/releases/download \
@@ -1302,8 +1302,6 @@ jobs:
             --artifact "./artifacts/rustdesk-${VERSION}-aarch64.exe" \
             --artifact "./artifacts/rustdesk-${VERSION}-aarch64.msi" \
             --artifact "./artifacts/rustdesk-${VERSION}-x86-sciter.exe" \
-            --artifact "./artifacts/rustdesk-${VERSION}-aarch64.dmg" \
-            --artifact "./artifacts/rustdesk-${VERSION}-x86_64.dmg" \
             --version "$VERSION" --release-id "$TAG_NAME" \
             --package-id rustdesk \
             --release-base-url https://github.com/${{ github.repository }}/releases/download
@@ -1320,8 +1318,6 @@ jobs:
             ./artifacts/rustdesk-${{ env.VERSION }}-aarch64.exe
             ./artifacts/rustdesk-${{ env.VERSION }}-aarch64.msi
             ./artifacts/rustdesk-${{ env.VERSION }}-x86-sciter.exe
-            ./artifacts/rustdesk-${{ env.VERSION }}-aarch64.dmg
-            ./artifacts/rustdesk-${{ env.VERSION }}-x86_64.dmg
 
       # The release action replaces same-name assets, so keep published sidecars
       # until replacements are ready.
@@ -1348,7 +1344,9 @@ jobs:
       - build-for-windows-flutter
       - build-for-windows-sciter
     runs-on: ubuntu-latest
-    if: ${{ inputs.upload-artifact }}
+    # This job packages the unsigned macOS dmg together with the Windows artifacts, so it only
+    # makes sense when macOS is built. Without it the job would fail on the missing *.dmg.
+    if: ${{ inputs.upload-artifact && inputs.build-macos }}
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
