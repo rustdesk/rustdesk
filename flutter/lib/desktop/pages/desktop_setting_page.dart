@@ -2014,6 +2014,7 @@ class _DisplayState extends State<_Display> {
       imageQuality(context),
       codec(context),
       if (isDesktop) trackpadSpeed(context),
+      keyboardMode(),
       if (!isWeb) privacyModeImpl(context),
       other(context),
     ]).marginOnly(bottom: _kListViewBottomMargin);
@@ -2142,6 +2143,26 @@ class _DisplayState extends State<_Display> {
         value: curSpeed,
         onDebouncer: onDebouncer,
       ),
+    ]);
+  }
+
+  Widget keyboardMode() {
+    return _Card(title: 'Keyboard mode', children: [
+      ComboBox(
+        keys: [kKeyMapMode, kKeyTranslateMode, kKeyLegacyMode],
+        values: [
+          translate('Map mode'),
+          translate('Translate mode'),
+          translate('Legacy mode'),
+        ],
+        initialKey: bind.mainGetUserDefaultOption(key: kOptionKeyboardMode),
+        enabled: !isOptionFixed(kOptionKeyboardMode),
+        onChanged: (mode) async {
+          await bind.mainSetUserDefaultOption(
+              key: kOptionKeyboardMode, value: mode);
+          if (mounted) setState(() {});
+        },
+      ).marginOnly(left: _kContentHMargin),
     ]);
   }
 

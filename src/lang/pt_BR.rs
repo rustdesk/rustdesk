@@ -830,5 +830,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Captura a tela diretamente da placa de vídeo pelo serviço do RustDesk, sem o pedido de compartilhamento de tela do Wayland, inclusive na tela de login. Pode não funcionar em todos os dispositivos; se as conexões continuarem pedindo para compartilhar a tela, desative isto ou use o X11. Alterar isto desconecta as sessões atuais."),
         ("wayland-drm-tip", "Para acesso autônomo no Wayland, experimente a captura de tela DRM ou use o X11 se não funcionar."),
         ("login-wayland-drm-tip", "Para acessar a tela de login do Wayland, experimente a captura de tela DRM ou mude-a para o X11."),
+        ("Keyboard mode", "Modo do teclado"),
     ].iter().cloned().collect();
 }
