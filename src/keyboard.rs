@@ -101,7 +101,7 @@ pub mod client {
     struct GrabOwnerState {
         owner: Option<u128>,
         #[cfg(windows)]
-        unicode_packet: crate::platform::windows::keyboard::UnicodePacket,
+        unicode_packet: UnicodePacket,
         last_grab: Option<std::time::Instant>,
         /// True while a deferred-release thread is in flight. Prevents
         /// spawning redundant threads during the X11 feedback loop.
@@ -340,43 +340,11 @@ pub mod client {
 
     #[cfg(windows)]
     pub(super) fn handle_unicode_packet(event: &Event) -> bool {
-        const ERROR_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
         let mut gs = GRAB_STATE.lock().unwrap();
-        if !rdev::is_unicode_packet_enabled() {
+        if gs.owner.is_none() {
             return false;
         }
-        let Some(_owner) = gs.owner else {
-            return false;
-        };
-        #[cfg(feature = "flutter")]
-        let Some(session) =
-            flutter::sessions::get_session_by_session_id(&hbb_common::SessionID::from_u128(_owner))
-        else {
-            gs.unicode_packet = Default::default();
-            return false;
-        };
-        #[cfg(feature = "flutter")]
-        if !*session.server_keyboard_enabled.read().unwrap()
-            || session.lc.read().unwrap().view_only.v
-        {
-            gs.unicode_packet = Default::default();
-            return false;
-        }
-        if matches!(event.event_type, EventType::KeyPress(_)) {
-            match gs.unicode_packet.decode(event.position_code) {
-                Ok(Some(key_event)) => {
-                    #[cfg(feature = "flutter")]
-                    session.send_key_event(&key_event);
-                    #[cfg(not(feature = "flutter"))]
-                    send_key_event(&key_event);
-                }
-                Ok(None) => {}
-                Err(err) => {
-                    hbb_common::throttled_log!(ERROR_LOG_INTERVAL, warn, "{err}");
-                }
-            }
-        }
-        true
+        crate::platform::windows::keyboard::handle_unicode_packet(event, &mut gs.unicode_packet)
     }
 
     pub fn process_event(keyboard_mode: &str, event: &Event, lock_modes: Option<i32>) {
@@ -1768,5 +1736,75 @@ pub mod input_source {
                 CONFIG_INPUT_SOURCE_2_TIP.to_string(),
             ),
         ]
+    }
+}
+
+#[cfg(any(windows, test))]
+#[derive(Default)]
+pub(crate) struct UnicodePacket {
+    high_surrogate: Option<u16>,
+}
+
+#[cfg(any(windows, test))]
+impl UnicodePacket {
+    pub(crate) fn decode(&mut self, code: u32) -> Result<Option<KeyEvent>, &'static str> {
+        const HIGH_SURROGATES: std::ops::RangeInclusive<u16> = 0xD800..=0xDBFF;
+        const LOW_SURROGATES: std::ops::RangeInclusive<u16> = 0xDC00..=0xDFFF;
+        const ERROR_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+        let previous = self.high_surrogate.take();
+        let code = u16::try_from(code).map_err(|_| "Invalid Unicode keyboard packet")?;
+        if HIGH_SURROGATES.contains(&code) {
+            self.high_surrogate = Some(code);
+            return if previous.is_some() {
+                Err("Unpaired Unicode keyboard surrogate")
+            } else {
+                Ok(None)
+            };
+        }
+
+        let units = match previous {
+            Some(high) if LOW_SURROGATES.contains(&code) => vec![high, code],
+            Some(_) => {
+                hbb_common::throttled_log!(
+                    ERROR_LOG_INTERVAL,
+                    warn,
+                    "Unpaired Unicode keyboard surrogate"
+                );
+                vec![code]
+            }
+            None => vec![code],
+        };
+        let text = String::from_utf16(&units).map_err(|_| "Invalid Unicode keyboard sequence")?;
+        let mut event = KeyEvent::new();
+        // Legacy text input already injects Unicode on the peer, including the sign-in screen.
+        event.set_seq(text);
+        Ok(Some(event))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UnicodePacket;
+
+    #[test]
+    fn unicode_packets_preserve_bmp_and_surrogate_pairs() {
+        let expected = "a8*6 café Ω Ж 日本語 😀🦀END";
+        let mut decoder = UnicodePacket::default();
+        let mut received = String::new();
+        for unit in expected.encode_utf16() {
+            if let Some(event) = decoder.decode(u32::from(unit)).unwrap() {
+                received.push_str(event.seq());
+            }
+        }
+        assert_eq!(received, expected);
+    }
+
+    #[test]
+    fn unicode_packets_keep_text_after_unpaired_high_surrogate() {
+        let mut decoder = UnicodePacket::default();
+        assert!(decoder.decode(0xD83D).unwrap().is_none());
+        assert_eq!(decoder.decode(u32::from(b'A')).unwrap().unwrap().seq(), "A");
+        assert_eq!(decoder.decode(u32::from(b'B')).unwrap().unwrap().seq(), "B");
     }
 }
