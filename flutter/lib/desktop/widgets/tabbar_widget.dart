@@ -1100,16 +1100,22 @@ class _TabState extends State<_Tab> with RestorationMixin {
           child: Tooltip(
             message:
                 widget.tabType == DesktopTabType.main ? '' : widget.label.value,
-            child: Text(
-              widget.tabType == DesktopTabType.main
-                  ? translate(widget.label.value)
-                  : widget.label.value,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: isSelected
-                      ? MyTheme.tabbar(context).selectedTextColor
-                      : MyTheme.tabbar(context).unSelectedTextColor),
-              overflow: TextOverflow.ellipsis,
+            // The tooltip repeats the label, which screen readers already read.
+            excludeFromSemantics: true,
+            child: Semantics(
+              button: true,
+              selected: isSelected,
+              child: Text(
+                widget.tabType == DesktopTabType.main
+                    ? translate(widget.label.value)
+                    : widget.label.value,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: isSelected
+                        ? MyTheme.tabbar(context).selectedTextColor
+                        : MyTheme.tabbar(context).unSelectedTextColor),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ));
     });
@@ -1245,12 +1251,16 @@ class _CloseButton extends StatelessWidget {
                   hoverColor: MyTheme.tabbar(context).closeHoverColor,
                   customBorder: const CircleBorder(),
                   onTap: () => onClose(),
-                  child: Icon(
-                    Icons.close,
-                    size: _kIconSize,
-                    color: tabSelected
-                        ? MyTheme.tabbar(context).selectedIconColor
-                        : MyTheme.tabbar(context).unSelectedIconColor,
+                  child: Semantics(
+                    button: true,
+                    label: translate('Close tab'),
+                    child: Icon(
+                      Icons.close,
+                      size: _kIconSize,
+                      color: tabSelected
+                          ? MyTheme.tabbar(context).selectedIconColor
+                          : MyTheme.tabbar(context).unSelectedIconColor,
+                    ),
                   ),
                 );
               } else {
@@ -1290,7 +1300,7 @@ class _ActionIconState extends State<ActionIcon> {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
+    final tooltip = Tooltip(
       message: widget.message != null ? translate(widget.message!) : "",
       waitDuration: const Duration(seconds: 1),
       child: InkWell(
@@ -1321,6 +1331,7 @@ class _ActionIconState extends State<ActionIcon> {
         ),
       ),
     );
+    return Semantics(button: true, child: tooltip);
   }
 }
 
@@ -1362,6 +1373,7 @@ class _TabDropDownButtonState extends State<_TabDropDownButton> {
         .map((e) => e.key)
         .toList();
     return ActionIcon(
+      message: 'More',
       onTapDown: (details) {
         final x = details.globalPosition.dx;
         final y = details.globalPosition.dy;

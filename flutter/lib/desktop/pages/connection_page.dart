@@ -72,9 +72,12 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                   onTap: () async {
                     await start_service(true);
                   },
-                  child: Text(translate("Start service"),
-                      style: TextStyle(
-                          decoration: TextDecoration.underline, fontSize: em)))
+                  child: Semantics(
+                      button: true,
+                      child: Text(translate("Start service"),
+                          style: TextStyle(
+                              decoration: TextDecoration.underline,
+                              fontSize: em))))
               .marginOnly(left: em),
         );
 
@@ -93,11 +96,14 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                     child: Row(
                       children: [
                         Flexible(
-                          child: Text(
-                            translate('setup_server_tip'),
-                            style: TextStyle(
-                                decoration: TextDecoration.underline,
-                                fontSize: em),
+                          child: Semantics(
+                            link: true,
+                            child: Text(
+                              translate('setup_server_tip'),
+                              style: TextStyle(
+                                  decoration: TextDecoration.underline,
+                                  fontSize: em),
+                            ),
                           ),
                         ),
                       ],
@@ -447,36 +453,42 @@ class _ConnectionPageState extends State<ConnectionPage>
                   ) {
                     updateTextAndPreserveSelection(
                         fieldTextEditingController, _idController.text);
-                    return Obx(() => TextField(
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          keyboardType: TextInputType.visiblePassword,
-                          focusNode: fieldFocusNode,
-                          style: const TextStyle(
-                            fontFamily: 'WorkSans',
-                            fontSize: 22,
-                            height: 1.4,
-                          ),
-                          maxLines: 1,
-                          cursorColor:
-                              Theme.of(context).textTheme.titleLarge?.color,
-                          decoration: InputDecoration(
-                              filled: false,
-                              counterText: '',
-                              hintText: _idInputFocused.value
-                                  ? null
-                                  : translate('Enter Remote ID'),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 15, vertical: 13)),
-                          controller: fieldTextEditingController,
-                          inputFormatters: [IDTextInputFormatter()],
-                          onChanged: (v) {
-                            _idController.id = v;
-                          },
-                          onSubmitted: (_) {
-                            onConnect();
-                          },
-                        ).workaroundFreezeLinuxMint());
+                    return Obx(() => Semantics(
+                          container: true,
+                          label: _idInputFocused.value
+                              ? translate('Enter Remote ID')
+                              : null,
+                          child: TextField(
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            keyboardType: TextInputType.visiblePassword,
+                            focusNode: fieldFocusNode,
+                            style: const TextStyle(
+                              fontFamily: 'WorkSans',
+                              fontSize: 22,
+                              height: 1.4,
+                            ),
+                            maxLines: 1,
+                            cursorColor:
+                                Theme.of(context).textTheme.titleLarge?.color,
+                            decoration: InputDecoration(
+                                filled: false,
+                                counterText: '',
+                                hintText: _idInputFocused.value
+                                    ? null
+                                    : translate('Enter Remote ID'),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 15, vertical: 13)),
+                            controller: fieldTextEditingController,
+                            inputFormatters: [IDTextInputFormatter()],
+                            onChanged: (v) {
+                              _idController.id = v;
+                            },
+                            onSubmitted: (_) {
+                              onConnect();
+                            },
+                          ).workaroundFreezeLinuxMint(),
+                        ));
                   },
                   onSelected: (option) {
                     setState(() {
@@ -573,12 +585,16 @@ class _ConnectionPageState extends State<ConnectionPage>
                       builder: (context, setState) {
                         var offset = Offset(0, 0);
                         return Obx(() => InkWell(
-                              child: _menuOpen.value
-                                  ? Transform.rotate(
-                                      angle: pi,
-                                      child: Icon(IconFont.more, size: 14),
-                                    )
-                                  : Icon(IconFont.more, size: 14),
+                              child: Semantics(
+                                button: true,
+                                label: translate('More'),
+                                child: _menuOpen.value
+                                    ? Transform.rotate(
+                                        angle: pi,
+                                        child: Icon(IconFont.more, size: 14),
+                                      )
+                                    : Icon(IconFont.more, size: 14),
+                              ),
                               onTapDown: (e) {
                                 offset = e.globalPosition;
                               },

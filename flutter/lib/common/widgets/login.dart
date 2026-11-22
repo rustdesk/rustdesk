@@ -958,18 +958,22 @@ Future<bool?> _openLoginDialog() async {
           onEnter: (_) => setState(() => isCloseHovered = true),
           onExit: (_) => setState(() => isCloseHovered = false),
           child: InkWell(
-            child: Icon(
-              Icons.close,
-              size: 25,
-              // No need to handle the branch of null.
-              // Because we can ensure the color is not null when debug.
-              color: isCloseHovered
-                  ? Colors.white
-                  : Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.color
-                      ?.withOpacity(0.55),
+            child: Semantics(
+              button: true,
+              label: translate('Close'),
+              child: Icon(
+                Icons.close,
+                size: 25,
+                // No need to handle the branch of null.
+                // Because we can ensure the color is not null when debug.
+                color: isCloseHovered
+                    ? Colors.white
+                    : Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.color
+                        ?.withOpacity(0.55),
+              ),
             ),
             onTap: onDialogCancel,
             hoverColor: Colors.red,

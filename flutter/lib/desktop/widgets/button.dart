@@ -38,7 +38,7 @@ class _ButtonState extends State<Button> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => InkWell(
+    final button = Obx(() => InkWell(
           onTapDown: (_) => pressed.value = true,
           onTapUp: (_) => pressed.value = false,
           onTapCancel: () => pressed.value = false,
@@ -81,6 +81,7 @@ class _ButtonState extends State<Button> {
                 ).marginSymmetric(horizontal: 12),
               )),
         ));
+    return Semantics(button: true, child: button);
   }
 }
 
@@ -120,7 +121,7 @@ class _FixedWidthButtonState extends State<FixedWidthButton> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => InkWell(
+    final button = Obx(() => InkWell(
           onTapDown: (_) => pressed.value = true,
           onTapUp: (_) => pressed.value = false,
           onTapCancel: () => pressed.value = false,
@@ -167,5 +168,6 @@ class _FixedWidthButtonState extends State<FixedWidthButton> {
             ),
           ),
         ));
+    return Semantics(button: true, child: button);
   }
 }

@@ -179,13 +179,17 @@ class _InstallPageBodyState extends State<_InstallPageBody>
                     children: [
                       Text('${translate('Installation Path')}:')
                           .marginOnly(right: 10),
-                      TextField(
-                        controller: controller,
-                        readOnly: true,
-                        decoration: InputDecoration(
-                          contentPadding: EdgeInsets.all(0.75 * em),
-                        ),
-                      ).workaroundFreezeLinuxMint().marginOnly(right: 10),
+                      Semantics(
+                        container: true,
+                        label: translate('Installation Path'),
+                        child: TextField(
+                          controller: controller,
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            contentPadding: EdgeInsets.all(0.75 * em),
+                          ),
+                        ).workaroundFreezeLinuxMint(),
+                      ).marginOnly(right: 10),
                       Obx(
                         () => OutlinedButton.icon(
                           icon: Icon(Icons.folder_outlined, size: 16),

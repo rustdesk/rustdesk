@@ -212,15 +212,19 @@ void changeWhiteList({Function()? callback}) async {
           Row(
             children: [
               Expanded(
-                child: TextField(
-                        maxLines: null,
-                        decoration: InputDecoration(
-                          errorText: msg.isEmpty ? null : translate(msg),
-                        ),
-                        controller: controller,
-                        enabled: !isOptFixed,
-                        autofocus: true)
-                    .workaroundFreezeLinuxMint(),
+                child: Semantics(
+                  container: true,
+                  label: translate("IP Whitelisting"),
+                  child: TextField(
+                          maxLines: null,
+                          decoration: InputDecoration(
+                            errorText: msg.isEmpty ? null : translate(msg),
+                          ),
+                          controller: controller,
+                          enabled: !isOptFixed,
+                          autofocus: true)
+                      .workaroundFreezeLinuxMint(),
+                ),
               ),
             ],
           ),
@@ -316,15 +320,19 @@ void changeIdWhiteList({Function()? callback}) async {
           Row(
             children: [
               Expanded(
-                child: TextField(
-                        maxLines: null,
-                        decoration: InputDecoration(
-                          errorText: msg.isEmpty ? null : translate(msg),
-                        ),
-                        controller: controller,
-                        enabled: !isOptFixed,
-                        autofocus: true)
-                    .workaroundFreezeLinuxMint(),
+                child: Semantics(
+                  container: true,
+                  label: translate("ID whitelisting"),
+                  child: TextField(
+                          maxLines: null,
+                          decoration: InputDecoration(
+                            errorText: msg.isEmpty ? null : translate(msg),
+                          ),
+                          controller: controller,
+                          enabled: !isOptFixed,
+                          autofocus: true)
+                      .workaroundFreezeLinuxMint(),
+                ),
               ),
             ],
           ),
@@ -404,24 +412,30 @@ Future<String> changeDirectAccessPort(
           Row(
             children: [
               Expanded(
-                child: TextField(
-                        maxLines: null,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                            hintText: '21118',
-                            isCollapsed: true,
-                            prefix: Text('$currentIP : '),
-                            suffix: IconButton(
-                                padding: EdgeInsets.zero,
-                                icon: const Icon(Icons.clear, size: 16),
-                                onPressed: () => controller.clear())),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(
-                              r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
-                        ],
-                        controller: controller,
-                        autofocus: true)
-                    .workaroundFreezeLinuxMint(),
+                child: Semantics(
+                  container: true,
+                  label: translate('Port'),
+                  child: TextField(
+                          maxLines: null,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                              hintText: '21118',
+                              isCollapsed: true,
+                              prefix: Text('$currentIP : '),
+                              suffix: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  icon: Icon(Icons.clear,
+                                      size: 16,
+                                      semanticLabel: translate('Clear')),
+                                  onPressed: () => controller.clear())),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(
+                                r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                          ],
+                          controller: controller,
+                          autofocus: true)
+                      .workaroundFreezeLinuxMint(),
+                ),
               ),
             ],
           ),
@@ -453,23 +467,29 @@ Future<String> changeAutoDisconnectTimeout(String old) async {
           Row(
             children: [
               Expanded(
-                child: TextField(
-                        maxLines: null,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                            hintText: '10',
-                            isCollapsed: true,
-                            suffix: IconButton(
-                                padding: EdgeInsets.zero,
-                                icon: const Icon(Icons.clear, size: 16),
-                                onPressed: () => controller.clear())),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(
-                              r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
-                        ],
-                        controller: controller,
-                        autofocus: true)
-                    .workaroundFreezeLinuxMint(),
+                child: Semantics(
+                  container: true,
+                  label: translate("Timeout in minutes"),
+                  child: TextField(
+                          maxLines: null,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                              hintText: '10',
+                              isCollapsed: true,
+                              suffix: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  icon: Icon(Icons.clear,
+                                      size: 16,
+                                      semanticLabel: translate('Clear')),
+                                  onPressed: () => controller.clear())),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(
+                                r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                          ],
+                          controller: controller,
+                          autofocus: true)
+                      .workaroundFreezeLinuxMint(),
+                ),
               ),
             ],
           ),
@@ -2628,23 +2648,29 @@ void setSharedAbPasswordDialog(String abName, Peer peer) {
         ],
       ),
       content: Obx(() => Column(children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              obscureText: !passwordVisible,
-              decoration: InputDecoration(
-                suffixIcon: IconButton(
-                  icon: Icon(
-                      passwordVisible ? Icons.visibility : Icons.visibility_off,
-                      color: MyTheme.lightTheme.primaryColor),
-                  onPressed: () {
-                    setState(() {
-                      passwordVisible = !passwordVisible;
-                    });
-                  },
+            Semantics(
+              container: true,
+              label: translate('Password'),
+              child: TextField(
+                controller: controller,
+                autofocus: true,
+                obscureText: !passwordVisible,
+                decoration: InputDecoration(
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                        passwordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: MyTheme.lightTheme.primaryColor),
+                    onPressed: () {
+                      setState(() {
+                        passwordVisible = !passwordVisible;
+                      });
+                    },
+                  ),
                 ),
-              ),
-            ).workaroundFreezeLinuxMint(),
+              ).workaroundFreezeLinuxMint(),
+            ),
             if (!gFFI.abModel.current.isPersonal())
               Row(children: [
                 Icon(Icons.info, color: Colors.amber).marginOnly(right: 4),
@@ -2902,6 +2928,7 @@ Widget trustedDeviceExpiration({
           width: isDesktop || isWebDesktop ? 140 : 100,
           height: dropdownHeight,
           child: ComboBox(
+            semanticLabel: translate('Trust duration (days)'),
             keys: periods,
             values: ['1', '7', '30', '90', translate('Forever')],
             initialKey: periods.contains(period) ? period : '90',
@@ -2984,16 +3011,19 @@ Widget trustedDevicesTable(
     child: Obx(() => DataTable(
           columns: [
             DataColumn(
-                label: Checkbox(
-              value: selectAll.value,
-              onChanged: (value) {
-                if (value == true) {
-                  selectedDevices.clear();
-                  selectedDevices.addAll(devices.map((e) => e.recordId));
-                } else {
-                  selectedDevices.clear();
-                }
-              },
+                label: Semantics(
+              label: translate('Select All'),
+              child: Checkbox(
+                value: selectAll.value,
+                onChanged: (value) {
+                  if (value == true) {
+                    selectedDevices.clear();
+                    selectedDevices.addAll(devices.map((e) => e.recordId));
+                  } else {
+                    selectedDevices.clear();
+                  }
+                },
+              ),
             )),
             DataColumn(label: Text(translate('Platform'))),
             DataColumn(label: Text(translate('ID'))),
@@ -3002,17 +3032,20 @@ Widget trustedDevicesTable(
           ],
           rows: devices.map((device) {
             return DataRow(cells: [
-              DataCell(Checkbox(
-                value: selectedDevices.contains(device.recordId),
-                onChanged: (value) {
-                  if (value == null) return;
-                  if (value) {
-                    selectedDevices.remove(device.recordId);
-                    selectedDevices.add(device.recordId);
-                  } else {
-                    selectedDevices.remove(device.recordId);
-                  }
-                },
+              DataCell(Semantics(
+                label: device.id,
+                child: Checkbox(
+                  value: selectedDevices.contains(device.recordId),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    if (value) {
+                      selectedDevices.remove(device.recordId);
+                      selectedDevices.add(device.recordId);
+                    } else {
+                      selectedDevices.remove(device.recordId);
+                    }
+                  },
+                ),
               )),
               DataCell(Text(device.platform)),
               DataCell(Text(device.id)),

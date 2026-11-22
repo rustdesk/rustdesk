@@ -1643,7 +1643,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   ),
                 ),
                 ActionIcon(
-                  message: "",
+                  message: "Directory",
                   icon: Icons.keyboard_arrow_down_rounded,
                   onTap: () async {
                     final renderBox = _locationBarKey.currentContext
@@ -1795,23 +1795,29 @@ class _FileManagerViewState extends State<FileManagerView> {
           colorFilter: svgColor(Theme.of(context).tabBarTheme.labelColor),
         ),
         Expanded(
-          child: TextField(
-            focusNode: _locationNode,
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              isDense: true,
-              prefix: Padding(
-                padding: EdgeInsets.only(left: 4.0),
+          child: Semantics(
+            container: true,
+            label: translate(_locationStatus.value == LocationStatus.pathLocation
+                ? 'Directory'
+                : 'Search'),
+            child: TextField(
+              focusNode: _locationNode,
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                prefix: Padding(
+                  padding: EdgeInsets.only(left: 4.0),
+                ),
               ),
-            ),
-            controller: textController,
-            onSubmitted: (path) {
-              controller.openDirectory(path);
-            },
-            onChanged: _locationStatus.value == LocationStatus.fileSearchBar
-                ? (searchText) => onSearchText(searchText, isLocal)
-                : null,
-          ).workaroundFreezeLinuxMint(),
+              controller: textController,
+              onSubmitted: (path) {
+                controller.openDirectory(path);
+              },
+              onChanged: _locationStatus.value == LocationStatus.fileSearchBar
+                  ? (searchText) => onSearchText(searchText, isLocal)
+                  : null,
+            ).workaroundFreezeLinuxMint(),
+          ),
         )
       ],
     );

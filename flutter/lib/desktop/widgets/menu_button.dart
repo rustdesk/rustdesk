@@ -31,7 +31,7 @@ class _MenuButtonState extends State<MenuButton> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    final button = Padding(
       padding: widget.padding,
       child: Tooltip(
         waitDuration: Duration(milliseconds: 300),
@@ -60,5 +60,6 @@ class _MenuButtonState extends State<MenuButton> {
         ),
       ),
     );
+    return Semantics(button: true, child: button);
   }
 }

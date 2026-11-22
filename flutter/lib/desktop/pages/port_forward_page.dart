@@ -199,14 +199,18 @@ class _PortForwardPageState extends State<PortForwardPage>
       child: Row(children: [
         buildTunnelInputCell(context,
             controller: localPortController,
-            inputFormatters: portInputFormatter),
+            inputFormatters: portInputFormatter,
+            label: 'Local Port'),
         const SizedBox(
             width: _kColumn1Width, child: Icon(Icons.arrow_forward_sharp)),
         buildTunnelInputCell(context,
-            controller: remoteHostController, hint: 'localhost'),
+            controller: remoteHostController,
+            hint: 'localhost',
+            label: 'Remote Host'),
         buildTunnelInputCell(context,
             controller: remotePortController,
-            inputFormatters: portInputFormatter),
+            inputFormatters: portInputFormatter,
+            label: 'Remote Port'),
         ElevatedButton(
           onPressed: () async {
             int? localPort = int.tryParse(localPortController.text);
@@ -239,16 +243,21 @@ class _PortForwardPageState extends State<PortForwardPage>
   buildTunnelInputCell(BuildContext context,
       {required TextEditingController controller,
       List<TextInputFormatter>? inputFormatters,
-      String? hint}) {
+      String? hint,
+      String? label}) {
     return Expanded(
       child: Padding(
           padding: const EdgeInsets.all(10.0),
-          child: TextField(
-              controller: controller,
-              inputFormatters: inputFormatters,
-              decoration: InputDecoration(
-                hintText: hint,
-              )).workaroundFreezeLinuxMint()),
+          child: Semantics(
+            container: true,
+            label: label == null ? null : translate(label),
+            child: TextField(
+                controller: controller,
+                inputFormatters: inputFormatters,
+                decoration: InputDecoration(
+                  hintText: hint,
+                )).workaroundFreezeLinuxMint(),
+          )),
     );
   }
 
@@ -273,7 +282,7 @@ class _PortForwardPageState extends State<PortForwardPage>
         SizedBox(
           width: _kColumn4Width,
           child: IconButton(
-            icon: const Icon(Icons.close),
+            icon: Icon(Icons.close, semanticLabel: translate('Remove')),
             onPressed: () async {
               await bind.sessionRemovePortForward(
                   sessionId: _ffi.sessionId, localPort: pf.localPort);

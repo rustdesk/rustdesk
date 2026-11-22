@@ -491,7 +491,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
               }
               handleOsPasswordEditIcon(sessionId, ffi.dialogManager);
             },
-            icon: Icon(Icons.edit, color: isMobile ? MyTheme.accent : null),
+            icon: Icon(Icons.edit,
+                color: isMobile ? MyTheme.accent : null,
+                semanticLabel: translate('Edit')),
           ),
         ),
         onPressed: () => handleOsPasswordAction(sessionId, ffi.dialogManager),

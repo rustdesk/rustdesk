@@ -310,7 +310,10 @@ class _AddressBookState extends State<AddressBook> {
               menuPos = RelativeRect.fromLTRB(x, y, x, y);
             },
             onPointerUp: (_) => _showMenu(menuPos),
-            child: build_more(context, invert: true)),
+            child: Semantics(
+                button: true,
+                label: translate('More'),
+                child: build_more(context, invert: true))),
       ],
     );
   }
@@ -514,7 +517,10 @@ class _AddressBookState extends State<AddressBook> {
 
       double marginBottom = 4;
 
-      row({required Widget label, required Widget input}) {
+      row(
+          {required Widget label,
+          required Widget input,
+          String? semanticLabel}) {
         makeChild(bool isPortrait) => Row(
               children: [
                 !isPortrait
@@ -525,7 +531,10 @@ class _AddressBookState extends State<AddressBook> {
                 Expanded(
                   child: ConstrainedBox(
                       constraints: const BoxConstraints(minWidth: 200),
-                      child: input),
+                      child: Semantics(
+                          container: true,
+                          label: isPortrait ? null : semanticLabel,
+                          child: input)),
                 ),
               ],
             ).marginOnly(bottom: !isPortrait ? 8 : 0);
@@ -540,6 +549,7 @@ class _AddressBookState extends State<AddressBook> {
             Column(
               children: [
                 row(
+                    semanticLabel: translate('ID'),
                     label: Row(
                       children: [
                         Text(
@@ -563,6 +573,7 @@ class _AddressBookState extends State<AddressBook> {
                               errorMaxLines: 5),
                         ).workaroundFreezeLinuxMint())),
                 row(
+                  semanticLabel: translate('Alias'),
                   label: Text(
                     translate('Alias'),
                     style: style,
@@ -578,6 +589,7 @@ class _AddressBookState extends State<AddressBook> {
                 ),
                 if (isCurrentAbShared)
                   row(
+                      semanticLabel: translate('Password'),
                       label: Text(
                         translate('Password'),
                         style: style,
@@ -606,6 +618,7 @@ class _AddressBookState extends State<AddressBook> {
                         ).workaroundFreezeLinuxMint(),
                       )),
                 row(
+                    semanticLabel: translate('Note'),
                     label: Text(
                       translate('Note'),
                       style: style,

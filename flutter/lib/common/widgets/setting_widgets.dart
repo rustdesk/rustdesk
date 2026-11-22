@@ -63,6 +63,8 @@ customImageQualityWidget(
                           qualityValue.value = value;
                           debouncerQuality.value = value;
                         },
+                  semanticFormatterCallback: (double value) =>
+                      '${translate('Bitrate')} ${value.round()}%',
                 ),
               ),
               Expanded(
@@ -129,6 +131,8 @@ customImageQualityWidget(
                             fpsValue.value = value;
                             debouncerFps.value = value;
                           },
+                    semanticFormatterCallback: (double value) =>
+                        '${translate('FPS')} ${value.round()}',
                   ),
                 ),
                 Expanded(
@@ -370,6 +374,8 @@ class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
             max: kMaxTrackpadSpeed.toDouble(),
             divisions: ((kMaxTrackpadSpeed - kMinTrackpadSpeed) / 10).round(),
             onChanged: (double v) => updateValue(v.round()),
+            semanticFormatterCallback: (double v) =>
+                '${translate('Trackpad speed')} ${v.round()}%',
           ),
         ),
         Expanded(
@@ -378,16 +384,20 @@ class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
               children: [
                 SizedBox(
                   width: 56,
-                  child: TextField(
-                    controller: _controller,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    onChanged: updateTextValue,
-                    onSubmitted: submitTextValue,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      contentPadding:
-                          EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+                  child: Semantics(
+                    container: true,
+                    label: translate('Trackpad speed'),
+                    child: TextField(
+                      controller: _controller,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      onChanged: updateTextValue,
+                      onSubmitted: submitTextValue,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        contentPadding: EdgeInsets.symmetric(
+                            vertical: 8.0, horizontal: 12.0),
+                      ),
                     ),
                   ),
                 ).marginOnly(right: 8.0),

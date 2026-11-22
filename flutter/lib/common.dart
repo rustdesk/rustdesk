@@ -3328,7 +3328,11 @@ Widget buildErrorBanner(BuildContext context,
                   onTap: () {
                     close.call();
                   },
-                  child: Icon(Icons.close).marginSymmetric(horizontal: 5),
+                  child: Semantics(
+                          button: true,
+                          label: translate('Close'),
+                          child: Icon(Icons.close))
+                      .marginSymmetric(horizontal: 5),
                 ),
               ).marginAll(4)
             ],
@@ -3698,6 +3702,7 @@ class ComboBox extends StatelessWidget {
   late final Function(String key) onChanged;
   late final bool enabled;
   late String current;
+  final String? semanticLabel;
 
   ComboBox({
     Key? key,
@@ -3706,6 +3711,7 @@ class ComboBox extends StatelessWidget {
     required this.initialKey,
     required this.onChanged,
     this.enabled = true,
+    this.semanticLabel,
   }) : super(key: key);
 
   @override
@@ -3716,7 +3722,7 @@ class ComboBox extends StatelessWidget {
     }
     var ref = values[index].obs;
     current = keys[index];
-    return Container(
+    final comboBox = Container(
       decoration: BoxDecoration(
         border: Border.all(
           color: enabled
@@ -3761,6 +3767,8 @@ class ComboBox extends StatelessWidget {
             }).toList(),
           )),
     ).marginOnly(bottom: 5);
+    return Semantics(
+        container: true, label: semanticLabel, child: comboBox);
   }
 }
 

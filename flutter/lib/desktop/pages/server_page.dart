@@ -406,9 +406,10 @@ class _CloseButton extends StatelessWidget {
       onPressed: () {
         windowManager.close();
       },
-      icon: const Icon(
+      icon: Icon(
         IconFont.close,
         size: 18,
+        semanticLabel: translate('Close'),
       ),
       splashColor: Colors.transparent,
       hoverColor: Colors.transparent,
@@ -568,9 +569,14 @@ class _CmHeaderState extends State<_CmHeader>
                       .toggleCMChatPage(MessageKey(client.peerId, client.id));
                 }
               }),
-              icon: SvgPicture.asset(client.type_() == ClientType.file
-                  ? 'assets/file_transfer.svg'
-                  : 'assets/chat2.svg'),
+              icon: Semantics(
+                label: translate(client.type_() == ClientType.file
+                    ? 'Transfer file'
+                    : 'Chat'),
+                child: SvgPicture.asset(client.type_() == ClientType.file
+                    ? 'assets/file_transfer.svg'
+                    : 'assets/chat2.svg'),
+              ),
               splashRadius: kDesktopIconButtonSplashRadius,
             ),
           )

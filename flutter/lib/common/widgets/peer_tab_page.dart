@@ -170,8 +170,11 @@ class _PeerTabPageState extends State<PeerTabPage>
                         decoration: (hover.value
                             ? (selected ? decoBorder : deco)
                             : (selected ? decoBorder : null)),
-                        child: Icon(model.tabIcon(t), color: color)
-                            .paddingSymmetric(horizontal: 4),
+                        child: Semantics(
+                          button: true,
+                          selected: selected,
+                          child: Icon(model.tabIcon(t), color: color),
+                        ).paddingSymmetric(horizontal: 4),
                       ).paddingSymmetric(horizontal: 4),
                       onTap: isOptionFixed(kOptionPeerTabIndex)
                           ? null
@@ -226,10 +229,13 @@ class _PeerTabPageState extends State<PeerTabPage>
             spinning: loading,
             child: RotatedBox(
                 quarterTurns: 2,
-                child: Icon(
-                  Icons.refresh,
-                  size: 18,
-                  color: textColor,
+                child: Semantics(
+                  button: true,
+                  child: Icon(
+                    Icons.refresh,
+                    size: 18,
+                    color: textColor,
+                  ),
                 ))),
       ),
     );
@@ -738,34 +744,39 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                       color: Theme.of(context).hintColor,
                     ).marginSymmetric(horizontal: 4),
                     Expanded(
-                      child: TextField(
-                        autofocus: true,
-                        controller: peerSearchTextController,
-                        onChanged: (searchText) {
-                          peerSearchText.value = searchText;
-                        },
-                        focusNode: focusNode,
-                        textAlign: TextAlign.start,
-                        maxLines: 1,
-                        cursorColor: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.color
-                            ?.withOpacity(0.5),
-                        cursorHeight: 18,
-                        cursorWidth: 1,
-                        style: const TextStyle(fontSize: 14),
-                        decoration: InputDecoration(
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 6),
-                          hintText:
-                              focused.value ? null : translate("Search ID"),
-                          hintStyle: TextStyle(
-                              fontSize: 14, color: Theme.of(context).hintColor),
-                          border: InputBorder.none,
-                          isDense: true,
-                        ),
-                      ).workaroundFreezeLinuxMint(),
+                      child: Semantics(
+                        container: true,
+                        label: focused.value ? translate("Search ID") : null,
+                        child: TextField(
+                          autofocus: true,
+                          controller: peerSearchTextController,
+                          onChanged: (searchText) {
+                            peerSearchText.value = searchText;
+                          },
+                          focusNode: focusNode,
+                          textAlign: TextAlign.start,
+                          maxLines: 1,
+                          cursorColor: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.color
+                              ?.withOpacity(0.5),
+                          cursorHeight: 18,
+                          cursorWidth: 1,
+                          style: const TextStyle(fontSize: 14),
+                          decoration: InputDecoration(
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 6),
+                            hintText:
+                                focused.value ? null : translate("Search ID"),
+                            hintStyle: TextStyle(
+                                fontSize: 14,
+                                color: Theme.of(context).hintColor),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                        ).workaroundFreezeLinuxMint(),
+                      ),
                     ),
                     // Icon(Icons.close),
                     IconButton(
@@ -1039,7 +1050,7 @@ Widget _hoverAction(
     color: Theme.of(context).colorScheme.background,
     borderRadius: BorderRadius.circular(6),
   );
-  return Tooltip(
+  final tooltip = Tooltip(
     message: toolTip,
     child: Obx(
       () => Container(
@@ -1053,6 +1064,7 @@ Widget _hoverAction(
               child: Container(padding: padding, child: child))),
     ),
   );
+  return Semantics(button: true, child: tooltip);
 }
 
 class PullDownMenuEntryImpl extends StatelessWidget

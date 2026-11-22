@@ -387,12 +387,16 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
               color: selected ? _accentColor : null,
               size: 20,
             ).marginOnly(left: 13, right: 10),
-            Text(
-              translate(tab.label),
-              style: TextStyle(
-                  color: selected ? _accentColor : null,
-                  fontWeight: FontWeight.w400,
-                  fontSize: _kContentFontSize),
+            Semantics(
+              button: true,
+              selected: selected,
+              child: Text(
+                translate(tab.label),
+                style: TextStyle(
+                    color: selected ? _accentColor : null,
+                    fontWeight: FontWeight.w400,
+                    fontSize: _kContentFontSize),
+              ),
             ),
           ]),
         ),
@@ -788,6 +792,7 @@ class _GeneralState extends State<_General> {
 
     builder(devices, currentDevice, setDevice) {
       final child = ComboBox(
+        semanticLabel: translate('Audio Input Device'),
         keys: devices,
         values: devices,
         initialKey: currentDevice,
@@ -917,6 +922,7 @@ class _GeneralState extends State<_General> {
       }
       final isOptFixed = isOptionFixed(kCommConfKeyLang);
       return ComboBox(
+        semanticLabel: translate('Language'),
         keys: keys,
         values: values,
         initialKey: currentKey,
@@ -965,22 +971,26 @@ class _GeneralState extends State<_General> {
               Row(children: [
                 SizedBox(
                   width: 95,
-                  child: TextField(
-                    controller: controller,
-                    enabled: enabled && !isOptFixed,
-                    onChanged: (v) => typed.value = v,
-                    inputFormatters: [
-                      // Seconds, at most one decimal. Clearing the field is
-                      // allowed and restores the built-in default.
-                      FilteringTextInputFormatter.allow(
-                          RegExp(r'^([0-9]|[1-9][0-9])(\.[0-9]?)?$')),
-                    ],
-                    decoration: const InputDecoration(
-                      hintText: '2.5',
-                      contentPadding:
-                          EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                    ),
-                  ).workaroundFreezeLinuxMint().marginOnly(right: 15),
+                  child: Semantics(
+                    container: true,
+                    label: translate('Relay fallback delay in seconds'),
+                    child: TextField(
+                      controller: controller,
+                      enabled: enabled && !isOptFixed,
+                      onChanged: (v) => typed.value = v,
+                      inputFormatters: [
+                        // Seconds, at most one decimal. Clearing the field is
+                        // allowed and restores the built-in default.
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'^([0-9]|[1-9][0-9])(\.[0-9]?)?$')),
+                      ],
+                      decoration: const InputDecoration(
+                        hintText: '2.5',
+                        contentPadding:
+                            EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                      ),
+                    ).workaroundFreezeLinuxMint(),
+                  ).marginOnly(right: 15),
                 ),
                 Obx(() => Offstage(
                       offstage: typed.value.trim() == saved.value.trim(),
@@ -1241,6 +1251,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
       return _Card(title: 'Permissions', children: [
         ComboBox(
+            semanticLabel: translate('Permissions'),
             keys: [
               defaultOptionAccessMode,
               'full',
@@ -1438,6 +1449,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           final isApproveModeFixed = isOptionFixed(kOptionApproveMode);
           return _Card(title: 'Password', children: [
             ComboBox(
+              semanticLabel: translate('Password'),
               enabled: !locked && !isApproveModeFixed,
               keys: modeKeys,
               values: modeValues,
@@ -1541,20 +1553,24 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               Row(children: [
                 SizedBox(
                   width: 95,
-                  child: TextField(
-                    controller: controller,
-                    enabled: enabled && !locked && !isOptFixed,
-                    onChanged: (_) => applyEnabled.value = true,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(
-                          r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
-                    ],
-                    decoration: const InputDecoration(
-                      hintText: '21118',
-                      contentPadding:
-                          EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                    ),
-                  ).workaroundFreezeLinuxMint().marginOnly(right: 15),
+                  child: Semantics(
+                    container: true,
+                    label: translate('Port'),
+                    child: TextField(
+                      controller: controller,
+                      enabled: enabled && !locked && !isOptFixed,
+                      onChanged: (_) => applyEnabled.value = true,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(
+                            r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                      ],
+                      decoration: const InputDecoration(
+                        hintText: '21118',
+                        contentPadding:
+                            EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                      ),
+                    ).workaroundFreezeLinuxMint(),
+                  ).marginOnly(right: 15),
                 ),
                 Obx(() => ElevatedButton(
                       onPressed: applyEnabled.value &&
@@ -1748,20 +1764,24 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             Row(children: [
               SizedBox(
                 width: 95,
-                child: TextField(
-                  controller: controller,
-                  enabled: enabled && !locked && !isOptFixed,
-                  onChanged: (_) => applyEnabled.value = true,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(
-                        r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
-                  ],
-                  decoration: const InputDecoration(
-                    hintText: '10',
-                    contentPadding:
-                        EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                  ),
-                ).workaroundFreezeLinuxMint().marginOnly(right: 15),
+                child: Semantics(
+                  container: true,
+                  label: translate('Timeout in minutes'),
+                  child: TextField(
+                    controller: controller,
+                    enabled: enabled && !locked && !isOptFixed,
+                    onChanged: (_) => applyEnabled.value = true,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(
+                          r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                    ],
+                    decoration: const InputDecoration(
+                      hintText: '10',
+                      contentPadding:
+                          EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                    ),
+                  ).workaroundFreezeLinuxMint(),
+                ).marginOnly(right: 15),
               ),
               Obx(() => ElevatedButton(
                     onPressed:
@@ -1928,14 +1948,17 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
           title: title,
           showTooltip: true,
           tooltipMessage: tooltipMessage,
-          trailing: Switch(
-            value: mainGetBoolOptionSync(optionKey),
-            onChanged: locked || isOptionFixed(optionKey)
-                ? null
-                : (value) {
-                    mainSetBoolOption(optionKey, value);
-                    setState(() {});
-                  },
+          trailing: Semantics(
+            label: translate(title),
+            child: Switch(
+              value: mainGetBoolOptionSync(optionKey),
+              onChanged: locked || isOptionFixed(optionKey)
+                  ? null
+                  : (value) {
+                      mainSetBoolOption(optionKey, value);
+                      setState(() {});
+                    },
+            ),
           ),
         );
 
@@ -1993,19 +2016,22 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                               showTooltip: true,
                               tooltipMessage:
                                   '${translate('disable-udp-tip')}\n\n${translate('server-oss-not-support-tip')}',
-                              trailing: Switch(
-                                value: bind.mainGetOptionSync(
-                                        key: kOptionDisableUdp) ==
-                                    'Y',
-                                onChanged:
-                                    locked || isOptionFixed(kOptionDisableUdp)
-                                        ? null
-                                        : (value) async {
-                                            await bind.mainSetOption(
-                                                key: kOptionDisableUdp,
-                                                value: value ? 'Y' : 'N');
-                                            setState(() {});
-                                          },
+                              trailing: Semantics(
+                                label: translate('Disable UDP'),
+                                child: Switch(
+                                  value: bind.mainGetOptionSync(
+                                          key: kOptionDisableUdp) ==
+                                      'Y',
+                                  onChanged: locked ||
+                                          isOptionFixed(kOptionDisableUdp)
+                                      ? null
+                                      : (value) async {
+                                          await bind.mainSetOption(
+                                              key: kOptionDisableUdp,
+                                              value: value ? 'Y' : 'N');
+                                          setState(() {});
+                                        },
+                                ),
                               ),
                             ),
                         ],
@@ -2567,6 +2593,7 @@ class __PrinterState extends State<_Printer> {
           onChanged: onRadioChanged),
       if (printerOptions.printerNames.isNotEmpty)
         ComboBox(
+          semanticLabel: translate('Incoming Print Jobs'),
           initialKey: printerOptions.printerName,
           keys: printerOptions.printerNames,
           values: printerOptions.printerNames,
@@ -3347,18 +3374,22 @@ void changeSocks5Proxy() async {
                         )).marginOnly(right: 10),
                   ),
                 Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      errorText: proxyMsg.isNotEmpty ? proxyMsg : null,
-                      labelText: isMobile ? translate('Server') : null,
-                      helperText:
-                          isMobile ? translate("default_proxy_tip") : null,
-                      helperMaxLines: isMobile ? 3 : null,
-                    ),
-                    controller: proxyController,
-                    autofocus: true,
-                    enabled: !isOptFixed,
-                  ).workaroundFreezeLinuxMint(),
+                  child: Semantics(
+                    container: true,
+                    label: isMobile ? null : translate('Server'),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        errorText: proxyMsg.isNotEmpty ? proxyMsg : null,
+                        labelText: isMobile ? translate('Server') : null,
+                        helperText:
+                            isMobile ? translate("default_proxy_tip") : null,
+                        helperMaxLines: isMobile ? 3 : null,
+                      ),
+                      controller: proxyController,
+                      autofocus: true,
+                      enabled: !isOptFixed,
+                    ).workaroundFreezeLinuxMint(),
+                  ),
                 ),
               ],
             ).marginOnly(bottom: 8),
@@ -3372,13 +3403,17 @@ void changeSocks5Proxy() async {
                         textAlign: TextAlign.right,
                       ).marginOnly(right: 10)),
                 Expanded(
-                  child: TextField(
-                    controller: userController,
-                    decoration: InputDecoration(
-                      labelText: isMobile ? translate('Username') : null,
-                    ),
-                    enabled: !isOptFixed,
-                  ).workaroundFreezeLinuxMint(),
+                  child: Semantics(
+                    container: true,
+                    label: isMobile ? null : translate('Username'),
+                    child: TextField(
+                      controller: userController,
+                      decoration: InputDecoration(
+                        labelText: isMobile ? translate('Username') : null,
+                      ),
+                      enabled: !isOptFixed,
+                    ).workaroundFreezeLinuxMint(),
+                  ),
                 ),
               ],
             ).marginOnly(bottom: 8),
@@ -3392,19 +3427,25 @@ void changeSocks5Proxy() async {
                         textAlign: TextAlign.right,
                       ).marginOnly(right: 10)),
                 Expanded(
-                  child: Obx(() => TextField(
-                        obscureText: obscure.value,
-                        decoration: InputDecoration(
-                            labelText: isMobile ? translate('Password') : null,
-                            suffixIcon: IconButton(
-                                onPressed: () => obscure.value = !obscure.value,
-                                icon: Icon(obscure.value
-                                    ? Icons.visibility_off
-                                    : Icons.visibility))),
-                        controller: pwdController,
-                        enabled: !isOptFixed,
-                        maxLength: bind.mainMaxEncryptLen(),
-                      ).workaroundFreezeLinuxMint()),
+                  child: Obx(() => Semantics(
+                        container: true,
+                        label: isMobile ? null : translate('Password'),
+                        child: TextField(
+                          obscureText: obscure.value,
+                          decoration: InputDecoration(
+                              labelText:
+                                  isMobile ? translate('Password') : null,
+                              suffixIcon: IconButton(
+                                  onPressed: () =>
+                                      obscure.value = !obscure.value,
+                                  icon: Icon(obscure.value
+                                      ? Icons.visibility_off
+                                      : Icons.visibility))),
+                          controller: pwdController,
+                          enabled: !isOptFixed,
+                          maxLength: bind.mainMaxEncryptLen(),
+                        ).workaroundFreezeLinuxMint(),
+                      )),
                 ),
               ],
             ),

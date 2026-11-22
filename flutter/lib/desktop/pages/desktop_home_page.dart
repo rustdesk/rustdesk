@@ -160,12 +160,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   alignment: Alignment.centerLeft,
                   child: InkWell(
                     child: Obx(
-                      () => Icon(
-                        Icons.settings,
-                        color: _editHover.value
-                            ? textColor
-                            : Colors.grey.withOpacity(0.5),
-                        size: 22,
+                      () => Semantics(
+                        button: true,
+                        label: translate('Settings'),
+                        child: Icon(
+                          Icons.settings,
+                          color: _editHover.value
+                              ? textColor
+                              : Colors.grey.withOpacity(0.5),
+                          size: 22,
+                        ),
                       ),
                     ),
                     onTap: () => {
@@ -238,17 +242,22 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             ClipboardData(text: model.serverId.text));
                         showToast(translate("Copied"));
                       },
-                      child: TextFormField(
-                        controller: model.serverId,
-                        readOnly: true,
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.only(top: 10, bottom: 10),
-                        ),
-                        style: TextStyle(
-                          fontSize: 22,
-                        ),
-                      ).workaroundFreezeLinuxMint(),
+                      child: Semantics(
+                        container: true,
+                        label: translate("ID"),
+                        child: TextFormField(
+                          controller: model.serverId,
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            border: InputBorder.none,
+                            contentPadding:
+                                EdgeInsets.only(top: 10, bottom: 10),
+                          ),
+                          style: TextStyle(
+                            fontSize: 22,
+                          ),
+                        ).workaroundFreezeLinuxMint(),
+                      ),
                     ),
                   )
                 ],
@@ -273,10 +282,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             backgroundColor: hover.value
                 ? Theme.of(context).scaffoldBackgroundColor
                 : Theme.of(context).colorScheme.background,
-            child: Icon(
-              Icons.more_vert_outlined,
-              size: 20,
-              color: hover.value ? textColor : textColor?.withOpacity(0.5),
+            child: Semantics(
+              button: true,
+              child: Icon(
+                Icons.more_vert_outlined,
+                size: 20,
+                color: hover.value ? textColor : textColor?.withOpacity(0.5),
+              ),
             ),
           ),
         ),
@@ -335,16 +347,20 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                               showToast(translate("Copied"));
                             }
                           },
-                          child: TextFormField(
-                            controller: model.serverPasswd,
-                            readOnly: true,
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding:
-                                  EdgeInsets.only(top: 14, bottom: 10),
-                            ),
-                            style: TextStyle(fontSize: 15),
-                          ).workaroundFreezeLinuxMint(),
+                          child: Semantics(
+                            container: true,
+                            label: translate("One-time Password"),
+                            child: TextFormField(
+                              controller: model.serverPasswd,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                contentPadding:
+                                    EdgeInsets.only(top: 14, bottom: 10),
+                              ),
+                              style: TextStyle(fontSize: 15),
+                            ).workaroundFreezeLinuxMint(),
+                          ),
                         ),
                       ),
                       if (showOneTime)
@@ -354,12 +370,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             message: translate('Refresh Password'),
                             child: Obx(() => RotatedBox(
                                 quarterTurns: 2,
-                                child: Icon(
-                                  Icons.refresh,
-                                  color: refreshHover.value
-                                      ? textColor
-                                      : Color(0xFFDDDDDD),
-                                  size: 22,
+                                child: Semantics(
+                                  button: true,
+                                  child: Icon(
+                                    Icons.refresh,
+                                    color: refreshHover.value
+                                        ? textColor
+                                        : Color(0xFFDDDDDD),
+                                    size: 22,
+                                  ),
                                 ))),
                           ),
                           onHover: (value) => refreshHover.value = value,
@@ -369,12 +388,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           child: Tooltip(
                             message: translate('Change Password'),
                             child: Obx(
-                              () => Icon(
-                                Icons.edit,
-                                color: editHover.value
-                                    ? textColor
-                                    : Color(0xFFDDDDDD),
-                                size: 22,
+                              () => Semantics(
+                                button: true,
+                                child: Icon(
+                                  Icons.edit,
+                                  color: editHover.value
+                                      ? textColor
+                                      : Color(0xFFDDDDDD),
+                                  size: 22,
+                                ),
                               ).marginOnly(right: 8, top: 4),
                             ),
                           ),
@@ -688,13 +710,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   child: InkWell(
                                       onTap: () async =>
                                           await launchUrl(Uri.parse(link!)),
-                                      child: Text(
-                                        translate(help),
-                                        style: TextStyle(
-                                            decoration:
-                                                TextDecoration.underline,
-                                            color: Colors.white,
-                                            fontSize: 12),
+                                      child: Semantics(
+                                        link: true,
+                                        child: Text(
+                                          translate(help),
+                                          style: TextStyle(
+                                              decoration:
+                                                  TextDecoration.underline,
+                                              color: Colors.white,
+                                              fontSize: 12),
+                                        ),
                                       )).marginOnly(top: 6)),
                             ]
                           : <Widget>[]))),
@@ -708,6 +733,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 Icons.close,
                 color: Colors.white,
                 size: 20,
+                semanticLabel: translate('Close'),
               ),
               onPressed: closeCard,
             ),

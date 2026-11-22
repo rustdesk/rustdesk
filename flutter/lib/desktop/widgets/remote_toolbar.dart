@@ -3086,7 +3086,7 @@ class _IconMenuButtonState extends State<_IconMenuButton> {
                           BorderRadius.circular(_ToolbarTheme.iconRadius),
                       color: hover ? widget.hoverColor : widget.color,
                     ),
-                    child: icon)),
+                    child: Semantics(button: true, child: icon))),
           )),
     ).marginSymmetric(
         horizontal: widget.hMargin ?? _ToolbarTheme.buttonHMargin,
@@ -3169,7 +3169,7 @@ class _IconSubmenuButtonState extends State<_IconSubmenuButton> {
                               BorderRadius.circular(_ToolbarTheme.iconRadius),
                           color: hover ? widget.hoverColor : widget.color,
                         ),
-                        child: icon))),
+                        child: Semantics(button: true, child: icon)))),
             menuChildren: widget
                 .menuChildrenGetter(this)
                 .map((e) => _buildPointerTrackWidget(e, widget.ffi))
@@ -3740,7 +3740,7 @@ class EdgeThicknessControl extends StatelessWidget {
           divisions:
               (EdgeThicknessControl.kMax - EdgeThicknessControl.kMin).round(),
           semanticFormatterCallback: (double newValue) =>
-              "${newValue.round()}px",
+              "${translate('ScrollEdge')} ${newValue.round()}px",
           onChanged: onChanged,
         ),
       ),

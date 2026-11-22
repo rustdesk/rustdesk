@@ -120,16 +120,20 @@ void showServerSettingsWithValue(
             ),
             SizedBox(width: labelSpacing),
             Expanded(
-              child: serverSettingsTextFormField(
+              child: Semantics(
+                container: true,
                 label: label,
-                controller: controller,
-                errorMsg: errorMsg,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                showLabelText: false,
-                validator: validator,
-                autofocus: autofocus,
-              ).workaroundFreezeLinuxMint(),
+                child: serverSettingsTextFormField(
+                  label: label,
+                  controller: controller,
+                  errorMsg: errorMsg,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  showLabelText: false,
+                  validator: validator,
+                  autofocus: autofocus,
+                ).workaroundFreezeLinuxMint(),
+              ),
             ),
           ],
         );

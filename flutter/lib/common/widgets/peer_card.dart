@@ -777,7 +777,7 @@ abstract class BasePeerCard extends StatelessWidget {
                 child: Transform.scale(
                     scale: 0.8,
                     child: IconButton(
-                      icon: const Icon(Icons.edit),
+                      icon: Icon(Icons.edit, semanticLabel: translate('Edit')),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(
                         minWidth: kMinInteractiveDimension - 8,
@@ -1428,17 +1428,21 @@ void _rdpDialog(String id) async {
                         ).marginOnly(right: 10))
                     : SizedBox.shrink(),
                 Expanded(
-                  child: TextField(
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(
-                          r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$'))
-                    ],
-                    decoration: InputDecoration(
-                        labelText: isDesktop ? null : translate('Port'),
-                        hintText: '3389'),
-                    controller: portController,
-                    autofocus: true,
-                  ).workaroundFreezeLinuxMint(),
+                  child: Semantics(
+                    container: true,
+                    label: isDesktop ? translate('Port') : null,
+                    child: TextField(
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(
+                            r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$'))
+                      ],
+                      decoration: InputDecoration(
+                          labelText: isDesktop ? null : translate('Port'),
+                          hintText: '3389'),
+                      controller: portController,
+                      autofocus: true,
+                    ).workaroundFreezeLinuxMint(),
+                  ),
                 ),
               ],
             ).marginOnly(bottom: isDesktop ? 8 : 0),
@@ -1453,12 +1457,16 @@ void _rdpDialog(String id) async {
                             ).marginOnly(right: 10))
                         : SizedBox.shrink(),
                     Expanded(
-                      child: TextField(
-                        decoration: InputDecoration(
-                            labelText:
-                                isDesktop ? null : translate('Username')),
-                        controller: userController,
-                      ).workaroundFreezeLinuxMint(),
+                      child: Semantics(
+                        container: true,
+                        label: isDesktop ? translate('Username') : null,
+                        child: TextField(
+                          decoration: InputDecoration(
+                              labelText:
+                                  isDesktop ? null : translate('Username')),
+                          controller: userController,
+                        ).workaroundFreezeLinuxMint(),
+                      ),
                     ),
                   ],
                 ).marginOnly(bottom: stateGlobal.isPortrait.isFalse ? 8 : 0)),
@@ -1473,20 +1481,24 @@ void _rdpDialog(String id) async {
                             ).marginOnly(right: 10))
                         : SizedBox.shrink(),
                     Expanded(
-                      child: Obx(() => TextField(
-                            obscureText: secure.value,
-                            maxLength: maxLength,
-                            decoration: InputDecoration(
-                                labelText:
-                                    isDesktop ? null : translate('Password'),
-                                suffixIcon: IconButton(
-                                    onPressed: () =>
-                                        secure.value = !secure.value,
-                                    icon: Icon(secure.value
-                                        ? Icons.visibility_off
-                                        : Icons.visibility))),
-                            controller: passwordController,
-                          ).workaroundFreezeLinuxMint()),
+                      child: Obx(() => Semantics(
+                            container: true,
+                            label: isDesktop ? translate('Password') : null,
+                            child: TextField(
+                              obscureText: secure.value,
+                              maxLength: maxLength,
+                              decoration: InputDecoration(
+                                  labelText:
+                                      isDesktop ? null : translate('Password'),
+                                  suffixIcon: IconButton(
+                                      onPressed: () =>
+                                          secure.value = !secure.value,
+                                      icon: Icon(secure.value
+                                          ? Icons.visibility_off
+                                          : Icons.visibility))),
+                              controller: passwordController,
+                            ).workaroundFreezeLinuxMint(),
+                          )),
                     ),
                   ],
                 ))
