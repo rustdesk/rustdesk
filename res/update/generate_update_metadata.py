@@ -66,6 +66,12 @@ def decode_env(name, expected_size):
     try:
         value = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error) as error:
+        if re.fullmatch(r"\s*\d+(\s*,\s*\d+)+\s*,?\s*", encoded):
+            fail(
+                f"{name} looks like a comma-separated byte array, not base64. "
+                "The byte array is only for the constant in src/update_metadata.rs; "
+                "this variable/secret must hold the base64 string (32 bytes -> 44 chars)."
+            )
         fail(f"invalid base64 in {name}: {error}")
     if len(value) != expected_size:
         fail(f"{name} must decode to {expected_size} bytes")
