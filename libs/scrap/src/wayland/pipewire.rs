@@ -290,10 +290,7 @@ fn gst_element(name: &str) -> ResultType<gst::Element> {
 }
 
 impl PipeWireRecorder {
-    fn build_pipeline(
-        capturable: &PipeWireCapturable,
-        dmabuf: bool,
-    ) -> ResultType<(gst::Pipeline, AppSink)> {
+    pub fn new(capturable: PipeWireCapturable) -> ResultType<Self> {
         let pipeline = gst::Pipeline::new(None);
         // Clock waits on stale capture timestamps can exhaust the compositor's buffers.
         pipeline.use_clock(None::<&gst::Clock>);
@@ -303,49 +300,38 @@ impl PipeWireRecorder {
         src.set_property("path", &format!("{}", capturable.path))?;
         src.set_property("keepalive_time", &1_000.as_raw_fd())?;
 
+        // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
+        // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
+        src.set_property("always-copy", &true)?;
+
+        // COSMIC/Wayland fix: insert videoconvert between pipewiresrc and appsink.
+        // xdg-desktop-portal-cosmic's modifier negotiation fails when the downstream
+        // format set is too narrow (appsink only accepts BGRx/RGBx), producing
+        // "no more output formats" / not-negotiated (-4). videoconvert accepts any
+        // system-memory video/x-raw format, widening negotiation so the portal can
+        // settle on a format it can deliver via its SHM path.
+        let convert = gst_element("videoconvert")?;
+
         let sink = gst_element("appsink")?;
         sink.set_property("drop", &true)?;
         sink.set_property("max-buffers", &1u32)?;
 
-        let caps = if dmabuf {
-            // No always-copy here: it copies only the PipeWire chunk, which for DMA-BUF is a
-            // placeholder size (1 byte on niri), not the frame. The frame is read through the fd.
-            pipeline.add_many(&[&src, &sink])?;
-            src.link(&sink)?;
-            DMABUF_CAPS
-                .parse::<gst::Caps>()
-                .map_err(|_| GStreamerError("Invalid DMA-BUF caps".into()))?
-        } else {
-            // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
-            // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
-            src.set_property("always-copy", &true)?;
-
-            // COSMIC/Wayland fix: insert videoconvert between pipewiresrc and appsink.
-            // xdg-desktop-portal-cosmic's modifier negotiation fails when the downstream
-            // format set is too narrow (appsink only accepts BGRx/RGBx), producing
-            // "no more output formats" / not-negotiated (-4). videoconvert accepts any
-            // system-memory video/x-raw format, widening negotiation so the portal can
-            // settle on a format it can deliver via its SHM path.
-            let convert = gst_element("videoconvert")?;
-            pipeline.add_many(&[&src, &convert, &sink])?;
-            src.link(&convert)?;
-            convert.link(&sink)?;
-
-            let mut caps = gst::Caps::new_empty();
-            caps.merge_structure(gst::structure::Structure::new(
-                "video/x-raw",
-                &[("format", &"BGRx")],
-            ));
-            caps.merge_structure(gst::structure::Structure::new(
-                "video/x-raw",
-                &[("format", &"RGBx")],
-            ));
-            caps
-        };
+        pipeline.add_many(&[&src, &convert, &sink])?;
+        src.link(&convert)?;
+        convert.link(&sink)?;
 
         let appsink = sink
             .dynamic_cast::<AppSink>()
             .map_err(|_| GStreamerError("Sink element is expected to be an appsink!".into()))?;
+        let mut caps = gst::Caps::new_empty();
+        caps.merge_structure(gst::structure::Structure::new(
+            "video/x-raw",
+            &[("format", &"BGRx")],
+        ));
+        caps.merge_structure(gst::structure::Structure::new(
+            "video/x-raw",
+            &[("format", &"RGBx")],
+        ));
         appsink.set_caps(Some(&caps));
 
         // [Workaround]
@@ -354,27 +340,22 @@ impl PipeWireRecorder {
         // but cannot completely resolve this issue.
         // Adding a short sleep period can also reduce the probability of crashes.
         debug!(
-            "[gstreamer] Setting pipeline {} to PLAYING state (dmabuf: {})...",
-            capturable.fd.as_raw_fd(),
-            dmabuf
+            "[gstreamer] Setting pipeline {} to PLAYING state...",
+            capturable.fd.as_raw_fd()
         );
-        if let Err(e) = pipeline.set_state(gst::State::Playing) {
-            let _ = pipeline.set_state(gst::State::Null);
-            return Err(e.into());
-        }
-        Ok((pipeline, appsink))
-    }
-
-    pub fn new(capturable: PipeWireCapturable) -> ResultType<Self> {
-        let (pipeline, appsink) = match Self::build_pipeline(&capturable, false) {
-            Ok(p) => p,
+        let (pipeline, appsink) = match pipeline.set_state(gst::State::Playing) {
+            Ok(_) => (pipeline, appsink),
             Err(e) => {
                 warn!(
                     "[gstreamer] System-memory pipeline {} failed ({}), retrying with linear DMA-BUF",
                     capturable.fd.as_raw_fd(),
                     e
                 );
-                Self::build_pipeline(&capturable, true)?
+                // Release the PipeWire stream before the next pipeline connects to the same node.
+                if let Err(e) = pipeline.set_state(gst::State::Null) {
+                    warn!("[gstreamer] Failed to stop pipeline: {}", e);
+                }
+                build_dmabuf_pipeline(&capturable)?
             }
         };
 
@@ -416,6 +397,47 @@ impl PipeWireRecorder {
     }
 }
 
+// Same as the pipeline in `PipeWireRecorder::new`, but for DMA-BUF: no videoconvert (it cannot
+// import DMA-BUF) and no always-copy (it copies only the PipeWire chunk, whose size is a
+// placeholder for DMA-BUF, 1 byte on niri; the frame is read through the fd instead).
+fn build_dmabuf_pipeline(capturable: &PipeWireCapturable) -> ResultType<(gst::Pipeline, AppSink)> {
+    let pipeline = gst::Pipeline::new(None);
+    // Clock waits on stale capture timestamps can exhaust the compositor's buffers.
+    pipeline.use_clock(None::<&gst::Clock>);
+
+    let src = gst_element("pipewiresrc")?;
+    src.set_property("fd", &capturable.fd.as_raw_fd())?;
+    src.set_property("path", &format!("{}", capturable.path))?;
+    src.set_property("keepalive_time", &1_000.as_raw_fd())?;
+
+    let sink = gst_element("appsink")?;
+    sink.set_property("drop", &true)?;
+    sink.set_property("max-buffers", &1u32)?;
+
+    pipeline.add_many(&[&src, &sink])?;
+    src.link(&sink)?;
+
+    let appsink = sink
+        .dynamic_cast::<AppSink>()
+        .map_err(|_| GStreamerError("Sink element is expected to be an appsink!".into()))?;
+    let caps = DMABUF_CAPS
+        .parse::<gst::Caps>()
+        .map_err(|_| GStreamerError("Invalid DMA-BUF caps".into()))?;
+    appsink.set_caps(Some(&caps));
+
+    debug!(
+        "[gstreamer] Setting DMA-BUF pipeline {} to PLAYING state...",
+        capturable.fd.as_raw_fd()
+    );
+    if let Err(e) = pipeline.set_state(gst::State::Playing) {
+        if let Err(e) = pipeline.set_state(gst::State::Null) {
+            warn!("[gstreamer] Failed to stop DMA-BUF pipeline: {}", e);
+        }
+        return Err(e.into());
+    }
+    Ok((pipeline, appsink))
+}
+
 // libgstallocators is part of gst-plugins-base, which pipewiresrc and gstreamer-video need anyway.
 #[link(name = "gstallocators-1.0")]
 extern "C" {
@@ -437,7 +459,7 @@ fn read_linear_dmabuf(
         flags: u64,
     }
     // _IOW('b', 0, struct dma_buf_sync)
-    const DMA_BUF_IOCTL_SYNC: libc::c_ulong = 0x4008_6200;
+    const DMA_BUF_IOCTL_SYNC: u64 = 0x4008_6200;
     const DMA_BUF_SYNC_READ: u64 = 1;
     const DMA_BUF_SYNC_END: u64 = 4;
 
@@ -450,23 +472,19 @@ fn read_linear_dmabuf(
         return Err(GStreamerError("Buffer memory is not DMA-BUF".into()).into());
     }
     let fd = unsafe { gst_dmabuf_memory_get_fd(mem_ptr) };
+    if fd < 0 {
+        return Err(GStreamerError("DMA-BUF memory has no fd".into()).into());
+    }
     let (stride, plane_offset) = match buf.get_meta::<gstreamer_video::VideoMeta>() {
-        Some(m) => (m.get_stride()[0] as usize, m.get_offset()[0]),
+        Some(m) => (m.get_stride()[0].max(0) as usize, m.get_offset()[0]),
         None => (w * 4, 0),
     };
-    if fd < 0 || stride < w * 4 {
-        return Err(GStreamerError(format!("Bad DMA-BUF fd {} or stride {}", fd, stride)).into());
-    }
-    let start = mem.get_offset() + plane_offset;
-    let len = start + stride * (h.max(1) - 1) + w * 4;
-    // The size comes from the dmabuf itself, so a bad stride/offset errors instead of SIGBUS.
+    // Map only what the dmabuf holds, so a bad stride or offset is an error, not a SIGBUS.
     let size = unsafe { libc::lseek(fd, 0, libc::SEEK_END) };
-    if size >= 0 && len > size as usize {
-        return Err(
-            GStreamerError(format!("DMA-BUF of {} bytes, frame needs {}", size, len)).into(),
-        );
+    if size <= 0 {
+        return Err(std::io::Error::last_os_error().into());
     }
-
+    let len = size as usize;
     let map = unsafe {
         libc::mmap(
             std::ptr::null_mut(),
@@ -480,24 +498,70 @@ fn read_linear_dmabuf(
     if map == libc::MAP_FAILED {
         return Err(std::io::Error::last_os_error().into());
     }
-    // Sync makes the CPU view coherent with the GPU; exporters without it just return an error.
-    let mut sync = DmaBufSync {
-        flags: DMA_BUF_SYNC_READ,
+    // Sync makes the CPU view coherent with the GPU around the read.
+    // The kernel asks callers to restart it on EINTR / EAGAIN.
+    let sync = |flags: u64| -> Result<(), Box<dyn Error>> {
+        let mut arg = DmaBufSync { flags };
+        loop {
+            if unsafe { libc::ioctl(fd, DMA_BUF_IOCTL_SYNC as _, &mut arg) } == 0 {
+                return Ok(());
+            }
+            let err = std::io::Error::last_os_error();
+            if !matches!(err.raw_os_error(), Some(libc::EINTR) | Some(libc::EAGAIN)) {
+                return Err(err.into());
+            }
+        }
     };
-    unsafe { libc::ioctl(fd, DMA_BUF_IOCTL_SYNC, &mut sync) };
-    let src = unsafe { std::slice::from_raw_parts(map as *const u8, len) };
+    let copied = sync(DMA_BUF_SYNC_READ).and_then(|_| {
+        let src = unsafe { std::slice::from_raw_parts(map as *const u8, len) };
+        let packed = pack_rows(src, mem.get_offset() + plane_offset, stride, w * 4, h, out);
+        let ended = sync(DMA_BUF_SYNC_READ | DMA_BUF_SYNC_END);
+        packed.and(ended)
+    });
+    if unsafe { libc::munmap(map, len) } != 0 {
+        warn!(
+            "[gstreamer] Failed to unmap DMA-BUF frame: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+    copied
+}
+
+/// Copy `h` rows of `row_len` bytes that start `stride` bytes apart at `start` into `out`.
+fn pack_rows(
+    src: &[u8],
+    start: usize,
+    stride: usize,
+    row_len: usize,
+    h: usize,
+    out: &mut Vec<u8>,
+) -> Result<(), Box<dyn Error>> {
+    let needed = start + stride * h.saturating_sub(1) + row_len;
+    if stride < row_len || needed > src.len() {
+        return Err(GStreamerError(format!(
+            "Frame needs {} bytes at stride {}, buffer has {}",
+            needed,
+            stride,
+            src.len()
+        ))
+        .into());
+    }
     out.clear();
-    out.reserve(w * h * 4);
+    out.reserve(row_len * h);
     for y in 0..h {
         let row = start + y * stride;
-        out.extend_from_slice(&src[row..row + w * 4]);
-    }
-    sync.flags = DMA_BUF_SYNC_READ | DMA_BUF_SYNC_END;
-    unsafe {
-        libc::ioctl(fd, DMA_BUF_IOCTL_SYNC, &mut sync);
-        libc::munmap(map, len);
+        out.extend_from_slice(&src[row..row + row_len]);
     }
     Ok(())
+}
+
+/// GStreamer pixel format for a DRM fourcc name with the same byte order.
+fn drm_format_pix_fmt(drm_format: Option<&str>) -> Option<&'static str> {
+    match drm_format {
+        Some("XR24") => Some("BGRx"),
+        Some("XB24") => Some("RGBx"),
+        _ => None,
+    }
 }
 
 impl Recorder for PipeWireRecorder {
@@ -516,18 +580,12 @@ impl Recorder for PipeWireRecorder {
             let w = w as usize;
             let h = h as usize;
             self.pix_fmt = if is_dmabuf {
-                // DRM fourcc names for the same byte order as GStreamer's BGRx / RGBx.
-                match cap.get::<&str>("drm-format")? {
-                    Some("XR24") => "BGRx".to_string(),
-                    Some("XB24") => "RGBx".to_string(),
-                    other => {
-                        return Err(GStreamerError(format!(
-                            "Unsupported DMA-BUF format {:?}",
-                            other
-                        ))
-                        .into())
-                    }
-                }
+                let drm_format = cap.get::<&str>("drm-format")?;
+                drm_format_pix_fmt(drm_format)
+                    .ok_or_else(|| {
+                        GStreamerError(format!("Unsupported DMA-BUF format {:?}", drm_format))
+                    })?
+                    .to_string()
             } else {
                 cap.get::<&str>("format")?
                     .ok_or("Failed to get pixel format")?
@@ -1964,7 +2022,32 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::{corrected_origin, WaylandDisplayInfo};
+    use super::{corrected_origin, drm_format_pix_fmt, pack_rows, WaylandDisplayInfo};
+
+    #[test]
+    fn a_strided_dmabuf_frame_comes_out_as_packed_rows() {
+        // 2x2 BGRx frame at offset 3 with stride 12: 4 bytes of padding after each row.
+        let mut src = vec![0xEE; 3 + 12 * 2];
+        src[3..11].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
+        src[15..23].copy_from_slice(&[9, 10, 11, 12, 13, 14, 15, 16]);
+        let mut out = Vec::new();
+        pack_rows(&src, 3, 12, 8, 2, &mut out).unwrap();
+        assert_eq!(out, (1..=16).collect::<Vec<u8>>());
+    }
+
+    #[test]
+    fn a_dmabuf_too_small_for_its_stride_is_an_error() {
+        let mut out = Vec::new();
+        assert!(pack_rows(&[0; 20], 0, 12, 8, 2, &mut out).is_ok());
+        assert!(pack_rows(&[0; 19], 0, 12, 8, 2, &mut out).is_err());
+    }
+
+    #[test]
+    fn niri_drm_formats_map_to_encoder_pixel_formats() {
+        assert_eq!(drm_format_pix_fmt(Some("XR24")), Some("BGRx"));
+        assert_eq!(drm_format_pix_fmt(Some("XB24")), Some("RGBx"));
+        assert_eq!(drm_format_pix_fmt(Some("NV12")), None);
+    }
 
     fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
         WaylandDisplayInfo {
