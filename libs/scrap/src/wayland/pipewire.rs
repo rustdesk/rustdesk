@@ -540,11 +540,16 @@ fn pack_rows(
     h: usize,
     out: &mut Vec<u8>,
 ) -> Result<(), Box<dyn Error>> {
-    let needed = start + stride * h.saturating_sub(1) + row_len;
-    if stride < row_len || needed > src.len() {
+    // Checked: stride and offset come from the compositor, and a wrapped sum would pass the guard.
+    let end = stride
+        .checked_mul(h.saturating_sub(1))
+        .and_then(|n| n.checked_add(start))
+        .and_then(|n| n.checked_add(row_len));
+    if stride < row_len || end.map_or(true, |end| end > src.len()) {
         return Err(GStreamerError(format!(
-            "Frame needs {} bytes at stride {}, buffer has {}",
-            needed,
+            "Frame of {} rows at offset {} and stride {} does not fit {} bytes",
+            h,
+            start,
             stride,
             src.len()
         ))
@@ -2044,6 +2049,8 @@ mod tests {
         let mut out = Vec::new();
         assert!(pack_rows(&[0; 20], 0, 12, 8, 2, &mut out).is_ok());
         assert!(pack_rows(&[0; 19], 0, 12, 8, 2, &mut out).is_err());
+        // A stride whose frame end overflows usize must not wrap into a small, passing size.
+        assert!(pack_rows(&[0; 64], 0, usize::MAX / 2, 8, 3, &mut out).is_err());
     }
 
     #[test]
