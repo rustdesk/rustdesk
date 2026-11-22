@@ -48,6 +48,7 @@ class _PeerCard extends StatefulWidget {
 class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
   var _menuPos = RelativeRect.fill;
+  DateTime? _lastMorePointerUp;
   final double _cardRadius = 16;
   final double _tileRadius = 5;
   final double _borderWidth = 2;
@@ -435,7 +436,7 @@ class _PeerCardState extends State<_PeerCard>
               )
             : Icon(Icons.check_box_outline_blank),
       );
-      return isWebDesktop
+      return isWebDesktop || isDesktop
           ? Semantics(
               container: true,
               label: formatID(peer.id),
@@ -446,8 +447,12 @@ class _PeerCardState extends State<_PeerCard>
     } else {
       if (isWebDesktop) return _actionMoreWeb(peer);
       return InkWell(
-          child: const Padding(
-              padding: EdgeInsets.all(12), child: Icon(Icons.more_vert)),
+          child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Semantics(
+                  button: true,
+                  label: translate('More'),
+                  child: const Icon(Icons.more_vert))),
           onTapDown: (e) {
             final x = e.globalPosition.dx;
             final y = e.globalPosition.dy;
@@ -469,7 +474,7 @@ class _PeerCardState extends State<_PeerCard>
               color: MyTheme.accent,
             )
           : Icon(Icons.check_box_outline_blank);
-      final checkbox = isWebDesktop
+      final checkbox = isWebDesktop || isDesktop
           ? Semantics(
               container: true,
               label: formatID(peer.id),
@@ -499,8 +504,30 @@ class _PeerCardState extends State<_PeerCard>
         final y = e.position.dy;
         _menuPos = RelativeRect.fromLTRB(x, y, x, y);
       },
-      onPointerUp: (_) => _showPeerMenu(peer.id),
-      child: build_more(context));
+      onPointerUp: (_) {
+        _lastMorePointerUp = DateTime.now();
+        _showPeerMenu(peer.id);
+      },
+      child: Semantics(
+          button: true,
+          label: translate('More'),
+          child: Builder(
+              builder: (context) => build_more(context, onTap: () {
+                    // A pointer click already opened the menu on pointer up;
+                    // only keyboard and screen reader activation get here alone.
+                    final last = _lastMorePointerUp;
+                    if (last != null &&
+                        DateTime.now().difference(last) <
+                            const Duration(seconds: 1)) {
+                      return;
+                    }
+                    final box = context.findRenderObject() as RenderBox;
+                    final position =
+                        box.localToGlobal(box.size.center(Offset.zero));
+                    _menuPos = RelativeRect.fromLTRB(
+                        position.dx, position.dy, position.dx, position.dy);
+                    _showPeerMenu(peer.id);
+                  }))));
 
   Widget _actionMoreWeb(Peer peer) => Semantics(
       container: true,

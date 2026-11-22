@@ -266,18 +266,24 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
                   child: Transform.scale(
                     scale: MenuConfig.iconScale,
                     child: Obx(() => opt.value == curOption.value
-                        ? IconButton(
-                            padding:
-                                const EdgeInsets.fromLTRB(8.0, 0.0, 8.0, 0.0),
-                            hoverColor: Colors.transparent,
-                            focusColor: Colors.transparent,
-                            onPressed: () {},
-                            icon: Icon(
-                              Icons.check,
-                              color: (opt.enabled ?? true.obs).isTrue
-                                  ? conf.commonColor
-                                  : Colors.grey,
-                            ))
+                        // A decorative check mark: the item reports the
+                        // checked state, so keep it out of focus and semantics.
+                        ? ExcludeFocus(
+                            child: ExcludeSemantics(
+                              child: IconButton(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      8.0, 0.0, 8.0, 0.0),
+                                  hoverColor: Colors.transparent,
+                                  focusColor: Colors.transparent,
+                                  onPressed: () {},
+                                  icon: Icon(
+                                    Icons.check,
+                                    color: (opt.enabled ?? true.obs).isTrue
+                                        ? conf.commonColor
+                                        : Colors.grey,
+                                  )),
+                            ),
+                          )
                         : const SizedBox.shrink()),
                   ))),
         ],
@@ -298,15 +304,19 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
       height: conf.height,
       child: Container(
         width: conf.boxWidth,
-        child: opt.enabled == null
-            ? TextButton(
-                child: child,
-                onPressed: onPressed,
-              )
-            : Obx(() => TextButton(
-                  child: child,
-                  onPressed: opt.enabled!.isTrue ? onPressed : null,
-                )),
+        child: Obx(() => Semantics(
+              inMutuallyExclusiveGroup: true,
+              checked: opt.value == curOption.value,
+              child: opt.enabled == null
+                  ? TextButton(
+                      child: child,
+                      onPressed: onPressed,
+                    )
+                  : TextButton(
+                      child: child,
+                      onPressed: opt.enabled!.isTrue ? onPressed : null,
+                    ),
+            )),
       ),
     );
   }
@@ -370,28 +380,37 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
                   minHeight: conf.height, maxHeight: conf.height),
               child: Row(
                 children: [
-                  Text(
-                    opt.text,
-                    style: TextStyle(
-                        color: Theme.of(context).textTheme.titleLarge?.color,
-                        fontSize: MenuConfig.fontSize,
-                        fontWeight: FontWeight.normal),
-                  ),
+                  Obx(() => Semantics(
+                        inMutuallyExclusiveGroup: true,
+                        checked: opt.value == curOption.value,
+                        child: Text(
+                          opt.text,
+                          style: TextStyle(
+                              color:
+                                  Theme.of(context).textTheme.titleLarge?.color,
+                              fontSize: MenuConfig.fontSize,
+                              fontWeight: FontWeight.normal),
+                        ),
+                      )),
                   Expanded(
                       child: Align(
                     alignment: Alignment.centerRight,
                     child: Transform.scale(
                         scale: MenuConfig.iconScale,
                         child: Obx(() => opt.value == curOption.value
-                            ? IconButton(
-                                padding: EdgeInsets.zero,
-                                hoverColor: Colors.transparent,
-                                focusColor: Colors.transparent,
-                                onPressed: () {},
-                                icon: Icon(
-                                  Icons.check,
-                                  color: conf.commonColor,
-                                ))
+                            ? ExcludeFocus(
+                                child: ExcludeSemantics(
+                                  child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      hoverColor: Colors.transparent,
+                                      focusColor: Colors.transparent,
+                                      onPressed: () {},
+                                      icon: Icon(
+                                        Icons.check,
+                                        color: conf.commonColor,
+                                      )),
+                                ),
+                              )
                             : const SizedBox.shrink())),
                   )),
                 ],
@@ -514,24 +533,30 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
                           scale: MenuConfig.iconScale,
                           child: Obx(() {
                             if (switchType == SwitchType.sswitch) {
-                              return Switch(
-                                value: curOption.value,
-                                onChanged: isEnabled
-                                    ? (v) {
-                                        tryPop(context);
-                                        setOption(v);
-                                      }
-                                    : null,
+                              return Semantics(
+                                label: text,
+                                child: Switch(
+                                  value: curOption.value,
+                                  onChanged: isEnabled
+                                      ? (v) {
+                                          tryPop(context);
+                                          setOption(v);
+                                        }
+                                      : null,
+                                ),
                               );
                             } else {
-                              return Checkbox(
-                                value: curOption.value,
-                                onChanged: isEnabled
-                                    ? (v) {
-                                        tryPop(context);
-                                        setOption(v);
-                                      }
-                                    : null,
+                              return Semantics(
+                                label: text,
+                                child: Checkbox(
+                                  value: curOption.value,
+                                  onChanged: isEnabled
+                                      ? (v) {
+                                          tryPop(context);
+                                          setOption(v);
+                                        }
+                                      : null,
+                                ),
                               );
                             }
                           })),
@@ -932,7 +957,9 @@ class _PopupSubMenuItemState<T> extends State<_PopupSubMenuItem<T>> {
     return OverlayPortal(
       controller: _submenuController,
       overlayChildBuilder: _buildSubmenu,
-      child: trigger,
+      // The nested buttons only keep the old spacing; expose one named item.
+      child: MergeSemantics(
+          child: Semantics(expanded: _submenuOpen, child: trigger)),
     );
   }
 }
