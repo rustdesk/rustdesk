@@ -265,6 +265,21 @@ class GenerateUpdateMetadataTest(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
 
+    def test_check_key_tolerates_surrounding_whitespace(self):
+        source = self.rust_source()
+
+        # Values pasted from a file or a shell tend to carry a trailing newline. It must be
+        # stripped (with a note), not rejected as invalid base64.
+        result = self.run_script(
+            "check-key",
+            "--rust-source",
+            str(source),
+            seed=self.seed + "\n",
+            public_key=self.public_key + "\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("trimmed surrounding whitespace", result.stderr)
+
     def test_check_key_rejects_invalid_public_key(self):
         source = self.rust_source()
         invalid_keys = [

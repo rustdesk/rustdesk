@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
@@ -53,9 +54,15 @@ def sha256_hex(path):
 
 
 def decode_env(name, expected_size):
-    encoded = os.environ.get(name)
+    # Trailing whitespace is a common paste artefact: secret and variable values are copied out
+    # of a file or a terminal, both of which tend to append a newline. Strip it instead of
+    # refusing the value, but say so, because a silent fix would hide a genuinely malformed value.
+    raw = os.environ.get(name)
+    encoded = (raw or "").strip()
     if not encoded:
         fail(f"missing environment variable: {name}")
+    if encoded != raw:
+        print(f"note: trimmed surrounding whitespace from {name}", file=sys.stderr)
     try:
         value = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error) as error:

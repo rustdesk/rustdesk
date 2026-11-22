@@ -31,22 +31,23 @@ jobs:
           VALUE: ${{ secrets.RUSTDESK_UPDATE_ED25519_SEED }}
         run: |
           import os
-          value = os.environ.get("VALUE", "")
-          print(f"length: {len(value)}")
-          if not value:
+          raw = os.environ.get("VALUE", "")
+          print(f"length: {len(raw)} (stripped: {len(raw.strip())})")
+          if not raw.strip():
               print("hint: it must be a repository SECRET, not a variable")
               raise SystemExit(1)
 
-      - name: FAILED HERE - secret RUSTDESK_UPDATE_ED25519_SEED is set but not 44 chars (newline/space, or truncated)
+      - name: FAILED HERE - secret RUSTDESK_UPDATE_ED25519_SEED is set but not 44 chars (truncated)
         shell: python
         env:
           VALUE: ${{ secrets.RUSTDESK_UPDATE_ED25519_SEED }}
         run: |
           import os
-          value = os.environ.get("VALUE", "")
-          print(f"length: {len(value)}")
+          raw = os.environ.get("VALUE", "")
+          value = raw.strip()
+          print(f"length: {len(raw)} (stripped: {len(value)})")
           if len(value) != 44:
-              print("hint: 32-byte key -> 44 base64 chars ending with '='; strip any trailing newline")
+              print("hint: 32-byte key -> 44 base64 chars ending with '='; check for a truncated paste")
               raise SystemExit(1)
 
   variable-public-key:
@@ -58,22 +59,23 @@ jobs:
           VALUE: ${{ vars.RUSTDESK_UPDATE_ED25519_PUBLIC_KEY }}
         run: |
           import os
-          value = os.environ.get("VALUE", "")
-          print(f"length: {len(value)}")
-          if not value:
+          raw = os.environ.get("VALUE", "")
+          print(f"length: {len(raw)} (stripped: {len(raw.strip())})")
+          if not raw.strip():
               print("hint: it must be a repository VARIABLE (Settings -> Variables), not a secret")
               raise SystemExit(1)
 
-      - name: FAILED HERE - variable RUSTDESK_UPDATE_ED25519_PUBLIC_KEY is set but not 44 chars
+      - name: FAILED HERE - variable RUSTDESK_UPDATE_ED25519_PUBLIC_KEY is set but not 44 chars (truncated)
         shell: python
         env:
           VALUE: ${{ vars.RUSTDESK_UPDATE_ED25519_PUBLIC_KEY }}
         run: |
           import os
-          value = os.environ.get("VALUE", "")
-          print(f"length: {len(value)}")
+          raw = os.environ.get("VALUE", "")
+          value = raw.strip()
+          print(f"length: {len(raw)} (stripped: {len(value)})")
           if len(value) != 44:
-              print("hint: 32-byte key -> 44 base64 chars ending with '='; strip any trailing newline")
+              print("hint: 32-byte key -> 44 base64 chars ending with '='; check for a truncated paste")
               raise SystemExit(1)
 
   key-pair-matches:
