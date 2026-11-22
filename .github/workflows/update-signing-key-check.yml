@@ -75,7 +75,9 @@ jobs:
           value = raw.strip()
           print(f"length: {len(raw)} (stripped: {len(value)})")
           if len(value) != 44:
-              print("hint: 32-byte key -> 44 base64 chars ending with '='; check for a truncated paste")
+              # The public key is public information (it is embedded in the source), so echoing it
+              # is safe and makes a malformed paste obvious. The seed is never printed.
+              print(f"::error::PUBLIC_KEY length={len(value)} raw_length={len(raw)} value={value!r}")
               raise SystemExit(1)
 
   key-pair-matches:
