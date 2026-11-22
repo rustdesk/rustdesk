@@ -7,6 +7,7 @@ pub use futures;
 pub use protobuf;
 pub use protos::message as message_proto;
 pub use protos::rendezvous as rendezvous_proto;
+use serde_derive::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{self, BufRead},
@@ -27,6 +28,7 @@ pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
 pub mod fs;
+pub mod mem;
 pub use lazy_static;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use mac_address;
@@ -48,12 +50,30 @@ pub use dlopen;
 pub use machine_uid;
 pub use serde_derive;
 pub use serde_json;
+pub use sha2;
 pub use sysinfo;
 pub use thiserror;
 pub use toml;
 pub use uuid;
+pub mod fingerprint;
+pub use flexi_logger;
+pub mod stream;
+pub mod websocket;
+#[cfg(feature = "webrtc")]
+pub mod webrtc;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub use rustls_platform_verifier;
+pub use stream::Stream;
+pub use whoami;
+pub mod tls;
+pub mod verifier;
+pub use async_recursion;
+#[cfg(target_os = "linux")]
+pub use users;
+pub use libloading;
+#[cfg(target_os = "linux")]
+pub use x11;
 
-pub type Stream = tcp::FramedStream;
 pub type SessionID = uuid::Uuid;
 
 #[inline]
@@ -235,7 +255,7 @@ where
 }
 
 pub fn is_valid_custom_id(id: &str) -> bool {
-    regex::Regex::new(r"^[a-zA-Z]\w{5,15}$")
+    regex::Regex::new(r"^[a-zA-Z][\w-]{5,15}$")
         .unwrap()
         .is_match(id)
 }
@@ -292,10 +312,65 @@ pub fn get_exe_time() -> SystemTime {
     })
 }
 
+/// Known cases where machine_uid::get() may fail:
+/// - Windows shutdown: "The media is write protected. (os error 19)"
+/// - macOS (hard to reproduce, reproduced at login screen): "No matching IOPlatformUUID in `ioreg -rd1 -c IOPlatformExpertDevice` command"
 pub fn get_uuid() -> Vec<u8> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Ok(id) = machine_uid::get() {
-        return id.into();
+    {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static CACHED_MACHINE_UID: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+        // Throttle only applies to the fallback machine_uid::get() log below, not the Once::call_once retry logs.
+        static LOG_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+        // Only macOS needs retry logic here because:
+        // - macOS: in testing, only one failure occurred when reading at 50ms intervals, so retry helps
+        // - Windows: failures during shutdown are persistent, retrying is pointless
+        #[cfg(target_os = "macos")]
+        {
+            static INIT: std::sync::Once = std::sync::Once::new();
+            INIT.call_once(|| {
+                // Keep in sync with upstream handling:
+                // https://github.com/rustdesk/rustdesk/blob/85db6779828349b23ca3eba91cc7cd36c5337797/src/common.rs#L822
+                let username = whoami::username().trim_end_matches('\0').to_owned();
+                let max_retries = if username == "root" { 16 } else { 8 };
+                for i in 0..max_retries {
+                    match machine_uid::get() {
+                        Ok(id) => {
+                            let _ = CACHED_MACHINE_UID.set(id.into());
+                            return;
+                        }
+                        Err(e) => {
+                            log::error!("Failed to get machine uid in macOS retry #{i}: {e}");
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            });
+        }
+
+        if let Some(uid) = CACHED_MACHINE_UID.get() {
+            return uid.clone();
+        }
+
+        match machine_uid::get() {
+            Ok(id) => {
+                let uid: Vec<u8> = id.into();
+                let _ = CACHED_MACHINE_UID.set(uid.clone());
+                return uid;
+            }
+            Err(e) => {
+                if LOG_COUNT
+                    .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                        (count < 30).then_some(count + 1)
+                    })
+                    .is_ok()
+                {
+                    log::error!("Failed to get machine uid: {e}");
+                }
+            }
+        }
     }
     Config::get_key_pair().1
 }
@@ -357,7 +432,7 @@ pub fn init_log(_is_async: bool, _name: &str) -> Option<flexi_logger::LoggerHand
         #[cfg(debug_assertions)]
         {
             use env_logger::*;
-            init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
+            init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info,reqwest=warn,rustls=warn,webrtc-sctp=warn,webrtc=warn"));
         }
         #[cfg(not(debug_assertions))]
         {
@@ -372,7 +447,7 @@ pub fn init_log(_is_async: bool, _name: &str) -> Option<flexi_logger::LoggerHand
                 path.push(_name);
             }
             use flexi_logger::*;
-            if let Ok(x) = Logger::try_with_env_or_str("debug") {
+            if let Ok(x) = Logger::try_with_env_or_str("debug,reqwest=warn,rustls=warn,webrtc-sctp=warn,webrtc=warn") {
                 logger_holder = x
                     .log_to_file(FileSpec::default().directory(path))
                     .write_mode(if _is_async {
@@ -392,6 +467,65 @@ pub fn init_log(_is_async: bool, _name: &str) -> Option<flexi_logger::LoggerHand
         }
     });
     logger_holder
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct VersionCheckRequest {
+    #[serde(default)]
+    pub os: String,
+    #[serde(default)]
+    pub os_version: String,
+    #[serde(default)]
+    pub arch: String,
+    #[serde(default)]
+    pub device_id: Vec<u8>,
+    #[serde(default)]
+    pub typ: String,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct VersionCheckResponse {
+    #[serde(default)]
+    pub url: String,
+}
+
+pub const VER_TYPE_RUSTDESK_CLIENT: &str = "rustdesk-client";
+pub const VER_TYPE_RUSTDESK_SERVER: &str = "rustdesk-server";
+
+pub fn version_check_request(typ: String) -> (VersionCheckRequest, String) {
+    const URL: &str = "https://api.rustdesk.com/version/latest";
+
+    use sysinfo::System;
+    let system = System::new();
+    let os = system.distribution_id();
+    let os_version = system.os_version().unwrap_or_default();
+    let arch = std::env::consts::ARCH.to_string();
+    #[allow(deprecated)]
+    let device_id = fingerprint::get_fingerprint(None, None);
+    (
+        VersionCheckRequest {
+            os,
+            os_version,
+            arch,
+            device_id,
+            typ,
+        },
+        URL.to_string(),
+    )
+}
+
+pub fn time_based_rand() -> u32 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+
+    let mut x = nanos as u64;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+
+    (x % 32768) as u32
 }
 
 #[cfg(test)]

@@ -1,0 +1,26 @@
+From 1440f556234d135ce58a2ef38916c6a63b05870e Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Sat, 14 Dec 2024 21:39:44 +0800
+Subject: [PATCH] remove amf loop query
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavcodec/amfenc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libavcodec/amfenc.c b/libavcodec/amfenc.c
+index f70f0109f6..a53a05b16b 100644
+--- a/libavcodec/amfenc.c
++++ b/libavcodec/amfenc.c
+@@ -886,7 +886,7 @@ int ff_amf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
+                 av_usleep(1000);
+             }
+         }
+-    } while (block_and_wait);
++    } while (false); // already set query timeout
+ 
+     if (res_query == AMF_EOF) {
+         ret = AVERROR_EOF;
+-- 
+2.43.0.windows.1
+

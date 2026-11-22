@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
-const _kWindowsSystemSound = 'System Sound';
+const _kSystemSound = 'System Sound';
 
 typedef AudioINputSetDevice = void Function(String device);
 typedef AudioInputBuilder = Widget Function(
@@ -21,7 +21,7 @@ class AudioInput extends StatelessWidget {
       : super(key: key);
 
   static String getDefault() {
-    if (isWindows) return translate('System Sound');
+    if (bind.mainAudioSupportLoopback()) return translate(_kSystemSound);
     return '';
   }
 
@@ -55,8 +55,8 @@ class AudioInput extends StatelessWidget {
   static Future<Map<String, Object>> getDevicesInfo(
       bool isCm, bool isVoiceCall) async {
     List<String> devices = (await bind.mainGetSoundInputs()).toList();
-    if (isWindows) {
-      devices.insert(0, translate(_kWindowsSystemSound));
+    if (bind.mainAudioSupportLoopback()) {
+      devices.insert(0, translate(_kSystemSound));
     }
     String current = await getValue(isCm, isVoiceCall);
     return {'devices': devices, 'current': current};

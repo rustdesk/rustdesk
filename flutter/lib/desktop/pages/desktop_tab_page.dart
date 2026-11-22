@@ -37,12 +37,8 @@ class DesktopTabPage extends StatefulWidget {
   }
 }
 
-class _DesktopTabPageState extends State<DesktopTabPage>
-    with WidgetsBindingObserver {
+class _DesktopTabPageState extends State<DesktopTabPage> {
   final tabController = DesktopTabController(tabType: DesktopTabType.main);
-
-  final RxBool _block = false.obs;
-  // bool mouseIn = false;
 
   _DesktopTabPageState() {
     RemoteCountState.init();
@@ -70,18 +66,9 @@ class _DesktopTabPageState extends State<DesktopTabPage>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      shouldBeBlocked(_block, canBeBlocked);
-    } else if (state == AppLifecycleState.inactive) {}
-  }
-
-  @override
   void initState() {
     super.initState();
     // HardwareKeyboard.instance.addHandler(_handleKeyEvent);
-    WidgetsBinding.instance.addObserver(this);
   }
 
   /*
@@ -97,7 +84,6 @@ class _DesktopTabPageState extends State<DesktopTabPage>
   @override
   void dispose() {
     // HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
-    WidgetsBinding.instance.removeObserver(this);
     Get.delete<DesktopTabController>();
 
     super.dispose();
@@ -111,7 +97,7 @@ class _DesktopTabPageState extends State<DesktopTabPage>
             body: DesktopTab(
               controller: tabController,
               tail: Offstage(
-                offstage: bind.isIncomingOnly() || bind.isDisableSettings(),
+                offstage: bind.isIncomingOnly() || bind.isDisableSettings() || bind.mainGetBuildinOption(key: 'sos-mode') == 'Y',
                 child: ActionIcon(
                   message: 'Settings',
                   icon: IconFont.menu,
@@ -119,7 +105,6 @@ class _DesktopTabPageState extends State<DesktopTabPage>
                   isClose: false,
                 ),
               ),
-              blockTab: _block,
             )));
     return isMacOS || kUseCompatibleUiMode
         ? tabWidget

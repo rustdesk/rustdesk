@@ -11,6 +11,8 @@ enum ConnType {
   FILE_TRANSFER = 1;
   PORT_FORWARD = 2;
   RDP = 3;
+  VIEW_CAMERA = 4;
+  TERMINAL = 5;
 }
 
 message RegisterPeerResponse { bool request_pk = 2; }
@@ -22,12 +24,40 @@ message PunchHoleRequest {
   ConnType conn_type = 4;
   string token = 5;
   string version = 6;
+  int32 udp_port = 7;
+  bool force_relay = 8;
+  int32 upnp_port = 9;
+  bytes socket_addr_v6 = 10;
 }
 
-message PunchHole { 
+message ControlPermissions {
+  enum Permission {
+    keyboard = 0;
+    remote_printer = 1;
+    clipboard = 2;
+    file = 3;
+    audio = 4;
+    camera = 5;
+    terminal = 6;
+    tunnel = 7;
+    restart = 8;
+    recording = 9;
+    block_input = 10;
+    remote_modify = 11;
+    privacy_mode = 12;
+  }
+  uint64 permissions = 1;
+}
+
+message PunchHole {
   bytes socket_addr = 1;
   string relay_server = 2;
   NatType nat_type = 3;
+  int32 udp_port = 4;
+  bool force_relay = 5;
+  int32 upnp_port = 6;
+  bytes socket_addr_v6 = 7;
+  ControlPermissions control_permissions = 8;
 }
 
 message TestNatRequest {
@@ -52,6 +82,8 @@ message PunchHoleSent {
   string relay_server = 3;
   NatType nat_type = 4;
   string version = 5;
+  int32 upnp_port = 6;
+  bytes socket_addr_v6 = 7;
 }
 
 message RegisterPk {
@@ -59,6 +91,7 @@ message RegisterPk {
   bytes uuid = 2;
   bytes pk = 3;
   string old_id = 4;
+  bool no_register_device = 5;
 }
 
 message RegisterPkResponse {
@@ -70,6 +103,7 @@ message RegisterPkResponse {
     INVALID_ID_FORMAT = 5;
     NOT_SUPPORT = 6;
     SERVER_ERROR = 7;
+    NOT_DEPLOYED = 8;
   }
   Result result = 1;
   int32 keep_alive = 2;
@@ -92,6 +126,9 @@ message PunchHoleResponse {
   }
   string other_failure = 7;
   int32 feedback = 8;
+  bool is_udp = 9;
+  int32 upnp_port = 10;
+  bytes socket_addr_v6 = 11;
 }
 
 message ConfigUpdate {
@@ -108,6 +145,7 @@ message RequestRelay {
   string licence_key = 6;
   ConnType conn_type = 7;
   string token = 8;
+  ControlPermissions control_permissions = 9;
 }
 
 message RelayResponse {
@@ -121,6 +159,8 @@ message RelayResponse {
   string refuse_reason = 6;
   string version = 7;
   int32 feedback = 9;
+  bytes socket_addr_v6 = 10;
+  int32 upnp_port = 11;
 }
 
 message SoftwareUpdate { string url = 1; }
@@ -129,9 +169,11 @@ message SoftwareUpdate { string url = 1; }
 // even some router has below connection error if we connect itself,
 //  { kind: Other, error: "could not resolve to any address" },
 // so we request local address to connect.
-message FetchLocalAddr { 
-  bytes socket_addr = 1; 
+message FetchLocalAddr {
+  bytes socket_addr = 1;
   string relay_server = 2;
+  bytes socket_addr_v6 = 3;
+  ControlPermissions control_permissions = 4;
 }
 
 message LocalAddr {
@@ -140,6 +182,7 @@ message LocalAddr {
   string relay_server = 3;
   string id = 4;
   string version = 5;
+  bytes socket_addr_v6 = 6;
 }
 
 message PeerDiscovery {
@@ -169,6 +212,25 @@ message HealthCheck {
   string token = 1;
 }
 
+message HeaderEntry {
+  string name = 1;
+  string value = 2;
+}
+
+message HttpProxyRequest {
+  string method = 1;
+  string path = 2;
+  repeated HeaderEntry headers = 3;
+  bytes body = 4;
+}
+
+message HttpProxyResponse {
+  int32 status = 1;
+  repeated HeaderEntry headers = 2;
+  bytes body = 3;
+  string error = 4;
+}
+
 message RendezvousMessage {
   oneof union {
     RegisterPeer register_peer = 6;
@@ -192,5 +254,7 @@ message RendezvousMessage {
     OnlineResponse online_response = 24;
     KeyExchange key_exchange = 25;
     HealthCheck hc = 26;
+    HttpProxyRequest http_proxy_request = 27;
+    HttpProxyResponse http_proxy_response = 28;
   }
 }

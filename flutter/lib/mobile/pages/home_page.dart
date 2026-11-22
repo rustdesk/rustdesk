@@ -204,18 +204,35 @@ class WebHomePage extends StatelessWidget {
       return;
     }
     bool isFileTransfer = false;
+    bool isViewCamera = false;
+    bool isTerminal = false;
     String? id;
     String? password;
     for (int i = 0; i < args.length; i++) {
       switch (args[i]) {
         case '--connect':
         case '--play':
-          isFileTransfer = false;
           id = args[i + 1];
           i++;
           break;
         case '--file-transfer':
           isFileTransfer = true;
+          id = args[i + 1];
+          i++;
+          break;
+        case '--view-camera':
+          isViewCamera = true;
+          id = args[i + 1];
+          i++;
+          break;
+        case '--terminal':
+          isTerminal = true;
+          id = args[i + 1];
+          i++;
+          break;
+        case '--terminal-admin':
+          setEnvTerminalAdmin();
+          isTerminal = true;
           id = args[i + 1];
           i++;
           break;
@@ -228,7 +245,11 @@ class WebHomePage extends StatelessWidget {
       }
     }
     if (id != null) {
-      connect(context, id, isFileTransfer: isFileTransfer, password: password);
+      connect(context, id, 
+        isFileTransfer: isFileTransfer, 
+        isViewCamera: isViewCamera, 
+        isTerminal: isTerminal,
+        password: password);
     }
   }
 }

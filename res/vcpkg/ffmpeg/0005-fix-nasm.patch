@@ -1,55 +1,78 @@
-diff --git a/libavcodec/x86/Makefile b/libavcodec/x86/Makefile
---- a/libavcodec/x86/Makefile
-+++ b/libavcodec/x86/Makefile
-@@ -158,6 +158,8 @@ X86ASM-OBJS-$(CONFIG_ALAC_DECODER)     += x86/alacdsp.o
- X86ASM-OBJS-$(CONFIG_APNG_DECODER)     += x86/pngdsp.o
- X86ASM-OBJS-$(CONFIG_CAVS_DECODER)     += x86/cavsidct.o
-+ifdef ARCH_X86_64
- X86ASM-OBJS-$(CONFIG_CFHD_ENCODER)     += x86/cfhdencdsp.o
-+endif
- X86ASM-OBJS-$(CONFIG_CFHD_DECODER)     += x86/cfhddsp.o
- X86ASM-OBJS-$(CONFIG_DCA_DECODER)      += x86/dcadsp.o x86/synth_filter.o
- X86ASM-OBJS-$(CONFIG_DIRAC_DECODER)    += x86/diracdsp.o                \
-@@ -175,15 +177,21 @@                                           x86/hevc_sao_10bit.o
- X86ASM-OBJS-$(CONFIG_JPEG2000_DECODER) += x86/jpeg2000dsp.o
- X86ASM-OBJS-$(CONFIG_LSCR_DECODER)     += x86/pngdsp.o
-+ifdef ARCH_X86_64
- X86ASM-OBJS-$(CONFIG_MLP_DECODER)      += x86/mlpdsp.o
-+endif
- X86ASM-OBJS-$(CONFIG_MPEG4_DECODER)    += x86/xvididct.o
- X86ASM-OBJS-$(CONFIG_PNG_DECODER)      += x86/pngdsp.o
-+ifdef ARCH_X86_64
- X86ASM-OBJS-$(CONFIG_PRORES_DECODER)   += x86/proresdsp.o
- X86ASM-OBJS-$(CONFIG_PRORES_LGPL_DECODER) += x86/proresdsp.o
-+endif
- X86ASM-OBJS-$(CONFIG_RV40_DECODER)     += x86/rv40dsp.o
- X86ASM-OBJS-$(CONFIG_SBC_ENCODER)      += x86/sbcdsp.o
- X86ASM-OBJS-$(CONFIG_SVQ1_ENCODER)     += x86/svq1enc.o
- X86ASM-OBJS-$(CONFIG_TAK_DECODER)      += x86/takdsp.o
-+ifdef ARCH_X86_64
- X86ASM-OBJS-$(CONFIG_TRUEHD_DECODER)   += x86/mlpdsp.o
-+endif
- X86ASM-OBJS-$(CONFIG_TTA_DECODER)      += x86/ttadsp.o
- X86ASM-OBJS-$(CONFIG_TTA_ENCODER)      += x86/ttaencdsp.o
- X86ASM-OBJS-$(CONFIG_UTVIDEO_DECODER)  += x86/utvideodsp.o
-diff --git a/libavfilter/x86/Makefile b/libavfilter/x86/Makefile
---- a/libavfilter/x86/Makefile
-+++ b/libavfilter/x86/Makefile
-@@ -44,6 +44,8 @@ 
- X86ASM-OBJS-$(CONFIG_AFIR_FILTER)            += x86/af_afir.o
- X86ASM-OBJS-$(CONFIG_ANLMDN_FILTER)          += x86/af_anlmdn.o
-+ifdef ARCH_X86_64
- X86ASM-OBJS-$(CONFIG_ATADENOISE_FILTER)      += x86/vf_atadenoise.o
-+endif
- X86ASM-OBJS-$(CONFIG_BLEND_FILTER)           += x86/vf_blend.o
- X86ASM-OBJS-$(CONFIG_BWDIF_FILTER)           += x86/vf_bwdif.o
- X86ASM-OBJS-$(CONFIG_COLORSPACE_FILTER)      += x86/colorspacedsp.o
-@@ -62,6 +62,8 @@ X86ASM-OBJS-$(CONFIG_LUT3D_FILTER)           += x86/vf_lut3d.o
- X86ASM-OBJS-$(CONFIG_MASKEDCLAMP_FILTER)     += x86/vf_maskedclamp.o
- X86ASM-OBJS-$(CONFIG_MASKEDMERGE_FILTER)     += x86/vf_maskedmerge.o
-+ifdef ARCH_X86_64
- X86ASM-OBJS-$(CONFIG_NLMEANS_FILTER)         += x86/vf_nlmeans.o
-+endif
- X86ASM-OBJS-$(CONFIG_OVERLAY_FILTER)         += x86/vf_overlay.o
- X86ASM-OBJS-$(CONFIG_PP7_FILTER)             += x86/vf_pp7.o
- X86ASM-OBJS-$(CONFIG_PSNR_FILTER)            += x86/vf_psnr.o
+diff --git a/libavcodec/x86/mlpdsp.asm b/libavcodec/x86/mlpdsp.asm
+index 3dc641e..609b834 100644
+--- a/libavcodec/x86/mlpdsp.asm
++++ b/libavcodec/x86/mlpdsp.asm
+@@ -23,7 +23,9 @@
+ 
+ SECTION .text
+ 
+-%if ARCH_X86_64
++%ifn ARCH_X86_64
++mlpdsp_placeholder: times 4 db 0
++%else
+ 
+ %macro SHLX 2
+ %if cpuflag(bmi2)
+diff --git a/libavcodec/x86/proresdsp.asm b/libavcodec/x86/proresdsp.asm
+index 65c9fad..5ad73f3 100644
+--- a/libavcodec/x86/proresdsp.asm
++++ b/libavcodec/x86/proresdsp.asm
+@@ -24,7 +24,10 @@
+ 
+ %include "libavutil/x86/x86util.asm"
+ 
+-%if ARCH_X86_64
++%ifn ARCH_X86_64
++SECTION .rdata
++proresdsp_placeholder: times 4 db 0
++%else
+ 
+ SECTION_RODATA
+ 
+diff --git a/libavcodec/x86/vvc/vvc_mc.asm b/libavcodec/x86/vvc/vvc_mc.asm
+index 30aa97c..3975f98 100644
+--- a/libavcodec/x86/vvc/vvc_mc.asm
++++ b/libavcodec/x86/vvc/vvc_mc.asm
+@@ -31,7 +31,9 @@
+ 
+ SECTION_RODATA 32
+ 
+-%if ARCH_X86_64
++%ifn ARCH_X86_64
++vvc_mc_placeholder: times 4 db 0
++%else
+ 
+ %if HAVE_AVX2_EXTERNAL
+ 
+diff --git a/libavfilter/x86/vf_atadenoise.asm b/libavfilter/x86/vf_atadenoise.asm
+index 4945ad3..748b65a 100644
+--- a/libavfilter/x86/vf_atadenoise.asm
++++ b/libavfilter/x86/vf_atadenoise.asm
+@@ -20,7 +20,10 @@
+ ;* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ ;******************************************************************************
+ 
+-%if ARCH_X86_64
++%ifn ARCH_X86_64
++SECTION .rdata
++vf_atadenoise_placeholder: times 4 db 0
++%else
+ 
+ %include "libavutil/x86/x86util.asm"
+ 
+diff --git a/libavfilter/x86/vf_nlmeans.asm b/libavfilter/x86/vf_nlmeans.asm
+index 8f57801..9aef3a4 100644
+--- a/libavfilter/x86/vf_nlmeans.asm
++++ b/libavfilter/x86/vf_nlmeans.asm
+@@ -21,7 +21,10 @@
+ 
+ %include "libavutil/x86/x86util.asm"
+ 
+-%if HAVE_AVX2_EXTERNAL && ARCH_X86_64
++%ifn HAVE_AVX2_EXTERNAL && ARCH_X86_64
++SECTION .rdata
++vf_nlmeans_placeholder: times 4 db 0
++%else
+ 
+ SECTION_RODATA 32
+ 

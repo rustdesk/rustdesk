@@ -65,8 +65,8 @@ class MainService : Service() {
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustPointerInput(kind: Int, mask: Int, x: Int, y: Int) {
-        // turn on screen with LIFT_DOWN when screen off
-        if (!powerManager.isInteractive && (kind == 0 || mask == LIFT_DOWN)) {
+        // turn on screen with LEFT_DOWN when screen off
+        if (!powerManager.isInteractive && (kind == 0 || mask == LEFT_DOWN)) {
             if (wakeLock.isHeld) {
                 Log.d(logTag, "Turn on Screen, WakeLock release")
                 wakeLock.release()
@@ -122,9 +122,9 @@ class MainService : Service() {
                     val authorized = jsonObject["authorized"] as Boolean
                     val isFileTransfer = jsonObject["is_file_transfer"] as Boolean
                     val type = if (isFileTransfer) {
-                        translate("File Connection")
+                        translate("Transfer file")
                     } else {
-                        translate("Screen Connection")
+                        translate("Share screen")
                     }
                     if (authorized) {
                         if (!isFileTransfer && !isStart) {
@@ -302,6 +302,8 @@ class MainService : Service() {
                     stopCapture()
                     FFI.refreshScreen()
                     startCapture()
+                } else {
+                    FFI.refreshScreen()
                 }
             }
 
@@ -431,6 +433,7 @@ class MainService : Service() {
         checkMediaPermission()
         _isStart = true
         FFI.setFrameRawEnable("video",true)
+        MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
         return true
     }
 
@@ -439,6 +442,7 @@ class MainService : Service() {
         Log.d(logTag, "Stop Capture")
         FFI.setFrameRawEnable("video",false)
         _isStart = false
+        MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
         // release video
         if (reuseVirtualDisplay) {
             // The virtual display video projection can be paused by calling `setSurface(null)`.

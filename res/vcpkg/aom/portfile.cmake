@@ -8,16 +8,28 @@ vcpkg_find_acquire_program(PERL)
 get_filename_component(PERL_PATH ${PERL} DIRECTORY)
 vcpkg_add_to_path(${PERL_PATH})
 
-vcpkg_from_git(
-    OUT_SOURCE_PATH SOURCE_PATH
-    URL "https://aomedia.googlesource.com/aom"
-    REF 8ad484f8a18ed1853c094e7d3a4e023b2a92df28 # 3.9.1
-    PATCHES
-        aom-uninitialized-pointer.diff
-        aom-avx2.diff
-        # Can be dropped when https://bugs.chromium.org/p/aomedia/issues/detail?id=3029 is merged into the upstream
-        aom-install.diff
-)
+if(DEFINED ENV{USE_AOM_391})
+    vcpkg_from_git(
+        OUT_SOURCE_PATH SOURCE_PATH
+        URL "https://aomedia.googlesource.com/aom"
+        REF 8ad484f8a18ed1853c094e7d3a4e023b2a92df28 # 3.9.1
+        PATCHES
+            aom-uninitialized-pointer.diff
+            aom-avx2.diff
+            aom-install.diff
+    )
+else()
+    vcpkg_from_git(
+        OUT_SOURCE_PATH SOURCE_PATH
+        URL "https://aomedia.googlesource.com/aom"
+        REF 10aece4157eb79315da205f39e19bf6ab3ee30d0 # 3.12.1
+        PATCHES
+            aom-uninitialized-pointer.diff
+            # aom-avx2.diff
+            # Can be dropped when https://bugs.chromium.org/p/aomedia/issues/detail?id=3029 is merged into the upstream
+            aom-install.diff
+    )
+endif()
 
 set(aom_target_cpu "")
 if(VCPKG_TARGET_IS_UWP OR (VCPKG_TARGET_IS_WINDOWS AND VCPKG_TARGET_ARCHITECTURE MATCHES "^arm"))

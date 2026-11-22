@@ -25,7 +25,13 @@ impl Session {
     pub fn new(id: &str, sender: mpsc::UnboundedSender<Data>) -> Self {
         let mut password = "".to_owned();
         if PeerConfig::load(id).password.is_empty() {
-            password = rpassword::prompt_password("Enter password: ").unwrap();
+            match rpassword::prompt_password("Enter password: ") {
+                Ok(p) => password = p,
+                Err(e) => {
+                    log::error!("Failed to read password: {:?}", e);
+                    password = "".to_owned();
+                }
+            }
         }
         let session = Self {
             id: id.to_owned(),

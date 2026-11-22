@@ -30,6 +30,15 @@ enum SortBy {
 class JobID {
   int _count = 0;
   int next() {
+    try {
+      if (!isWeb) {
+        String v = bind.mainGetCommonSync(key: 'transfer-job-id');
+        return int.parse(v);
+      }
+    } catch (e) {
+      debugPrint("Failed to get transfer job id: $e");
+    }
+    // Finally increase the count if on the web or if failed to get the id.
     _count++;
     return _count;
   }
@@ -98,6 +107,38 @@ class FileModel {
       remoteController.initDirAndHome(evt);
     }
     fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
+  }
+
+  void receiveEmptyDirs(Map<String, dynamic> evt) {
+    fileFetcher.tryCompleteEmptyDirsTask(evt['value'], evt['is_local']);
+  }
+
+  // This method fixes a deadlock that occurred when the previous code directly
+  // called jobController.jobError(evt) in the job_error event handler.
+  //
+  // The problem with directly calling jobController.jobError():
+  //   1. fetchDirectoryRecursiveToRemove(jobID) registers readRecursiveTasks[jobID]
+  //      and waits for completion
+  //   2. If the remote has no permission (or some other errors), it returns a FileTransferError
+  //   3. The error triggers job_error event, which called jobController.jobError()
+  //   4. jobController.jobError() calls getJob(jobID) to find the job in jobTable
+  //   5. But addDeleteDirJob() is called AFTER fetchDirectoryRecursiveToRemove(),
+  //      so the job doesn't exist yet in jobTable
+  //   6. Result: jobController.jobError() does nothing useful, and
+  //      readRecursiveTasks[jobID] never completes, causing a 2s timeout
+  //
+  // Solution: Before calling jobController.jobError(), we first check if there's
+  // a pending readRecursiveTasks with this ID and complete it with the error.
+  void handleJobError(Map<String, dynamic> evt) {
+    final id = int.tryParse(evt['id']?.toString() ?? '');
+    if (id != null) {
+      final err = evt['err']?.toString() ?? 'Unknown error';
+      fileFetcher.tryCompleteRecursiveTaskWithError(id, err);
+    }
+    // Always call jobController.jobError(evt) to ensure all error events are processed,
+    // even if the event does not have a valid job ID. This allows for generic error handling
+    // or logging of unexpected errors.
+    jobController.jobError(evt);
   }
 
   Future<void> postOverrideFileConfirm(Map<String, dynamic> evt) async {
@@ -257,6 +298,27 @@ class FileModel {
       debugPrint("Failed to decode onSelectedFiles: $e");
     }
   }
+
+  void sendEmptyDirs(dynamic obj) {
+    late final List<dynamic> emptyDirs;
+    try {
+      emptyDirs = jsonDecode(obj['dirs'] as String);
+    } catch (e) {
+      debugPrint("Failed to decode sendEmptyDirs: $e");
+    }
+    final otherSideData = remoteController.directoryData();
+    final toPath = otherSideData.directory.path;
+    final isPeerWindows = otherSideData.options.isWindows;
+
+    final isLocalWindows = isWindows || isWebOnWindows;
+    for (var dir in emptyDirs) {
+      if (isLocalWindows != isPeerWindows) {
+        dir = PathUtil.convert(dir, isLocalWindows, isPeerWindows);
+      }
+      var peerPath = PathUtil.join(toPath, dir, isPeerWindows);
+      remoteController.createDirWithRemote(peerPath, true);
+    }
+  }
 }
 
 class DirectoryData {
@@ -329,14 +391,30 @@ class FileController {
 
     await Future.delayed(Duration(milliseconds: 100));
 
-    final dir = (await bind.sessionGetPeerOption(
+    final savedDir = (await bind.sessionGetPeerOption(
         sessionId: sessionId, name: isLocal ? "local_dir" : "remote_dir"));
-    openDirectory(dir.isEmpty ? options.value.home : dir);
+    Future<bool> tryOpenReadyDirs() async {
+      final dirs = <String>{
+        if (directory.value.path.isNotEmpty) directory.value.path,
+        if (savedDir.isNotEmpty) savedDir,
+        options.value.home,
+      };
+      for (final dir in dirs) {
+        if (await _openDirectoryPath(dir, isBack: true)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    var opened = await tryOpenReadyDirs();
 
     await Future.delayed(Duration(seconds: 1));
 
-    if (directory.value.path.isEmpty) {
-      openDirectory(options.value.home);
+    if (!opened) {
+      // The peer may become ready during the reconnect delay, so retry the
+      // same candidates instead of only retrying the default home directory.
+      await tryOpenReadyDirs();
     }
   }
 
@@ -367,19 +445,23 @@ class FileController {
     });
   }
 
-  Future<void> refresh() async {
-    await openDirectory(directory.value.path);
+  Future<bool> refresh() async {
+    // "." can be both a refresh command and a real remote directory path.
+    // Refresh must bypass openDirectory's command dispatch to avoid recursion.
+    return await _openDirectoryPath(directory.value.path, isBack: true);
   }
 
-  Future<void> openDirectory(String path, {bool isBack = false}) async {
-    if (path == ".") {
-      refresh();
-      return;
+  Future<bool> openDirectory(String path, {bool isBack = false}) async {
+    if (!isBack && path == ".") {
+      return await refresh();
     }
-    if (path == "..") {
-      goToParentDirectory();
-      return;
+    if (!isBack && path == "..") {
+      return await _goToParentDirectory(isBack: isBack);
     }
+    return await _openDirectoryPath(path, isBack: isBack);
+  }
+
+  Future<bool> _openDirectoryPath(String path, {bool isBack = false}) async {
     if (!isBack) {
       pushHistory();
     }
@@ -396,8 +478,10 @@ class FileController {
       final fd = await fileFetcher.fetchDirectory(path, isLocal, showHidden);
       fd.format(isWindows, sort: sortBy.value);
       directory.value = fd;
+      return true;
     } catch (e) {
       debugPrint("Failed to openDirectory $path: $e");
+      return false;
     }
   }
 
@@ -425,19 +509,22 @@ class FileController {
       goBack();
       return;
     }
-    openDirectory(path, isBack: true);
+    unawaited(_openDirectoryPath(path, isBack: true).then<void>((_) {}));
   }
 
   void goToParentDirectory() {
+    unawaited(_goToParentDirectory().then<void>((_) {}));
+  }
+
+  Future<bool> _goToParentDirectory({bool isBack = false}) async {
     final isWindows = options.value.isWindows;
     final dirPath = directory.value.path;
     var parent = PathUtil.dirname(dirPath, isWindows);
     // specially for C:\, D:\, goto '/'
     if (parent == dirPath && isWindows) {
-      openDirectory('/');
-      return;
+      return await _openDirectoryPath('/', isBack: isBack);
     }
-    openDirectory(parent);
+    return await _openDirectoryPath(parent, isBack: isBack);
   }
 
   // TODO deprecated this
@@ -470,7 +557,8 @@ class FileController {
   }
 
   /// sendFiles from current side (FileController.isLocal) to other side (SelectedItems).
-  void sendFiles(SelectedItems items, DirectoryData otherSideData) {
+  Future<void> sendFiles(
+      SelectedItems items, DirectoryData otherSideData) async {
     /// ignore wrong items side status
     if (items.isLocal != isLocal) {
       return;
@@ -496,6 +584,43 @@ class FileController {
       debugPrint(
           "path: ${from.path}, toPath: $toPath, to: ${PathUtil.join(toPath, from.name, isWindows)}");
     }
+
+    if (isWeb ||
+        (!isLocal &&
+            versionCmp(rootState.target!.ffiModel.pi.version, '1.3.3') < 0)) {
+      return;
+    }
+
+    final List<Entry> entrys = items.items.toList();
+    var isRemote = isLocal == true ? true : false;
+
+    await Future.forEach(entrys, (Entry item) async {
+      if (!item.isDirectory) {
+        return;
+      }
+
+      final List<String> paths = [];
+
+      final emptyDirs =
+          await fileFetcher.readEmptyDirs(item.path, isLocal, showHidden);
+
+      if (emptyDirs.isEmpty) {
+        return;
+      } else {
+        for (var dir in emptyDirs) {
+          paths.add(dir.path);
+        }
+      }
+
+      final dirs = paths.map((path) {
+        return PathUtil.getOtherSidePath(directory.value.path, path,
+            options.value.isWindows, toPath, isWindows);
+      });
+
+      for (var dir in dirs) {
+        createDirWithRemote(dir, isRemote);
+      }
+    });
   }
 
   bool _removeCheckboxRemember = false;
@@ -519,8 +644,21 @@ class FileController {
       } else if (item.isDirectory) {
         title = translate("Not an empty directory");
         dialogManager?.showLoading(translate("Waiting"));
-        final fd = await fileFetcher.fetchDirectoryRecursiveToRemove(
-            jobID, item.path, items.isLocal, true);
+        final FileDirectory fd;
+        try {
+          fd = await fileFetcher.fetchDirectoryRecursiveToRemove(
+              jobID, item.path, items.isLocal, true);
+        } catch (e) {
+          dialogManager?.dismissAll();
+          final dm = dialogManager;
+          if (dm != null) {
+            msgBox(sessionId, 'custom-error-nook-nocancel-hasclose',
+                translate("Error"), e.toString(), '', dm);
+          } else {
+            debugPrint("removeAction error msgbox failed: $e");
+          }
+          return;
+        }
         if (fd.path.isEmpty) {
           fd.path = item.path;
         }
@@ -534,7 +672,7 @@ class FileController {
               item.name,
               false);
           if (confirm == true) {
-            sendRemoveEmptyDir(
+            await sendRemoveEmptyDir(
               item.path,
               0,
               deleteJobId,
@@ -575,7 +713,7 @@ class FileController {
             // handle remove res;
             if (item.isDirectory &&
                 res['file_num'] == (entries.length - 1).toString()) {
-              sendRemoveEmptyDir(item.path, i, deleteJobId);
+              await sendRemoveEmptyDir(item.path, i, deleteJobId);
             }
           } else {
             jobController.updateJobStatus(deleteJobId,
@@ -588,7 +726,7 @@ class FileController {
                 final res = await jobController.jobResultListener.start();
                 if (item.isDirectory &&
                     res['file_num'] == (entries.length - 1).toString()) {
-                  sendRemoveEmptyDir(item.path, i, deleteJobId);
+                  await sendRemoveEmptyDir(item.path, i, deleteJobId);
                 }
               }
             } else {
@@ -683,18 +821,22 @@ class FileController {
         fileNum: fileNum);
   }
 
-  void sendRemoveEmptyDir(String path, int fileNum, int actId) {
+  Future<void> sendRemoveEmptyDir(String path, int fileNum, int actId) async {
     history.removeWhere((element) => element.contains(path));
-    bind.sessionRemoveAllEmptyDirs(
+    await bind.sessionRemoveAllEmptyDirs(
         sessionId: sessionId, actId: actId, path: path, isRemote: !isLocal);
   }
 
-  Future<void> createDir(String path) async {
+  Future<void> createDirWithRemote(String path, bool isRemote) async {
     bind.sessionCreateDir(
         sessionId: sessionId,
         actId: JobController.jobID.next(),
         path: path,
-        isRemote: !isLocal);
+        isRemote: isRemote);
+  }
+
+  Future<void> createDir(String path) async {
+    await createDirWithRemote(path, !isLocal);
   }
 
   Future<void> renameAction(Entry item, bool isLocal) async {
@@ -957,30 +1099,54 @@ class JobController {
     await bind.sessionCancelJob(sessionId: sessionId, actId: id);
   }
 
-  void loadLastJob(Map<String, dynamic> evt) {
+  Future<void> loadLastJob(Map<String, dynamic> evt) async {
     debugPrint("load last job: $evt");
     Map<String, dynamic> jobDetail = json.decode(evt['value']);
-    // int id = int.parse(jobDetail['id']);
     String remote = jobDetail['remote'];
     String to = jobDetail['to'];
     bool showHidden = jobDetail['show_hidden'];
     int fileNum = jobDetail['file_num'];
     bool isRemote = jobDetail['is_remote'];
-    final currJobId = JobController.jobID.next();
-    String fileName = path.basename(isRemote ? remote : to);
-    var jobProgress = JobProgress()
-      ..type = JobType.transfer
-      ..fileName = fileName
-      ..jobName = isRemote ? remote : to
-      ..id = currJobId
-      ..isRemoteToLocal = isRemote
-      ..fileNum = fileNum
-      ..remote = remote
-      ..to = to
-      ..showHidden = showHidden
-      ..state = JobState.paused;
-    jobTable.add(jobProgress);
-    bind.sessionAddJob(
+    bool isAutoStart = jobDetail['auto_start'] == true;
+    int currJobId = -1;
+    if (isAutoStart) {
+      // Ensure jobDetail['id'] exists and is an int
+      if (jobDetail.containsKey('id') &&
+          jobDetail['id'] != null &&
+          jobDetail['id'] is int) {
+        currJobId = jobDetail['id'];
+      }
+    }
+    if (currJobId < 0) {
+      // If id is missing or invalid, disable auto-start and assign a new job id
+      isAutoStart = false;
+      currJobId = JobController.jobID.next();
+    }
+
+    if (!isAutoStart) {
+      if (!(isDesktop || isWebDesktop)) {
+        // Don't add to job table if not auto start on mobile.
+        // Because mobile does not support job list view now.
+        return;
+      }
+
+      // Add to job table if not auto start on desktop.
+      String fileName = path.basename(isRemote ? remote : to);
+      final jobProgress = JobProgress()
+        ..type = JobType.transfer
+        ..fileName = fileName
+        ..jobName = isRemote ? remote : to
+        ..id = currJobId
+        ..isRemoteToLocal = isRemote
+        ..fileNum = fileNum
+        ..remote = remote
+        ..to = to
+        ..showHidden = showHidden
+        ..state = JobState.paused;
+      jobTable.add(jobProgress);
+    }
+
+    await bind.sessionAddJob(
       sessionId: sessionId,
       isRemote: isRemote,
       includeHidden: showHidden,
@@ -989,6 +1155,11 @@ class JobController {
       to: isRemote ? to : remote,
       fileNum: fileNum,
     );
+
+    if (isAutoStart) {
+      await bind.sessionResumeJob(
+          sessionId: sessionId, actId: currJobId, isRemote: isRemote);
+    }
   }
 
   void resumeJob(int jobId) {
@@ -1018,6 +1189,11 @@ class JobController {
       jobTable.refresh();
     }
     debugPrint("update folder files: $info");
+  }
+
+  void clear() {
+    jobTable.clear();
+    jobResultListener.clear();
   }
 }
 
@@ -1064,12 +1240,31 @@ class JobResultListener<T> {
 class FileFetcher {
   // Map<String,Completer<FileDirectory>> localTasks = {}; // now we only use read local dir sync
   Map<String, Completer<FileDirectory>> remoteTasks = {};
+  Map<String, Completer<List<FileDirectory>>> remoteEmptyDirsTasks = {};
   Map<int, Completer<FileDirectory>> readRecursiveTasks = {};
 
   final GetSessionID getSessionID;
   SessionID get sessionId => getSessionID();
 
   FileFetcher(this.getSessionID);
+
+  Future<List<FileDirectory>> registerReadEmptyDirsTask(
+      bool isLocal, String path) {
+    // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
+    final tasks = remoteEmptyDirsTasks; // bypass now
+    if (tasks.containsKey(path)) {
+      throw "Failed to registerReadEmptyDirsTask, already have same read job";
+    }
+    final c = Completer<List<FileDirectory>>();
+    tasks[path] = c;
+
+    Timer(Duration(seconds: 2), () {
+      tasks.remove(path);
+      if (c.isCompleted) return;
+      c.completeError("Failed to read empty dirs, timeout");
+    });
+    return c.future;
+  }
 
   Future<FileDirectory> registerReadTask(bool isLocal, String path) {
     // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
@@ -1104,6 +1299,25 @@ class FileFetcher {
     return c.future;
   }
 
+  tryCompleteEmptyDirsTask(String? msg, String? isLocalStr) {
+    if (msg == null || isLocalStr == null) return;
+    late final Map<String, Completer<List<FileDirectory>>> tasks;
+    try {
+      final map = jsonDecode(msg);
+      final String path = map["path"];
+      final List<dynamic> fdJsons = map["empty_dirs"];
+      final List<FileDirectory> fds =
+          fdJsons.map((fdJson) => FileDirectory.fromJson(fdJson)).toList();
+
+      tasks = remoteEmptyDirsTasks;
+      final completer = tasks.remove(path);
+
+      completer?.complete(fds);
+    } catch (e) {
+      debugPrint("tryCompleteJob err: $e");
+    }
+  }
+
   tryCompleteTask(String? msg, String? isLocalStr) {
     if (msg == null || isLocalStr == null) return;
     late final Map<Object, Completer<FileDirectory>> tasks;
@@ -1124,6 +1338,37 @@ class FileFetcher {
       }
     } catch (e) {
       debugPrint("tryCompleteJob err: $e");
+    }
+  }
+
+  // Complete a pending recursive read task with an error.
+  // See FileModel.handleJobError() for why this is necessary.
+  void tryCompleteRecursiveTaskWithError(int id, String error) {
+    final completer = readRecursiveTasks.remove(id);
+    if (completer != null && !completer.isCompleted) {
+      completer.completeError(error);
+    }
+  }
+
+  Future<List<FileDirectory>> readEmptyDirs(
+      String path, bool isLocal, bool showHidden) async {
+    try {
+      if (isLocal) {
+        final res = await bind.sessionReadLocalEmptyDirsRecursiveSync(
+            sessionId: sessionId, path: path, includeHidden: showHidden);
+
+        final List<dynamic> fdJsons = jsonDecode(res);
+
+        final List<FileDirectory> fds =
+            fdJsons.map((fdJson) => FileDirectory.fromJson(fdJson)).toList();
+        return fds;
+      } else {
+        await bind.sessionReadRemoteEmptyDirsRecursiveSync(
+            sessionId: sessionId, path: path, includeHidden: showHidden);
+        return registerReadEmptyDirsTask(isLocal, path);
+      }
+    } catch (e) {
+      return Future.error(e);
     }
   }
 
@@ -1268,6 +1513,10 @@ class JobProgress {
   var err = "";
   int lastTransferredSize = 0;
 
+  double get percent =>
+      totalSize > 0 ? (finishedSize.toDouble() / totalSize) : 0.0;
+  String get percentText => '${(percent * 100).toStringAsFixed(0)}%';
+
   clear() {
     type = JobType.none;
     state = JobState.none;
@@ -1373,6 +1622,24 @@ class PathUtil {
   static final windowsContext = path.Context(style: path.Style.windows);
   static final posixContext = path.Context(style: path.Style.posix);
 
+  static String getOtherSidePath(String mainRootPath, String mainPath,
+      bool isMainWindows, String otherRootPath, bool isOtherWindows) {
+    final mainPathUtil = isMainWindows ? windowsContext : posixContext;
+    final relativePath = mainPathUtil.relative(mainPath, from: mainRootPath);
+
+    final names = mainPathUtil.split(relativePath);
+
+    final otherPathUtil = isOtherWindows ? windowsContext : posixContext;
+
+    String path = otherRootPath;
+
+    for (var name in names) {
+      path = otherPathUtil.join(path, name);
+    }
+
+    return path;
+  }
+
   static String join(String path1, String path2, bool isWindows) {
     final pathUtil = isWindows ? windowsContext : posixContext;
     return pathUtil.join(path1, path2);
@@ -1381,6 +1648,12 @@ class PathUtil {
   static List<String> split(String path, bool isWindows) {
     final pathUtil = isWindows ? windowsContext : posixContext;
     return pathUtil.split(path);
+  }
+
+  static String convert(String path, bool isMainWindows, bool isOtherWindows) {
+    final mainPathUtil = isMainWindows ? windowsContext : posixContext;
+    final otherPathUtil = isOtherWindows ? windowsContext : posixContext;
+    return otherPathUtil.joinAll(mainPathUtil.split(path));
   }
 
   static String dirname(String path, bool isWindows) {

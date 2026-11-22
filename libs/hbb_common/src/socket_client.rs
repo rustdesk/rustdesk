@@ -1,12 +1,15 @@
+#[cfg(feature = "webrtc")]
+use crate::webrtc::{self, is_webrtc_endpoint};
 use crate::{
     config::{Config, NetworkType},
     tcp::FramedStream,
     udp::FramedSocket,
-    ResultType,
+    websocket::{self, check_ws, is_ws_endpoint},
+    ResultType, Stream,
 };
 use anyhow::Context;
-use std::net::SocketAddr;
-use tokio::net::ToSocketAddrs;
+use std::{net::SocketAddr, sync::Arc};
+use tokio::net::{ToSocketAddrs, UdpSocket};
 use tokio_socks::{IntoTargetAddr, TargetAddr};
 
 #[inline]
@@ -47,6 +50,30 @@ pub fn increase_port<T: std::string::ToString>(host: T, offset: i32) -> String {
         }
     }
     host
+}
+
+pub fn split_host_port<T: std::string::ToString>(host: T) -> Option<(String, i32)> {
+    let host = host.to_string();
+    if crate::is_ipv6_str(&host) {
+        if host.starts_with('[') {
+            let tmp: Vec<&str> = host.split("]:").collect();
+            if tmp.len() == 2 {
+                let port: i32 = tmp[1].parse().unwrap_or(0);
+                if port > 0 {
+                    return Some((format!("{}]", tmp[0]), port));
+                }
+            }
+        }
+    } else if host.contains(':') {
+        let tmp: Vec<&str> = host.split(':').collect();
+        if tmp.len() == 2 {
+            let port: i32 = tmp[1].parse().unwrap_or(0);
+            if port > 0 {
+                return Some((tmp[0].to_string(), port));
+            }
+        }
+    }
+    None
 }
 
 pub fn test_if_valid_server(host: &str, test_with_proxy: bool) -> String {
@@ -95,6 +122,7 @@ impl IsResolvedSocketAddr for &str {
     }
 }
 
+// This function checks if the target is a websocket endpoint and connects accordingly.
 #[inline]
 pub async fn connect_tcp<
     't,
@@ -102,10 +130,23 @@ pub async fn connect_tcp<
 >(
     target: T,
     ms_timeout: u64,
-) -> ResultType<FramedStream> {
+) -> ResultType<crate::Stream> {
+    #[cfg(feature = "webrtc")]
+    if is_webrtc_endpoint(&target.to_string()) {
+        return Ok(Stream::WebRTC(
+            webrtc::WebRTCStream::new(&target.to_string(), false, ms_timeout).await?,
+        ));
+    }
+    let target_str = check_ws(&target.to_string());
+    if is_ws_endpoint(&target_str) {
+        return Ok(Stream::WebSocket(
+            websocket::WsFramedStream::new(target_str, None, None, ms_timeout).await?,
+        ));
+    }
     connect_tcp_local(target, None, ms_timeout).await
 }
 
+// This function connects directly to the target without checking for websocket endpoints.
 pub async fn connect_tcp_local<
     't,
     T: IntoTargetAddr<'t> + ToSocketAddrs + IsResolvedSocketAddr + std::fmt::Display,
@@ -113,19 +154,27 @@ pub async fn connect_tcp_local<
     target: T,
     local: Option<SocketAddr>,
     ms_timeout: u64,
-) -> ResultType<FramedStream> {
+) -> ResultType<Stream> {
     if let Some(conf) = Config::get_socks() {
-        return FramedStream::connect(target, local, &conf, ms_timeout).await;
+        return Ok(Stream::Tcp(
+            FramedStream::connect(target, local, &conf, ms_timeout).await?,
+        ));
     }
-    if let Some(target) = target.resolve() {
-        if let Some(local) = local {
-            if local.is_ipv6() && target.is_ipv4() {
-                let target = query_nip_io(target).await?;
-                return FramedStream::new(target, Some(local), ms_timeout).await;
+
+    if let Some(target_addr) = target.resolve() {
+        if let Some(local_addr) = local {
+            if local_addr.is_ipv6() && target_addr.is_ipv4() {
+                let resolved_target = query_nip_io(target_addr).await?;
+                return Ok(Stream::Tcp(
+                    FramedStream::new(resolved_target, Some(local_addr), ms_timeout).await?,
+                ));
             }
         }
     }
-    FramedStream::new(target, local, ms_timeout).await
+
+    Ok(Stream::Tcp(
+        FramedStream::new(target, local, ms_timeout).await?,
+    ))
 }
 
 #[inline]
@@ -164,6 +213,14 @@ async fn test_target(target: &str) -> ResultType<SocketAddr> {
         .await?
         .next()
         .context(format!("Failed to look up host for {target}"))
+}
+
+#[inline]
+pub async fn new_direct_udp_for(target: &str) -> ResultType<(Arc<UdpSocket>, SocketAddr)> {
+    let peer_addr = test_target(target).await?;
+    let local_addr = Config::get_any_listen_addr(peer_addr.is_ipv4());
+    let socket = UdpSocket::bind(local_addr).await?;
+    Ok((Arc::new(socket), peer_addr))
 }
 
 #[inline]

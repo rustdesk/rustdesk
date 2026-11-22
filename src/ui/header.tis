@@ -117,6 +117,13 @@ class Header: Reactor.Component {
             icon_conn = svg_insecure_relay;
             title_conn = translate("Relayed and unencrypted connection");
         }
+        var stream_type = this.stream_type;
+        if (stream_type == "Relay") {
+            stream_type = "TCP";
+        }
+        if (stream_type) {
+            title_conn += " (" + stream_type + ")";
+        }
         var title = get_id();
         if (pi.hostname) title += "(" + pi.username + "@" + pi.hostname + ")";
         if ((pi.displays || []).length == 0) {
@@ -174,6 +181,13 @@ class Header: Reactor.Component {
             }
         }
 
+        var is_file_copy_paste_supported = false;
+        if (handler.version_cmp(pi.version, '1.2.4') < 0) {
+            is_file_copy_paste_supported = is_win && pi.platform == "Windows";
+        } else {
+            is_file_copy_paste_supported = handler.has_file_clipboard() && pi.platform_additions?.has_file_clipboard;
+        }
+
         return <popup>
             <menu.context #display-options>
                 <li #adjust-window style="display:none">{translate('Adjust Window')}</li> 
@@ -201,10 +215,10 @@ class Header: Reactor.Component {
                 {<li #follow-remote-window .toggle-option><span>{svg_checkmark}</span>{translate('Follow remote window focus')}</li>}
                 <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
                 {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
-                {(is_win && pi.platform == "Windows") && file_enabled ? <li #enable-file-copy-paste .toggle-option><span>{svg_checkmark}</span>{translate('Enable file copy and paste')}</li> : ""}
+                {is_file_copy_paste_supported && file_enabled ? <li #enable-file-copy-paste .toggle-option><span>{svg_checkmark}</span>{translate('Enable file copy and paste')}</li> : ""}
                 {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
                 {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
-                {keyboard_enabled && pi.platform == "Windows" ? <li #privacy-mode><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
+                {(pi.platform == "Windows" || pi.platform == "Mac OS") && (handler.get_toggle_option("privacy-mode") || (keyboard_enabled && privacy_mode_enabled)) ? <li #privacy-mode><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
                 {keyboard_enabled && ((is_osx && pi.platform != "Mac OS") || (!is_osx && pi.platform == "Mac OS")) ? <li #allow_swap_key  .toggle-option><span>{svg_checkmark}</span>{translate('Swap control-command key')}</li> : ""}
                 {handler.version_cmp(pi.version, '1.2.4') >= 0 ? <li #i444><span>{svg_checkmark}</span>{translate('True color (4:4:4)')}</li> : ""}
             </menu>
@@ -223,6 +237,7 @@ class Header: Reactor.Component {
                 {restart_enabled && (pi.platform == "Linux" || pi.platform == "Windows" || pi.platform == "Mac OS") ? <li #restart_remote_device>{translate('Restart remote device')}</li> : ""}
                 {keyboard_enabled ? <li #lock-screen>{translate('Insert Lock')}</li> : ""}
                 {keyboard_enabled && pi.platform == "Windows" && pi.sas_enabled ? <li #block-input>{translate("Block user input")}</li> : ""}
+                {handler.is_screenshot_supported() ? <li #take-screenshot>{translate('Take screenshot')}</li> : "" }
                 <li #refresh>{translate('Refresh')}</li>
             </menu>
         </popup>;
@@ -369,6 +384,10 @@ class Header: Reactor.Component {
     event click $(#lock-screen) {
         handler.lock_screen();
     }
+
+    event click $(#take-screenshot) {
+        handler.take_screenshot(pi.current_display, "");
+    }
     
     event click $(#refresh) {
         // 0 is just a dummy value. It will be ignored by the handler.
@@ -408,7 +427,7 @@ class Header: Reactor.Component {
                 adaptDisplay();
             } else if (type == "codec-preference") {
                 handler.set_option("codec-preference", me.id);
-                handler.change_prefer_codec();
+                handler.update_supported_decodings();
             }
             toggleMenuState();
         }
@@ -539,6 +558,26 @@ handler.setCurrentDisplay = function(v) {
     }
 }
 
+handler.screenshot = function(msg) {
+    if (msg) {
+        msgbox(
+            "custom-nocancel-nook-hasclose-error",
+            translate("Take screenshot"),
+            msg,
+            "",
+            function() {}
+        );
+    } else {
+        msgbox(
+            "custom-take-screenshot-nocancel-nook",
+            translate("Take screenshot"),
+            translate("screenshot-action-tip"),
+            "",
+            function() {}
+        );
+    }
+}
+
 function updatePrivacyMode() {
     var el = $(li#privacy-mode);
     if (el) {
@@ -563,7 +602,13 @@ function togglePrivacyMode(privacy_id) {
     if (!supported) {
         msgbox("nocancel", translate("Privacy mode"), translate("Unsupported"), "", function() { });
     } else {
-        handler.toggle_option(privacy_id);
+        var privacy_mode_impls = pi.platform_additions?.supported_privacy_mode_impl;
+        if (privacy_mode_impls == null || privacy_mode_impls == undefined) {
+            handler.toggle_option(privacy_id);
+            return;
+        }
+        var is_on = handler.get_toggle_option("privacy-mode");
+        handler.toggle_privacy_mode("", !is_on);
     }
 }
 
@@ -580,7 +625,7 @@ function toggleQualityMonitor(name) {
 
 function toggleI444(name) {
     handler.toggle_option(name);
-    handler.change_prefer_codec();
+    handler.update_supported_decodings();
     toggleMenuState();
 }
 
@@ -663,10 +708,11 @@ function startChat() {
     chatbox = view.window(params);
 }
 
-handler.setConnectionType = function(secured, direct) {
+handler.setConnectionType = function(secured, direct, stream_type) {
     header.update({
        secure_connection: secured,
        direct_connection: direct, 
+       stream_type: stream_type,
     });
 }
 

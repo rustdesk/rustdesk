@@ -9,9 +9,9 @@
   <b>Abbiamo bisogno del tuo aiuto per tradurre questo file README e la <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">UI RustDesk</a> nella tua lingua nativa</b>
 </p>
 
-Chatta con noi su: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Chatta con noi su: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Funzionalit%C3%A0%20Avanzate-blue)](https://rustdesk.com/pricing.html)
 
 [![Bounties aperti](https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Frustdesk%2Fbounties%3Fstatus%3Dopen)](https://console.algora.io/org/rustdesk/bounties?status=open)
 
@@ -163,6 +163,10 @@ Assicurati di eseguire questi comandi dalla radice del repository RustDesk, altr
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: codice specifico della piattaforma
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: codice Flutter per desktop e mobile
 - **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: JavaScript per client web Flutter
+
+> [!Attenzione]
+> **Dichiarazione di non responsabilità per uso improprio:** <br>
+> Gli sviluppatori di RustDesk non approvano né supportano alcun uso non etico o illegale di questo software. L'uso improprio, come l'accesso non autorizzato, il controllo o l'invasione della privacy, è strettamente contro le nostre linee guida. Gli autori non sono responsabili per qualsiasi uso improprio dell'applicazione.
 
 ## Schermate
 

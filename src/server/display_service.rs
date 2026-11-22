@@ -133,12 +133,13 @@ pub fn set_last_changed_resolution(display_name: &str, original: (i32, i32), cha
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn reset_resolutions() {
+pub fn restore_resolutions() {
     for (name, res) in CHANGED_RESOLUTIONS.read().unwrap().iter() {
         let (w, h) = res.original;
+        log::info!("Restore resolution of display '{}' to ({}, {})", name, w, h);
         if let Err(e) = crate::platform::change_resolution(name, w as _, h as _) {
             log::error!(
-                "Failed to reset resolution of display '{}' to ({},{}): {}",
+                "Failed to restore resolution of display '{}' to ({},{}): {}",
                 name,
                 w,
                 h,
@@ -146,7 +147,7 @@ pub fn reset_resolutions() {
             );
         }
     }
-    // Can be cleared because reset resolutions is called when there is no client connected.
+    // Can be cleared because restore resolutions is called when there is no client connected.
     CHANGED_RESOLUTIONS.write().unwrap().clear();
 }
 
@@ -303,6 +304,12 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
 // Display to DisplayInfo
 // The DisplayInfo is be sent to the peer.
 pub(super) fn check_update_displays(all: &Vec<Display>) {
+    // For compatibility: if only one display, scale remains 1.0 and we use the physical size for `uinput`.
+    // If there are multiple displays, we use the logical size for `uinput` by setting scale to d.scale().
+    #[cfg(target_os = "linux")]
+    let use_logical_scale = !is_x11()
+        && crate::is_server()
+        && scrap::wayland::display::get_displays().displays.len() > 1;
     let displays = all
         .iter()
         .map(|d| {
@@ -313,6 +320,12 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
             #[cfg(target_os = "macos")]
             {
                 scale = d.scale();
+            }
+            #[cfg(target_os = "linux")]
+            {
+                if use_logical_scale {
+                    scale = d.scale();
+                }
             }
             let original_resolution = get_original_resolution(
                 &display_name,

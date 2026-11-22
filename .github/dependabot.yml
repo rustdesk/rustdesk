@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    target-branch: "master"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "Git submodule"
+    labels:
+      - "dependencies"

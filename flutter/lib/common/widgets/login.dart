@@ -20,7 +20,8 @@ const kOpSvgList = [
   'okta',
   'facebook',
   'azure',
-  'auth0'
+  'auth0',
+  'microsoft'
 ];
 
 class _IconOP extends StatelessWidget {
@@ -103,7 +104,7 @@ class ButtonOP extends StatelessWidget {
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Center(
-                        child: Text('${translate("Continue with")} $opLabel')),
+                        child: Text(translate("Continue with {$opLabel}"))),
                   ),
                 ),
               ],
@@ -166,10 +167,13 @@ class _WidgetOPState extends State<WidgetOP> {
       final String stateMsg = resultMap['state_msg'];
       String failedMsg = resultMap['failed_msg'];
       final String? url = resultMap['url'];
+      final bool urlLaunched = (resultMap['url_launched'] as bool?) ?? false;
       final authBody = resultMap['auth_body'];
       if (_stateMsg != stateMsg || _failedMsg != failedMsg) {
         if (_url.isEmpty && url != null && url.isNotEmpty) {
-          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+          if (!urlLaunched) {
+            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+          }
           _url = url;
         }
         if (authBody != null) {
@@ -221,21 +225,59 @@ class _WidgetOPState extends State<WidgetOP> {
           return Offstage(
             offstage:
                 _failedMsg.isEmpty && widget.curOP.value != widget.config.op,
-            child: RichText(
-              text: TextSpan(
-                text: '$_stateMsg  ',
-                style:
-                    DefaultTextStyle.of(context).style.copyWith(fontSize: 12),
-                children: <TextSpan>[
-                  TextSpan(
-                    text: _failedMsg,
-                    style: DefaultTextStyle.of(context).style.copyWith(
-                          fontSize: 14,
-                          color: Colors.red,
-                        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (_stateMsg.isNotEmpty && _failedMsg.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: SelectableText(
+                      translate(_stateMsg),
+                      style: DefaultTextStyle.of(context)
+                          .style
+                          .copyWith(fontSize: 12),
+                    ),
                   ),
-                ],
-              ),
+                if (_failedMsg.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Builder(builder: (context) {
+                      final errorColor =
+                          Theme.of(context).colorScheme.error;
+                      final bgColor = Theme.of(context)
+                          .colorScheme
+                          .errorContainer
+                          .withOpacity(0.3);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8.0, vertical: 6.0),
+                        decoration: BoxDecoration(
+                          color: bgColor,
+                          borderRadius: BorderRadius.circular(4.0),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.error_outline,
+                                color: errorColor, size: 16),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: SelectableText(
+                                translate(_failedMsg),
+                                style: DefaultTextStyle.of(context)
+                                    .style
+                                    .copyWith(
+                                      fontSize: 13,
+                                      color: errorColor,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+              ],
             ),
           );
         }),
@@ -397,6 +439,8 @@ Future<bool?> loginDialog() async {
   String? passwordMsg;
   var isInProgress = false;
   final RxString curOP = ''.obs;
+  // Track hover state for the close icon
+  bool isCloseHovered = false;
 
   final loginOptions = [].obs;
   Future.delayed(Duration.zero, () async {
@@ -455,10 +499,14 @@ Future<bool?> loginDialog() async {
                   resp.user, resp.secret, isEmailVerification);
             } else {
               setState(() => isInProgress = false);
+              // Workaround for web, close the dialog first, then show the verification code dialog.
+              // Otherwise, the text field will keep selecting the text and we can't input the code.
+              // Not sure why this happens.
+              if (isWeb && close != null) close(null);
               final res = await verificationCodeDialog(
                   resp.user, resp.secret, isEmailVerification);
               if (res == true) {
-                if (close != null) close(false);
+                if (!isWeb && close != null) close(false);
                 return;
               }
             }
@@ -550,21 +598,27 @@ Future<bool?> loginDialog() async {
         Text(
           translate('Login'),
         ).marginOnly(top: MyTheme.dialogPadding),
-        InkWell(
-          child: Icon(
-            Icons.close,
-            size: 25,
-            // No need to handle the branch of null.
-            // Because we can ensure the color is not null when debug.
-            color: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.color
-                ?.withOpacity(0.55),
+        MouseRegion(
+          onEnter: (_) => setState(() => isCloseHovered = true),
+          onExit: (_) => setState(() => isCloseHovered = false),
+          child: InkWell(
+            child: Icon(
+              Icons.close,
+              size: 25,
+              // No need to handle the branch of null.
+              // Because we can ensure the color is not null when debug.
+              color: isCloseHovered
+                  ? Colors.white
+                  : Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.color
+                      ?.withOpacity(0.55),
+            ),
+            onTap: onDialogCancel,
+            hoverColor: Colors.red,
+            borderRadius: BorderRadius.circular(5),
           ),
-          onTap: onDialogCancel,
-          hoverColor: Colors.red,
-          borderRadius: BorderRadius.circular(5),
         ).marginOnly(top: 10, right: 15),
       ],
     );
@@ -678,7 +732,7 @@ Future<bool?> verificationCodeDialog(
                       labelText: "Email", prefixIcon: Icon(Icons.email)),
                   readOnly: true,
                   controller: TextEditingController(text: user?.email),
-                )),
+                ).workaroundFreezeLinuxMint()),
             isEmailVerification ? const SizedBox(height: 8) : const Offstage(),
             codeField,
             /*

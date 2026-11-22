@@ -2,9 +2,14 @@ use super::{linux::*, ResultType};
 use crate::client::{
     LOGIN_MSG_DESKTOP_NO_DESKTOP, LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER,
     LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LOGIN_MSG_DESKTOP_XORG_NOT_FOUND,
-    LOGIN_MSG_DESKTOP_XSESSION_FAILED,
+    LOGIN_MSG_DESKTOP_XSESSION_FAILED, LOGIN_MSG_PASSWORD_WRONG,
 };
-use hbb_common::{allow_err, bail, log, rand::prelude::*, tokio::time};
+use hbb_common::{
+    allow_err, bail, log,
+    rand::prelude::*,
+    tokio::time,
+    users::{get_user_by_name, os::unix::UserExt, User},
+};
 use pam;
 use std::{
     collections::HashMap,
@@ -18,7 +23,6 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use users::{get_user_by_name, os::unix::UserExt, User};
 
 lazy_static::lazy_static! {
     static ref DESKTOP_RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
@@ -90,6 +94,49 @@ fn detect_headless() -> Option<&'static str> {
     None
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum XSessionStartErrorKind {
+    Auth,
+    Env,
+}
+
+const XSESSION_AUTH_FAILURE_DETAIL: &str = "authentication failed";
+
+#[derive(Debug)]
+struct XSessionStartError {
+    kind: XSessionStartErrorKind,
+    detail: String,
+}
+
+impl XSessionStartError {
+    fn auth(detail: String) -> Self {
+        Self {
+            kind: XSessionStartErrorKind::Auth,
+            detail,
+        }
+    }
+
+    fn env(detail: String) -> Self {
+        Self {
+            kind: XSessionStartErrorKind::Env,
+            detail,
+        }
+    }
+}
+
+impl std::fmt::Display for XSessionStartError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.detail)
+    }
+}
+
+fn map_xsession_start_error_to_login_msg(kind: XSessionStartErrorKind) -> &'static str {
+    match kind {
+        XSessionStartErrorKind::Auth => LOGIN_MSG_PASSWORD_WRONG,
+        XSessionStartErrorKind::Env => LOGIN_MSG_DESKTOP_XSESSION_FAILED,
+    }
+}
+
 pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
     debug_assert!(crate::is_server());
     if _username.is_empty() {
@@ -132,14 +179,21 @@ pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
                 }
             }
             Err(e) => {
-                log::error!("Failed to start xsession {}", e);
-                LOGIN_MSG_DESKTOP_XSESSION_FAILED.to_owned()
+                match e.kind {
+                    XSessionStartErrorKind::Auth => {
+                        log::warn!("Failed to authenticate xsession user {}", e);
+                    }
+                    XSessionStartErrorKind::Env => {
+                        log::error!("Failed to start xsession {}", e);
+                    }
+                }
+                map_xsession_start_error_to_login_msg(e.kind).to_owned()
             }
         }
     }
 }
 
-fn try_start_x_session(username: &str, password: &str) -> ResultType<(String, bool)> {
+fn try_start_x_session(username: &str, password: &str) -> Result<(String, bool), XSessionStartError> {
     let mut desktop_manager = DESKTOP_MANAGER.lock().unwrap();
     if let Some(desktop_manager) = &mut (*desktop_manager) {
         if let Some(seat0_username) = desktop_manager.get_supported_display_seat0_username() {
@@ -157,7 +211,9 @@ fn try_start_x_session(username: &str, password: &str) -> ResultType<(String, bo
             desktop_manager.is_running(),
         ))
     } else {
-        bail!(crate::client::LOGIN_MSG_DESKTOP_NOT_INITED);
+        Err(XSessionStartError::env(
+            crate::client::LOGIN_MSG_DESKTOP_NOT_INITED.to_owned(),
+        ))
     }
 }
 
@@ -243,10 +299,15 @@ impl DesktopManager {
         self.is_child_running.load(Ordering::SeqCst)
     }
 
-    fn try_start_x_session(&mut self, username: &str, password: &str) -> ResultType<()> {
+    fn try_start_x_session(
+        &mut self,
+        username: &str,
+        password: &str,
+    ) -> Result<(), XSessionStartError> {
         match get_user_by_name(username) {
             Some(userinfo) => {
-                let mut client = pam::Client::with_password(&pam_get_service_name())?;
+                let mut client = pam::Client::with_password(&pam_get_service_name())
+                    .map_err(|e| XSessionStartError::env(format!("failed to init pam client, {}", e)))?;
                 client
                     .conversation_mut()
                     .set_credentials(username, password);
@@ -263,17 +324,24 @@ impl DesktopManager {
                                 Ok(())
                             }
                             Err(e) => {
-                                bail!("failed to start x session, {}", e);
+                                Err(XSessionStartError::env(format!(
+                                    "failed to start x session, {}",
+                                    e
+                                )))
                             }
                         }
                     }
-                    Err(e) => {
-                        bail!("failed to check user pass for {}, {}", username, e);
+                    Err(_e) => {
+                        Err(XSessionStartError::auth(
+                            XSESSION_AUTH_FAILURE_DETAIL.to_owned(),
+                        ))
                     }
                 }
             }
             None => {
-                bail!("failed to get userinfo of {}", username);
+                Err(XSessionStartError::auth(
+                    XSESSION_AUTH_FAILURE_DETAIL.to_owned(),
+                ))
             }
         }
     }
@@ -321,7 +389,7 @@ impl DesktopManager {
             ),
             // ("DISPLAY", self.display.clone()),
             // ("XAUTHORITY", self.xauth.clone()),
-            // (ENV_DESKTOP_PROTOCAL, XProtocal::X11.to_string()),
+            // (ENV_DESKTOP_PROTOCOL, XProtocol::X11.to_string()),
         ]);
         self.child_exit.store(false, Ordering::SeqCst);
         let is_child_running = self.is_child_running.clone();

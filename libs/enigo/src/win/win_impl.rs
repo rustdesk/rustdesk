@@ -269,7 +269,7 @@ impl KeyboardControllable for Enigo {
                     for pos in 0..mod_len {
                         let rpos = mod_len - 1 - pos;
                         if flag & (0x0001 << rpos) != 0 {
-                            self.key_up(modifiers[pos]);
+                            self.key_up(modifiers[rpos]);
                         }
                     }
 
@@ -298,7 +298,18 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_up(&mut self, key: Key) {
-        keybd_event(KEYEVENTF_KEYUP, self.key_to_keycode(key), 0);
+        match key {
+            Key::Layout(c) => {
+                let code = self.get_layoutdependent_keycode(c);
+                if code as u16 != 0xFFFF {
+                    let vk = code & 0x00FF;
+                    keybd_event(KEYEVENTF_KEYUP, vk, 0);
+                }
+            }
+            _ => {
+                keybd_event(KEYEVENTF_KEYUP, self.key_to_keycode(key), 0);
+            }
+        }
     }
 
     fn get_key_state(&mut self, key: Key) -> bool {

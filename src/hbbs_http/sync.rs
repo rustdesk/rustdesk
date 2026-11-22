@@ -7,7 +7,8 @@ use std::{
 #[cfg(not(any(target_os = "ios")))]
 use crate::{ui_interface::get_builtin_option, Connection};
 use hbb_common::{
-    config::{keys, Config, LocalConfig},
+    config::{self, keys, Config, LocalConfig},
+    log,
     tokio::{self, sync::broadcast, time::Instant},
 };
 use serde::{Deserialize, Serialize};
@@ -48,6 +49,38 @@ pub struct StrategyOptions {
     pub extra: HashMap<String, String>,
 }
 
+struct InfoUploaded {
+    uploaded: bool,
+    url: String,
+    last_uploaded: Option<Instant>,
+    id: String,
+    username: Option<String>,
+}
+
+impl Default for InfoUploaded {
+    fn default() -> Self {
+        Self {
+            uploaded: false,
+            url: "".to_owned(),
+            last_uploaded: None,
+            id: "".to_owned(),
+            username: None,
+        }
+    }
+}
+
+impl InfoUploaded {
+    fn uploaded(url: String, id: String, username: String) -> Self {
+        Self {
+            uploaded: true,
+            url,
+            last_uploaded: None,
+            id,
+            username: Some(username),
+        }
+    }
+}
+
 #[cfg(not(any(target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn start_hbbs_sync_async() {
@@ -56,8 +89,8 @@ async fn start_hbbs_sync_async() {
         TIME_CONN,
     ));
     let mut last_sent: Option<Instant> = None;
-    let mut info_uploaded: (bool, String, Option<Instant>, String) =
-        (false, "".to_owned(), None, "".to_owned());
+    let mut info_uploaded = InfoUploaded::default();
+    let mut sysinfo_ver = "".to_owned();
     loop {
         tokio::select! {
             _ = interval.tick() => {
@@ -67,53 +100,131 @@ async fn start_hbbs_sync_async() {
                     *PRO.lock().unwrap() = false;
                     continue;
                 }
-                if hbb_common::config::option2bool("stop-service", &Config::get_option("stop-service")) {
+                if config::option2bool("stop-service", &Config::get_option("stop-service")) {
                     continue;
                 }
                 let conns = Connection::alive_conns();
-                if info_uploaded.0 && (url != info_uploaded.1 || id != info_uploaded.3) {
-                    info_uploaded.0 = false;
+                if info_uploaded.uploaded && (url != info_uploaded.url || id != info_uploaded.id) {
+                    info_uploaded.uploaded = false;
                     *PRO.lock().unwrap() = false;
                 }
-                if !info_uploaded.0 && info_uploaded.2.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true) {
-                    let mut v = crate::get_sysinfo();
-                    // username is empty in login screen of windows, but here we only upload sysinfo once, causing
-                    // real user name not uploaded after login screen. https://github.com/rustdesk/rustdesk/discussions/8031
-                    if !cfg!(windows) || !v["username"].as_str().unwrap_or_default().is_empty() {
-                        v["version"] = json!(crate::VERSION);
-                        v["id"] = json!(id);
-                        v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
-                        let ab_name = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NAME);
-                        if !ab_name.is_empty() {
-                            v[keys::OPTION_PRESET_ADDRESS_BOOK_NAME] = json!(ab_name);
-                        }
-                        let ab_tag = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_TAG);
-                        if !ab_tag.is_empty() {
-                            v[keys::OPTION_PRESET_ADDRESS_BOOK_TAG] = json!(ab_tag);
-                        }
-                        let username = get_builtin_option(keys::OPTION_PRESET_USERNAME);
-                        if !username.is_empty() {
-                            v[keys::OPTION_PRESET_USERNAME] = json!(username);
-                        }
-                        let strategy_name = get_builtin_option(keys::OPTION_PRESET_STRATEGY_NAME);
-                        if !strategy_name.is_empty() {
-                            v[keys::OPTION_PRESET_STRATEGY_NAME] = json!(strategy_name);
-                        }
-                        match crate::post_request(url.replace("heartbeat", "sysinfo"), v.to_string(), "").await {
-                            Ok(x)  => {
-                                if x == "SYSINFO_UPDATED" {
-                                    info_uploaded = (true, url.clone(), None, id.clone());
-                                    hbb_common::log::info!("sysinfo updated");
+                // For Windows:
+                // We can't skip uploading sysinfo when the username is empty, because the username may
+                // always be empty before login. We also need to upload the other sysinfo info.
+                //
+                // https://github.com/rustdesk/rustdesk/discussions/8031
+                // We still need to check the username after uploading sysinfo, because
+                // 1. The username may be empty when logining in, and it can be fetched after a while.
+                //    In this case, we need to upload sysinfo again.
+                // 2. The username may be changed after uploading sysinfo, and we need to upload sysinfo again.
+                //
+                // The Windows session will switch to the last user session before the restart,
+                // so it may be able to get the username before login.
+                // But strangely, sometimes we can get the username before login,
+                // we may not be able to get the username before login after the next restart.
+                let mut v = crate::get_sysinfo();
+                let sys_username = v["username"].as_str().unwrap_or_default().to_string();
+                // Though the username comparison is only necessary on Windows,
+                // we still keep the comparison on other platforms for consistency.
+                let need_upload = (!info_uploaded.uploaded || info_uploaded.username.as_ref() != Some(&sys_username)) &&
+                    info_uploaded.last_uploaded.map(|x| x.elapsed() >= UPLOAD_SYSINFO_TIMEOUT).unwrap_or(true);
+                if need_upload {
+                    v["version"] = json!(crate::VERSION);
+                    v["id"] = json!(id);
+                    v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
+                    let ab_name = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NAME);
+                    if !ab_name.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_NAME] = json!(ab_name);
+                    }
+                    let ab_tag = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_TAG);
+                    if !ab_tag.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_TAG] = json!(ab_tag);
+                    }
+                    let ab_alias = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_ALIAS);
+                    if !ab_alias.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_ALIAS] = json!(ab_alias);
+                    }
+                    let ab_password = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD);
+                    if !ab_password.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD] = json!(ab_password);
+                    }
+                    let ab_note = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NOTE);
+                    if !ab_note.is_empty() {
+                        v[keys::OPTION_PRESET_ADDRESS_BOOK_NOTE] = json!(ab_note);
+                    }
+                    let username = get_builtin_option(keys::OPTION_PRESET_USERNAME);
+                    if !username.is_empty() {
+                        v[keys::OPTION_PRESET_USERNAME] = json!(username);
+                    }
+                    let strategy_name = get_builtin_option(keys::OPTION_PRESET_STRATEGY_NAME);
+                    if !strategy_name.is_empty() {
+                        v[keys::OPTION_PRESET_STRATEGY_NAME] = json!(strategy_name);
+                    }
+                    let device_group_name = get_builtin_option(keys::OPTION_PRESET_DEVICE_GROUP_NAME);
+                    if !device_group_name.is_empty() {
+                        v[keys::OPTION_PRESET_DEVICE_GROUP_NAME] = json!(device_group_name);
+                    }
+                    let device_username = Config::get_option(keys::OPTION_PRESET_DEVICE_USERNAME);
+                    if !device_username.is_empty() {
+                        v["username"] = json!(device_username);
+                    }
+                    let device_name = Config::get_option(keys::OPTION_PRESET_DEVICE_NAME);
+                    if !device_name.is_empty() {
+                        v["hostname"] = json!(device_name);
+                    }
+                    let note = Config::get_option(keys::OPTION_PRESET_NOTE);
+                    if !note.is_empty() {
+                        v[keys::OPTION_PRESET_NOTE] = json!(note);
+                    }
+                    let v = v.to_string();
+                    let mut hash = "".to_owned();
+                    if crate::is_public(&url) {
+                        use sha2::{Digest, Sha256};
+                        let mut hasher = Sha256::new();
+                        hasher.update(url.as_bytes());
+                        hasher.update(&v.as_bytes());
+                        let res = hasher.finalize();
+                        hash = hbb_common::base64::encode(&res[..]);
+                        let old_hash = config::Status::get("sysinfo_hash");
+                        let ver = config::Status::get("sysinfo_ver"); // sysinfo_ver is the version of sysinfo on server's side
+                        if hash == old_hash {
+                            // When the api doesn't exist, Ok("") will be returned in test.
+                            let samever = match crate::post_request(url.replace("heartbeat", "sysinfo_ver"), "".to_owned(), "").await {
+                                Ok(x)  => {
+                                    sysinfo_ver = x.clone();
                                     *PRO.lock().unwrap() = true;
-                                } else if x == "ID_NOT_FOUND" {
-                                    info_uploaded.2 = None; // next heartbeat will upload sysinfo again
-                                } else {
-                                    info_uploaded.2 = Some(Instant::now());
+                                    x == ver
                                 }
+                                _ => {
+                                    false // to make sure Pro can be assigned in below post for old
+                                            // hbbs pro not supporting sysinfo_ver, use false for ensuring
+                                }
+                            };
+                            if samever {
+                                info_uploaded = InfoUploaded::uploaded(url.clone(), id.clone(), sys_username);
+                                log::info!("sysinfo not changed, skip upload");
+                                continue;
                             }
-                            _ => {
-                                info_uploaded.2 = Some(Instant::now());
+                        }
+                    }
+                    match crate::post_request(url.replace("heartbeat", "sysinfo"), v, "").await {
+                        Ok(x)  => {
+                            if x == "SYSINFO_UPDATED" {
+                                info_uploaded = InfoUploaded::uploaded(url.clone(), id.clone(), sys_username);
+                                log::info!("sysinfo updated");
+                                if !hash.is_empty() {
+                                    config::Status::set("sysinfo_hash", hash);
+                                    config::Status::set("sysinfo_ver", sysinfo_ver.clone());
+                                }
+                                *PRO.lock().unwrap() = true;
+                            } else if x == "ID_NOT_FOUND" {
+                                info_uploaded.last_uploaded = None; // next heartbeat will upload sysinfo again
+                            } else {
+                                info_uploaded.last_uploaded = Some(Instant::now());
                             }
+                        }
+                        _ => {
+                            info_uploaded.last_uploaded = Some(Instant::now());
                         }
                     }
                 }
@@ -132,6 +243,11 @@ async fn start_hbbs_sync_async() {
                 v["modified_at"] = json!(modified_at);
                 if let Ok(s) = crate::post_request(url.clone(), v.to_string(), "").await {
                     if let Ok(mut rsp) = serde_json::from_str::<HashMap::<&str, Value>>(&s) {
+                        if rsp.remove("sysinfo").is_some() {
+                            info_uploaded.uploaded = false;
+                            config::Status::set("sysinfo_hash", "".to_owned());
+                            log::info!("sysinfo required to forcely update");
+                        }
                         if let Some(conns)  = rsp.remove("disconnect") {
                                 if let Ok(conns) = serde_json::from_value::<Vec<i32>>(conns) {
                                     SENDER.lock().unwrap().send(conns).ok();
@@ -146,6 +262,7 @@ async fn start_hbbs_sync_async() {
                         }
                         if let Some(strategy) = rsp.remove("strategy") {
                             if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
+                                log::info!("strategy updated");
                                 handle_config_options(strategy.config_options);
                             }
                         }
@@ -161,7 +278,7 @@ fn heartbeat_url() -> String {
         Config::get_option("api-server"),
         Config::get_option("custom-rendezvous-server"),
     );
-    if url.is_empty() || url.contains("rustdesk.com") {
+    if url.is_empty() || crate::is_public(&url) {
         return "".to_owned();
     }
     format!("{}/api/heartbeat", url)
@@ -169,10 +286,14 @@ fn heartbeat_url() -> String {
 
 fn handle_config_options(config_options: HashMap<String, String>) {
     let mut options = Config::get_options();
+    let default_settings = config::DEFAULT_SETTINGS.read().unwrap().clone();
     config_options
         .iter()
         .map(|(k, v)| {
-            if v.is_empty() {
+            // Priority: user config > default advanced options.
+            // Only when default advanced options are also empty, remove user option (fallback to built-in default);
+            // otherwise insert an empty value so user config remains present.
+            if v.is_empty() && default_settings.get(k).map_or("", |v| v).is_empty() {
                 options.remove(k);
             } else {
                 options.insert(k.to_string(), v.to_string());

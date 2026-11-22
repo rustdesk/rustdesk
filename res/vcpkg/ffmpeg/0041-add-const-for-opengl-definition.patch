@@ -1,0 +1,13 @@
+diff --git a/libavdevice/opengl_enc.c b/libavdevice/opengl_enc.c
+index b2ac6eb..6351614 100644
+--- a/libavdevice/opengl_enc.c
++++ b/libavdevice/opengl_enc.c
+@@ -116,7 +116,7 @@ typedef void   (APIENTRY *FF_PFNGLATTACHSHADERPROC) (GLuint program, GLuint shad
+ typedef GLuint (APIENTRY *FF_PFNGLCREATESHADERPROC) (GLenum type);
+ typedef void   (APIENTRY *FF_PFNGLDELETESHADERPROC) (GLuint shader);
+ typedef void   (APIENTRY *FF_PFNGLCOMPILESHADERPROC) (GLuint shader);
+-typedef void   (APIENTRY *FF_PFNGLSHADERSOURCEPROC) (GLuint shader, GLsizei count, const char* *string, const GLint *length);
++typedef void   (APIENTRY *FF_PFNGLSHADERSOURCEPROC) (GLuint shader, GLsizei count, const char* const *string, const GLint *length);
+ typedef void   (APIENTRY *FF_PFNGLGETSHADERIVPROC) (GLuint shader, GLenum pname, GLint *params);
+ typedef void   (APIENTRY *FF_PFNGLGETSHADERINFOLOGPROC) (GLuint shader, GLsizei bufSize, GLsizei *length, char *infoLog);
+ 

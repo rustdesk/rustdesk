@@ -9,9 +9,9 @@
   <b>Precisamos de sua ajuda para traduzir este README e a <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">UI do RustDesk</a> para sua língua nativa</b>
 </p>
 
-Converse conosco: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Converse conosco: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Recursos%20Avan%C3%A7ados-blue)](https://rustdesk.com/pricing.html)
 
 Mais um software de desktop remoto, escrito em Rust. Funciona por padrão, sem necessidade de configuração. Você tem completo controle de seus dados, sem se preocupar com segurança. Você pode usar nossos servidores de rendezvous/relay, [configurar seu próprio](https://rustdesk.com/server), ou [escrever seu próprio servidor de rendezvous/relay](https://github.com/rustdesk/rustdesk-server-demo).
 
@@ -136,6 +136,10 @@ Por favor verifique que está executando estes comandos da raiz do repositório 
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: iniciar uma conexão "peer to peer"
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Comunicação com [rustdesk-server](https://github.com/rustdesk/rustdesk-server), aguardar pela conexão remota direta (TCP hole punching) ou conexão indireta (relayed)
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: código específico a cada plataforma
+
+> [!Cuidadob]
+> **Aviso de uso indevido:** <br>
+> Os desenvolvedores do RustDesk não aprovam nem apoiam qualquer uso antiético ou ilegal deste software. O uso indevido, como acesso não autorizado, controle ou invasão de privacidade, é estritamente contra nossas diretrizes. Os autores não são responsáveis por qualquer uso indevido da aplicação.
 
 ## Screenshots
 

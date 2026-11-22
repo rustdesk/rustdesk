@@ -1,0 +1,9 @@
+[package]
+name = "libxdo-sys"
+version = "0.11.0"
+edition = "2021"
+publish = false
+description = "Dynamic loading wrapper for libxdo-sys that doesn't require libxdo at compile/link time"
+
+[dependencies]
+hbb_common = { path = "../hbb_common" }

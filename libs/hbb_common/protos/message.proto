@@ -62,6 +62,8 @@ message FileTransfer {
   bool show_hidden = 2;
 }
 
+message ViewCamera {}
+
 message OSLogin {
   string username = 1;
   string password = 2;
@@ -76,6 +78,8 @@ message LoginRequest {
   oneof union {
     FileTransfer file_transfer = 7;
     PortForward port_forward = 8;
+    ViewCamera view_camera = 15;
+    Terminal terminal = 16;
   }
   bool video_ack_required = 9;
   uint64 session_id = 10;
@@ -83,6 +87,11 @@ message LoginRequest {
   OSLogin os_login = 12;
   string my_platform = 13;
   bytes hwid = 14;
+  string avatar = 17;
+}
+
+message Terminal {
+  string service_id = 1;  // Service ID for reconnecting to existing session
 }
 
 message Auth2FA {
@@ -94,6 +103,7 @@ message ChatMessage { string text = 1; }
 
 message Features {
   bool privacy_mode = 1;
+  bool terminal = 2;
 }
 
 message CodecAbility {
@@ -284,7 +294,9 @@ enum ControlKey {
 }
 
 message KeyEvent {
+  // `down` indicates the key's state(down or up).
   bool down = 1;
+  // `press` indicates a click event(down and up).
   bool press = 2;
   oneof union {
     ControlKey control_key = 3;
@@ -368,6 +380,16 @@ message ReadDir {
   bool include_hidden = 2;
 }
 
+message ReadEmptyDirs {
+  string path = 1;
+  bool include_hidden = 2;
+}
+
+message ReadEmptyDirsResponse {
+  string path = 1;
+  repeated FileDirectory empty_dirs = 2;
+}
+
 message ReadAllFiles {
   int32 id = 1;
   string path = 2;
@@ -392,6 +414,7 @@ message FileAction {
     FileTransferCancel cancel = 8;
     FileTransferSendConfirmRequest send_confirm = 9;
     FileRename rename = 10;
+    ReadEmptyDirs read_empty_dirs = 11;
   }
 }
 
@@ -404,6 +427,7 @@ message FileResponse {
     FileTransferError error = 3;
     FileTransferDone done = 4;
     FileTransferDigest digest = 5;
+    ReadEmptyDirsResponse empty_dirs = 6;
   }
 }
 
@@ -414,6 +438,11 @@ message FileTransferDigest {
   uint64 file_size = 4;
   bool is_upload = 5;
   bool is_identical = 6;
+  uint64 transferred_size = 7; // For resume. Indicates the size of the file already transferred
+  bool is_resume = 8;          // For resume. Indicates if the transfer is a resume.
+                               // `is_resume` can let the controlled side know whether to check the `.digest` file.
+                               // When `is_resume` is false, `.digest` exists, the same file does not exist,
+                               // the controlled side should not check `.digest`, it should confirm with a new transfer request.
 }
 
 message FileTransferBlock {
@@ -435,6 +464,12 @@ message FileTransferSendRequest {
   string path = 2;
   bool include_hidden = 3;
   int32 file_num = 4;
+
+  enum FileType {
+    Generic = 0;
+    Printer = 1;
+  }
+  FileType file_type = 5;
 }
 
 message FileTransferSendConfirmRequest {
@@ -519,6 +554,24 @@ message CliprdrFileContentsResponse {
   bytes requested_data = 5;
 }
 
+// Try empty clipboard in the following case(Windows only):
+// 1. `A`(Windows) -> `B`, `C`
+// 2. Copy in `A, file clipboards on `B` and `C` are updated.
+// 3. Copy in `B`.
+// `A` should tell `C` to empty the file clipboard.
+message CliprdrTryEmpty {
+}
+
+// Clipobard file message for audit.
+message CliprdrFile {
+  string name = 1;
+  uint64 size = 2;
+}
+
+message CliprdrFiles {
+  repeated CliprdrFile files = 1;
+}
+
 message Cliprdr {
   oneof union {
     CliprdrMonitorReady ready = 1;
@@ -528,6 +581,8 @@ message Cliprdr {
     CliprdrServerFormatDataResponse format_data_response = 5;
     CliprdrFileContentsRequest file_contents_request = 6;
     CliprdrFileContentsResponse file_contents_response = 7;
+    CliprdrTryEmpty try_empty = 8;
+    CliprdrFiles files = 9;
   }
 }
 
@@ -580,6 +635,7 @@ message PermissionInfo {
     Restart = 5;
     Recording = 6;
     BlockInput = 7;
+    PrivacyMode = 8;
   }
 
   Permission permission = 1;
@@ -637,6 +693,9 @@ message OptionMessage {
   // starting from 15 please, do not use removed fields
   BoolOption follow_remote_cursor = 15;
   BoolOption follow_remote_window = 16;
+  BoolOption disable_camera = 17;
+  BoolOption terminal_persistent = 18;
+  BoolOption show_my_cursor = 19;
 }
 
 message TestDelay {
@@ -815,6 +874,81 @@ message VoiceCallResponse {
   int64 ack_timestamp = 3;
 }
 
+message ScreenshotRequest {
+  int32 display = 1;
+  // sid is the session id on the controlling side
+  // It is used to forward the message to the correct remote (session) window.
+  string sid = 2;
+}
+
+message ScreenshotResponse {
+  string sid = 1;
+  // empty if success
+  string msg = 2;
+  bytes data = 3;
+}
+
+// Terminal messages - standalone feature like FileAction
+message OpenTerminal {
+  int32 terminal_id = 1;  // 0 for default terminal
+  uint32 rows = 2;
+  uint32 cols = 3;
+}
+
+message ResizeTerminal {
+  int32 terminal_id = 1;
+  uint32 rows = 2;
+  uint32 cols = 3;
+}
+
+message TerminalData {
+  int32 terminal_id = 1;
+  bytes data = 2;
+  bool compressed = 3;
+}
+
+message CloseTerminal {
+  int32 terminal_id = 1;
+}
+
+message TerminalAction {
+  oneof union {
+    OpenTerminal open = 1;
+    TerminalData data = 2;
+    ResizeTerminal resize = 3;
+    CloseTerminal close = 4;
+  }
+}
+
+message TerminalOpened {
+  int32 terminal_id = 1;
+  bool success = 2;
+  string message = 3;
+  uint32 pid = 4;
+  string service_id = 5;  // Service ID for persistent sessions
+  repeated int32 persistent_sessions = 6; // Used to restore the persistent sessions.
+  bool replay_terminal_output = 7; // Whether the next data response replays buffered terminal output.
+}
+
+message TerminalClosed {
+  int32 terminal_id = 1;
+  int32 exit_code = 2;
+}
+
+message TerminalError {
+  int32 terminal_id = 1;
+  string message = 2;
+}
+
+message TerminalResponse {
+  oneof union {
+    TerminalOpened opened = 1;
+    TerminalData data = 2;
+    TerminalClosed closed = 3;
+    TerminalError error = 4;
+  }
+}
+
 message Message {
   oneof union {
     SignedId signed_id = 3;
@@ -843,5 +977,9 @@ message Message {
     PointerDeviceEvent pointer_device_event = 26;
     Auth2FA auth_2fa = 27;
     MultiClipboards multi_clipboards = 28;
+    ScreenshotRequest screenshot_request = 29;
+    ScreenshotResponse screenshot_response= 30;
+    TerminalAction terminal_action = 31;
+    TerminalResponse terminal_response = 32;
   }
 }

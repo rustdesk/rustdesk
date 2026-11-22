@@ -1,0 +1,42 @@
+From a609e1666c79ccce4faf7aa61d509bf202df9149 Mon Sep 17 00:00:00 2001
+From: 21pages <sunboeasy@gmail.com>
+Date: Fri, 5 Sep 2025 21:35:37 +0800
+Subject: [PATCH] android mediacodec encode align 64
+
+Signed-off-by: 21pages <sunboeasy@gmail.com>
+---
+ libavcodec/mediacodecenc.c | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/libavcodec/mediacodecenc.c b/libavcodec/mediacodecenc.c
+index 221f7360f4..768c8151df 100644
+--- a/libavcodec/mediacodecenc.c
++++ b/libavcodec/mediacodecenc.c
+@@ -242,18 +242,19 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
+     ff_AMediaFormat_setString(format, "mime", codec_mime);
+     // Workaround the alignment requirement of mediacodec. We can't do it
+     // silently for AV_PIX_FMT_MEDIACODEC.
++    const int align = 64;
+     if (avctx->pix_fmt != AV_PIX_FMT_MEDIACODEC &&
+         (avctx->codec_id == AV_CODEC_ID_H264 ||
+          avctx->codec_id == AV_CODEC_ID_HEVC)) {
+-        s->width = FFALIGN(avctx->width, 16);
+-        s->height = FFALIGN(avctx->height, 16);
++        s->width = FFALIGN(avctx->width, align);
++        s->height = FFALIGN(avctx->height, align);
+     } else {
+         s->width = avctx->width;
+         s->height = avctx->height;
+-        if (s->width % 16 || s->height % 16)
++        if (s->width % align || s->height % align)
+             av_log(avctx, AV_LOG_WARNING,
+-                    "Video size %dx%d isn't align to 16, it may have device compatibility issue\n",
+-                    s->width, s->height);
++                    "Video size %dx%d isn't align to %d, it may have device compatibility issue\n",
++                    s->width, s->height, align);
+     }
+     ff_AMediaFormat_setInt32(format, "width", s->width);
+     ff_AMediaFormat_setInt32(format, "height", s->height);
+-- 
+2.43.0.windows.1
+

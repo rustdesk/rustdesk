@@ -1,4 +1,4 @@
-use crate::hbbs_http::create_http_client;
+use crate::hbbs_http::create_http_client_with_url;
 use bytes::Bytes;
 use hbb_common::{bail, config::Config, lazy_static, log, ResultType};
 use reqwest::blocking::{Body, Client};
@@ -25,51 +25,57 @@ pub fn is_enable() -> bool {
 }
 
 pub fn run(rx: Receiver<RecordState>) {
-    let mut uploader = RecordUploader {
-        client: create_http_client(),
-        api_server: crate::get_api_server(
+    std::thread::spawn(move || {
+        let api_server = crate::get_api_server(
             Config::get_option("api-server"),
             Config::get_option("custom-rendezvous-server"),
-        ),
-        filepath: Default::default(),
-        filename: Default::default(),
-        upload_size: Default::default(),
-        running: Default::default(),
-        last_send: Instant::now(),
-    };
-    std::thread::spawn(move || loop {
-        if let Err(e) = match rx.recv() {
-            Ok(state) => match state {
-                RecordState::NewFile(filepath) => uploader.handle_new_file(filepath),
-                RecordState::NewFrame => {
-                    if uploader.running {
-                        uploader.handle_frame(false)
-                    } else {
-                        Ok(())
+        );
+        // This URL is used for TLS connectivity testing and fallback detection.
+        let login_option_url = format!("{}/api/login-options", &api_server);
+        let client = create_http_client_with_url(&login_option_url);
+        let mut uploader = RecordUploader {
+            client,
+            api_server,
+            filepath: Default::default(),
+            filename: Default::default(),
+            upload_size: Default::default(),
+            running: Default::default(),
+            last_send: Instant::now(),
+        };
+        loop {
+            if let Err(e) = match rx.recv() {
+                Ok(state) => match state {
+                    RecordState::NewFile(filepath) => uploader.handle_new_file(filepath),
+                    RecordState::NewFrame => {
+                        if uploader.running {
+                            uploader.handle_frame(false)
+                        } else {
+                            Ok(())
+                        }
                     }
-                }
-                RecordState::WriteTail => {
-                    if uploader.running {
-                        uploader.handle_tail()
-                    } else {
-                        Ok(())
+                    RecordState::WriteTail => {
+                        if uploader.running {
+                            uploader.handle_tail()
+                        } else {
+                            Ok(())
+                        }
                     }
-                }
-                RecordState::RemoveFile => {
-                    if uploader.running {
-                        uploader.handle_remove()
-                    } else {
-                        Ok(())
+                    RecordState::RemoveFile => {
+                        if uploader.running {
+                            uploader.handle_remove()
+                        } else {
+                            Ok(())
+                        }
                     }
+                },
+                Err(e) => {
+                    log::trace!("upload thread stop: {}", e);
+                    break;
                 }
-            },
-            Err(e) => {
-                log::trace!("upload thread stop: {}", e);
-                break;
+            } {
+                uploader.running = false;
+                log::error!("upload stop: {}", e);
             }
-        } {
-            uploader.running = false;
-            log::error!("upload stop: {}", e);
         }
     });
 }

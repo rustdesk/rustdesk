@@ -1,4 +1,6 @@
 // logic from webrtc -- https://github.com/shiguredo/libwebrtc/blob/main/modules/desktop_capture/win/screen_capturer_win_magnifier.cc
+#![allow(non_snake_case)]
+
 use lazy_static;
 use std::{
     ffi::CString,
@@ -133,7 +135,7 @@ impl MagInterface {
             s.lib_handle = LoadLibraryExA(
                 lib_file_name_c.as_ptr() as _,
                 NULL,
-                LOAD_WITH_ALTERED_SEARCH_PATH,
+                LOAD_LIBRARY_SEARCH_SYSTEM32,
             );
             if s.lib_handle.is_null() {
                 return Err(Error::new(

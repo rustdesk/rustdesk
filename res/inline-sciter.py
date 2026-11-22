@@ -23,7 +23,8 @@ remote = open('src/ui/remote.html').read() \
     .replace('include "grid.tis";', open('src/ui/grid.tis').read()) \
     .replace('include "header.tis";', open('src/ui/header.tis').read()) \
     .replace('include "file_transfer.tis";', open('src/ui/file_transfer.tis').read()) \
-    .replace('include "port_forward.tis";', open('src/ui/port_forward.tis').read())
+    .replace('include "port_forward.tis";', open('src/ui/port_forward.tis').read()) \
+    .replace('include "printer.tis";', open('src/ui/printer.tis').read())
 
 chatbox = open('src/ui/chatbox.html').read()
 install = open('src/ui/install.html').read().replace('include "install.tis";', open('src/ui/install.tis').read())

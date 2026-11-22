@@ -1,0 +1,14 @@
+name: SOS程序生成
+
+# 专用于生成 SOS 版(富氏邦定制客户端)程序。
+# 仅保留此工作流用于出包，其余工作流已改为手动触发以节省资源。
+on:
+  workflow_dispatch:
+
+jobs:
+  build-sos:
+    uses: ./.github/workflows/flutter-build-vumstar.yml
+    secrets: inherit
+    with:
+      upload-artifact: true
+      upload-tag: sos-${{ github.run_number }}

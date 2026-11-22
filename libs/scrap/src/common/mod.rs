@@ -13,12 +13,12 @@ cfg_if! {
     } else if #[cfg(x11)] {
         cfg_if! {
             if #[cfg(feature="wayland")] {
-        mod linux;
-        mod wayland;
-        mod x11;
-        pub use self::linux::*;
-        pub use self::wayland::set_map_err;
-        pub use self::x11::PixelBuffer;
+                mod linux;
+                mod wayland;
+                mod x11;
+                pub use self::linux::*;
+                pub use self::wayland::set_map_err;
+                pub use self::x11::PixelBuffer;
             } else {
                 mod x11;
                 pub use self::x11::*;
@@ -49,6 +49,8 @@ pub const STRIDE_ALIGN: usize = 64; // commonly used in libvpx vpx_img_alloc cal
 pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
 
 pub mod aom;
+#[cfg(not(any(target_os = "ios")))]
+pub mod camera;
 pub mod record;
 mod vpx;
 
@@ -61,6 +63,7 @@ pub enum ImageFormat {
 }
 
 #[repr(C)]
+#[derive(Clone)]
 pub struct ImageRgb {
     pub raw: Vec<u8>,
     pub w: usize,
@@ -189,7 +192,7 @@ impl Frame<'_> {
         yuvfmt: EncodeYuvFormat,
         yuv: &'a mut Vec<u8>,
         mid_data: &mut Vec<u8>,
-    ) -> ResultType<EncodeInput> {
+    ) -> ResultType<EncodeInput<'a>> {
         match self {
             Frame::PixelBuffer(pixelbuffer) => {
                 convert_to_yuv(&pixelbuffer, yuvfmt, yuv, mid_data)?;

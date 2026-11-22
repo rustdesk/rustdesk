@@ -1,7 +1,7 @@
-From 6e76c57cf2c0e790228f19c88089eef110fd74aa Mon Sep 17 00:00:00 2001
+From 8d061adb7b00fc765b8001307c025437ef1cad88 Mon Sep 17 00:00:00 2001
 From: 21pages <sunboeasy@gmail.com>
 Date: Thu, 5 Sep 2024 16:32:16 +0800
-Subject: [PATCH 2/3] libavcodec/amfenc: reconfig when bitrate change
+Subject: [PATCH 2/5] libavcodec/amfenc: reconfig when bitrate change
 
 Signed-off-by: 21pages <sunboeasy@gmail.com>
 ---
@@ -10,10 +10,10 @@ Signed-off-by: 21pages <sunboeasy@gmail.com>
  2 files changed, 21 insertions(+)
 
 diff --git a/libavcodec/amfenc.c b/libavcodec/amfenc.c
-index 061859f85c..97587fe66b 100644
+index a47aea6108..f70f0109f6 100644
 --- a/libavcodec/amfenc.c
 +++ b/libavcodec/amfenc.c
-@@ -222,6 +222,7 @@ static int amf_init_context(AVCodecContext *avctx)
+@@ -275,6 +275,7 @@ static int amf_init_context(AVCodecContext *avctx)
  
      ctx->hwsurfaces_in_queue = 0;
      ctx->hwsurfaces_in_queue_max = 16;
@@ -21,7 +21,7 @@ index 061859f85c..97587fe66b 100644
  
      // configure AMF logger
      // the return of these functions indicates old state and do not affect behaviour
-@@ -583,6 +584,23 @@ static void amf_release_buffer_with_frame_ref(AMFBuffer *frame_ref_storage_buffe
+@@ -640,6 +641,23 @@ static void amf_release_buffer_with_frame_ref(AMFBuffer *frame_ref_storage_buffe
      frame_ref_storage_buffer->pVtbl->Release(frame_ref_storage_buffer);
  }
  
@@ -45,7 +45,7 @@ index 061859f85c..97587fe66b 100644
  int ff_amf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
  {
      AmfContext *ctx = avctx->priv_data;
-@@ -596,6 +614,8 @@ int ff_amf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
+@@ -653,6 +671,8 @@ int ff_amf_receive_packet(AVCodecContext *avctx, AVPacket *avpkt)
      int         query_output_data_flag = 0;
      AMF_RESULT  res_resubmit;
  
@@ -55,10 +55,10 @@ index 061859f85c..97587fe66b 100644
          return AVERROR(EINVAL);
  
 diff --git a/libavcodec/amfenc.h b/libavcodec/amfenc.h
-index d636673a9d..09506ee2e0 100644
+index 320c66919e..481e0fb75d 100644
 --- a/libavcodec/amfenc.h
 +++ b/libavcodec/amfenc.h
-@@ -113,6 +113,7 @@ typedef struct AmfContext {
+@@ -115,6 +115,7 @@ typedef struct AmfContext {
      int                 max_b_frames;
      int                 qvbr_quality_level;
      int                 hw_high_motion_quality_boost;

@@ -6,6 +6,7 @@ on:
   workflow_call:
 
 env:
+  CARGO_EXPAND_VERSION: "1.0.95"
   FLUTTER_VERSION: "3.22.3"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
@@ -19,13 +20,7 @@ jobs:
         job:
           - {
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-20.04,
-              extra-build-args: "",
-            }
-          - {
-              target: aarch64-apple-darwin,
-              os: macos-latest,
-              arch: aarch64,
+              os: ubuntu-22.04,
               extra-build-args: "",
             }
     steps:
@@ -33,7 +28,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install prerequisites
-        if: matrix.job.os == 'ubuntu-20.04'
         run: |
           sudo apt-get install ca-certificates -y
           sudo apt-get update -y
@@ -44,9 +38,9 @@ jobs:
             gcc \
             git \
             g++ \
-            libclang-10-dev \
+            libclang-dev \
             libgtk-3-dev \
-            llvm-10-dev \
+            llvm-dev \
             nasm \
             ninja-build \
             pkg-config \
@@ -80,37 +74,19 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid"
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
           pushd flutter && sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml && flutter pub get && popd
 
       - name: Run flutter rust bridge
         run: |
-          case ${{ matrix.job.os }} in
-            ubuntu-20.04)
-              ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
-            ;;
-            macos-latest)
-              ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
-              ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/ios/Runner/bridge_generated.h
-            ;;
-          esac
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
 
-      - name: Upload Artifact(ubuntu)
-        if: matrix.job.os == 'ubuntu-20.04'
+      - name: Upload Artifact
         uses: actions/upload-artifact@master
         with:
           name: bridge-artifact
-          path: |
-            ./src/bridge_generated.rs
-            ./src/bridge_generated.io.rs
-            ./flutter/lib/generated_bridge.dart
-            ./flutter/lib/generated_bridge.freezed.dart
-
-      - name: Upload Artifact(macos)
-        if: matrix.job.os == 'macos-latest'
-        uses: actions/upload-artifact@master
-        with:
-          name: bridge-artifact-macos
           path: |
             ./src/bridge_generated.rs
             ./src/bridge_generated.io.rs

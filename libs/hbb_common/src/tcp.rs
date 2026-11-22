@@ -22,16 +22,16 @@ use tokio_socks::IntoTargetAddr;
 use tokio_util::codec::Framed;
 
 pub trait TcpStreamTrait: AsyncRead + AsyncWrite + Unpin {}
-pub struct DynTcpStream(pub(crate) Box<dyn TcpStreamTrait + Send + Sync>);
+pub struct DynTcpStream(pub Box<dyn TcpStreamTrait + Send + Sync>);
 
 #[derive(Clone)]
-pub struct Encrypt(Key, u64, u64);
+pub struct Encrypt(pub Key, pub u64, pub u64);
 
 pub struct FramedStream(
-    pub(crate) Framed<DynTcpStream, BytesCodec>,
-    pub(crate) SocketAddr,
-    pub(crate) Option<Encrypt>,
-    pub(crate) u64,
+    pub Framed<DynTcpStream, BytesCodec>,
+    pub SocketAddr,
+    pub Option<Encrypt>,
+    pub u64,
 );
 
 impl Deref for FramedStream {
@@ -68,10 +68,11 @@ pub(crate) fn new_socket(addr: std::net::SocketAddr, reuse: bool) -> Result<TcpS
         std::net::SocketAddr::V6(..) => TcpSocket::new_v6()?,
     };
     if reuse {
-        // windows has no reuse_port, but it's reuse_address
+        // windows has no reuse_port, but its reuse_address
         // almost equals to unix's reuse_port + reuse_address,
         // though may introduce nondeterministic behavior
-        #[cfg(unix)]
+        // illumos has no support for SO_REUSEPORT
+        #[cfg(all(unix, not(target_os = "illumos")))]
         socket.set_reuseport(true).ok();
         socket.set_reuseaddr(true).ok();
     }
@@ -226,6 +227,8 @@ pub async fn listen_any(port: u16) -> ResultType<TcpListener> {
     if let Ok(mut socket) = TcpSocket::new_v6() {
         #[cfg(unix)]
         {
+            // illumos has no support for SO_REUSEPORT
+            #[cfg(not(target_os = "illumos"))]
             socket.set_reuseport(true).ok();
             socket.set_reuseaddr(true).ok();
             use std::os::unix::io::{FromRawFd, IntoRawFd};

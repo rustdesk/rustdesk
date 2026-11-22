@@ -16,9 +16,25 @@ bool refreshingUser = false;
 
 class UserModel {
   final RxString userName = ''.obs;
+  final RxString displayName = ''.obs;
+  final RxString avatar = ''.obs;
   final RxBool isAdmin = false.obs;
   final RxString networkError = ''.obs;
   bool get isLogin => userName.isNotEmpty;
+  String get displayNameOrUserName =>
+      displayName.value.trim().isEmpty ? userName.value : displayName.value;
+  String get accountLabelWithHandle {
+    final username = userName.value.trim();
+    if (username.isEmpty) {
+      return '';
+    }
+    final preferred = displayName.value.trim();
+    if (preferred.isEmpty || preferred == username) {
+      return username;
+    }
+    return '$preferred (@$username)';
+  }
+
   WeakReference<FFI> parent;
 
   UserModel(this.parent) {
@@ -66,7 +82,7 @@ class UserModel {
         reset(resetOther: status == 401);
         return;
       }
-      final data = json.decode(utf8.decode(response.bodyBytes));
+      final data = json.decode(decode_http_response(response));
       final error = data['error'];
       if (error != null) {
         throw error;
@@ -98,7 +114,9 @@ class UserModel {
   _updateLocalUserInfo() {
     final userInfo = getLocalUserInfo();
     if (userInfo != null) {
-      userName.value = userInfo['name'];
+      userName.value = (userInfo['name'] ?? '').toString();
+      displayName.value = (userInfo['display_name'] ?? '').toString();
+      avatar.value = (userInfo['avatar'] ?? '').toString();
     }
   }
 
@@ -110,12 +128,20 @@ class UserModel {
       await gFFI.groupModel.reset();
     }
     userName.value = '';
+    displayName.value = '';
+    avatar.value = '';
   }
 
   _parseAndUpdateUser(UserPayload user) {
     userName.value = user.name;
+    displayName.value = user.displayName;
+    avatar.value = user.avatar;
     isAdmin.value = user.isAdmin;
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
+    if (isWeb) {
+      // ugly here, tmp solution
+      bind.mainSetLocalOption(key: 'verifier', value: user.verifier ?? '');
+    }
   }
 
   // update ab and group status
@@ -156,7 +182,7 @@ class UserModel {
 
     final Map<String, dynamic> body;
     try {
-      body = jsonDecode(utf8.decode(resp.bodyBytes));
+      body = jsonDecode(decode_http_response(resp));
     } catch (e) {
       debugPrint("login: jsonDecode resp body failed: ${e.toString()}");
       if (resp.statusCode != 200) {
@@ -184,7 +210,9 @@ class UserModel {
       rethrow;
     }
 
-    if (loginResponse.user != null) {
+    final isLogInDone = loginResponse.type == HttpType.kAuthResTypeToken &&
+        loginResponse.access_token != null;
+    if (isLogInDone && loginResponse.user != null) {
       _parseAndUpdateUser(loginResponse.user!);
     }
 

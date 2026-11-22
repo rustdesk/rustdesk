@@ -446,6 +446,8 @@ pub mod amyuni_idd {
             if crate::platform::windows::is_x64() {
                 log::info!("Uninstalling driver by deviceinstaller64.exe");
                 install_if_x86_on_x64(&work_dir, "remove usbmmidd")?;
+                // Sleep some time to wait for the driver to be uninstalled.
+                std::thread::sleep(Duration::from_secs(2));
                 return Ok(());
             }
         }
@@ -667,8 +669,8 @@ pub mod amyuni_idd {
         // we still forcibly plug out all virtual displays.
         //
         // 1. RustDesk plug in 2 virtual displays. (RustDesk)
-        // 2. Other process plug out all virtual displays. (User mannually)
-        // 3. Other process plug in 1 virtual display. (User mannually)
+        // 2. Other process plug out all virtual displays. (User manually)
+        // 3. Other process plug in 1 virtual display. (User manually)
         // 4. RustDesk plug out all virtual displays in this call. (RustDesk disconnect)
         //
         // This is not a normal scenario, RustDesk will plug out virtual display unexpectedly.

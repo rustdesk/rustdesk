@@ -8,7 +8,6 @@ use super::x11::PixelBuffer;
 
 pub struct Capturer(Display, Box<dyn Recorder>, Vec<u8>);
 
-
 lazy_static::lazy_static! {
     static ref MAP_ERR: RwLock<Option<fn(err: String)-> io::Error>> = Default::default();
 }
@@ -61,7 +60,7 @@ impl TraitCapturer for Capturer {
     }
 }
 
-pub struct Display(pipewire::PipeWireCapturable);
+pub struct Display(pub(crate) pipewire::PipeWireCapturable);
 
 impl Display {
     pub fn primary() -> io::Result<Display> {
@@ -81,11 +80,35 @@ impl Display {
     }
 
     pub fn width(&self) -> usize {
-        self.0.size.0
+        self.physical_width()
     }
 
     pub fn height(&self) -> usize {
-        self.0.size.1
+        self.physical_height()
+    }
+
+    pub fn physical_width(&self) -> usize {
+        self.0.physical_size.0
+    }
+
+    pub fn physical_height(&self) -> usize {
+        self.0.physical_size.1
+    }
+
+    pub fn logical_width(&self) -> usize {
+        self.0.logical_size.0
+    }
+
+    pub fn logical_height(&self) -> usize {
+        self.0.logical_size.1
+    }
+
+    pub fn scale(&self) -> f64 {
+        if self.logical_width() == 0 {
+            1.0
+        } else {
+            self.physical_width() as f64 / self.logical_width() as f64
+        }
     }
 
     pub fn origin(&self) -> (i32, i32) {
@@ -97,7 +120,7 @@ impl Display {
     }
 
     pub fn is_primary(&self) -> bool {
-        false
+        self.0.primary
     }
 
     pub fn name(&self) -> String {

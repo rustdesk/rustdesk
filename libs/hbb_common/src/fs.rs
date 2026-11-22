@@ -1,11 +1,19 @@
 #[cfg(windows)]
 use std::os::windows::prelude::*;
-use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    fmt::{Debug, Display},
+    io::Cursor,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicI32, Ordering},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::{fs::File, io::*};
+use tokio::{
+    fs::{File, OpenOptions},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufStream as TokioBufStream},
+};
 
 use crate::{anyhow::anyhow, bail, get_version_number, message_proto::*, ResultType, Stream};
 // https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html
@@ -13,6 +21,16 @@ use crate::{
     compress::{compress, decompress},
     config::Config,
 };
+
+static NEXT_JOB_ID: AtomicI32 = AtomicI32::new(1);
+
+pub fn get_next_job_id() -> i32 {
+    NEXT_JOB_ID.fetch_add(1, Ordering::SeqCst)
+}
+
+pub fn update_next_job_id(id: i32) {
+    NEXT_JOB_ID.store(id, Ordering::SeqCst);
+}
 
 pub fn read_dir(path: &Path, include_hidden: bool) -> ResultType<FileDirectory> {
     let mut dir = FileDirectory {
@@ -123,7 +141,7 @@ pub fn get_home_as_string() -> String {
 }
 
 fn read_dir_recursive(
-    path: &PathBuf,
+    path: &Path,
     prefix: &Path,
     include_hidden: bool,
 ) -> ResultType<Vec<FileEntry>> {
@@ -185,6 +203,51 @@ pub fn get_recursive_files(path: &str, include_hidden: bool) -> ResultType<Vec<F
     read_dir_recursive(&get_path(path), &get_path(""), include_hidden)
 }
 
+fn read_empty_dirs_recursive(
+    path: &Path,
+    prefix: &Path,
+    include_hidden: bool,
+) -> ResultType<Vec<FileDirectory>> {
+    let mut dirs = Vec::new();
+    if path.is_dir() {
+        // to-do: symbol link handling, cp the link rather than the content
+        // to-do: file mode, for unix
+        let fd = read_dir(path, include_hidden)?;
+        if fd.entries.is_empty() {
+            dirs.push(fd);
+        } else {
+            for entry in fd.entries.iter() {
+                match entry.entry_type.enum_value() {
+                    Ok(FileType::Dir) => {
+                        if let Ok(mut tmp) = read_empty_dirs_recursive(
+                            &path.join(&entry.name),
+                            &prefix.join(&entry.name),
+                            include_hidden,
+                        ) {
+                            for entry in tmp.drain(0..) {
+                                dirs.push(entry);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(dirs)
+    } else if path.is_file() {
+        Ok(dirs)
+    } else {
+        bail!("Not exists");
+    }
+}
+
+pub fn get_empty_dirs_recursive(
+    path: &str,
+    include_hidden: bool,
+) -> ResultType<Vec<FileDirectory>> {
+    read_empty_dirs_recursive(&get_path(path), &get_path(""), include_hidden)
+}
+
 #[inline]
 pub fn is_file_exists(file_path: &str) -> bool {
     return Path::new(file_path).exists();
@@ -195,22 +258,151 @@ pub fn can_enable_overwrite_detection(version: i64) -> bool {
     version >= get_version_number("1.1.10")
 }
 
+#[repr(i32)]
+#[derive(Copy, Clone, Serialize, Debug, PartialEq)]
+pub enum JobType {
+    Generic = 0,
+    Printer = 1,
+}
+
+impl Default for JobType {
+    fn default() -> Self {
+        JobType::Generic
+    }
+}
+
+impl From<JobType> for file_transfer_send_request::FileType {
+    fn from(t: JobType) -> Self {
+        match t {
+            JobType::Generic => file_transfer_send_request::FileType::Generic,
+            JobType::Printer => file_transfer_send_request::FileType::Printer,
+        }
+    }
+}
+
+impl From<i32> for JobType {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => JobType::Generic,
+            1 => JobType::Printer,
+            _ => JobType::Generic,
+        }
+    }
+}
+
+impl Into<i32> for JobType {
+    fn into(self) -> i32 {
+        self as i32
+    }
+}
+
+impl JobType {
+    pub fn from_proto(t: ::protobuf::EnumOrUnknown<file_transfer_send_request::FileType>) -> Self {
+        match t.enum_value() {
+            Ok(file_transfer_send_request::FileType::Generic) => JobType::Generic,
+            Ok(file_transfer_send_request::FileType::Printer) => JobType::Printer,
+            _ => JobType::Generic,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum DataSource {
+    FilePath(PathBuf),
+    MemoryCursor(Cursor<Vec<u8>>),
+}
+
+impl Default for DataSource {
+    fn default() -> Self {
+        DataSource::FilePath(PathBuf::new())
+    }
+}
+
+impl serde::Serialize for DataSource {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            DataSource::FilePath(p) => serializer.serialize_str(p.to_str().unwrap_or("")),
+            DataSource::MemoryCursor(_) => serializer.serialize_str(""),
+        }
+    }
+}
+
+impl Display for DataSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DataSource::FilePath(p) => write!(f, "File: {}", p.to_string_lossy().to_string()),
+            DataSource::MemoryCursor(_) => write!(f, "Bytes"),
+        }
+    }
+}
+
+impl DataSource {
+    fn to_meta(&self) -> String {
+        match self {
+            DataSource::FilePath(p) => p.to_string_lossy().to_string(),
+            DataSource::MemoryCursor(_) => "".to_string(),
+        }
+    }
+}
+
+enum DataStream {
+    FileStream(File),
+    BufStream(TokioBufStream<Cursor<Vec<u8>>>),
+}
+
+impl Debug for DataStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DataStream::FileStream(fs) => write!(f, "{:?}", fs),
+            DataStream::BufStream(_) => write!(f, "BufStream"),
+        }
+    }
+}
+
+impl DataStream {
+    async fn write_all(&mut self, buf: &[u8]) -> ResultType<()> {
+        match self {
+            DataStream::FileStream(fs) => fs.write_all(buf).await?,
+            DataStream::BufStream(bs) => bs.write_all(buf).await?,
+        }
+        Ok(())
+    }
+
+    async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            DataStream::FileStream(fs) => fs.read(buf).await,
+            DataStream::BufStream(bs) => bs.read(buf).await,
+        }
+    }
+}
+
+#[derive(Default, Serialize, Deserialize, Debug)]
+pub struct FileDigest {
+    pub size: u64,
+    pub modified: u64,
+}
+
 #[derive(Default, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferJob {
     pub id: i32,
+    pub r#type: JobType,
     pub remote: String,
-    pub path: PathBuf,
+    pub data_source: DataSource,
     pub show_hidden: bool,
     pub is_remote: bool,
     pub is_last_job: bool,
+    pub is_resume: bool,
     pub file_num: i32,
     #[serde(skip_serializing)]
-    pub files: Vec<FileEntry>,
+    files: Vec<FileEntry>,
     pub conn_id: i32, // server only
 
     #[serde(skip_serializing)]
-    file: Option<File>,
+    data_stream: Option<DataStream>,
     pub total_size: u64,
     finished_size: u64,
     transferred: u64,
@@ -220,6 +412,8 @@ pub struct TransferJob {
     file_skipped: bool,
     file_is_waiting: bool,
     default_overwrite_strategy: Option<bool>,
+    #[serde(skip_serializing)]
+    digest: FileDigest,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -258,62 +452,171 @@ fn get_ext(name: &str) -> &str {
 
 #[inline]
 fn is_compressed_file(name: &str) -> bool {
+    let compressed_exts = ["xz", "gz", "zip", "7z", "rar", "bz2", "tgz", "png", "jpg"];
     let ext = get_ext(name);
-    ext == "xz"
-        || ext == "gz"
-        || ext == "zip"
-        || ext == "7z"
-        || ext == "rar"
-        || ext == "bz2"
-        || ext == "tgz"
-        || ext == "png"
-        || ext == "jpg"
+    compressed_exts.contains(&ext)
+}
+
+pub fn validate_file_name_no_traversal(name: &str) -> ResultType<()> {
+    if name.bytes().any(|b| b == 0) {
+        bail!("file name contains null bytes");
+    }
+    let has_traversal = name
+        .split(|c: char| c == '/' || (cfg!(windows) && c == '\\'))
+        .filter(|s| !s.is_empty())
+        .any(|s| s == "..");
+    if has_traversal {
+        bail!("path traversal detected in file name");
+    }
+    #[cfg(windows)]
+    {
+        if name.len() >= 2 {
+            let bytes = name.as_bytes();
+            if bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+                bail!("absolute path detected in file name");
+            }
+        }
+        if name.starts_with('/') || name.starts_with('\\') {
+            bail!("absolute path detected in file name");
+        }
+    }
+    #[cfg(not(windows))]
+    if name.starts_with('/') {
+        bail!("absolute path detected in file name");
+    }
+    Ok(())
+}
+
+fn validate_transfer_file_names(files: &[FileEntry]) -> ResultType<()> {
+    // Single-file transfer may use an empty relative name, because
+    // the destination file path is carried by transfer metadata.
+    if files.len() == 1 && files.first().map_or(false, |f| f.name.is_empty()) {
+        return Ok(());
+    }
+    for file in files {
+        if file.name.is_empty() {
+            bail!("empty file name in multi-file transfer");
+        }
+        validate_file_name_no_traversal(&file.name)?;
+    }
+    Ok(())
+}
+
+#[inline]
+fn validate_fs_path_argument(path: &str, arg_name: &str) -> ResultType<()> {
+    if path.is_empty() {
+        bail!("{arg_name} cannot be empty");
+    }
+    if path.bytes().any(|b| b == 0) {
+        bail!("{arg_name} contains null bytes");
+    }
+    Ok(())
+}
+
+fn validate_no_symlink_components(base: &PathBuf, name: &str) -> ResultType<()> {
+    if name.is_empty() {
+        return Ok(());
+    }
+    let mut current = base.clone();
+    for component in Path::new(name).components() {
+        match component {
+            std::path::Component::Normal(seg) => {
+                current.push(seg);
+                // Best-effort guard: path-based checks are inherently TOCTOU-prone
+                // if local filesystem state changes between validation and write.
+                match std::fs::symlink_metadata(&current) {
+                    Ok(meta) => {
+                        // This is inherent to filesystem-based checks and acknowledged as a limitation.
+                        // For true protection, you'd need openat(2) / O_NOFOLLOW at write time.
+                        if meta.file_type().is_symlink() {
+                            bail!("symlink path component is not allowed");
+                        }
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        // Component does not exist yet, continue best-effort validation.
+                    }
+                    Err(err) => {
+                        bail!(
+                            "failed to validate path component '{}': {}",
+                            current.display(),
+                            err
+                        );
+                    }
+                }
+            }
+            std::path::Component::CurDir => {}
+            _ => {
+                bail!("invalid file name component");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn join_validated_path(base: &PathBuf, name: &str) -> ResultType<PathBuf> {
+    validate_file_name_no_traversal(name)?;
+    validate_no_symlink_components(base, name)?;
+    Ok(TransferJob::join(base, name))
 }
 
 impl TransferJob {
     #[allow(clippy::too_many_arguments)]
     pub fn new_write(
         id: i32,
+        r#type: JobType,
         remote: String,
-        path: String,
+        data_source: DataSource,
         file_num: i32,
         show_hidden: bool,
         is_remote: bool,
-        files: Vec<FileEntry>,
         enable_overwrite_detection: bool,
     ) -> Self {
-        log::info!("new write {}", path);
-        let total_size = files.iter().map(|x| x.size).sum();
+        log::info!("new write {}", data_source);
         Self {
             id,
+            r#type,
             remote,
-            path: get_path(&path),
+            data_source,
             file_num,
             show_hidden,
             is_remote,
-            files,
-            total_size,
+            files: Vec::new(),
+            total_size: 0,
             enable_overwrite_detection,
             ..Default::default()
         }
     }
 
+    pub fn with_files(mut self, files: Vec<FileEntry>) -> ResultType<Self> {
+        self.set_files(files)?;
+        Ok(self)
+    }
+
     pub fn new_read(
         id: i32,
+        r#type: JobType,
         remote: String,
-        path: String,
+        data_source: DataSource,
         file_num: i32,
         show_hidden: bool,
         is_remote: bool,
         enable_overwrite_detection: bool,
     ) -> ResultType<Self> {
-        log::info!("new read {}", path);
-        let files = get_recursive_files(&path, show_hidden)?;
-        let total_size = files.iter().map(|x| x.size).sum();
+        log::info!("new read {}", data_source);
+        let (files, total_size) = match &data_source {
+            DataSource::FilePath(p) => {
+                let p = p.to_str().ok_or(anyhow!("Invalid path"))?;
+                let files = get_recursive_files(p, show_hidden)?;
+                let total_size = files.iter().map(|x| x.size).sum();
+                (files, total_size)
+            }
+            DataSource::MemoryCursor(c) => (Vec::new(), c.get_ref().len() as u64),
+        };
         Ok(Self {
             id,
+            r#type,
             remote,
-            path: get_path(&path),
+            data_source,
             file_num,
             show_hidden,
             is_remote,
@@ -324,14 +627,38 @@ impl TransferJob {
         })
     }
 
+    pub async fn get_buf_data(self) -> ResultType<Option<Vec<u8>>> {
+        match self.data_stream {
+            Some(DataStream::BufStream(mut bs)) => {
+                bs.flush().await?;
+                Ok(Some(bs.into_inner().into_inner()))
+            }
+            _ => Ok(None),
+        }
+    }
+
     #[inline]
     pub fn files(&self) -> &Vec<FileEntry> {
         &self.files
     }
 
     #[inline]
-    pub fn set_files(&mut self, files: Vec<FileEntry>) {
+    pub fn set_files(&mut self, files: Vec<FileEntry>) -> ResultType<()> {
+        validate_transfer_file_names(&files)?;
+        if let DataSource::FilePath(base) = &self.data_source {
+            for file in &files {
+                validate_no_symlink_components(base, &file.name)?;
+            }
+        }
+        self.total_size = files.iter().map(|x| x.size).sum();
         self.files = files;
+        Ok(())
+    }
+
+    #[inline]
+    pub fn set_digest(&mut self, size: u64, modified: u64) {
+        self.digest.size = size;
+        self.digest.modified = modified;
     }
 
     #[inline]
@@ -359,28 +686,73 @@ impl TransferJob {
         self.file_num
     }
 
+    fn resolve_entry_path(&self, base: &PathBuf, name: &str) -> Option<PathBuf> {
+        if self.r#type == JobType::Generic {
+            match join_validated_path(base, name) {
+                Ok(path) => Some(path),
+                Err(err) => {
+                    log::error!("Invalid file name in transfer job {}: {}", self.id, err);
+                    None
+                }
+            }
+        } else {
+            Some(Self::join(base, name))
+        }
+    }
+
     pub fn modify_time(&self) {
-        let file_num = self.file_num as usize;
-        if file_num < self.files.len() {
-            let entry = &self.files[file_num];
-            let path = self.join(&entry.name);
-            let download_path = format!("{}.download", get_string(&path));
-            std::fs::rename(download_path, &path).ok();
-            filetime::set_file_mtime(
-                &path,
-                filetime::FileTime::from_unix_time(entry.modified_time as _, 0),
-            )
-            .ok();
+        if self.r#type == JobType::Printer {
+            return;
+        }
+        if let DataSource::FilePath(p) = &self.data_source {
+            let file_num = self.file_num as usize;
+            if file_num < self.files.len() {
+                let entry = &self.files[file_num];
+                let Some(path) = self.resolve_entry_path(p, &entry.name) else {
+                    return;
+                };
+                let download_path = format!("{}.download", get_string(&path));
+                let digest_path = format!("{}.digest", get_string(&path));
+                std::fs::remove_file(digest_path).ok();
+                std::fs::rename(download_path, &path).ok();
+                filetime::set_file_mtime(
+                    &path,
+                    filetime::FileTime::from_unix_time(entry.modified_time as _, 0),
+                )
+                .ok();
+            }
         }
     }
 
     pub fn remove_download_file(&self) {
-        let file_num = self.file_num as usize;
-        if file_num < self.files.len() {
-            let entry = &self.files[file_num];
-            let path = self.join(&entry.name);
-            let download_path = format!("{}.download", get_string(&path));
-            std::fs::remove_file(download_path).ok();
+        if self.r#type == JobType::Printer {
+            return;
+        }
+        if let DataSource::FilePath(p) = &self.data_source {
+            let file_num = self.file_num as usize;
+            if file_num < self.files.len() {
+                let entry = &self.files[file_num];
+                let Some(path) = self.resolve_entry_path(p, &entry.name) else {
+                    return;
+                };
+                let download_path = format!("{}.download", get_string(&path));
+                let digest_path = format!("{}.digest", get_string(&path));
+                std::fs::remove_file(download_path).ok();
+                std::fs::remove_file(digest_path).ok();
+            }
+        }
+    }
+
+    #[inline]
+    pub fn set_finished_size_on_resume(&mut self) {
+        if self.is_resume && self.file_num > 0 {
+            let finished_size: u64 = self
+                .files
+                .iter()
+                .take(self.file_num as usize)
+                .map(|file| file.size)
+                .sum();
+            self.finished_size = finished_size;
         }
     }
 
@@ -388,34 +760,63 @@ impl TransferJob {
         if block.id != self.id {
             bail!("Wrong id");
         }
-        let file_num = block.file_num as usize;
-        if file_num >= self.files.len() {
-            bail!("Wrong file number");
-        }
-        if file_num != self.file_num as usize || self.file.is_none() {
-            self.modify_time();
-            if let Some(file) = self.file.as_mut() {
-                file.sync_all().await?;
+        match &self.data_source {
+            DataSource::FilePath(p) => {
+                let file_num = block.file_num as usize;
+                if file_num >= self.files.len() {
+                    bail!("Wrong file number");
+                }
+                if file_num != self.file_num as usize || self.data_stream.is_none() {
+                    self.modify_time();
+                    if let Some(DataStream::FileStream(file)) = self.data_stream.as_mut() {
+                        file.sync_all().await?;
+                    }
+                    self.file_num = block.file_num;
+                    let entry = &self.files[file_num];
+                    let (path, digest_path) = if self.r#type == JobType::Printer {
+                        (p.to_string_lossy().to_string(), None)
+                    } else {
+                        let path = join_validated_path(p, &entry.name)?;
+                        // NOTE: We intentionally keep path-based validation + regular file open here.
+                        // This still has a known TOCTOU window for symlink races, but avoids a large
+                        // cross-platform rewrite for now.
+                        // Revisit with descriptor/handle-based no-follow open in future hardening.
+                        if let Some(pp) = path.parent() {
+                            std::fs::create_dir_all(pp).ok();
+                        }
+                        let file_path = get_string(&path);
+                        (
+                            format!("{}.download", &file_path),
+                            Some(format!("{}.digest", &file_path)),
+                        )
+                    };
+                    if let Some(dp) = digest_path.as_ref() {
+                        if Path::new(dp).exists() {
+                            std::fs::remove_file(dp)?;
+                        }
+                    }
+                    self.data_stream = Some(DataStream::FileStream(File::create(&path).await?));
+                    if let Some(dp) = digest_path.as_ref() {
+                        std::fs::write(dp, json!(self.digest).to_string()).ok();
+                    }
+                }
             }
-            self.file_num = block.file_num;
-            let entry = &self.files[file_num];
-            let path = self.join(&entry.name);
-            if let Some(p) = path.parent() {
-                std::fs::create_dir_all(p).ok();
+            DataSource::MemoryCursor(c) => {
+                if self.data_stream.is_none() {
+                    self.data_stream = Some(DataStream::BufStream(TokioBufStream::new(c.clone())));
+                }
             }
-            let path = format!("{}.download", get_string(&path));
-            self.file = Some(File::create(&path).await?);
         }
         if block.compressed {
             let tmp = decompress(&block.data);
-            self.file
+            self.data_stream
                 .as_mut()
-                .ok_or(anyhow!("file is None"))?
+                .ok_or(anyhow!("data stream is None"))?
                 .write_all(&tmp)
                 .await?;
             self.finished_size += tmp.len() as u64;
         } else {
-            self.file
+            self.data_stream
                 .as_mut()
                 .ok_or(anyhow!("file is None"))?
                 .write_all(&block.data)
@@ -427,58 +828,142 @@ impl TransferJob {
     }
 
     #[inline]
-    pub fn join(&self, name: &str) -> PathBuf {
+    pub fn join(p: &PathBuf, name: &str) -> PathBuf {
         if name.is_empty() {
-            self.path.clone()
+            p.clone()
         } else {
-            self.path.join(name)
+            p.join(name)
         }
     }
 
-    pub async fn read(&mut self, stream: &mut Stream) -> ResultType<Option<FileTransferBlock>> {
+    /// Open the data stream for the current file.
+    /// Returns Ok(true) if job is done, Ok(false) otherwise.
+    async fn open_data_stream(&mut self) -> ResultType<bool> {
         let file_num = self.file_num as usize;
-        if file_num >= self.files.len() {
-            self.file.take();
-            return Ok(None);
-        }
-        let name = &self.files[file_num].name;
-        if self.file.is_none() {
-            match File::open(self.join(name)).await {
-                Ok(file) => {
-                    self.file = Some(file);
-                    self.file_confirmed = false;
-                    self.file_is_waiting = false;
+        match &mut self.data_source {
+            DataSource::FilePath(p) => {
+                if file_num >= self.files.len() {
+                    // job done
+                    self.data_stream.take();
+                    return Ok(true);
+                };
+                if self.data_stream.is_none() {
+                    match File::open(Self::join(p, &self.files[file_num].name)).await {
+                        Ok(file) => {
+                            self.data_stream = Some(DataStream::FileStream(file));
+                            self.file_confirmed = false;
+                            self.file_is_waiting = false;
+                        }
+                        // On open error, behave the same as validation failure: advance
+                        // to next file and return the error.
+                        Err(err) => {
+                            self.file_num += 1;
+                            self.file_confirmed = false;
+                            self.file_is_waiting = false;
+                            return Err(err.into());
+                        }
+                    }
                 }
-                Err(err) => {
-                    self.file_num += 1;
-                    self.file_confirmed = false;
-                    self.file_is_waiting = false;
-                    return Err(err.into());
+            }
+            DataSource::MemoryCursor(c) => {
+                if self.data_stream.is_none() {
+                    let mut t = std::io::Cursor::new(Vec::new());
+                    std::mem::swap(&mut t, c);
+                    self.data_stream = Some(DataStream::BufStream(TokioBufStream::new(t)));
                 }
             }
         }
-        if self.enable_overwrite_detection && !self.file_confirmed() {
-            if !self.file_is_waiting() {
-                self.send_current_digest(stream).await?;
-                self.set_file_is_waiting(true);
-            }
+        Ok(false)
+    }
+
+    /// Get current file's digest (last_modified, file_size) for overwrite detection.
+    async fn get_current_digest(&self) -> ResultType<(u64, u64)> {
+        let meta = match self.data_stream.as_ref().ok_or(anyhow!("file is None"))? {
+            DataStream::FileStream(file) => file.metadata().await?,
+            DataStream::BufStream(_) => bail!("No digest for buf stream"),
+        };
+        let last_modified = meta
+            .modified()?
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_secs();
+        Ok((last_modified, meta.len()))
+    }
+
+    async fn init_data_stream(&mut self, stream: &mut crate::Stream) -> ResultType<()> {
+        if self.open_data_stream().await? {
+            return Ok(());
+        }
+        if self.r#type == JobType::Generic
+            && self.enable_overwrite_detection
+            && !self.file_confirmed()
+            && !self.file_is_waiting()
+        {
+            self.send_current_digest(stream).await?;
+            self.set_file_is_waiting(true);
+        }
+        Ok(())
+    }
+
+    /// Initialize data stream for CM (Connection Manager) scenario.
+    /// Returns digest info (last_modified, file_size) if overwrite detection is enabled,
+    /// so caller can send it via IPC instead of network stream.
+    /// Returns Ok(None) if job is done or already initialized.
+    pub async fn init_data_stream_for_cm(&mut self) -> ResultType<Option<(u64, u64)>> {
+        if self.open_data_stream().await? {
             return Ok(None);
         }
+        // For overwrite detection, return digest info instead of sending via stream
+        if self.r#type == JobType::Generic
+            && self.enable_overwrite_detection
+            && !self.file_confirmed()
+            && !self.file_is_waiting()
+        {
+            let digest = self.get_current_digest().await?;
+            self.set_file_is_waiting(true);
+            return Ok(Some(digest));
+        }
+        Ok(None)
+    }
+
+    pub async fn read(&mut self) -> ResultType<Option<FileTransferBlock>> {
+        if self.r#type == JobType::Generic {
+            if self.enable_overwrite_detection && !self.file_confirmed() {
+                return Ok(None);
+            }
+        }
+
+        let file_num = self.file_num as usize;
+        let name = match &self.data_source {
+            DataSource::FilePath(p) => {
+                if file_num >= self.files.len() {
+                    self.data_stream.take();
+                    return Ok(None);
+                };
+                if self.files.len() == 1 && self.files[file_num].name.is_empty() {
+                    p.file_name()
+                        .map(|p| p.to_str().unwrap_or(""))
+                        .unwrap_or("")
+                } else {
+                    &self.files[file_num].name
+                }
+            }
+            DataSource::MemoryCursor(..) => "",
+        };
         const BUF_SIZE: usize = 128 * 1024;
         let mut buf: Vec<u8> = vec![0; BUF_SIZE];
         let mut compressed = false;
         let mut offset: usize = 0;
         loop {
             match self
-                .file
+                .data_stream
                 .as_mut()
-                .ok_or(anyhow!("file is None"))?
+                .ok_or(anyhow!("data stream is None"))?
                 .read(&mut buf[offset..])
                 .await
             {
                 Err(err) => {
                     self.file_num += 1;
-                    self.file = None;
+                    self.data_stream = None;
                     self.file_confirmed = false;
                     self.file_is_waiting = false;
                     return Err(err.into());
@@ -493,13 +978,17 @@ impl TransferJob {
         }
         unsafe { buf.set_len(offset) };
         if offset == 0 {
+            if matches!(self.data_source, DataSource::MemoryCursor(_)) {
+                self.data_stream.take();
+                return Ok(None);
+            }
             self.file_num += 1;
-            self.file = None;
+            self.data_stream = None;
             self.file_confirmed = false;
             self.file_is_waiting = false;
         } else {
             self.finished_size += offset as u64;
-            if !is_compressed_file(name) {
+            if matches!(self.data_source, DataSource::FilePath(_)) && !is_compressed_file(name) {
                 let tmp = compress(&buf);
                 if tmp.len() < buf.len() {
                     buf = tmp;
@@ -517,24 +1006,17 @@ impl TransferJob {
         }))
     }
 
+    // Only for generic job and file stream
     async fn send_current_digest(&mut self, stream: &mut Stream) -> ResultType<()> {
+        let (last_modified, file_size) = self.get_current_digest().await?;
         let mut msg = Message::new();
         let mut resp = FileResponse::new();
-        let meta = self
-            .file
-            .as_ref()
-            .ok_or(anyhow!("file is None"))?
-            .metadata()
-            .await?;
-        let last_modified = meta
-            .modified()?
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_secs();
         resp.set_digest(FileTransferDigest {
             id: self.id,
             file_num: self.file_num,
             last_modified,
-            file_size: meta.len(),
+            file_size,
+            is_resume: self.is_resume,
             ..Default::default()
         });
         msg.set_file_response(resp);
@@ -611,7 +1093,7 @@ impl TransferJob {
 
     pub fn set_file_skipped(&mut self) -> bool {
         log::debug!("skip file {} in job {}", self.file_num, self.id);
-        self.file.take();
+        self.data_stream.take();
         self.set_file_confirmed(false);
         self.set_file_is_waiting(false);
         self.file_num += 1;
@@ -619,8 +1101,64 @@ impl TransferJob {
         true
     }
 
-    pub fn confirm(&mut self, r: &FileTransferSendConfirmRequest) -> bool {
+    async fn set_stream_offset(&mut self, file_num: usize, offset: u64) {
+        if let DataSource::FilePath(p) = &self.data_source {
+            let entry = &self.files[file_num];
+            let Some(path) = self.resolve_entry_path(p, &entry.name) else {
+                return;
+            };
+            let file_path = get_string(&path);
+            let download_path = format!("{}.download", &file_path);
+            let digest_path = format!("{}.digest", &file_path);
+
+            let mut f = if Path::new(&download_path).exists() && Path::new(&digest_path).exists() {
+                // If both download and digest files exist, seek (writer) to the offset
+                // NOTE: same as write path: best-effort symlink validation happened earlier,
+                // but this reopen remains TOCTOU-prone by design for now.
+                match OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .open(&download_path)
+                    .await
+                {
+                    Ok(f) => f,
+                    Err(e) => {
+                        log::warn!("Failed to open file {}: {}", download_path, e);
+                        return;
+                    }
+                }
+            } else if Path::new(&file_path).exists() {
+                // If `file_path` exists, seek (reader) to the offset
+                match File::open(&file_path).await {
+                    Ok(f) => f,
+                    Err(e) => {
+                        log::warn!("Failed to open file {}: {}", file_path, e);
+                        return;
+                    }
+                }
+            } else {
+                log::warn!(
+                    "File {} not found, cannot seek to offset {}",
+                    file_path,
+                    offset
+                );
+                return;
+            };
+            if f.seek(std::io::SeekFrom::Start(offset)).await.is_ok() {
+                self.data_stream = Some(DataStream::FileStream(f));
+                self.transferred += offset;
+                self.finished_size += offset;
+            }
+        }
+    }
+
+    pub async fn confirm(&mut self, r: &FileTransferSendConfirmRequest) -> bool {
         if self.file_num() != r.file_num {
+            // This branch will always be hit if:
+            // 1. `confirm()` is called in `ui_cm_interface.rs`
+            // 2. Not resuming
+            //
+            // It is ok. Because `confirm()` in `ui_cm_interface.rs` is only used for resuming.
             log::info!("file num truncated, ignoring");
         } else {
             match r.union {
@@ -631,8 +1169,13 @@ impl TransferJob {
                         self.set_file_confirmed(true);
                     }
                 }
-                Some(file_transfer_send_confirm_request::Union::OffsetBlk(_offset)) => {
+                Some(file_transfer_send_confirm_request::Union::OffsetBlk(offset)) => {
                     self.set_file_confirmed(true);
+                    // If offset is greater than 0, we need to seek to the offset
+                    if offset > 0 {
+                        self.set_stream_offset(r.file_num as usize, offset as u64)
+                            .await;
+                    }
                 }
                 _ => {}
             }
@@ -645,7 +1188,7 @@ impl TransferJob {
         TransferJobMeta {
             id: self.id,
             remote: self.remote.to_string(),
-            to: self.path.to_string_lossy().to_string(),
+            to: self.data_source.to_meta(),
             file_num: self.file_num,
             show_hidden: self.show_hidden,
             is_remote: self.is_remote,
@@ -722,14 +1265,22 @@ pub fn new_receive(
 }
 
 #[inline]
-pub fn new_send(id: i32, path: String, file_num: i32, include_hidden: bool) -> Message {
+pub fn new_send(
+    id: i32,
+    r#type: JobType,
+    path: String,
+    file_num: i32,
+    include_hidden: bool,
+) -> Message {
     log::info!("new send: {}, id: {}", path, id);
     let mut action = FileAction::new();
+    let t: file_transfer_send_request::FileType = r#type.into();
     action.set_send(FileTransferSendRequest {
         id,
         path,
         include_hidden,
         file_num,
+        file_type: t.into(),
         ..Default::default()
     });
     let mut msg_out = Message::new();
@@ -751,8 +1302,10 @@ pub fn new_done(id: i32, file_num: i32) -> Message {
 }
 
 #[inline]
-pub fn remove_job(id: i32, jobs: &mut Vec<TransferJob>) {
-    *jobs = jobs.drain(0..).filter(|x| x.id() != id).collect();
+pub fn remove_job(id: i32, jobs: &mut Vec<TransferJob>) -> Option<TransferJob> {
+    jobs.iter()
+        .position(|x| x.id() == id)
+        .map(|index| jobs.remove(index))
 }
 
 #[inline]
@@ -765,17 +1318,33 @@ pub fn get_job_immutable(id: i32, jobs: &[TransferJob]) -> Option<&TransferJob> 
     jobs.iter().find(|x| x.id() == id)
 }
 
+async fn init_jobs(jobs: &mut Vec<TransferJob>, stream: &mut crate::Stream) -> ResultType<()> {
+    for job in jobs.iter_mut() {
+        if job.is_last_job {
+            continue;
+        }
+        if let Err(err) = job.init_data_stream(stream).await {
+            stream
+                .send(&new_error(job.id(), err, job.file_num()))
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn handle_read_jobs(
     jobs: &mut Vec<TransferJob>,
     stream: &mut crate::Stream,
 ) -> ResultType<String> {
+    init_jobs(jobs, stream).await?;
+
     let mut job_log = Default::default();
     let mut finished = Vec::new();
     for job in jobs.iter_mut() {
         if job.is_last_job {
             continue;
         }
-        match job.read(stream).await {
+        match job.read().await {
             Err(err) => {
                 stream
                     .send(&new_error(job.id(), err, job.file_num()))
@@ -802,14 +1371,16 @@ pub async fn handle_read_jobs(
                 }
             }
         }
+        // Break to handle jobs one by one.
+        break;
     }
     for id in finished {
-        remove_job(id, jobs);
+        let _ = remove_job(id, jobs);
     }
     Ok(job_log)
 }
 
-pub fn remove_all_empty_dir(path: &PathBuf) -> ResultType<()> {
+pub fn remove_all_empty_dir(path: &Path) -> ResultType<()> {
     let fd = read_dir(path, true)?;
     for entry in fd.entries.iter() {
         match entry.entry_type.enum_value() {
@@ -828,18 +1399,25 @@ pub fn remove_all_empty_dir(path: &PathBuf) -> ResultType<()> {
 
 #[inline]
 pub fn remove_file(file: &str) -> ResultType<()> {
+    validate_fs_path_argument(file, "file path")?;
     std::fs::remove_file(get_path(file))?;
     Ok(())
 }
 
 #[inline]
 pub fn create_dir(dir: &str) -> ResultType<()> {
+    validate_fs_path_argument(dir, "directory path")?;
     std::fs::create_dir_all(get_path(dir))?;
     Ok(())
 }
 
 #[inline]
 pub fn rename_file(path: &str, new_name: &str) -> ResultType<()> {
+    validate_fs_path_argument(path, "path")?;
+    if new_name.is_empty() {
+        bail!("new file name cannot be empty");
+    }
+    validate_file_name_no_traversal(new_name)?;
     let path = std::path::Path::new(&path);
     if path.exists() {
         let dir = path
@@ -868,10 +1446,42 @@ pub enum DigestCheckResult {
 
 #[inline]
 pub fn is_write_need_confirmation(
+    is_resume: bool,
     file_path: &str,
     digest: &FileTransferDigest,
 ) -> ResultType<DigestCheckResult> {
     let path = Path::new(file_path);
+    let digest_file = format!("{}.digest", file_path);
+    let download_file = format!("{}.download", file_path);
+    if is_resume && Path::new(&digest_file).exists() && Path::new(&download_file).exists() {
+        // If the digest file exists, it means the file was transferred before.
+        // We can use the digest file to check whether the file is the same.
+        if let Ok(content) = std::fs::read_to_string(digest_file) {
+            if let Ok(local_digest) = serde_json::from_str::<FileDigest>(&content) {
+                let is_identical = local_digest.modified == digest.last_modified
+                    && local_digest.size == digest.file_size;
+                if is_identical {
+                    if let Ok(download_metadata) = std::fs::metadata(download_file) {
+                        // Get the file size of the local file
+                        // Only send confirmation if the file is not empty.
+                        let transferred_size = download_metadata.len();
+                        if transferred_size > 0 {
+                            return Ok(DigestCheckResult::NeedConfirm(FileTransferDigest {
+                                id: digest.id,
+                                file_num: digest.file_num,
+                                last_modified: digest.last_modified,
+                                file_size: digest.file_size,
+                                is_identical,
+                                transferred_size,
+                                ..Default::default()
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if path.exists() && path.is_file() {
         let metadata = std::fs::metadata(path)?;
         let modified_time = metadata.modified()?;
@@ -893,6 +1503,7 @@ pub fn is_write_need_confirmation(
             ..Default::default()
         }))
     } else {
+        // If the file does not exist, or the digest file and download file do not exist, we return NoSuchFile.
         Ok(DigestCheckResult::NoSuchFile)
     }
 }
@@ -912,4 +1523,284 @@ pub fn serialize_transfer_job(job: &TransferJob, done: bool, cancel: bool, error
     value["cancel"] = json!(cancel);
     value["error"] = json!(error);
     serde_json::to_string(&value).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestTempDir {
+        path: PathBuf,
+    }
+
+    impl TestTempDir {
+        fn new(prefix: &str) -> Self {
+            Self {
+                path: unique_temp_dir(prefix),
+            }
+        }
+
+        fn join(&self, path: &str) -> PathBuf {
+            self.path.join(path)
+        }
+    }
+
+    impl Drop for TestTempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), timestamp))
+    }
+
+    fn new_file_entry(name: &str) -> FileEntry {
+        let mut entry = FileEntry::new();
+        entry.name = name.to_string();
+        entry
+    }
+
+    fn new_validation_job(id: i32) -> TransferJob {
+        TransferJob::new_write(
+            id,
+            JobType::Generic,
+            "/fake/remote".to_string(),
+            DataSource::FilePath(std::env::temp_dir().join(format!("rustdesk_validation_{id}"))),
+            0,
+            false,
+            true,
+            false,
+        )
+    }
+
+    fn new_write_job(id: i32, download_dir: PathBuf, name: &str) -> ResultType<TransferJob> {
+        let job = TransferJob::new_write(
+            id,
+            JobType::Generic,
+            "/fake/remote".to_string(),
+            DataSource::FilePath(download_dir),
+            0,
+            false,
+            true,
+            false,
+        )
+        .with_files(vec![new_file_entry(name)])?;
+        Ok(job)
+    }
+
+    fn assert_err_contains(err: anyhow::Error, expected: &str) {
+        assert!(
+            err.to_string().contains(expected),
+            "expected error containing '{}', got: {}",
+            expected,
+            err
+        );
+    }
+
+    #[test]
+    fn path_traversal_e2e_write_rejects_relative_escape() {
+        let tmp_root = TestTempDir::new("rustdesk_e2e_relative");
+        let downloads = tmp_root.join("downloads");
+        std::fs::create_dir_all(&downloads).expect("create downloads dir");
+
+        let err = new_write_job(1, downloads, "../traversal_proof.txt")
+            .expect_err("relative path traversal must be rejected");
+        assert_err_contains(err, "path traversal");
+        assert!(!tmp_root.join("traversal_proof.txt").exists());
+    }
+
+    #[test]
+    fn path_traversal_e2e_write_rejects_absolute_path() {
+        let tmp_root = TestTempDir::new("rustdesk_e2e_absolute");
+        let downloads = tmp_root.join("downloads");
+        let absolute_target = tmp_root.join("fake_ssh").join("authorized_keys");
+        std::fs::create_dir_all(&downloads).expect("create downloads dir");
+
+        let err = new_write_job(2, downloads, &absolute_target.to_string_lossy())
+            .expect_err("absolute path must be rejected");
+        assert_err_contains(err, "absolute path");
+        assert!(!absolute_target.exists());
+    }
+
+    #[test]
+    #[cfg_attr(windows, ignore = "requires symlink privilege to create test symlink")]
+    fn path_traversal_e2e_write_rejects_symlink_escape() {
+        let tmp_root = TestTempDir::new("rustdesk_e2e_symlink");
+        let downloads = tmp_root.join("downloads");
+        let outside = tmp_root.join("outside");
+        let escaped_target = outside.join("escape.txt");
+        std::fs::create_dir_all(&downloads).expect("create downloads dir");
+        std::fs::create_dir_all(&outside).expect("create outside dir");
+
+        let symlink_path = downloads.join("link");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            symlink(&outside, &symlink_path).expect("create symlink for test");
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::symlink_dir;
+            symlink_dir(&outside, &symlink_path).expect("create directory symlink for test");
+        }
+
+        let err = new_write_job(3, downloads, "link/escape.txt")
+            .expect_err("symlink traversal must be rejected");
+        assert_err_contains(err, "symlink");
+        assert!(!escaped_target.exists());
+    }
+
+    #[test]
+    fn set_files_allows_single_empty_name_for_single_file_transfer() {
+        let mut job = new_validation_job(101);
+        assert!(job.set_files(vec![new_file_entry("")]).is_ok());
+    }
+
+    #[test]
+    fn set_files_rejects_empty_name_in_multi_file_transfer() {
+        let mut job = new_validation_job(102);
+        let err = job
+            .set_files(vec![new_file_entry(""), new_file_entry("ok.txt")])
+            .expect_err("empty name in multi-file transfer must be rejected");
+        assert_err_contains(err, "empty file name");
+    }
+
+    #[test]
+    fn set_files_rejects_null_byte_name() {
+        let mut job = new_validation_job(103);
+        let err = job
+            .set_files(vec![new_file_entry("bad\0name.txt")])
+            .expect_err("null byte in file name must be rejected");
+        assert_err_contains(err, "null bytes");
+    }
+
+    #[test]
+    fn set_files_rejects_mixed_entries_when_one_is_traversal() {
+        let mut job = new_validation_job(104);
+        let err = job
+            .set_files(vec![
+                new_file_entry("safe/file.txt"),
+                new_file_entry("../../escape.txt"),
+            ])
+            .expect_err("any traversal entry must reject the full file list");
+        assert_err_contains(err, "path traversal");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn set_files_rejects_unc_absolute_path() {
+        let mut job = new_validation_job(105);
+        let err = job
+            .set_files(vec![new_file_entry("\\\\server\\share\\payload.txt")])
+            .expect_err("UNC absolute path must be rejected");
+        assert_err_contains(err, "absolute path");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn set_files_allows_backslash_prefixed_name_on_unix() {
+        let mut job = new_validation_job(105);
+        assert!(job
+            .set_files(vec![new_file_entry("\\\\server\\share\\payload.txt")])
+            .is_ok());
+    }
+
+    #[test]
+    fn remove_file_rejects_empty_path() {
+        let err = remove_file("").expect_err("empty file path must be rejected");
+        assert_err_contains(err, "cannot be empty");
+    }
+
+    #[test]
+    fn remove_file_rejects_null_byte_path() {
+        let err = remove_file("bad\0path").expect_err("null byte path must be rejected");
+        assert_err_contains(err, "null bytes");
+    }
+
+    #[test]
+    fn create_dir_rejects_empty_path() {
+        let err = create_dir("").expect_err("empty directory path must be rejected");
+        assert_err_contains(err, "cannot be empty");
+    }
+
+    #[test]
+    fn create_dir_rejects_null_byte_path() {
+        let err = create_dir("bad\0path").expect_err("null byte path must be rejected");
+        assert_err_contains(err, "null bytes");
+    }
+
+    #[test]
+    fn rename_file_rejects_invalid_new_name() {
+        let tmp_root = TestTempDir::new("rustdesk_rename_invalid");
+        let src = tmp_root.join("source.txt");
+        std::fs::create_dir_all(&tmp_root.path).expect("create temp dir");
+        std::fs::write(&src, b"content").expect("create source file");
+
+        let src_str = src.to_string_lossy().to_string();
+
+        let err_empty =
+            rename_file(&src_str, "").expect_err("empty new file name must be rejected");
+        assert_err_contains(err_empty, "cannot be empty");
+
+        let err_traversal = rename_file(&src_str, "../escape.txt")
+            .expect_err("traversal new file name must be rejected");
+        assert_err_contains(err_traversal, "path traversal");
+
+        let err_null = rename_file(&src_str, "bad\0name.txt")
+            .expect_err("null byte in new file name must be rejected");
+        assert_err_contains(err_null, "null bytes");
+
+        #[cfg(windows)]
+        {
+            let err_abs = rename_file(&src_str, "C:\\Windows\\Temp\\payload.txt")
+                .expect_err("absolute new file name must be rejected");
+            assert_err_contains(err_abs, "absolute path");
+        }
+        #[cfg(not(windows))]
+        {
+            let err_abs = rename_file(&src_str, "/tmp/payload.txt")
+                .expect_err("absolute new file name must be rejected");
+            assert_err_contains(err_abs, "absolute path");
+        }
+    }
+
+    #[test]
+    fn rename_file_accepts_valid_new_name() {
+        let tmp_root = TestTempDir::new("rustdesk_rename_ok");
+        let src = tmp_root.join("rename_src.txt");
+        let dst = tmp_root.join("renamed.txt");
+        std::fs::create_dir_all(&tmp_root.path).expect("create temp dir");
+        std::fs::write(&src, b"content").expect("create source file");
+
+        let src_str = src.to_string_lossy().to_string();
+        rename_file(&src_str, "renamed.txt").expect("rename should succeed");
+
+        assert!(!src.exists());
+        assert!(dst.exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn set_files_rejects_windows_drive_absolute_path() {
+        let mut job = new_validation_job(106);
+        let err = job
+            .set_files(vec![new_file_entry("C:\\Windows\\Temp\\payload.txt")])
+            .expect_err("drive-letter absolute path must be rejected");
+        assert_err_contains(err, "absolute path");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn set_files_rejects_windows_verbatim_drive_absolute_path() {
+        let mut job = new_validation_job(1061);
+        let err = job
+            .set_files(vec![new_file_entry(r"\\?\C:\Windows\Temp\x.txt")])
+            .expect_err("verbatim drive absolute path must be rejected");
+        assert_err_contains(err, "absolute path");
+    }
 }

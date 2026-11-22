@@ -197,3 +197,40 @@ pub fn convert_to_yuv(
     }
     Ok(())
 }
+
+#[cfg(not(target_os = "ios"))]
+pub fn convert(captured: &PixelBuffer, pixfmt: crate::Pixfmt, dst: &mut Vec<u8>) -> ResultType<()> {
+    if captured.pixfmt() == pixfmt {
+        dst.extend_from_slice(captured.data());
+        return Ok(());
+    }
+
+    let src = captured.data();
+    let src_stride = captured.stride();
+    let src_pixfmt = captured.pixfmt();
+    let src_width = captured.width();
+    let src_height = captured.height();
+
+    let unsupported = format!(
+        "unsupported pixfmt conversion: {src_pixfmt:?} -> {:?}",
+        pixfmt
+    );
+
+    match (src_pixfmt, pixfmt) {
+        (crate::Pixfmt::BGRA, crate::Pixfmt::RGBA) | (crate::Pixfmt::RGBA, crate::Pixfmt::BGRA) => {
+            dst.resize(src.len(), 0);
+            call_yuv!(ABGRToARGB(
+                src.as_ptr(),
+                src_stride[0] as _,
+                dst.as_mut_ptr(),
+                src_stride[0] as _,
+                src_width as _,
+                src_height as _,
+            ));
+        }
+        _ => {
+            bail!(unsupported);
+        }
+    }
+    Ok(())
+}

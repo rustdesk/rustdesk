@@ -3,6 +3,7 @@
 #![allow(non_upper_case_globals)]
 #![allow(improper_ctypes)]
 #![allow(dead_code)]
+#![allow(unused_imports)]
 
 impl Default for vpx_codec_enc_cfg {
     fn default() -> Self {

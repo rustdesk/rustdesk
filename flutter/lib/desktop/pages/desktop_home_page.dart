@@ -12,17 +12,18 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
-import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
+import 'package:flutter_hbb/desktop/widgets/update_progress.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/plugin/ui_manager.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/utils/platform_channel.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
-
 import '../widgets/button.dart';
 
 class DesktopHomePage extends StatefulWidget {
@@ -35,12 +36,11 @@ class DesktopHomePage extends StatefulWidget {
 const borderColor = Color(0xFF2F65BA);
 
 class _DesktopHomePageState extends State<DesktopHomePage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   final _leftPaneScrollController = ScrollController();
 
   @override
   bool get wantKeepAlive => true;
-  var updateUrl = '';
   var systemError = '';
   StreamSubscription? _uniLinksSubscription;
   var svcStopped = false.obs;
@@ -52,6 +52,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   bool isCardClosed = false;
 
   final RxBool _editHover = false.obs;
+  final RxBool _block = false.obs;
 
   final GlobalKey _childKey = GlobalKey();
 
@@ -59,18 +60,31 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
-    return Row(
+    final isSosMode = bind.mainGetBuildinOption(key: 'sos-mode') == 'Y';
+    return _buildBlock(
+        child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        buildLeftPane(context),
-        if (!isIncomingOnly) const VerticalDivider(width: 1),
-        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+isSosMode
+          ? SizedBox(
+              width: 380,
+              child: buildLeftPane(context),
+            )
+          : buildLeftPane(context),
+        if (!isIncomingOnly && !isSosMode) const VerticalDivider(width: 1),
+        if (!isIncomingOnly && !isSosMode) Expanded(child: buildRightPane(context)),
       ],
-    );
+    ));
+  }
+
+  Widget _buildBlock({required Widget child}) {
+    return buildRemoteBlock(
+        block: _block, mask: true, use: canBeBlocked, child: child);
   }
 
   Widget buildLeftPane(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
+    final isSosMode = bind.mainGetBuildinOption(key: 'sos-mode') == 'Y';
     final isOutgoingOnly = bind.isOutgoingOnly();
     final children = <Widget>[
       if (!isOutgoingOnly) buildPresetPasswordWarning(),
@@ -86,26 +100,50 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       buildTip(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
-      FutureBuilder<Widget>(
-        future: buildHelpCards(),
-        builder: (_, data) {
-          if (data.hasData) {
-            if (isIncomingOnly) {
-              if (isInHomePage()) {
-                Future.delayed(Duration(milliseconds: 300), () {
-                  _updateWindowSize();
-                });
-              }
-            }
-            return data.data!;
-          } else {
-            return const Offstage();
-          }
-        },
+    //  FutureBuilder<Widget>(
+    //    future: Future.value(
+     //       Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
+     //   builder: (_, data) {
+       //   if (data.hasData) {
+         //   if (isIncomingOnly || isSosMode) {
+        //      if (isInHomePage()) {
+        //        Future.delayed(Duration(milliseconds: 300), () {
+       //           _updateWindowSize();
+      //          });
+    //          }
+   //         }
+   //         return data.data!;
+   //       } else {
+   //         return const Offstage();
+   //       }
+   //     },
+   //   ),
+
+      // 原来的 FutureBuilder 已注释
+// 新增富氏邦卡片
+Container(
+  width: double.infinity,
+  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+  decoration: BoxDecoration(
+    color: Colors.green.shade50,
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: Colors.green.shade200),
+  ),
+  child: const Center(
+    child: Text(
+      '富氏邦',
+      style: TextStyle(
+        fontSize: 56,
+        fontWeight: FontWeight.bold,
+        color: Colors.green,
       ),
+    ),
+  ),
+),
       buildPluginEntry(),
     ];
-    if (isIncomingOnly) {
+    if (isIncomingOnly || isSosMode) {
       children.addAll([
         Divider(),
         OnlineStatusWidget(
@@ -125,47 +163,48 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       child: Container(
         width: isIncomingOnly ? 280.0 : 200.0,
         color: Theme.of(context).colorScheme.background,
-        child: DesktopScrollWrapper(
-          scrollController: _leftPaneScrollController,
-          child: Stack(
-            children: [
-              SingleChildScrollView(
-                controller: _leftPaneScrollController,
-                physics: DraggableNeverScrollableScrollPhysics(),
-                child: Column(
-                  key: _childKey,
-                  children: children,
-                ),
-              ),
-              if (isOutgoingOnly)
-                Positioned(
-                  bottom: 6,
-                  left: 12,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: InkWell(
-                      child: Obx(
-                        () => Icon(
-                          Icons.settings,
-                          color: _editHover.value
-                              ? textColor
-                              : Colors.grey.withOpacity(0.5),
-                          size: 22,
-                        ),
-                      ),
-                      onTap: () => {
-                        if (DesktopSettingPage.tabKeys.isNotEmpty)
-                          {
-                            DesktopSettingPage.switch2page(
-                                DesktopSettingPage.tabKeys[0])
-                          }
-                      },
-                      onHover: (value) => _editHover.value = value,
-                    ),
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                SingleChildScrollView(
+                  controller: _leftPaneScrollController,
+                  child: Column(
+                    key: _childKey,
+                    children: children,
                   ),
-                )
-            ],
-          ),
+                ),
+                Expanded(child: Container())
+              ],
+            ),
+            if (isOutgoingOnly)
+              Positioned(
+                bottom: 6,
+                left: 12,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: InkWell(
+                    child: Obx(
+                      () => Icon(
+                        Icons.settings,
+                        color: _editHover.value
+                            ? textColor
+                            : Colors.grey.withOpacity(0.5),
+                        size: 22,
+                      ),
+                    ),
+                    onTap: () => {
+                      if (DesktopSettingPage.tabKeys.isNotEmpty)
+                        {
+                          DesktopSettingPage.switch2page(
+                              DesktopSettingPage.tabKeys[0])
+                        }
+                    },
+                    onHover: (value) => _editHover.value = value,
+                  ),
+                ),
+              )
+          ],
         ),
       ),
     );
@@ -180,6 +219,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
+    final isSosMode = bind.mainGetBuildinOption(key: 'sos-mode') == 'Y';
     return Container(
       margin: const EdgeInsets.only(left: 20, right: 11),
       height: 57,
@@ -213,7 +253,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   ?.color
                                   ?.withOpacity(0.5)),
                         ).marginOnly(top: 5),
-                        buildPopupMenu(context)
+                        isSosMode ? const Offstage() : buildPopupMenu(context)
                       ],
                     ),
                   ),
@@ -234,7 +274,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         style: TextStyle(
                           fontSize: 22,
                         ),
-                      ),
+                      ).workaroundFreezeLinuxMint(),
                     ),
                   )
                 ],
@@ -330,7 +370,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   EdgeInsets.only(top: 14, bottom: 10),
                             ),
                             style: TextStyle(fontSize: 15),
-                          ),
+                          ).workaroundFreezeLinuxMint(),
                         ),
                       ),
                       if (showOneTime)
@@ -381,6 +421,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildTip(BuildContext context) {
     final isOutgoingOnly = bind.isOutgoingOnly();
+    final isSosMode = bind.mainGetBuildinOption(key: 'sos-mode') == 'Y';
     return Padding(
       padding:
           const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
@@ -394,7 +435,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    translate("Your Desktop"),
+                    isSosMode ? (translate("Your Desktop") + " SOS\u7248") : translate("Your Desktop"),
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
@@ -420,18 +461,32 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
-  Future<Widget> buildHelpCards() async {
+  Widget buildHelpCards(String updateUrl) {
     if (!bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
         bind.mainUriPrefixSync().contains('rustdesk')) {
-      return buildInstallCard(
-          "Status",
-          "There is a newer version of ${bind.mainGetAppNameSync()} ${bind.mainGetNewVersion()} available.",
-          "Click to download", () async {
+      final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
+      String btnText = isToUpdate ? 'Update' : 'Download';
+      GestureTapCallback onPressed = () async {
         final Uri url = Uri.parse('https://rustdesk.com/download');
         await launchUrl(url);
-      }, closeButton: true);
+      };
+      if (isToUpdate) {
+        onPressed = () {
+          handleUpdate(updateUrl);
+        };
+      }
+      return buildInstallCard(
+          "Status",
+          "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
+          btnText,
+          onPressed,
+          closeButton: true,
+          help: isToUpdate ? 'Changelog' : null,
+          link: isToUpdate
+              ? 'https://github.com/rustdesk/rustdesk/releases/tag/${bind.mainGetNewVersion()}'
+              : null);
     }
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
@@ -674,20 +729,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
-    if (!bind.isCustomClient()) {
-      platformFFI.registerEventHandler(
-          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish,
-          (Map<String, dynamic> evt) async {
-        if (evt['url'] is String) {
-          setState(() {
-            updateUrl = evt['url'];
-          });
-        }
-      });
-      Timer(const Duration(seconds: 1), () async {
-        bind.mainGetSoftwareUpdateUrl();
-      });
-    }
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
       final error = await bind.mainGetError();
@@ -756,11 +797,23 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           'scaleFactor': screen.scaleFactor,
         };
 
+    bool isChattyMethod(String methodName) {
+      switch (methodName) {
+        case kWindowBumpMouse: return true;
+      }
+
+      return false;
+    }
+
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
-      debugPrint(
+      if (!isChattyMethod(call.method)) {
+        debugPrint(
           "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+      }
       if (call.method == kWindowMainWindowOnTop) {
         windowOnTop(null);
+      } else if (call.method == kWindowRefreshCurrentUser) {
+        gFFI.userModel.refreshCurrentUser();
       } else if (call.method == kWindowGetWindowInfo) {
         final screen = (await window_size.getWindowInfo()).screen;
         if (screen == null) {
@@ -781,12 +834,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         await connectMainDesktop(
           call.arguments['id'],
           isFileTransfer: call.arguments['isFileTransfer'],
+          isViewCamera: call.arguments['isViewCamera'],
+          isTerminal: call.arguments['isTerminal'],
           isTcpTunneling: call.arguments['isTcpTunneling'],
           isRDP: call.arguments['isRDP'],
           password: call.arguments['password'],
           forceRelay: call.arguments['forceRelay'],
           connToken: call.arguments['connToken'],
         );
+      } else if (call.method == kWindowBumpMouse) {
+        return RdPlatformChannel.instance.bumpMouse(
+          dx: call.arguments['dx'],
+          dy: call.arguments['dy']);
       } else if (call.method == kWindowEventMoveTabToNewWindow) {
         final args = call.arguments.split(',');
         int? windowId;
@@ -795,9 +854,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         } catch (e) {
           debugPrint("Failed to parse window id '${call.arguments}': $e");
         }
-        if (windowId != null) {
+        WindowType? windowType;
+        try {
+          windowType = WindowType.values.byName(args[3]);
+        } catch (e) {
+          debugPrint("Failed to parse window type '${call.arguments}': $e");
+        }
+        if (windowId != null && windowType != null) {
           await rustDeskWinManager.moveTabToNewWindow(
-              windowId, args[1], args[2]);
+              windowId, args[1], args[2], windowType);
         }
       } else if (call.method == kWindowEventOpenMonitorSession) {
         final args = jsonDecode(call.arguments);
@@ -805,9 +870,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         final peerId = args['peer_id'] as String;
         final display = args['display'] as int;
         final displayCount = args['display_count'] as int;
+        final windowType = args['window_type'] as int;
         final screenRect = parseParamScreenRect(args);
         await rustDeskWinManager.openMonitorSession(
-            windowId, peerId, display, displayCount, screenRect);
+            windowId, peerId, display, displayCount, screenRect, windowType);
       } else if (call.method == kWindowEventRemoteWindowCoords) {
         final windowId = int.tryParse(call.arguments);
         if (windowId != null) {
@@ -823,6 +889,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         _updateWindowSize();
       });
     }
+    WidgetsBinding.instance.addObserver(this);
   }
 
   _updateWindowSize() {
@@ -844,11 +911,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     _uniLinksSubscription?.cancel();
     Get.delete<RxBool>(tag: 'stop-service');
     _updateTimer?.cancel();
-    if (!bind.isCustomClient()) {
-      platformFFI.unregisterEventHandler(
-          kCheckSoftwareUpdateFinish, kCheckSoftwareUpdateFinish);
-    }
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      shouldBeBlocked(_block, canBeBlocked);
+    }
   }
 
   Widget buildPluginEntry() {
@@ -868,12 +940,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 }
 
 void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
-  final pw = await bind.mainGetPermanentPassword();
-  final p0 = TextEditingController(text: pw);
-  final p1 = TextEditingController(text: pw);
+  final p0 = TextEditingController(text: "");
+  final p1 = TextEditingController(text: "");
   var errMsg0 = "";
   var errMsg1 = "";
-  final RxString rxPass = pw.trim().obs;
+  final localPasswordSet =
+      (await bind.mainGetCommon(key: "local-permanent-password-set")) == "true";
+  final permanentPasswordSet =
+      (await bind.mainGetCommon(key: "permanent-password-set")) == "true";
+  final presetPassword = permanentPasswordSet && !localPasswordSet;
+  var canSubmit = false;
+  final RxString rxPass = "".obs;
   final rules = [
     DigitValidationRule(),
     UppercaseValidationRule(),
@@ -882,9 +959,21 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     MinCharactersValidationRule(8),
   ];
   final maxLength = bind.mainMaxEncryptLen();
+  final statusTip = localPasswordSet
+      ? translate('password-hidden-tip')
+      : (presetPassword ? translate('preset-password-in-use-tip') : '');
+  final showStatusTipOnMobile =
+      statusTip.isNotEmpty && !isDesktop && !isWebDesktop;
 
   gFFI.dialogManager.show((setState, close, context) {
-    submit() {
+    updateCanSubmit() {
+      canSubmit = p0.text.trim().isNotEmpty || p1.text.trim().isNotEmpty;
+    }
+
+    submit() async {
+      if (!canSubmit) {
+        return;
+      }
       setState(() {
         errMsg0 = "";
         errMsg1 = "";
@@ -907,7 +996,13 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         });
         return;
       }
-      bind.mainSetPermanentPassword(password: pass);
+      final ok = await bind.mainSetPermanentPasswordWithResult(password: pass);
+      if (!ok) {
+        setState(() {
+          errMsg0 = '${translate('Prompt')}: ${translate("Failed")}';
+        });
+        return;
+      }
       if (pass.isNotEmpty) {
         notEmptyCallback?.call();
       }
@@ -915,14 +1010,20 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
     }
 
     return CustomAlertDialog(
-      title: Text(translate("Set Password")),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.key, color: MyTheme.accent),
+          Text(translate("Set Password")).paddingOnly(left: 10),
+        ],
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(
-              height: 8.0,
+            SizedBox(
+              height: showStatusTipOnMobile ? 0.0 : 6.0,
             ),
             Row(
               children: [
@@ -938,10 +1039,11 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                       rxPass.value = value.trim();
                       setState(() {
                         errMsg0 = '';
+                        updateCanSubmit();
                       });
                     },
                     maxLength: maxLength,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ),
@@ -949,9 +1051,9 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
               children: [
                 Expanded(child: PasswordStrengthIndicator(password: rxPass)),
               ],
-            ).marginSymmetric(vertical: 8),
-            const SizedBox(
-              height: 8.0,
+            ).marginOnly(top: 2, bottom: showStatusTipOnMobile ? 2 : 8),
+            SizedBox(
+              height: showStatusTipOnMobile ? 0.0 : 8.0,
             ),
             Row(
               children: [
@@ -965,18 +1067,31 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
                     onChanged: (value) {
                       setState(() {
                         errMsg1 = '';
+                        updateCanSubmit();
                       });
                     },
                     maxLength: maxLength,
-                  ),
+                  ).workaroundFreezeLinuxMint(),
                 ),
               ],
             ),
-            const SizedBox(
-              height: 8.0,
+            if (statusTip.isNotEmpty)
+              Row(
+                children: [
+                  Icon(Icons.info, color: Colors.amber, size: 18)
+                      .marginOnly(right: 6),
+                  Expanded(
+                      child: Text(
+                    statusTip,
+                    style: const TextStyle(fontSize: 13, height: 1.1),
+                  ))
+                ],
+              ).marginOnly(top: 6, bottom: 2),
+            SizedBox(
+              height: showStatusTipOnMobile ? 0.0 : 8.0,
             ),
             Obx(() => Wrap(
-                  runSpacing: 8,
+                  runSpacing: showStatusTipOnMobile ? 2.0 : 8.0,
                   spacing: 4,
                   children: rules.map((e) {
                     var checked = e.validate(rxPass.value.trim());
@@ -996,11 +1111,67 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
           ],
         ),
       ),
-      actions: [
-        dialogButton("Cancel", onPressed: close, isOutline: true),
-        dialogButton("OK", onPressed: submit),
-      ],
-      onSubmit: submit,
+      actions: (() {
+        final cancelButton = dialogButton(
+          "Cancel",
+          icon: Icon(Icons.close_rounded),
+          onPressed: close,
+          isOutline: true,
+        );
+        final removeButton = dialogButton(
+          "Remove",
+          icon: Icon(Icons.delete_outline_rounded),
+          onPressed: () async {
+            setState(() {
+              errMsg0 = "";
+              errMsg1 = "";
+            });
+            final ok =
+                await bind.mainSetPermanentPasswordWithResult(password: "");
+            if (!ok) {
+              setState(() {
+                errMsg0 = '${translate('Prompt')}: ${translate("Failed")}';
+              });
+              return;
+            }
+            close();
+          },
+          buttonStyle: ButtonStyle(
+              backgroundColor: MaterialStatePropertyAll(Colors.red)),
+        );
+        final okButton = dialogButton(
+          "OK",
+          icon: Icon(Icons.done_rounded),
+          onPressed: canSubmit ? submit : null,
+        );
+        if (!isDesktop && !isWebDesktop && localPasswordSet) {
+          return [
+            Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    cancelButton,
+                    const SizedBox(width: 4),
+                    removeButton,
+                    const SizedBox(width: 4),
+                    okButton,
+                  ],
+                ),
+              ),
+            ),
+          ];
+        }
+        return [
+          cancelButton,
+          if (localPasswordSet) removeButton,
+          okButton,
+        ];
+      })(),
+      onSubmit: canSubmit ? submit : null,
       onCancel: close,
     );
   });

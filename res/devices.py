@@ -12,6 +12,7 @@ def view(
     device_name=None,
     user_name=None,
     group_name=None,
+    device_group_name=None,
     offline_days=None,
 ):
     headers = {"Authorization": f"Bearer {token}"}
@@ -21,6 +22,7 @@ def view(
         "device_name": device_name,
         "user_name": user_name,
         "group_name": group_name,
+        "device_group_name": device_group_name,
     }
 
     params = {
@@ -32,12 +34,20 @@ def view(
 
     devices = []
 
-    current = 1
+    current = 0
 
     while True:
+        current += 1
         params["current"] = current
         response = requests.get(f"{url}/api/devices", headers=headers, params=params)
+        if response.status_code != 200:
+            print(f"Error: HTTP {response.status_code} - {response.text}")
+            exit(1)
+        
         response_json = response.json()
+        if "error" in response_json:
+            print(f"Error: {response_json['error']}")
+            exit(1)
 
         data = response_json.get("data", [])
 
@@ -52,22 +62,25 @@ def view(
                 devices.append(device)
 
         total = response_json.get("total", 0)
-        current += pageSize
-        if len(data) < pageSize or current > total:
+        if len(data) < pageSize or current * pageSize >= total:
             break
 
     return devices
 
 
 def check(response):
-    if response.status_code == 200:
-        try:
-            response_json = response.json()
-            return response_json
-        except ValueError:
-            return response.text or "Success"
-    else:
-        return "Failed", response.status_code, response.text
+    if response.status_code != 200:
+        print(f"Error: HTTP {response.status_code} - {response.text}")
+        exit(1)
+    
+    try:
+        response_json = response.json()
+        if "error" in response_json:
+            print(f"Error: {response_json['error']}")
+            exit(1)
+        return response_json
+    except ValueError:
+        return response.text or "Success"
 
 
 def disable(url, token, guid, id):
@@ -93,8 +106,17 @@ def delete(url, token, guid, id):
 
 def assign(url, token, guid, id, type, value):
     print("assign", id, type, value)
-    if type != "ab" and type != "strategy_name" and type != "user_name":
-        print("Invalid type, it must be 'ab', 'strategy_name' or 'user_name'")
+    valid_types = [
+        "ab",
+        "strategy_name",
+        "user_name",
+        "device_group_name",
+        "note",
+        "device_username",
+        "device_name",
+    ]
+    if type not in valid_types:
+        print(f"Invalid type, it must be one of: {', '.join(valid_types)}")
         return
     data = {"type": type, "value": value}
     headers = {"Authorization": f"Bearer {token}"}
@@ -118,10 +140,11 @@ def main():
     parser.add_argument("--id", help="Device ID")
     parser.add_argument("--device_name", help="Device name")
     parser.add_argument("--user_name", help="User name")
-    parser.add_argument("--group_name", help="Group name")
+    parser.add_argument("--group_name", help="User group name")
+    parser.add_argument("--device_group_name", help="Device group name")
     parser.add_argument(
         "--assign_to",
-        help="<type>=<value>, e.g. user_name=mike, strategy_name=test, ab=ab1, ab=ab1,tag1",
+        help="<type>=<value>, e.g. user_name=mike, strategy_name=test, device_group_name=group1, note=note1, device_username=username1, device_name=name1, ab=ab1, ab=ab1,tag1,alias1,password1,note1"
     )
     parser.add_argument(
         "--offline_days", type=int, help="Offline duration in days, e.g., 7"
@@ -138,34 +161,44 @@ def main():
         args.device_name,
         args.user_name,
         args.group_name,
+        args.device_group_name,
         args.offline_days,
     )
 
     if args.command == "view":
         for device in devices:
             print(device)
-    elif args.command == "disable":
-        for device in devices:
-            response = disable(args.url, args.token, device["guid"], device["id"])
-            print(response)
-    elif args.command == "enable":
-        for device in devices:
-            response = enable(args.url, args.token, device["guid"], device["id"])
-            print(response)
-    elif args.command == "delete":
-        for device in devices:
-            response = delete(args.url, args.token, device["guid"], device["id"])
-            print(response)
-    elif args.command == "assign":
-        if "=" not in args.assign_to:
-            print("Invalid assign_to format, it must be <type>=<value>")
-            return
-        type, value = args.assign_to.split("=", 1)
-        for device in devices:
-            response = assign(
-                args.url, args.token, device["guid"], device["id"], type, value
-            )
-            print(response)
+    elif args.command in ["disable", "enable", "delete", "assign"]:
+        # Check if we need user confirmation for multiple devices
+        if len(devices) > 1:
+            print(f"Found {len(devices)} devices. Do you want to proceed with {args.command} operation on the devices? (Y/N)")
+            confirmation = input("Type 'Y' to confirm: ").strip()
+            if confirmation.upper() != 'Y':
+                print("Operation cancelled.")
+                return
+        
+        if args.command == "disable":
+            for device in devices:
+                response = disable(args.url, args.token, device["guid"], device["id"])
+                print(response)
+        elif args.command == "enable":
+            for device in devices:
+                response = enable(args.url, args.token, device["guid"], device["id"])
+                print(response)
+        elif args.command == "delete":
+            for device in devices:
+                response = delete(args.url, args.token, device["guid"], device["id"])
+                print(response)
+        elif args.command == "assign":
+            if "=" not in args.assign_to:
+                print("Invalid assign_to format, it must be <type>=<value>")
+                return
+            type, value = args.assign_to.split("=", 1)
+            for device in devices:
+                response = assign(
+                    args.url, args.token, device["guid"], device["id"], type, value
+                )
+                print(response)
 
 
 if __name__ == "__main__":

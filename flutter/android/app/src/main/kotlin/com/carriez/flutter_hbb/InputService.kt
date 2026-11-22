@@ -19,6 +19,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.ViewGroup.LayoutParams
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.KeyEvent as KeyEventAndroid
+import android.view.ViewConfiguration
 import android.graphics.Rect
 import android.media.AudioManager
 import android.accessibilityservice.AccessibilityServiceInfo
@@ -34,10 +35,15 @@ import hbb.MessageOuterClass.KeyEvent
 import hbb.MessageOuterClass.KeyboardMode
 import hbb.KeyEventConverter
 
-const val LIFT_DOWN = 9
-const val LIFT_MOVE = 8
-const val LIFT_UP = 10
+// const val BUTTON_UP = 2
+// const val BUTTON_BACK = 0x08
+
+const val LEFT_DOWN = 9
+const val LEFT_MOVE = 8
+const val LEFT_UP = 10
 const val RIGHT_UP = 18
+// (BUTTON_BACK << 3) | BUTTON_UP
+const val BACK_UP = 66
 const val WHEEL_BUTTON_DOWN = 33
 const val WHEEL_BUTTON_UP = 34
 const val WHEEL_DOWN = 523331
@@ -65,17 +71,23 @@ class InputService : AccessibilityService() {
     private val logTag = "input service"
     private var leftIsDown = false
     private var touchPath = Path()
+    private var stroke: GestureDescription.StrokeDescription? = null
     private var lastTouchGestureStartTime = 0L
     private var mouseX = 0
     private var mouseY = 0
     private var timer = Timer()
     private var recentActionTask: TimerTask? = null
+    // 100(tap timeout) + 400(long press timeout)
+    private val longPressDuration = ViewConfiguration.getTapTimeout().toLong() + ViewConfiguration.getLongPressTimeout().toLong()
 
     private val wheelActionsQueue = LinkedList<GestureDescription>()
     private var isWheelActionsPolling = false
     private var isWaitingLongPress = false
 
     private var fakeEditTextForTextStateCalculation: EditText? = null
+
+    private var lastX = 0
+    private var lastY = 0
 
     private val volumeController: VolumeController by lazy { VolumeController(applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager) }
 
@@ -84,7 +96,7 @@ class InputService : AccessibilityService() {
         val x = max(0, _x)
         val y = max(0, _y)
 
-        if (mask == 0 || mask == LIFT_MOVE) {
+        if (mask == 0 || mask == LEFT_MOVE) {
             val oldX = mouseX
             val oldY = mouseY
             mouseX = x * SCREEN_INFO.scale
@@ -98,31 +110,30 @@ class InputService : AccessibilityService() {
             }
         }
 
-        // left button down ,was up
-        if (mask == LIFT_DOWN) {
+        // left button down, was up
+        if (mask == LEFT_DOWN) {
             isWaitingLongPress = true
             timer.schedule(object : TimerTask() {
                 override fun run() {
                     if (isWaitingLongPress) {
                         isWaitingLongPress = false
-                        leftIsDown = false
-                        endGesture(mouseX, mouseY)
+                        continueGesture(mouseX, mouseY)
                     }
                 }
-            }, LONG_TAP_DELAY * 4)
+            }, longPressDuration)
 
             leftIsDown = true
             startGesture(mouseX, mouseY)
             return
         }
 
-        // left down ,was down
+        // left down, was down
         if (leftIsDown) {
             continueGesture(mouseX, mouseY)
         }
 
-        // left up ,was down
-        if (mask == LIFT_UP) {
+        // left up, was down
+        if (mask == LEFT_UP) {
             if (leftIsDown) {
                 leftIsDown = false
                 isWaitingLongPress = false
@@ -132,6 +143,11 @@ class InputService : AccessibilityService() {
         }
 
         if (mask == RIGHT_UP) {
+            longPress(mouseX, mouseY)
+            return
+        }
+
+        if (mask == BACK_UP) {
             performGlobalAction(GLOBAL_ACTION_BACK)
             return
         }
@@ -241,18 +257,100 @@ class InputService : AccessibilityService() {
         }
     }
 
-    private fun startGesture(x: Int, y: Int) {
-        touchPath = Path()
-        touchPath.moveTo(x.toFloat(), y.toFloat())
-        lastTouchGestureStartTime = System.currentTimeMillis()
-    }
-
-    private fun continueGesture(x: Int, y: Int) {
-        touchPath.lineTo(x.toFloat(), y.toFloat())
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun performClick(x: Int, y: Int, duration: Long) {
+        val path = Path()
+        path.moveTo(x.toFloat(), y.toFloat())
+        try {
+            val longPressStroke = GestureDescription.StrokeDescription(path, 0, duration)
+            val builder = GestureDescription.Builder()
+            builder.addStroke(longPressStroke)
+            Log.d(logTag, "performClick x:$x y:$y time:$duration")
+            dispatchGesture(builder.build(), null, null)
+        } catch (e: Exception) {
+            Log.e(logTag, "performClick, error:$e")
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
-    private fun endGesture(x: Int, y: Int) {
+    private fun longPress(x: Int, y: Int) {
+        performClick(x, y, longPressDuration)
+    }
+
+    private fun startGesture(x: Int, y: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            touchPath.reset()
+        } else {
+            touchPath = Path()
+        }
+        touchPath.moveTo(x.toFloat(), y.toFloat())
+        lastTouchGestureStartTime = System.currentTimeMillis()
+        lastX = x
+        lastY = y
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun doDispatchGesture(x: Int, y: Int, willContinue: Boolean) {
+        touchPath.lineTo(x.toFloat(), y.toFloat())
+        var duration = System.currentTimeMillis() - lastTouchGestureStartTime
+        if (duration <= 0) {
+            duration = 1
+        }
+        try {
+            if (stroke == null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    stroke = GestureDescription.StrokeDescription(
+                        touchPath,
+                        0,
+                        duration,
+                        willContinue
+                    )
+                } else {
+                    stroke = GestureDescription.StrokeDescription(
+                        touchPath,
+                        0,
+                        duration
+                    )
+                }
+            } else {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    stroke = stroke?.continueStroke(touchPath, 0, duration, willContinue)
+                } else {
+                    stroke = null
+                    stroke = GestureDescription.StrokeDescription(
+                        touchPath,
+                        0,
+                        duration
+                    )
+                }
+            }
+            stroke?.let {
+                val builder = GestureDescription.Builder()
+                builder.addStroke(it)
+                Log.d(logTag, "doDispatchGesture x:$x y:$y time:$duration")
+                dispatchGesture(builder.build(), null, null)
+            }
+        } catch (e: Exception) {
+            Log.e(logTag, "doDispatchGesture, willContinue:$willContinue, error:$e")
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun continueGesture(x: Int, y: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            doDispatchGesture(x, y, true)
+            touchPath.reset()
+            touchPath.moveTo(x.toFloat(), y.toFloat())
+            lastTouchGestureStartTime = System.currentTimeMillis()
+            lastX = x
+            lastY = y
+        } else {
+            touchPath.lineTo(x.toFloat(), y.toFloat())
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun endGestureBelowO(x: Int, y: Int) {
         try {
             touchPath.lineTo(x.toFloat(), y.toFloat())
             var duration = System.currentTimeMillis() - lastTouchGestureStartTime
@@ -270,6 +368,17 @@ class InputService : AccessibilityService() {
             dispatchGesture(builder.build(), null, null)
         } catch (e: Exception) {
             Log.e(logTag, "endGesture error:$e")
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun endGesture(x: Int, y: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            doDispatchGesture(x, y, false)
+            touchPath.reset()
+            stroke = null
+        } else {
+            endGestureBelowO(x, y)
         }
     }
 

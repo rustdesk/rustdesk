@@ -7,7 +7,6 @@ use winapi::{
     shared::{
         dxgi::*,
         dxgi1_2::*,
-        dxgiformat::DXGI_FORMAT_B8G8R8A8_UNORM,
         dxgitype::*,
         minwindef::{DWORD, FALSE, TRUE, UINT},
         ntdef::LONG,
@@ -118,6 +117,7 @@ impl Capturer {
                 } else {
                     hres
                 }
+
                 // NVFBC(NVIDIA Capture SDK) which xpra used already deprecated, https://developer.nvidia.com/capture-sdk
 
                 // also try high version DXGI for better performance, e.g.
@@ -129,6 +129,8 @@ impl Capturer {
                 // can help us update screen incrementally
 
                 /* // not supported on my PC, try in the future
+                use winapi::shared::dxgiformat::DXGI_FORMAT_B8G8R8A8_UNORM;
+
                 let format : Vec<DXGI_FORMAT> = vec![DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_420_OPAQUE];
                 (*display.inner).DuplicateOutput1(
                     device as *mut _,
@@ -394,7 +396,7 @@ impl Capturer {
         } else {
             let width = self.width;
             let height = self.height;
-            Ok(Frame::PixelBuffer(PixelBuffer::new(
+            Ok(Frame::PixelBuffer(PixelBuffer::with_BGRA(
                 self.get_pixelbuffer(timeout)?,
                 width,
                 height,

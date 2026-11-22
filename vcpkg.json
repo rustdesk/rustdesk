@@ -25,10 +25,6 @@
       "platform": "android"
     },
     {
-      "name": "oboe-wrapper",
-      "platform": "android"
-    },
-    {
       "name": "opus",
       "host": true
     },
@@ -51,6 +47,16 @@
     {
       "name": "libyuv",
       "host": false
+    },
+    {
+      "name": "mfx-dispatch",
+      "host": true,
+      "platform": "((x86 | x64) & (android | linux)) | (windows & !uwp)"
+    },
+    {
+      "name": "mfx-dispatch",
+      "host": false,
+      "platform": "((x86 | x64) & (android | linux)) | (windows & !uwp)"
     },
     {
       "name": "ffmpeg",
@@ -80,15 +86,20 @@
   "vcpkg-configuration": {
     "default-registry": {
       "kind": "builtin",
-      "baseline": "f7423ee180c4b7f40d43402c2feb3859161ef625"
+      "baseline": "120deac3062162151622ca4860575a33844ba10b"
     },
     "overlay-ports": [
       "./res/vcpkg"
     ]
   },
   "overrides": [
-    { "name": "ffnvcodec", "version": "12.1.14.0" },
-    { "name": "amd-amf", "version": "1.4.29" },
-    { "name": "mfx-dispatch", "version": "1.35.1" }
+    {
+      "name": "ffnvcodec",
+      "version": "12.1.14.0"
+    },
+    {
+      "name": "amd-amf",
+      "version": "1.4.35"
+    }
   ]
 }

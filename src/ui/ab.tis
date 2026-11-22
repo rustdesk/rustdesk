@@ -543,15 +543,15 @@ class MultipleSessions: Reactor.Component {
                         <span class={!type ? 'active' : 'inactive'}>{translate('Recent sessions')}</span>
                         <span #fav class={type == "fav" ? 'active' : 'inactive'}>{translate('Favorites')}</span>
                         {handler.is_installed() && <span #lan class={type == "lan" ? 'active' : 'inactive'}>{translate('Discovered')}</span>}
-                        <span #ab class={type == "ab" ? 'active' : 'inactive'}>{translate('Address book')}</span>
+                        {!disable_account && !disable_ab && <span #ab class={type == "ab" ? 'active' : 'inactive'}>{translate('Address book')}</span>}
                     </div>
-                    {!this.hidden && <SearchBar type={type} />}
-                    {!this.hidden && <SessionStyle type={type} />}
+                    {!this.hidden && !(disable_account && type == "ab") && <SearchBar type={type} />}
+                    {!this.hidden && !(disable_account && type == "ab") && <SessionStyle type={type} />}
                 </div>
                 {!this.hidden && 
                 ((type == "fav" && <Favorites />) ||
                 (type == "lan" && handler.is_installed() && <LanPeers />) ||
-                (type == "ab" && <AddressBook />) ||
+                (type == "ab" && !disable_account && !disable_ab && <AddressBook />) ||
                 <SessionList sessions={handler.get_recent_sessions()} />)}
             </div>;
     }
