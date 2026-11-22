@@ -10,6 +10,10 @@ jobs:
   run-flutter-nightly-build:
     uses: ./.github/workflows/flutter-build.yml
     secrets: inherit
+    # Required by the called workflow's metadata job (`contents: write`). Without it the run
+    # fails to start on a repository whose default token permission is read-only.
+    permissions:
+      contents: write
     with:
       upload-artifact: true
       upload-tag: "nightly"

@@ -20,5 +20,11 @@ on:
 jobs:
   run-ci:
     uses: ./.github/workflows/flutter-build.yml
+    # One of the called workflow's jobs publishes release assets and therefore asks for
+    # `contents: write`. A called workflow may not exceed the caller's token permissions, and
+    # this repository defaults to read-only, so without this the whole run fails to start
+    # (conclusion: startup_failure) instead of running any job.
+    permissions:
+      contents: write
     with:
       upload-artifact: false
