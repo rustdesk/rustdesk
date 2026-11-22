@@ -1207,7 +1207,10 @@ jobs:
   publish-signed-update-metadata:
     needs: [build-for-windows-flutter, build-for-windows-sciter, build-for-macOS]
     runs-on: ubuntu-22.04
-    if: ${{ inputs.upload-artifact && inputs.publish-update-metadata && github.repository == 'rustdesk/rustdesk' }}
+    # NOTE: no `github.repository == 'rustdesk/rustdesk'` guard here. This fork publishes its own
+    # update channel, so pinning the job to the upstream repository would silently skip signing
+    # `rustdesk-update.json` and leave every client unable to update. Callers decide via the input.
+    if: ${{ inputs.upload-artifact && inputs.publish-update-metadata }}
     concurrency:
       group: signed-update-${{ inputs.upload-tag }}
       cancel-in-progress: false

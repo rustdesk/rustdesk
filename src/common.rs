@@ -1107,10 +1107,15 @@ pub fn update_asset_url_prefix(release_id: &str) -> String {
     )
 }
 
-/// GitHub API endpoint returning the newest published release of the update source.
-pub fn update_latest_release_api_url() -> String {
+/// GitHub API endpoint listing the releases of the update source.
+///
+/// The list is used instead of `/releases/latest` on purpose: that endpoint reports only the
+/// newest release that is *not* flagged as a prerelease, and this project publishes every build
+/// with `prerelease: true`. Asking for `/releases/latest` therefore yields 404 and no client
+/// would ever see an update.
+pub fn update_releases_api_url() -> String {
     format!(
-        "https://api.github.com/repos/{}/releases/latest",
+        "https://api.github.com/repos/{}/releases?per_page=100",
         update_repo_slug()
     )
 }
@@ -1243,7 +1248,7 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
 }
 
 async fn fetch_latest_release_tag() -> ResultType<String> {
-    let url = update_latest_release_api_url();
+    let url = update_releases_api_url();
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(&url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
@@ -1293,16 +1298,36 @@ async fn fetch_latest_release_tag() -> ResultType<String> {
     }?;
     let json: Value = serde_json::from_slice(&response_bytes)
         .with_context(|| format!("Invalid update check response from {}", url))?;
-    let release_id = json
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .trim()
-        .to_owned();
-    if release_id.is_empty() {
-        bail!("Update source {} returned no release tag", url);
-    }
-    Ok(release_id)
+    newest_stable_release_id(&json)
+        .with_context(|| format!("Invalid update check response from {}", url))?
+        .ok_or_else(|| anyhow!("Update source {} has no stable release", url))
+}
+
+/// Pick the newest stable release tag from a `/releases` payload.
+///
+/// Drafts are skipped because they are not published, and pre-releases are skipped because their
+/// tag is not a stable `x.y.z` version. The `prerelease` flag itself is deliberately ignored: this
+/// project flags even its normal builds that way, so honouring it would hide every release.
+fn newest_stable_release_id(payload: &Value) -> ResultType<Option<String>> {
+    let releases = payload
+        .as_array()
+        .ok_or_else(|| anyhow!("expected a JSON array of releases"))?;
+    Ok(releases
+        .iter()
+        .filter(|release| {
+            !release
+                .get("draft")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        })
+        .filter_map(|release| release.get("tag_name").and_then(|v| v.as_str()))
+        .filter_map(|tag| {
+            display_version_from_release_id(tag)
+                .ok()
+                .map(|version| (get_version_number(&version), tag.trim().to_owned()))
+        })
+        .max_by_key(|(version_number, _)| *version_number)
+        .map(|(_, release_id)| release_id))
 }
 
 #[inline]
@@ -3218,8 +3243,31 @@ mod tests {
             release_id_from_update_url(&format!("{update_url}/")).unwrap(),
             "v1.4.6"
         );
-        assert!(update_latest_release_api_url().ends_with("/releases/latest"));
+        assert!(update_releases_api_url().ends_with("/releases?per_page=100"));
         assert!(update_asset_url_prefix("v1.4.6").ends_with("/releases/download/v1.4.6/"));
+    }
+
+    #[test]
+    fn picks_newest_stable_release_from_releases_payload() {
+        let payload = json!([
+            // Published as prerelease, which must not hide it: the whole project does this.
+            {"tag_name": "v1.5.2", "prerelease": true, "draft": false},
+            {"tag_name": "v1.4.10", "prerelease": true, "draft": false},
+            {"tag_name": "v1.5.3-rc1", "prerelease": true, "draft": false},
+            {"tag_name": "nightly", "prerelease": true, "draft": false},
+            {"tag_name": "v9.9.9", "prerelease": false, "draft": true},
+        ]);
+        assert_eq!(
+            newest_stable_release_id(&payload).unwrap().as_deref(),
+            Some("v1.5.2")
+        );
+
+        // Nothing stable published yet.
+        let payload = json!([{"tag_name": "nightly", "draft": false}]);
+        assert_eq!(newest_stable_release_id(&payload).unwrap(), None);
+
+        // Not a release list at all.
+        assert!(newest_stable_release_id(&json!({"message": "Not Found"})).is_err());
     }
 
     #[test]
