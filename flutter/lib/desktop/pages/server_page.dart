@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/widgets/cm_window_dock.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
@@ -52,12 +53,18 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   @override
   void initState() {
     windowManager.addListener(this);
+    if (cmWindowDock.enabled) {
+      gFFI.serverModel.addListener(cmWindowDock.syncExpandedHeight);
+    }
     super.initState();
   }
 
   @override
   void dispose() {
     windowManager.removeListener(this);
+    if (cmWindowDock.enabled) {
+      gFFI.serverModel.removeListener(cmWindowDock.syncExpandedHeight);
+    }
     super.dispose();
   }
 
@@ -97,6 +104,20 @@ class _DesktopServerPageState extends State<DesktopServerPage>
             backgroundColor: Theme.of(context).colorScheme.background,
             body: ConnectionManager(),
           );
+          if (cmWindowDock.enabled || cmWindowDock.value) {
+            final borderRadius = BorderRadius.circular(12);
+            return CmWindowDockView(
+              child: Container(
+                padding: const EdgeInsets.all(1),
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(borderRadius: borderRadius),
+                foregroundDecoration: BoxDecoration(
+                    borderRadius: borderRadius,
+                    border: Border.all(color: MyTheme.color(context).border!)),
+                child: body,
+              ),
+            );
+          }
           return isLinux
               ? buildVirtualWindowFrame(context, body)
               : workaroundWindowBorder(
@@ -200,13 +221,20 @@ class ConnectionManagerState extends State<ConnectionManager>
             child: DesktopTab(
               showTitle: false,
               showMaximize: false,
-              showMinimize: true,
+              showMinimize: !cmWindowDock.enabled,
               showClose: true,
               onWindowCloseButton: handleWindowCloseButton,
               controller: serverModel.tabController,
               selectedBorderColor: MyTheme.accent,
               maxLabelWidth: 100,
-              tail: null, //buildScrollJumper(),
+              tail: cmWindowDock.enabled && isMacOS
+                  ? ActionIcon(
+                      message: 'Close',
+                      icon: IconFont.close,
+                      isClose: true,
+                      onTap: handleWindowCloseButton,
+                    )
+                  : null,
               tabBuilder: (key, icon, label, themeConf) {
                 final client = serverModel.clients
                     .firstWhereOrNull((client) => client.id.toString() == key);
@@ -377,7 +405,11 @@ Widget buildConnectionCard(Client client) {
         Expanded(
           child: Align(
             alignment: Alignment.bottomCenter,
-            child: _CmControlPanel(client: client),
+            child: cmWindowDock.enabled
+                ? SingleChildScrollView(
+                    reverse: !client.incomingVoiceCall,
+                    child: _CmControlPanel(client: client))
+                : _CmControlPanel(client: client),
           ),
         )
       ],
@@ -455,6 +487,7 @@ class _CmHeaderState extends State<_CmHeader>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final compact = cmWindowDock.enabled;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10.0),
@@ -467,10 +500,10 @@ class _CmHeaderState extends State<_CmHeader>
           ],
         ),
       ),
-      margin: EdgeInsets.symmetric(horizontal: 5.0, vertical: 10.0),
+      margin: EdgeInsets.symmetric(horizontal: 5.0, vertical: compact ? 6 : 10),
       padding: EdgeInsets.only(
-        top: 10.0,
-        bottom: 10.0,
+        top: compact ? 6 : 10,
+        bottom: compact ? 6 : 10,
         left: 10.0,
         right: 5.0,
       ),
@@ -489,7 +522,7 @@ class _CmHeaderState extends State<_CmHeader>
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 20,
+                    fontSize: compact ? 16 : 20,
                     overflow: TextOverflow.ellipsis,
                   ),
                   maxLines: 1,
@@ -497,7 +530,8 @@ class _CmHeaderState extends State<_CmHeader>
                 FittedBox(
                   child: Text(
                     "(${client.peerId})",
-                    style: TextStyle(color: Colors.white, fontSize: 14),
+                    style: TextStyle(
+                        color: Colors.white, fontSize: compact ? 12 : 14),
                   ),
                 ),
                 if (client.type_() == ClientType.terminal)
@@ -528,7 +562,7 @@ class _CmHeaderState extends State<_CmHeader>
                       style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ),
-                SizedBox(height: 10.0),
+                SizedBox(height: compact ? 4 : 10),
                 FittedBox(
                     child: Row(
                   children: [
@@ -585,7 +619,7 @@ class _CmHeaderState extends State<_CmHeader>
   Widget _buildClientAvatar() {
     return buildAvatarWidget(
           avatar: client.avatar,
-          size: 70,
+          size: cmWindowDock.enabled ? 44 : 70,
           borderRadius: 15,
           fallback: _buildInitialAvatar(),
         ) ??
@@ -594,8 +628,8 @@ class _CmHeaderState extends State<_CmHeader>
 
   Widget _buildInitialAvatar() {
     return Container(
-      width: 70,
-      height: 70,
+      width: cmWindowDock.enabled ? 44 : 70,
+      height: cmWindowDock.enabled ? 44 : 70,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: str2color(client.name),
@@ -606,7 +640,7 @@ class _CmHeaderState extends State<_CmHeader>
         style: TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,
-          fontSize: 55,
+          fontSize: cmWindowDock.enabled ? 32 : 55,
         ),
       ),
     );
@@ -637,7 +671,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
               : Colors.grey[700],
           borderRadius: BorderRadius.circular(10.0),
         ),
-        padding: EdgeInsets.all(8.0),
+        padding: EdgeInsets.all(cmWindowDock.enabled ? 6 : 8),
         child: InkWell(
           onTap: canModify
               ? () =>
@@ -661,15 +695,16 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = cmWindowDock.enabled;
     final crossAxisCount = 4;
-    final spacing = 10.0;
+    final spacing = compact ? 6.0 : 10.0;
     final canModifyPermission =
         bind.mainGetBuildinOption(key: kOptionEnablePermChangeInAcceptWindow) !=
             'N';
     return Container(
       width: double.infinity,
-      height: 160.0,
-      margin: EdgeInsets.all(5.0),
+      height: compact ? (client.type_() == ClientType.camera ? 72 : 112) : 160,
+      margin: EdgeInsets.all(compact ? 3 : 5),
       padding: EdgeInsets.all(5.0),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10.0),
@@ -688,12 +723,14 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
         children: [
           Text(
             translate("Permissions"),
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                fontSize: compact ? 14 : 16, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
-          ).marginOnly(left: 4.0, bottom: 8.0),
+          ).marginOnly(left: 4.0, bottom: compact ? 4 : 8),
           Expanded(
             child: GridView.count(
               crossAxisCount: crossAxisCount,
+              childAspectRatio: compact ? 1.7 : 1,
               padding: EdgeInsets.symmetric(horizontal: spacing),
               mainAxisSpacing: spacing,
               crossAxisSpacing: spacing,
@@ -1023,7 +1060,11 @@ class _CmControlPanel extends StatelessWidget {
             color: MyTheme.accent,
             onClick: () {
               handleElevate(context);
-              windowManager.minimize();
+              if (cmWindowDock.enabled) {
+                cmWindowDock.dock();
+              } else {
+                windowManager.minimize();
+              }
             },
             icon: Icon(
               Icons.security_rounded,
@@ -1086,7 +1127,11 @@ class _CmControlPanel extends StatelessWidget {
           child: buildButton(context, color: Colors.green[700], onClick: () {
             handleAccept(context);
             handleElevate(context);
-            windowManager.minimize();
+            if (cmWindowDock.enabled) {
+              cmWindowDock.dock();
+            } else {
+              windowManager.minimize();
+            }
           },
               text: 'Accept and Elevate',
               icon: Icon(
@@ -1109,7 +1154,11 @@ class _CmControlPanel extends StatelessWidget {
                       color: MyTheme.accent,
                       onClick: () {
                         handleAccept(context);
-                        windowManager.minimize();
+                        if (cmWindowDock.enabled) {
+                          cmWindowDock.dock();
+                        } else {
+                          windowManager.minimize();
+                        }
                       },
                       text: 'Accept',
                       textColor: Colors.white,

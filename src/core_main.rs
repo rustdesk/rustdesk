@@ -699,6 +699,8 @@ pub fn core_main() -> Option<CoreMainAction> {
             }
             return None;
         } else if args[0] == "--cm" {
+            #[cfg(all(target_os = "linux", feature = "flutter"))]
+            crate::platform::linux::prepare_cm_banner_backend();
             // call connection manager to establish connections
             // meanwhile, return true to call flutter window to show control panel
             crate::ui_interface::start_option_status_sync();

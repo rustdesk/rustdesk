@@ -203,6 +203,15 @@ class MainFlutterWindow: NSWindow {
         channel.setMethodCallHandler({
             (call, result) -> Void in
                 switch call.method {
+                case "setCmBannerWindow":
+                    guard CommandLine.arguments.contains("--cm"),
+                          let controller = registrar.view?.window?.contentViewController as? FlutterViewController else {
+                        result(FlutterError(code: "cm_banner_window", message: "CM view controller unavailable", details: nil))
+                        return
+                    }
+                    // FlutterView has a separate background from NSWindow.
+                    controller.backgroundColor = .clear
+                    result(nil)
                 case "setWindowTheme":
                     let arg = call.arguments as! [String: Any]
                     let themeName = arg["themeName"] as? String

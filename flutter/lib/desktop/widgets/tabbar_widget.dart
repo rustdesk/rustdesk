@@ -640,7 +640,8 @@ class _DesktopTabState extends State<DesktopTab>
                 child: Row(
                   children: [
                     Offstage(
-                        offstage: !isMacOS,
+                        offstage: !isMacOS ||
+                            (tabType == DesktopTabType.cm && !showMinimize),
                         child: const SizedBox(
                           width: 78,
                         )),

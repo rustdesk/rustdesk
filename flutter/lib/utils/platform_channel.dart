@@ -16,6 +16,27 @@ class RdPlatformChannel {
   final MethodChannel _hostMethodChannel =
       MethodChannel("org.rustdesk.rustdesk/host");
 
+  Future<bool> isCmBannerSupported() async {
+    if (!isLinux) return true;
+    return await _hostMethodChannel.invokeMethod<bool>('isCmBannerSupported') ??
+        false;
+  }
+
+  Future<void> setCmBannerWindow() {
+    assert(isWindows || isLinux || isMacOS);
+    return _hostMethodChannel.invokeMethod('setCmBannerWindow');
+  }
+
+  Future<void> setCmBannerBounds(Rect bounds) {
+    assert(isLinux);
+    return _hostMethodChannel.invokeMethod('setCmBannerBounds', {
+      'x': bounds.left,
+      'y': bounds.top,
+      'width': bounds.width,
+      'height': bounds.height,
+    });
+  }
+
   /// Bump the position of the mouse cursor, if applicable
   Future<bool> bumpMouse({required int dx, required int dy}) async {
     // No debug output; this call is too chatty.

@@ -15,6 +15,7 @@ import 'package:flutter_hbb/desktop/screen/desktop_view_camera_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_terminal_screen.dart';
+import 'package:flutter_hbb/desktop/widgets/cm_window_dock.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -118,6 +119,10 @@ Future<void> main(List<String> args) async {
 }
 
 Future<void> initEnv(String appType) async {
+  if (isLinux &&
+      (appType == kAppTypeMain || appType == kAppTypeConnectionManager)) {
+    await CmWindowDock.initPlatformSupport();
+  }
   // global shared preference
   await platformFFI.init(appType);
   // global FFI, use this **ONLY** for global configuration
@@ -304,6 +309,13 @@ void runConnectionManagerScreen() async {
 bool _isCmReadyToShow = false;
 
 showCmWindow({bool isStartup = false}) async {
+  if (cmWindowDock.enabled) {
+    if (isStartup || _isCmReadyToShow) {
+      await cmWindowDock.show(isStartup: isStartup);
+      _isCmReadyToShow = true;
+    }
+    return;
+  }
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: kConnectionManagerWindowSizeClosedChat, alwaysOnTop: true);

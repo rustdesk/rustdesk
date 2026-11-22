@@ -13,6 +13,7 @@ import 'package:window_manager/window_manager.dart';
 import '../common.dart';
 import '../common/formatter/id_formatter.dart';
 import '../desktop/pages/server_page.dart' as desktop;
+import '../desktop/widgets/cm_window_dock.dart';
 import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
 import '../mobile/widgets/android_file_transfer_setup.dart';
@@ -586,12 +587,19 @@ class ServerModel with ChangeNotifier {
         onTap: () {},
         page: desktop.buildConnectionCard(client)));
     Future.delayed(Duration.zero, () async {
+      if (!hideCm && cmWindowDock.value) await cmWindowDock.expand();
       if (!hideCm) windowOnTop(null);
     });
     // Only do the hidden task when on Desktop.
     if (client.authorized && isDesktop) {
       cmHiddenTimer = Timer(const Duration(seconds: 3), () {
-        if (!hideCm) windowManager.minimize();
+        if (!hideCm) {
+          if (cmWindowDock.enabled) {
+            cmWindowDock.dock();
+          } else {
+            windowManager.minimize();
+          }
+        }
         cmHiddenTimer = null;
       });
     }
@@ -723,6 +731,10 @@ class ServerModel with ChangeNotifier {
       if (desktopType == DesktopType.cm && _clients.isEmpty) {
         hideCmWindow();
       }
+      if (cmWindowDock.value &&
+          !_clients.any((client) => client.authorized && !client.disconnected)) {
+        cmWindowDock.expand();
+      }
       if (isAndroid) androidUpdatekeepScreenOn();
       notifyListeners();
     } catch (e) {
@@ -766,7 +778,8 @@ class ServerModel with ChangeNotifier {
             showVoiceCallDialog(client);
           } else {
             // Has incoming phone call, let's set the window on top.
-            Future.delayed(Duration.zero, () {
+            Future.delayed(Duration.zero, () async {
+              if (cmWindowDock.value) await cmWindowDock.expand();
               windowOnTop(null);
             });
           }
