@@ -3255,24 +3255,6 @@ pub fn is_x11() -> bool {
     *IS_X11
 }
 
-#[inline]
-pub fn is_selinux_enforcing() -> bool {
-    match run_cmds("getenforce") {
-        Ok(output) => output.trim() == "Enforcing",
-        Err(_) => match run_cmds("sestatus") {
-            Ok(output) => {
-                for line in output.lines() {
-                    if line.contains("Current mode:") {
-                        return line.contains("enforcing");
-                    }
-                }
-                false
-            }
-            Err(_) => false,
-        },
-    }
-}
-
 /// Get the app ID for shortcuts inhibitor permission.
 /// Returns different ID based on whether running in Flatpak or native.
 /// The ID must match the installed .desktop filename, as GNOME Shell's
