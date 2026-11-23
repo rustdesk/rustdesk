@@ -712,6 +712,8 @@ impl Connection {
             crate::rustdesk_interval(time::interval_at(Instant::now(), TEST_DELAY_TIMEOUT));
         let mut last_recv_time = Instant::now();
         let started = Instant::now();
+        #[cfg(feature = "video-diagnostics")]
+        let mut video_diagnostics = crate::video_diagnostics::Window::<2>::new(std::time::Instant::now());
 
         // The connection type is not known until the login request arrives;
         // `on_message` picks the type-specific timeout then.
@@ -1096,14 +1098,28 @@ impl Connection {
                     }
                 }
                 Some((instant, value)) = rx_video.recv() => {
+                    #[cfg(feature = "video-diagnostics")]
+                    let queue_elapsed = instant.elapsed();
                     if !conn.video_ack_required {
                         if let Some(message::Union::VideoFrame(vf)) = &value.union {
                             video_service::notify_video_frame_fetched(vf.display as usize, id, Some(instant.into()));
                         }
                     }
+                    #[cfg(feature = "video-diagnostics")]
+                    let send_started = std::time::Instant::now();
                     if let Err(err) = conn.stream.send(&value as &Message).await {
                         conn.on_close(&err.to_string(), false).await;
                         break;
+                    }
+                    #[cfg(feature = "video-diagnostics")]
+                    if let Some(stats) = video_diagnostics.record(
+                        std::time::Instant::now(),
+                        [queue_elapsed, send_started.elapsed()],
+                        true,
+                    ) {
+                        log::debug!("video_send conn={} samples={} window_s={:.2} messages_fps={:.1} queue_avg_ms={:.2} queue_max_ms={:.2} send_api_avg_ms={:.2} send_api_max_ms={:.2}",
+                            id, stats.samples, stats.seconds, stats.completed_per_second,
+                            stats.average_ms[0], stats.maximum_ms[0], stats.average_ms[1], stats.maximum_ms[1]);
                     }
                 },
                 Some((instant, value)) = rx.recv() => {

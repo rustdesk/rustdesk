@@ -744,6 +744,8 @@ fn run(vs: VideoService) -> ResultType<()> {
         capture_height,
     );
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
+    #[cfg(feature = "video-diagnostics")]
+    let mut diagnostics = crate::video_diagnostics::Window::<2>::new(std::time::Instant::now());
 
     while sp.ok() {
         #[cfg(windows)]
@@ -815,8 +817,12 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         let time = now - start;
         let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
+        #[cfg(feature = "video-diagnostics")]
+        let capture_started = std::time::Instant::now();
         let res = match c.frame(spf) {
             Ok(frame) => {
+                #[cfg(feature = "video-diagnostics")]
+                let capture_elapsed = capture_started.elapsed();
                 repeat_encode_counter = 0;
                 if frame.valid() {
                     let screenshot_key = (vs.source, display_idx);
@@ -866,6 +872,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                         }
                     }
 
+                    #[cfg(feature = "video-diagnostics")]
+                    let encode_started = std::time::Instant::now();
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
                     static_refresh.on_frame(&frame);
                     let result = handle_one_frame(
@@ -882,6 +890,16 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_height,
                     )?;
                     static_refresh.on_frame_encoded(&result);
+                    #[cfg(feature = "video-diagnostics")]
+                    if let Some(stats) = diagnostics.record(
+                        std::time::Instant::now(),
+                        [capture_elapsed, encode_started.elapsed()],
+                        !result.send_conn_ids.is_empty(),
+                    ) {
+                        log::debug!("video_encode display={} codec={:?} samples={} window_s={:.2} fresh_sent_fps={:.1} capture_avg_ms={:.2} capture_max_ms={:.2} convert_encode_dispatch_avg_ms={:.2} convert_encode_dispatch_max_ms={:.2}",
+                            display_idx, codec_format, stats.samples, stats.seconds, stats.completed_per_second,
+                            stats.average_ms[0], stats.maximum_ms[0], stats.average_ms[1], stats.maximum_ms[1]);
+                    }
                     frame_controller.set_send(now, result.send_conn_ids);
                     send_counter += 1;
                 }

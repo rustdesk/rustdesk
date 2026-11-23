@@ -4015,6 +4015,8 @@ pub fn start_video_thread<F, T>(
         let mut count = 0;
         let mut duration = std::time::Duration::ZERO;
         let mut skip_beginning = 0;
+        #[cfg(feature = "video-diagnostics")]
+        let mut diagnostics = crate::video_diagnostics::Window::<2>::new(std::time::Instant::now());
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
@@ -4056,14 +4058,32 @@ pub fn start_video_thread<F, T>(
                             let mut pixelbuffer = true;
                             let mut tmp_chroma = None;
                             let format_changed = handler.decoder.format() != format;
+                            #[cfg(feature = "video-diagnostics")]
+                            let decode_started = std::time::Instant::now();
                             match handler.handle_frame(vf, &mut pixelbuffer, &mut tmp_chroma) {
                                 Ok(true) => {
+                                    #[cfg(feature = "video-diagnostics")]
+                                    let decode_elapsed = decode_started.elapsed();
+                                    #[cfg(feature = "video-diagnostics")]
+                                    let submit_started = std::time::Instant::now();
                                     video_callback(
                                         display,
                                         &mut handler.rgb,
                                         handler.texture.texture,
                                         pixelbuffer,
                                     );
+
+                                    #[cfg(feature = "video-diagnostics")]
+                                    if let Some(stats) = diagnostics.record(
+                                        std::time::Instant::now(),
+                                        [decode_elapsed, submit_started.elapsed()],
+                                        true,
+                                    ) {
+                                        log::debug!("video_decode display={} codec={:?} samples={} window_s={:.2} callback_fps={:.1} decode_avg_ms={:.2} decode_max_ms={:.2} submit_avg_ms={:.2} submit_max_ms={:.2} pixelbuffer={}",
+                                            display, format, stats.samples, stats.seconds, stats.completed_per_second,
+                                            stats.average_ms[0], stats.maximum_ms[0],
+                                            stats.average_ms[1], stats.maximum_ms[1], pixelbuffer);
+                                    }
 
                                     // chroma
                                     if tmp_chroma.is_some() && last_chroma != tmp_chroma {
