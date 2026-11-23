@@ -827,5 +827,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Solicită aprobarea"),
         ("Forever", "Pentru totdeauna"),
         ("username-login-disabled-oidc-unavailable", "Autentificarea cu nume de utilizator și parolă este dezactivată și nu sunt disponibile metode de autentificare OIDC."),
+        ("Keep sessions connected in the background", ""),
+        ("keep-sessions-in-background-tip", ""),
+        ("Remote session open", ""),
+        ("session-keep-alive-paused-tip", ""),
     ].iter().cloned().collect();
 }

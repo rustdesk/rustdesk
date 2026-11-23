@@ -23,6 +23,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../models/shortcut_model.dart';
 import '../../utils/image.dart';
+import '../session_keep_alive.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
 
@@ -97,6 +98,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Timer? _iosKeyboardWorkaroundTimer;
 
   final _blockableOverlayState = BlockableOverlayState();
+  final _keepAlive = SessionKeepAlive();
 
   final keyboardVisibilityController = KeyboardVisibilityController();
   late final StreamSubscription<bool> keyboardSubscription;
@@ -136,6 +138,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     WakelockManager.enable(_uniqueKey);
+    _keepAlive.attach();
     _physicalFocusNode.requestFocus();
     HardwareKeyboard.instance.addHandler(_handleLocalKeyEvent);
     gFFI.inputModel.listenToMouse(true);
@@ -186,6 +189,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   Future<void> dispose() async {
+    _keepAlive.detach();
     HardwareKeyboard.instance.removeHandler(_handleLocalKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
@@ -225,6 +229,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _keepAlive.onLifecycle(state);
     if (state == AppLifecycleState.resumed) {
       trySyncClipboard();
     }

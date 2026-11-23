@@ -970,6 +970,11 @@ void androidChannelInit() {
             AndroidPermissionManager.complete(type, result);
             break;
           }
+        case "on_session_keep_alive_ended":
+          {
+            closeConnection();
+            break;
+          }
         case "on_media_projection_canceled":
           {
             gFFI.serverModel.stopService();

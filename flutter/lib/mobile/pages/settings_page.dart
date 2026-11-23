@@ -108,6 +108,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _isUsingPublicServer = false;
   var _allowAskForNoteAtEndOfConnection = false;
   var _preventSleepWhileConnected = true;
+  var _keepSessionsInBackground =
+      bind.mainGetLocalOption(key: kOptionKeepSessionsInBackground) == 'Y';
 
   _SettingsState() {
     _enableAbr = option2bool(
@@ -961,6 +963,28 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                     kOptionKeepAwakeDuringOutgoingSessions, v);
                 setState(() {
                   _preventSleepWhileConnected = v;
+                });
+              },
+            ),
+          if (isAndroid && !incomingOnly)
+            SettingsTile.switchTile(
+              title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(translate('Keep sessions connected in the background')),
+                    Text('* ${translate('keep-sessions-in-background-tip')}',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ]),
+              initialValue: _keepSessionsInBackground,
+              onToggle: (v) async {
+                // The service runs without it, but its Disconnect action is hidden.
+                if (v) await gFFI.serverModel.checkRequestNotificationPermission();
+                await bind.mainSetLocalOption(
+                    key: kOptionKeepSessionsInBackground,
+                    value: v ? 'Y' : defaultOptionNo);
+                if (!mounted) return;
+                setState(() {
+                  _keepSessionsInBackground = v;
                 });
               },
             ),

@@ -99,6 +99,15 @@
         </service>
 
         <service
+            android:name=".SessionKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a user-opened remote desktop session connected while the app is in the background, with a Disconnect action and a time limit." />
+        </service>
+
+        <service
             android:name=".FloatingWindowService"
             android:enabled="true" />
 
