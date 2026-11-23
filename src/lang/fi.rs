@@ -532,7 +532,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "Avaa uudessa ikkunassa"),
         ("Show displays as individual windows", "Näytä näytöt erillisinä ikkunoina"),
         ("Use all my displays for the remote session", "Käytä kaikkia näyttöjä etäistunnossa"),
-        ("selinux_tip", "SELinux saattaa estää etäyhteyden toiminnan. Tarkista asetukset."),
         ("Change view", "Vaihda näkymä"),
         ("Big tiles", "Suuret ruudut"),
         ("Small tiles", "Pienet ruudut"),

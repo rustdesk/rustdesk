@@ -532,7 +532,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "Ava uues aknas"),
         ("Show displays as individual windows", "Kuva kuvarid eraldi akendena"),
         ("Use all my displays for the remote session", "Kasuta kõiki minu kuvarid kaugseansi jaoks"),
-        ("selinux_tip", "SELinux on su seadmes lubatud, mis võib RustDeskil takistada juhitud poolel toimimist."),
         ("Change view", "Muuda vaadet"),
         ("Big tiles", "Suured plaadid"),
         ("Small tiles", "Väikesed plaadid"),

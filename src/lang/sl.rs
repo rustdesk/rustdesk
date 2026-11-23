@@ -532,7 +532,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "Odpri v novem oknu"),
         ("Show displays as individual windows", "Prikaži zaslone kot ločena okna"),
         ("Use all my displays for the remote session", "Uporabi vse zaslone za oddaljeno sejo"),
-        ("selinux_tip", "Na vaši napravi je omogčen SELinux, kar lahko povzroča težave pri oddaljenem nadzoru"),
         ("Change view", "Spremeni pogled"),
         ("Big tiles", "Velike ploščice"),
         ("Small tiles", "Majhne ploščice"),

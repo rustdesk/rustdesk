@@ -532,7 +532,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", ""),
         ("Show displays as individual windows", ""),
         ("Use all my displays for the remote session", ""),
-        ("selinux_tip", ""),
         ("Change view", ""),
         ("Big tiles", ""),
         ("Small tiles", ""),

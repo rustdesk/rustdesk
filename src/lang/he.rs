@@ -532,7 +532,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "פתח בחלון חדש"),
         ("Show displays as individual windows", "הצג מסכים כחלונות נפרדים"),
         ("Use all my displays for the remote session", "השתמש בכל המסכים שלי עבור ההפעלה המרוחקת"),
-        ("selinux_tip", "SELinux מופעל במכשיר שלך, מה שעלול למנוע מ-RustDesk לפעול כראוי כצד הנשלט."),
         ("Change view", "שנה תצוגה"),
         ("Big tiles", "אריחים גדולים"),
         ("Small tiles", "אריחים קטנים"),

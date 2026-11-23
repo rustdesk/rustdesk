@@ -532,7 +532,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "在新視窗中開啟"),
         ("Show displays as individual windows", "在各別的視窗開啟螢幕畫面"),
         ("Use all my displays for the remote session", "使用所有的螢幕用於遠端連線"),
-        ("selinux_tip", "SELinux 處於啟用狀態，RustDesk 可能無法作為被控端正常運作。"),
         ("Change view", "更改檢視方式"),
         ("Big tiles", "大磁磚"),
         ("Small tiles", "小磁磚"),

@@ -532,7 +532,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "Yeni pəncərədə aç"),
         ("Show displays as individual windows", "Ekranları ayrı pəncərələr kimi göstər"),
         ("Use all my displays for the remote session", "Uzaq sessiya üçün bütün ekranlarımı işlət"),
-        ("selinux_tip", "Cihazınızda SELinux aktivdir, bu, RustDesk-in idarə olunan tərəf kimi düzgün işləməsinə mane ola bilər."),
         ("Change view", "Görünüşü dəyiş"),
         ("Big tiles", "Böyük xanalar"),
         ("Small tiles", "Kiçik xanalar"),
