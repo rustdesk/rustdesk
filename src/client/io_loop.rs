@@ -379,9 +379,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 log::info!("Peer stopped answering, reconnecting");
                                 #[cfg(feature = "flutter")]
                                 self.handler.msgbox("restarting-show", "Connecting...", "Connection in progress. Please wait.", "");
-                                // Sciter knows no `restarting-show` and would show a dialog that
-                                // waits for a click, where the timeout this arrives ahead of is
-                                // retryable and reconnects on its own. Keep that message for it.
+                                // Keep Sciter's existing transport-timeout retry and message.
                                 #[cfg(not(feature = "flutter"))]
                                 self.handler.msgbox("error", "Connection Error", "Timeout", "");
                                 break;

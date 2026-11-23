@@ -312,6 +312,10 @@ handler.cancel_msgbox = function(tag) {
 
 var reconnectTimeout = 1000;
 handler.msgbox_retry = function(type, title, text, link, hasRetry) {
+    if (type == "restarting" || type == "restarting-show") {
+        type = "error";
+        hasRetry = true;
+    }
     handler.msgbox(type, title, text, link, hasRetry);
     if (hasRetry) {
         self.timer(0, retryConnect);
