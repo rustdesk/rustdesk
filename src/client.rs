@@ -99,6 +99,10 @@ mod login_method;
 mod audio_playback;
 #[cfg(target_os = "windows")]
 mod audio_playback_recovery;
+#[cfg(target_os = "windows")]
+pub(crate) mod voice_call_output;
+#[cfg(any(target_os = "windows", test))]
+mod voice_call_output_name;
 #[cfg(all(test, not(target_os = "linux")))]
 #[path = "client/tests/audio_state_tests.rs"]
 mod audio_state_tests;
@@ -2142,6 +2146,8 @@ impl ClientClipboardHandler {
 /// Audio handler for the [`Client`].
 #[derive(Default)]
 pub struct AudioHandler {
+    #[cfg(target_os = "windows")]
+    voice_call_output_device: Option<String>,
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
     #[cfg(target_os = "linux")]
     simple: Option<psimple::Simple>,
@@ -2377,11 +2383,23 @@ impl AudioHandler {
     /// Start the audio playback.
     #[cfg(not(target_os = "linux"))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
-        let device = AUDIO_HOST
-            .default_output_device()
-            .with_context(|| "Failed to get default output device")?;
+        #[cfg(target_os = "windows")]
+        let routed_device = self
+            .voice_call_output_device
+            .as_deref()
+            .map(voice_call_output::output_device)
+            .transpose()?;
+        #[cfg(not(target_os = "windows"))]
+        let routed_device: Option<cpal::Device> = None;
+        let device = if let Some(device) = routed_device {
+            device
+        } else {
+            AUDIO_HOST
+                .default_output_device()
+                .with_context(|| "Failed to get default output device")?
+        };
         log::info!(
-            "Using default output device: \"{}\"",
+            "Using output device: \"{}\"",
             device.name().unwrap_or("".to_owned())
         );
         let config = device.default_output_config().map_err(|e| anyhow!(e))?;
@@ -2459,6 +2477,10 @@ impl AudioHandler {
                 #[cfg(not(target_os = "linux"))]
                 let mut previous = std::mem::take(self);
                 #[cfg(target_os = "windows")]
+                {
+                    self.voice_call_output_device = previous.voice_call_output_device.clone();
+                }
+                #[cfg(target_os = "windows")]
                 self.prepare_playback(&f);
                 self.audio_decoder = Some((d, buffer));
                 self.channels = f.channels as _;
@@ -2493,7 +2515,13 @@ impl AudioHandler {
                     "Failed to replace audio playback stream; keeping the existing compatible stream: {error:#}"
                 );
             } else {
+                #[cfg(target_os = "windows")]
+                let output = self.voice_call_output_device.take();
                 *self = Self::default();
+                #[cfg(target_os = "windows")]
+                {
+                    self.voice_call_output_device = output;
+                }
                 log::error!("Failed to start audio playback: {error:#}");
             }
         }

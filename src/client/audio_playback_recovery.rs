@@ -55,7 +55,9 @@ impl AudioHandler {
         self.audio_stream = None;
         self.playback_recovery.report_pending();
         self.playback_status.report_errors();
+        let output = self.voice_call_output_device.take();
         let recovery = std::mem::take(self).playback_recovery;
+        self.voice_call_output_device = output;
         self.playback_recovery.format = recovery.format;
         self.playback_recovery.retry_at = recovery.retry_at;
         self.playback_recovery.restart_not_before = recovery.restart_not_before;

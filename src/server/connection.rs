@@ -432,6 +432,8 @@ pub struct Connection {
     from_switch: bool,
     voice_call_request_timestamp: Option<NonZeroI64>,
     voice_calling: bool,
+    #[cfg(target_os = "windows")]
+    voice_audio_routed: Option<crate::client::voice_call_output::VoiceAudioStop>,
     options_in_login: Option<OptionMessage>,
     #[cfg(not(any(target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
@@ -641,6 +643,8 @@ impl Connection {
             audio_sender: None,
             voice_call_request_timestamp: None,
             voice_calling: false,
+            #[cfg(target_os = "windows")]
+            voice_audio_routed: None,
             options_in_login: None,
             #[cfg(not(any(target_os = "ios")))]
             pressed_modifiers: Default::default(),
@@ -4055,7 +4059,17 @@ impl Connection {
                         if !self.disable_audio {
                             // Drop the audio sender previously.
                             drop(std::mem::replace(&mut self.audio_sender, None));
-                            self.audio_sender = Some(start_audio_thread());
+                            #[cfg(target_os = "windows")]
+                            {
+                                let (sender, routed) =
+                                    crate::client::voice_call_output::start_host_voice_audio(self.voice_calling);
+                                self.audio_sender = Some(sender);
+                                self.voice_audio_routed = routed;
+                            }
+                            #[cfg(not(target_os = "windows"))]
+                            {
+                                self.audio_sender = Some(start_audio_thread());
+                            }
                             self.audio_sender
                                 .as_ref()
                                 .map(|a| allow_err!(a.send(MediaData::AudioFormat(format))));
@@ -4978,6 +4992,10 @@ impl Connection {
     }
 
     pub async fn close_voice_call(&mut self) {
+        #[cfg(target_os = "windows")]
+        if self.voice_audio_routed.take().is_some() {
+            self.audio_sender = None;
+        }
         crate::audio_service::set_voice_call_input_device(None, true);
         // Notify the connection manager that the voice call has been closed.
         self.send_to_cm(Data::CloseVoiceCall("".to_owned()));
