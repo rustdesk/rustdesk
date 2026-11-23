@@ -157,6 +157,57 @@ pub mod client {
         *lock = true;
     }
 
+    /// Set while the hook is removed because no remote session is left.
+    #[cfg(windows)]
+    static GRAB_PAUSED: AtomicBool = AtomicBool::new(false);
+
+    /// The low-level keyboard hook used to stay installed for the life of the process.
+    /// While it is in and key translation is on (a lost focus-leave is enough), rdev's
+    /// ToUnicodeEx consumes the dead-key state of every program on the controlling PC,
+    /// so accents (e.g. on ABNT2 or US-International layouts) break in other apps until
+    /// RustDesk is closed (#2670). When the last remote session closes, remove the hook
+    /// and switch the translation off; the next session re-installs it
+    /// (resume_grab_loop). Windows only: that is where it was reproduced, and rdev
+    /// exits and re-grabs cleanly there.
+    ///
+    /// A session opened in the instant between rdev::exit_grab and the old hook
+    /// thread's exit can leave the new hook unknown to rdev, kept until the app
+    /// closes - which is how every hook behaved before this.
+    #[cfg(windows)]
+    pub fn pause_grab_loop() {
+        let mut started = IS_GRAB_STARTED.lock().unwrap();
+        if !*started {
+            return;
+        }
+        {
+            let mut gs = GRAB_STATE.lock().unwrap();
+            gs.owner = None;
+            gs.last_grab = None;
+            gs.deferred_pending = false;
+        }
+        rdev::set_get_key_unicode(false);
+        KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
+        match super::stop_grab_loop() {
+            Ok(()) => {
+                *started = false;
+                GRAB_PAUSED.store(true, Ordering::SeqCst);
+                log::info!("keyboard hook removed: no remote session left");
+            }
+            Err(err) => log::error!("failed to remove the keyboard hook: {:?}", err),
+        }
+    }
+
+    /// Re-installs the hook removed by pause_grab_loop. The hook is first
+    /// installed when a remote window is created (mainInitInputSource), and a closed
+    /// remote window is hidden and reused, so a new session must bring it back here.
+    #[cfg(windows)]
+    pub fn resume_grab_loop() {
+        if GRAB_PAUSED.swap(false, Ordering::SeqCst) {
+            start_grab_loop();
+            log::info!("keyboard hook back for a new remote session");
+        }
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn change_grab_status(state: GrabState, keyboard_mode: &str, session_id: u128) {
         #[cfg(feature = "flutter")]
@@ -759,6 +810,8 @@ fn start_grab_loop() {
 }
 
 // #[allow(dead_code)] is ok here. No need to stop grabbing loop.
+// On Windows it is stopped when no remote session is left
+// (client::pause_grab_loop); elsewhere it is still unused.
 #[allow(dead_code)]
 fn stop_grab_loop() -> Result<(), rdev::GrabError> {
     #[cfg(any(target_os = "windows", target_os = "macos"))]

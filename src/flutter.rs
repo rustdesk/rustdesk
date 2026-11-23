@@ -2133,6 +2133,12 @@ pub mod sessions {
         let s = SESSIONS.write().unwrap().remove(&remove_peer_key?);
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         update_session_count_to_server();
+        // No remote session left: remove the low-level keyboard hook, so it no longer
+        // eats the local dead keys (see keyboard::client::pause_grab_loop).
+        #[cfg(windows)]
+        if SESSIONS.read().unwrap().is_empty() {
+            crate::keyboard::client::pause_grab_loop();
+        }
         s
     }
 
@@ -2296,6 +2302,10 @@ pub mod sessions {
             .insert(session_id, Default::default());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         update_session_count_to_server();
+        // Re-install the keyboard hook removed when the last session closed
+        // (see keyboard::client::resume_grab_loop).
+        #[cfg(windows)]
+        crate::keyboard::client::resume_grab_loop();
     }
 
     #[inline]
