@@ -2136,8 +2136,13 @@ pub mod sessions {
         // No remote session left: remove the low-level keyboard hook, so it no longer
         // eats the local dead keys (see keyboard::client::pause_grab_loop).
         #[cfg(windows)]
-        if SESSIONS.read().unwrap().is_empty() {
-            crate::keyboard::client::pause_grab_loop();
+        {
+            // Keep the guard while pausing, so insert_session cannot run in between
+            // and miss the resume.
+            let sessions = SESSIONS.read().unwrap();
+            if sessions.is_empty() {
+                crate::keyboard::client::pause_grab_loop();
+            }
         }
         s
     }

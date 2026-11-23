@@ -191,6 +191,14 @@ pub mod client {
             Ok(()) => {
                 *started = false;
                 GRAB_PAUSED.store(true, Ordering::SeqCst);
+                // Releases happening while the hook is out are never seen.
+                for down in MODIFIERS_STATE.lock().unwrap().values_mut() {
+                    *down = false;
+                }
+                TO_RELEASE.lock().unwrap().clear();
+                unsafe {
+                    IS_0X021D_DOWN = false;
+                }
                 log::info!("keyboard hook removed: no remote session left");
             }
             Err(err) => log::error!("failed to remove the keyboard hook: {:?}", err),
