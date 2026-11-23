@@ -1313,6 +1313,7 @@ impl Connection {
                         if press {
                             msg.down = true;
                         }
+                        CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         handle_key(&msg);
                         if press {
                             msg.down = false;
@@ -2057,6 +2058,10 @@ impl Connection {
         {
             platform_additions.insert("support_view_camera".into(), json!(true));
         }
+        #[cfg(target_os = "macos")]
+        if camera::is_camera_supported() {
+            platform_additions.insert("support_view_camera".into(), json!(true));
+        }
 
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         if !platform_additions.is_empty() {
@@ -2082,7 +2087,9 @@ impl Connection {
         if self.is_remote() {
             let mut msg = "".to_string();
             #[cfg(feature = "drm")]
-            if !crate::platform::linux::is_x11_for_drm() {
+            if crate::platform::linux::drm_capture_enabled()
+                && !crate::platform::linux::is_x11_for_drm()
+            {
                 super::drm_capturer::settle_unknown_availability().await;
             }
             // Refuse only while nothing can capture a Wayland greeter: the DRM path can.
@@ -2152,7 +2159,25 @@ impl Connection {
             log::info!("peer info supported_encoding: {:?}", supported_encoding);
             pi.encoding = Some(supported_encoding).into();
 
-            pi.displays = camera::Cameras::all_info().unwrap_or(Vec::new());
+            // On macOS this can block for up to 30s waiting on the camera permission prompt, so
+            // keep it off the Tokio worker.
+            #[cfg(target_os = "macos")]
+            {
+                pi.displays = tokio::task::spawn_blocking(camera::Cameras::all_info)
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::error!("camera all_info task panicked: {}", e);
+                        Ok(Vec::new())
+                    })
+                    .unwrap_or_else(|e| {
+                        log::error!("camera all_info error: {}", e);
+                        Vec::new()
+                    });
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                pi.displays = camera::Cameras::all_info().unwrap_or(Vec::new());
+            }
             pi.current_display = camera::PRIMARY_CAMERA_IDX as _;
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
@@ -3382,9 +3407,6 @@ impl Connection {
                         return true;
                     }
                     if self.peer_keyboard_enabled() {
-                        if is_enter(&me) {
-                            CLICK_TIME.store(get_time(), Ordering::SeqCst);
-                        }
                         // https://github.com/rustdesk/rustdesk/issues/8633
                         MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
 

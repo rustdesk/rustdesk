@@ -270,7 +270,14 @@ pub struct PipeWireRecorder {
     width: usize,
     height: usize,
     saved_raw_data: Vec<u8>, // for faster compare and copy
+    dmabuf_frame: Vec<u8>,   // last frame read from a linear DMA-BUF, rows packed to width * 4
 }
+
+// Compositors such as niri offer screencast buffers only as DMA-BUF, so the system-memory
+// pipeline never negotiates ("no more input formats"). Linear DMA-BUF can be read by the CPU,
+// so the fallback pipeline accepts it and `read_linear_dmabuf` copies the frame out.
+// A drm-format without a ":0x<modifier>" suffix means the linear modifier.
+const DMABUF_CAPS: &str = "video/x-raw(memory:DMABuf),format=DMA_DRM,drm-format={XR24,XB24}";
 
 // Element creation fails the same way for a plugin that is not installed as for one that is
 // broken, so the tag does not claim which. Only the name travels to the peer -- it is what
@@ -336,7 +343,21 @@ impl PipeWireRecorder {
             "[gstreamer] Setting pipeline {} to PLAYING state...",
             capturable.fd.as_raw_fd()
         );
-        pipeline.set_state(gst::State::Playing)?;
+        let (pipeline, appsink) = match pipeline.set_state(gst::State::Playing) {
+            Ok(_) => (pipeline, appsink),
+            Err(e) => {
+                warn!(
+                    "[gstreamer] System-memory pipeline {} failed ({}), retrying with linear DMA-BUF",
+                    capturable.fd.as_raw_fd(),
+                    e
+                );
+                // Release the PipeWire stream before the next pipeline connects to the same node.
+                if let Err(e) = pipeline.set_state(gst::State::Null) {
+                    warn!("[gstreamer] Failed to stop pipeline: {}", e);
+                }
+                build_dmabuf_pipeline(&capturable)?
+            }
+        };
 
         // If `is_server_running()` is false, it means using remote_desktop_portal,
         // which does not use multiple streams, so no need to wait for state change.
@@ -371,7 +392,275 @@ impl PipeWireRecorder {
             buffer_cropped: vec![],
             is_cropped: false,
             saved_raw_data: Vec::new(),
+            dmabuf_frame: Vec::new(),
         })
+    }
+}
+
+// Same as the pipeline in `PipeWireRecorder::new`, but for DMA-BUF: no videoconvert (it cannot
+// import DMA-BUF) and no always-copy (it copies only the PipeWire chunk, whose size is a
+// placeholder for DMA-BUF, 1 byte on niri; the frame is read through the fd instead).
+fn build_dmabuf_pipeline(capturable: &PipeWireCapturable) -> ResultType<(gst::Pipeline, AppSink)> {
+    let pipeline = gst::Pipeline::new(None);
+    // Clock waits on stale capture timestamps can exhaust the compositor's buffers.
+    pipeline.use_clock(None::<&gst::Clock>);
+
+    let src = gst_element("pipewiresrc")?;
+    src.set_property("fd", &capturable.fd.as_raw_fd())?;
+    src.set_property("path", &format!("{}", capturable.path))?;
+    src.set_property("keepalive_time", &1_000.as_raw_fd())?;
+
+    let sink = gst_element("appsink")?;
+    sink.set_property("drop", &true)?;
+    sink.set_property("max-buffers", &1u32)?;
+
+    pipeline.add_many(&[&src, &sink])?;
+    src.link(&sink)?;
+
+    let appsink = sink
+        .dynamic_cast::<AppSink>()
+        .map_err(|_| GStreamerError("Sink element is expected to be an appsink!".into()))?;
+    let caps = DMABUF_CAPS
+        .parse::<gst::Caps>()
+        .map_err(|_| GStreamerError("Invalid DMA-BUF caps".into()))?;
+    appsink.set_caps(Some(&caps));
+
+    debug!(
+        "[gstreamer] Setting DMA-BUF pipeline {} to PLAYING state...",
+        capturable.fd.as_raw_fd()
+    );
+    if let Err(e) = pipeline.set_state(gst::State::Playing) {
+        if let Err(e) = pipeline.set_state(gst::State::Null) {
+            warn!("[gstreamer] Failed to stop DMA-BUF pipeline: {}", e);
+        }
+        return Err(e.into());
+    }
+    Ok((pipeline, appsink))
+}
+
+// libgstallocators is part of gst-plugins-base, which pipewiresrc and gstreamer-video need anyway.
+#[link(name = "gstallocators-1.0")]
+extern "C" {
+    fn gst_is_dmabuf_memory(mem: *mut std::ffi::c_void) -> std::os::raw::c_int;
+    fn gst_dmabuf_memory_get_fd(mem: *mut std::ffi::c_void) -> std::os::raw::c_int;
+}
+
+/// Copy a linear BGRx/RGBx DMA-BUF frame into `out` as packed rows of `w * 4` bytes.
+/// A normal map of such a buffer covers only the PipeWire chunk size, so read through the fd.
+/// Returns `Ok(false)`, with `out` unchanged, for a frame that does not fit its dmabuf.
+fn read_linear_dmabuf(
+    buf: &gst::Buffer,
+    w: usize,
+    h: usize,
+    out: &mut Vec<u8>,
+) -> Result<bool, Box<dyn Error>> {
+    use hbb_common::libc;
+    #[repr(C)]
+    struct DmaBufSync {
+        flags: u64,
+    }
+    // _IOW('b', 0, struct dma_buf_sync)
+    const DMA_BUF_IOCTL_SYNC: u64 = 0x4008_6200;
+    const DMA_BUF_SYNC_READ: u64 = 1;
+    const DMA_BUF_SYNC_END: u64 = 4;
+
+    if buf.n_memory() != 1 {
+        return Err(GStreamerError(format!("DMA-BUF with {} memories", buf.n_memory())).into());
+    }
+    let mem = buf.peek_memory(0);
+    let mem_ptr = unsafe { mem.as_ptr() } as *mut std::ffi::c_void;
+    if unsafe { gst_is_dmabuf_memory(mem_ptr) } == 0 {
+        return Err(GStreamerError("Buffer memory is not DMA-BUF".into()).into());
+    }
+    let fd = unsafe { gst_dmabuf_memory_get_fd(mem_ptr) };
+    if fd < 0 {
+        return Err(GStreamerError("DMA-BUF memory has no fd".into()).into());
+    }
+    let (stride, plane_offset) = match buf.get_meta::<gstreamer_video::VideoMeta>() {
+        Some(m) => (m.get_stride()[0].max(0) as usize, m.get_offset()[0]),
+        None => (w * 4, 0),
+    };
+    // Map only what the dmabuf holds, so a bad stride or offset is an error, not a SIGBUS.
+    let size = unsafe { libc::lseek(fd, 0, libc::SEEK_END) };
+    if size <= 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let len = size as usize;
+    let map = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            len,
+            libc::PROT_READ,
+            libc::MAP_SHARED,
+            fd,
+            0,
+        )
+    };
+    if map == libc::MAP_FAILED {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    // Sync makes the CPU view coherent with the GPU around the read.
+    // The kernel asks callers to restart it on EINTR / EAGAIN.
+    let sync = |flags: u64| -> Result<(), Box<dyn Error>> {
+        let mut arg = DmaBufSync { flags };
+        loop {
+            if unsafe { libc::ioctl(fd, DMA_BUF_IOCTL_SYNC as _, &mut arg) } == 0 {
+                return Ok(());
+            }
+            let err = std::io::Error::last_os_error();
+            if !matches!(err.raw_os_error(), Some(libc::EINTR) | Some(libc::EAGAIN)) {
+                return Err(err.into());
+            }
+        }
+    };
+    let copied = sync(DMA_BUF_SYNC_READ).and_then(|_| {
+        let src = unsafe { std::slice::from_raw_parts(map as *const u8, len) };
+        let start = mem.get_offset() + plane_offset;
+        let packed = pack_rows(src, start, stride, w * 4, h, out);
+        if !packed {
+            // Caps can carry a new size while the buffer is still from the old allocation,
+            // like the system-memory size mismatch (pipewire#985): drop the frame.
+            trace!(
+                "DMA-BUF frame of {}x{} at offset {} and stride {} does not fit {} bytes, dropping it!",
+                w,
+                h,
+                start,
+                stride,
+                len
+            );
+        }
+        sync(DMA_BUF_SYNC_READ | DMA_BUF_SYNC_END).map(|_| packed)
+    });
+    if unsafe { libc::munmap(map, len) } != 0 {
+        let err = std::io::Error::last_os_error();
+        // Runs once per frame, so a persistent failure must not write a line per frame.
+        hbb_common::throttled_log!(
+            Duration::from_secs(60),
+            warn,
+            "[gstreamer] Failed to unmap DMA-BUF frame: {}",
+            err
+        );
+    }
+    copied
+}
+
+/// Copy `h` rows of `row_len` bytes that start `stride` bytes apart at `start` into `out`.
+/// Returns false, with `out` unchanged, when the rows do not fit in `src`.
+fn pack_rows(
+    src: &[u8],
+    start: usize,
+    stride: usize,
+    row_len: usize,
+    h: usize,
+    out: &mut Vec<u8>,
+) -> bool {
+    // Checked: stride and offset come from the compositor, and a wrapped sum would pass the guard.
+    let end = stride
+        .checked_mul(h.saturating_sub(1))
+        .and_then(|n| n.checked_add(start))
+        .and_then(|n| n.checked_add(row_len));
+    if stride < row_len || end.map_or(true, |end| end > src.len()) {
+        return false;
+    }
+    out.clear();
+    out.reserve(row_len * h);
+    for y in 0..h {
+        let row = start + y * stride;
+        out.extend_from_slice(&src[row..row + row_len]);
+    }
+    true
+}
+
+/// Whether a `VideoCropMeta` rectangle `(x, y, width, height)` lies inside a `w` x `h` frame.
+fn crop_fits((x, y, crop_w, crop_h): (u32, u32, u32, u32), w: usize, h: usize) -> bool {
+    x.checked_add(crop_w).map_or(false, |r| r as usize <= w)
+        && y.checked_add(crop_h).map_or(false, |b| b as usize <= h)
+}
+
+/// GStreamer pixel format for a DRM fourcc name with the same byte order.
+fn drm_format_pix_fmt(drm_format: Option<&str>) -> Option<&'static str> {
+    match drm_format {
+        Some("XR24") => Some("BGRx"),
+        Some("XB24") => Some("RGBx"),
+        _ => None,
+    }
+}
+
+fn is_dmabuf_sample(sample: &gst::Sample) -> bool {
+    sample
+        .get_caps()
+        .and_then(|caps| caps.get_features(0))
+        .map_or(false, |f| f.contains("memory:DMABuf"))
+}
+
+impl PipeWireRecorder {
+    // Same steps as `capture` for system memory, with the frame read through the dmabuf fd.
+    fn capture_dmabuf(&mut self, sample: gst::Sample) -> Result<PixelProvider<'_>, Box<dyn Error>> {
+        let cap = sample
+            .get_caps()
+            .ok_or("Failed get caps")?
+            .get_structure(0)
+            .ok_or("Failed to get structure")?;
+        let w: i32 = cap.get_value("width")?.get_some()?;
+        let h: i32 = cap.get_value("height")?.get_some()?;
+        let w = w as usize;
+        let h = h as usize;
+        let drm_format = cap.get::<&str>("drm-format")?;
+        let pix_fmt = drm_format_pix_fmt(drm_format).ok_or_else(|| {
+            GStreamerError(format!("Unsupported DMA-BUF format {:?}", drm_format))
+        })?;
+
+        let buf = sample
+            .get_buffer_owned()
+            .ok_or_else(|| GStreamerError("Failed to get owned buffer.".into()))?;
+        let mut crop = buf
+            .get_meta::<gstreamer_video::VideoCropMeta>()
+            .map(|m| m.get_rect());
+        // only crop if necessary
+        if Some((0, 0, w as u32, h as u32)) == crop {
+            crop = None;
+        }
+        // The compositor sets the crop; one left from an old allocation must not slice past the frame.
+        if let Some(c) = crop.filter(|&c| !crop_fits(c, w, h)) {
+            trace!(
+                "DMA-BUF crop {:?} does not fit {}x{}, dropping it!",
+                c,
+                w,
+                h
+            );
+            return Ok(PixelProvider::NONE);
+        }
+        if !read_linear_dmabuf(&buf, w, h, &mut self.dmabuf_frame)? {
+            return Ok(PixelProvider::NONE);
+        }
+        if let Err(..) = crate::would_block_if_equal(&mut self.saved_raw_data, &self.dmabuf_frame) {
+            return Ok(PixelProvider::NONE);
+        }
+        let (width, height, data) = if let Some((x_off, y_off, w_crop, h_crop)) = crop {
+            let x_off = x_off as usize;
+            let y_off = y_off as usize;
+            let w_crop = w_crop as usize;
+            let h_crop = h_crop as usize;
+            self.buffer_cropped.clear();
+            // BGRx is 4 bytes per pixel
+            self.buffer_cropped.reserve(w_crop * h_crop * 4);
+            for y in y_off..(y_off + h_crop) {
+                let i = 4 * (w * y + x_off);
+                self.buffer_cropped
+                    .extend(&self.dmabuf_frame[i..i + 4 * w_crop]);
+            }
+            (w_crop, h_crop, self.buffer_cropped.as_slice())
+        } else {
+            (w, h, self.dmabuf_frame.as_slice())
+        };
+        match pix_fmt {
+            "BGRx" => Ok(PixelProvider::BGR0(width, height, data)),
+            "RGBx" => Ok(PixelProvider::RGB0(width, height, data)),
+            _ => Err(Box::new(GStreamerError(format!(
+                "Unreachable! Unknown pix_fmt, {}",
+                pix_fmt
+            )))),
+        }
     }
 }
 
@@ -381,6 +670,9 @@ impl Recorder for PipeWireRecorder {
             .appsink
             .try_pull_sample(gst::ClockTime::from_mseconds(timeout_ms))
         {
+            if is_dmabuf_sample(&sample) {
+                return self.capture_dmabuf(sample);
+            }
             let cap = sample
                 .get_caps()
                 .ok_or("Failed get caps")?
@@ -1817,7 +2109,35 @@ fn sort_streams(
 
 #[cfg(test)]
 mod tests {
-    use super::{corrected_origin, WaylandDisplayInfo};
+    use super::{corrected_origin, drm_format_pix_fmt, pack_rows, WaylandDisplayInfo};
+
+    #[test]
+    fn a_strided_dmabuf_frame_comes_out_as_packed_rows() {
+        // 2x2 BGRx frame at offset 3 with stride 12: 4 bytes of padding after each row.
+        let mut src = vec![0xEE; 3 + 12 * 2];
+        src[3..11].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
+        src[15..23].copy_from_slice(&[9, 10, 11, 12, 13, 14, 15, 16]);
+        let mut out = Vec::new();
+        assert!(pack_rows(&src, 3, 12, 8, 2, &mut out));
+        assert_eq!(out, (1..=16).collect::<Vec<u8>>());
+    }
+
+    #[test]
+    fn a_dmabuf_too_small_for_its_stride_is_dropped() {
+        let mut out = Vec::new();
+        assert!(pack_rows(&[1; 20], 0, 12, 8, 2, &mut out));
+        let frame = out.clone();
+        assert!(!pack_rows(&[2; 19], 0, 12, 8, 2, &mut out));
+        // A dropped frame leaves the last good one in place.
+        assert_eq!(out, frame);
+    }
+
+    #[test]
+    fn niri_drm_formats_map_to_encoder_pixel_formats() {
+        assert_eq!(drm_format_pix_fmt(Some("XR24")), Some("BGRx"));
+        assert_eq!(drm_format_pix_fmt(Some("XB24")), Some("RGBx"));
+        assert_eq!(drm_format_pix_fmt(Some("NV12")), None);
+    }
 
     fn output(x: i32, y: i32, mode: (i32, i32)) -> WaylandDisplayInfo {
         WaylandDisplayInfo {

@@ -283,6 +283,9 @@ name = "RustDesk"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
+# View Camera needs NSCameraUsageDescription or macOS kills the process at the
+# camera permission prompt; the Flutter bundle gets it via its own Info.plist.
+osx_info_plist_exts = ["res/osx_camera_info.plist"]
 
 #https://github.com/johnthagen/min-sized-rust
 [profile.release]

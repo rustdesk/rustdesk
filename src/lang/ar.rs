@@ -827,7 +827,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "طلب الموافقة"),
         ("Forever", "إلى الأبد"),
         ("username-login-disabled-oidc-unavailable", "تم تعطيل تسجيل الدخول باسم المستخدم وكلمة المرور، ولا توجد طرق متاحة لتسجيل الدخول عبر OIDC."),
+        ("Use DRM screen capture", "استخدام التقاط الشاشة عبر DRM"),
+        ("drm-capture-tip", "يلتقط الشاشة مباشرة من بطاقة الرسومات عبر خدمة RustDesk، دون طلب مشاركة الشاشة في Wayland، بما في ذلك شاشة تسجيل الدخول. قد لا يعمل على كل الأجهزة؛ إذا استمرت الاتصالات في طلب مشاركة الشاشة، فأوقف هذا الخيار أو استخدم X11. تغيير هذا الخيار يقطع الجلسات الحالية."),
+        ("wayland-drm-tip", "للوصول غير المراقب على Wayland، جرّب التقاط الشاشة عبر DRM، أو استخدم X11 إذا لم يعمل."),        ("login-wayland-drm-tip", "للوصول إلى شاشة تسجيل الدخول في Wayland، جرّب التقاط الشاشة عبر DRM أو حوّلها إلى X11."),
         ("Enable Unicode input", "تفعيل إدخال Unicode"),
-        ("unicode-input-tip", "التقاط نص Unicode الذي ترسله أدوات مثل KeePassXC Auto-Type. يتطلب استخدام مصدر الإدخال 1."),
-    ].iter().cloned().collect();
+        ("unicode-input-tip", "التقاط نص Unicode الذي ترسله أدوات مثل KeePassXC Auto-Type. يتطلب استخدام مصدر الإدخال 1."),    ].iter().cloned().collect();
 }
