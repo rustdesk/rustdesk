@@ -38,7 +38,6 @@ The selected endpoint is also passed to the server audio capture path. WASAPI lo
 6. While connected, confirm RustDesk uses the preferred two-channel VB-CABLE endpoint automatically, without a device dropdown.
 7. While connected, select Normal and confirm the physical endpoint returns immediately without the previous Reconnect the previous audio output error.
 8. Remove or disable VB-CABLE and confirm Remote only is disabled with an install prompt; RustDesk must not fall back to speakers.
-9. During Remote only audio, enter and exit privacy mode repeatedly and confirm the privacy-mode crash regression remains fixed.
-10. Close the main window and leave only the tray, then connect and disconnect; confirm switching and restoration still occur.
-11. Lock the Windows session, connect and disconnect, then unlock; confirm the endpoint state is restored without requiring the settings window.
-12. While connected, terminate the main UI process, reconnect the UI, and confirm the per-session worker keeps routing and then restores after disconnect.
+9. Close the main window and leave only the tray, then connect and disconnect; confirm switching and restoration still occur.
+10. Lock the Windows session, connect and disconnect, then unlock; confirm the endpoint state is restored without requiring the settings window.
+11. While connected, terminate the main UI process, reconnect the UI, and confirm the per-session worker keeps routing and then restores after disconnect.
