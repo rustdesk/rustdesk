@@ -101,6 +101,11 @@ impl DerefMut for Encoder {
 }
 
 pub struct Decoder {
+    /// Per-session answer to "can this renderer present a decoded GPU frame?",
+    /// read once per received frame and passed to the decoder as `want_gpu`;
+    /// see [`Self::set_gpu_frames_wanted`].
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    gpu_frames_wanted: Option<crate::GpuFramesWanted>,
     vp8: Option<VpxDecoder>,
     vp9: Option<VpxDecoder>,
     av1: Option<AomDecoder>,
@@ -120,6 +125,10 @@ pub struct Decoder {
     valid: bool,
     #[cfg(feature = "hwcodec")]
     i420: Vec<u8>,
+    /// GPU frame produced by the last handle_video_frame call, if any.
+    /// Cross-platform slot: on targets without a GPU-frame path the type is
+    /// `Option<Infallible>`, so it is always `None` and costs nothing.
+    pixelbuffer: crate::PixelBufferOutput,
 }
 
 #[derive(Debug, Clone)]
@@ -498,6 +507,39 @@ impl Decoder {
         decoding
     }
 
+    /// Install the caller's "can the renderer present GPU frames" handle.
+    ///
+    /// The handle is per session, not per process: two sessions can render
+    /// differently, and a shared switch would make the software session's
+    /// decoder skip its software transfer. It is only ever *read* here, once per
+    /// received frame, to answer the decoder's `want_gpu` question; whether a
+    /// frame was actually delivered as a surface is read back from the decode
+    /// call itself.
+    #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+    pub fn set_gpu_frames_wanted(&mut self, wanted: crate::GpuFramesWanted) {
+        self.gpu_frames_wanted = Some(wanted);
+    }
+
+    /// Whether this session's renderer can present a decoded GPU frame.
+    ///
+    /// This is the question the decoder asks as `want_gpu` for one packet, not a
+    /// prediction of what it will return: a decoder that is asked and produces a
+    /// software frame anyway still reports that frame, and the caller presents
+    /// it. Platforms without a GPU-frame path always answer `false`.
+    #[cfg(feature = "hwcodec")]
+    fn gpu_frame_wanted(&self) -> bool {
+        #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+        {
+            self.gpu_frames_wanted
+                .as_ref()
+                .is_some_and(|wanted| wanted.load(std::sync::atomic::Ordering::Relaxed))
+        }
+        #[cfg(not(all(target_os = "macos", feature = "hwcodec")))]
+        {
+            false
+        }
+    }
+
     pub fn new(format: CodecFormat, _luid: Option<i64>) -> Decoder {
         log::info!("try create new decoder, format: {format:?}, _luid: {_luid:?}");
         let (mut vp8, mut vp9, mut av1) = (None, None, None);
@@ -597,6 +639,8 @@ impl Decoder {
             log::info!("create {format:?} decoder success");
         }
         Decoder {
+            #[cfg(all(target_os = "macos", feature = "hwcodec"))]
+            gpu_frames_wanted: None,
             vp8,
             vp9,
             av1,
@@ -616,7 +660,21 @@ impl Decoder {
             valid,
             #[cfg(feature = "hwcodec")]
             i420: vec![],
+            pixelbuffer: None,
         }
+    }
+
+    /// Take the GPU frame produced by the last `handle_video_frame` call.
+    ///
+    /// Taking clears the slot, so one frame is delivered at most once.
+    #[cfg(target_os = "macos")]
+    pub fn take_pixelbuffer(&mut self) -> crate::PixelBufferOutput {
+        self.pixelbuffer.take()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn take_pixelbuffer(&mut self) -> crate::PixelBufferOutput {
+        None
     }
 
     pub fn format(&self) -> CodecFormat {
@@ -666,9 +724,27 @@ impl Decoder {
                     *_pixelbuffer = false;
                     return Decoder::handle_vram_video_frame(decoder, h264s, _texture);
                 }
+                // One answer per received frame: every packet of this batch is
+                // decoded with the same `want_gpu`, and each call reports what
+                // it produced. Read before the decoder borrow: the switch lives
+                // on `self`.
+                //
+                // No local test covers this routing: it needs the `hwcodec`
+                // feature, which needs a matching FFmpeg, so the split between
+                // the surface branch and the software branch is exercised by the
+                // macOS CI build rather than by `cargo test`.
+                #[cfg(feature = "hwcodec")]
+                let want_gpu = self.gpu_frame_wanted();
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h264_ram {
-                    return Decoder::handle_hwram_video_frame(decoder, h264s, rgb, &mut self.i420);
+                    return Decoder::handle_hwram_video_frame(
+                        decoder,
+                        h264s,
+                        rgb,
+                        &mut self.i420,
+                        &mut self.pixelbuffer,
+                        want_gpu,
+                    );
                 }
                 Err(anyhow!("don't support h264!"))
             }
@@ -680,9 +756,20 @@ impl Decoder {
                     *_pixelbuffer = false;
                     return Decoder::handle_vram_video_frame(decoder, h265s, _texture);
                 }
+                // See the H264 arm: one `want_gpu` per received frame, read
+                // before the decoder borrow.
+                #[cfg(feature = "hwcodec")]
+                let want_gpu = self.gpu_frame_wanted();
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h265_ram {
-                    return Decoder::handle_hwram_video_frame(decoder, h265s, rgb, &mut self.i420);
+                    return Decoder::handle_hwram_video_frame(
+                        decoder,
+                        h265s,
+                        rgb,
+                        &mut self.i420,
+                        &mut self.pixelbuffer,
+                        want_gpu,
+                    );
                 }
                 Err(anyhow!("don't support h265!"))
             }
@@ -769,15 +856,48 @@ impl Decoder {
         frames: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
         i420: &mut Vec<u8>,
+        pixelbuffer: &mut crate::PixelBufferOutput,
+        want_gpu: bool,
     ) -> ResultType<bool> {
         let mut ret = false;
+        // Transaction boundary: the slot belongs to this batch of packets only,
+        // so a GPU frame from an earlier call can never be presented over a
+        // newer software frame (the `?` below can return in the middle of a
+        // batch, which used to leave the slot populated).
+        *pixelbuffer = None;
         for h264 in frames.frames.iter() {
-            for image in decoder.decode(&h264.data)? {
+            // One call, one answer. `want_gpu` travels with the packet because
+            // the decoder decides *during* the call whether to skip its software
+            // transfer; what it actually produced is read back from the return
+            // value, never from the switch that was passed in. A GPU demand that
+            // flips to true mid-stream therefore still presents whatever this
+            // call produced instead of a stale picture.
+            let decoded = decoder.decode(&h264.data, want_gpu)?;
+            // A surface wins: the decoder skipped the software transfer for it.
+            #[cfg(target_os = "macos")]
+            if let Some(frame) = decoded.pixelbuffer {
+                // Metadata only: the recorder sizes its output from `ImageRgb`,
+                // and the software conversion that used to fill these in never
+                // runs on this path, so a recording would otherwise open at 0x0
+                // (or at the last software frame's size). No pixels are copied.
+                rgb.w = frame.width() as usize;
+                rgb.h = frame.height() as usize;
+                *pixelbuffer = Some(frame);
+                ret = true;
+                continue;
+            }
+            // No surface this call: present the software frames it did produce.
+            let mut software_ok = false;
+            for image in decoded.images {
                 // TODO: just process the last frame
                 if image.to_fmt(rgb, i420).is_ok() {
-                    ret = true;
+                    software_ok = true;
                 }
             }
+            // A software frame produced later in the same batch wins: the rule is
+            // "the last decoded frame is the one presented", and the caller must
+            // not paint an older GPU frame over it.
+            ret = present_software(pixelbuffer, software_ok) || ret;
         }
         return Ok(ret);
     }
@@ -845,6 +965,26 @@ impl Decoder {
         };
         (codec, chroma)
     }
+}
+
+/// Clear the surface slot when this packet produced a software picture.
+///
+/// Every software presentation of `handle_hwram_video_frame` ends here, so the rule
+/// lives in one place: a surface that an earlier packet of the same batch put in the
+/// slot must not be presented over the software picture decoded after it, because the
+/// callback would then present that older surface and skip the newer picture. With
+/// the direct path off the caller drops such a frame instead of painting stale
+/// pixels.
+///
+/// Generic over the slot's contents, and compiled without the `hwcodec` feature,
+/// so the transition is testable by a plain `cargo test` -- no hardware decoder and
+/// no FFmpeg involved.
+#[cfg(any(feature = "hwcodec", test))]
+fn present_software<T>(pixelbuffer: &mut Option<T>, software_ok: bool) -> bool {
+    if software_ok {
+        *pixelbuffer = None;
+    }
+    software_ok
 }
 
 #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
@@ -1154,4 +1294,49 @@ pub fn test_av1() {
             );
         });
     });
+}
+
+/// The ordering rule `handle_hwram_video_frame` applies to a software picture.
+///
+/// The decode loop reads its outcome from the call's return value (a surface, or
+/// the software frames), so the "a newer picture owns the slot" rule is factored
+/// into `present_software` and asserted here. Gated on `test` only --
+/// no `hwcodec` feature, no FFmpeg, no hardware decoder -- so a plain `cargo test`
+/// collects and runs these instead of skipping them.
+#[cfg(test)]
+mod presentation_tests {
+    use super::*;
+
+    #[test]
+    fn a_software_picture_clears_the_surface_in_the_slot() {
+        let mut slot = Some(7u8);
+        assert!(present_software(&mut slot, true));
+        assert!(
+            slot.is_none(),
+            "the surface an earlier packet left here must not survive the newer software picture"
+        );
+    }
+
+    #[test]
+    fn nothing_to_present_leaves_the_surface_in_the_slot() {
+        let mut slot = Some(7u8);
+        assert!(!present_software(&mut slot, false));
+        assert_eq!(
+            slot,
+            Some(7),
+            "a packet that presents nothing must not discard the surface"
+        );
+    }
+
+    #[test]
+    fn a_later_software_picture_still_wins_after_an_earlier_one() {
+        // The software path calls the helper per packet, so the rule has to hold
+        // across a batch: the newest picture owns the slot, and a packet that
+        // presents nothing afterwards must not resurrect anything.
+        let mut slot = Some(7u8);
+        assert!(present_software(&mut slot, true));
+        assert!(slot.is_none());
+        assert!(!present_software(&mut slot, false));
+        assert!(slot.is_none());
+    }
 }

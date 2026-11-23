@@ -316,7 +316,7 @@ mod hw {
         let start = Instant::now();
         let mut cnt = 0;
         for h26x in h26xs {
-            let _ = decoder.decode(h26x).unwrap();
+            let _ = decoder.decode(h26x, false).unwrap();
             cnt += 1;
         }
         let device = format!("{:?}", decoder.info.hwdevice).to_lowercase();
