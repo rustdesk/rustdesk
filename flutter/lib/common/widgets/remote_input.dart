@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 
@@ -11,6 +12,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 
+import '../../mobile/models/trackpad_motion.dart';
 import './gestures.dart';
 
 class RawKeyFocusScope extends StatelessWidget {
@@ -86,7 +88,8 @@ class RawTouchGestureDetectorRegion extends StatefulWidget {
 ///   DoubleFiner -> right click
 ///   HoldDrag -> left drag
 class _RawTouchGestureDetectorRegionState
-    extends State<RawTouchGestureDetectorRegion> {
+    extends State<RawTouchGestureDetectorRegion>
+    with TickerProviderStateMixin {
   Offset _cacheLongPressPosition = Offset(0, 0);
   // Timestamp of the last long press event.
   int _cacheLongPressPositionTs = 0;
@@ -110,6 +113,15 @@ class _RawTouchGestureDetectorRegionState
   // Cache global position for onTap (which lacks position info).
   Offset? _lastTapDownGlobalPosition;
 
+  final _trackpadPointers = <int>{};
+  Duration? _lastTrackpadTime;
+  Duration? _trackpadReleaseTime;
+  Offset _lastTrackpadPosition = Offset.zero;
+  Ticker? _trackpadGlide;
+  double _trackpadAcceleration = 0;
+  double _trackpadGlideStrength = 0;
+  double _trackpadSpeed = 0;
+
   FFI get ffi => widget.ffi;
   FfiModel get ffiModel => widget.ffiModel;
   InputModel get inputModel => widget.inputModel;
@@ -117,12 +129,111 @@ class _RawTouchGestureDetectorRegionState
   SessionID get sessionId => ffi.sessionId;
   bool get canvasLocked => isMobile && ffi.canvasModel.locked;
 
+  bool get _useTrackpadMotion =>
+      isAndroid &&
+      !handleTouch &&
+      !widget.isCamera &&
+      !ffiModel.viewOnly &&
+      ffiModel.keyboard &&
+      !inputModel.isPhysicalMouse.value &&
+      !isSpecialHoldDragActive;
+
   @override
   Widget build(BuildContext context) {
-    return RawGestureDetector(
+    final gestures = RawGestureDetector(
       child: widget.child,
       gestures: makeGestures(context),
     );
+    if (!isAndroid) return gestures;
+    return Listener(
+      onPointerDown: (event) {
+        _cancelTrackpadMotion();
+        if (event.kind == PointerDeviceKind.touch) {
+          _trackpadPointers.add(event.pointer);
+          if (_useTrackpadMotion && _trackpadPointers.length == 1) {
+            _trackpadAcceleration = trackpadMotionStrength(
+                bind.mainGetLocalOption(key: kOptionTrackpadAcceleration));
+            _trackpadGlideStrength = trackpadMotionStrength(
+                bind.mainGetLocalOption(key: kOptionTrackpadGlide));
+          }
+        }
+      },
+      onPointerUp: (event) {
+        if (_trackpadPointers.remove(event.pointer) &&
+            _trackpadPointers.isEmpty) {
+          _trackpadReleaseTime = event.timeStamp;
+        }
+      },
+      onPointerCancel: (event) {
+        _trackpadPointers.remove(event.pointer);
+        _cancelTrackpadMotion();
+      },
+      child: gestures,
+    );
+  }
+
+  @override
+  void dispose() {
+    _trackpadGlide?.dispose();
+    super.dispose();
+  }
+
+  void _cancelTrackpadMotion() {
+    _trackpadGlide?.stop();
+    _lastTrackpadTime = null;
+    _trackpadReleaseTime = null;
+    _trackpadSpeed = 0;
+  }
+
+  Offset _scaleTrackpadMovement(DragUpdateDetails d) {
+    final timestamp = d.sourceTimeStamp;
+    final previous = _lastTrackpadTime;
+    _lastTrackpadTime = timestamp;
+    _lastTrackpadPosition = d.localPosition;
+    if (timestamp == null || previous == null) {
+      _trackpadSpeed = 0;
+      return d.delta;
+    }
+    _trackpadSpeed = trackpadFilteredSpeed(
+        _trackpadSpeed, d.delta.distance, timestamp - previous);
+    return d.delta * trackpadMotionGain(_trackpadSpeed, _trackpadAcceleration);
+  }
+
+  void _startTrackpadGlide(Offset velocity) {
+    final lastMove = _lastTrackpadTime;
+    final release = _trackpadReleaseTime;
+    _cancelTrackpadMotion();
+    if (lastMove == null || release == null || _trackpadPointers.isNotEmpty) {
+      return;
+    }
+    final duration = trackpadGlideDuration(_trackpadGlideStrength);
+    final distance =
+        trackpadGlideDistance(velocity.distance, release - lastMove, duration);
+    if (distance == 0) return;
+    final travel = velocity * (distance / velocity.distance);
+    final position = _lastTrackpadPosition;
+    final relative = inputModel.relativeMouseMode.value;
+    var previous = Offset.zero;
+    _trackpadGlide?.dispose();
+    _trackpadGlide = createTicker((elapsed) {
+      if (!_useTrackpadMotion ||
+          inputModel.relativeMouseMode.value != relative ||
+          ffi.cursorModel.shouldBlock(position.dx, position.dy) ||
+          WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+          elapsed > duration * 2) {
+        _trackpadGlide?.stop();
+        return;
+      }
+      final next = travel * trackpadGlideProgress(elapsed, duration);
+      final delta = next - previous;
+      previous = next;
+      if (relative) {
+        inputModel.sendMobileRelativeMouseMove(delta.dx, delta.dy);
+      } else {
+        ffi.cursorModel.updatePan(delta, position, false);
+      }
+      if (elapsed >= duration) _trackpadGlide?.stop();
+    })..start();
   }
 
   bool isNotTouchBasedDevice() {
@@ -414,11 +525,16 @@ class _RawTouchGestureDetectorRegionState
     if (handleTouch && !_touchModePanStarted) {
       return;
     }
+    final delta = _useTrackpadMotion &&
+            _trackpadPointers.length == 1 &&
+            (_trackpadAcceleration > 0 || _trackpadGlideStrength > 0)
+        ? _scaleTrackpadMovement(d)
+        : d.delta;
     // In relative mouse mode, send delta directly without position tracking.
     if (inputModel.relativeMouseMode.value) {
-      await inputModel.sendMobileRelativeMouseMove(d.delta.dx, d.delta.dy);
+      await inputModel.sendMobileRelativeMouseMove(delta.dx, delta.dy);
     } else {
-      await ffi.cursorModel.updatePan(d.delta, d.localPosition, handleTouch);
+      await ffi.cursorModel.updatePan(delta, d.localPosition, handleTouch);
     }
   }
 
@@ -435,6 +551,8 @@ class _RawTouchGestureDetectorRegionState
       if (!inputModel.relativeMouseMode.value) {
         await inputModel.sendMouse('up', MouseButtons.left);
       }
+    } else if (_useTrackpadMotion) {
+      _startTrackpadGlide(d.velocity.pixelsPerSecond);
     }
   }
 
@@ -444,6 +562,7 @@ class _RawTouchGestureDetectorRegionState
   // double-click problem on iPad with magic mouse.
   onOneFingerPanCancel() {
     _touchModePanStarted = false;
+    _cancelTrackpadMotion();
   }
 
   // scale + pan event

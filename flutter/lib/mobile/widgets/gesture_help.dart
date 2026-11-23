@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:toggle_switch/toggle_switch.dart';
+
+import '../models/trackpad_motion.dart';
 
 class GestureIcons {
   static const String _family = 'gestureicons';
@@ -58,6 +61,10 @@ class _GestureHelpState extends State<GestureHelp> {
   late int _selectedIndex;
   late bool _touchMode;
   final VirtualMouseMode _virtualMouseMode;
+  late double _trackpadAcceleration = trackpadMotionStrength(
+      bind.mainGetLocalOption(key: kOptionTrackpadAcceleration));
+  late double _trackpadGlide = trackpadMotionStrength(
+      bind.mainGetLocalOption(key: kOptionTrackpadGlide));
 
   _GestureHelpState(bool touchMode, VirtualMouseMode virtualMouseMode)
       : _virtualMouseMode = virtualMouseMode {
@@ -73,11 +80,37 @@ class _GestureHelpState extends State<GestureHelp> {
     }
   }
 
+  Widget _trackpadSlider(String label, String key, double value,
+      String valueLabel, ValueChanged<double> onChanged) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(translate(label))),
+            const SizedBox(width: 12),
+            Text(valueLabel, style: Theme.of(context).textTheme.labelMedium),
+          ],
+        ),
+        Slider(
+          value: value,
+          divisions: 10,
+          label: valueLabel,
+          onChanged: onChanged,
+          onChangeEnd: (value) {
+            bind.mainSetLocalOption(
+                key: key, value: (value * 100).round().toString());
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final space = 12.0;
     var width = size.width - 2 * space;
+    final trackpadControlsWidth = width.clamp(0.0, 300.0).toDouble();
     final minWidth = 90;
     if (size.width > minWidth + 2 * space) {
       final n = (size.width / (minWidth + 2 * space)).floor();
@@ -101,7 +134,7 @@ class _GestureHelpState extends State<GestureHelp> {
                         activeBgColor: [MyTheme.accent],
                         inactiveBgColor: Theme.of(context).hintColor,
                         totalSwitches: 2,
-                        minWidth: 150,
+                        minWidth: isAndroid ? trackpadControlsWidth / 2 : 150,
                         fontSize: 15,
                         iconSize: 18,
                         labels: [
@@ -121,6 +154,33 @@ class _GestureHelpState extends State<GestureHelp> {
                           });
                         },
                       ),
+                      if (isAndroid && !_touchMode)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 14),
+                          child: SizedBox(
+                            width: trackpadControlsWidth,
+                            child: Column(
+                              children: [
+                                _trackpadSlider(
+                                    'Mouse acceleration',
+                                    kOptionTrackpadAcceleration,
+                                    _trackpadAcceleration,
+                                    '${(_trackpadAcceleration * 100).round()}%',
+                                    (value) {
+                                  setState(() => _trackpadAcceleration = value);
+                                }),
+                                _trackpadSlider(
+                                    'Mouse glide',
+                                    kOptionTrackpadGlide,
+                                    _trackpadGlide,
+                                    '${trackpadGlideDuration(_trackpadGlide).inMilliseconds} ms',
+                                    (value) {
+                                  setState(() => _trackpadGlide = value);
+                                }),
+                              ],
+                            ),
+                          ),
+                        ),
                       Transform.translate(
                         offset: const Offset(-10.0, 0.0),
                         child: Row(

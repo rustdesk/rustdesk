@@ -164,6 +164,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
 
   DragUpdateDetails _getDragUpdateDetails(ScaleUpdateDetails d) =>
       DragUpdateDetails(
+          sourceTimeStamp: d.sourceTimeStamp,
           globalPosition: d.focalPoint,
           localPosition: d.localFocalPoint,
           delta: d.focalPointDelta);
