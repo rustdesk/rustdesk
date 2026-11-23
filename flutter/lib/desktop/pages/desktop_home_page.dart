@@ -428,6 +428,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
+    if (isWindows &&
+        !bind.isDisableInstallation() &&
+        bind.mainIsInstalled() &&
+        !bind.isOutgoingOnly() &&
+        !mainGetBoolOptionSync(kOptionStopService) &&
+        !bind.mainIsInstalledDaemon(prompt: false)) {
+      return buildInstallCard("", "install_daemon_tip", "Install", () async {
+        await rustDeskWinManager.closeAllSubWindows();
+        await start_service(true);
+      });
+    }
     if (!bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&

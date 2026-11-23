@@ -38,6 +38,14 @@ impl Capturer {
     pub fn height(&self) -> usize {
         self.height
     }
+
+    /// Check DXGI access without reading pixels; an unchanged desktop may return WouldBlock.
+    pub fn probe_frame(&mut self) -> io::Result<()> {
+        match self.inner.probe_frame() {
+            Err(ref error) if error.kind() == TimedOut => Err(WouldBlock.into()),
+            result => result,
+        }
+    }
 }
 
 impl TraitCapturer for Capturer {

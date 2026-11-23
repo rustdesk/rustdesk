@@ -30,7 +30,7 @@ issue.
   doit compiler et passer les tests).
 
 - Les commits doivent être accompagnés d'une signature Developer Certificate of
-  Origin (http://developercertificate.org), indiquant que vous (et votre
+  Origin (https://developercertificate.org), indiquant que vous (et votre
   employeur le cas échéant) acceptez d'être liés par les termes de la
   [licence du projet](../LICENCE). Dans git, il s'agit de l'option `-s` de
   `git commit`.
