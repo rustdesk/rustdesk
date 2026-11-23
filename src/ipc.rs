@@ -498,8 +498,6 @@ pub enum Data {
     VideoConnCount(Option<usize>),
     #[cfg(feature = "flutter")]
     AudioConnCount(Option<usize>),
-    #[cfg(all(target_os = "windows", feature = "flutter"))]
-    AudioOutput(Option<String>),
     // Although the key is not necessary, it is used to avoid hardcoding the key.
     WaylandScreencastRestoreToken((String, String)),
     HwCodecConfig(Option<String>),
@@ -981,13 +979,6 @@ async fn handle(data: Data, stream: &mut Connection) {
                 .count();
             allow_err!(stream.send(&Data::AudioConnCount(Some(n))).await);
         }
-        #[cfg(all(target_os = "windows", feature = "flutter"))]
-        Data::AudioOutput(None) => {
-            match crate::platform::windows::audio_output::devices_json() {
-                Ok(status) => allow_err!(stream.send(&Data::AudioOutput(Some(status))).await),
-                Err(error) => allow_err!(stream.send(&Data::SecurityConfigError(error.to_string())).await),
-            }
-        }
         Data::Config((name, value)) => match value {
             None => {
                 let value;
@@ -1130,9 +1121,28 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if value.contains_key(base::config::keys::OPTION_REMOTE_ONLY_AUDIO_MODE)
                     || value.contains_key(base::config::keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE)
                 {
-                    if let Err(error) = crate::platform::windows::audio_output::apply_configured_mode() {
-                        allow_err!(stream.send(&Data::SecurityConfigError(error.to_string())).await);
-                        return;
+                    let result = tokio::task::spawn_blocking(
+                        crate::platform::windows::audio_output::apply_configured_mode,
+                    )
+                    .await;
+                    match result {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => {
+                            allow_err!(
+                                stream
+                                    .send(&Data::SecurityConfigError(error.to_string()))
+                                    .await
+                            );
+                            return;
+                        }
+                        Err(error) => {
+                            allow_err!(
+                                stream
+                                    .send(&Data::SecurityConfigError(error.to_string()))
+                                    .await
+                            );
+                            return;
+                        }
                     }
                 }
                 allow_err!(stream.send(&Data::Options(None)).await);
@@ -2042,21 +2052,6 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
             Config::get_rendezvous_servers(),
         )
     }
-}
-
-#[cfg(all(target_os = "windows", feature = "flutter"))]
-#[tokio::main(flavor = "current_thread")]
-pub async fn get_audio_output_status() -> ResultType<String> {
-    async fn request() -> ResultType<String> {
-        let mut c = connect(1000, "").await?;
-        c.send(&Data::AudioOutput(None)).await?;
-        match c.next_timeout(1000).await? {
-            Some(Data::AudioOutput(Some(status))) => Ok(status),
-            Some(Data::SecurityConfigError(error)) => bail!(error),
-            _ => bail!("Audio output status response was unavailable"),
-        }
-    }
-    request().await
 }
 
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {

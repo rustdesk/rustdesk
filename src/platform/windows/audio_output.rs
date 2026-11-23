@@ -555,7 +555,9 @@ fn activate_output(
     target: &IMMDevice,
 ) -> ResultType<()> {
     let devices = outputs(enumerator)?;
-    if saved_output()?.is_none() {
+    let mut saved = if let Some(saved) = saved_output()? {
+        saved
+    } else {
         let mut defaults = [String::new(), String::new(), String::new()];
         for (i, role) in ROLES.iter().enumerate() {
             defaults[i] =
@@ -581,14 +583,40 @@ fn activate_output(
         let virtual_volume = (id.to_owned(), unsafe {
             volume(target)?.GetMasterVolumeLevelScalar()?
         });
-        let saved = SavedOutput {
+        SavedOutput {
             defaults,
             mutes,
             volumes,
             virtual_volume,
-        };
-        save_state(&saved)?;
+        }
+    };
+
+    for device in &devices {
+        let endpoint = device_id(device)?;
+        if endpoint == id {
+            continue;
+        }
+        if !saved
+            .mutes
+            .iter()
+            .any(|(saved_id, _)| saved_id == &endpoint)
+        {
+            saved.mutes.push((
+                endpoint.clone(),
+                unsafe { volume(device)?.GetMute()? }.as_bool(),
+            ));
+        }
+        if !saved
+            .volumes
+            .iter()
+            .any(|(saved_id, _)| saved_id == &endpoint)
+        {
+            saved.volumes.push((endpoint, unsafe {
+                volume(device)?.GetMasterVolumeLevelScalar()?
+            }));
+        }
     }
+    save_state(&saved)?;
 
     let result = (|| {
         // Mute physical endpoints only while a remote session is active.
@@ -636,17 +664,23 @@ fn handle_initialize(state: &mut WorkerState) -> ResultType<()> {
 }
 
 fn reconcile(state: &mut WorkerState) -> ResultType<()> {
+    let mode = configured_mode();
     let configured = selected_device();
     let changed = configured != state.selected;
     state.selected = configured;
-    if saved_output()?.is_some() && (state.connection_count == 0 || state.selected.is_empty()) {
+    if mode != "remote" && saved_output()?.is_some() {
         restore_state()?;
-    } else if state.connection_count > 0
+    } else if mode == "remote" && state.connection_count == 0 && saved_output()?.is_some() {
+        restore_state()?;
+    } else if mode == "remote"
+        && state.connection_count > 0
         && !state.selected.is_empty()
         && (changed || state.retry_pending || saved_output()?.is_none())
     {
         switch_to(&state.selected)?;
         crate::audio_service::restart();
+    } else if mode == "remote" && state.connection_count > 0 && state.selected.is_empty() {
+        bail!("No usable VB-CABLE playback endpoint is available");
     }
     Ok(())
 }
@@ -706,7 +740,10 @@ fn update_connection_count(state: &mut WorkerState, count: usize) -> ResultType<
     let (started, ended) = connection_transition(state.connection_count, count);
     state.connection_count = count;
     if started {
-        if !state.selected.is_empty() {
+        if configured_mode() == "remote" {
+            if state.selected.is_empty() {
+                bail!("No usable VB-CABLE playback endpoint is available");
+            }
             switch_to(&state.selected)?;
             crate::audio_service::restart();
         }
@@ -798,9 +835,33 @@ pub(crate) fn initialize() {
 
 pub(crate) fn devices_json() -> ResultType<String> {
     if server_worker_available() {
-        return crate::ipc::get_audio_output_status();
+        return enumerated_status_json();
     }
     send_sync(Command::Status)
+}
+
+fn enumerated_status_json() -> ResultType<String> {
+    let _com = ComApartment::new()?;
+    let enumerator = enumerator()?;
+    let mut devices = Vec::new();
+    for device in outputs(&enumerator)? {
+        if virtual_output(&device)? {
+            devices.push(OutputDevice {
+                id: device_id(&device)?,
+                name: property(&device, &PKEY_Device_FriendlyName)?,
+            });
+        }
+    }
+    Ok(serde_json::json!({
+        "devices": devices,
+        "available": auto_selected_device(&enumerator)?.is_some(),
+        "selected": selected_device(),
+        "mode": configured_mode(),
+        "connected_count": 0,
+        "can_restore": false,
+        "error": "",
+    })
+    .to_string())
 }
 
 fn capture_device_for(endpoint: &IMMDevice) -> ResultType<cpal::Device> {

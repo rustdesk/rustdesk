@@ -466,7 +466,9 @@ pub(crate) fn set_audio_output_mode(mode: &str) -> hbb_common::ResultType<()> {
     if mode == "normal" {
         options.remove(base::config::keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE);
     }
-    try_set_options(options)
+    ipc::set_options(options.clone())?;
+    *OPTIONS.lock().unwrap() = options;
+    Ok(())
 }
 
 #[inline]
