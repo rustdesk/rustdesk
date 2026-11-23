@@ -827,5 +827,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Begär godkännande"),
         ("Forever", "För alltid"),
         ("username-login-disabled-oidc-unavailable", "Inloggning med användarnamn och lösenord är inaktiverad, och inga OIDC-inloggningsmetoder är tillgängliga."),
+        ("Redirect audio to remote client", ""),
+        ("Normal", ""),
+        ("Remote only", ""),
+        ("Install VB-CABLE to use remote-only audio.", ""),
+        ("Get VB-CABLE", ""),
+        ("remote-only-audio-tip", ""),
+        ("VB-CABLE is required for Remote only.", ""),
+        ("Audio output will be restored automatically.", ""),
     ].iter().cloned().collect();
 }

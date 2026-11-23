@@ -827,5 +827,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Prašyti patvirtinimo"),
         ("Forever", "Visam laikui"),
         ("username-login-disabled-oidc-unavailable", "Prisijungimas naudojant naudotojo vardą ir slaptažodį išjungtas ir nėra galimų OIDC prisijungimo būdų."),
+        ("Redirect audio to remote client", ""),
+        ("Normal", ""),
+        ("Remote only", ""),
+        ("Install VB-CABLE to use remote-only audio.", ""),
+        ("Get VB-CABLE", ""),
+        ("remote-only-audio-tip", ""),
+        ("VB-CABLE is required for Remote only.", ""),
+        ("Audio output will be restored automatically.", ""),
     ].iter().cloned().collect();
 }

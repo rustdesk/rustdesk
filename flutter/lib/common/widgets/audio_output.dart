@@ -14,9 +14,9 @@ class AudioOutput extends StatefulWidget {
 }
 
 class _AudioOutputState extends State<AudioOutput> with WidgetsBindingObserver {
-  String _selected = '';
   String _mode = 'normal';
   String? _error;
+  String? _writeError;
   bool _hasCable = false;
   bool _busy = true;
   bool _refreshing = false;
@@ -48,13 +48,11 @@ class _AudioOutputState extends State<AudioOutput> with WidgetsBindingObserver {
       final data =
           jsonDecode(await bind.mainGetAudioOutputs()) as Map<String, dynamic>;
       if (!mounted) return;
-      final devices = data['devices'] as List? ?? const [];
       setState(() {
-        _hasCable = data['available'] == true || devices.isNotEmpty;
+        _hasCable = data['available'] == true;
         _mode = (data['mode'] as String?) ?? 'normal';
-        _selected = (data['selected'] as String?) ?? '';
         final workerError = (data['error'] as String?) ?? '';
-        _error = workerError.isEmpty ? null : workerError;
+        _error = _writeError ?? (workerError.isEmpty ? null : workerError);
       });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -69,16 +67,23 @@ class _AudioOutputState extends State<AudioOutput> with WidgetsBindingObserver {
     setState(() {
       _busy = true;
       _error = null;
+      _writeError = null;
     });
     try {
       await bind.mainSetOption(
-        key: kOptionRemoteOnlyAudioDevice,
-        value: mode == 'normal'
-            ? ''
-            : (_selected.isEmpty ? kOptionRemoteOnlyAudioAuto : _selected),
+        key: kOptionRemoteOnlyAudioMode,
+        value: mode,
       );
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) {
+        setState(() {
+          _writeError = e.toString();
+          _error = _writeError;
+        });
+      }
+    }
+    if (mounted && _writeError == null) {
+      setState(() => _mode = mode);
     }
     await _refresh();
   }

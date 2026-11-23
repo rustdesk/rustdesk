@@ -1,7 +1,7 @@
 //! Host-side audio routing. The virtual endpoint deliberately survives capture
 //! teardown: disconnecting restores the physical output exactly as it was.
 
-use base::config::keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE;
+use base::config::keys::{OPTION_REMOTE_ONLY_AUDIO_DEVICE, OPTION_REMOTE_ONLY_AUDIO_MODE};
 use cpal::traits::{DeviceTrait, HostTrait};
 use hbb_common::{
     anyhow::{bail, Context},
@@ -66,17 +66,16 @@ struct AudioOutputState {
 
 enum Command {
     Configure(String, mpsc::Sender<Result<(), String>>),
-    Preview(String, mpsc::Sender<Result<(), String>>),
     ConnectionCount(usize),
     Status(mpsc::Sender<Result<String, String>>),
 }
 
 struct WorkerState {
     connection_count: usize,
-    audition_until: Option<Instant>,
     selected: String,
-    preview_selected: String,
     last_error: String,
+    retry_pending: bool,
+    retry_after: Instant,
 }
 
 static WORKER: OnceLock<mpsc::Sender<Command>> = OnceLock::new();
@@ -213,9 +212,9 @@ fn state_to_saved(state: AudioOutputState) -> Option<SavedOutput> {
 fn load_state() -> ResultType<Option<SavedOutput>> {
     let path = state_path();
     match std::fs::read_to_string(&path) {
-        Ok(value) if !value.trim().is_empty() => {
-            Ok(state_to_saved(serde_json::from_str(&value).context("Cannot read audio output state")?))
-        }
+        Ok(value) if !value.trim().is_empty() => Ok(state_to_saved(
+            serde_json::from_str(&value).context("Cannot read audio output state")?,
+        )),
         Ok(_) => Ok(None),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err.into()),
@@ -259,7 +258,9 @@ fn saved_output() -> ResultType<Option<SavedOutput>> {
     if json.is_empty() {
         return Ok(None);
     }
-    Ok(Some(serde_json::from_str(&json).context("Cannot read saved audio output settings")?))
+    Ok(Some(
+        serde_json::from_str(&json).context("Cannot read saved audio output settings")?,
+    ))
 }
 
 fn endpoint_priority(name: &str, channels: u16) -> u8 {
@@ -284,18 +285,18 @@ fn auto_selected_device(enumerator: &IMMDeviceEnumerator) -> ResultType<Option<(
         let capture = match capture_device_for(&device) {
             Ok(capture) => capture,
             Err(err) => {
-                log::warn!("Skipping unusable VB-CABLE endpoint {name}: {err}");
+                hbb_common::throttled_log!(
+                    Duration::from_secs(10),
+                    warn,
+                    "Skipping unusable VB-CABLE endpoint {name}: {err}"
+                );
                 continue;
             }
         };
         let channels = capture.default_output_config()?.channels();
         candidates.push((endpoint_priority(&name, channels), id, name));
     }
-    candidates.sort_by(|left, right| {
-        left.0
-            .cmp(&right.0)
-            .then_with(|| left.2.cmp(&right.2))
-    });
+    candidates.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.2.cmp(&right.2)));
     if let Some((_, id, name)) = candidates.into_iter().next() {
         return Ok(Some((id, name)));
     }
@@ -303,14 +304,11 @@ fn auto_selected_device(enumerator: &IMMDeviceEnumerator) -> ResultType<Option<(
 }
 
 fn selected_device() -> String {
-    let configured = {
-        let value = crate::ui_interface::get_option(OPTION_REMOTE_ONLY_AUDIO_DEVICE);
-        if value.is_empty() {
-            Config::get_option(OPTION_REMOTE_ONLY_AUDIO_DEVICE)
-        } else {
-            value
-        }
-    };
+    let mode = configured_mode();
+    if mode != "remote" {
+        return String::new();
+    }
+    let configured = option_value(OPTION_REMOTE_ONLY_AUDIO_DEVICE);
     let result = (|| {
         let _com = ComApartment::new()?;
         let device_enumerator = enumerator()?;
@@ -318,14 +316,46 @@ fn selected_device() -> String {
     })();
     match result {
         Ok(Some((id, name))) => {
-            log::debug!("Selected VB-CABLE endpoint automatically: {name} ({id})");
+            log::trace!("Selected VB-CABLE endpoint automatically: {name} ({id})");
             id
         }
         Ok(None) => configured,
         Err(err) => {
-            log::warn!("Cannot enumerate VB-CABLE endpoints: {err}");
+            hbb_common::throttled_log!(
+                Duration::from_secs(10),
+                warn,
+                "Cannot enumerate VB-CABLE endpoints: {err}"
+            );
             configured
         }
+    }
+}
+
+fn configured_mode() -> String {
+    let mode = option_value(OPTION_REMOTE_ONLY_AUDIO_MODE);
+    if !mode.is_empty() {
+        return mode;
+    }
+    // Older builds used a non-empty endpoint option as the mode flag.
+    if !option_value(OPTION_REMOTE_ONLY_AUDIO_DEVICE).is_empty() {
+        "remote".to_owned()
+    } else {
+        "normal".to_owned()
+    }
+}
+
+fn option_value(key: &str) -> String {
+    if crate::common::is_server() {
+        let value = Config::get_option(key);
+        if !value.is_empty() {
+            return value;
+        }
+    }
+    let value = crate::ui_interface::get_option(key);
+    if value.is_empty() {
+        Config::get_option(key)
+    } else {
+        value
     }
 }
 
@@ -350,38 +380,34 @@ fn send_sync<T>(build: impl FnOnce(mpsc::Sender<Result<T, String>>) -> Command) 
     match reply_rx.recv_timeout(Duration::from_secs(5)) {
         Ok(Ok(value)) => Ok(value),
         Ok(Err(err)) => Err(hbb_common::anyhow::anyhow!(err)),
-        Err(err) => Err(hbb_common::anyhow::anyhow!("Audio routing worker timed out: {err}")),
+        Err(err) => Err(hbb_common::anyhow::anyhow!(
+            "Audio routing worker timed out: {err}"
+        )),
     }
 }
 
 fn worker_loop(rx: mpsc::Receiver<Command>) {
     let mut state = WorkerState {
         connection_count: 0,
-        audition_until: None,
         selected: selected_device(),
-        preview_selected: String::new(),
         last_error: String::new(),
+        retry_pending: false,
+        retry_after: Instant::now(),
     };
-    let _ = handle_initialize(&mut state);
+    if let Err(err) = handle_initialize(&mut state) {
+        record_worker_error(&mut state, err);
+    }
     loop {
         match rx.recv_timeout(Duration::from_millis(250)) {
             Ok(command) => handle_command(command, &mut state),
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                let configured = selected_device();
-                if configured != state.selected && state.audition_until.is_none() {
-                    let result = configure_output(&mut state, &configured);
-                    if let Err(err) = result {
+                if Instant::now() >= state.retry_after {
+                    if let Err(err) = reconcile(&mut state) {
                         record_worker_error(&mut state, err);
                     } else {
                         state.last_error.clear();
+                        state.retry_pending = false;
                     }
-                }
-                if state.audition_until.is_some_and(|until| Instant::now() >= until) {
-                    if let Err(err) = restore_state() {
-                        record_worker_error(&mut state, err);
-                    }
-                    state.audition_until = None;
-                    state.preview_selected.clear();
                 }
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -391,6 +417,8 @@ fn worker_loop(rx: mpsc::Receiver<Command>) {
 
 fn record_worker_error(state: &mut WorkerState, err: impl std::fmt::Display) {
     state.last_error = err.to_string();
+    state.retry_pending = true;
+    state.retry_after = Instant::now() + Duration::from_secs(1);
     log::error!("Audio routing failed: {}", state.last_error);
 }
 
@@ -402,15 +430,7 @@ fn handle_command(command: Command, state: &mut WorkerState) {
                 record_worker_error(state, err);
             } else {
                 state.last_error.clear();
-            }
-            let _ = reply.send(result.map_err(|err| err.to_string()));
-        }
-        Command::Preview(id, reply) => {
-            let result = preview_output(state, &id);
-            if let Err(err) = &result {
-                record_worker_error(state, err);
-            } else {
-                state.last_error.clear();
+                state.retry_pending = false;
             }
             let _ = reply.send(result.map_err(|err| err.to_string()));
         }
@@ -419,6 +439,7 @@ fn handle_command(command: Command, state: &mut WorkerState) {
                 record_worker_error(state, err);
             } else {
                 state.last_error.clear();
+                state.retry_pending = false;
             }
         }
         Command::Status(reply) => {
@@ -436,13 +457,22 @@ fn restore_output(
     let mut all_roles_restored = true;
     for (role, endpoint) in ROLES.iter().zip(&saved.defaults) {
         match get_device(enumerator, endpoint) {
-            Ok(device) if unsafe { device.GetState()? } == DEVICE_STATE_ACTIVE => {
-                set_default(policy, endpoint, *role)?;
-            }
-            Ok(_) => {
-                all_roles_restored = false;
-                log::warn!("Saved audio output is no longer active: {endpoint}");
-            }
+            Ok(device) => match unsafe { device.GetState() } {
+                Ok(state) if state == DEVICE_STATE_ACTIVE => {
+                    if let Err(err) = set_default(policy, endpoint, *role) {
+                        all_roles_restored = false;
+                        log::warn!("Cannot restore saved audio output {endpoint}: {err}");
+                    }
+                }
+                Ok(_) => {
+                    all_roles_restored = false;
+                    log::warn!("Saved audio output is no longer active: {endpoint}");
+                }
+                Err(err) => {
+                    all_roles_restored = false;
+                    log::warn!("Cannot inspect saved audio output {endpoint}: {err}");
+                }
+            },
             Err(err) => {
                 all_roles_restored = false;
                 log::warn!("Cannot restore saved audio output {endpoint}: {err}");
@@ -457,13 +487,17 @@ fn restore_output(
         for device in outputs(enumerator)? {
             if !virtual_output(&device)? {
                 let fallback_id = device_id(&device)?;
+                let mut fallback_ok = true;
                 for role in ROLES {
                     if let Err(err) = set_default(policy, &fallback_id, role) {
+                        fallback_ok = false;
                         log::warn!("Cannot set fallback audio output {fallback_id}: {err}");
                     }
                 }
-                log::warn!("Using fallback physical audio output after the saved endpoint disappeared: {fallback_id}");
-                fallback_restored = true;
+                if fallback_ok {
+                    log::warn!("Using fallback physical audio output after the saved endpoint disappeared: {fallback_id}");
+                    fallback_restored = true;
+                }
                 break;
             }
         }
@@ -471,11 +505,13 @@ fn restore_output(
 
     for (endpoint, level) in &saved.volumes {
         if let Ok(device) = get_device(enumerator, endpoint) {
-            if unsafe { device.GetState()? } == DEVICE_STATE_ACTIVE {
-                if let Err(err) = unsafe {
+            if matches!(unsafe { device.GetState() }, Ok(state) if state == DEVICE_STATE_ACTIVE) {
+                let result = unsafe {
                     volume(&device)?.SetMasterVolumeLevelScalar(*level, std::ptr::null())
-                } {
+                };
+                if let Err(err) = result {
                     log::warn!("Cannot restore volume state for {endpoint}: {err}");
+                    return Err(err.into());
                 }
             }
         }
@@ -483,58 +519,33 @@ fn restore_output(
 
     for (endpoint, muted) in &saved.mutes {
         if let Ok(device) = get_device(enumerator, endpoint) {
-            if unsafe { device.GetState()? } == DEVICE_STATE_ACTIVE {
-                if let Err(err) = unsafe { volume(&device)?.SetMute(*muted, std::ptr::null()) } {
+            if matches!(unsafe { device.GetState() }, Ok(state) if state == DEVICE_STATE_ACTIVE) {
+                let result = unsafe { volume(&device)?.SetMute(*muted, std::ptr::null()) };
+                if let Err(err) = result {
                     log::warn!("Cannot restore mute state for {endpoint}: {err}");
+                    return Err(err.into());
                 }
             }
         }
     }
 
     if let Ok(device) = get_device(enumerator, &saved.virtual_volume.0) {
-        if unsafe { device.GetState()? } == DEVICE_STATE_ACTIVE {
-            if let Err(err) = unsafe {
-                volume(&device)?.SetMasterVolumeLevelScalar(
-                    saved.virtual_volume.1,
-                    std::ptr::null(),
-                )
-            } {
+        if matches!(unsafe { device.GetState() }, Ok(state) if state == DEVICE_STATE_ACTIVE) {
+            let result = unsafe {
+                volume(&device)?
+                    .SetMasterVolumeLevelScalar(saved.virtual_volume.1, std::ptr::null())
+            };
+            if let Err(err) = result {
                 log::warn!("Cannot restore virtual audio volume: {err}");
+                return Err(err.into());
             }
         }
     }
 
     if !all_roles_restored && !fallback_restored {
-        log::warn!("No physical audio output is available after disconnect");
+        bail!("No physical audio output is available after disconnect");
     }
     Ok(())
-}
-
-fn restore_orphaned_virtual_output(enumerator: &IMMDeviceEnumerator) -> ResultType<bool> {
-    let current = unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole)? };
-    if !virtual_output(&current)? {
-        return Ok(false);
-    }
-
-    let mut physical = None;
-    for device in outputs(enumerator)? {
-        if !virtual_output(&device)? {
-            physical = Some((device_id(&device)?, device));
-            break;
-        }
-    }
-    let Some((id, _device)) = physical else {
-        log::warn!("The default output is virtual, but no physical output is available");
-        return Ok(false);
-    };
-
-    let policy = policy()?;
-    for role in ROLES {
-        set_default(&policy, &id, role)?;
-    }
-
-    log::info!("Recovered orphaned virtual audio output to physical endpoint {id}");
-    Ok(true)
 }
 
 fn activate_output(
@@ -562,10 +573,9 @@ fn activate_output(
         let volumes = devices
             .iter()
             .map(|device| {
-                Ok((
-                    device_id(device)?,
-                    unsafe { volume(device)?.GetMasterVolumeLevelScalar()? },
-                ))
+                Ok((device_id(device)?, unsafe {
+                    volume(device)?.GetMasterVolumeLevelScalar()?
+                }))
             })
             .collect::<ResultType<_>>()?;
         let virtual_volume = (id.to_owned(), unsafe {
@@ -580,19 +590,28 @@ fn activate_output(
         save_state(&saved)?;
     }
 
-    // Mute physical endpoints only while a remote session is active.
-    for device in &devices {
-        if device_id(device)? != id {
-            unsafe { volume(device)?.SetMute(true, std::ptr::null())? };
+    let result = (|| {
+        // Mute physical endpoints only while a remote session is active.
+        for device in &devices {
+            if device_id(device)? != id {
+                unsafe { volume(device)?.SetMute(true, std::ptr::null())? };
+            }
         }
-    }
-    for role in ROLES {
-        set_default(policy, id, role)?;
-    }
-    unsafe {
-        let endpoint_volume = volume(target)?;
-        endpoint_volume.SetMasterVolumeLevelScalar(1.0, std::ptr::null())?;
-        endpoint_volume.SetMute(false, std::ptr::null())?;
+        for role in ROLES {
+            set_default(policy, id, role)?;
+        }
+        unsafe {
+            let endpoint_volume = volume(target)?;
+            endpoint_volume.SetMasterVolumeLevelScalar(1.0, std::ptr::null())?;
+            endpoint_volume.SetMute(false, std::ptr::null())?;
+        }
+        Ok::<(), hbb_common::anyhow::Error>(())
+    })();
+    if let Err(err) = result {
+        if let Err(restore_err) = restore_state() {
+            bail!("Audio output switch failed: {err}; recovery failed: {restore_err}");
+        }
+        return Err(err);
     }
     Ok(())
 }
@@ -612,11 +631,22 @@ fn handle_initialize(state: &mut WorkerState) -> ResultType<()> {
     state.selected = selected_device();
     if state.connection_count == 0 {
         restore_state()?;
-        if !state.selected.is_empty() && saved_output()?.is_none() {
-            let _com = ComApartment::new()?;
-            let enumerator = enumerator()?;
-            let _ = restore_orphaned_virtual_output(&enumerator)?;
-        }
+    }
+    Ok(())
+}
+
+fn reconcile(state: &mut WorkerState) -> ResultType<()> {
+    let configured = selected_device();
+    let changed = configured != state.selected;
+    state.selected = configured;
+    if saved_output()?.is_some() && (state.connection_count == 0 || state.selected.is_empty()) {
+        restore_state()?;
+    } else if state.connection_count > 0
+        && !state.selected.is_empty()
+        && (changed || state.retry_pending || saved_output()?.is_none())
+    {
+        switch_to(&state.selected)?;
+        crate::audio_service::restart();
     }
     Ok(())
 }
@@ -643,10 +673,11 @@ fn switch_to(id: &str) -> ResultType<()> {
 
 fn configure_output(state: &mut WorkerState, id: &str) -> ResultType<()> {
     if id.is_empty() {
-        state.selected.clear();
-        state.audition_until = None;
-        state.preview_selected.clear();
         restore_state()?;
+        if state.connection_count > 0 {
+            crate::audio_service::restart();
+        }
+        state.selected.clear();
         log::info!("Audio output mode changed to Normal");
         return Ok(());
     }
@@ -661,29 +692,13 @@ fn configure_output(state: &mut WorkerState, id: &str) -> ResultType<()> {
         id.to_owned()
     };
     let target = validate_target(&enumerator, &effective_id)?;
-    state.selected = effective_id.clone();
     if state.connection_count > 0 {
         let policy = policy()?;
         activate_output(&enumerator, &policy, &effective_id, &target)?;
+        crate::audio_service::restart();
     }
+    state.selected = effective_id.clone();
     log::info!("Audio output mode changed to Remote only: {effective_id}");
-    Ok(())
-}
-
-fn preview_output(state: &mut WorkerState, id: &str) -> ResultType<()> {
-    if id.is_empty() {
-        state.audition_until = None;
-        state.preview_selected.clear();
-        restore_state()?;
-        return Ok(());
-    }
-    if state.connection_count > 0 {
-        bail!("Audio preview is available only when no remote connection is active");
-    }
-    switch_to(id)?;
-    state.preview_selected = id.to_owned();
-    state.audition_until = Some(Instant::now() + Duration::from_secs(15));
-    log::info!("Audio output preview started for 15 seconds: {id}");
     Ok(())
 }
 
@@ -691,12 +706,11 @@ fn update_connection_count(state: &mut WorkerState, count: usize) -> ResultType<
     let (started, ended) = connection_transition(state.connection_count, count);
     state.connection_count = count;
     if started {
-        state.audition_until = None;
         if !state.selected.is_empty() {
             switch_to(&state.selected)?;
+            crate::audio_service::restart();
         }
     } else if ended {
-        state.audition_until = None;
         restore_state()?;
     }
     Ok(())
@@ -721,14 +735,9 @@ fn status_json(state: &WorkerState) -> ResultType<String> {
     Ok(serde_json::json!({
         "devices": devices,
         "available": auto_selected_device(&enumerator)?.is_some(),
-        "selected": if state.audition_until.is_some() {
-            state.preview_selected.clone()
-        } else {
-            state.selected.clone()
-        },
-        "mode": if state.selected.is_empty() { "normal" } else { "remote" },
+        "selected": state.selected,
+        "mode": configured_mode(),
         "connected_count": state.connection_count,
-        "auditioning": state.audition_until.is_some(),
         "can_restore": saved_output()?.is_some(),
         "error": state.last_error,
     })
@@ -737,14 +746,39 @@ fn status_json(state: &WorkerState) -> ResultType<String> {
 
 /// Queue an endpoint change. COM and PolicyConfig calls run only on the worker.
 pub(crate) fn set_device(id: &str) -> ResultType<()> {
+    let mode = if id.is_empty() { "normal" } else { "remote" };
+    if server_worker_available() {
+        crate::ui_interface::set_audio_output_mode(mode)?;
+        return Ok(());
+    }
     send_sync(|reply| Command::Configure(id.to_owned(), reply))?;
-    crate::ui_interface::set_audio_output_config(if id == AUTO_DEVICE { "" } else { id })?;
-    crate::audio_service::restart();
+    crate::ui_interface::set_audio_output_mode(mode)?;
     Ok(())
 }
 
-pub(crate) fn preview_device(id: &str) -> ResultType<()> {
-    send_sync(|reply| Command::Preview(id.to_owned(), reply))
+pub(crate) fn set_mode(mode: &str) -> ResultType<()> {
+    match mode {
+        "normal" | "remote" => {}
+        _ => bail!("Unknown remote-only audio mode: {mode}"),
+    }
+    if server_worker_available() {
+        crate::ui_interface::set_audio_output_mode(mode)?;
+        return Ok(());
+    }
+    let id = if mode == "remote" { AUTO_DEVICE } else { "" };
+    send_sync(|reply| Command::Configure(id.to_owned(), reply))?;
+    crate::ui_interface::set_audio_output_mode(mode)?;
+    Ok(())
+}
+
+pub(crate) fn apply_configured_mode() -> ResultType<()> {
+    let id = selected_device();
+    send_sync(|reply| Command::Configure(id, reply))?;
+    Ok(())
+}
+
+fn server_worker_available() -> bool {
+    !crate::common::is_server() && crate::common::check_process("--server", false)
 }
 
 /// The count is computed by the server from AUTHED_CONNS and delivered over IPC.
@@ -763,6 +797,9 @@ pub(crate) fn initialize() {
 }
 
 pub(crate) fn devices_json() -> ResultType<String> {
+    if server_worker_available() {
+        return crate::ipc::get_audio_output_status();
+    }
     send_sync(Command::Status)
 }
 
@@ -778,7 +815,9 @@ fn capture_device_for(endpoint: &IMMDevice) -> ResultType<cpal::Device> {
     if matches.len() != 1 {
         bail!("Virtual audio device name is missing or ambiguous: {name}");
     }
-    let device = matches.pop().context("Virtual audio device is unavailable")?;
+    let device = matches
+        .pop()
+        .context("Virtual audio device is unavailable")?;
     let channels = device.default_output_config()?.channels();
     if channels == 0 || channels > 8 {
         bail!("Select a virtual playback device with 1 to 8 channels, such as CABLE Input");
@@ -823,8 +862,14 @@ mod tests {
         assert_eq!(endpoint_priority("扬声器 (VB-Audio Virtual Cable)", 2), 0);
         assert_eq!(endpoint_priority("Speakers (VB-Audio Virtual Cable)", 2), 0);
         assert_eq!(endpoint_priority("Speakers (VB-Audio Virtual Cable)", 6), 2);
-        assert_eq!(endpoint_priority("CABLE In 16 Ch (VB-Audio Virtual Cable)", 16), 1);
-        assert_eq!(endpoint_priority("CABLE Input (VB-Audio Virtual Cable)", 2), 1);
+        assert_eq!(
+            endpoint_priority("CABLE In 16 Ch (VB-Audio Virtual Cable)", 16),
+            1
+        );
+        assert_eq!(
+            endpoint_priority("CABLE Input (VB-Audio Virtual Cable)", 2),
+            1
+        );
         assert_eq!(endpoint_priority("VB-Audio Cable A", 2), 2);
     }
 
@@ -862,11 +907,18 @@ mod tests {
             virtual_output(&device).unwrap();
             let before = unsafe { volume(&device).unwrap().GetMute().unwrap() }.as_bool();
             if !virtual_output(&device).unwrap() {
-                assert!(set_device(&device_id(&device).unwrap()).is_err());
-                assert_eq!(unsafe { volume(&device).unwrap().GetMute().unwrap() }.as_bool(), before);
+                assert!(
+                    validate_target(&enumerator().unwrap(), &device_id(&device).unwrap()).is_err()
+                );
+                assert_eq!(
+                    unsafe { volume(&device).unwrap().GetMute().unwrap() }.as_bool(),
+                    before
+                );
             }
         }
         policy().unwrap();
-        assert!(set_device("nonexistent-rustdesk-audio-output").is_err());
+        assert!(
+            validate_target(&enumerator().unwrap(), "nonexistent-rustdesk-audio-output").is_err()
+        );
     }
 }

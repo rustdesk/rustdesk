@@ -293,13 +293,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android-logs-folder-tip", "Choose Android → media to store log files."),
         ("install-directory-not-empty-tip", "The selected folder is not empty. Installation may delete existing data. Consider choosing a different folder."),
         ("username-login-disabled-oidc-unavailable", "Username and password login is disabled, and no OIDC login methods are available."),
-        ("Redirect audio to remote client", "Redirect audio to remote client"),
-        ("Normal", "Normal"),
-        ("Remote only", "Remote only"),
-        ("Install VB-CABLE to use remote-only audio.", "Install VB-CABLE to use remote-only audio."),
-        ("Get VB-CABLE", "Get VB-CABLE"),
         ("remote-only-audio-tip", "Applies while a remote session is active. After disconnect, the physical output, volume, and mute state are restored."),
-        ("VB-CABLE is required for Remote only.", "VB-CABLE is required for Remote only."),
-        ("Audio output will be restored automatically.", "Audio output will be restored automatically."),
     ].iter().cloned().collect();
 }
