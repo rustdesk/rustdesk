@@ -827,5 +827,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Request approval", "Küsi heakskiitu"),
         ("Forever", "Igavesti"),
         ("username-login-disabled-oidc-unavailable", "Kasutajanime ja parooliga sisselogimine on keelatud ja ühtegi OIDC sisselogimisviisi pole saadaval."),
+        ("Use DRM screen capture", "Kasuta DRM-ekraanihõivet"),
+        ("drm-capture-tip", "Hõivab ekraani RustDeski teenuse kaudu otse graafikakaardilt, ilma Waylandi ekraani jagamise päringuta, ka sisselogimisekraanil. Ei pruugi töötada igas seadmes; kui ühendused küsivad endiselt ekraani jagamist, lülita see välja või kasuta X11. Muutmine katkestab praegused seansid."),
+        ("wayland-drm-tip", "Järelvalveta juurdepääsuks Waylandis proovi DRM-ekraanihõivet või kasuta X11, kui see ei tööta."),
+        ("login-wayland-drm-tip", "Waylandi sisselogimisekraanile juurdepääsuks proovi DRM-ekraanihõivet või lülita see X11 peale."),
     ].iter().cloned().collect();
 }

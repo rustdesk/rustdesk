@@ -385,6 +385,7 @@ fn refresh_wayland_uinput_rect_if_changed() {
     }
     #[cfg(not(feature = "drm"))]
     let _ = live_changed;
+    let drm_capture = crate::platform::linux::drm_capture_enabled();
     // The remap corrects for per-display origin shifts; the uinput ABS range corrects for
     // the overall bounding box. Only enable the remap once the range matches the live
     // layout, otherwise moves would be remapped into a range the device is not yet using.
@@ -392,7 +393,7 @@ fn refresh_wayland_uinput_rect_if_changed() {
     // The check, the apply, what they record and the flag below run on the uinput apply thread,
     // in turn with the other paths; this loop waits for its answer.
     #[cfg(feature = "drm")]
-    if run_uinput_apply(move |rt| {
+    if drm_capture && run_uinput_apply(move |rt| {
         let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
         // The device already runs a range that fits this layout: the DRM calibration may measure.
         if range_ok {
@@ -445,8 +446,7 @@ fn refresh_wayland_uinput_rect_if_changed() {
             "Failed to check the uinput range: the uinput apply thread is gone"
         );
     }
-    #[cfg(not(feature = "drm"))]
-    {
+    if !drm_capture {
         let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
         if !range_ok {
             let (minx, maxx, miny, maxy) = rect;
@@ -829,7 +829,8 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
 fn wayland_has_compositor() -> bool {
     #[cfg(feature = "drm")]
     {
-        !crate::platform::linux::is_login_screen_wayland_cached()
+        !crate::platform::linux::drm_capture_enabled()
+            || !crate::platform::linux::is_login_screen_wayland_cached()
     }
     #[cfg(not(feature = "drm"))]
     {

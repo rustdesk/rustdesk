@@ -67,7 +67,11 @@ lazy_static::lazy_static! {
         let x11 = base::platform::linux::is_x11_or_headless();
         #[cfg(feature = "drm")]
         {
-            if x11 && !display_server_forced() && is_login_screen_wayland() {
+            if x11
+                && drm_capture_enabled()
+                && !display_server_forced()
+                && is_login_screen_wayland()
+            {
                 log::info!(
                     "drm: seat0 is a Wayland login screen that reads as x11 upstream; \
                      treating it as Wayland so the DRM path is not disabled at the one \
@@ -393,7 +397,7 @@ pub struct xcb_xfixes_get_cursor_image {
 pub fn is_login_screen_wayland() -> bool {
     let values = get_values_of_seat0_with_gdm_wayland(&[0, 2, 1]);
     #[cfg(feature = "drm")]
-    if is_wayland_tty_greeter(&values[0], &values[2]) {
+    if drm_capture_enabled() && is_wayland_tty_greeter(&values[0], &values[2]) {
         return true;
     }
     is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
@@ -497,6 +501,28 @@ mod tty_greeter_tests {
         let _listener = std::os::unix::net::UnixListener::bind(dir.join("wayland-1")).unwrap();
         assert!(dir_has_wayland_socket(&dir));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// The root service sets this for a greeter `--server`: that process reads the greeter account's
+/// config, which has not synced from root yet when `IS_X11` is computed.
+#[cfg(feature = "drm")]
+pub(crate) const ENV_DRM_CAPTURE: &str = "RUSTDESK_DRM_CAPTURE";
+
+/// DRM capture is compiled in and `allow-drm-capture` is on. While it is off, the drm paths in
+/// this crate run as a build without it. The Wayland enumeration in `base` and `scrap` does not
+/// read it: with no compositor named in the environment it probes the seat's socket and backs
+/// off after a failure, and it logs an enumeration failure once until the next success.
+pub fn drm_capture_enabled() -> bool {
+    #[cfg(feature = "drm")]
+    {
+        use base::config::keys::OPTION_ALLOW_DRM_CAPTURE;
+        std::env::var(ENV_DRM_CAPTURE).as_deref() == Ok("Y")
+            || Config::get_bool_option(OPTION_ALLOW_DRM_CAPTURE)
+    }
+    #[cfg(not(feature = "drm"))]
+    {
+        false
     }
 }
 
@@ -1095,6 +1121,10 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
             }
 
             append_audio_latency_envs(&mut envs, |key| std::env::var(key).ok());
+            #[cfg(feature = "drm")]
+            if desktop.is_login_wayland() && drm_capture_enabled() {
+                envs.push((ENV_DRM_CAPTURE, "Y".to_owned()));
+            }
 
             envs.push((
                 "TERM",
@@ -1265,29 +1295,6 @@ pub fn start_os_service() {
         allow_err!(crate::ipc::start(crate::POSTFIX_SERVICE));
     });
 
-    // DRM/KMS capture producer (opt-in `drm` feature): a dedicated thread + runtime that streams
-    // scanout frames to the user `--server` over the `_drm` service-scoped channel. Runs here
-    // because this process is the root service that already holds CAP_SYS_ADMIN for the in-process
-    // (direct-mode) libdrmtap read.
-    //
-    // Builder, like every other thread this feature starts: `thread::spawn` PANICS if the thread
-    // cannot be created (EAGAIN under a thread-count or memory limit), and here that panic would
-    // unwind out of `start_os_service` -- taking down the root service itself, for a feature whose
-    // failure should only cost DRM capture. Losing the producer leaves the consumer to fall back to
-    // PipeWire/X11, which is the same path a host without the feature takes.
-    #[cfg(feature = "drm")]
-    if let Err(err) = std::thread::Builder::new()
-        .name("drm-producer".into())
-        .spawn(|| {
-            crate::ipc::start_drm();
-        })
-    {
-        log::warn!(
-            "failed to spawn the drm capture producer thread: {err}; DRM capture is off for \
-             this boot and the consumer falls back to PipeWire/X11"
-        );
-    }
-
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     let (mut display, mut xauth): (String, String) = ("".to_owned(), "".to_owned());
@@ -1304,7 +1311,20 @@ pub fn start_os_service() {
 
     let mut cm0 = false;
     let mut last_restart = Instant::now();
+    #[cfg(feature = "drm")]
+    let mut drm_capture = DrmCaptureSwitch::new();
     while running.load(Ordering::SeqCst) {
+        #[cfg(feature = "drm")]
+        if drm_capture.poll() {
+            log::info!(
+                "drm capture switched {}; restarting --server",
+                if drm_capture.on { "on" } else { "off" }
+            );
+            desktop = Desktop::default();
+            stop_server(&mut server);
+            stop_server(&mut user_server);
+            force_stop_server();
+        }
         desktop.refresh();
         update_active_user_lookup_cache(&desktop);
 
@@ -1332,11 +1352,12 @@ pub fn start_os_service() {
                 // A greeter neither recognizes (e.g. LightDM) never reaches this branch -- it takes
                 // the unprivileged else-branch below already. A genuine root graphical session (username=="root")
                 // has no lower uid to drop to, so it stays root. The whole branch is gated on the drm
-                // feature, so the drm-off build is upstream's single `start_server(None, ..)` line.
+                // feature and on allow-drm-capture; otherwise it is upstream's single
+                // `start_server(None, ..)` line.
                 #[cfg(not(feature = "drm"))]
                 start_server(None, &mut server);
                 #[cfg(feature = "drm")]
-                if desktop.username != "root" && !desktop.uid.is_empty() {
+                if drm_capture_enabled() && desktop.username != "root" && !desktop.uid.is_empty() {
                     start_server(Some(&desktop), &mut server);
                     // If dropping to the greeter uid did not produce a RUNNING server, fall back to a
                     // root --server so the login screen stays remotable instead of looping on a
@@ -1403,6 +1424,88 @@ pub fn start_os_service() {
     log::info!("Exit");
 }
 
+/// Follows `allow-drm-capture` from the service loop. The `_drm` producer starts the first time it
+/// is on and then stays up; while the option is off `handle_drm_conn` refuses every peer.
+#[cfg(feature = "drm")]
+struct DrmCaptureSwitch {
+    on: bool,
+    producer_started: bool,
+}
+
+#[cfg(feature = "drm")]
+impl DrmCaptureSwitch {
+    fn new() -> Self {
+        Self {
+            on: drm_capture_enabled(),
+            producer_started: false,
+        }
+    }
+
+    /// Whether the option changed since the last call: every `--server` decided its paths at start.
+    fn poll(&mut self) -> bool {
+        let on = drm_capture_enabled();
+        let changed = on != self.on;
+        self.on = on;
+        if self.on && !self.producer_started {
+            self.producer_started = true;
+            // DRM/KMS capture producer (opt-in `drm` feature): a dedicated thread + runtime that
+            // streams scanout frames to the user `--server` over the `_drm` service-scoped channel.
+            // Runs here because this process is the root service that already holds CAP_SYS_ADMIN
+            // for the in-process (direct-mode) libdrmtap read.
+            //
+            // Builder, like every other thread this feature starts: `thread::spawn` PANICS if the
+            // thread cannot be created (EAGAIN under a thread-count or memory limit), and here that
+            // panic would unwind out of `start_os_service` -- taking down the root service itself,
+            // for a feature whose failure should only cost DRM capture. Losing the producer leaves
+            // the consumer to fall back to PipeWire/X11, which is the same path a host without the
+            // feature takes.
+            if let Err(err) = std::thread::Builder::new()
+                .name("drm-producer".into())
+                .spawn(|| {
+                    crate::ipc::start_drm();
+                })
+            {
+                log::warn!(
+                    "failed to spawn the drm capture producer thread: {err}; DRM capture is off \
+                     for this boot and the consumer falls back to PipeWire/X11"
+                );
+            }
+        }
+        changed
+    }
+}
+
+/// The service acts on `allow-drm-capture` from its own copy of the config, which only a non-root
+/// `--server` syncs. A root `--server` that applied a change to the option hands its config over
+/// itself, and so does the CLI, or the change never takes effect. The UI does not: `SyncConfig`
+/// carries the whole config, and a long-lived process may hold an older copy of the rest.
+#[cfg(feature = "drm")]
+pub async fn sync_drm_capture_to_service(was_on: bool) {
+    use crate::ipc::{connect_trusted_device_service, Data};
+    use hbb_common::config::Config2;
+    if !is_root() || drm_capture_enabled() == was_on {
+        return;
+    }
+    let result = async {
+        let mut conn = connect_trusted_device_service(1000).await?;
+        let config2 = crate::trusted_devices::config::update(Config2::get_for_sync).await?;
+        let configs = Box::new((Config::get(), config2));
+        conn.send(&Data::SyncConfig(Some(configs))).await?;
+        conn.next_timeout(1000).await
+    }
+    .await;
+    match result {
+        Ok(Some(Data::SyncConfig(None))) => {
+            log::info!("allow-drm-capture changed as root, config synced to the service")
+        }
+        Ok(Some(Data::SecurityConfigError(err))) => {
+            log::warn!("the service rejected the allow-drm-capture sync: {err}")
+        }
+        Ok(_) => log::warn!("the service did not confirm the allow-drm-capture sync"),
+        Err(err) => log::warn!("failed to sync allow-drm-capture to the service: {err}"),
+    }
+}
+
 #[inline]
 /// Returns the cached active `(uid, username)` snapshot when available.
 /// Callers that require a fresh seat0 lookup should call `get_values_of_seat0` directly.
@@ -1430,8 +1533,9 @@ pub fn get_active_userid_fresh() -> String {
     // A Wayland greeter owns seat0 while it is up and the DRM backend serves it, so a uid gate that
     // cannot see it rejects the greeter's own `--server`. `Desktop::refresh` reads it the same way.
     #[cfg(feature = "drm")]
-    return get_values_of_seat0_with_gdm_wayland(&[1])[0].clone();
-    #[cfg(not(feature = "drm"))]
+    if drm_capture_enabled() {
+        return get_values_of_seat0_with_gdm_wayland(&[1])[0].clone();
+    }
     get_values_of_seat0(&[1])[0].clone()
 }
 
@@ -2737,7 +2841,7 @@ mod desktop {
             self.username = seat0_values[2].clone();
             self.protocol = get_display_server_of_session(&self.sid).into();
             #[cfg(feature = "drm")]
-            {
+            if super::drm_capture_enabled() {
                 self.tty_greeter = super::is_tty_greeter_session(&self.sid);
                 if self.tty_greeter {
                     // `Type=tty` names no display server, and the fallback above read this
@@ -2764,7 +2868,9 @@ mod desktop {
                 // fully populated environment. This is for the display managers whose greeter user
                 // does match, and for greetd's Wayland greeters (`adopt_wayland_tty_greeter`).
                 #[cfg(feature = "drm")]
-                self.get_home();
+                if super::drm_capture_enabled() {
+                    self.get_home();
+                }
                 return;
             }
 
