@@ -2257,10 +2257,102 @@ DP-0 disconnected (normal left inverted right x axis y axis)
         assert!(caps["resolutions"].contains(" 1280x720 "));
         assert!(caps["resolutions"].contains(" 640x480 "));
     }
+
+    fn count_zombie_children() -> usize {
+        let my_pid = std::process::id();
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_str()
+                    .map(|s| s.bytes().all(|b| b.is_ascii_digit()))
+                    .unwrap_or(false)
+            })
+            .filter(|entry| {
+                let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
+                    return false;
+                };
+                let Some((_, rest)) = stat.rsplit_once(')') else {
+                    return false;
+                };
+                let mut parts = rest.split_whitespace();
+                let state = parts.next();
+                let ppid = parts.next().and_then(|s| s.parse::<u32>().ok());
+                state == Some("Z") && ppid == Some(my_pid)
+            })
+            .count()
+    }
+
+    #[test]
+    fn change_resolution_reaps_child_on_success() {
+        let res = change_resolution_with_cmd("/bin/true", "DP-1", 1920, 1080);
+        assert!(res.is_ok(), "expected Ok, got {:?}", res);
+        assert_eq!(
+            count_zombie_children(),
+            0,
+            "xrandr child was left as zombie"
+        );
+    }
+
+    #[test]
+    fn change_resolution_returns_error_and_reaps_on_nonzero_exit() {
+        let res = change_resolution_with_cmd("/bin/false", "DP-1", 9999, 9999);
+        assert!(res.is_err(), "expected Err on non-zero exit");
+        let msg = res.unwrap_err().to_string();
+        assert!(
+            msg.contains("DP-1") && msg.contains("9999x9999"),
+            "unexpected err: {}",
+            msg
+        );
+        assert_eq!(
+            count_zombie_children(),
+            0,
+            "failed xrandr child was left as zombie"
+        );
+    }
+
+    #[test]
+    fn change_resolution_directly_end_to_end_with_xrandr() {
+        if std::env::var("DISPLAY").is_err() || !has_cmd("xrandr") {
+            return;
+        }
+        let Ok(output) = run_cmds("xrandr --query") else {
+            return;
+        };
+        let Some(conn_name) = output
+            .lines()
+            .find(|line| line.contains(" connected"))
+            .and_then(|line| line.split_whitespace().next())
+        else {
+            return;
+        };
+        if let Ok(cur) = current_resolution(conn_name) {
+            let ok_res =
+                change_resolution_directly(conn_name, cur.width as usize, cur.height as usize);
+            assert!(ok_res.is_ok(), "live xrandr failed: {:?}", ok_res);
+            assert_eq!(count_zombie_children(), 0);
+        }
+        let err_res = change_resolution_directly(conn_name, 9999, 9999);
+        assert!(
+            err_res.is_err(),
+            "expected Err for unsupported xrandr mode on {}",
+            conn_name
+        );
+        assert_eq!(count_zombie_children(), 0);
+    }
 }
 
-pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
-    let status = Command::new("xrandr")
+fn change_resolution_with_cmd(
+    program: &str,
+    name: &str,
+    width: usize,
+    height: usize,
+) -> ResultType<()> {
+    let status = Command::new(program)
         .args(vec![
             "--output",
             name,
@@ -2278,6 +2370,10 @@ pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> Re
         );
     }
     Ok(())
+}
+
+pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
+    change_resolution_with_cmd("xrandr", name, width, height)
 }
 
 /// Scoped to `uid`, the user of the session being refreshed: the compositor starts Xwayland as
