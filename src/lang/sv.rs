@@ -829,7 +829,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("username-login-disabled-oidc-unavailable", "Inloggning med användarnamn och lösenord är inaktiverad, och inga OIDC-inloggningsmetoder är tillgängliga."),
         ("Use DRM screen capture", "Använd DRM-skärminspelning"),
         ("drm-capture-tip", "Fångar skärmen direkt från grafikkortet via RustDesk-tjänsten, utan Waylands fråga om skärmdelning, även på inloggningsskärmen. Fungerar kanske inte på alla enheter; om anslutningar fortfarande ber om skärmdelning, stäng av detta eller använd X11. Att ändra detta kopplar från aktuella sessioner."),
-        ("wayland-drm-tip", "Prova DRM-skärminspelning för obevakad åtkomst på Wayland, eller använd X11 om det inte fungerar."),        ("login-wayland-drm-tip", "Prova DRM-skärminspelning för att nå Waylands inloggningsskärm, eller byt den till X11."),
+        ("wayland-drm-tip", "Prova DRM-skärminspelning för obevakad åtkomst på Wayland, eller använd X11 om det inte fungerar."),
+        ("login-wayland-drm-tip", "Prova DRM-skärminspelning för att nå Waylands inloggningsskärm, eller byt den till X11."),
         ("Enable Unicode input", "Aktivera Unicode-inmatning"),
         ("unicode-input-tip", "Fånga Unicode-text som skickas av verktyg som KeePassXC Auto-Type. Kräver inmatningskälla 1."),
     ].iter().cloned().collect();

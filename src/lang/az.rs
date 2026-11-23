@@ -829,7 +829,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("username-login-disabled-oidc-unavailable", "İstifadəçi adı və parol ilə giriş deaktiv edilib və heç bir OIDC giriş üsulu mövcud deyil."),
         ("Use DRM screen capture", "DRM ekran çəkilişindən istifadə et"),
         ("drm-capture-tip", "Ekranı RustDesk xidməti vasitəsilə birbaşa qrafik kartdan çəkir, Wayland ekran paylaşımı sorğusu olmadan, giriş ekranı da daxil olmaqla. Hər cihazda işləməyə bilər; bağlantılar hələ də ekranı paylaşmağı tələb edirsə, bunu söndürün və ya X11 işlədin. Bunu dəyişmək cari sessiyaları kəsir."),
-        ("wayland-drm-tip", "Wayland-da nəzarətsiz giriş üçün DRM ekran çəkilişini sınayın, işləməzsə X11 işlədin."),        ("login-wayland-drm-tip", "Wayland giriş ekranına daxil olmaq üçün DRM ekran çəkilişini sınayın və ya onu X11-ə keçirin."),
+        ("wayland-drm-tip", "Wayland-da nəzarətsiz giriş üçün DRM ekran çəkilişini sınayın, işləməzsə X11 işlədin."),
+        ("login-wayland-drm-tip", "Wayland giriş ekranına daxil olmaq üçün DRM ekran çəkilişini sınayın və ya onu X11-ə keçirin."),
         ("Enable Unicode input", "Unicode girişini aktivləşdir"),
         ("unicode-input-tip", "KeePassXC Auto-Type kimi alətlərin göndərdiyi Unicode mətnini tutun. Giriş mənbəyi 1 tələb olunur."),
     ].iter().cloned().collect();

@@ -829,7 +829,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("username-login-disabled-oidc-unavailable", ""),
         ("Use DRM screen capture", ""),
         ("drm-capture-tip", ""),
-        ("wayland-drm-tip", ""),        ("login-wayland-drm-tip", ""),
+        ("wayland-drm-tip", ""),
+        ("login-wayland-drm-tip", ""),
         ("Enable Unicode input", ""),
         ("unicode-input-tip", ""),
     ].iter().cloned().collect();

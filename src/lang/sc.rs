@@ -829,7 +829,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("username-login-disabled-oidc-unavailable", "S'atzessu cun su nùmene utente e sa crae est disabilitadu, e non b'at perunu mètodu de atzessu OIDC a disponimentu."),
         ("Use DRM screen capture", ""),
         ("drm-capture-tip", ""),
-        ("wayland-drm-tip", ""),        ("login-wayland-drm-tip", ""),
+        ("wayland-drm-tip", ""),
+        ("login-wayland-drm-tip", ""),
         ("Enable Unicode input", "Abìlita s'intrada Unicode"),
         ("unicode-input-tip", "Catura su testu Unicode imbiadu dae ainas comente KeePassXC Auto-Type. Bisòngiat sa mitza de intrada 1."),
     ].iter().cloned().collect();

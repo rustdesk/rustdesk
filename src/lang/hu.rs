@@ -829,7 +829,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("username-login-disabled-oidc-unavailable", "A felhasználónévvel és jelszóval történő bejelentkezés le van tiltva, és nem érhető el OIDC bejelentkezési mód."),
         ("Use DRM screen capture", "DRM-képernyőrögzítés használata"),
         ("drm-capture-tip", "A RustDesk szolgáltatáson keresztül közvetlenül a videokártyáról rögzíti a képernyőt, a Wayland képernyőmegosztási kérése nélkül, a bejelentkezési képernyőn is. Nem biztos, hogy minden eszközön működik; ha a kapcsolatok továbbra is képernyőmegosztást kérnek, kapcsolja ki ezt, vagy használja az X11-et. A módosítás bontja az aktuális munkameneteket."),
-        ("wayland-drm-tip", "Felügyelet nélküli hozzáféréshez Waylanden próbálja ki a DRM-képernyőrögzítést, vagy használja az X11-et."),        ("login-wayland-drm-tip", "A Wayland bejelentkezési képernyőjéhez próbálja ki a DRM-képernyőrögzítést, vagy váltson X11-re."),
+        ("wayland-drm-tip", "Felügyelet nélküli hozzáféréshez Waylanden próbálja ki a DRM-képernyőrögzítést, vagy használja az X11-et."),
+        ("login-wayland-drm-tip", "A Wayland bejelentkezési képernyőjéhez próbálja ki a DRM-képernyőrögzítést, vagy váltson X11-re."),
         ("Enable Unicode input", "Unicode-bevitel engedélyezése"),
         ("unicode-input-tip", "Az olyan eszközök által küldött Unicode-szöveg rögzítése, mint a KeePassXC Auto-Type. Az 1. bemeneti forrást igényli."),
     ].iter().cloned().collect();
