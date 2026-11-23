@@ -531,24 +531,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         return Container();
       }
       final LinuxCards = <Widget>[];
-      if (bind.isSelinuxEnforcing()) {
-        // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.
-        final keyShowSelinuxHelpTip = "show-selinux-help-tip";
-        if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
-          LinuxCards.add(buildInstallCard(
-            "Warning",
-            "selinux_tip",
-            "",
-            () async {},
-            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
-            help: 'Help',
-            link:
-                'https://rustdesk.com/docs/en/client/linux/#permissions-issue',
-            closeButton: true,
-            closeOption: keyShowSelinuxHelpTip,
-          ));
-        }
-      }
       final drmSupported = bind.mainIsInstalled() &&
           bind.mainGetCommonSync(key: 'is-drm-capture-supported') == 'true';
       if (drmSupported && mainGetBoolOptionSync(kOptionAllowDrmCapture)) {

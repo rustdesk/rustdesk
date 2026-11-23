@@ -532,7 +532,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Open in new window", "Deschide în fereastră nouă"),
         ("Show displays as individual windows", "Afișează monitoarele ca ferestre individuale"),
         ("Use all my displays for the remote session", "Folosește toate monitoarele mele pentru sesiunea la distanță"),
-        ("selinux_tip", "SELinux este activat pe acest sistem. Este posibil ca unele funcții să nu funcționeze corect. Te rugăm să consulți documentația pentru instrucțiuni de configurare."),
         ("Change view", "Schimbă vizualizarea"),
         ("Big tiles", "Dale mari"),
         ("Small tiles", "Dale mici"),
