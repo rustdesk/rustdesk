@@ -831,5 +831,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "RustDesk سروس کے ذریعے براہِ راست گرافکس کارڈ سے اسکرین کیپچر کرتا ہے، Wayland کی اسکرین شیئرنگ کی تصدیق کے بغیر، لاگ ان اسکرین پر بھی۔ ہو سکتا ہے یہ ہر ڈیوائس پر کام نہ کرے؛ اگر کنکشن اب بھی اسکرین شیئر کرنے کا کہیں تو اسے بند کریں یا X11 استعمال کریں۔ اسے تبدیل کرنے سے موجودہ سیشن منقطع ہو جاتے ہیں۔"),
         ("wayland-drm-tip", "Wayland پر بغیر نگرانی رسائی کے لیے DRM اسکرین کیپچر آزمائیں، کام نہ کرے تو X11 استعمال کریں۔"),        ("login-wayland-drm-tip", "Wayland لاگ ان اسکرین تک رسائی کے لیے DRM اسکرین کیپچر آزمائیں یا اسے X11 پر منتقل کریں۔"),
         ("Enable Unicode input", "Unicode ان پٹ کو فعال کریں"),
-        ("unicode-input-tip", "KeePassXC Auto-Type جیسے ٹولز کے بھیجے گئے Unicode متن کو کیپچر کریں۔ ان پٹ کا ماخذ 1 درکار ہے۔"),    ].iter().cloned().collect();
+        ("unicode-input-tip", "KeePassXC Auto-Type جیسے ٹولز کے بھیجے گئے Unicode متن کو کیپچر کریں۔ ان پٹ کا ماخذ 1 درکار ہے۔"),
+    ].iter().cloned().collect();
 }

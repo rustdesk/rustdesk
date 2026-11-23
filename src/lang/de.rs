@@ -831,5 +831,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Nimmt den Bildschirm über den RustDesk-Dienst direkt von der Grafikkarte auf, ohne die Wayland-Abfrage zur Bildschirmfreigabe, auch auf dem Anmeldebildschirm. Funktioniert möglicherweise nicht auf jedem Gerät. Wenn Verbindungen weiterhin eine Bildschirmfreigabe verlangen, deaktivieren Sie dies oder verwenden Sie X11. Eine Änderung trennt die aktuellen Sitzungen."),
         ("wayland-drm-tip", "Für unbeaufsichtigten Zugriff unter Wayland DRM-Bildschirmaufnahme versuchen, sonst X11 verwenden."),        ("login-wayland-drm-tip", "Für den Wayland-Anmeldebildschirm DRM-Bildschirmaufnahme versuchen oder auf X11 umstellen."),
         ("Enable Unicode input", "Unicode-Eingabe aktivieren"),
-        ("unicode-input-tip", "Unicode-Text erfassen, der von Werkzeugen wie KeePassXC Auto-Type gesendet wird. Erfordert Eingabequelle 1."),    ].iter().cloned().collect();
+        ("unicode-input-tip", "Unicode-Text erfassen, der von Werkzeugen wie KeePassXC Auto-Type gesendet wird. Erfordert Eingabequelle 1."),
+    ].iter().cloned().collect();
 }
