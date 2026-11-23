@@ -5,7 +5,7 @@ use std::{
     io::Cursor,
     path::{Path, PathBuf},
     sync::atomic::{AtomicI32, Ordering},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde_derive::{Deserialize, Serialize};
@@ -1661,13 +1661,14 @@ pub fn is_write_need_confirmation(
     if path.exists() && path.is_file() {
         let metadata = std::fs::metadata(path)?;
         let modified_time = metadata.modified()?;
-        let remote_mt = Duration::from_secs(digest.last_modified);
         let local_mt = modified_time.duration_since(UNIX_EPOCH)?;
         // [Note]
         // We decide to give the decision whether to override the existing file to users,
         // which obey the behavior of the file manager in our system.
+        // The peer's digest carries whole seconds, so the local sub-second part cannot take
+        // part in the comparison: a file it saved with any fraction would never match.
         let mut is_identical = false;
-        if remote_mt == local_mt && digest.file_size == metadata.len() {
+        if digest.last_modified == local_mt.as_secs() && digest.file_size == metadata.len() {
             is_identical = true;
         }
         Ok(DigestCheckResult::NeedConfirm(FileTransferDigest {

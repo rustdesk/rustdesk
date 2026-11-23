@@ -246,6 +246,41 @@ async fn download_recovers_interrupted_transfer() {
 }
 
 #[tokio::test]
+async fn download_reports_an_identical_file_despite_sub_second_mtime() {
+    let dir = DownloadDir::new();
+    let target = dir.0.join("file.txt");
+    std::fs::write(&target, b"received").unwrap();
+    // Filesystems keep sub-second modification times, while the peer's digest carries
+    // whole seconds only.
+    filetime::set_file_mtime(
+        &target,
+        filetime::FileTime::from_unix_time(1_700_000_000, 500_000_000),
+    )
+    .unwrap();
+    let mut job = dir.job();
+    let confirmation = match job
+        .download_digest(
+            false,
+            &FileTransferDigest {
+                id: 1,
+                file_num: 0,
+                last_modified: 1_700_000_000,
+                file_size: b"received".len() as _,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    {
+        DigestCheckResult::NeedConfirm(confirmation) => confirmation,
+        _ => panic!("an existing file must require confirmation"),
+    };
+    assert!(
+        confirmation.is_identical,
+        "same size and same second of modification time must report the file as identical"
+    );
+}
+
+#[tokio::test]
 async fn download_does_not_publish_or_remove_unreceived_staging_files() {
     let dir = DownloadDir::new();
     let target = dir.0.join("file.txt");
