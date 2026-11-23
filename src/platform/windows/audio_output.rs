@@ -1,5 +1,5 @@
 //! Host-side audio routing. The virtual endpoint deliberately survives capture
-//! teardown: disconnecting must never redirect a playing video to the speakers.
+//! teardown: disconnecting must restore the physical output at zero volume.
 
 use base::config::keys::OPTION_REMOTE_ONLY_AUDIO_DEVICE;
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -181,13 +181,187 @@ pub(crate) fn devices_json() -> ResultType<String> {
             });
         }
     }
-    let options = crate::ipc::get_options();
     Ok(serde_json::json!({
         "devices": devices,
-        "selected": options.get(OPTION_REMOTE_ONLY_AUDIO_DEVICE).cloned().unwrap_or_default(),
+        "selected": crate::ui_interface::get_option(OPTION_REMOTE_ONLY_AUDIO_DEVICE),
         "can_restore": saved_output()?.is_some(),
     })
     .to_string())
+}
+
+fn selected_device() -> String {
+    crate::ui_interface::get_option(OPTION_REMOTE_ONLY_AUDIO_DEVICE)
+}
+
+fn restore_output(
+    enumerator: &IMMDeviceEnumerator,
+    policy: &PolicyConfig,
+    saved: &SavedOutput,
+) -> ResultType<()> {
+    let mut restored_defaults = Vec::new();
+    for (role, endpoint) in ROLES.iter().zip(&saved.defaults) {
+        match get_device(enumerator, endpoint) {
+            Ok(device) if unsafe { device.GetState()? } == DEVICE_STATE_ACTIVE => {
+                set_default(policy, endpoint, *role)?;
+                restored_defaults.push(endpoint.clone());
+            }
+            Ok(_) => log::warn!("Saved audio output is no longer active: {endpoint}"),
+            Err(err) => log::warn!("Cannot restore saved audio output {endpoint}: {err}"),
+        }
+    }
+
+    for (endpoint, muted) in &saved.mutes {
+        if let Ok(device) = get_device(enumerator, endpoint) {
+            if unsafe { device.GetState()? } == DEVICE_STATE_ACTIVE {
+                if let Err(err) = unsafe { volume(&device)?.SetMute(*muted, std::ptr::null()) } {
+                    log::warn!("Cannot restore mute state for {endpoint}: {err}");
+                }
+            }
+        }
+    }
+
+    if let Ok(device) = get_device(enumerator, &saved.virtual_volume.0) {
+        if unsafe { device.GetState()? } == DEVICE_STATE_ACTIVE {
+            if let Err(err) = unsafe {
+                volume(&device)?.SetMasterVolumeLevelScalar(
+                    saved.virtual_volume.1,
+                    std::ptr::null(),
+                )
+            } {
+                log::warn!("Cannot restore virtual audio volume: {err}");
+            }
+        }
+    }
+
+    // The restored physical output is deliberately left unmuted at zero
+    // volume. Users can raise it normally after the remote session ends.
+    let mut physical_output_restored = false;
+    for endpoint in restored_defaults {
+        if endpoint == saved.virtual_volume.0 || physical_output_restored {
+            continue;
+        }
+        if let Ok(device) = get_device(enumerator, &endpoint) {
+            if unsafe { device.GetState()? } == DEVICE_STATE_ACTIVE {
+                unsafe {
+                    let endpoint_volume = volume(&device)?;
+                    endpoint_volume.SetMasterVolumeLevelScalar(0.0, std::ptr::null())?;
+                    endpoint_volume.SetMute(false, std::ptr::null())?;
+                }
+                physical_output_restored = true;
+            }
+        }
+    }
+    if !physical_output_restored {
+        for device in outputs(enumerator)? {
+            if device_id(&device)? != saved.virtual_volume.0 && !virtual_output(&device)? {
+                unsafe {
+                    let endpoint_volume = volume(&device)?;
+                    endpoint_volume.SetMasterVolumeLevelScalar(0.0, std::ptr::null())?;
+                    endpoint_volume.SetMute(false, std::ptr::null())?;
+                }
+                physical_output_restored = true;
+                break;
+            }
+        }
+    }
+    if !physical_output_restored {
+        log::warn!("No physical audio output is available after disconnect");
+    }
+    Ok(())
+}
+
+fn restore_orphaned_virtual_output(enumerator: &IMMDeviceEnumerator) -> ResultType<bool> {
+    let current = unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole)? };
+    if !virtual_output(&current)? {
+        return Ok(false);
+    }
+
+    let mut physical = None;
+    for device in outputs(enumerator)? {
+        if !virtual_output(&device)? {
+            physical = Some((device_id(&device)?, device));
+            break;
+        }
+    }
+    let Some((id, device)) = physical else {
+        log::warn!("The default output is virtual, but no physical output is available");
+        return Ok(false);
+    };
+
+    let policy = policy()?;
+    for role in ROLES {
+        set_default(&policy, &id, role)?;
+    }
+
+    unsafe {
+        let endpoint_volume = volume(&device)?;
+        endpoint_volume.SetMasterVolumeLevelScalar(0.0, std::ptr::null())?;
+        endpoint_volume.SetMute(false, std::ptr::null())?;
+    }
+    log::info!("Recovered orphaned virtual audio output to physical endpoint {id}");
+    Ok(true)
+}
+
+fn unmute_current_physical_output(enumerator: &IMMDeviceEnumerator) -> ResultType<bool> {
+    let current = unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole)? };
+    if virtual_output(&current)? {
+        return restore_orphaned_virtual_output(enumerator);
+    }
+    unsafe { volume(&current)?.SetMute(false, std::ptr::null())? };
+    Ok(true)
+}
+
+fn activate_output(
+    enumerator: &IMMDeviceEnumerator,
+    policy: &PolicyConfig,
+    id: &str,
+    target: &IMMDevice,
+) -> ResultType<()> {
+    let devices = outputs(enumerator)?;
+    if saved_output()?.is_none() {
+        let mut defaults = [String::new(), String::new(), String::new()];
+        for (i, role) in ROLES.iter().enumerate() {
+            defaults[i] =
+                device_id(&unsafe { enumerator.GetDefaultAudioEndpoint(eRender, *role)? })?;
+        }
+        let mutes = devices
+            .iter()
+            .map(|device| {
+                Ok((
+                    device_id(device)?,
+                    unsafe { volume(device)?.GetMute()? }.as_bool(),
+                ))
+            })
+            .collect::<ResultType<_>>()?;
+        let virtual_volume = (id.to_owned(), unsafe {
+            volume(target)?.GetMasterVolumeLevelScalar()?
+        });
+        let saved = serde_json::to_string(&SavedOutput {
+            defaults,
+            mutes,
+            virtual_volume,
+        })?;
+        LocalConfig::set_option(RESTORE_KEY.to_owned(), saved.clone());
+        if LocalConfig::get_option_from_file(RESTORE_KEY) != saved {
+            bail!("Cannot save audio output settings; routing was not changed");
+        }
+    }
+
+    // Mute physical endpoints only while a remote session is active.
+    for device in &devices {
+        if device_id(device)? != id {
+            unsafe { volume(device)?.SetMute(true, std::ptr::null())? };
+        }
+    }
+    for role in ROLES {
+        set_default(policy, id, role)?;
+    }
+    unsafe {
+        let endpoint_volume = volume(target)?;
+        endpoint_volume.SetMasterVolumeLevelScalar(1.0, std::ptr::null())?;
+        endpoint_volume.SetMute(false, std::ptr::null())?;
+    }
+    Ok(())
 }
 
 /// Executed by the local settings UI so default-endpoint policy is changed for
@@ -196,32 +370,14 @@ pub(crate) fn set_device(id: &str) -> ResultType<()> {
     let _lock = ROUTING.lock().unwrap();
     let _com = ComApartment::new()?;
     let enumerator = enumerator()?;
-    let policy = policy()?;
     if id.is_empty() {
         if let Some(saved) = saved_output()? {
-            // Validate defaults before restoring any output. If a speaker was
-            // unplugged, keep everything muted and allow the user to reconnect it.
-            for endpoint in &saved.defaults {
-                if unsafe { get_device(&enumerator, endpoint)?.GetState()? } != DEVICE_STATE_ACTIVE
-                {
-                    bail!("Reconnect the previous audio output before switching to Normal");
-                }
-            }
-            for (role, endpoint) in ROLES.iter().zip(&saved.defaults) {
-                set_default(&policy, endpoint, *role)?;
-            }
-            let device = get_device(&enumerator, &saved.virtual_volume.0)?;
-            unsafe {
-                volume(&device)?
-                    .SetMasterVolumeLevelScalar(saved.virtual_volume.1, std::ptr::null())?
-            };
-            for (endpoint, muted) in &saved.mutes {
-                let device = get_device(&enumerator, endpoint)?;
-                unsafe { volume(&device)?.SetMute(*muted, std::ptr::null())? };
-            }
+            restore_output(&enumerator, &policy()?, &saved)?;
+            LocalConfig::set_option(RESTORE_KEY.to_owned(), String::new());
+        } else {
+            unmute_current_physical_output(&enumerator)?;
         }
         persist_device("")?;
-        LocalConfig::set_option(RESTORE_KEY.to_owned(), String::new());
     } else {
         let target = get_device(&enumerator, id).context("Virtual audio device is unavailable")?;
         if !virtual_output(&target)? {
@@ -230,54 +386,9 @@ pub(crate) fn set_device(id: &str) -> ResultType<()> {
         // Reject ambiguous friendly names before touching system audio. CPAL's
         // pinned version exposes names but not endpoint IDs.
         capture_device_for(&target)?;
-        let devices = outputs(&enumerator)?;
         if let Some(saved) = saved_output()? {
-            if saved.virtual_volume.0 != id {
-                bail!("Switch to Normal before selecting a different virtual audio device");
-            }
-        }
-        if saved_output()?.is_none() {
-            let mut defaults = [String::new(), String::new(), String::new()];
-            for (i, role) in ROLES.iter().enumerate() {
-                defaults[i] =
-                    device_id(&unsafe { enumerator.GetDefaultAudioEndpoint(eRender, *role)? })?;
-            }
-            let mutes = devices
-                .iter()
-                .map(|device| {
-                    Ok((
-                        device_id(device)?,
-                        unsafe { volume(device)?.GetMute()? }.as_bool(),
-                    ))
-                })
-                .collect::<ResultType<_>>()?;
-            let virtual_volume = (id.to_owned(), unsafe {
-                volume(&target)?.GetMasterVolumeLevelScalar()?
-            });
-            let saved = serde_json::to_string(&SavedOutput {
-                defaults,
-                mutes,
-                virtual_volume,
-            })?;
-            LocalConfig::set_option(RESTORE_KEY.to_owned(), saved.clone());
-            if LocalConfig::get_option_from_file(RESTORE_KEY) != saved {
-                bail!("Cannot save audio output settings; routing was not changed");
-            }
-        }
-        // Mute first: apps pinned to a physical endpoint must not leak sound.
-        // These mutes remain after disconnect, capture errors and process exit.
-        for device in &devices {
-            if device_id(device)? != id {
-                unsafe { volume(device)?.SetMute(true, std::ptr::null())? };
-            }
-        }
-        for role in ROLES {
-            set_default(&policy, id, role)?;
-        }
-        unsafe {
-            let volume = volume(&target)?;
-            volume.SetMasterVolumeLevelScalar(1.0, std::ptr::null())?;
-            volume.SetMute(false, std::ptr::null())?;
+            restore_output(&enumerator, &policy()?, &saved)?;
+            LocalConfig::set_option(RESTORE_KEY.to_owned(), String::new());
         }
         persist_device(id)?;
     }
@@ -289,6 +400,33 @@ pub(crate) fn set_device(id: &str) -> ResultType<()> {
             "Remote only"
         }
     );
+    Ok(())
+}
+
+/// Synchronize Windows endpoint routing with the remote-session count. This is
+/// called by the interactive UI process, because the service runs as
+/// LocalSystem and cannot safely change the user's default audio policy.
+pub(crate) fn set_remote_connection_state(active: bool) -> ResultType<()> {
+    let _lock = ROUTING.lock().unwrap();
+    let _com = ComApartment::new()?;
+    let enumerator = enumerator()?;
+    if active {
+        let id = selected_device();
+        if id.is_empty() || saved_output()?.is_some() {
+            return Ok(());
+        }
+        let target = get_device(&enumerator, &id).context("Virtual audio device is unavailable")?;
+        if !virtual_output(&target)? {
+            bail!("Remote-only audio device is unavailable");
+        }
+        capture_device_for(&target)?;
+        activate_output(&enumerator, &policy()?, &id, &target)?;
+    } else if let Some(saved) = saved_output()? {
+        restore_output(&enumerator, &policy()?, &saved)?;
+        LocalConfig::set_option(RESTORE_KEY.to_owned(), String::new());
+    } else if !selected_device().is_empty() {
+        restore_orphaned_virtual_output(&enumerator)?;
+    }
     Ok(())
 }
 

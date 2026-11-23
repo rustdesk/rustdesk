@@ -1453,7 +1453,16 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                             }
                             #[cfg(feature = "flutter")]
                             Ok(Some(ipc::Data::VideoConnCount(Some(n)))) => {
+                                let was_active = video_conn_count > 0;
                                 video_conn_count = n;
+                                #[cfg(target_os = "windows")]
+                                if !crate::common::is_server() && (n > 0 || was_active) {
+                                    allow_err!(
+                                        crate::platform::windows::audio_output::set_remote_connection_state(
+                                            n > 0
+                                        )
+                                    );
+                                }
                             }
                             Ok(Some(ipc::Data::OnlineStatus(Some((mut x, _c))))) => {
                                 if x > 0 {
