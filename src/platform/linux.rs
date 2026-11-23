@@ -2260,14 +2260,23 @@ DP-0 disconnected (normal left inverted right x axis y axis)
 }
 
 pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
-    Command::new("xrandr")
+    let status = Command::new("xrandr")
         .args(vec![
             "--output",
             name,
             "--mode",
             &format!("{}x{}", width, height),
         ])
-        .spawn()?;
+        .status()?;
+    if !status.success() {
+        bail!(
+            "Failed to change resolution of '{}' to {}x{}, xrandr exited with {}",
+            name,
+            width,
+            height,
+            status
+        );
+    }
     Ok(())
 }
 
