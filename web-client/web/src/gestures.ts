@@ -36,6 +36,11 @@ export function fingerUp(input: {
   return "left-click";
 }
 
+/** Movement past the tap slop is a drag, so a pending long-press must be cancelled. */
+export function shouldCancelLongPress(moved: number): boolean {
+  return moved > TAP_SLOP_PX;
+}
+
 /** Two fingers that barely moved are a right click, not a pinch or a pan. */
 export function isTwoFingerTap(midShift: number, distDelta: number): boolean {
   return midShift < 12 && Math.abs(distDelta) < 12;

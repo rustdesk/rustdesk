@@ -95,17 +95,23 @@ npm run dev    # proxies /api and /ws to 127.0.0.1:21119
 While disconnected, a connection dialog sits on the empty stage. A live
 session dismisses it and gives the remote picture the full viewport. A small
 Session tab on the top edge, kept inside the fullscreen element, slides
-horizontally so it can move off a remote title bar. Opening it shows Fit,
-100%, zoom, pan, touch or mouse mode, the display list, shortcuts, and
-telemetry. Keys and pointer events reach the host only while that panel is
-closed. Fit is the default; zoom (menu, Ctrl/Alt+wheel, or a two-finger
-pinch) is anchored on the cursor, and Space+drag or Pan mode moves the view
-when it is larger than the viewport. Pointer coordinates include that scale
-and pan. A phone starts in touch mode: tap to click, long-press or a
-two-finger tap for the right button, one finger to drag, and pinch or two
-fingers to zoom and pan. Mouse mode shows a local cursor. The soft keyboard
-sits above the visual viewport, and inputs are 16px so the page itself does
-not zoom.
+horizontally so it can move off a remote title bar. The stage itself has no margin: it is `100vw` by `100dvh` at the viewport
+origin, and Fit letterboxing uses the same plain background out to the edges.
+Opening the Session tab shows Fit, 100%, zoom, pan, touch or mouse mode, the
+display list, shortcuts, clipboard, quality, and telemetry. Keys and pointer
+events reach the host only while that panel is closed. Fit is the default;
+zoom (menu, Ctrl/Alt+wheel, or a two-finger pinch) is anchored on the cursor.
+Holding Space pans only once the pointer also drags; a Space tap with no
+drag is sent to the host, and Pan mode pans on its own. Pointer coordinates
+include that scale and pan. Ctrl, Alt, and Meta chords are sent with their
+modifiers. The browser keeps Ctrl/Cmd+W, Ctrl/Cmd+T, Ctrl/Cmd+N, and
+Ctrl/Cmd+Tab, so those never reach the remote desktop. A phone starts in
+touch mode: tap to click, long-press or a two-finger tap for the right
+button, one finger to drag, and pinch or two fingers to zoom and pan. The
+local cursor dot is shown only in mouse mode on a touch device. The soft
+keyboard sits above the visual viewport, and inputs are 16px so the page
+itself does not zoom. Safe-area insets apply to the Session tab and the soft
+keyboard bar only.
 
 ## LAN self-host
 

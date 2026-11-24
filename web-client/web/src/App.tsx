@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { probeCodecs, RemoteDecoder, webCodecsStatus } from "./decoder";
-import { controlFromCode, isModifier } from "./keys";
+import { controlFromCode, isModifier, keyDownAction, keyUpAction, type KeyMods } from "./keys";
 import {
   fingerDown,
   fingerUp,
   isTwoFingerTap,
   keyboardInset,
   LONG_PRESS_MS,
-  TAP_SLOP_PX,
+  shouldCancelLongPress,
 } from "./gestures";
 import { clampPan, fitScale, mapFromRemote, mapToRemote, zoomAround, type ViewTransform } from "./mapping";
 import {
@@ -73,6 +73,10 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [connectDialog, setConnectDialog] = useState(false);
   const [softKeys, setSoftKeys] = useState(false);
+  const [touchDevice] = useState(coarsePointer);
+  const [clipDraft, setClipDraft] = useState("");
+  const [remoteClip, setRemoteClip] = useState("");
+  const [quality, setQuality] = useState("balanced");
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLElement>(null);
@@ -105,6 +109,9 @@ export default function App() {
   const lastTouchAt = useRef(0);
   const longTimer = useRef(0);
   const composing = useRef(false);
+  const spaceHeldRef = useRef(false);
+  const spacePannedRef = useRef(false);
+  const spaceOriginRef = useRef<{ x: number; y: number } | null>(null);
   const pendingClick = useRef<{ button: "left" | "right"; x: number; y: number; timer: number } | null>(null);
   const cursorEl = useRef<HTMLDivElement>(null);
 
@@ -359,6 +366,8 @@ export default function App() {
         setDetail(message.message);
       } else if (message.type === "rtt") {
         setRtt(message.ms);
+      } else if (message.type === "clipboard") {
+        setRemoteClip(message.text);
       }
     };
     socket.onerror = () => {
@@ -509,7 +518,10 @@ export default function App() {
       return;
     }
     const panning = hand || spacePan;
-    if (panning) return;
+    if (panning || spaceHeldRef.current) {
+      if (spaceHeldRef.current) spaceOriginRef.current = local;
+      return;
+    }
     if (event.pointerType === "touch") {
       const since = lastTapUp.current ? performance.now() - lastTapUp.current : null;
       const start = fingerDown(touchMode ? "touch" : "mouse", since);
@@ -595,6 +607,19 @@ export default function App() {
       pinch.current = { ...next, originX: pinch.current.originX, originY: pinch.current.originY, originDist: pinch.current.originDist };
       return;
     }
+    if (spaceHeldRef.current && pointers.current.size < 2) {
+      const origin = spaceOriginRef.current ?? local;
+      const moved = Math.hypot(local.x - origin.x, local.y - origin.y);
+      if (!spacePannedRef.current && !shouldCancelLongPress(moved)) return;
+      spacePannedRef.current = true;
+      setSpacePan(true);
+      const current = currentView();
+      const remoteW = sizeRef.current.width;
+      const remoteH = sizeRef.current.height;
+      setPan(clampPan(box.w, box.h, remoteW, remoteH, current.scale, current.panX + dx, current.panY + dy));
+      if (current.scale > fitScale(box.w, box.h, remoteW, remoteH) + 0.01) setViewMode("custom");
+      return;
+    }
     if (hand || spacePan) {
       const current = currentView();
       const remoteW = sizeRef.current.width;
@@ -606,6 +631,7 @@ export default function App() {
     if (event.pointerType === "touch" && pointers.current.size < 2) {
       const moved = Math.hypot(local.x - touchTap.current.x, local.y - touchTap.current.y);
       if (touchTap.current.longFired) return;
+      if (shouldCancelLongPress(moved)) clearLongPress();
       if (!touchMode) {
         placeCursor(
           Math.min(sizeRef.current.width - 1, Math.max(0, cursor.current.x + dx / currentView().scale)),
@@ -614,7 +640,7 @@ export default function App() {
         if (touchTap.current.dragging) queueMove(cursorPoint());
         return;
       }
-      if (!touchTap.current.dragging && moved > TAP_SLOP_PX) {
+      if (!touchTap.current.dragging && shouldCancelLongPress(moved)) {
         clearLongPress();
         const origin = remoteFromLocal(touchTap.current.x, touchTap.current.y);
         if (!origin) return;
@@ -662,7 +688,7 @@ export default function App() {
       clearLongPress();
       return;
     }
-    if (hand || spacePan) return;
+    if (spaceHeldRef.current || hand || spacePan) return;
     if (event.pointerType === "touch") {
       clearLongPress();
       const moved = Math.hypot(local.x - touchTap.current.x, local.y - touchTap.current.y);
@@ -732,6 +758,24 @@ export default function App() {
     const inField = (target: EventTarget | null) =>
       target instanceof HTMLElement &&
       Boolean(target.closest("[data-testid=connection-panel], [data-testid=session-menu], [data-testid=softbar]"));
+    const mods = (event: KeyboardEvent): KeyMods => ({
+      code: event.code,
+      key: event.key,
+      ctrl: event.ctrlKey,
+      alt: event.altKey,
+      meta: event.metaKey,
+      shift: event.shiftKey,
+      repeat: event.repeat,
+    });
+    const sendKey = (action: "down" | "up", part: { control?: string; chr?: string; modifiers: string[] }) => {
+      send({
+        type: "key",
+        action,
+        control: part.control ?? "",
+        chr: part.chr ?? "",
+        modifiers: part.modifiers,
+      });
+    };
     const onDown = (event: KeyboardEvent) => {
       const blocked = chromeRef.current.menu || chromeRef.current.dialog;
       if (blocked) {
@@ -748,33 +792,51 @@ export default function App() {
       }
       if (phase !== "live") return;
       if (inField(event.target)) return;
-      if (event.code === "Space") {
-        event.preventDefault();
-        setSpacePan(true);
+      const action = keyDownAction(mods(event));
+      if (action.type === "reserved" || action.type === "ignore") return;
+      event.preventDefault();
+      if (action.type === "space-down") {
+        if (event.repeat) return;
+        spaceHeldRef.current = true;
+        spacePannedRef.current = false;
         return;
       }
-      const control = controlFromCode(event.code);
-      if (control) {
-        event.preventDefault();
-        send({ type: "key", action: "down", control });
+      if (action.type === "text") {
+        send({ type: "text", text: action.text });
         return;
       }
-      if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey && !event.repeat) {
-        event.preventDefault();
-        send({ type: "text", text: event.key });
-      }
+      if (action.type === "control") sendKey("down", { control: action.name, modifiers: action.modifiers });
+      if (action.type === "combo") sendKey("down", action);
     };
     const onUp = (event: KeyboardEvent) => {
-      if (event.code === "Space") {
-        setSpacePan(false);
+      if (chromeRef.current.menu || chromeRef.current.dialog || phase !== "live") {
+        if (event.code === "Space") {
+          spaceHeldRef.current = false;
+          spacePannedRef.current = false;
+          spaceOriginRef.current = null;
+          setSpacePan(false);
+        }
         return;
       }
-      if (chromeRef.current.menu || chromeRef.current.dialog || phase !== "live") return;
       if (inField(event.target)) return;
-      const control = controlFromCode(event.code);
-      if (!control) return;
+      const action = keyUpAction(mods(event));
+      if (action.type === "space-up") {
+        const panned = spacePannedRef.current;
+        spaceHeldRef.current = false;
+        spacePannedRef.current = false;
+        spaceOriginRef.current = null;
+        setSpacePan(false);
+        if (!panned) {
+          event.preventDefault();
+          sendKey("down", { control: "Space", modifiers: [] });
+          sendKey("up", { control: "Space", modifiers: [] });
+        }
+        return;
+      }
+      if (action.type === "ignore") return;
       event.preventDefault();
-      send({ type: "key", action: "up", control });
+      if (action.type === "control") sendKey("up", { control: action.name, modifiers: action.modifiers });
+      if (action.type === "combo") sendKey("up", action);
     };
     window.addEventListener("keydown", onDown, true);
     window.addEventListener("keyup", onUp, true);
@@ -783,6 +845,39 @@ export default function App() {
       window.removeEventListener("keyup", onUp, true);
     };
   }, [phase]);
+
+  async function pasteToRemote() {
+    let text = clipDraft;
+    try {
+      const fromApi = await Promise.race([
+        navigator.clipboard.readText(),
+        new Promise<string>((_resolve, reject) => {
+          window.setTimeout(() => reject(new Error("clipboard timeout")), 250);
+        }),
+      ]);
+      if (fromApi) text = fromApi;
+    } catch {
+      /* The text box is the fallback when the Clipboard API is blocked. */
+    }
+    if (!text) return;
+    send({ type: "clipboard", text });
+    closeChrome();
+    window.setTimeout(() => chord([{ control: "Control" }, { chr: "v" }]), 400);
+  }
+
+  async function copyRemoteClip() {
+    if (!remoteClip) return;
+    try {
+      await navigator.clipboard.writeText(remoteClip);
+    } catch {
+      setClipDraft(remoteClip);
+    }
+  }
+
+  function setQualityPreset(name: string, fps: number) {
+    setQuality(name);
+    send({ type: "quality", quality: name, fps });
+  }
 
   function toggleFullscreen() {
     const node = stageRef.current;
@@ -824,7 +919,7 @@ export default function App() {
         ref={cursorEl}
         className="remote-cursor"
         data-testid="remote-cursor"
-        hidden={touchMode}
+        hidden={!touchDevice || touchMode}
       />
       <input ref={captureRef} className="capture" data-testid="capture" aria-hidden="true" tabIndex={-1} />
 
@@ -859,7 +954,7 @@ export default function App() {
       )}
 
       {showConnect && (
-        <div className="scrim" onPointerDown={(event) => { event.stopPropagation(); if (event.target === event.currentTarget && phase === "live") closeChrome(); }}>
+        <div className="scrim" data-testid="connection-backdrop" onPointerDown={(event) => { event.stopPropagation(); if (event.target === event.currentTarget && phase === "live") closeChrome(); }}>
           <form
             className="sheet"
             data-testid="connection-panel"
@@ -1012,6 +1107,31 @@ export default function App() {
               </select>
               <button type="button" className="ghost" onClick={() => send({ type: "refresh" })}>Refresh</button>
               <button type="button" className="ghost" data-testid="fullscreen" onClick={toggleFullscreen}>Fullscreen</button>
+            </div>
+
+            <h3>Clipboard</h3>
+            <textarea
+              data-testid="clipboard-text"
+              rows={2}
+              value={clipDraft}
+              placeholder="Clipboard text"
+              onChange={(event) => setClipDraft(event.target.value)}
+            />
+            <div className="actions">
+              <button type="button" className="ghost" data-testid="clipboard-send" onClick={() => void pasteToRemote()}>
+                Paste to remote
+              </button>
+              <button type="button" className="ghost" data-testid="clipboard-copy" onClick={() => void copyRemoteClip()} disabled={!remoteClip}>
+                Copy
+              </button>
+            </div>
+            <p className="detail" data-testid="remote-clipboard">{remoteClip || "No remote clipboard yet."}</p>
+
+            <h3>Quality</h3>
+            <div className="actions">
+              <button type="button" className={quality === "low" ? "primary" : "ghost"} data-testid="quality-low" onClick={() => setQualityPreset("low", 15)}>Low</button>
+              <button type="button" className={quality === "balanced" ? "primary" : "ghost"} data-testid="quality-balanced" onClick={() => setQualityPreset("balanced", 30)}>Balanced</button>
+              <button type="button" className={quality === "best" ? "primary" : "ghost"} data-testid="quality-best" onClick={() => setQualityPreset("best", 60)}>Best</button>
             </div>
 
             <h3>Input</h3>

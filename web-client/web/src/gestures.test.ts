@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DOUBLE_TAP_MS, fingerDown, fingerUp, isTwoFingerTap, keyboardInset, TAP_SLOP_PX } from "./gestures";
+import { DOUBLE_TAP_MS, fingerDown, fingerUp, isTwoFingerTap, keyboardInset, shouldCancelLongPress, TAP_SLOP_PX } from "./gestures";
 
 describe("phone gestures", () => {
   it("treats a still finger as a left click and a long-press as already handled", () => {
@@ -19,6 +19,11 @@ describe("phone gestures", () => {
     expect(isTwoFingerTap(2, 3)).toBe(true);
     expect(isTwoFingerTap(20, 0)).toBe(false);
     expect(isTwoFingerTap(0, 30)).toBe(false);
+  });
+
+  it("cancels a long-press once the finger moves past the tap slop", () => {
+    expect(shouldCancelLongPress(TAP_SLOP_PX)).toBe(false);
+    expect(shouldCancelLongPress(TAP_SLOP_PX + 1)).toBe(true);
   });
 
   it("measures the soft-keyboard overlap and ignores a closed keyboard", () => {
