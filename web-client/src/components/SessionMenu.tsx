@@ -1,3 +1,4 @@
+import { MobileSessionPanel, type MobilePanel } from './MobileSessionPanel';
 import React, { useState } from 'react';
 import {
   Activity,
@@ -32,7 +33,8 @@ export interface SessionStats {
 
 type MenuTab = 'control' | 'input' | 'display';
 
-interface SessionMenuProps {
+export interface SessionMenuProps {
+  clipboardDisabled: boolean;
   locale: Locale;
   audioEnabled: boolean;
   audioIssue: string | null;
@@ -85,7 +87,12 @@ interface SessionMenuProps {
   onSendClipboard: (text: string) => void;
 }
 
-export function SessionMenu({
+export function SessionMenu(props: SessionMenuProps & { mobilePanel: MobilePanel }) {
+  if (props.mobileLayout) return <MobileSessionPanel key={props.mobilePanel} {...props} />;
+  return <DesktopSessionMenu {...props} />;
+}
+
+function DesktopSessionMenu({
   locale,
   audioEnabled,
   audioIssue,

@@ -325,6 +325,11 @@ const DICT = {
     toolbarMore: 'Settings & Menu',
     toolbarDragHint: 'Drag horizontally to reposition',
     mobileOrbAria: 'Open remote control menu',
+    moreActions: 'More',
+    pointerSettings: 'Keyboard & mouse',
+    screens: 'Screen',
+    shortcutKeys: 'Shortcuts',
+    disconnectRemote: 'Disconnect remote session',
     menuLabel: 'Menu',
   },
   zh: {
@@ -613,6 +618,11 @@ const DICT = {
     toolbarMore: '更多配置与菜单',
     toolbarDragHint: '左右拖动调整位置',
     mobileOrbAria: '展开远程操作菜单',
+    moreActions: '更多',
+    pointerSettings: '键鼠',
+    screens: '屏幕',
+    shortcutKeys: '快捷键',
+    disconnectRemote: '断开远程连接',
     menuLabel: '菜单',
   },
 } as const;

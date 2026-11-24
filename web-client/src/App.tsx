@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { MousePointer2 } from 'lucide-react';
 import { RemoteAudio } from './lib/remoteAudio';
 import { DiagnosticOverlay } from './components/DiagnosticOverlay';
+import type { MobilePanel } from './components/MobileSessionPanel';
 import { MobileDock } from './components/MobileDock';
 import {
   RustDeskShell,
@@ -360,6 +361,7 @@ export default function App() {
   const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const [toolbarPinned, setToolbarPinned] = useState(false);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>('toolbar');
   const [menuOpen, setMenuOpen] = useState(false);
   const [connectDialog, setConnectDialog] = useState(false);
   const [softKeys, setSoftKeys] = useState(false);
@@ -2474,7 +2476,7 @@ export default function App() {
   const showConnectSheet = phase !== 'live' || connectDialog;
   const showSessionMenu = menuOpen && phase === 'live' && !connectDialog;
   const showHandle = phase === 'live' && !connectDialog && !menuOpen && !isTouchLayout;
-  const showMobileDock = remoteInput && !softKeys && isTouchLayout;
+  const showMobileDock = phase === 'live' && !connectDialog && !softKeys && isTouchLayout;
   const liveHostTitle =
     peer?.hostname || peer?.username || (mode === 'id' ? peerId : host) || 'Remote';
   const showRemoteCursor =
@@ -2646,13 +2648,17 @@ export default function App() {
           locale={locale}
           stageWidth={box.w}
           stageHeight={box.h}
-          touchMode={touchMode}
+          activePanel={menuOpen ? mobilePanel : null}
           rightArmed={rightArmed}
-          hasWarning={Boolean(decoderError)}
           onToggleKeyboard={toggleSoftKeyboard}
-          onToggleTouchMode={handleToggleTouchMode}
-          onRightClickAction={handleMobileRightClick}
-          onOpenMenu={() => setMenuOpen(true)}
+          onRightClickAction={() => {
+            closeChrome();
+            handleMobileRightClick();
+          }}
+          onOpenMenu={panel => {
+            setMobilePanel(menuOpen && panel === mobilePanel ? 'toolbar' : panel);
+            setMenuOpen(true);
+          }}
         />
       )}
 
@@ -2717,6 +2723,8 @@ export default function App() {
 
       {showSessionMenu && (
         <SessionMenu
+          clipboardDisabled={displayPrefs.disableClipboard}
+          mobilePanel={mobilePanel}
           locale={locale}
           audioEnabled={audioEnabled}
           audioIssue={audioIssue ? t(locale, audioIssue) : null}
