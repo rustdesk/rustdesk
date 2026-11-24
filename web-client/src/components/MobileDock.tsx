@@ -1,17 +1,19 @@
 import React, { useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Keyboard, Layers2, Monitor, MousePointer2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Keyboard, Layers2, RotateCw, Monitor, MousePointer2 } from 'lucide-react';
 import { t, type Locale } from '../lib/i18n';
 import type { MobilePanel } from './MobileSessionPanel';
 
 interface Props {
   locale: Locale;
+  landscape: boolean;
+  onRotate: () => void;
   activePanel: MobilePanel | null;
   onToggleKeyboard: () => void;
   onCollapse: () => void;
   onOpenMenu: (panel: MobilePanel) => void;
 }
 
-export function MobileDock({ locale, activePanel, onToggleKeyboard, onCollapse, onOpenMenu }: Props) {
+export function MobileDock({ locale, landscape, onRotate, activePanel, onToggleKeyboard, onCollapse, onOpenMenu }: Props) {
   const [hint, setHint] = useState(0);
   const lastTap = useRef<number | null>(null);
 
@@ -19,6 +21,7 @@ export function MobileDock({ locale, activePanel, onToggleKeyboard, onCollapse, 
     ['dock-keyboard', 'keyboard', Keyboard, onToggleKeyboard, false],
     ['dock-input-mode', 'pointerSettings', MousePointer2, () => onOpenMenu('input'), activePanel === 'input'],
     ['dock-display', 'screens', Monitor, () => onOpenMenu('display'), activePanel === 'display'],
+    ['dock-orientation', landscape ? 'portraitLayout' : 'landscapeLayout', RotateCw, onRotate, false],
     ['dock-menu', 'moreActions', Layers2, () => onOpenMenu('actions'), activePanel === 'actions'],
   ] as const;
 

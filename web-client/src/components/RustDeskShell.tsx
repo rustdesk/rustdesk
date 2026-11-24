@@ -6,8 +6,6 @@ import {
   LayoutGrid,
   List,
   Loader2,
-  Maximize2,
-  Minimize2,
   MoreVertical,
   Search,
   Star,
@@ -55,7 +53,6 @@ interface RustDeskShellProps {
   locale: Locale;
   localePreference: LocalePreference;
   isDesktop: boolean;
-  isFullscreen: boolean;
   theme: ThemePreference;
   displayPrefs: DisplayPrefs;
   onChangeLocale: (next: LocalePreference) => void;
@@ -92,7 +89,6 @@ interface RustDeskShellProps {
   onRemoveDevice: (key: string) => void;
   onToggleTouchMode: () => void;
   onToggleDiagnostics: () => void;
-  onToggleFullscreen: () => void;
   onConnect: (req?: ConnectRequest) => void;
   onDisconnect: () => void;
   onDismissError: () => void;
@@ -103,7 +99,6 @@ export function RustDeskShell({
   locale,
   localePreference,
   isDesktop,
-  isFullscreen,
   theme,
   displayPrefs,
   onChangeLocale,
@@ -140,7 +135,6 @@ export function RustDeskShell({
   onRemoveDevice,
   onToggleTouchMode,
   onToggleDiagnostics,
-  onToggleFullscreen,
   onConnect,
   onDisconnect,
   onDismissError,
@@ -367,57 +361,13 @@ export function RustDeskShell({
     );
   }
 
-  const fullscreenLabel = isFullscreen ? t(locale, 'exitFullscreen') : t(locale, 'enterFullscreen');
 
   return (
     <div
-      className={`rd-mobile-shell${isFullscreen ? ' is-fullscreen' : ''}`}
+      className="rd-mobile-shell"
       data-testid="connection-panel"
-      data-fullscreen={isFullscreen ? 'true' : 'false'}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      {isFullscreen ? (
-        <div className="rd-fs-floating-actions" data-testid="fullscreen-floating-actions">
-          {isLive && (
-            <button
-              type="button"
-              className="rd-mobile-icon-btn dark"
-              style={{ width: 36, height: 36 }}
-              aria-label={t(locale, 'close')}
-              data-tooltip={t(locale, 'close')}
-              data-tooltip-pos="bottom-end"
-              onClick={onClose}
-            >
-              <X size={18} />
-            </button>
-          )}
-          <button
-            type="button"
-            className="rd-mobile-icon-btn dark"
-            style={{ width: 36, height: 36 }}
-            data-testid="toggle-fullscreen"
-            aria-label={fullscreenLabel}
-            aria-pressed={isFullscreen}
-            data-tooltip={fullscreenLabel}
-            data-tooltip-pos="bottom-end"
-            onClick={onToggleFullscreen}
-          >
-            <Minimize2 size={17} />
-          </button>
-          <button
-            type="button"
-            className="rd-mobile-icon-btn dark"
-            style={{ width: 36, height: 36 }}
-            data-testid="mobile-open-settings"
-            aria-label={t(locale, 'openSettings')}
-            data-tooltip={t(locale, 'tabSettings')}
-            data-tooltip-pos="bottom-end"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <MoreVertical size={18} />
-          </button>
-        </div>
-      ) : (
         <header className="rd-mobile-topbar" data-testid="main-topbar">
           <div className="w-20 flex items-center justify-start">
             {isLive && (
@@ -439,18 +389,7 @@ export function RustDeskShell({
           </h1>
 
           <div className="w-20 flex items-center justify-end gap-0.5">
-            <button
-              type="button"
-              className="rd-mobile-icon-btn"
-              data-testid="toggle-fullscreen"
-              aria-label={fullscreenLabel}
-              aria-pressed={isFullscreen}
-              data-tooltip={fullscreenLabel}
-              data-tooltip-pos="bottom-end"
-              onClick={onToggleFullscreen}
-            >
-              <Maximize2 size={18} />
-            </button>
+
             <button
               type="button"
               className="rd-mobile-icon-btn"
@@ -464,7 +403,6 @@ export function RustDeskShell({
             </button>
           </div>
         </header>
-      )}
 
       <main className="rd-mobile-scroll rd-mobile-home-body">
         {/* Hero Remote ID / Direct IP Input Block */}

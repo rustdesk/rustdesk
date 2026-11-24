@@ -29,7 +29,6 @@ interface SessionHandleProps {
   activeDisplay: number;
   viewMode: ViewMode;
   hasWarning: boolean;
-  isFullscreen: boolean;
   onMoveHandle: (nextX: number) => void;
   onSetExpanded: (expanded: boolean) => void;
   onTogglePinned: () => void;
@@ -53,7 +52,6 @@ export function SessionHandle({
   activeDisplay,
   viewMode,
   hasWarning,
-  isFullscreen,
   onMoveHandle,
   onSetExpanded,
   onTogglePinned,
@@ -122,7 +120,7 @@ export function SessionHandle({
     return (
       <button
         type="button"
-        className={`pull${hasWarning ? ' warn' : ''}${isFullscreen ? ' fullscreen-subtle' : ''}`}
+        className={`pull${hasWarning ? ' warn' : ''}`}
         data-testid="session-handle"
         aria-label={t(locale, 'toolbarExpand')}
         aria-expanded="false"

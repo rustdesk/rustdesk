@@ -1825,14 +1825,19 @@ button:focus-visible {
   background:var(--remote-toolbar-surface); color:#f3f5f8; border:1px solid #40454c; color-scheme:dark;
 }
 .stage {
-  --dock-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  --view-top:env(safe-area-inset-top, 0px);
+  --view-right:env(safe-area-inset-right, 0px);
+  --view-bottom:env(safe-area-inset-bottom, 0px);
+  --view-left:env(safe-area-inset-left, 0px);
+
+  --dock-bottom: calc(10px + var(--view-bottom));
 }
 .remote-tools,.remote-capsule {
   bottom:var(--dock-bottom); height:var(--remote-toolbar-height);
   position:absolute; z-index:7; display:flex; overflow:hidden; touch-action:manipulation;
 }
 .remote-tools {
-  inset-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right));
+  inset-inline:max(12px,var(--view-left)) max(12px,var(--view-right));
   border-radius:12px;
 }
 .remote-tools button,.remote-capsule button {
@@ -1842,15 +1847,15 @@ button:focus-visible {
 .remote-tools button { font-size:12px; gap:1px; -webkit-tap-highlight-color:transparent; }
 .remote-tools button.selected { color:#8bcaff; }
 .remote-capsule {
-  right:max(16px,env(safe-area-inset-right)); width:88px; overflow:visible; border-radius:24px; touch-action:none; user-select:none;
+  right:max(16px,var(--view-right)); width:88px; overflow:visible; border-radius:24px; touch-action:none; user-select:none;
 }
 .remote-capsule button + button { border-left:1px solid #ffffff16; }
 .remote-capsule svg { width:21px; }
 .remote-menu-backdrop { position:absolute; inset:0; z-index:5; }
 .remote-menu-panel {
-  position:absolute; inset-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right));
+  position:absolute; inset-inline:max(12px,var(--view-left)) max(12px,var(--view-right));
   bottom:calc(var(--dock-bottom) + var(--remote-toolbar-height) + 7px); border-radius:10px;
-  max-height:calc(100% - var(--dock-bottom) - var(--remote-toolbar-height) - 15px - env(safe-area-inset-top, 0px));
+  max-height:calc(100% - var(--dock-bottom) - var(--remote-toolbar-height) - 15px - var(--view-top));
   overflow:auto; overscroll-behavior:contain; touch-action:pan-y;
 }
 .tool-group { padding:3px 13px; }
@@ -1890,3 +1895,23 @@ button:focus-visible {
   animation:capsule-hint 1.6s forwards;
 }
 @keyframes capsule-hint { 80% {opacity:1} 100% {opacity:0} }
+
+@media (orientation: portrait) {
+  .stage[data-direction="landscape"] {
+    inset:0 auto auto 100%; width:100dvh; height:100dvw; transform-origin:top left; transform:rotate(90deg);
+    --view-top:env(safe-area-inset-right, 0px);
+    --view-right:env(safe-area-inset-bottom, 0px);
+    --view-bottom:env(safe-area-inset-left, 0px);
+    --view-left:env(safe-area-inset-top, 0px);
+  }
+}
+
+@media (orientation: landscape) {
+  .stage[data-direction="portrait"] {
+    inset:0 auto auto 100%; width:100dvh; height:100dvw; transform-origin:top left; transform:rotate(90deg);
+    --view-top:env(safe-area-inset-right, 0px);
+    --view-right:env(safe-area-inset-bottom, 0px);
+    --view-bottom:env(safe-area-inset-left, 0px);
+    --view-left:env(safe-area-inset-top, 0px);
+  }
+}

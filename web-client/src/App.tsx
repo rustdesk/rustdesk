@@ -365,7 +365,8 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [connectDialog, setConnectDialog] = useState(false);
   const [softKeys, setSoftKeys] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [layoutDirection, setLayoutDirection] = useState<'portrait' | 'landscape' | null>(null);
+  useEffect(() => { if (phase !== 'live') setLayoutDirection(null); }, [phase]);
   const [virtualCursorVisible, setVirtualCursorVisible] = useState(false);
   const [cursorEmbedded, setCursorEmbedded] = useState(false);
   const [cursorShape, setCursorShape] = useState<{
@@ -746,9 +747,8 @@ export default function App() {
     const el = stageRef.current;
     if (!el) return;
     const update = () => {
-      const rect = el.getBoundingClientRect();
-      const w = Math.round(rect.width);
-      const h = Math.round(rect.height);
+      const w = el.clientWidth;
+      const h = el.clientHeight;
       setBox((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
       if (w > 0 && h > 0) {
         const isLandscape = w > h;
@@ -818,24 +818,6 @@ export default function App() {
       document.documentElement.style.setProperty('--kb', '0px');
     };
   }, [resetPageZoom]);
-
-  // Track native fullscreen changes and Escape exit for immersive fallback fullscreen
-  useEffect(() => {
-    const onFs = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !document.fullscreenElement && isFullscreen && phaseRef.current !== 'live') {
-        setIsFullscreen(false);
-      }
-    };
-    document.addEventListener('fullscreenchange', onFs);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('fullscreenchange', onFs);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [isFullscreen]);
 
   const focusDesktopCapture = useCallback(() => {
     if (window.matchMedia('(pointer: coarse)').matches) return;
@@ -1619,31 +1601,6 @@ export default function App() {
     [closeChrome, sendChord, tapControl],
   );
 
-  // Lock system-level shortcuts (Ctrl+W, Alt+Tab, etc.) when in fullscreen remote control on supporting browsers
-  useEffect(() => {
-    const nav = navigator as Navigator & {
-      keyboard?: { lock?: () => Promise<void>; unlock?: () => void };
-    };
-    if (!nav.keyboard?.lock) return;
-    if (remoteInput && isFullscreen) {
-      nav.keyboard.lock().catch(() => {
-        // Ignore unsupported or permission-denied Keyboard Lock errors
-      });
-      return () => {
-        try {
-          nav.keyboard?.unlock?.();
-        } catch {
-          // Ignore unlock errors
-        }
-      };
-    }
-    try {
-      nav.keyboard.unlock?.();
-    } catch {
-      // Ignore unlock errors
-    }
-  }, [remoteInput, isFullscreen]);
-
   // Global physical keyboard listener (capture phase + full host-browser shortcut isolation)
   useEffect(() => {
     const isInsideChromeInput = (target: EventTarget | null): boolean => {
@@ -1757,6 +1714,9 @@ export default function App() {
   const stageLocalPoint = useCallback((clientX: number, clientY: number) => {
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return { x: clientX, y: clientY };
+    if (stageRef.current?.dataset.direction && getComputedStyle(stageRef.current).transform !== 'none') {
+      return { x: clientY - rect.top, y: rect.right - clientX };
+    }
     return { x: clientX - rect.left, y: clientY - rect.top };
   }, []);
 
@@ -2266,13 +2226,8 @@ export default function App() {
     };
 
     const touchPairMetrics = (touches: TouchList) => {
-      const rect = el.getBoundingClientRect();
-      const t0 = touches[0];
-      const t1 = touches[1];
-      const x0 = t0.clientX - rect.left;
-      const y0 = t0.clientY - rect.top;
-      const x1 = t1.clientX - rect.left;
-      const y1 = t1.clientY - rect.top;
+      const { x: x0, y: y0 } = stageLocalPoint(touches[0].clientX, touches[0].clientY);
+      const { x: x1, y: y1 } = stageLocalPoint(touches[1].clientX, touches[1].clientY);
       return {
         midX: (x0 + x1) / 2,
         midY: (y0 + y1) / 2,
@@ -2424,27 +2379,6 @@ export default function App() {
     };
   }, []);
 
-  const handleToggleFullscreen = useCallback(() => {
-    const el = stageRef.current ?? document.documentElement;
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {
-        setIsFullscreen(false);
-      });
-      return;
-    }
-    if (isFullscreen) {
-      setIsFullscreen(false);
-      return;
-    }
-    if (typeof el.requestFullscreen === 'function') {
-      el.requestFullscreen()
-        .then(() => setIsFullscreen(true))
-        .catch(() => setIsFullscreen(true));
-    } else {
-      setIsFullscreen(true);
-    }
-  }, [isFullscreen]);
-
   const isMobileViewport =
     box.w > 0 ? box.w <= 768 : typeof window !== 'undefined' && window.innerWidth <= 768;
 
@@ -2472,7 +2406,7 @@ export default function App() {
     setRightArmed((r) => !r);
   };
 
-  const isTouchLayout = isCoarseDevice || isMobileViewport;
+  const isTouchLayout = isCoarseDevice || isMobileViewport || layoutDirection !== null;
   const showConnectSheet = phase !== 'live' || connectDialog;
   const showSessionMenu = menuOpen && phase === 'live' && !connectDialog;
   const showHandle = phase === 'live' && !connectDialog && !menuOpen && !isTouchLayout;
@@ -2489,6 +2423,7 @@ export default function App() {
     <section
       ref={stageRef}
       className={`stage${hand ? ' hand' : ''}`}
+      data-direction={phase === 'live' && !softKeys && !connectDialog ? layoutDirection : undefined}
       data-testid="stage"
       data-remote-active={remoteInput ? 'true' : 'false'}
       data-scroll-style={displayPrefs.scrollStyle}
@@ -2603,7 +2538,6 @@ export default function App() {
           activeDisplay={display}
           viewMode={viewMode}
           hasWarning={Boolean(decoderError)}
-          isFullscreen={isFullscreen}
           onMoveHandle={setHandleX}
           onSetExpanded={setToolbarExpanded}
           onTogglePinned={() => setToolbarPinned((prev) => !prev)}
@@ -2646,6 +2580,8 @@ export default function App() {
       {showMobileDock && (
         <MobileDock
           locale={locale}
+          landscape={box.w > box.h}
+          onRotate={() => setLayoutDirection(box.w > box.h ? 'portrait' : 'landscape')}
           activePanel={menuOpen ? mobilePanel : null}
           onToggleKeyboard={toggleSoftKeyboard}
           onCollapse={closeChrome}
@@ -2661,7 +2597,6 @@ export default function App() {
           locale={locale}
           localePreference={localePreference}
           isDesktop={!isMobileViewport}
-          isFullscreen={isFullscreen}
           theme={theme}
           displayPrefs={displayPrefs}
           onChangeLocale={changeLocale}
@@ -2707,7 +2642,6 @@ export default function App() {
           onRemoveDevice={handleRemoveDevice}
           onToggleTouchMode={handleToggleTouchMode}
           onToggleDiagnostics={() => setDiagnosticsOpen((prev) => !prev)}
-          onToggleFullscreen={handleToggleFullscreen}
           onConnect={(req) => void connectSession(req)}
           onDisconnect={disconnect}
           onDismissError={handleDismissError}
