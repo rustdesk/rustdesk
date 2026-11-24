@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { probeCodecs, RemoteDecoder, webCodecsStatus } from "./decoder";
 import { controlFromCode, isModifier } from "./keys";
-import { clampPan, fitScale, mapToRemote, zoomAround, type ViewTransform } from "./mapping";
+import {
+  fingerDown,
+  fingerUp,
+  isTwoFingerTap,
+  keyboardInset,
+  LONG_PRESS_MS,
+  TAP_SLOP_PX,
+} from "./gestures";
+import { clampPan, fitScale, mapFromRemote, mapToRemote, zoomAround, type ViewTransform } from "./mapping";
 import {
   decodeFrame,
   parseServerMessage,
@@ -58,7 +66,7 @@ export default function App() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ panX: 0, panY: 0 });
   const [hand, setHand] = useState(false);
-  const [touchMode, setTouchMode] = useState(false);
+  const [touchMode, setTouchMode] = useState(coarsePointer);
   const [spacePan, setSpacePan] = useState(false);
   const [handleX, setHandleX] = useState(0.5);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -91,7 +99,14 @@ export default function App() {
   } | null>(null);
   const handleDrag = useRef<{ startX: number; origin: number; moved: boolean } | null>(null);
   const cursor = useRef({ x: 0, y: 0 });
-  const touchTap = useRef({ x: 0, y: 0, t: 0, dragging: false });
+  const touchTap = useRef({ x: 0, y: 0, t: 0, dragging: false, longFired: false });
+  const lastTapUp = useRef(0);
+  const suppressTap = useRef(false);
+  const lastTouchAt = useRef(0);
+  const longTimer = useRef(0);
+  const composing = useRef(false);
+  const pendingClick = useRef<{ button: "left" | "right"; x: number; y: number; timer: number } | null>(null);
+  const cursorEl = useRef<HTMLDivElement>(null);
 
   const remoteInput = phase === "live" && !menuOpen && !connectDialog;
 
@@ -110,6 +125,34 @@ export default function App() {
     const observer = new ResizeObserver(apply);
     observer.observe(node);
     return () => observer.disconnect();
+  }, []);
+
+  const aspectRef = useRef(0);
+  useEffect(() => {
+    if (box.w < 2 || box.h < 2) return;
+    const aspect = box.w / box.h;
+    const prev = aspectRef.current;
+    aspectRef.current = aspect;
+    if (prev > 0 && (prev - 1) * (aspect - 1) < 0) {
+      setViewMode("fit");
+      setZoom(1);
+    }
+  }, [box.w, box.h]);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      const inset = keyboardInset(window.innerHeight, vv.height, vv.offsetTop);
+      document.documentElement.style.setProperty("--kb", `${Math.round(inset)}px`);
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+    };
   }, []);
 
   function currentView(): ViewTransform {
@@ -133,7 +176,11 @@ export default function App() {
       delayMs: rtt || stats.delayMs,
       bitrate: stats.bitrate,
       decoded: stats.decoded,
+      cursorX: cursor.current.x,
+      cursorY: cursor.current.y,
+      touchMode,
     };
+    placeCursor(cursor.current.x, cursor.current.y);
     window.__rdView = {
       scale: view.scale,
       panX: view.panX,
@@ -141,12 +188,13 @@ export default function App() {
       width: box.w,
       height: box.h,
     };
-  }, [phase, stats, rtt, view.scale, view.panX, view.panY, box.w, box.h]);
+  }, [phase, stats, rtt, view.scale, view.panX, view.panY, box.w, box.h, touchMode]);
 
   useEffect(() => {
     return () => {
       socketRef.current?.close();
       decoderRef.current?.close();
+      if (longTimer.current) window.clearTimeout(longTimer.current);
     };
   }, []);
 
@@ -155,6 +203,10 @@ export default function App() {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(payload));
     }
+  }
+
+  function sendText(text: string) {
+    for (const ch of text) send({ type: "text", text: ch });
   }
 
   function closeChrome() {
@@ -355,6 +407,74 @@ export default function App() {
     setPan(nextPan);
   }
 
+  function placeCursor(x: number, y: number) {
+    cursor.current = { x, y };
+    if (window.__rd) {
+      window.__rd.cursorX = x;
+      window.__rd.cursorY = y;
+    }
+    const node = cursorEl.current;
+    if (!node) return;
+    const local = mapFromRemote(x, y, currentView());
+    node.style.left = `${local.x}px`;
+    node.style.top = `${local.y}px`;
+  }
+
+  function clearLongPress() {
+    if (longTimer.current) window.clearTimeout(longTimer.current);
+    longTimer.current = 0;
+  }
+
+  function remoteFromLocal(x: number, y: number) {
+    return mapToRemote(x, y, sizeRef.current.width, sizeRef.current.height, currentView());
+  }
+
+  function cursorPoint() {
+    return {
+      x: Math.min(sizeRef.current.width - 1, Math.max(0, Math.round(cursor.current.x))),
+      y: Math.min(sizeRef.current.height - 1, Math.max(0, Math.round(cursor.current.y))),
+    };
+  }
+
+  function finishClick() {
+    const pending = pendingClick.current;
+    if (!pending) return;
+    window.clearTimeout(pending.timer);
+    pendingClick.current = null;
+    send({ type: "mouse", action: "up", button: pending.button, x: pending.x, y: pending.y });
+  }
+
+  function clickButton(button: "left" | "right", x: number, y: number) {
+    finishClick();
+    send({ type: "mouse", action: "move", x, y });
+    send({ type: "mouse", action: "down", button, x, y });
+    const timer = window.setTimeout(() => {
+      if (pendingClick.current?.timer !== timer) return;
+      pendingClick.current = null;
+      send({ type: "mouse", action: "up", button, x, y });
+    }, 40);
+    pendingClick.current = { button, x, y, timer };
+  }
+
+  function armLongPress() {
+    clearLongPress();
+    longTimer.current = window.setTimeout(() => {
+      longTimer.current = 0;
+      if (pointers.current.size !== 1 || touchTap.current.dragging) return;
+      touchTap.current.longFired = true;
+      const pos = touchMode ? remoteFromLocal(touchTap.current.x, touchTap.current.y) : cursorPoint();
+      if (!pos) return;
+      clickButton("right", pos.x, pos.y);
+    }, LONG_PRESS_MS);
+  }
+
+  function releaseStuckDrag() {
+    if (!touchTap.current.dragging) return;
+    const pos = touchMode ? remoteFromLocal(touchTap.current.x, touchTap.current.y) : cursorPoint();
+    touchTap.current.dragging = false;
+    if (pos) send({ type: "mouse", action: "up", button: "left", x: pos.x, y: pos.y });
+  }
+
   function buttonName(button: number, armed: boolean) {
     if (armed) return "right";
     if (button === 2) return "right";
@@ -364,18 +484,47 @@ export default function App() {
 
   function onPointerDown(event: React.PointerEvent<HTMLElement>) {
     if (!remoteInput) return;
+    if (event.pointerType === "mouse" && performance.now() - lastTouchAt.current < 700) return;
     const local = stagePoint(event);
     if (!local) return;
+    if (event.pointerType === "touch" && event.isPrimary && pointers.current.size > 0) {
+      pointers.current.clear();
+      pinch.current = null;
+      suppressTap.current = false;
+      clearLongPress();
+      releaseStuckDrag();
+    }
     pointers.current.set(event.pointerId, local);
+    if (pointers.current.size === 1) suppressTap.current = false;
     event.currentTarget.setPointerCapture(event.pointerId);
+    if (event.pointerType === "touch") {
+      lastTouchAt.current = performance.now();
+      event.preventDefault();
+    }
     if (pointers.current.size >= 2) {
+      clearLongPress();
+      releaseStuckDrag();
       pinch.current = pinchSnapshot();
+      suppressTap.current = true;
       return;
     }
     const panning = hand || spacePan;
     if (panning) return;
-    if (event.pointerType === "touch" && !touchMode) {
-      touchTap.current = { x: local.x, y: local.y, t: performance.now(), dragging: false };
+    if (event.pointerType === "touch") {
+      const since = lastTapUp.current ? performance.now() - lastTapUp.current : null;
+      const start = fingerDown(touchMode ? "touch" : "mouse", since);
+      touchTap.current = { x: local.x, y: local.y, t: performance.now(), dragging: start === "drag-lock", longFired: false };
+      if (start === "drag-lock") {
+        finishClick();
+        const pos = cursorPoint();
+        send({ type: "mouse", action: "move", x: pos.x, y: pos.y });
+        send({ type: "mouse", action: "down", button: "left", x: pos.x, y: pos.y });
+        return;
+      }
+      if (!touchMode && sizeRef.current.width > 0 && cursor.current.x === 0 && cursor.current.y === 0) {
+        placeCursor(sizeRef.current.width / 2, sizeRef.current.height / 2);
+      }
+      armLongPress();
       return;
     }
     const pos = pointerPos(event);
@@ -420,6 +569,7 @@ export default function App() {
 
   function onPointerMove(event: React.PointerEvent<HTMLElement>) {
     if (!remoteInput) return;
+    if (event.pointerType === "mouse" && performance.now() - lastTouchAt.current < 700) return;
     const local = stagePoint(event);
     if (!local) return;
     const prev = pointers.current.get(event.pointerId) ?? local;
@@ -453,13 +603,29 @@ export default function App() {
       if (current.scale > fitScale(box.w, box.h, remoteW, remoteH) + 0.01) setViewMode("custom");
       return;
     }
-    if (event.pointerType === "touch" && !touchMode) {
+    if (event.pointerType === "touch" && pointers.current.size < 2) {
       const moved = Math.hypot(local.x - touchTap.current.x, local.y - touchTap.current.y);
-      cursor.current.x = Math.min(sizeRef.current.width - 1, Math.max(0, cursor.current.x + dx / currentView().scale));
-      cursor.current.y = Math.min(sizeRef.current.height - 1, Math.max(0, cursor.current.y + dy / currentView().scale));
-      const pos = { x: Math.round(cursor.current.x), y: Math.round(cursor.current.y) };
-      if (moved > 8 && touchTap.current.dragging) {
-        queueMove(pos);
+      if (touchTap.current.longFired) return;
+      if (!touchMode) {
+        placeCursor(
+          Math.min(sizeRef.current.width - 1, Math.max(0, cursor.current.x + dx / currentView().scale)),
+          Math.min(sizeRef.current.height - 1, Math.max(0, cursor.current.y + dy / currentView().scale)),
+        );
+        if (touchTap.current.dragging) queueMove(cursorPoint());
+        return;
+      }
+      if (!touchTap.current.dragging && moved > TAP_SLOP_PX) {
+        clearLongPress();
+        const origin = remoteFromLocal(touchTap.current.x, touchTap.current.y);
+        if (!origin) return;
+        finishClick();
+        touchTap.current.dragging = true;
+        send({ type: "mouse", action: "move", x: origin.x, y: origin.y });
+        send({ type: "mouse", action: "down", button: "left", x: origin.x, y: origin.y });
+      }
+      if (touchTap.current.dragging) {
+        const pos = pointerPos(event);
+        if (pos) queueMove(pos);
       }
       return;
     }
@@ -471,38 +637,48 @@ export default function App() {
   function onPointerUp(event: React.PointerEvent<HTMLElement>) {
     const local = stagePoint(event);
     const wasPinch = pointers.current.size >= 2;
+    const tap = wasPinch && pinchWasTap();
     pointers.current.delete(event.pointerId);
     if (pointers.current.size < 2) pinch.current = null;
     if (!remoteInput || !local) return;
+    if (event.pointerType === "mouse" && performance.now() - lastTouchAt.current < 700) return;
     if (wasPinch) {
-      if (pinchWasTap()) {
+      clearLongPress();
+      if (tap) {
         const pos = pointerPos(event);
-        if (pos) {
-          send({ type: "mouse", action: "down", button: "right", x: pos.x, y: pos.y });
-          send({ type: "mouse", action: "up", button: "right", x: pos.x, y: pos.y });
-        }
+        if (pos) clickButton("right", pos.x, pos.y);
       }
+      suppressTap.current = true;
+      return;
+    }
+    if (suppressTap.current) {
+      if (touchTap.current.dragging) {
+        flushMove();
+        const pos = touchMode ? pointerPos(event) : cursorPoint();
+        touchTap.current.dragging = false;
+        if (pos) send({ type: "mouse", action: "up", button: "left", x: pos.x, y: pos.y });
+      }
+      if (pointers.current.size === 0) suppressTap.current = false;
+      clearLongPress();
       return;
     }
     if (hand || spacePan) return;
-    if (event.pointerType === "touch" && !touchMode) {
+    if (event.pointerType === "touch") {
+      clearLongPress();
       const moved = Math.hypot(local.x - touchTap.current.x, local.y - touchTap.current.y);
-      const pos = { x: Math.round(cursor.current.x), y: Math.round(cursor.current.y) };
-      if (touchTap.current.dragging) {
+      const action = fingerUp({ moved, longFired: touchTap.current.longFired, dragging: touchTap.current.dragging });
+      touchTap.current.longFired = false;
+      if (action === "end-drag") {
         flushMove();
-        send({ type: "mouse", action: "up", button: "left", x: pos.x, y: pos.y });
+        const pos = touchMode ? pointerPos(event) : cursorPoint();
         touchTap.current.dragging = false;
+        if (pos) send({ type: "mouse", action: "up", button: "left", x: pos.x, y: pos.y });
         return;
       }
-      if (moved < 8) {
-        const now = performance.now();
-        if (now - touchTap.current.t < 280) {
-          touchTap.current.dragging = true;
-          send({ type: "mouse", action: "down", button: "left", x: pos.x, y: pos.y });
-          return;
-        }
-        send({ type: "mouse", action: "down", button: "left", x: pos.x, y: pos.y });
-        send({ type: "mouse", action: "up", button: "left", x: pos.x, y: pos.y });
+      if (action === "left-click") {
+        lastTapUp.current = performance.now();
+        const pos = touchMode ? remoteFromLocal(touchTap.current.x, touchTap.current.y) : cursorPoint();
+        if (pos) clickButton("left", pos.x, pos.y);
       }
       return;
     }
@@ -516,7 +692,7 @@ export default function App() {
     const start = pinch.current;
     if (!start) return false;
     const midShift = Math.hypot(start.midX - start.originX, start.midY - start.originY);
-    return midShift < 12 && Math.abs(start.dist - start.originDist) < 12;
+    return isTwoFingerTap(midShift, start.dist - start.originDist);
   }
 
   function onWheel(event: React.WheelEvent<HTMLElement>) {
@@ -644,6 +820,12 @@ export default function App() {
           height: Math.max(1, sizeRef.current.height * view.scale),
         }}
       />
+      <div
+        ref={cursorEl}
+        className="remote-cursor"
+        data-testid="remote-cursor"
+        hidden={touchMode}
+      />
       <input ref={captureRef} className="capture" data-testid="capture" aria-hidden="true" tabIndex={-1} />
 
       {phase === "live" && !showConnect && !menuOpen && (
@@ -677,7 +859,7 @@ export default function App() {
       )}
 
       {showConnect && (
-        <div className="scrim" onPointerDown={(event) => event.stopPropagation()} onMouseDown={() => phase === "live" && closeChrome()}>
+        <div className="scrim" onPointerDown={(event) => { event.stopPropagation(); if (event.target === event.currentTarget && phase === "live") closeChrome(); }}>
           <form
             className="sheet"
             data-testid="connection-panel"
@@ -771,7 +953,7 @@ export default function App() {
       )}
 
       {menuOpen && phase === "live" && !connectDialog && (
-        <div className="scrim" data-testid="session-backdrop" onPointerDown={(event) => event.stopPropagation()} onMouseDown={closeChrome}>
+        <div className="scrim" data-testid="session-backdrop" onPointerDown={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) closeChrome(); }}>
           <div className="sheet" data-testid="session-menu" onPointerDown={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
             <div className="sheet-head">
               <h2>Session</h2>
@@ -803,7 +985,12 @@ export default function App() {
               <button type="button" className="ghost" data-testid="zoom-in" onClick={() => setScale(view.scale * 1.15, box.w / 2, box.h / 2)}>+</button>
               <span data-testid="zoom">{Math.round((fitScale(box.w, box.h, sizeRef.current.width, sizeRef.current.height) === 0 ? 1 : view.scale / fitScale(box.w, box.h, sizeRef.current.width, sizeRef.current.height)) * 100)}%</span>
               <button type="button" className={hand ? "primary" : "ghost"} data-testid="pan" onClick={() => setHand((value) => !value)}>{hand ? "Panning" : "Pan"}</button>
-              <button type="button" className={touchMode ? "primary" : "ghost"} data-testid="touch-mode" onClick={() => setTouchMode((value) => !value)}>{touchMode ? "Touch" : "Mouse"}</button>
+              <button type="button" className={touchMode ? "primary" : "ghost"} data-testid="touch-mode" onClick={() => {
+                if (touchMode && sizeRef.current.width > 0) {
+                  placeCursor(sizeRef.current.width / 2, sizeRef.current.height / 2);
+                }
+                setTouchMode((value) => !value);
+              }}>{touchMode ? "Touch" : "Mouse"}</button>
             </div>
             <div className="actions">
               <select
@@ -872,26 +1059,33 @@ export default function App() {
             data-testid="soft-input"
             placeholder="Type to the remote desktop"
             onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing || event.key === "Process") return;
               const control = controlFromCode(event.code);
               if (!control) return;
               event.preventDefault();
               send({ type: "key", action: "down", control });
             }}
             onKeyUp={(event) => {
+              if (event.nativeEvent.isComposing || event.key === "Process") return;
               const control = controlFromCode(event.code);
               if (!control) return;
               event.preventDefault();
               send({ type: "key", action: "up", control });
             }}
-            onBeforeInput={(event) => {
-              const native = event.nativeEvent as InputEvent;
-              if (native.inputType === "insertText" && native.data) {
-                event.preventDefault();
-                send({ type: "text", text: native.data });
-              }
+            onCompositionStart={() => {
+              composing.current = true;
             }}
             onCompositionEnd={(event) => {
-              if (event.data) send({ type: "text", text: event.data });
+              composing.current = false;
+              if (event.data) sendText(event.data);
+              event.currentTarget.value = "";
+            }}
+            onInput={(event) => {
+              if (composing.current) return;
+              const value = event.currentTarget.value;
+              if (!value) return;
+              sendText(value);
+              event.currentTarget.value = "";
             }}
           />
           <button type="button" className="ghost" onClick={() => setSoftKeys(false)}>Hide</button>
@@ -899,6 +1093,11 @@ export default function App() {
       )}
     </section>
   );
+}
+
+function coarsePointer(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 }
 
 function formatBitrate(bitsPerSecond: number): string {

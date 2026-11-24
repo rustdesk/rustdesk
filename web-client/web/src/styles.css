@@ -17,18 +17,25 @@
 * { box-sizing: border-box; }
 
 html, body, #root {
+  position: fixed;
+  inset: 0;
   margin: 0;
+  width: 100%;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
 }
 
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
+input, select, textarea { font-size: 16px; }
 
 .stage {
-  position: relative;
-  width: 100vw;
-  height: 100dvh;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   background: #101418;
   overflow: hidden;
 }
@@ -57,19 +64,35 @@ button { cursor: pointer; }
 
 .pull {
   position: absolute;
-  top: 0;
+  top: env(safe-area-inset-top, 0px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 4;
-  height: 18px;
-  padding: 0 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  height: 44px;
+  padding: 2px 18px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 18px;
+  letter-spacing: 0.04em;
+}
+
+.pull::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 22px;
   border: 1px solid rgba(213, 221, 230, 0.9);
   border-top: 0;
   border-radius: 0 0 8px 8px;
   background: rgba(255, 255, 255, 0.94);
-  color: var(--ink-soft);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  z-index: -1;
 }
 
 .pull.warn { color: var(--bad); }
@@ -84,11 +107,11 @@ button { cursor: pointer; }
 .sheet {
   position: absolute;
   z-index: 6;
-  top: 28px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
-  width: min(560px, calc(100vw - 24px));
-  max-height: calc(100dvh - 40px);
+  width: min(560px, calc(100vw - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--kb, 0px));
   overflow: auto;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -126,11 +149,13 @@ button { cursor: pointer; }
   gap: 6px;
 }
 
-.modes button, .ghost, .quickbar button, .primary {
+.modes button, .ghost, .quickbar button, .primary, select {
   border-radius: 8px;
   border: 1px solid var(--line);
   background: #f7f9fb;
   padding: 8px 10px;
+  min-height: 40px;
+  min-width: 40px;
 }
 
 .modes button.active {
@@ -215,9 +240,9 @@ input:focus, select:focus, button:focus-visible {
 .softbar {
   position: absolute;
   z-index: 4;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px) + var(--kb, 0px));
   display: flex;
   gap: 8px;
   align-items: center;
@@ -226,6 +251,20 @@ input:focus, select:focus, button:focus-visible {
   border: 1px solid var(--line);
   border-radius: 10px;
 }
+
+.remote-cursor {
+  position: absolute;
+  z-index: 3;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: #fff;
+  pointer-events: none;
+}
+
+.remote-cursor[hidden] { display: none; }
 
 .softbar input { flex: 1; min-width: 0; margin: 0; }
 

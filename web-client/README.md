@@ -101,7 +101,11 @@ telemetry. Keys and pointer events reach the host only while that panel is
 closed. Fit is the default; zoom (menu, Ctrl/Alt+wheel, or a two-finger
 pinch) is anchored on the cursor, and Space+drag or Pan mode moves the view
 when it is larger than the viewport. Pointer coordinates include that scale
-and pan.
+and pan. A phone starts in touch mode: tap to click, long-press or a
+two-finger tap for the right button, one finger to drag, and pinch or two
+fingers to zoom and pan. Mouse mode shows a local cursor. The soft keyboard
+sits above the visual viewport, and inputs are 16px so the page itself does
+not zoom.
 
 ## LAN self-host
 

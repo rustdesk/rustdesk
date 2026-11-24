@@ -9,6 +9,9 @@ interface RdStats {
   delayMs: number;
   bitrate: number;
   decoded: number;
+  cursorX?: number;
+  cursorY?: number;
+  touchMode?: boolean;
 }
 
 interface RdView {

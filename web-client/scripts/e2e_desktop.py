@@ -21,6 +21,7 @@ class Desktop:
         self.clicks = 0
         self.text = ""
         self.drag = 0
+        self.right = 0
         self.drag_origin: int | None = None
         self.root = tk.Tk()
         self.root.overrideredirect(True)
@@ -40,6 +41,7 @@ class Desktop:
             bd=0,
         )
         self.button.place(x=0, y=0, width=WIDTH, height=400)
+        self.button.bind("<Button-3>", self.on_right)
 
         self.entry = tk.Entry(self.root, font=("DejaVu Sans", 32), bg="white", fg="#1c2430")
         self.entry.place(x=40, y=450, width=1200, height=72)
@@ -66,6 +68,7 @@ class Desktop:
         self.drag_label.bind("<Button-1>", self.on_drag_down)
         self.drag_label.bind("<B1-Motion>", self.on_drag_move)
         self.drag_label.bind("<ButtonRelease-1>", self.on_drag_up)
+        self.root.bind("<ButtonRelease-1>", self.on_drag_up)
         self.write()
         self.tick()
 
@@ -76,6 +79,11 @@ class Desktop:
         self.clicks += 1
         self.button.configure(text=self.button_label())
         self.write()
+
+    def on_right(self, _event: object) -> str:
+        self.right += 1
+        self.write()
+        return "break"
 
     def on_type(self, _event: object) -> None:
         self.text = self.entry.get()
@@ -89,6 +97,7 @@ class Desktop:
             return
         self.drag = int(event.x) - self.drag_origin
         self.drag_label.configure(text=f"DRAG {self.drag}")
+        self.write()
 
     def on_drag_up(self, event: tk.Event) -> None:
         if self.drag_origin is None:
@@ -103,8 +112,10 @@ class Desktop:
         self.root.after(200, self.tick)
 
     def write(self) -> None:
-        payload = {"clicks": self.clicks, "text": self.text, "drag": self.drag, "ts": time.time()}
-        STATE.write_text(json.dumps(payload), encoding="utf-8")
+        payload = {"clicks": self.clicks, "text": self.text, "drag": self.drag, "right": self.right, "ts": time.time()}
+        tmp = STATE.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        tmp.replace(STATE)
 
     def run(self) -> None:
         self.root.mainloop()
