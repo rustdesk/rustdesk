@@ -835,5 +835,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-only-audio-tip", ""),
         ("VB-CABLE is required for Remote only.", ""),
         ("Audio output will be restored automatically.", ""),
+        ("privacy-mode-background", ""),
+        ("Black", ""),
+        ("Desktop wallpaper and taskbar", ""),
     ].iter().cloned().collect();
 }

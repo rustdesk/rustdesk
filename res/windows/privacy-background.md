@@ -15,6 +15,10 @@ Only the `TrayNotifyWnd` region is copied through a cropped DWM thumbnail. DWM u
 
 This is a rendered idle taskbar rather than a new Windows virtual desktop. Light/dark system themes and the Windows 11 alignment preference are read from Windows settings. Pinned shortcuts are read when the overlay starts; their enumeration order may differ from a manually rearranged native taskbar. Pins stored without `.lnk` shortcuts, search/widgets/task-view controls, custom taskbar styling and secondary-monitor notification areas are not fully reproduced. Auto-hidden or unavailable taskbars may remain hidden; the wallpaper still covers the screen. Multi-monitor coverage and DPI scaling use the existing privacy-window geometry.
 
+Pinned-icon lookup runs on the privacy-window thread at first show. A shortcut
+or icon target on an unavailable network location can stall this lookup and delay
+hiding the overlay, session-lock handling, shutdown, and cursor restoration.
+
 If the wallpaper cannot be loaded, Privacy Mode 1 falls back to pure black. Privacy Mode 2 is unchanged. This remains an overlay rather than a Windows security lock screen or a separate Windows virtual desktop.
 
 While the privacy windows are shown, `MagShowSystemCursor(FALSE)` suppresses the
@@ -29,8 +33,11 @@ The connection lifecycle is synchronized with Windows locking. When a session
 ends, RustDesk posts the hide request and waits for the privacy broker process
 to exit before it calls `LockWorkStation()`. If a new connection arrives while
 the session is already locked, the broker keeps its windows hidden and waits
-for `WTS_SESSION_UNLOCK`; disconnecting that connection cancels the pending
-display before the broker is stopped.
+for `WTS_SESSION_UNLOCK`; an initial sign-in resumes on
+`WTS_SESSION_DESKTOP_READY`, after Windows switches to the user's desktop.
+The message pump preserves the deferral flag and checks whether its desktop
+already receives input, so a queued request does not wait again after unlock.
+Disconnecting that connection cancels the pending display before the broker is stopped.
 
 ## Build
 

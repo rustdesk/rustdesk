@@ -39,11 +39,14 @@ int wmain()
 		_wputenv_s(L"RUSTDESK_PRIVACY_BACKGROUND", L"");
 		PrivacyBackground background;
 		background.Reload(directory);
+		const auto contrasting = static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH));
+		FillRect(dc, &client, contrasting);
 		Check(background.Paint(dc, client), "missing config defaults to black");
 		Check(GetPixel(dc, 40, 30) == RGB(0, 0, 0), "default black center pixel");
 		std::puts("PASS default black background");
 		_wputenv_s(L"RUSTDESK_PRIVACY_BACKGROUND", L"black");
 		background.Reload(directory);
+		FillRect(dc, &client, contrasting);
 		Check(background.Paint(dc, client), "environment black selects custom paint");
 		Check(GetPixel(dc, 40, 30) == RGB(0, 0, 0), "environment black center pixel");
 		_wputenv_s(L"RUSTDESK_PRIVACY_BACKGROUND", L"");
@@ -53,6 +56,7 @@ int wmain()
 
 		WritePrivateProfileStringW(L"Privacy", L"Background", L"black", config.c_str());
 		background.Reload(directory);
+		FillRect(dc, &client, contrasting);
 		Check(background.Paint(dc, client), "black selects custom paint");
 		Check(GetPixel(dc, 40, 30) == RGB(0, 0, 0), "black center pixel");
 		Check(GetPixel(dc, 0, 0) == RGB(0, 0, 0), "black corner pixel");
@@ -79,6 +83,7 @@ int wmain()
 		WritePrivateProfileStringW(L"Privacy", L"Background", L"wallpaper", config.c_str());
 		background.Reload(directory);
 		Check(background.Paint(dc, client), "wallpaper selects custom paint");
+		Check(background.ShowsTaskbar(), "loaded wallpaper enables taskbar");
 		Check(GetPixel(dc, 40, 30) == RGB(255, 0, 0), "wallpaper center pixel");
 		Check(GetPixel(dc, 5, 5) == RGB(255, 0, 0), "portrait wallpaper fills landscape screen");
 		WritePrivateProfileStringW(L"Privacy", L"Background", L"black", config.c_str());
@@ -87,6 +92,7 @@ int wmain()
 		WritePrivateProfileStringW(L"Privacy", L"Background", L"wallpaper", config.c_str());
 		background.Reload(directory);
 		Check(background.Paint(dc, client), "missing wallpaper keeps opaque overlay");
+		Check(!background.ShowsTaskbar(), "missing wallpaper suppresses taskbar");
 		Check(GetPixel(dc, 40, 30) == RGB(0, 0, 0), "missing wallpaper falls back to black");
 		std::puts("PASS wallpaper, reload and missing-image fallback");
 	}

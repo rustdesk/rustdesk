@@ -45,16 +45,32 @@ public:
 			bounds_ = bounds;
 			InvalidateRect(destination, &bounds_, FALSE);
 		}
-		dpi_ = GetDpiForWindow(search.window);
+		const auto oldDpi = dpi_;
+		const auto oldTray = tray_;
+		const auto getDpiForWindow = reinterpret_cast<UINT(WINAPI*)(HWND)>(
+			GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+		dpi_ = getDpiForWindow ? getDpiForWindow(search.window) : 0;
+		if (!dpi_)
+		{
+			const auto dc = GetDC(search.window);
+			if (dc)
+			{
+				dpi_ = GetDeviceCaps(dc, LOGPIXELSX);
+				ReleaseDC(search.window, dc);
+			}
+		}
 		if (!dpi_) dpi_ = 96;
 		tray_ = {};
 		const auto trayWindow = FindWindowExW(search.window, nullptr, L"TrayNotifyWnd", nullptr);
-		if (!trayWindow || !GetWindowRect(trayWindow, &tray_))
+		if (trayWindow && GetWindowRect(trayWindow, &tray_))
+			MapWindowPoints(nullptr, destination, reinterpret_cast<POINT*>(&tray_), 2);
+		if (oldDpi != dpi_ || !EqualRect(&oldTray, &tray_))
+			InvalidateRect(destination, &bounds_, FALSE);
+		if (IsRectEmpty(&tray_))
 		{
 			ResetThumbnail();
 			return true;
 		}
-		MapWindowPoints(nullptr, destination, reinterpret_cast<POINT*>(&tray_), 2);
 		if (source_ != search.window || !thumbnail_)
 		{
 			ResetThumbnail();

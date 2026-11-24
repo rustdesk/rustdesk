@@ -835,5 +835,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("remote-only-audio-tip", "僅在遠端連線期間生效。中斷連線後還原連線前的實體輸出、音量和靜音狀態。"),
         ("VB-CABLE is required for Remote only.", "僅遠端播放需要 VB-CABLE。"),
         ("Audio output will be restored automatically.", "本機音訊輸出會在沒有連線時自動還原。"),
+        ("privacy-mode-background", "隱私模式背景"),
+        ("Black", "純黑"),
+        ("Desktop wallpaper and taskbar", "桌面桌布與工作列"),
     ].iter().cloned().collect();
 }

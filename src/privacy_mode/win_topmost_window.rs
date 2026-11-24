@@ -1,6 +1,6 @@
 use super::{PrivacyMode, INVALID_PRIVACY_MODE_CONN_ID};
 use crate::{platform::windows::get_user_token, privacy_mode::PrivacyModeState};
-use hbb_common::{allow_err, bail, log, ResultType};
+use hbb_common::{allow_err, bail, config::Config, log, ResultType};
 use std::{
     ffi::CString,
     io::Error,
@@ -40,7 +40,7 @@ const WM_RUSTDESK_SHUTDOWN_WINDOWS: u32 = WM_APP + 2;
 const PRIVACY_WINDOW_SHUTDOWN_WAIT_MILLIS: u32 = 1_000;
 
 fn privacy_mode_background() -> &'static str {
-    if crate::ui_interface::get_option(PRIVACY_MODE_BACKGROUND_OPTION.to_owned()) == "desktop" {
+    if Config::get_option(PRIVACY_MODE_BACKGROUND_OPTION) == "desktop" {
         "wallpaper"
     } else {
         "black"
@@ -168,27 +168,18 @@ impl PrivacyMode for PrivacyModeImpl {
     ) -> ResultType<()> {
         self.check_off_conn_id(conn_id)?;
         let unhook_result = super::win_input::unhook();
-        let hwnds = match find_privacy_hwnds() {
-            Ok(hwnds) => hwnds,
-            Err(e) => {
-                self.stop();
-                return Err(e);
-            }
-        };
-        let hide_result = set_privacy_windows_visible(&hwnds, false, false);
+        let hide_result = find_privacy_hwnds()
+            .and_then(|hwnds| set_privacy_windows_visible(&hwnds, false, false));
         // LockWorkStation is called immediately after this function returns. Stop the
         // broker here so its window thread and cursor state are gone before the desktop
         // switches to the secure lock screen.
         self.stop();
-        unhook_result?;
 
         // Continue local state cleanup even after stop(); the broker has
         // been torn down, so keeping conn_id/hwnd would leave stale state.
         if self.conn_id != INVALID_PRIVACY_MODE_CONN_ID {
-            // Only publish the off state after the hide message was posted.
-            // Otherwise the peer may receive a success-like state and then a
-            // failed turn-off response for the same request.
-            if hide_result.is_ok() {
+            // Do not publish a success-like state before returning a cleanup error.
+            if hide_result.is_ok() && unhook_result.is_ok() {
                 if let Some(state) = state {
                     allow_err!(super::set_privacy_mode_state(
                         conn_id,
@@ -202,6 +193,7 @@ impl PrivacyMode for PrivacyModeImpl {
             self.hwnd = 0;
         }
 
+        unhook_result?;
         hide_result.map(|_| ())
     }
 
