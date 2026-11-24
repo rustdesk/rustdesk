@@ -1,0 +1,30 @@
+services:
+  rustdesk-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rustdesk-web-client:latest
+    container_name: ${CONTAINER_NAME:-rustdesk-web-client}
+    restart: unless-stopped
+    ports:
+      # Default host port 21120 avoids common 3000/8080 conflicts and RustDesk hbbs/hbbr ports (21114-21119).
+      # Override anytime via HOST_PORT=<port> or ./deploy.sh --port <port>.
+      - "${HOST_BIND:-0.0.0.0}:${HOST_PORT:-21120}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
+      RUSTDESK_GATEWAY_TOKEN: "${RUSTDESK_GATEWAY_TOKEN:-}"
+    init: true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -1,5 +1,17 @@
 import React, { useState } from 'react';
-import { Activity, Globe, Monitor } from 'lucide-react';
+import {
+  Activity,
+  Globe,
+  Keyboard,
+  Maximize2,
+  Minimize2,
+  Monitor,
+  Power,
+  RefreshCw,
+  Sliders,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import { formatConnectionError } from '../lib/errors';
 import { statusLabel, t, type Locale } from '../lib/i18n';
 import type { ViewMode } from '../lib/mapping';
@@ -16,6 +28,8 @@ export interface SessionStats {
   decoded: number;
 }
 
+type MenuTab = 'control' | 'input' | 'display' | 'session';
+
 interface SessionMenuProps {
   locale: Locale;
   onToggleLocale: () => void;
@@ -31,6 +45,8 @@ interface SessionMenuProps {
   rightArmed: boolean;
   softKeys: boolean;
   isFullscreen: boolean;
+  viewOnly: boolean;
+  showRemoteCursor: boolean;
   diagnosticsOpen: boolean;
   stats: SessionStats;
   rtt: number;
@@ -41,6 +57,8 @@ interface SessionMenuProps {
   onOpenConnection: () => void;
   onDisconnect: () => void;
   onToggleDiagnostics: () => void;
+  onToggleViewOnly: () => void;
+  onToggleRemoteCursor: () => void;
   onFit: () => void;
   onOriginal: () => void;
   onZoomOut: () => void;
@@ -72,6 +90,8 @@ export function SessionMenu({
   rightArmed,
   softKeys,
   isFullscreen,
+  viewOnly,
+  showRemoteCursor,
   diagnosticsOpen,
   stats,
   rtt,
@@ -82,6 +102,8 @@ export function SessionMenu({
   onOpenConnection,
   onDisconnect,
   onToggleDiagnostics,
+  onToggleViewOnly,
+  onToggleRemoteCursor,
   onFit,
   onOriginal,
   onZoomOut,
@@ -97,6 +119,7 @@ export function SessionMenu({
   onChangeQuality,
   onSendClipboard,
 }: SessionMenuProps) {
+  const [activeTab, setActiveTab] = useState<MenuTab>('control');
   const [clipDraft, setClipDraft] = useState('');
   const [clipNotice, setClipNotice] = useState('');
 
@@ -127,6 +150,13 @@ export function SessionMenu({
     window.setTimeout(() => setClipNotice(''), 2000);
   };
 
+  const tabs: Array<{ id: MenuTab; label: string; icon: React.ReactNode }> = [
+    { id: 'control', label: t(locale, 'menuTabControl'), icon: <Sliders size={14} /> },
+    { id: 'input', label: t(locale, 'menuTabInput'), icon: <Keyboard size={14} /> },
+    { id: 'display', label: t(locale, 'menuTabDisplay'), icon: <Sparkles size={14} /> },
+    { id: 'session', label: t(locale, 'menuTabSession'), icon: <Activity size={14} /> },
+  ];
+
   return (
     <div
       className="scrim"
@@ -146,60 +176,476 @@ export function SessionMenu({
         onPointerDown={(e) => e.stopPropagation()}
       >
         <div
-          className="sm:hidden w-10 h-1 rounded-full bg-[#cbd5e1] mx-auto mb-2.5"
+          className="sm:hidden w-10 h-1 rounded-full bg-[var(--line)] mx-auto mb-2.5"
           aria-hidden="true"
         />
+
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#e8eef4]">
+        <div className="flex items-center justify-between gap-2 pb-3 border-b border-[var(--rd-divider)]">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold text-[#1c2430] m-0">
-                {t(locale, 'session')}
+              <h2 className="text-base font-semibold text-[var(--ink)] m-0 truncate">
+                {hostTitle}
               </h2>
               <span className={`rd-status ${phase}`} data-testid="status">
                 {statusLabel(locale, phase)}
               </span>
             </div>
-            <p className="text-xs text-[#5c6b7a] m-0 mt-0.5 truncate" data-testid="detail">
-              {hostTitle} · {platformLabel} · {linkLabel}
+            <p className="text-xs text-[var(--ink-soft)] m-0 mt-0.5 truncate" data-testid="detail">
+              {platformLabel} · {linkLabel}
+              {displayRtt > 0 ? ` · ${displayRtt} ms` : ''}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              className="rd-btn"
-              data-testid="lang-toggle"
-              aria-label={t(locale, 'langToggleAria')}
-              onClick={onToggleLocale}
+              className={`rd-btn${isFullscreen ? ' active' : ''}`}
+              style={{ minWidth: 36, minHeight: 36, padding: 6 }}
+              data-testid="fullscreen"
+              aria-label={isFullscreen ? t(locale, 'exitFullscreen') : t(locale, 'fullscreen')}
+              data-tooltip={isFullscreen ? t(locale, 'exitFullscreen') : t(locale, 'fullscreen')}
+              data-tooltip-pos="bottom-end"
+              onClick={onToggleFullscreen}
             >
-              <Globe size={15} />
-              <span>{t(locale, 'langToggle')}</span>
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
             <button
               type="button"
               className="rd-btn"
+              style={{ minWidth: 36, minHeight: 36, padding: 6 }}
               data-testid="session-close"
+              aria-label={t(locale, 'close')}
+              data-tooltip={t(locale, 'close')}
+              data-tooltip-pos="bottom-end"
               onClick={onClose}
             >
-              {t(locale, 'close')}
+              <X size={16} />
             </button>
           </div>
         </div>
 
-        {/* Session actions */}
-        <div className="flex flex-wrap gap-2 py-3 border-b border-[#e8eef4]">
+        {/* Categorized 4-Tab Bar */}
+        <div
+          className="rd-session-tabs my-3"
+          role="tablist"
+          aria-label={t(locale, 'session')}
+        >
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              data-testid={`menu-tab-${tab.id}`}
+              className={`rd-session-tab${activeTab === tab.id ? ' active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Tab 1: Control (View, Displays, Input Mode, Quick Actions) */}
+        {activeTab === 'control' && (
+          <div className="flex flex-col gap-3.5" role="tabpanel">
+            {hasMultipleDisplays && (
+              <div data-testid="display-switcher">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-semibold text-[var(--ink-soft)]">
+                    {t(locale, 'displays')}
+                  </span>
+                  <span className="text-xs font-mono-tabular text-[var(--ink-soft)]">
+                    {displays.length} {t(locale, 'monitorsCount')}
+                  </span>
+                </div>
+                <div
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                  role="group"
+                  aria-label={t(locale, 'displays')}
+                  data-testid="display"
+                >
+                  {displays.map((d) => {
+                    const isSelected = display === d.index;
+                    const isOffline = d.online === false;
+                    const label = d.name || `${t(locale, 'displayFallback')} ${d.index + 1}`;
+                    return (
+                      <button
+                        key={d.index}
+                        type="button"
+                        disabled={isOffline}
+                        aria-pressed={isSelected}
+                        data-testid={`display-option-${d.index}`}
+                        className={`display-card${isSelected ? ' active' : ''}`}
+                        onClick={() => onSwitchDisplay(d.index)}
+                      >
+                        <div className="flex items-center justify-between gap-2 w-full">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--ink)] min-w-0">
+                            <Monitor
+                              size={15}
+                              className={
+                                isSelected
+                                  ? 'text-[var(--accent)] shrink-0'
+                                  : 'text-[var(--ink-soft)] shrink-0'
+                              }
+                            />
+                            <span className="font-mono-tabular">#{d.index + 1}</span>
+                          </span>
+                          <span
+                            className={`text-[11px] font-medium ${
+                              isOffline
+                                ? 'text-[var(--bad)]'
+                                : isSelected
+                                  ? 'text-[var(--accent)]'
+                                  : 'text-[var(--ink-soft)]'
+                            }`}
+                          >
+                            {isOffline
+                              ? t(locale, 'offline')
+                              : isSelected
+                                ? t(locale, 'active')
+                                : `${d.width}×${d.height}`}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 w-full mt-1">
+                          <span className="text-xs text-[var(--ink)] truncate" title={label}>
+                            {label}
+                          </span>
+                          {isSelected && (
+                            <span className="text-[11px] font-mono-tabular text-[var(--ink-soft)] shrink-0">
+                              {d.width}×{d.height}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
+                {t(locale, 'view')}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={`rd-btn${viewMode === 'fit' ? ' primary' : ''}`}
+                  onClick={onFit}
+                >
+                  {t(locale, 'fit')}
+                </button>
+                <button
+                  type="button"
+                  className={`rd-btn${viewMode === 'original' ? ' primary' : ''}`}
+                  onClick={onOriginal}
+                >
+                  100%
+                </button>
+                <button
+                  type="button"
+                  className="rd-btn font-mono-tabular"
+                  data-testid="zoom-out"
+                  aria-label={t(locale, 'zoomOut')}
+                  data-tooltip={t(locale, 'zoomOut')}
+                  data-tooltip-pos="top"
+                  onClick={onZoomOut}
+                >
+                  −
+                </button>
+                <span
+                  className="font-mono-tabular text-xs font-medium text-[var(--ink)] min-w-[46px] text-center"
+                  data-testid="zoom"
+                >
+                  {zoomPercent}%
+                </span>
+                <button
+                  type="button"
+                  className="rd-btn font-mono-tabular"
+                  data-testid="zoom-in"
+                  aria-label={t(locale, 'zoomIn')}
+                  data-tooltip={t(locale, 'zoomIn')}
+                  data-tooltip-pos="top"
+                  onClick={onZoomIn}
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  className={`rd-btn${hand ? ' active' : ''}`}
+                  data-testid="pan"
+                  onClick={onToggleHand}
+                >
+                  {hand ? t(locale, 'panning') : t(locale, 'pan')}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rd-btn"
+                data-testid="touch-mode"
+                onClick={onToggleTouchMode}
+              >
+                {touchMode ? t(locale, 'touch') : t(locale, 'mouse')}
+              </button>
+              <button type="button" className="rd-btn" onClick={onRefresh}>
+                <RefreshCw size={14} />
+                <span>{t(locale, 'refresh')}</span>
+              </button>
+              <button
+                type="button"
+                className={`rd-btn${viewOnly ? ' active' : ''}`}
+                data-testid="menu-view-only"
+                aria-pressed={viewOnly}
+                onClick={onToggleViewOnly}
+              >
+                {t(locale, 'optViewOnly')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Input (Shortcuts, Soft Keyboard, Right Click, Clipboard) */}
+        {activeTab === 'input' && (
+          <div className="flex flex-col gap-3.5" role="tabpanel">
+            <div>
+              <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
+                {t(locale, 'input')}
+              </div>
+              <div className="flex flex-wrap gap-2" data-testid="quickbar">
+                <button type="button" className="rd-btn" onClick={() => onQuickKey('Esc')}>
+                  Esc
+                </button>
+                <button type="button" className="rd-btn" onClick={() => onQuickKey('Tab')}>
+                  Tab
+                </button>
+                <button type="button" className="rd-btn" onClick={() => onQuickKey('Ctrl+C')}>
+                  Ctrl+C
+                </button>
+                <button type="button" className="rd-btn" onClick={() => onQuickKey('Ctrl+V')}>
+                  Ctrl+V
+                </button>
+                <button
+                  type="button"
+                  className="rd-btn"
+                  onClick={() => onQuickKey('Ctrl+Alt+Del')}
+                >
+                  Ctrl+Alt+Del
+                </button>
+                <button type="button" className="rd-btn" onClick={() => onQuickKey('Lock')}>
+                  {t(locale, 'lockScreen')}
+                </button>
+                <button
+                  type="button"
+                  className={`rd-btn${rightArmed ? ' active' : ''}`}
+                  onClick={onToggleRightArmed}
+                >
+                  {rightArmed ? t(locale, 'rightClickArmed') : t(locale, 'rightClick')}
+                </button>
+                <button
+                  type="button"
+                  className={`rd-btn${softKeys ? ' active' : ''}`}
+                  data-testid="keyboard"
+                  onClick={onToggleKeyboard}
+                >
+                  {t(locale, 'keyboard')}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs font-semibold text-[var(--ink-soft)]">
+                  {t(locale, 'clipboard')}
+                </span>
+                {clipNotice && <span className="text-xs text-[var(--ok)]">{clipNotice}</span>}
+              </div>
+              <form className="flex gap-2" onSubmit={handleSendClip}>
+                <input
+                  type="text"
+                  className="rd-input flex-1"
+                  data-testid="clipboard-input"
+                  value={clipDraft}
+                  placeholder={t(locale, 'clipboardPlaceholder')}
+                  onChange={(e) => setClipDraft(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  className="rd-btn primary"
+                  data-testid="clipboard-send"
+                  disabled={!clipDraft.trim()}
+                >
+                  {t(locale, 'send')}
+                </button>
+              </form>
+              {remoteClipboard && (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-[var(--rd-card-bg)] border border-[var(--rd-card-border)] px-2.5 py-1.5">
+                  <span
+                    className="text-xs text-[var(--ink)] truncate font-mono-tabular"
+                    data-testid="clipboard-remote"
+                    title={remoteClipboard}
+                  >
+                    {remoteClipboard}
+                  </span>
+                  <button type="button" className="rd-btn" onClick={handleCopyRemote}>
+                    {t(locale, 'copy')}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Quality & Display Options */}
+        {activeTab === 'display' && (
+          <div className="flex flex-col gap-3.5" role="tabpanel">
+            <div>
+              <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
+                {t(locale, 'qualityAndFps')}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {(
+                  [
+                    { value: 'low', label: t(locale, 'qualityLow') },
+                    { value: 'balanced', label: t(locale, 'qualityBalanced') },
+                    { value: 'best', label: t(locale, 'qualityBest') },
+                  ] as const
+                ).map((q) => (
+                  <button
+                    key={q.value}
+                    type="button"
+                    className={`rd-btn${quality === q.value ? ' active' : ''}`}
+                    data-testid={`quality-${q.value}`}
+                    onClick={() => onChangeQuality(q.value, targetFps)}
+                  >
+                    {q.label}
+                  </button>
+                ))}
+                <select
+                  className="rd-select rd-select-inline font-mono-tabular"
+                  aria-label={t(locale, 'targetFps')}
+                  data-testid="fps-select"
+                  value={targetFps}
+                  onChange={(e) => onChangeQuality(quality, Number(e.target.value))}
+                >
+                  <option value={15}>15 fps</option>
+                  <option value={30}>30 fps</option>
+                  <option value={60}>60 fps</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="rd-check-row">
+                <input
+                  type="checkbox"
+                  checked={showRemoteCursor}
+                  onChange={onToggleRemoteCursor}
+                />
+                <span>{t(locale, 'optShowRemoteCursor')}</span>
+              </label>
+              <label className="rd-check-row">
+                <input
+                  type="checkbox"
+                  data-testid="toggle-diagnostics"
+                  checked={diagnosticsOpen}
+                  onChange={onToggleDiagnostics}
+                />
+                <span>{t(locale, 'diagnostics')}</span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Session Telemetry & Language */}
+        {activeTab === 'session' && (
+          <div className="flex flex-col gap-3.5" role="tabpanel" data-testid="telemetry">
+            <div className="grid grid-cols-3 gap-x-4 gap-y-2.5 text-xs rounded-xl bg-[var(--rd-card-bg)] border border-[var(--rd-card-border)] p-3">
+              <div>
+                <div className="text-[var(--ink-soft)]">{t(locale, 'statCodec')}</div>
+                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="codec">
+                  {stats.codec}
+                </div>
+              </div>
+              <div>
+                <div className="text-[var(--ink-soft)]">{t(locale, 'statSize')}</div>
+                <div
+                  className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5"
+                  data-testid="resolution"
+                >
+                  {stats.width > 0 && stats.height > 0 ? `${stats.width}×${stats.height}` : '—'}
+                </div>
+              </div>
+              <div>
+                <div className="text-[var(--ink-soft)]">{t(locale, 'statFps')}</div>
+                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="fps">
+                  {stats.fps}
+                </div>
+              </div>
+              <div>
+                <div className="text-[var(--ink-soft)]">{t(locale, 'statRtt')}</div>
+                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="delay">
+                  {displayRtt} ms
+                </div>
+              </div>
+              <div>
+                <div className="text-[var(--ink-soft)]">{t(locale, 'statBitrate')}</div>
+                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="bitrate">
+                  {formatBitrate(stats.bitrate)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[var(--ink-soft)]">{t(locale, 'statFrames')}</div>
+                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="decoded">
+                  {stats.decoded}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rd-btn"
+                data-testid="lang-toggle"
+                aria-label={t(locale, 'langToggleAria')}
+                onClick={onToggleLocale}
+              >
+                <Globe size={15} />
+                <span>{t(locale, 'langToggle')}</span>
+              </button>
+              <button
+                type="button"
+                className={`rd-btn${diagnosticsOpen ? ' active' : ''}`}
+                onClick={onToggleDiagnostics}
+              >
+                <Activity size={15} />
+                <span>{t(locale, 'diagnostics')}</span>
+              </button>
+            </div>
+
+            {detail && phase !== 'live' && (
+              <p className="m-0 text-xs text-[var(--ink-soft)]">{detail}</p>
+            )}
+          </div>
+        )}
+
+        {decoderError && (
+          <div
+            className="mt-3 rounded-lg border border-[var(--rd-err-border)] bg-[var(--bad-bg)] px-3 py-2 text-xs text-[var(--bad)] leading-relaxed"
+            data-testid="decoder-error"
+            role="alert"
+          >
+            {formatConnectionError(locale, decoderError).message}
+          </div>
+        )}
+
+        {/* Persistent Footer: Switch Connection + Disconnect */}
+        <div className="flex items-center justify-between gap-2 pt-3 mt-3.5 border-t border-[var(--rd-divider)]">
           <button type="button" className="rd-btn" onClick={onOpenConnection}>
             {t(locale, 'connection')}
-          </button>
-          <button
-            type="button"
-            className={`rd-btn${diagnosticsOpen ? ' active' : ''}`}
-            data-testid="toggle-diagnostics"
-            aria-pressed={diagnosticsOpen}
-            onClick={onToggleDiagnostics}
-          >
-            <Activity size={15} />
-            <span>{t(locale, 'diagnostics')}</span>
           </button>
           <button
             type="button"
@@ -207,349 +653,9 @@ export function SessionMenu({
             data-testid="disconnect"
             onClick={onDisconnect}
           >
-            {t(locale, 'disconnect')}
+            <Power size={15} />
+            <span>{t(locale, 'disconnect')}</span>
           </button>
-        </div>
-
-        {/* Dedicated Multi-Display Switcher (shown when peer exposes > 1 remote displays) */}
-        {hasMultipleDisplays && (
-          <div
-            className="py-3 border-b border-[#e8eef4]"
-            data-testid="display-switcher"
-          >
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-xs font-semibold text-[#5c6b7a]">
-                {t(locale, 'displays')}
-              </span>
-              <span className="text-xs font-mono-tabular text-[#5c6b7a]">
-                {displays.length} {t(locale, 'monitorsCount')}
-              </span>
-            </div>
-            <div
-              className="grid grid-cols-1 sm:grid-cols-2 gap-2"
-              role="group"
-              aria-label={t(locale, 'displays')}
-              data-testid="display"
-            >
-              {displays.map((d) => {
-                const isSelected = display === d.index;
-                const isOffline = d.online === false;
-                const label = d.name || `${t(locale, 'displayFallback')} ${d.index + 1}`;
-                return (
-                  <button
-                    key={d.index}
-                    type="button"
-                    disabled={isOffline}
-                    aria-pressed={isSelected}
-                    data-testid={`display-option-${d.index}`}
-                    className={`display-card${isSelected ? ' active' : ''}`}
-                    onClick={() => onSwitchDisplay(d.index)}
-                  >
-                    <div className="flex items-center justify-between gap-2 w-full">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1c2430] min-w-0">
-                        <Monitor
-                          size={15}
-                          className={isSelected ? 'text-[#0b6bcb] shrink-0' : 'text-[#5c6b7a] shrink-0'}
-                        />
-                        <span className="font-mono-tabular">#{d.index + 1}</span>
-                      </span>
-                      <span
-                        className={`text-[11px] font-medium ${
-                          isOffline
-                            ? 'text-[#b42318]'
-                            : isSelected
-                              ? 'text-[#0b6bcb]'
-                              : 'text-[#5c6b7a]'
-                        }`}
-                      >
-                        {isOffline
-                          ? t(locale, 'offline')
-                          : isSelected
-                            ? t(locale, 'active')
-                            : `${d.width}×${d.height}`}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 w-full mt-1">
-                      <span className="text-xs text-[#1c2430] truncate" title={label}>
-                        {label}
-                      </span>
-                      {isSelected && (
-                        <span className="text-[11px] font-mono-tabular text-[#5c6b7a] shrink-0">
-                          {d.width}×{d.height}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* View controls */}
-        <div className="py-3 border-b border-[#e8eef4]">
-          <div className="text-xs font-semibold text-[#5c6b7a] mb-2">{t(locale, 'view')}</div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className={`rd-btn${viewMode === 'fit' ? ' primary' : ''}`}
-              onClick={onFit}
-            >
-              {t(locale, 'fit')}
-            </button>
-            <button
-              type="button"
-              className={`rd-btn${viewMode === 'original' ? ' primary' : ''}`}
-              onClick={onOriginal}
-            >
-              100%
-            </button>
-            <button
-              type="button"
-              className="rd-btn font-mono-tabular"
-              data-testid="zoom-out"
-              aria-label={t(locale, 'zoomOut')}
-              data-tooltip={t(locale, 'zoomOut')}
-              data-tooltip-pos="top"
-              onClick={onZoomOut}
-            >
-              −
-            </button>
-            <span
-              className="font-mono-tabular text-xs font-medium text-[#1c2430] min-w-[46px] text-center"
-              data-testid="zoom"
-            >
-              {zoomPercent}%
-            </span>
-            <button
-              type="button"
-              className="rd-btn font-mono-tabular"
-              data-testid="zoom-in"
-              aria-label={t(locale, 'zoomIn')}
-              data-tooltip={t(locale, 'zoomIn')}
-              data-tooltip-pos="top"
-              onClick={onZoomIn}
-            >
-              +
-            </button>
-            <button
-              type="button"
-              className={`rd-btn${hand ? ' active' : ''}`}
-              data-testid="pan"
-              onClick={onToggleHand}
-            >
-              {hand ? t(locale, 'panning') : t(locale, 'pan')}
-            </button>
-            <button
-              type="button"
-              className="rd-btn"
-              data-testid="touch-mode"
-              onClick={onToggleTouchMode}
-            >
-              {touchMode ? t(locale, 'touch') : t(locale, 'mouse')}
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 mt-2.5">
-            <button type="button" className="rd-btn" onClick={onRefresh}>
-              {t(locale, 'refresh')}
-            </button>
-            <button
-              type="button"
-              className={`rd-btn${isFullscreen ? ' active' : ''}`}
-              data-testid="fullscreen"
-              onClick={onToggleFullscreen}
-            >
-              {isFullscreen ? t(locale, 'exitFullscreen') : t(locale, 'fullscreen')}
-            </button>
-          </div>
-        </div>
-
-        {/* Input quickbar */}
-        <div className="py-3 border-b border-[#e8eef4]">
-          <div className="text-xs font-semibold text-[#5c6b7a] mb-2">{t(locale, 'input')}</div>
-          <div className="flex flex-wrap gap-2" data-testid="quickbar">
-            <button type="button" className="rd-btn" onClick={() => onQuickKey('Esc')}>
-              Esc
-            </button>
-            <button type="button" className="rd-btn" onClick={() => onQuickKey('Tab')}>
-              Tab
-            </button>
-            <button type="button" className="rd-btn" onClick={() => onQuickKey('Ctrl+C')}>
-              Ctrl+C
-            </button>
-            <button type="button" className="rd-btn" onClick={() => onQuickKey('Ctrl+V')}>
-              Ctrl+V
-            </button>
-            <button
-              type="button"
-              className="rd-btn"
-              onClick={() => onQuickKey('Ctrl+Alt+Del')}
-            >
-              Ctrl+Alt+Del
-            </button>
-            <button
-              type="button"
-              className="rd-btn"
-              onClick={() => onQuickKey('Lock')}
-            >
-              {t(locale, 'lockScreen')}
-            </button>
-            <button
-              type="button"
-              className={`rd-btn${rightArmed ? ' active' : ''}`}
-              onClick={onToggleRightArmed}
-            >
-              {rightArmed ? t(locale, 'rightClickArmed') : t(locale, 'rightClick')}
-            </button>
-            <button
-              type="button"
-              className={`rd-btn${softKeys ? ' active' : ''}`}
-              data-testid="keyboard"
-              onClick={onToggleKeyboard}
-            >
-              {t(locale, 'keyboard')}
-            </button>
-          </div>
-        </div>
-
-        {/* Quality & FPS (M11) */}
-        <div className="py-3 border-b border-[#e8eef4]">
-          <div className="text-xs font-semibold text-[#5c6b7a] mb-2">
-            {t(locale, 'qualityAndFps')}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {(
-              [
-                { value: 'low', label: t(locale, 'qualityLow') },
-                { value: 'balanced', label: t(locale, 'qualityBalanced') },
-                { value: 'best', label: t(locale, 'qualityBest') },
-              ] as const
-            ).map((q) => (
-              <button
-                key={q.value}
-                type="button"
-                className={`rd-btn${quality === q.value ? ' active' : ''}`}
-                data-testid={`quality-${q.value}`}
-                onClick={() => onChangeQuality(q.value, targetFps)}
-              >
-                {q.label}
-              </button>
-            ))}
-            <select
-              className="rd-select rd-select-inline font-mono-tabular"
-              aria-label={t(locale, 'targetFps')}
-              data-testid="fps-select"
-              value={targetFps}
-              onChange={(e) => onChangeQuality(quality, Number(e.target.value))}
-            >
-              <option value={15}>15 fps</option>
-              <option value={30}>30 fps</option>
-              <option value={60}>60 fps</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Clipboard sync (M11) */}
-        <div className="py-3 border-b border-[#e8eef4]">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-xs font-semibold text-[#5c6b7a]">
-              {t(locale, 'clipboard')}
-            </span>
-            {clipNotice && <span className="text-xs text-[#0f7b4c]">{clipNotice}</span>}
-          </div>
-          <form className="flex gap-2" onSubmit={handleSendClip}>
-            <input
-              type="text"
-              className="rd-input flex-1"
-              data-testid="clipboard-input"
-              value={clipDraft}
-              placeholder={t(locale, 'clipboardPlaceholder')}
-              onChange={(e) => setClipDraft(e.target.value)}
-            />
-            <button
-              type="submit"
-              className="rd-btn primary"
-              data-testid="clipboard-send"
-              disabled={!clipDraft.trim()}
-            >
-              {t(locale, 'send')}
-            </button>
-          </form>
-          {remoteClipboard && (
-            <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-[#f7f9fb] border border-[#e2e8f0] px-2.5 py-1.5">
-              <span
-                className="text-xs text-[#1c2430] truncate font-mono-tabular"
-                data-testid="clipboard-remote"
-                title={remoteClipboard}
-              >
-                {remoteClipboard}
-              </span>
-              <button type="button" className="rd-btn" onClick={handleCopyRemote}>
-                {t(locale, 'copy')}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Telemetry Stats */}
-        <div className="pt-3" data-testid="telemetry">
-          <div className="text-xs font-semibold text-[#5c6b7a] mb-2">{t(locale, 'stats')}</div>
-          <div className="grid grid-cols-3 gap-x-4 gap-y-2.5 text-xs">
-            <div>
-              <div className="text-[#5c6b7a]">{t(locale, 'statCodec')}</div>
-              <div className="font-mono-tabular font-semibold text-[#1c2430]" data-testid="codec">
-                {stats.codec}
-              </div>
-            </div>
-            <div>
-              <div className="text-[#5c6b7a]">{t(locale, 'statSize')}</div>
-              <div
-                className="font-mono-tabular font-semibold text-[#1c2430]"
-                data-testid="resolution"
-              >
-                {stats.width > 0 && stats.height > 0 ? `${stats.width}×${stats.height}` : '—'}
-              </div>
-            </div>
-            <div>
-              <div className="text-[#5c6b7a]">{t(locale, 'statFps')}</div>
-              <div className="font-mono-tabular font-semibold text-[#1c2430]" data-testid="fps">
-                {stats.fps}
-              </div>
-            </div>
-            <div>
-              <div className="text-[#5c6b7a]">{t(locale, 'statRtt')}</div>
-              <div className="font-mono-tabular font-semibold text-[#1c2430]" data-testid="delay">
-                {displayRtt} ms
-              </div>
-            </div>
-            <div>
-              <div className="text-[#5c6b7a]">{t(locale, 'statBitrate')}</div>
-              <div className="font-mono-tabular font-semibold text-[#1c2430]" data-testid="bitrate">
-                {formatBitrate(stats.bitrate)}
-              </div>
-            </div>
-            <div>
-              <div className="text-[#5c6b7a]">{t(locale, 'statFrames')}</div>
-              <div className="font-mono-tabular font-semibold text-[#1c2430]" data-testid="decoded">
-                {stats.decoded}
-              </div>
-            </div>
-          </div>
-
-          {detail && phase !== 'live' && (
-            <p className="mt-2 mb-0 text-xs text-[#5c6b7a]">{detail}</p>
-          )}
-
-          {decoderError && (
-            <div
-              className="mt-2.5 rounded-lg border border-[var(--rd-err-border)] bg-[var(--bad-bg)] px-3 py-2 text-xs text-[var(--bad)] leading-relaxed"
-              data-testid="decoder-error"
-              role="alert"
-            >
-              {formatConnectionError(locale, decoderError).message}
-            </div>
-          )}
         </div>
       </div>
     </div>

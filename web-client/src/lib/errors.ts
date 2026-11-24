@@ -74,7 +74,28 @@ export function formatConnectionError(locale: Locale, rawMessage: string): Forma
     };
   }
 
-  // 3. Network, server key, peer offline, timeout, and gateway errors
+  // 3. Network, DNS, server key, peer offline, timeout, and gateway errors
+  if (
+    lower.includes('dns lookup') ||
+    lower.includes('enotfound') ||
+    lower.includes('eai_again') ||
+    lower.includes('eai_nodata') ||
+    lower.includes('eai_noname') ||
+    lower.includes('eservfail') ||
+    lower.includes('域名解析')
+  ) {
+    const match = raw.match(/DNS lookup (?:failed|timed out) for "([^"]+)"/i);
+    const domain = match?.[1];
+    return {
+      kind: 'network',
+      title: t(locale, 'errTitleDns'),
+      message: domain
+        ? locale === 'zh'
+          ? `无法解析域名「${domain}」，请检查域名拼写、去掉 http:// 前缀并确认 DNS 记录正常。`
+          : `Could not resolve domain "${domain}". Check the spelling, remove any http:// prefix, and verify DNS records.`
+        : t(locale, 'errMsgDns'),
+    };
+  }
   if (
     lower.includes('signature') ||
     lower.includes('public key') ||
@@ -127,8 +148,6 @@ export function formatConnectionError(locale: Locale, rawMessage: string): Forma
     lower.includes('os error 111') ||
     lower.includes('network is unreachable') ||
     lower.includes('enetunreach') ||
-    lower.includes('enotfound') ||
-    lower.includes('eai_again') ||
     lower.includes('ehostunreach')
   ) {
     return {

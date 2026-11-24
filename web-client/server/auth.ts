@@ -25,8 +25,31 @@ export function passwordResponse(password: string, salt: string, challenge: stri
     .digest();
 }
 
+/**
+ * Normalizes user-pasted host / server strings by stripping URL schemes
+ * (http://, https://, ws://, wss://, tcp://, rustdesk://), fullwidth colons,
+ * trailing paths/queries/fragments, and surrounding whitespace.
+ */
+export function sanitizeHostInput(raw: string): string {
+  let s = (raw ?? '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim()
+    .replace(/：/g, ':');
+
+  // Strip common URL protocol prefixes users accidentally paste
+  s = s.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '');
+
+  // Strip path, query, or hash suffix if present
+  const cutIdx = s.search(/[/?#]/);
+  if (cutIdx !== -1) {
+    s = s.slice(0, cutIdx);
+  }
+
+  return s.trim();
+}
+
 export function hostHasPort(host: string): boolean {
-  const trimmed = host.trim();
+  const trimmed = sanitizeHostInput(host);
   if (trimmed.startsWith('[')) {
     return trimmed.includes(']:');
   }
@@ -35,7 +58,7 @@ export function hostHasPort(host: string): boolean {
 }
 
 export function isIpStr(host: string): boolean {
-  const trimmed = host.trim();
+  const trimmed = sanitizeHostInput(host);
   if (trimmed.startsWith('[')) {
     const end = trimmed.indexOf(']');
     if (end === -1) return false;
@@ -49,10 +72,11 @@ export function isIpStr(host: string): boolean {
 }
 
 /**
- * Formats host + default port like hbb_common::socket_client::check_port.
+ * Formats host + default port like hbb_common::socket_client::check_port,
+ * while tolerating pasted URLs, fullwidth colons, and trailing slashes.
  */
 export function checkPort(host: string, defaultPort: number): { host: string; port: number } {
-  const trimmed = host.trim();
+  const trimmed = sanitizeHostInput(host);
   if (trimmed.startsWith('[')) {
     const end = trimmed.indexOf(']');
     if (end !== -1) {
@@ -72,9 +96,11 @@ export function checkPort(host: string, defaultPort: number): { host: string; po
   }
   const idx = trimmed.lastIndexOf(':');
   if (idx !== -1 && trimmed.indexOf(':') === idx) {
-    const parsed = Number.parseInt(trimmed.slice(idx + 1), 10);
-    if (Number.isFinite(parsed) && parsed > 0 && parsed <= 65535) {
-      return { host: trimmed.slice(0, idx), port: parsed };
+    const hostPart = trimmed.slice(0, idx).trim();
+    const portPart = trimmed.slice(idx + 1).trim();
+    const parsed = Number.parseInt(portPart, 10);
+    if (hostPart && /^\d+$/.test(portPart) && parsed > 0 && parsed <= 65535) {
+      return { host: hostPart, port: parsed };
     }
   }
   return { host: trimmed, port: defaultPort };
@@ -89,10 +115,10 @@ export function formatHostPort(host: string, port: number): string {
 
 /**
  * Computes RustDesk direct login username (IP:port or [IPv6]:port).
- * Resolves hostnames to IP addresses when possible.
+ * Resolves hostnames to IPv4 first (falling back to IPv6) to match TCP dial order.
  */
 export async function directUsername(host: string, port: number): Promise<string> {
-  const trimmed = host.trim();
+  const trimmed = sanitizeHostInput(host);
   if (isIpStr(trimmed) && hostHasPort(trimmed)) {
     return trimmed;
   }
@@ -101,9 +127,10 @@ export async function directUsername(host: string, port: number): Promise<string
     return formatHostPort(parsed.host, parsed.port);
   }
   try {
-    const looked = await dns.lookup(parsed.host);
-    if (looked?.address) {
-      return formatHostPort(looked.address, parsed.port);
+    const records = await dns.lookup(parsed.host, { all: true });
+    const preferred = records.find((r) => r.family === 4) ?? records[0];
+    if (preferred?.address) {
+      return formatHostPort(preferred.address, parsed.port);
     }
   } catch {
     // Fall back to host:port when DNS resolution is unavailable

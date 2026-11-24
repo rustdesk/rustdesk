@@ -326,6 +326,20 @@ export function humanizeError(err: unknown): string {
   if (lower.includes('empty password') || lower.includes('no password access')) {
     return 'The host requires a password. Enter the permanent password set on the desktop and connect again.';
   }
+  if (
+    lower.includes('dns lookup') ||
+    lower.includes('enotfound') ||
+    lower.includes('eai_again') ||
+    lower.includes('eai_nodata') ||
+    lower.includes('eai_noname') ||
+    lower.includes('eservfail')
+  ) {
+    const match = raw.match(/DNS lookup (?:failed|timed out) for "([^"]+)"/i);
+    if (match?.[1]) {
+      return `DNS lookup failed for "${match[1]}". Check the domain spelling, remove any http:// prefix, and verify DNS records.`;
+    }
+    return 'DNS lookup failed. Check the server domain spelling and network DNS settings.';
+  }
   if (lower.includes('offline') || lower.includes('id does not exist')) {
     return 'The remote desktop is offline, or the ID does not match this host.';
   }
@@ -336,9 +350,9 @@ export function humanizeError(err: unknown): string {
     lower.includes('os error 111') ||
     lower.includes('network is unreachable') ||
     lower.includes('enetunreach') ||
-    lower.includes('enotfound')
+    lower.includes('ehostunreach')
   ) {
-    return 'Cannot reach the host. Check the address and port, and confirm direct IP access is enabled on the desktop.';
+    return 'Cannot reach the server or host. Check the address, port, and firewall settings.';
   }
   if (lower.includes('timed out') || lower.includes('timeout') || lower.includes('etimedout')) {
     return 'The host did not answer in time. It may be offline, or a firewall is blocking the port.';

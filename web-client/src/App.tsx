@@ -330,6 +330,8 @@ export default function App() {
   const [touchMode, setTouchMode] = useState<boolean>(isCoarseDevice);
   const [rightArmed, setRightArmed] = useState(false);
   const [handleX, setHandleX] = useState(0.5);
+  const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  const [toolbarPinned, setToolbarPinned] = useState(false);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [menuOpen, setMenuOpen] = useState(false);
   const [connectDialog, setConnectDialog] = useState(false);
@@ -834,6 +836,7 @@ export default function App() {
       const sock = new WebSocket(wsUrl());
       sock.binaryType = 'arraybuffer';
       wsRef.current = sock;
+      let receivedTerminalError = false;
 
       sock.onopen = () => {
         if (wsRef.current !== sock) return;
@@ -895,6 +898,7 @@ export default function App() {
         switch (msg.type) {
           case 'status':
             if (msg.state === 'live') {
+              phaseRef.current = 'live';
               setPhase('live');
               setConnectDialog(false);
               setMenuOpen(false);
@@ -903,6 +907,7 @@ export default function App() {
               );
               captureRef.current?.focus();
             } else if (msg.state === 'connecting') {
+              phaseRef.current = 'connecting';
               setPhase('connecting');
               if (msg.detail) {
                 setStatusDetail(null, msg.detail);
@@ -910,6 +915,8 @@ export default function App() {
                 setStatusDetail('connecting');
               }
             } else if (msg.state === 'error') {
+              receivedTerminalError = true;
+              phaseRef.current = 'error';
               setPhase('error');
               setConnectDialog(true);
               setMenuOpen(false);
@@ -922,6 +929,7 @@ export default function App() {
                 setStatusDetail('detailHostRejected');
               }
             } else if (msg.state === 'closed') {
+              phaseRef.current = 'idle';
               setPhase('idle');
               setStatusDetail('detailDisconnected');
             }
@@ -994,6 +1002,12 @@ export default function App() {
           case 'error':
             setDecoderError(msg.message);
             setStatusDetail(null, msg.message);
+            if (phaseRef.current === 'connecting') {
+              receivedTerminalError = true;
+              phaseRef.current = 'error';
+              setPhase('error');
+              setConnectDialog(true);
+            }
             break;
 
           default:
@@ -1002,7 +1016,8 @@ export default function App() {
       };
 
       sock.onerror = () => {
-        if (wsRef.current !== sock) return;
+        if (wsRef.current !== sock || receivedTerminalError) return;
+        phaseRef.current = 'error';
         setPhase('error');
         setConnectDialog(true);
         setStatusDetail('detailGatewayError');
@@ -1011,11 +1026,16 @@ export default function App() {
       sock.onclose = () => {
         if (wsRef.current !== sock) return;
         wsRef.current = null;
+        if (receivedTerminalError || phaseRef.current === 'error') {
+          return;
+        }
         if (phaseRef.current === 'connecting') {
+          phaseRef.current = 'error';
           setPhase('error');
           setConnectDialog(true);
           setStatusDetail('detailGatewayClosed');
-        } else if (phaseRef.current !== 'error') {
+        } else {
+          phaseRef.current = 'idle';
           setPhase('idle');
         }
       };
@@ -1057,6 +1077,7 @@ export default function App() {
     }
     decoderRef.current?.close();
     setMenuOpen(false);
+    setToolbarExpanded(false);
     setConnectDialog(false);
     setSoftKeys(false);
     resetDiagnostics();
@@ -1371,6 +1392,10 @@ export default function App() {
   // Pointer handlers on stage
   const handlePointerDown = (e: React.PointerEvent<HTMLElement>) => {
     if (!remoteInput) return;
+
+    if (toolbarExpanded && !toolbarPinned) {
+      setToolbarExpanded(false);
+    }
 
     const isTouch = e.pointerType === 'touch';
     // Ignore browser-synthesized mouse events for 700ms after touch
@@ -1914,10 +1939,13 @@ export default function App() {
     setRightArmed((r) => !r);
   };
 
+  const isTouchLayout = isCoarseDevice || isMobileViewport;
   const showConnectSheet = phase !== 'live' || connectDialog;
   const showSessionMenu = menuOpen && phase === 'live' && !connectDialog;
-  const showHandle = phase === 'live' && !connectDialog && !menuOpen;
-  const showMobileDock = remoteInput && !softKeys && (isCoarseDevice || isMobileViewport);
+  const showHandle = phase === 'live' && !connectDialog && !menuOpen && !isTouchLayout;
+  const showMobileDock = remoteInput && !softKeys && isTouchLayout;
+  const liveHostTitle =
+    peer?.hostname || peer?.username || (mode === 'id' ? peerId : host) || 'Remote';
   // Appendix B fix #2: hide virtual cursor dot on desktop fine-pointer sessions
   const showRemoteCursor =
     displayPrefs.showRemoteCursor && !touchMode && virtualCursorVisible && phase === 'live';
@@ -1993,10 +2021,40 @@ export default function App() {
           locale={locale}
           handleX={handleX}
           stageWidth={box.w}
+          expanded={toolbarExpanded}
+          pinned={toolbarPinned}
+          hostTitle={liveHostTitle}
+          displays={peer?.displays ?? []}
+          activeDisplay={display}
+          viewMode={viewMode}
           hasWarning={Boolean(decoderError)}
           isFullscreen={isFullscreen}
           onMoveHandle={setHandleX}
+          onSetExpanded={setToolbarExpanded}
+          onTogglePinned={() => setToolbarPinned((prev) => !prev)}
+          onSwitchDisplay={(idx) => {
+            setDisplay(idx);
+            send({ type: 'switchDisplay', display: idx });
+          }}
+          onToggleViewMode={() => {
+            if (viewMode === 'fit') {
+              setViewMode('original');
+              setPan({
+                panX: (box.w - remoteW) / 2,
+                panY: (box.h - remoteH) / 2,
+              });
+            } else {
+              setViewMode('fit');
+              setZoom(1);
+              setPan({ panX: 0, panY: 0 });
+            }
+          }}
+          onRefresh={() => send({ type: 'refresh' })}
+          onToggleKeyboard={() => setSoftKeys((prev) => !prev)}
+          onCtrlAltDel={() => handleQuickKey('Ctrl+Alt+Del')}
+          onToggleFullscreen={handleToggleFullscreen}
           onOpenMenu={() => setMenuOpen(true)}
+          onDisconnect={disconnect}
         />
       )}
 
@@ -2013,8 +2071,11 @@ export default function App() {
       {showMobileDock && (
         <MobileDock
           locale={locale}
+          stageWidth={box.w}
+          stageHeight={box.h}
           touchMode={touchMode}
           rightArmed={rightArmed}
+          hasWarning={Boolean(decoderError)}
           onToggleKeyboard={() => setSoftKeys(true)}
           onToggleTouchMode={handleToggleTouchMode}
           onRightClickAction={handleMobileRightClick}
@@ -2093,6 +2154,8 @@ export default function App() {
           rightArmed={rightArmed}
           softKeys={softKeys}
           isFullscreen={isFullscreen}
+          viewOnly={displayPrefs.viewOnly}
+          showRemoteCursor={displayPrefs.showRemoteCursor}
           diagnosticsOpen={diagnosticsOpen}
           stats={stats}
           rtt={rtt}
@@ -2109,6 +2172,12 @@ export default function App() {
             setDiagnosticsOpen((prev) => !prev);
             setMenuOpen(false);
           }}
+          onToggleViewOnly={() =>
+            handleUpdateDisplayPrefs({ viewOnly: !displayPrefs.viewOnly })
+          }
+          onToggleRemoteCursor={() =>
+            handleUpdateDisplayPrefs({ showRemoteCursor: !displayPrefs.showRemoteCursor })
+          }
           onFit={() => {
             setViewMode('fit');
             setZoom(1);

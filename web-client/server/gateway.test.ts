@@ -7,9 +7,11 @@ import {
   DEFAULT_DIRECT_PORT,
   RELAY_PORT,
   RENDEZVOUS_PORT,
+  checkPort,
   directUsername,
   isValidRelayUuid,
   passwordResponse,
+  sanitizeHostInput,
   tokenMatches,
 } from './auth.ts';
 import {
@@ -18,6 +20,7 @@ import {
   KX_VERSION_LATEST,
   StreamCipher,
   encodeBytesFrame,
+  formatNetError,
 } from './bytesCodec.ts';
 import {
   MOUSE_BUTTON_LEFT,
@@ -163,10 +166,28 @@ test('text and Escape become legacy KeyEvents and video_received is a Misc flag'
   assert.equal(ack.misc.video_received, true);
 });
 
-test('humanizeError produces plain-language errors', () => {
+test('humanizeError produces plain-language errors including distinct DNS failures', () => {
   assert.match(humanizeError(new Error('Wrong Password')), /rejected the password/i);
-  assert.match(humanizeError(new Error('ECONNREFUSED 127.0.0.1:21118')), /Cannot reach the host/i);
+  assert.match(humanizeError(new Error('ECONNREFUSED 127.0.0.1:21118')), /Cannot reach the server or host/i);
   assert.match(humanizeError(new Error('timed out')), /did not answer in time/i);
+  assert.match(
+    humanizeError(new Error('DNS lookup failed for "bad.rustdesk.test" (ENOTFOUND)')),
+    /DNS lookup failed for "bad\.rustdesk\.test"/i,
+  );
+});
+
+test('sanitizeHostInput and checkPort normalize pasted URLs, fullwidth colons, and trailing paths', () => {
+  assert.equal(sanitizeHostInput('  https://rs.example.com:21116/path?a=1  '), 'rs.example.com:21116');
+  assert.equal(sanitizeHostInput('http://hbbs.example.com/'), 'hbbs.example.com');
+  assert.equal(sanitizeHostInput('rs.example.com：31116'), 'rs.example.com:31116');
+  assert.deepEqual(checkPort('https://rs.example.com/', 21116), { host: 'rs.example.com', port: 21116 });
+  assert.deepEqual(checkPort('rs.example.com：31116', 21116), { host: 'rs.example.com', port: 31116 });
+  assert.deepEqual(checkPort('[2001:db8::1]:21117', 21116), { host: '2001:db8::1', port: 21117 });
+});
+
+test('formatNetError unwraps Node AggregateError with empty top-level message', () => {
+  const agg = new AggregateError([new Error('connect ECONNREFUSED 127.0.0.1:21116')], '');
+  assert.equal(formatNetError(agg), 'connect ECONNREFUSED 127.0.0.1:21116');
 });
 
 test('gateway token check is optional and constant-time exact', () => {

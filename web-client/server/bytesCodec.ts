@@ -1,3 +1,4 @@
+import dns from 'node:dns/promises';
 import net from 'node:net';
 import nacl from 'tweetnacl';
 import { blake2b } from '@noble/hashes/blake2.js';
@@ -206,36 +207,38 @@ export class EncryptedFramedStream {
     });
   }
 
-  static connect(host: string, port: number, timeoutMs: number): Promise<EncryptedFramedStream> {
-    return new Promise((resolve, reject) => {
-      const socket = net.createConnection({ host, port });
-      let settled = false;
+  static async connect(
+    host: string,
+    port: number,
+    timeoutMs: number,
+  ): Promise<EncryptedFramedStream> {
+    const cleanHost = host.trim();
+    if (!cleanHost || /\s/.test(cleanHost)) {
+      throw new Error(`DNS lookup failed for "${host}" (EINVAL)`);
+    }
 
-      const timer = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          socket.destroy();
-          reject(new Error(`timed out connecting to ${host}:${port}`));
-        }
-      }, timeoutMs);
+    const targets = await resolveDialTargets(cleanHost, Math.min(timeoutMs, 5_000));
+    const deadline = Date.now() + timeoutMs;
+    let lastError: Error | null = null;
 
-      socket.once('connect', () => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          resolve(new EncryptedFramedStream(socket));
-        }
-      });
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i];
+      const remaining = deadline - Date.now();
+      if (remaining <= 50) {
+        break;
+      }
+      // Give each candidate a fair share of the remaining budget so a dead IPv6/IPv4 record never starves the fallback
+      const slotsLeft = targets.length - i;
+      const attemptTimeout = slotsLeft > 1 ? Math.max(1_500, Math.floor(remaining / slotsLeft)) : remaining;
 
-      socket.once('error', (err) => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          socket.destroy();
-          reject(new Error(`failed to connect to ${host}:${port}: ${err.message}`));
-        }
-      });
-    });
+      try {
+        return await dialSingleAddress(target.address, target.family, cleanHost, port, attemptTimeout);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+      }
+    }
+
+    throw lastError ?? new Error(`timed out connecting to ${cleanHost}:${port}`);
   }
 
   private fail(err: Error) {
@@ -313,4 +316,117 @@ export class EncryptedFramedStream {
     this.closed = true;
     this.socket.destroy();
   }
+}
+
+export function formatNetError(err: unknown): string {
+  if (err && typeof err === 'object' && 'errors' in err && Array.isArray((err as AggregateError).errors)) {
+    const inner = (err as AggregateError).errors
+      .map((item) => formatNetError(item))
+      .filter(Boolean);
+    if (inner.length > 0) {
+      return inner[0];
+    }
+  }
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (err.message) return err.message;
+    if (code) return code;
+  }
+  return String(err ?? 'unknown network error');
+}
+
+export async function resolveDialTargets(
+  host: string,
+  timeoutMs: number,
+): Promise<Array<{ address: string; family: 4 | 6 }>> {
+  const ipFamily = net.isIP(host);
+  if (ipFamily === 4 || ipFamily === 6) {
+    return [{ address: host, family: ipFamily }];
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const records = await Promise.race([
+      dns.lookup(host, { all: true }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          const timeoutErr = new Error(`DNS lookup timed out for "${host}" (EAI_AGAIN)`) as NodeJS.ErrnoException;
+          timeoutErr.code = 'EAI_AGAIN';
+          reject(timeoutErr);
+        }, Math.max(1_000, timeoutMs));
+      }),
+    ]);
+
+    if (!Array.isArray(records) || records.length === 0) {
+      throw new Error(`DNS lookup failed for "${host}" (ENOTFOUND)`);
+    }
+
+    // Prefer IPv4 records first, then IPv6, deduplicated to prevent dead IPv6 routes from breaking connections
+    const seen = new Set<string>();
+    const v4: Array<{ address: string; family: 4 | 6 }> = [];
+    const v6: Array<{ address: string; family: 4 | 6 }> = [];
+    for (const rec of records) {
+      if (!rec.address || seen.has(rec.address)) continue;
+      seen.add(rec.address);
+      if (rec.family === 4) v4.push({ address: rec.address, family: 4 });
+      else if (rec.family === 6) v6.push({ address: rec.address, family: 6 });
+    }
+    const ordered = [...v4, ...v6];
+    if (ordered.length === 0) {
+      throw new Error(`DNS lookup failed for "${host}" (ENOTFOUND)`);
+    }
+    return ordered;
+  } catch (err) {
+    const msg = formatNetError(err);
+    if (msg.startsWith('DNS lookup')) {
+      throw err instanceof Error ? err : new Error(msg);
+    }
+    const code = (err as NodeJS.ErrnoException | undefined)?.code ?? 'ENOTFOUND';
+    throw new Error(`DNS lookup failed for "${host}" (${code})`);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function dialSingleAddress(
+  address: string,
+  family: 4 | 6,
+  displayHost: string,
+  port: number,
+  timeoutMs: number,
+): Promise<EncryptedFramedStream> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: address, port, family });
+    let settled = false;
+
+    const onError = (err: Error) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        socket.destroy();
+        reject(new Error(`failed to connect to ${displayHost}:${port}: ${formatNetError(err)}`));
+      }
+    };
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        socket.destroy();
+        reject(new Error(`timed out connecting to ${displayHost}:${port}`));
+      }
+    }, timeoutMs);
+
+    socket.on('error', onError);
+
+    socket.once('connect', () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        const stream = new EncryptedFramedStream(socket);
+        // Remove dial error listener AFTER EncryptedFramedStream attaches its own error listener
+        socket.off('error', onError);
+        resolve(stream);
+      }
+    });
+  });
 }

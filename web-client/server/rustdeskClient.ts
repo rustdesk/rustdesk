@@ -10,12 +10,12 @@ import {
 } from './auth.ts';
 import { EncryptedFramedStream } from './bytesCodec.ts';
 import {
-  CodecCaps,
+  type CodecCaps,
   buildLoginOptions,
   buildRefreshVideoMessage,
 } from './control.ts';
 import {
-  HostHash,
+  type HostHash,
   peerSignKey,
   readUntilHash,
   secureRendezvous,
@@ -168,10 +168,15 @@ async function requestRelayViaRendezvous(
   idDial: { host: string; port: number },
   suggestedRelayServer: string,
   secure: boolean,
+  idServerSecured: boolean,
 ): Promise<{ peerStream: EncryptedFramedStream; pkBytes?: Uint8Array }> {
   const peerId = target.peerId.replace(/\s+/g, '');
   const relaySocket = await EncryptedFramedStream.connect(idDial.host, idDial.port, 10_000);
   try {
+    if (idServerSecured && target.key.trim()) {
+      await secureRendezvous(relaySocket, target.key, 1_500);
+    }
+
     const uuid = crypto.randomUUID();
     const relayServer = target.relayServer.trim() || suggestedRelayServer.trim();
 
@@ -208,11 +213,15 @@ async function requestRelayViaRendezvous(
       idDial.host;
     if (!finalRelayHost) throw new Error('relay server is empty');
 
+    const defaultRelayPort =
+      idDial.port > 0 && idDial.port < 65535 ? idDial.port + 1 : RELAY_PORT;
+
     const peerStream = await connectRelayEndpoint(
       finalRelayHost,
       peerId,
       finalUuid,
       target.key.trim(),
+      defaultRelayPort,
     );
     const pkBytes = rr.pk ? new Uint8Array(rr.pk) : undefined;
     relaySocket.close();
@@ -228,8 +237,9 @@ async function connectRelayEndpoint(
   peerId: string,
   uuid: string,
   licenceKey: string,
+  defaultRelayPort = RELAY_PORT,
 ): Promise<EncryptedFramedStream> {
-  const relayDial = checkPort(relayHost, RELAY_PORT);
+  const relayDial = checkPort(relayHost, defaultRelayPort);
   const peerStream = await EncryptedFramedStream.connect(relayDial.host, relayDial.port, 10_000);
   try {
     await peerStream.sendRaw(
@@ -262,9 +272,10 @@ export async function connectViaId(
   const idSocket = await EncryptedFramedStream.connect(idDial.host, idDial.port, 10_000);
 
   let peerStream: EncryptedFramedStream | null = null;
+  let idServerSecured = false;
   try {
     if (target.key.trim()) {
-      await secureRendezvous(idSocket, target.key);
+      idServerSecured = await secureRendezvous(idSocket, target.key);
     }
 
     await idSocket.sendRaw(
@@ -341,6 +352,7 @@ export async function connectViaId(
           idDial,
           relayHint,
           Boolean(signPk),
+          idServerSecured,
         );
         peerStream = relay.peerStream;
         const finalSignPk =
@@ -363,7 +375,16 @@ export async function connectViaId(
           target.relayServer.trim() || String(rr.relay_server ?? '').trim() || idDial.host;
         if (!relayHost) throw new Error('relay server is empty');
 
-        peerStream = await connectRelayEndpoint(relayHost, peerId, uuid, target.key.trim());
+        const defaultRelayPort =
+          idDial.port > 0 && idDial.port < 65535 ? idDial.port + 1 : RELAY_PORT;
+
+        peerStream = await connectRelayEndpoint(
+          relayHost,
+          peerId,
+          uuid,
+          target.key.trim(),
+          defaultRelayPort,
+        );
         const pkBytes = rr.pk ? new Uint8Array(rr.pk) : undefined;
         const signPk = peerSignKey(target.key, pkBytes, peerId);
         const { hash, encrypted } = await readUntilHash(peerStream, signPk, peerId);

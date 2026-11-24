@@ -46,17 +46,25 @@ test('classifies server key / signature mismatch into network error', () => {
   assert.equal(res.title, '服务器公钥不匹配');
 });
 
-test('classifies connection refused / DNS / unreachable into network error', () => {
+test('classifies connection refused / unreachable and DNS failures distinctly', () => {
   const refused = formatConnectionError(
     'zh',
-    'Cannot reach the host. Check the address and port, and confirm direct IP access is enabled on the desktop.',
+    'Cannot reach the server or host. Check the address, port, and firewall settings.',
   );
   assert.equal(refused.kind, 'network');
   assert.equal(refused.title, '无法连接到目标');
 
-  const dns = formatConnectionError('en', 'getaddrinfo ENOTFOUND hbbs.invalid');
-  assert.equal(dns.kind, 'network');
-  assert.equal(dns.title, 'Cannot Reach Host');
+  const dnsEn = formatConnectionError('en', 'getaddrinfo ENOTFOUND hbbs.invalid');
+  assert.equal(dnsEn.kind, 'network');
+  assert.equal(dnsEn.title, 'DNS Resolution Failed');
+
+  const dnsZh = formatConnectionError(
+    'zh',
+    'DNS lookup failed for "rs.bad-domain.test". Check the domain spelling, remove any http:// prefix, and verify DNS records.',
+  );
+  assert.equal(dnsZh.kind, 'network');
+  assert.equal(dnsZh.title, '域名解析失败');
+  assert.match(dnsZh.message, /rs\.bad-domain\.test/);
 });
 
 test('classifies timeout into network error', () => {

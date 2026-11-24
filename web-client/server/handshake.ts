@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import nacl from 'tweetnacl';
 import {
-  EncryptedFramedStream,
+  type EncryptedFramedStream,
   KX_PARAMS_DOMAIN,
   kxVersionFor,
 } from './bytesCodec.ts';

@@ -35,9 +35,29 @@ async function startServer() {
   const httpServer = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
 
+  wss.on('error', (err) => {
+    console.error('WebSocketServer error:', err);
+  });
+
+  httpServer.on('clientError', (_err, socket) => {
+    if (socket.writable) {
+      socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+    } else {
+      socket.destroy();
+    }
+  });
+
   httpServer.on('upgrade', (request, socket, head) => {
-    const reqUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
-    if (reqUrl.pathname === '/ws') {
+    let pathname = '';
+    try {
+      const reqUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
+      pathname = reqUrl.pathname;
+    } catch {
+      socket.destroy();
+      return;
+    }
+
+    if (pathname === '/ws') {
       wss.handleUpgrade(request, socket, head, (ws) => {
         serveSocket(ws, { token: gatewayToken });
       });

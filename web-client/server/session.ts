@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws';
 import { tokenMatches } from './auth.ts';
 import {
-  ClientMessage,
+  type ClientMessage,
   buildVideoReceivedMessage,
   hasAnyCodec,
   humanizeError,
@@ -9,7 +9,7 @@ import {
   toHostMessage,
 } from './control.ts';
 import { decodeMessage, encodeMessage } from './protos.ts';
-import { ConnectedHost, connectDirect, connectViaId } from './rustdeskClient.ts';
+import { type ConnectedHost, connectDirect, connectViaId } from './rustdeskClient.ts';
 import {
   CODEC_AV1,
   CODEC_H264,
@@ -124,9 +124,15 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   let warnedRawVideo = false;
   let currentSize = { width: 0, height: 0 };
 
-  const sendJson = (payload: Record<string, unknown>) => {
+  let isAlive = true;
+
+  const sendJson = (payload: Record<string, unknown>, onSent?: () => void) => {
     if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify(payload));
+      ws.send(JSON.stringify(payload), () => {
+        onSent?.();
+      });
+    } else {
+      onSent?.();
     }
   };
 
@@ -136,9 +142,35 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     }
   };
 
+  // WebSocket protocol-level heartbeat keeps Cloud Run / Nginx / Cloudflare proxies from dropping idle sessions
+  const heartbeat = setInterval(() => {
+    if (state === 'closed' || ws.readyState !== ws.OPEN) {
+      clearInterval(heartbeat);
+      return;
+    }
+    if (!isAlive) {
+      cleanup(false);
+      ws.terminate();
+      return;
+    }
+    isAlive = false;
+    try {
+      ws.ping();
+    } catch {
+      cleanup(false);
+      ws.terminate();
+    }
+  }, 25_000);
+  heartbeat.unref?.();
+
+  ws.on('pong', () => {
+    isAlive = true;
+  });
+
   const cleanup = (sendClosedStatus: boolean) => {
     if (state === 'closed') return;
     state = 'closed';
+    clearInterval(heartbeat);
     if (hostConn) {
       hostConn.stream.close();
       hostConn = null;
@@ -397,7 +429,11 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         void startHostPump(conn);
       } catch (err) {
         if ((state as string) !== 'closed') {
-          sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+          sendJson({ type: 'status', state: 'error', detail: humanizeError(err) }, () => {
+            if (ws.readyState === ws.OPEN) {
+              ws.close(1000, 'connect error');
+            }
+          });
           cleanup(false);
         }
       }
