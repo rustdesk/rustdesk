@@ -34,7 +34,6 @@ export interface SessionStats {
 type MenuTab = 'control' | 'input' | 'display';
 
 export interface SessionMenuProps {
-  clipboardDisabled: boolean;
   locale: Locale;
   audioEnabled: boolean;
   audioIssue: string | null;

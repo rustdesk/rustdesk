@@ -1825,10 +1825,10 @@ button:focus-visible {
   background:var(--remote-toolbar-surface); color:#f3f5f8; border:1px solid #40454c; color-scheme:dark;
 }
 .stage {
-  --dock-y: clamp(env(safe-area-inset-top, 0px), var(--dock-top, calc(100% - var(--remote-toolbar-height) - 10px - env(safe-area-inset-bottom))), calc(100% - var(--remote-toolbar-height) - env(safe-area-inset-bottom)));
+  --dock-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
 }
 .remote-tools,.remote-capsule {
-  top:var(--dock-y); height:var(--remote-toolbar-height);
+  bottom:var(--dock-bottom); height:var(--remote-toolbar-height);
   position:absolute; z-index:7; display:flex; overflow:hidden; touch-action:manipulation;
 }
 .remote-tools {
@@ -1849,8 +1849,8 @@ button:focus-visible {
 .remote-menu-backdrop { position:absolute; inset:0; z-index:5; }
 .remote-menu-panel {
   position:absolute; inset-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right));
-  bottom:calc(100% - var(--dock-y) + 7px); border-radius:10px;
-  max-height:calc(var(--dock-y) - 15px - env(safe-area-inset-top));
+  bottom:calc(var(--dock-bottom) + var(--remote-toolbar-height) + 7px); border-radius:10px;
+  max-height:calc(100% - var(--dock-bottom) - var(--remote-toolbar-height) - 15px - env(safe-area-inset-top, 0px));
   overflow:auto; overscroll-behavior:contain; touch-action:pan-y;
 }
 .tool-group { padding:3px 13px; }
@@ -1884,14 +1884,9 @@ button:focus-visible {
 .remote-menu-panel dl>div { padding:6px 0; }
 .remote-menu-panel dd,.remote-menu-panel p { font-size:13px; color:#c2cad3; margin:3px 0 8px; }
 
-.stage[data-panel-below=true] .remote-menu-panel {
-  bottom:auto; top:calc(var(--dock-y) + var(--remote-toolbar-height) + 7px);
-  max-height:calc(100% - var(--dock-y) - var(--remote-toolbar-height) - 15px - env(safe-area-inset-bottom));
-}
 .capsule-hint {
   position:absolute; right:0; bottom:calc(100% + 5px); pointer-events:none; white-space:nowrap;
   padding:4px 8px; border-radius:5px; background:#22252b; color:white; font-size:12px;
   animation:capsule-hint 1.6s forwards;
 }
-.stage[data-panel-below=true] .capsule-hint { bottom:auto; top:calc(100% + 5px); }
 @keyframes capsule-hint { 80% {opacity:1} 100% {opacity:0} }

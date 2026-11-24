@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Activity, Clipboard, Command, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, RefreshCw, Scaling, SlidersHorizontal, Volume2, CircleHelp } from 'lucide-react';
+import React from 'react';
+import { Activity, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, Scaling, SlidersHorizontal, Volume2, CircleHelp } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
@@ -29,8 +29,6 @@ const gestureRows = {
 } as const;
 
 export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePanel }) {
-  const [draft, setDraft] = useState('');
-  const [notice, setNotice] = useState('');
   const label = (key: I18nKey) => t(p.locale, key);
   const monitors = p.peer?.displays ?? [];
   const panelName = { toolbar: 'session', actions: 'moreActions', input: 'pointerSettings', display: 'screens' } as const;
@@ -50,26 +48,7 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
         <section className="remote-menu-panel" role="dialog" aria-label={label(panelName[p.mobilePanel])} data-testid="session-menu">
           {p.mobilePanel === 'actions' && <>
             <div className="tool-group">
-              <details><summary><Command />{label('shortcutKeys')}</summary>
-                <div className="tool-options">{(['Ctrl+C', 'Ctrl+V', 'Ctrl+Alt+Del'] as const).map(k => <button key={k} onClick={() => p.onQuickKey(k)}>{k}</button>)}</div>
-              </details>
               {action(LockKeyhole, 'lockScreen', () => p.onQuickKey('Lock'))}
-              <details><summary><Clipboard />{label('clipboard')}</summary>
-                <form className="tool-options" onSubmit={e => {
-                  e.preventDefault();
-                  if (!draft.trim() || p.clipboardDisabled) return;
-                  p.onSendClipboard(draft); setDraft(''); setNotice(label('clipSent'));
-                }}>
-                  <input type="text" data-testid="clipboard-input" aria-label={label('clipboard')} value={draft}
-                    placeholder={label('clipboardPlaceholder')} disabled={p.clipboardDisabled} onChange={e => setDraft(e.target.value)} />
-                  <button disabled={!draft.trim() || p.clipboardDisabled}>{label('send')}</button>
-                </form>
-                {p.remoteClipboard && <button className="tool-row" disabled={p.clipboardDisabled} onClick={async () => {
-                  try { await navigator.clipboard.writeText(p.remoteClipboard); setNotice(label('clipCopied')); }
-                  catch { setNotice(label('clipDenied')); }
-                }}>{label('copy')} · {p.remoteClipboard.slice(0, 40)}</button>}
-                {notice && <p role="status">{notice}</p>}
-              </details>
             </div>
             <div className="tool-group">
               {toggle(Eye, 'optViewOnly', p.viewOnly, p.onToggleViewOnly)}
@@ -127,10 +106,9 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
                   {['auto','h264','vp8','vp9','av1'].map(v => <option key={v} value={v}>{v==='auto'?label('codecAuto'):v.toUpperCase()}</option>)}</select></label>
               </details>
             </div>
-            <div className="tool-group">
-              {monitors.length > 1 && toggle(Focus,'followWindow',p.followWindow,p.onToggleFollowWindow)}
-              {action(RefreshCw,'refresh',p.onRefresh)}
-            </div>
+            {monitors.length > 1 && <div className="tool-group">
+              {toggle(Focus,'followWindow',p.followWindow,p.onToggleFollowWindow)}
+            </div>}
           </>}
           {p.decoderError && <p role="alert">{formatConnectionError(p.locale,p.decoderError).message}</p>}
         </section>
