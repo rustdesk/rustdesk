@@ -12,6 +12,10 @@ on:
       publish-update-metadata:
         type: boolean
         default: false
+      windows-x64-flutter-preview:
+        description: Build the Windows x64 client against stock Flutter 3.50.1
+        type: boolean
+        default: false
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
@@ -201,7 +205,7 @@ jobs:
           # arm64 is on Flutter 3.44, so it needs the bridge generated with the same Flutter
           # (its *.freezed.dart must match the freezed the arm64 build resolves). x64 and every
           # other platform keep the default 3.22.3-generated bridge.
-          name: ${{ matrix.job.arch == 'aarch64' && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
+          name: ${{ (matrix.job.arch == 'aarch64' || inputs.windows-x64-flutter-preview) && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
           path: ./
 
       - name: Install LLVM and Clang
@@ -218,7 +222,7 @@ jobs:
         uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225  # v2.12.0; https://github.com/subosito/flutter-action/issues/277
         with:
           channel: "stable"
-          flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_WINDOWS_ARM_VERSION || env.FLUTTER_VERSION }}
+          flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_WINDOWS_ARM_VERSION || inputs.windows-x64-flutter-preview && '3.50.1' || env.FLUTTER_VERSION }}
           architecture: x64
 
       - name: Force arm64 Dart SDK + engine
@@ -257,7 +261,7 @@ jobs:
       # x64 only: arm64 uses the stock native arm64 Windows engine, and the rustdesk/engine
       # windows-x64-release.zip is built for the 3.24-era x64 engine (matches FLUTTER_VERSION).
       - name: Replace engine with rustdesk custom flutter engine
-        if: ${{ matrix.job.arch == 'x86_64' }}
+        if: ${{ matrix.job.arch == 'x86_64' && !inputs.windows-x64-flutter-preview }}
         run: |
           flutter doctor -v
           flutter precache --windows
@@ -268,7 +272,7 @@ jobs:
       - name: Patch flutter
         # x64 stays on Flutter 3.24.5, which needs the dropdown filter patch.
         # arm64 is on Flutter 3.44 (patched separately below) and does not use this patch.
-        if: ${{ matrix.job.arch == 'x86_64' }}
+        if: ${{ matrix.job.arch == 'x86_64' && !inputs.windows-x64-flutter-preview }}
         shell: bash
         run: |
           cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
@@ -277,12 +281,12 @@ jobs:
             git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
           fi
 
-      - name: Patch RustDesk sources for Flutter 3.44 (arm64)
+      - name: Patch RustDesk sources for newer Flutter
         # arm64 is on Flutter 3.44 (as is macOS arm64); apply its source/pubspec deltas on the fly
         # (shared with the macOS arm64 build and the 3.44 bridge job) so the committed sources
         # stay on Flutter 3.24.5.
         # `flutter build` then runs `pub get`, regenerating pubspec.lock for the bumped deps.
-        if: ${{ matrix.job.arch == 'aarch64' }}
+        if: ${{ matrix.job.arch == 'aarch64' || inputs.windows-x64-flutter-preview }}
         shell: bash
         run: bash .github/patches/apply_flutter_3.44_source_patches.sh
 

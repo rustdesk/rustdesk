@@ -23,3 +23,4 @@ jobs:
     uses: ./.github/workflows/flutter-build.yml
     with:
       upload-artifact: false
+      windows-x64-flutter-preview: ${{ github.ref_name == 'experimental/flutter-official-windowing' }}
