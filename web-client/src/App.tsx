@@ -2744,7 +2744,7 @@ export default function App() {
         <RustDeskShell
           locale={locale}
           localePreference={localePreference}
-          isDesktop={!isMobileViewport}
+          isDesktop={!(isMobileViewport || (isCoarseDevice && box.h > 0 && box.h <= 540 && box.w > box.h))}
           theme={theme}
           displayPrefs={displayPrefs}
           onChangeLocale={changeLocale}

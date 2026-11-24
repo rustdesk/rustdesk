@@ -1896,3 +1896,49 @@ button:focus-visible {
 .quality-monitor { z-index:3; pointer-events:none; }
 .restart-notice { z-index:45; }
 .restart-notice button { margin-inline-start:8px; color:inherit; text-decoration:underline; }
+
+/* Keep controls within thumb reach on naturally rotated phones. */
+@media (orientation: landscape) and (max-height: 540px) and (pointer: coarse) {
+  .stage {
+    --remote-toolbar-height: 44px;
+    --dock-bottom: max(6px, var(--view-bottom));
+    --landscape-dock-right: max(8px, var(--view-right));
+  }
+
+  .remote-tools,
+  .remote-menu-panel {
+    inset-inline: auto var(--landscape-dock-right);
+    width: min(360px, calc(100% - var(--view-left) - var(--landscape-dock-right) - 8px));
+  }
+
+  .remote-capsule {
+    right: var(--landscape-dock-right);
+  }
+
+  .softbar {
+    height: 40px;
+  }
+
+  .rd-mobile-shell {
+    padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+  }
+
+  .rd-mobile-topbar {
+    height: calc(44px + env(safe-area-inset-top));
+  }
+
+  .rd-hero-container {
+    padding-block: 10px;
+  }
+
+  .rd-password-scrim {
+    bottom: var(--kb, 0px);
+    padding: max(6px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(6px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+
+  .rd-password-dialog {
+    max-height: 100%;
+    overflow-y: auto;
+  }
+}
