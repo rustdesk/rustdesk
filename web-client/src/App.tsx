@@ -1569,17 +1569,6 @@ export default function App() {
     [send],
   );
 
-  const pasteClipboardKeys = async () => {
-    const socket = wsRef.current;
-    const text = await navigator.clipboard.readText();
-    if (!socket || socket !== wsRef.current || socket.readyState !== WebSocket.OPEN ||
-        phaseRef.current !== 'live' || displayPrefsRef.current.viewOnly || displayPrefsRef.current.disableClipboard) {
-      throw new Error('Clipboard input is unavailable');
-    }
-    if (text) sendText(text);
-    return Boolean(text);
-  };
-
   const tapControl = useCallback(
     (control: string) => {
       if (chromeRef.current.menu || chromeRef.current.dialog) return;
@@ -2752,8 +2741,6 @@ export default function App() {
           onToggleFollowCursor={() => handleUpdateDisplayPrefs({ followRemoteCursor: !displayPrefs.followRemoteCursor })}
           sizes={resolutionOptions?.display === display ? resolutionOptions.sizes : []}
           onResolution={(width, height) => send({ type: 'resolution', display, width, height })}
-          onPasteKeys={pasteClipboardKeys}
-          pasteDisabled={displayPrefs.viewOnly || displayPrefs.disableClipboard}
           showRemoteCursor={displayPrefs.showRemoteCursor}
           diagnosticsOpen={diagnosticsOpen}
           stats={stats}
@@ -2829,8 +2816,6 @@ export default function App() {
         <SoftKeyboardBar
           locale={locale}
           inputRef={softKeyboardInputRef}
-          onPasteKeys={pasteClipboardKeys}
-          pasteDisabled={displayPrefs.viewOnly || displayPrefs.disableClipboard}
           onSendText={sendText}
           onSendControl={(action, control) => send({ type: 'key', action, control })}
           onSendChord={sendChord}

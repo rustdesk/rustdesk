@@ -1,9 +1,7 @@
-import { PasteKeysButton } from './PasteKeysButton';
 import React, { useState } from 'react';
 import {
   Activity,
   Keyboard,
-  Monitor,
   Power,
   RefreshCw,
   Sliders,
@@ -36,8 +34,6 @@ type MenuTab = 'control' | 'input' | 'display';
 
 interface SessionMenuProps {
   locale: Locale;
-  onPasteKeys: () => Promise<boolean>;
-  pasteDisabled: boolean;
   audioEnabled: boolean;
   audioIssue: string | null;
   onToggleAudio: () => void;
@@ -91,8 +87,6 @@ interface SessionMenuProps {
 
 export function SessionMenu({
   locale,
-  onPasteKeys,
-  pasteDisabled,
   audioEnabled,
   audioIssue,
   onToggleAudio,
@@ -256,80 +250,24 @@ export function SessionMenu({
 
         {/* Tab 1: Control (View, Displays, Input Mode, Quick Actions) */}
         {activeTab === 'control' && (
-          <div className="flex flex-col gap-3.5" role="tabpanel">
+          <div className="flex flex-col" role="tabpanel">
             {mobileLayout && hasMultipleDisplays && (
-              <div className="session-group" data-testid="display-switcher">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-xs font-semibold text-[var(--ink-soft)]">
-                    {t(locale, 'displays')}
-                  </span>
-                  <span className="text-xs font-mono-tabular text-[var(--ink-soft)]">
-                    {displays.length} {t(locale, 'monitorsCount')}
-                  </span>
-                </div>
-                <div
-                  className="grid grid-cols-1 sm:grid-cols-2 gap-2"
-                  role="group"
-                  aria-label={t(locale, 'displays')}
+              <label className="session-group rd-check-row" data-testid="display-switcher">
+                <span>{t(locale, 'displays')}</span>
+                <select
+                  className="rd-select min-w-0 max-w-[70%]"
                   data-testid="display"
+                  value={display}
+                  onChange={e => onSwitchDisplay(Number(e.target.value))}
                 >
-                  {displays.map((d) => {
-                    const isSelected = display === d.index;
-                    const isOffline = d.online === false;
-                    const label = d.name || `${t(locale, 'displayFallback')} ${d.index + 1}`;
-                    return (
-                      <button
-                        key={d.index}
-                        type="button"
-                        disabled={isOffline}
-                        aria-pressed={isSelected}
-                        data-testid={`display-option-${d.index}`}
-                        className={`display-card${isSelected ? ' active' : ''}`}
-                        onClick={() => onSwitchDisplay(d.index)}
-                      >
-                        <div className="flex items-center justify-between gap-2 w-full">
-                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--ink)] min-w-0">
-                            <Monitor
-                              size={15}
-                              className={
-                                isSelected
-                                  ? 'text-[var(--accent)] shrink-0'
-                                  : 'text-[var(--ink-soft)] shrink-0'
-                              }
-                            />
-                            <span className="font-mono-tabular">#{d.index + 1}</span>
-                          </span>
-                          <span
-                            className={`text-[11px] font-medium ${
-                              isOffline
-                                ? 'text-[var(--bad)]'
-                                : isSelected
-                                  ? 'text-[var(--accent)]'
-                                  : 'text-[var(--ink-soft)]'
-                            }`}
-                          >
-                            {isOffline
-                              ? t(locale, 'offline')
-                              : isSelected
-                                ? t(locale, 'active')
-                                : `${d.width}×${d.height}`}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 w-full mt-1">
-                          <span className="text-xs text-[var(--ink)] truncate" title={label}>
-                            {label}
-                          </span>
-                          {isSelected && (
-                            <span className="text-[11px] font-mono-tabular text-[var(--ink-soft)] shrink-0">
-                              {d.width}×{d.height}
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                  {displays.map(d => (
+                    <option key={d.index} value={d.index} disabled={d.online === false}>
+                      {d.name || `${t(locale, 'displayFallback')} ${d.index + 1}`} · {d.width}×{d.height}
+                      {d.online === false && ` · ${t(locale, 'offline')}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
 
             <div className="session-group">
@@ -433,7 +371,7 @@ export function SessionMenu({
 
         {/* Tab 2: Input (Shortcuts, Soft Keyboard, Right Click, Clipboard) */}
         {activeTab === 'input' && (
-          <div className="flex flex-col gap-3.5" role="tabpanel">
+          <div className="flex flex-col" role="tabpanel">
             <div className="session-group">
               <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
                 {t(locale, 'input')}
@@ -463,9 +401,11 @@ export function SessionMenu({
                   <button
                     type="button"
                     className={`rd-btn${rightArmed ? ' active' : ''}`}
+                    aria-pressed={touchMode ? rightArmed : undefined}
+                    title={t(locale, touchMode ? 'dockArmRight' : 'dockRightAtCursor')}
                     onClick={onRightClick}
                   >
-                    {t(locale, touchMode ? 'dockArmRight' : 'dockRightAtCursor')}
+                    {t(locale, 'rightClick')}
                   </button>
                 )}
               </div>
@@ -496,9 +436,8 @@ export function SessionMenu({
                   {t(locale, 'send')}
                 </button>
               </form>
-              <PasteKeysButton locale={locale} onPasteKeys={onPasteKeys} pasteDisabled={pasteDisabled} className="rd-btn mt-2" />
               {remoteClipboard && (
-                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-[var(--rd-card-bg)] border border-[var(--rd-card-border)] px-2.5 py-1.5">
+                <div className="mt-2 flex items-center justify-between gap-2">
                   <span
                     className="text-xs text-[var(--ink)] truncate font-mono-tabular"
                     data-testid="clipboard-remote"
@@ -517,7 +456,7 @@ export function SessionMenu({
 
         {/* Tab 3: Quality & Display Options */}
         {activeTab === 'display' && (
-          <div className="flex flex-col gap-3.5" role="tabpanel">
+          <div className="flex flex-col" role="tabpanel">
             <div className="session-group">
               <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
                 {t(locale, 'qualityAndFps')}

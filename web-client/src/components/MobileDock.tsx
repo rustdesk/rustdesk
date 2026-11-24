@@ -280,7 +280,7 @@ export function MobileDock({
             onClick={onRightClickAction}
           >
             <MousePointerClick size={18} />
-            <span className="max-w-16 whitespace-normal">{t(locale, touchMode ? 'dockArmRight' : 'dockRightAtCursor')}</span>
+            <span>{t(locale, 'rightClick')}</span>
           </button>
 
           <button

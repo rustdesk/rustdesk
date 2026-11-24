@@ -442,20 +442,19 @@ button:focus-visible {
 
 .sheet-menu .session-group {
   min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--rd-card-border);
-  border-radius: 10px;
-  background: var(--surface);
+  padding-block: 8px;
 }
 
-.sheet-menu .rd-btn:not(.primary):not(.active):not(.danger),
-.sheet-menu .display-card:not(.active) {
+.sheet-menu .session-group + .session-group {
+  border-top: 1px solid var(--rd-divider);
+}
+
+.sheet-menu .rd-btn:not(.primary):not(.active):not(.danger) {
   background: var(--surface-subtle);
   border-color: var(--line);
 }
 
-.sheet-menu .rd-btn:not(.primary):not(.active):not(.danger):hover:not(:disabled),
-.sheet-menu .display-card:not(.active):hover:not(:disabled) {
+.sheet-menu .rd-btn:not(.primary):not(.active):not(.danger):hover:not(:disabled) {
   background: var(--accent-tint);
   border-color: var(--accent);
 }
@@ -807,40 +806,6 @@ button:focus-visible {
   border: 0;
   padding: 0;
   pointer-events: none;
-}
-
-.display-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  width: 100%;
-  min-height: 54px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface-subtle);
-  color: var(--ink);
-  text-align: left;
-  transition: background-color 140ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 140ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.display-card:hover:not(:disabled) {
-  background: var(--rd-hover-bg);
-  border-color: var(--accent);
-}
-
-.display-card.active {
-  border-color: var(--accent);
-  background: var(--accent-tint);
-  box-shadow: 0 0 0 1px rgba(11, 107, 203, 0.14);
-}
-
-.display-card:disabled {
-  opacity: 0.52;
-  cursor: not-allowed;
 }
 
 .rd-btn {

@@ -1,4 +1,3 @@
-import { PasteKeysButton } from './PasteKeysButton';
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { keyboardInset } from '../lib/gestures';
@@ -13,8 +12,6 @@ import {
 
 interface SoftKeyboardBarProps {
   locale: Locale;
-  onPasteKeys: () => Promise<boolean>;
-  pasteDisabled: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
   onSendText: (text: string) => void;
   onSendControl: (action: 'down' | 'up', control: string) => void;
@@ -43,8 +40,6 @@ const EXTRA_KEYS = [
 
 export function SoftKeyboardBar({
   locale,
-  onPasteKeys,
-  pasteDisabled,
   inputRef,
   onSendText,
   onSendControl,
@@ -228,7 +223,6 @@ export function SoftKeyboardBar({
         role="toolbar"
         aria-label={t(locale, 'specialKeysAria')}
       >
-        <PasteKeysButton locale={locale} onPasteKeys={onPasteKeys} pasteDisabled={pasteDisabled} className="soft-key-btn" />
         {STICKY_MODIFIERS.map((mod) => {
           const isActive = latched.includes(mod.control);
           return (
