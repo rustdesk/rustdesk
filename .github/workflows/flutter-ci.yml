@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - master
+      - experimental/flutter-official-windowing
     paths-ignore:
       - ".github/**"
       - "docs/**"

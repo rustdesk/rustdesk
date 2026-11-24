@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/src/foundation/_features.dart' show isWindowingEnabled;
 import 'package:flutter/src/widgets/_window.dart' as official;
+import 'package:flutter/src/widgets/_window_win32.dart'
+    show WindowControllerWin32;
 
 import 'src/backend.dart';
 import 'src/window_controller.dart';
@@ -28,8 +30,10 @@ class ExperimentalWindowContext {
 }
 
 final Object _windowZoneKey = Object();
+const _win32 = MethodChannel('rustdesk/desktop_multi_window/win32');
 typedef ExperimentalWindowBuilder = Widget Function(
-    ExperimentalWindowContext window);
+  ExperimentalWindowContext window,
+);
 
 /// Flutter 3.50.1 Windows PoC. Importing this library alone does not opt in.
 class ExperimentalWindowingBackend implements DesktopWindowBackend {
@@ -40,35 +44,39 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
   int _nextId = 1;
   int get currentWindowId => Zone.current[_windowZoneKey] as int? ?? 0;
 
-  static ExperimentalWindowingBackend install(
-      {required ExperimentalWindowBuilder builder}) {
+  static ExperimentalWindowingBackend install({
+    required ExperimentalWindowBuilder builder,
+  }) {
     WidgetsFlutterBinding.ensureInitialized();
     if (!Platform.isWindows || !isWindowingEnabled) {
       throw UnsupportedError(
-          'This PoC requires Windows, Flutter 3.50.1 and FLUTTER_WINDOWING=true.');
+        'This PoC requires Windows, Flutter 3.50.1 and FLUTTER_WINDOWING=true.',
+      );
     }
     if (experimentalWindowBackend != null)
       throw StateError('Backend already installed');
     final backend = ExperimentalWindowingBackend._(builder);
     backend._entries[0] = _Entry(ExperimentalWindowContext._(0, null));
+    unawaited(backend._show(0));
     experimentalWindowBackend = backend;
-    backend._show(0);
     return backend;
   }
 
   /// Mount with runWidget, never runApp. Each Window supplies its own FlutterView.
   Widget get root => ListenableBuilder(
-        listenable: _updates,
-        builder: (context, _) => ViewCollection(views: [
-          for (final entry in _entries.values)
-            if (entry.native != null && !entry.native!.isDestroyed)
-              official.Window(
-                key: ValueKey(entry.context.windowId),
-                controller: entry.native!,
-                child: entry.context.run(() => builder(entry.context)),
-              ),
-        ]),
-      );
+    listenable: _updates,
+    builder: (context, _) => ViewCollection(
+      views: [
+        for (final entry in _entries.values)
+          if (entry.native != null && !entry.native!.isDestroyed)
+            official.Window(
+              key: ValueKey(entry.context.windowId),
+              controller: entry.native!,
+              child: entry.context.run(() => builder(entry.context)),
+            ),
+      ],
+    ),
+  );
 
   ExperimentalWindowContext contextFor(int id) => _entry(id).context;
   int viewIdFor(int id) => _native(id).rootView.viewId;
@@ -90,19 +98,51 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
     return _Controller(this, id);
   }
 
-  void _show(int id) {
+  Future<void> _show(int id) async {
     final entry = _entry(id);
     if (entry.native == null) {
       entry.native = official.WindowController(
-          size: entry.size, title: entry.title, delegate: _Delegate(this, id));
+        size: entry.size,
+        title: entry.title,
+        delegate: _Delegate(this, id),
+      );
       entry.native!.addListener(() => _changed(id));
+      final showGeneration = ++entry.pendingShow;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!entry.native!.isDestroyed) entry.native!.activate();
+        if (!entry.native!.isDestroyed && entry.pendingShow == showGeneration) {
+          unawaited(_control<void>(id, 'show'));
+        }
       });
       _updates.value++;
+      final frame = entry.stagedFrame;
+      if (frame != null) {
+        await _setFrame(id, frame);
+        entry.stagedFrame = null;
+      }
     } else {
-      entry.native!.activate();
+      await _control<void>(id, 'show');
     }
+  }
+
+  Future<T?> _control<T>(
+    int id,
+    String method, [
+    Map<String, int> args = const {},
+  ]) {
+    final native = _native(id) as WindowControllerWin32;
+    return _win32.invokeMethod<T>(method, {
+      'hwnd': native.windowHandle.address,
+      ...args,
+    });
+  }
+
+  Future<void> _setFrame(int id, Rect frame) async {
+    await _control<void>(id, 'setFrame', {
+      'x': frame.left.toInt(),
+      'y': frame.top.toInt(),
+      'width': frame.width.toInt(),
+      'height': frame.height.toInt(),
+    });
   }
 
   void _changed(int id) {
@@ -114,7 +154,7 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
       native.isActivated,
       native.isMaximized,
       native.isMinimized,
-      native.isFullscreen
+      native.isFullscreen,
     ];
     final events = [
       [kWindowEventBlur, kWindowEventFocus],
@@ -199,20 +239,25 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
     });
   }
 
-  dynamic _copy(dynamic value) => const StandardMessageCodec()
-      .decodeMessage(const StandardMessageCodec().encodeMessage(value));
+  dynamic _copy(dynamic value) => const StandardMessageCodec().decodeMessage(
+    const StandardMessageCodec().encodeMessage(value),
+  );
 
   @override
   Future<dynamic> invokeMethod(
-      int target, String method, dynamic arguments) async {
+    int target,
+    String method,
+    dynamic arguments,
+  ) async {
     final source = currentWindowId;
     _entry(source);
     final entry = _entry(target);
     final handler = entry.handler;
     if (handler == null)
       throw MissingPluginException('No handler for window $target');
-    final result = await entry.context
-        .run(() => handler(MethodCall(method, _copy(arguments)), source));
+    final result = await entry.context.run(
+      () => handler(MethodCall(method, _copy(arguments)), source),
+    );
     return _copy(result);
   }
 
@@ -240,6 +285,8 @@ class _Entry {
   WindowMethodHandler? handler;
   final List<MultiWindowListener> listeners = [];
   bool preventClose = false;
+  int pendingShow = 0;
+  Rect? stagedFrame;
   String title = 'RustDesk official windowing PoC';
   Size size = const Size(640, 420);
   List<bool> flags = [false, false, false, false];
@@ -264,13 +311,14 @@ class _Controller extends WindowController {
   _Entry get entry => backend._entry(windowId);
   official.WindowController get native => backend._native(windowId);
   Never _unsupported(String operation) => throw UnsupportedError(
-      '$operation has no equivalent in the Flutter 3.50.1 generic Windowing API');
+    '$operation has no equivalent in the Flutter 3.50.1 generic Windowing API',
+  );
   @override
   Future<void> show() async => backend._show(windowId);
   @override
   Future<void> close() async => backend._close(windowId);
   @override
-  Future<void> focus() async => native.activate();
+  Future<void> focus() async => backend._control<void>(windowId, 'focus');
   @override
   Future<void> maximize() async => native.setMaximized(true);
   @override
@@ -297,15 +345,54 @@ class _Controller extends WindowController {
   @override
   Future<void> setPreventClose(bool value) async => entry.preventClose = value;
   @override
-  Future<void> hide() async => _unsupported('hide');
+  Future<void> hide() async {
+    entry.pendingShow++;
+    if (entry.native != null) await backend._control<void>(windowId, 'hide');
+  }
+
   @override
-  Future<bool> isHidden() async => _unsupported('isHidden');
+  Future<bool> isHidden() async =>
+      entry.native == null ||
+      (await backend._control<bool>(windowId, 'isHidden'))!;
   @override
-  Future<void> setFrame(Rect frame) async =>
-      _unsupported('setFrame (outer rect and position)');
+  Future<void> setFrame(Rect frame) async {
+    if (![
+          frame.left,
+          frame.top,
+          frame.width,
+          frame.height,
+        ].every((v) => v.isFinite && v.abs() <= 0x7fffffff) ||
+        frame.width < 1 ||
+        frame.height < 1) {
+      throw ArgumentError.value(
+        frame,
+        'frame',
+        'Expected a positive Win32 window rectangle',
+      );
+    }
+    if (entry.native == null) {
+      entry.stagedFrame = frame;
+      return;
+    }
+    await backend._setFrame(windowId, frame);
+  }
+
   @override
-  Future<Rect> getFrame() async =>
-      _unsupported('getFrame (outer rect and position)');
+  Future<Rect> getFrame() async {
+    if (entry.native == null && entry.stagedFrame != null)
+      return entry.stagedFrame!;
+    final rect = (await backend._control<Map<Object?, Object?>>(
+      windowId,
+      'getFrame',
+    ))!;
+    return Rect.fromLTWH(
+      rect['x'] as double,
+      rect['y'] as double,
+      rect['width'] as double,
+      rect['height'] as double,
+    );
+  }
+
   @override
   Future<void> center() async => _unsupported('center');
   @override

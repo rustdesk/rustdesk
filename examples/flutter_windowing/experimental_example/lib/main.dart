@@ -369,7 +369,7 @@ Future<void> runChecks() async {
       'name': 'focus foreground parity',
       'pass': null,
       'detail':
-          'Win32 foreground=$focused; official activate only calls ShowWindow(SW_RESTORE), not SetForegroundWindow',
+          'Win32 foreground=$focused after SetForegroundWindow; Windows may deny activation',
     });
     stdout.writeln('POC OBSERVATION focus foreground=$focused');
     await a.setFullscreen(true);
@@ -379,16 +379,26 @@ Future<void> runChecks() async {
       'Windows fullscreen restored',
       () async => !await a.isFullScreen(),
     );
-    await rejected(
-      'hide fails explicitly',
-      a.hide,
-      (e) => e is UnsupportedError,
+    await a.hide();
+    await poll(
+      'hide changes native visibility',
+      () async =>
+          await a.isHidden() &&
+          (await nativeProbe('PoC test A')).single['visible'] == false,
     );
-    await rejected(
-      'position fails explicitly',
-      () => a.setFrame(const Rect.fromLTWH(50, 50, 500, 300)),
-      (e) => e is UnsupportedError,
+    check('hide leaves B visible', !await b.isHidden());
+    const frame = Rect.fromLTWH(75, 100, 530, 365);
+    await a.setFrame(frame);
+    check('setFrame preserves hidden state', await a.isHidden());
+    check('Win32 outer frame round trips', await a.getFrame() == frame);
+    await a.show();
+    await poll(
+      'show restores hidden HWND',
+      () async =>
+          !await a.isHidden() &&
+          (await nativeProbe('PoC test A')).single['visible'] == true,
     );
+    check('show preserves outer frame', await a.getFrame() == frame);
     final listener = CloseListener();
     backend
         .contextFor(a.windowId)

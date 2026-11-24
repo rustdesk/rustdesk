@@ -4,7 +4,8 @@ Branch: `experimental/flutter-official-windowing`. Based on RustDesk's pinned
 plugin commit `cddc2e64f8fefce4f80db87b20bcda2dd019bed6`.
 
 This is a compatibility experiment, not a drop-in RustDesk build.
-The RustDesk application repository is unchanged.
+This branch contains the standalone example under examples/flutter_windowing.
+The RustDesk application still selects its existing plugin.
 
 ## Opt in
 
@@ -69,15 +70,16 @@ RustDesk build retains the full original native target and its dependencies.
   cancellation on close, reentrancy stress, and large texture transfers have
   not been established.
 * Maximize, unmaximize, minimize, restore/show, fullscreen, title, and native
-  close interception were exercised on Windows. Native HWND state was checked
-  separately through user32. `focus` maps to official `activate()`, which in
-  3.50.1 calls ShowWindow(SW_RESTORE), **not** SetForegroundWindow. Foreground
-  focus was false in the background test and is not equivalent to legacy's
-  stronger request. Official requests may be constrained by the OS.
-* Hide/isHidden, absolute outer frame/position, centering, title-bar removal,
-  custom drag/resize, movable, frame autosave, XID, and initial native background
-  color return UnsupportedError instead of claiming an equivalent operation.
-  Generic API contentSize is not legacy's outer-window frame.
+  close interception were exercised on Windows. The Win32 compatibility channel
+  supplies hide/show, foreground activation, and outer-frame coordinates for
+  the HWND returned by Flutter. It validates the process and platform thread
+  before acting. Windows may still deny foreground activation. The self-test
+  checks visibility and geometry against the actual window and reports the
+  foreground result separately.
+* Centering, title-bar removal, custom drag/resize, movable, frame autosave,
+  XID, and initial native background color still return UnsupportedError.
+  Frame coordinates are Win32 screen pixels. Mixed DPI and multiple monitors
+  have not been verified.
 * Close, focus/blur, maximize/unmaximize, minimize/restore, fullscreen, and resize
   events are adapted from controller state/lifetime. Move/moved and
   resize-finished events are not provided. Event ordering/count parity and
@@ -106,8 +108,8 @@ regressions. No full RustDesk executable/remote connection was built or tested.
 
 ## Verification
 
-The official debug executable completed 33 checks, plus a separately recorded
-foreground-focus limitation. The release build compiled, opened its native main
+The official debug executable completed 37 checks, plus a separately recorded
+foreground-focus observation. The release build compiled, opened its native main
 window, and exited after system close. Three mocked channel tests verify the
 default legacy routing, controller payloads, and incoming/outgoing messages.
 
@@ -129,3 +131,25 @@ and destruction. The Dart method `isFullScreen` does not match native Windows
 exited with 0xC0000005 after creating two windows. A later run passed, so legacy
 stability under 3.50.1 is **not established**. No cause is asserted. Earlier
 immediate show queries also demonstrated that ShowWindowAsync needs polling.
+
+## Upstream acceptance
+
+The experiment workflow runs the native Windows test. Full Flutter CI also runs
+for the experiment branch and uses the existing Windows, Linux, macOS and mobile
+build configurations. Passing that matrix verifies the application baseline.
+A replacement PR needs a matrix that compiles the integrated client with the
+new backend selected on each supported platform.
+
+The current Windows x64 build uses Flutter 3.24.5 and a separately provided
+engine to retain Windows 7 support. The experiment needs Flutter 3.50.1.
+The supported Windows and macOS versions must be resolved before changing the
+production toolchain. A successful Windows 11 example run does not establish
+support on older systems.
+
+For the application integration, move launch identity, stateGlobal and event
+subscriptions to explicit window ownership, then wire a first real session view
+and its texture/input routing. Verify two simultaneous connections with close,
+reopen, tab reuse, visibility and persisted geometry before migrating the other
+window types. Add Linux/macOS runner and window-control coverage before selecting
+this backend there. Keep the normal CI jobs and require the new backend's jobs
+while both paths exist.

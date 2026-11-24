@@ -1,0 +1,39 @@
+name: Flutter windowing experiment
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'examples/flutter_windowing/**'
+      - '.github/workflows/flutter-windowing-experiment.yml'
+  push:
+    branches: [experimental/flutter-official-windowing]
+    paths:
+      - 'examples/flutter_windowing/**'
+      - '.github/workflows/flutter-windowing-experiment.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows x64 official windowing
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Check out the tested Flutter SDK
+        shell: pwsh
+        run: |
+          $sdk = Join-Path $env:RUNNER_TEMP 'flutter'
+          git -c core.longpaths=true clone --depth 1 --branch 3.50.1 https://github.com/flutter/flutter.git $sdk
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $revision = git -C $sdk rev-parse HEAD
+          if ($LASTEXITCODE -or $revision -ne 'ae9b586f34a8443573f82ef57c3bf914a908cbf7') {
+            throw "Unexpected Flutter revision: $revision"
+          }
+          "WINDOWING_FLUTTER_SDK=$sdk" >> $env:GITHUB_ENV
+      - name: Build and run native window checks
+        shell: pwsh
+        run: |
+          ./examples/flutter_windowing/experimental_example/tool/run.ps1 -FlutterSdk $env:WINDOWING_FLUTTER_SDK -SelfTest

@@ -1,4 +1,5 @@
 #include "include/desktop_multi_window/desktop_multi_window_plugin.h"
+#include "official_window_controls.h"
 #include "multi_window_plugin_internal.h"
 
 #include <flutter/method_channel.h>
@@ -206,6 +207,7 @@ void DesktopMultiWindowPlugin::HandleMethodCall(
 
 void DesktopMultiWindowPluginRegisterWithRegistrar(
     FlutterDesktopPluginRegistrarRef registrar) {
+  RegisterOfficialWindowControls(registrar);
 
   InternalMultiWindowPluginRegisterWithRegistrar(registrar);
 
