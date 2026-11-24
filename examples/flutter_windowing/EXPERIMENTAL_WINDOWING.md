@@ -1,0 +1,131 @@
+# Flutter 3.50.1 official windowing PoC (Windows)
+
+Branch: `experimental/flutter-official-windowing`. Based on RustDesk's pinned
+plugin commit `cddc2e64f8fefce4f80db87b20bcda2dd019bed6`.
+
+This is a compatibility experiment, not a drop-in RustDesk build.
+The RustDesk application repository is unchanged.
+
+## Opt in
+
+Use the official Flutter **3.50.1** tag
+`ae9b586f34a8443573f82ef57c3bf914a908cbf7` (Dart 3.14.0).
+Keep that tag detached (`[user-branch]`), as tested here; the 3.50.1 tool
+marks windowing available only under main/master channel settings. An ordinary
+stable-channel checkout can reject the feature even with the environment flag.
+Set `FLUTTER_WINDOWING=true` **for the build process**. This exposes the
+experimental feature without changing the user's global Flutter configuration.
+
+Run `experimental_example/tool/run.ps1 -FlutterSdk <sdk-path>` for the demo,
+or add `-SelfTest` for the native executable checks. A temporary unused drive
+letter avoids MSBuild's long-path failure; the mapping is removed after exit.
+The script runs until the demo is closed. No vcpkg dependencies are required
+by this isolated plugin example.
+
+An application must explicitly import `experimental_windowing.dart`, install
+`ExperimentalWindowingBackend`, supply a per-window widget builder, and call
+`runWidget(backend.root)`. The example Windows runner starts a headless
+`flutter::FlutterEngine`, avoiding a spare implicit runner window.
+Flutter's verified API is the internal
+`package:flutter/src/widgets/_window.dart`: `WindowController`, `Window`,
+`WindowControllerDelegate`, `destroy`, `activate`, `setMaximized`,
+`setMinimized`, and `setFullscreen`. These names are taken from this pinned SDK,
+not presumed stable. Even patch releases may break this experiment.
+
+## Minimal compatibility seam
+
+`src/backend.dart` provides the optional backend contract. Existing public
+`DesktopMultiWindow` methods and `WindowController` factories check it before
+entering their original implementation. With no explicit installation the
+registry is null, so the old native channels and multi-engine code still run.
+Existing method names/signatures and ID 0 for main are retained.
+
+The only SDK migration edits in the existing implementation are the Dart upper
+bound `<4.0.0` and `describeEnum(edge)` -> `edge.name` (same channel string).
+No existing native legacy C++ source is modified. The CMake
+`DESKTOP_MULTI_WINDOW_OFFICIAL_ONLY` option defaults OFF. Only the standalone
+example enables it to avoid linking RustDesk-specific auxiliary plugins. That
+harness native stub explicitly rejects accidental legacy calls. A normal
+RustDesk build retains the full original native target and its dependencies.
+
+## Runtime semantics and limits
+
+* `createWindow` stages an ID and arguments; `show` constructs the official
+  native controller/view. Unlike legacy, hidden creation does not start a new
+  engine or execute `main(args)`.
+* One engine/isolate serves every official view. Widget state, text controllers,
+  handlers, listener lists, and `ExperimentalWindowContext.state` can be kept
+  separate. Dart globals/statics, plugin instances, service singletons, and FFI
+  registrations remain shared. The executable deliberately verifies both the
+  separate widget counters and the shared global variable.
+* Wrap each window's handler registration and UI callbacks with `window.run`.
+  Flutter does not execute widget callbacks in a dedicated window Zone by
+  itself. Unscoped calls are attributed to main ID 0. Async work started inside
+  `run` keeps the target window identity across await.
+* Messages use the StandardMessageCodec to copy arguments/results and preserve
+  the serialized value boundary. They are in-process dispatch, not independent
+  isolate MethodChannels. Closed IDs fail with StateError; absent handlers fail
+  with MissingPluginException. Arbitrary exception envelope parity, pending-call
+  cancellation on close, reentrancy stress, and large texture transfers have
+  not been established.
+* Maximize, unmaximize, minimize, restore/show, fullscreen, title, and native
+  close interception were exercised on Windows. Native HWND state was checked
+  separately through user32. `focus` maps to official `activate()`, which in
+  3.50.1 calls ShowWindow(SW_RESTORE), **not** SetForegroundWindow. Foreground
+  focus was false in the background test and is not equivalent to legacy's
+  stronger request. Official requests may be constrained by the OS.
+* Hide/isHidden, absolute outer frame/position, centering, title-bar removal,
+  custom drag/resize, movable, frame autosave, XID, and initial native background
+  color return UnsupportedError instead of claiming an equivalent operation.
+  Generic API contentSize is not legacy's outer-window frame.
+* Close, focus/blur, maximize/unmaximize, minimize/restore, fullscreen, and resize
+  events are adapted from controller state/lifetime. Move/moved and
+  resize-finished events are not provided. Event ordering/count parity and
+  listener mutation during callbacks remain unverified.
+* Closing main requests application exit. The release executable was launched
+  and exited with code 0 after an external WM_CLOSE on main.
+* No validation on macOS/Linux, multiple monitors, DPI changes, suspend/resume,
+  accessibility, GPU textures, remote sessions, performance, or long sessions.
+
+## RustDesk integration boundary
+
+The inspected RustDesk commit is
+`51f94394ce61e1f3d26229565c326b2862cbdd1f`.
+Its `flutter/lib/main.dart` re-enters main for each legacy child and sets
+`kWindowId`, `kWindowType`, `desktopType`, and global model/FFI state. A backend
+swap cannot preserve that isolation. An eventual application change must move
+that state into a per-window session and adapt bootstrap/native plugin lookup
+to view identity. This experiment makes no such business-layer change.
+
+RustDesk's Flutter 3.50.1 dependency resolution completed, with old file_picker
+plugin metadata warnings. Analysis additionally found theme data type changes,
+nullable string/numeric type issues, and absent generated native bridge code.
+Those are separate application migration work; the 608 reported diagnostics
+include many deprecations and missing-generation cascades, not 608 proven SDK
+regressions. No full RustDesk executable/remote connection was built or tested.
+
+## Verification
+
+The official debug executable completed 33 checks, plus a separately recorded
+foreground-focus limitation. The release build compiled, opened its native main
+window, and exited after system close. Three mocked channel tests verify the
+default legacy routing, controller payloads, and incoming/outgoing messages.
+
+The new implementation/example files analyze without diagnostics. Pre-existing
+legacy lint warnings are outside this change. Logs and machine-readable runtime
+results accompany the delivered experiment.
+
+Sources: [Flutter announcement](https://flutter.dev/blog/desktop-windowing-apis),
+[pinned SDK API](https://github.com/flutter/flutter/blob/ae9b586f34a8443573f82ef57c3bf914a908cbf7/packages/flutter/lib/src/widgets/_window.dart),
+[Windows implementation](https://github.com/flutter/flutter/blob/ae9b586f34a8443573f82ef57c3bf914a908cbf7/packages/flutter/lib/src/widgets/_window_win32.dart).
+
+The original native legacy backend also built against 3.50.1 in a separate smoke
+harness, with its RustDesk-pinned window_size and texture renderer dependencies.
+A final run completed 12 checks (including deliberate reproduction of the
+existing fullscreen query mismatch): messages, separate globals, hide/show,
+outer frame coordinates, maximize/minimize, title-bar requests, close prevention,
+and destruction. The Dart method `isFullScreen` does not match native Windows
+`isFullscreen`; this pre-existing bug is left unchanged. One intervening run
+exited with 0xC0000005 after creating two windows. A later run passed, so legacy
+stability under 3.50.1 is **not established**. No cause is asserted. Earlier
+immediate show queries also demonstrated that ShowWindowAsync needs polling.
