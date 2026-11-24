@@ -5,7 +5,7 @@ Read these before opening a PR. They apply whether the code is AI-generated or w
 
 PRs that skip these requirements, leave the sections below empty, or have an
 unjustifiably large regression surface may be closed without review.
-Translation-only and docs-only PRs may skip the test and regression sections.
+Translation-only, docs-only, and CI-only PRs may skip the test, AI cross-review, and regression sections.
 -->
 
 ## Type
@@ -60,6 +60,21 @@ the change; for changes to existing UI, show before and after.
 Write "No UI impact" if there is none.
 -->
 
+## AI cross-review
+
+<!--
+Have this diff reviewed by AI models other than the one that wrote it.
+Reviewers can be wrong or hallucinate, so do not apply findings blindly: judge
+each one yourself. Fix the real issues; a finding you leave unfixed is fine if
+you can explain why.
+As proof, paste each model's review output (or a share link to the conversation)
+and, for each finding, what you decided and why. Put long output in a <details> block.
+-->
+
+**Models used:**
+
+**Review output, and your decision on each finding:**
+
 ## Regression surface
 
 <!--
@@ -81,4 +96,4 @@ New code that only runs when the new feature is used does not need to be listed.
 - [ ] UI added, changed, or affected: I uploaded a video or screenshots above that prove the change.
 - [ ] I re-tested the existing functionality listed under "Regression surface".
 - [ ] The diff contains only what this change needs: no unrelated refactoring, formatting, renames, or drive-by fixes.
-- [ ] I had this diff cross-reviewed by different AI models, not only the one that wrote it, and fixed the real issues they found. Models used:
+- [ ] I had this diff cross-reviewed by different AI models, not only the one that wrote it, and included their review output above. I judged each finding myself instead of applying it blindly: I fixed the real issues and can explain why I left the others.

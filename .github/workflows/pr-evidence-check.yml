@@ -1,0 +1,156 @@
+name: PR evidence check
+
+# pull_request_target is needed to label and comment on PRs from forks.
+# This workflow must never check out or run code from the PR: it only reads
+# the PR description and file list through the API.
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pr-evidence-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.type != 'Bot' &&
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const MARKER = '<!-- pr-evidence-check -->';
+            const LABEL = 'needs-evidence';
+            const APPROVAL_POLICY = 'https://github.com/rustdesk/rustdesk/discussions/17223';
+            const TESTING_POLICY = 'https://github.com/rustdesk/rustdesk/discussions/17225';
+            const TEMPLATE = 'https://github.com/rustdesk/rustdesk/blob/master/.github/pull_request_template.md';
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+            const issue_number = pr.number;
+            // PRs opened before the template existed are left alone.
+            if (new Date(pr.created_at) < new Date('2026-11-24T15:46:22Z')) return;
+            // author_association can say CONTRIBUTOR for org members with private membership.
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner, repo, username: pr.user.login,
+              });
+              if (['admin', 'write'].includes(data.permission)) return;
+            } catch (e) {
+              core.info(`permission lookup failed: ${e.status}`);
+            }
+
+            const files = (await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: issue_number, per_page: 100,
+            })).map(f => f.filename);
+            const body = (pr.body || '').replace(/<!--[\s\S]*?-->/g, '');
+
+            const LABELS = {
+              env: /\*\*Environment\*\*(\s*\([^)]*\))?\s*:?/i,
+              repro: /\*\*Reproduced on master\*\*(\s*\([^)]*\))?\s*:?/i,
+              steps: /\*\*Steps and actual results with this PR:?\*\*:?/i,
+              untested: /\*\*Not tested \/ could not reproduce:?\*\*:?/i,
+              models: /\*\*Models used:?\*\*:?/i,
+              review: /\*\*Review output[^*\n]*:?\*\*:?/i,
+            };
+            // Only the template's own headings end a section, so pasted review output may contain "##".
+            const HEADINGS = /\n##\s*(Type|Linked issue|What and why|End-to-end test|Screenshots|AI cross-review|Regression surface|Known limits|Checklist)\b/i;
+            const until = (text, res) => {
+              const ends = res.map(re => text.search(re)).filter(i => i >= 0);
+              return text.slice(0, ends.length ? Math.min(...ends) : text.length);
+            };
+            function section(key) {
+              const m = LABELS[key].exec(body);
+              if (!m) return '';
+              return until(body.slice(m.index + m[0].length), [...Object.values(LABELS), HEADINGS]);
+            }
+            function heading(re) {
+              const m = re.exec(body);
+              return m ? until(body.slice(m.index + m[0].length), [HEADINGS]) : '';
+            }
+            const filled = text => text.replace(/^\s*(-|\d+\.)\s*$/gm, '').trim().length > 0;
+            const ticked = re => new RegExp(String.raw`^\s*-\s*\[[xX]\]\s*` + re.source, 'm').test(body);
+
+            const missing = [];
+            const docsOnly = files.length > 0 &&
+              files.every(f => /^(src\/lang\/|docs\/|\.github\/(?!patches\/))|\.md$/.test(f));
+            if (!docsOnly) {
+              if (!/^## End-to-end test on real devices/m.test(body)) {
+                missing.push(`The test sections of the [PR template](${TEMPLATE}) seem to be missing. Please add them back and fill them in.`);
+              } else {
+                if (!filled(section('env'))) {
+                  missing.push('**Environment**: the real devices you tested on (OS and version, controlling or controlled side, and so on).');
+                }
+                if (ticked(/Bug fix\s*$/) && !filled(section('repro')) && !/reproduc/i.test(section('untested'))) {
+                  missing.push('**Reproduced on master**: how you triggered the original issue on master, or under **Not tested / could not reproduce** why you could not.');
+                }
+                if (!filled(section('steps'))) {
+                  missing.push('**Steps and actual results with this PR**: what you did on those devices and what happened.');
+                }
+                const review = section('review');
+                const proof = /https?:\/\/|<details/i.test(review) || review.replace(/\s+/g, ' ').trim().length >= 100;
+                if (!filled(section('models')) || !proof) {
+                  missing.push('**AI cross-review**: the AI models, other than the one that wrote the code, that reviewed this diff, with their review output (pasted or a share link) and your decision on each finding. Findings can be wrong, so you do not have to fix all of them, but say why you left one.');
+                }
+              }
+            }
+
+            const touchesUi = files.some(f => /^(flutter\/lib\/|src\/ui\/)/.test(f));
+            const hasMedia = /github\.com\/user-attachments\/(assets|files)\/|user-images\.githubusercontent\.com\/|<img\s|<video\s|https?:\/\/\S+\.(png|jpe?g|gif|webp|mp4|mov|webm)\b/i.test(body) ||
+              /https?:\/\//.test(heading(/^##\s*Screenshots[^\n]*/m));
+            if (touchesUi && !hasMedia && !/no ui impact/i.test(body)) {
+              missing.push('**Screenshots / video**: this PR changes UI code, so please upload a video or screenshots that show the change (before and after for existing UI), or write "No UI impact" if there is none.');
+            }
+
+            if (ticked(/Feature \/ enhancement/)) {
+              const POLICIES = ['17223', '17225'];
+              const approval = heading(/^Feature approval/m).replace(/\[required for features\]\([^)]*\)/, '');
+              const refs = [
+                ...approval.matchAll(/(?:#|rustdesk\/rustdesk\/discussions\/)(\d+)/g),
+                ...body.matchAll(/rustdesk\/rustdesk\/discussions\/(\d+)/g),
+              ].map(m => m[1]).filter(n => !POLICIES.includes(n));
+              if (refs.length === 0) {
+                missing.push(`**Feature approval**: a link to the discussion where a maintainer approved this feature ([why](${APPROVAL_POLICY})).`);
+              }
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const previous = comments.find(c => c.user.type === 'Bot' && c.body.includes(MARKER));
+            const ignore = (...codes) => e => { if (!codes.includes(e.status)) throw e; };
+
+            if (missing.length === 0) {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number, name: LABEL }).catch(ignore(404));
+              const done = `${MARKER}\nThanks for updating the description. The automated check has nothing more to ask for.`;
+              if (previous && previous.body !== done) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body: done });
+              }
+              return;
+            }
+
+            const text = [
+              MARKER,
+              'Thanks for the contribution! This is an automated reminder. Before a maintainer reviews this PR, please add the following to the PR description:',
+              '',
+              ...missing.map(m => `- ${m}`),
+              '',
+              `We ask for these because of [feature approval](${APPROVAL_POLICY}) and [end-to-end testing on real devices](${TESTING_POLICY}). This check runs again when you edit the description.`,
+            ].join('\n');
+
+            await github.rest.issues.createLabel({
+              owner, repo, name: LABEL, color: 'fbca04',
+              description: 'PR description is missing test evidence or approval',
+            }).catch(ignore(422));
+            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [LABEL] });
+            if (!previous) {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: text });
+            } else if (previous.body !== text) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body: text });
+            }
