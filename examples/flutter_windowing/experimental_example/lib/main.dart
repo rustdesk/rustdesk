@@ -257,6 +257,10 @@ Future<void> runChecks() async {
           ui.PlatformDispatcher.instance.views.length == initialViews,
     );
     await a.setTitle('PoC test A');
+    const initialFrame = Rect.fromLTWH(60, 100, 570, 390);
+    await a.setFrame(initialFrame);
+    await a.showTitleBar(false);
+    check('staged controls keep A hidden', await a.isHidden());
     await b.setTitle('PoC test B');
     await a.show();
     await b.show();
@@ -265,6 +269,15 @@ Future<void> runChecks() async {
       () => ui.PlatformDispatcher.instance.views.length == initialViews + 2,
     );
     await Future<void>.delayed(const Duration(milliseconds: 500));
+    check(
+      'staged native frame applied before showing',
+      await a.getFrame() == initialFrame,
+    );
+    check(
+      'staged caption hidden on first show',
+      (await nativeProbe('PoC test A')).single['caption'] == false,
+    );
+    await a.showTitleBar(true);
     check(
       'distinct FlutterView IDs',
       {
@@ -399,6 +412,26 @@ Future<void> runChecks() async {
           (await nativeProbe('PoC test A')).single['visible'] == true,
     );
     check('show preserves outer frame', await a.getFrame() == frame);
+    await a.center();
+    final centered = await a.getFrame();
+    check(
+      'center moves window without resizing',
+      centered.topLeft != frame.topLeft && centered.size == frame.size,
+    );
+    await a.showTitleBar(false);
+    check(
+      'Win32 caption style removed',
+      (await nativeProbe('PoC test A')).single['caption'] == false,
+    );
+    await a.showTitleBar(true);
+    check(
+      'Win32 caption style restored',
+      (await nativeProbe('PoC test A')).single['caption'] == true,
+    );
+    check(
+      'title bar toggling leaves B unchanged',
+      (await nativeProbe('PoC test B')).single['caption'] == true,
+    );
     final listener = CloseListener();
     backend
         .contextFor(a.windowId)

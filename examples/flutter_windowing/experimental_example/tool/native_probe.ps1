@@ -9,6 +9,7 @@ public static class PocNative {
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback, IntPtr arg);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int count);
+  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hwnd, int index);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hwnd);
@@ -27,6 +28,7 @@ $found = [System.Collections.Generic.List[object]]::new()
       $found.Add([pscustomobject]@{
         handle=$hwnd.ToInt64(); title=$text.ToString()
         visible=[PocNative]::IsWindowVisible($hwnd)
+        caption=(([PocNative]::GetWindowLong($hwnd, -16) -band 0x00C00000) -eq 0x00C00000)
         maximized=[PocNative]::IsZoomed($hwnd)
         minimized=[PocNative]::IsIconic($hwnd)
         foreground=($hwnd -eq [PocNative]::GetForegroundWindow())

@@ -79,6 +79,39 @@ void RegisterOfficialWindowControls(FlutterDesktopPluginRegistrarRef registrar) 
         result->Error("win32_error", "SetWindowPos failed");
         return;
       }
+    } else if (method == "center") {
+      RECT rect{};
+      MONITORINFO monitor{};
+      monitor.cbSize = sizeof(monitor);
+      if (!GetWindowRect(hwnd, &rect) ||
+          !GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor)) {
+        result->Error("win32_error", "Could not determine window and monitor bounds");
+        return;
+      }
+      const auto& bounds = monitor.rcMonitor;
+      const auto x = bounds.left + (bounds.right - bounds.left - (rect.right - rect.left)) / 2;
+      const auto y = bounds.top + (bounds.bottom - bounds.top - (rect.bottom - rect.top)) / 2;
+      if (!SetWindowPos(hwnd, nullptr, x, y, 0, 0,
+                        SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER)) {
+        result->Error("win32_error", "Could not center window");
+        return;
+      }
+    } else if (method == "showTitleBar") {
+      const auto show = ReadInteger(*values, "show", -1);
+      if (show != 0 && show != 1) {
+        result->Error("invalid_argument", "Expected a title bar visibility flag");
+        return;
+      }
+      const auto style = GetWindowLongPtr(hwnd, GWL_STYLE);
+      SetLastError(ERROR_SUCCESS);
+      const auto previous = SetWindowLongPtr(
+          hwnd, GWL_STYLE, show ? (style | WS_CAPTION) : (style & ~WS_CAPTION));
+      if ((!previous && GetLastError() != ERROR_SUCCESS) ||
+          !SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE |
+                        SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED)) {
+        result->Error("win32_error", "Could not update title bar");
+        return;
+      }
     } else if (method == "hide") {
       ShowWindow(hwnd, SW_HIDE);
     } else if (method == "show") {

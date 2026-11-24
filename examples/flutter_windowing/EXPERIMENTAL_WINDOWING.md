@@ -71,13 +71,15 @@ RustDesk build retains the full original native target and its dependencies.
   not been established.
 * Maximize, unmaximize, minimize, restore/show, fullscreen, title, and native
   close interception were exercised on Windows. The Win32 compatibility channel
-  supplies hide/show, foreground activation, and outer-frame coordinates for
+  supplies hide/show, foreground activation, centering, caption visibility, and
+  outer-frame coordinates for
   the HWND returned by Flutter. It validates the process and platform thread
   before acting. Windows may still deny foreground activation. The self-test
   checks visibility and geometry against the actual window and reports the
   foreground result separately.
-* Centering, title-bar removal, custom drag/resize, movable, frame autosave,
-  XID, and initial native background color still return UnsupportedError.
+* Custom drag/resize, movable, frame autosave, XID, and initial native
+  background color still return UnsupportedError. The native caption toggle does
+  not implement legacy custom non-client drawing or its event ordering.
   Frame coordinates are Win32 screen pixels. Mixed DPI and multiple monitors
   have not been verified.
 * Close, focus/blur, maximize/unmaximize, minimize/restore, fullscreen, and resize
@@ -108,7 +110,7 @@ regressions. No full RustDesk executable/remote connection was built or tested.
 
 ## Verification
 
-The official debug executable completed 37 checks, plus a separately recorded
+The official debug executable completed 44 checks, plus a separately recorded
 foreground-focus observation. The release build compiled, opened its native main
 window, and exited after system close. Three mocked channel tests verify the
 default legacy routing, controller payloads, and incoming/outgoing messages.
@@ -135,8 +137,10 @@ immediate show queries also demonstrated that ShowWindowAsync needs polling.
 ## Upstream acceptance
 
 The experiment workflow runs the native Windows test. Full Flutter CI also runs
-for the experiment branch and uses the existing Windows, Linux, macOS and mobile
-build configurations. Passing that matrix verifies the application baseline.
+for this branch. Its x64 Windows job builds the RustDesk application using stock
+Flutter 3.50.1 and the existing backend; other jobs use their current platform
+SDK and backend. Passing that matrix does not exercise application sessions on
+the new backend.
 A replacement PR needs a matrix that compiles the integrated client with the
 new backend selected on each supported platform.
 

@@ -68,7 +68,7 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
     builder: (context, _) => ViewCollection(
       views: [
         for (final entry in _entries.values)
-          if (entry.native != null && !entry.native!.isDestroyed)
+          if (entry.isMounted && !entry.native!.isDestroyed)
             official.Window(
               key: ValueKey(entry.context.windowId),
               controller: entry.native!,
@@ -108,17 +108,33 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
       );
       entry.native!.addListener(() => _changed(id));
       final showGeneration = ++entry.pendingShow;
+      // Apply staged controls before mounting any Flutter content in the view.
+      try {
+        final titleBarVisible = entry.titleBarVisible;
+        if (titleBarVisible != null) {
+          await _control<void>(id, 'showTitleBar', {
+            'show': titleBarVisible ? 1 : 0,
+          });
+        }
+        final frame = entry.stagedFrame;
+        if (frame != null) {
+          await _setFrame(id, frame);
+        }
+        if (entry.centerOnShow) {
+          await _control<void>(id, 'center');
+        }
+      } catch (_) {
+        entry.native!.destroy();
+        rethrow;
+      }
+      if (entry.native!.isDestroyed) return;
+      entry.isMounted = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!entry.native!.isDestroyed && entry.pendingShow == showGeneration) {
           unawaited(_control<void>(id, 'show'));
         }
       });
       _updates.value++;
-      final frame = entry.stagedFrame;
-      if (frame != null) {
-        await _setFrame(id, frame);
-        entry.stagedFrame = null;
-      }
     } else {
       await _control<void>(id, 'show');
     }
@@ -285,8 +301,11 @@ class _Entry {
   WindowMethodHandler? handler;
   final List<MultiWindowListener> listeners = [];
   bool preventClose = false;
+  bool isMounted = false;
   int pendingShow = 0;
   Rect? stagedFrame;
+  bool centerOnShow = false;
+  bool? titleBarVisible;
   String title = 'RustDesk official windowing PoC';
   Size size = const Size(640, 420);
   List<bool> flags = [false, false, false, false];
@@ -372,6 +391,7 @@ class _Controller extends WindowController {
     }
     if (entry.native == null) {
       entry.stagedFrame = frame;
+      entry.centerOnShow = false;
       return;
     }
     await backend._setFrame(windowId, frame);
@@ -394,9 +414,25 @@ class _Controller extends WindowController {
   }
 
   @override
-  Future<void> center() async => _unsupported('center');
+  Future<void> center() async {
+    if (entry.native == null) {
+      entry.centerOnShow = true;
+      return;
+    }
+    await backend._control<void>(windowId, 'center');
+  }
+
   @override
-  Future<void> showTitleBar(bool show) async => _unsupported('showTitleBar');
+  Future<void> showTitleBar(bool show) async {
+    if (entry.native == null) {
+      entry.titleBarVisible = show;
+      return;
+    }
+    await backend._control<void>(windowId, 'showTitleBar', {
+      'show': show ? 1 : 0,
+    });
+  }
+
   @override
   Future<void> startDragging() async => _unsupported('startDragging');
   @override
