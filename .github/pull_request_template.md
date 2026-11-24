@@ -81,4 +81,4 @@ New code that only runs when the new feature is used does not need to be listed.
 - [ ] UI added, changed, or affected: I uploaded a video or screenshots above that prove the change.
 - [ ] I re-tested the existing functionality listed under "Regression surface".
 - [ ] The diff contains only what this change needs: no unrelated refactoring, formatting, renames, or drive-by fixes.
-- [ ] I reviewed every line of this diff myself and can explain it.
+- [ ] I had this diff cross-reviewed by different AI models, not only the one that wrote it, and fixed the real issues they found. Models used:
