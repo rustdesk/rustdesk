@@ -40,6 +40,8 @@ export interface PeerEncodingInfo {
 
 export interface PeerMessage {
   route?: 'direct' | 'relay';
+  privacyAllowed?: boolean;
+  clipboardAllowed?: boolean;
   restartAllowed?: boolean;
   type: 'peer';
   hostname: string;
@@ -61,6 +63,8 @@ export interface CursorShape {
 }
 
 export type ServerMessage =
+  | { type: 'permissions'; privacyAllowed: boolean; clipboardAllowed: boolean }
+  | { type: 'privacyResult'; enabled?: boolean; failed: boolean }
   | { type: 'restartPermission'; allowed: boolean }
   | { type: 'restartResult'; sent: boolean }
   | { type: 'audioDenied' }
@@ -100,6 +104,7 @@ export interface CodecSupport {
 export type QualityLevel = 'low' | 'balanced' | 'best';
 
 export type ClientMessage =
+  | { type: 'privacy'; enabled: boolean }
   | { type: 'restart' }
   | { type: 'audio'; enabled: boolean }
   | { type: 'resolution'; display: number; width: number; height: number }

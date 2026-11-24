@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Keyboard, RotateCcw, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, Scaling, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { ClipboardCopy, ClipboardPaste, Shield, Activity, Keyboard, RotateCcw, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, Scaling, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
@@ -30,6 +30,31 @@ const gestureRows = {
 
 export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePanel }) {
   const label = (key: I18nKey) => t(p.locale, key);
+  const [clipNotice, setClipNotice] = React.useState<I18nKey | null>(null);
+  const active = React.useRef(false);
+  React.useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  const clipboardAction = async (copyRemote: boolean) => {
+    try {
+      if (copyRemote) {
+        await navigator.clipboard.writeText(p.remoteClipboard);
+        setClipNotice('clipCopied');
+      } else {
+        const text = await navigator.clipboard.readText();
+        if (!active.current) return;
+        if (!text || new TextEncoder().encode(text).length > 256 * 1024) {
+          setClipNotice('clipInvalid');
+          return;
+        }
+        p.onSendClipboard(text);
+        setClipNotice('clipSent');
+      }
+    } catch {
+      setClipNotice('clipDenied');
+    }
+  };
   const monitors = p.peer?.displays ?? [];
   const panelName = { toolbar: 'session', actions: 'moreActions', input: 'pointerSettings', display: 'screens', gestures: 'dockGuide' } as const;
 
@@ -54,6 +79,11 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
               {toggle(Eye, 'optViewOnly', p.viewOnly, p.onToggleViewOnly)}
               {toggle(Volume2, 'remoteAudio', p.audioEnabled, p.onToggleAudio)}
               {p.audioIssue && <p role="alert">{p.audioIssue}</p>}
+            </div>
+            <div className="tool-group">
+              <button className="tool-row" disabled={p.clipboardDisabled || p.viewOnly} onClick={() => void clipboardAction(false)}><ClipboardPaste />{label('sendLocalText')}</button>
+              <button className="tool-row" disabled={p.clipboardDisabled || !p.remoteClipboard} onClick={() => void clipboardAction(true)}><ClipboardCopy />{label('copyRemoteText')}</button>
+              {clipNotice && <p role="status">{label(clipNotice)}</p>}
             </div>
             <div className="tool-group">{action(Activity, 'diagTitle', p.onToggleDiagnostics)}</div>
             <div className="tool-group">{p.peer?.restartAllowed && action(RotateCcw, 'restartDevice', p.onRestart)}{action(LogOut, 'disconnectRemote', p.onDisconnect, true)}</div>
@@ -80,6 +110,9 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
               <button key={d.index} aria-pressed={d.index === p.display} disabled={d.online === false}
                 onClick={() => p.onSwitchDisplay(d.index)}><Monitor />{d.name || label('screens')+' '+(d.index+1)}</button>)}</div>}
             <div className="tool-group">
+              {p.peer?.privacyAllowed && toggle(Shield, 'privacyMode', p.privacyEnabled, p.onTogglePrivacy, p.privacyPending || p.viewOnly)}
+              {p.privacyPending && <p role="status">{label('privacyWaiting')}</p>}
+              {p.privacyIssue && <p role="alert">{label('privacyFailed')}</p>}
               <details><summary><ScanEye />{label('view')}<small>{p.viewMode === 'fit' ? label('fit') : p.zoomPercent+'%'}</small></summary>
                 <div className="tool-options">
                   <button data-testid="view-fit" onClick={p.onFit}>{label('fit')}</button><button onClick={p.onOriginal}>100%</button>

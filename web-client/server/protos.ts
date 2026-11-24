@@ -447,6 +447,19 @@ message PermissionInfo {
   bool enabled = 2;
 }
 
+message TogglePrivacyMode {
+  string impl_key = 1;
+  bool on = 2;
+}
+
+message BackNotification {
+  oneof union {
+    int32 privacy_mode_state = 1;
+    int32 block_input_state = 2;
+  }
+  string impl_key = 4;
+}
+
 message Misc {
   oneof union {
     int32 follow_current_display = 38;
@@ -458,6 +471,8 @@ message Misc {
     OptionMessage option = 7;
     AudioFormat audio_format = 8;
     string close_reason = 9;
+    BackNotification back_notification = 13;
+    TogglePrivacyMode toggle_privacy_mode = 33;
     bool restart_remote_device = 14;
     bool refresh_video = 10;
     bool video_received = 12;

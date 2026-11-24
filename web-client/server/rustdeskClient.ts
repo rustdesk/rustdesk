@@ -54,6 +54,8 @@ export interface IdTarget {
 
 export interface ConnectedHost {
   route: 'direct' | 'relay';
+  privacyAllowed: boolean;
+  clipboardAllowed: boolean;
   restartAllowed: boolean;
   stream: EncryptedFramedStream;
   peerInfo: Record<string, any>;
@@ -69,7 +71,7 @@ async function loginHost(
   codecs: CodecCaps,
   encrypted: boolean,
   route: ConnectedHost['route'],
-  permissions: { restart: boolean },
+  permissions: { restart: boolean; privacy: boolean; clipboard: boolean },
   quality?: string,
   fps?: number,
   preferCodec?: string,
@@ -95,6 +97,8 @@ async function loginHost(
     const raw = await stream.next(remaining);
     if (!raw) throw new Error('host closed the connection before LoginResponse');
     const msg = decodeMessage(raw);
+    if (msg.misc?.permission_info?.permission === 8) permissions.privacy = msg.misc.permission_info.enabled === true;
+    if (msg.misc?.permission_info?.permission === 2) permissions.clipboard = msg.misc.permission_info.enabled === true;
     if (msg.misc?.permission_info?.permission === 5) permissions.restart = msg.misc.permission_info.enabled === true;
     if (msg.login_response) {
       if (msg.login_response.error !== undefined && msg.login_response.union === 'error') {
@@ -107,6 +111,7 @@ async function loginHost(
         return {
           stream,
           route, restartAllowed: permissions.restart,
+          privacyAllowed: permissions.privacy, clipboardAllowed: permissions.clipboard,
           peerInfo: msg.login_response.peer_info,
           username,
           encrypted,
@@ -119,6 +124,7 @@ async function loginHost(
       return {
         stream,
         route, restartAllowed: permissions.restart,
+          privacyAllowed: permissions.privacy, clipboardAllowed: permissions.clipboard,
           peerInfo: msg.peer_info,
         username,
         encrypted,
@@ -151,7 +157,7 @@ export async function connectDirect(
 
   const stream = await EncryptedFramedStream.connect(dial.host, dial.port, 8_000);
   try {
-    const permissions = { restart: true };
+    const permissions = { restart: true, privacy: true, clipboard: true };
     const { hash, encrypted } = await readUntilHash(stream, null, '', permissions);
     return await loginHost(
       stream,
@@ -365,7 +371,7 @@ export async function connectViaId(
                 decodedAddr.port,
                 3_500,
               );
-              const permissions = { restart: true };
+              const permissions = { restart: true, privacy: true, clipboard: true };
               const { hash, encrypted } = await readUntilHash(peerStream, signPk, peerId, permissions);
               idSocket.close();
               return await loginHost(
@@ -402,7 +408,7 @@ export async function connectViaId(
         peerStream = relay.peerStream;
         const finalSignPk =
           signPk ?? peerSignKey(target.key, relay.pkBytes, peerId);
-        const permissions = { restart: true };
+        const permissions = { restart: true, privacy: true, clipboard: true };
         const { hash, encrypted } = await readUntilHash(peerStream, finalSignPk, peerId, permissions);
         return await loginHost(
           peerStream,
@@ -445,7 +451,7 @@ export async function connectViaId(
         );
         const pkBytes = rr.pk ? new Uint8Array(rr.pk) : undefined;
         const signPk = peerSignKey(target.key, pkBytes, peerId);
-        const permissions = { restart: true };
+        const permissions = { restart: true, privacy: true, clipboard: true };
         const { hash, encrypted } = await readUntilHash(peerStream, signPk, peerId, permissions);
         idSocket.close();
         return await loginHost(

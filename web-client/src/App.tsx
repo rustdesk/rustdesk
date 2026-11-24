@@ -349,6 +349,17 @@ export default function App() {
   const [targetFps, setTargetFps] = useState(() =>
     resolveTargetFps(displayPrefs.qualityPreset, displayPrefs.customFps),
   );
+  const [privacyEnabled, setPrivacyEnabled] = useState(false);
+  const [privacyPending, setPrivacyPending] = useState(false);
+  const [privacyIssue, setPrivacyIssue] = useState(false);
+  useEffect(() => {
+    if (!privacyPending) return;
+    const timeout = window.setTimeout(() => {
+      setPrivacyPending(false);
+      setPrivacyIssue(true);
+    }, 15000);
+    return () => window.clearTimeout(timeout);
+  }, [privacyPending]);
   const [remoteClipboard, setRemoteClipboard] = useState('');
 
   // Viewport & chrome state
@@ -1077,6 +1088,10 @@ export default function App() {
       );
 
       setPeer(null);
+      setRemoteClipboard('');
+      setPrivacyEnabled(false);
+      setPrivacyIssue(false);
+      setPrivacyPending(false);
       setResolutionOptions(null);
       setCursorShape(null);
       setCursorEmbedded(false);
@@ -1257,6 +1272,16 @@ export default function App() {
             break;
           }
 
+          case 'permissions':
+            setPeer(previous => previous ? { ...previous, privacyAllowed: msg.privacyAllowed, clipboardAllowed: msg.clipboardAllowed } : previous);
+            if (!msg.clipboardAllowed) setRemoteClipboard('');
+            if (!msg.privacyAllowed) setPrivacyPending(false);
+            break;
+          case 'privacyResult':
+            if (typeof msg.enabled === 'boolean') setPrivacyEnabled(msg.enabled);
+            setPrivacyIssue(msg.failed);
+            setPrivacyPending(false);
+            break;
           case 'restartPermission':
             setPeer(previous => previous ? { ...previous, restartAllowed: msg.allowed } : previous);
             break;
@@ -2809,6 +2834,16 @@ export default function App() {
           quality={quality}
           targetFps={targetFps}
           preferredCodec={displayPrefs.codec}
+          privacyEnabled={privacyEnabled}
+          privacyPending={privacyPending}
+          privacyIssue={privacyIssue}
+          onTogglePrivacy={() => {
+            if (!peer?.privacyAllowed || privacyPending || displayPrefs.viewOnly) return;
+            setPrivacyIssue(false);
+            setPrivacyPending(true);
+            send({ type: 'privacy', enabled: !privacyEnabled });
+          }}
+          clipboardDisabled={displayPrefs.disableClipboard || peer?.clipboardAllowed === false}
           remoteClipboard={remoteClipboard}
           onClose={closeChrome}
           onOpenConnection={() => {

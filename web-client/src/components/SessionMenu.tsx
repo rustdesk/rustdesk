@@ -67,6 +67,11 @@ export interface SessionMenuProps {
   quality: QualityLevel;
   targetFps: number;
   preferredCodec: PreferredCodec;
+  privacyEnabled: boolean;
+  privacyPending: boolean;
+  privacyIssue: boolean;
+  onTogglePrivacy: () => void;
+  clipboardDisabled: boolean;
   remoteClipboard: string;
   onClose: () => void;
   onOpenConnection: () => void;

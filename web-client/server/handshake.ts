@@ -51,13 +51,15 @@ export function createSymmetricKeyMsg(theirPk: Uint8Array): {
   };
 }
 
-async function recvHash(stream: EncryptedFramedStream, permissions: { restart: boolean }, timeoutMs = 10_000): Promise<HostHash> {
+async function recvHash(stream: EncryptedFramedStream, permissions: { restart: boolean; privacy: boolean; clipboard: boolean }, timeoutMs = 10_000): Promise<HostHash> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const remaining = Math.max(50, deadline - Date.now());
     const raw = await stream.next(remaining);
     if (!raw) throw new Error('host closed the connection before sending Hash');
     const msg = decodeMessage(raw);
+    if (msg.misc?.permission_info?.permission === 8) permissions.privacy = msg.misc.permission_info.enabled === true;
+    if (msg.misc?.permission_info?.permission === 2) permissions.clipboard = msg.misc.permission_info.enabled === true;
     if (msg.misc?.permission_info?.permission === 5) permissions.restart = msg.misc.permission_info.enabled === true;
     if (msg.hash) {
       return {
@@ -76,7 +78,7 @@ export async function readUntilHash(
   stream: EncryptedFramedStream,
   peerSignPk: Uint8Array | null,
   expectedId: string,
-  permissions = { restart: true },
+  permissions = { restart: true, privacy: true, clipboard: true },
 ): Promise<{ hash: HostHash; encrypted: boolean }> {
   const raw = await stream.next(10_000);
   if (!raw) throw new Error('host closed the connection during handshake');

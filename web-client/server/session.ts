@@ -29,6 +29,13 @@ export interface GatewayConfig {
 
 const MAX_CLIPBOARD_BYTES = 256 * 1024;
 
+function permissions(conn: ConnectedHost) {
+  return {
+    privacyAllowed: conn.privacyAllowed && conn.peerInfo.features?.privacy_mode === true,
+    clipboardAllowed: conn.clipboardAllowed,
+  };
+}
+
 function canRestart(conn: ConnectedHost): boolean {
   return conn.restartAllowed && ['windows', 'mac os', 'macos', 'linux'].includes(String(conn.peerInfo.platform).toLowerCase());
 }
@@ -67,6 +74,7 @@ function peerToJson(peer: Record<string, any>, conn: ConnectedHost): Record<stri
     encoding,
     encrypted: conn.encrypted,
     route: conn.route,
+    ...permissions(conn),
     restartAllowed: canRestart(conn),
   };
 }
@@ -134,6 +142,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   let sizes: { width: number; height: number }[] = [];
   let hostConn: ConnectedHost | null = null;
   let sessionCodecs: CodecCaps | undefined;
+  let privacyImpl = '';
   let audioRequested = false;
   let audioAllowed = true;
   let audioFormat: { sampleRate: number; channels: number } | null = null;
@@ -271,6 +280,22 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         }
 
         const permission = msg.misc?.permission_info;
+        if (permission?.permission === 8 || permission?.permission === 2) {
+          if (permission.permission === 8) conn.privacyAllowed = permission.enabled === true;
+          else conn.clipboardAllowed = permission.enabled === true;
+          sendJson({ type: 'permissions', ...permissions(conn) });
+        }
+        const notice = msg.misc?.back_notification;
+        if (typeof notice?.privacy_mode_state === 'number') {
+          const code = notice.privacy_mode_state;
+          if (code === 4) privacyImpl = notice.impl_key || '';
+          if (code === 3) {
+            conn.privacyAllowed = false;
+            sendJson({ type: 'permissions', ...permissions(conn) });
+          }
+          const enabled = code === 4 ? true : [3,5,6,7,8,9,11].includes(code) ? false : undefined;
+          sendJson({ type: 'privacyResult', enabled, failed: ![4,8,9].includes(code) });
+        }
         if (permission?.permission === 5) {
           conn.restartAllowed = permission.enabled === true;
           sendJson({ type: 'restartPermission', allowed: canRestart(conn) });
@@ -293,7 +318,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         }
 
         // 3. Clipboard (single or RustDesk 1.4/1.5 MultiClipboards, uncompressed UTF-8 <= 256 KiB)
-        if (msg.clipboard && !msg.clipboard.compress && msg.clipboard.content) {
+        if (conn.clipboardAllowed && msg.clipboard && !msg.clipboard.compress && msg.clipboard.content) {
           const fmt = Number(msg.clipboard.format ?? 0);
           if (fmt === 0) {
             const buf = Buffer.from(msg.clipboard.content);
@@ -301,7 +326,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
               sendJson({ type: 'clipboard', text: buf.toString('utf8') });
             }
           }
-        } else if (Array.isArray(msg.multi_clipboards?.clipboards)) {
+        } else if (conn.clipboardAllowed && Array.isArray(msg.multi_clipboards?.clipboards)) {
           for (const clip of msg.multi_clipboards.clipboards) {
             if (!clip.compress && clip.content && Number(clip.format ?? 0) === 0) {
               const buf = Buffer.from(clip.content);
@@ -515,6 +540,23 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     if (state !== 'live') return;
 
     if (hostConn) {
+      if (parsed.type === 'clipboard' && (!hostConn.clipboardAllowed || typeof parsed.text !== 'string')) return;
+      if (parsed.type === 'privacy') {
+        if (!permissions(hostConn).privacyAllowed || typeof parsed.enabled !== 'boolean') {
+          sendJson({ type: 'privacyResult', failed: true });
+          return;
+        }
+        const [major, minor, patch] = String(hostConn.peerInfo.version).split('.').map(Number);
+        const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
+        const misc = modern ? { toggle_privacy_mode: { on: parsed.enabled, impl_key: privacyImpl } }
+          : { option: { privacy_mode: parsed.enabled ? 2 : 1 } };
+        try {
+          await hostConn.stream.sendRaw(encodeMessage({ misc }));
+        } catch {
+          sendJson({ type: 'privacyResult', failed: true });
+        }
+        return;
+      }
       if (parsed.type === 'restart') {
         const conn = hostConn;
         if (!canRestart(conn)) {
