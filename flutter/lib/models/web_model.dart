@@ -137,7 +137,7 @@ class PlatformFFI {
       _ffiBind.sessionRegisterGpuTexture(
           sessionId: sessionId, display: display, ptr: ptr);
 
-  Future<void> init(String appType) async {
+  Future<void> init(String appType, {int? windowId}) async {
     Completer completer = Completer();
     context["onInitFinished"] = () {
       completer.complete();

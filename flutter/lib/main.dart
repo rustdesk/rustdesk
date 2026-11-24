@@ -130,9 +130,9 @@ Future<void> main(List<String> args) async {
   }
 }
 
-Future<void> initEnv(String appType) async {
+Future<void> initEnv(String appType, {int? windowId}) async {
   // global shared preference
-  await platformFFI.init(appType);
+  await platformFFI.init(appType, windowId: windowId);
   // global FFI, use this **ONLY** for global configuration
   // for convenience, use global FFI on mobile platform
   // focus on multi-ffi on desktop first
@@ -204,7 +204,7 @@ void runMultiWindow(
   Map<String, dynamic> argument,
   String appType,
 ) async {
-  await initEnv(appType);
+  await initEnv(appType, windowId: windowId);
   final title = getWindowName();
   // set prevent close to true, we handle close event manually
   final controller = WindowController.fromWindowId(windowId);
