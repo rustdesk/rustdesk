@@ -26,6 +26,7 @@ import {
 } from './lib/devices';
 import {
   clearLegacyPasswordStorage,
+  restoreTabPasswords, persistTabPasswords, forgetTabPasswords,
   removeSavedPassword,
   setSavedPassword,
   type SavedPasswordMap,
@@ -253,13 +254,35 @@ export default function App() {
   const [savedPasswords, setSavedPasswords] = useState<SavedPasswordMap>({});
   const [rememberPassword, setRememberPassword] = useState(false);
 
+  const [passwordsReady, setPasswordsReady] = useState(false);
+  const [passwordStorageFailed, setPasswordStorageFailed] = useState(false);
   useEffect(() => {
+    let active = true;
     clearLegacyPasswordStorage();
+    void restoreTabPasswords().then(saved => {
+      if (active && saved) {
+        setSavedPasswords(saved);
+        setRememberPassword(true);
+      }
+    }).catch(() => {
+      if (active) { forgetTabPasswords(); setPasswordStorageFailed(true); }
+    }).finally(() => { if (active) setPasswordsReady(true); });
+    return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!passwordsReady || !rememberPassword) return;
+    let active = true;
+    void persistTabPasswords(savedPasswords, () => active).catch(() => {
+      if (active) { forgetTabPasswords(); setPasswordStorageFailed(true); }
+    });
+    return () => { active = false; };
+  }, [passwordsReady, rememberPassword, savedPasswords]);
+
 
   const handleRememberPasswordChange = (enabled: boolean) => {
     setRememberPassword(enabled);
-    if (!enabled) setSavedPasswords({});
+    if (!enabled) { forgetTabPasswords(); setSavedPasswords({}); }
   };
 
   const handleToggleFavorite = useCallback((key: string) => {
@@ -2740,7 +2763,8 @@ export default function App() {
         />
       )}
 
-      {showConnectSheet && (
+      {passwordStorageFailed && <div className="restart-notice" role="alert">{t(locale, 'passwordStorageFailed')} <button onClick={() => setPasswordStorageFailed(false)}>OK</button></div>}
+      {showConnectSheet && passwordsReady && (
         <RustDeskShell
           locale={locale}
           localePreference={localePreference}
