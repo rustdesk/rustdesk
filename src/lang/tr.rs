@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Ekranı RustDesk hizmeti aracılığıyla doğrudan ekran kartından yakalar; giriş ekranı dahil Wayland ekran paylaşımı onayı istenmez. Her cihazda çalışmayabilir; bağlantılar hâlâ ekran paylaşımı istiyorsa bunu kapatın veya X11 kullanın. Bunu değiştirmek mevcut oturumların bağlantısını keser."),
         ("wayland-drm-tip", "Wayland'de gözetimsiz erişim için DRM ekran yakalamayı deneyin, çalışmazsa X11 kullanın."),
         ("login-wayland-drm-tip", "Wayland giriş ekranına erişmek için DRM ekran yakalamayı deneyin veya ekranı X11'e geçirin."),
+        ("App lock", "Uygulama kilidi"),
+        ("app-lock-tip", "Uygulamayı açmak için parmak izi, yüz veya ekran kilidi iste."),
+        ("app-lock-no-screen-lock-tip", "Önce bu cihazda bir ekran kilidi ayarlayın."),
+        ("Lock after leaving the app", "Uygulamadan çıktıktan sonra kilitle"),
+        ("Immediately", "Hemen"),
+        ("After 1 minute", "1 dakika sonra"),
+        ("After 5 minutes", "5 dakika sonra"),
+        ("Unlock", "Kilidi aç"),
     ].iter().cloned().collect();
 }

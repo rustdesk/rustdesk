@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "RustDesk サービスを通じてグラフィックカードから直接画面をキャプチャし、ログイン画面も含めて Wayland の画面共有の確認を表示しません。すべてのデバイスで動作するとは限りません。接続時に引き続き画面共有の確認が求められる場合は、これをオフにするか X11 を使用してください。この設定を変更すると現在のセッションは切断されます。"),
         ("wayland-drm-tip", "Wayland で無人アクセスを行うには DRM 画面キャプチャを試し、動作しない場合は X11 を使用してください。"),
         ("login-wayland-drm-tip", "Wayland のログイン画面にアクセスするには、DRM 画面キャプチャを試すか X11 に切り替えてください。"),
+        ("App lock", "アプリロック"),
+        ("app-lock-tip", "アプリを開くときに指紋、顔、または画面ロックを要求します。"),
+        ("app-lock-no-screen-lock-tip", "先にこのデバイスで画面ロックを設定してください。"),
+        ("Lock after leaving the app", "アプリを離れた後にロック"),
+        ("Immediately", "すぐに"),
+        ("After 1 minute", "1分後"),
+        ("After 5 minutes", "5分後"),
+        ("Unlock", "ロック解除"),
     ].iter().cloned().collect();
 }

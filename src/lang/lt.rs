@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Fiksuoja ekraną tiesiai iš vaizdo plokštės per RustDesk paslaugą, be Wayland ekrano bendrinimo užklausos, taip pat ir prisijungimo ekrane. Gali veikti ne visuose įrenginiuose; jei ryšiai vis dar prašo bendrinti ekraną, išjunkite šią parinktį arba naudokite X11. Pakeitus nutraukiami esami seansai."),
         ("wayland-drm-tip", "Neprižiūrimai prieigai Wayland aplinkoje išbandykite DRM ekrano fiksavimą arba naudokite X11, jei neveikia."),
         ("login-wayland-drm-tip", "Norėdami pasiekti Wayland prisijungimo ekraną, išbandykite DRM fiksavimą arba perjunkite jį į X11."),
+        ("App lock", "Programėlės užraktas"),
+        ("app-lock-tip", "Reikalauti piršto atspaudo, veido arba ekrano užrakto programėlei atidaryti."),
+        ("app-lock-no-screen-lock-tip", "Pirmiausia šiame įrenginyje nustatykite ekrano užraktą."),
+        ("Lock after leaving the app", "Užrakinti išėjus iš programėlės"),
+        ("Immediately", "Iš karto"),
+        ("After 1 minute", "Po 1 minutės"),
+        ("After 5 minutes", "Po 5 minučių"),
+        ("Unlock", "Atrakinti"),
     ].iter().cloned().collect();
 }

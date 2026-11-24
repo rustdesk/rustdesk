@@ -177,6 +177,10 @@ pub const OPTION_FLOATING_WINDOW_SVG: &str = "floating-window-svg";
 // android keep screen on
 pub const OPTION_KEEP_SCREEN_ON: &str = "keep-screen-on";
 
+// android app lock
+pub const OPTION_ALLOW_APP_LOCK: &str = "allow-app-lock";
+pub const OPTION_APP_LOCK_TIMEOUT: &str = "app-lock-timeout";
+
 // Server-side: keep host system awake during incoming sessions (Security setting)
 pub const OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS: &str = "keep-awake-during-incoming-sessions";
 
@@ -246,6 +250,8 @@ pub const KEYS_LOCAL_SETTINGS: &[&str] = &[
     OPTION_FLOATING_WINDOW_TRANSPARENCY,
     OPTION_FLOATING_WINDOW_SVG,
     OPTION_KEEP_SCREEN_ON,
+    OPTION_ALLOW_APP_LOCK,
+    OPTION_APP_LOCK_TIMEOUT,
     // Client-side: keep client system awake during outgoing sessions (General setting)
     OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS,
     OPTION_DISABLE_GROUP_PANEL,

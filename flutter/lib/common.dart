@@ -34,6 +34,7 @@ import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
 import 'mobile/pages/view_camera_page.dart';
 import 'mobile/pages/terminal_page.dart';
+import 'mobile/widgets/app_lock.dart';
 import 'desktop/pages/remote_page.dart' as desktop_remote;
 import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
 import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
@@ -2611,6 +2612,7 @@ connect(BuildContext context, String id,
     bool? isSharedPassword,
     String loginMethod = ''}) async {
   if (id == '') return;
+  if (isAndroid && appLock.locked.value) await appLock.whenUnlocked();
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
       if (Get.isRegistered<IDTextEditingController>()) {

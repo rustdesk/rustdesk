@@ -17,6 +17,7 @@ import '../../common/widgets/login.dart';
 import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../widgets/app_lock.dart';
 import '../widgets/deploy_dialog.dart';
 import '../../models/shortcut_model.dart';
 import '../widgets/dialog.dart';
@@ -1034,6 +1035,39 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               ),
             ],
           ),
+        if (isAndroid && !disabledSettings && !hideSecuritySettings)
+          SettingsSection(title: Text(translate('Security')), tiles: [
+            SettingsTile.switchTile(
+              title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(translate('App lock')),
+                    Text('* ${translate('app-lock-tip')}',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ]),
+              initialValue: appLock.enabled,
+              onToggle: isOptionFixed(kOptionAllowAppLock)
+                  ? null
+                  : (v) async {
+                      await appLock.setEnabled(v);
+                      setState(() {});
+                    },
+            ),
+            if (appLock.enabled)
+              _getPopupDialogRadioEntry(
+                title: 'Lock after leaving the app',
+                list: [
+                  _RadioEntry('Immediately', '0'),
+                  _RadioEntry('After 1 minute', kAppLockDefaultTimeout),
+                  _RadioEntry('After 5 minutes', '300'),
+                ],
+                getter: () => appLock.timeout,
+                asyncSetter: isOptionFixed(kOptionAppLockTimeout)
+                    ? null
+                    : (value) => bind.mainSetLocalOption(
+                        key: kOptionAppLockTimeout, value: value),
+              ),
+          ]),
         if (isAndroid &&
             !disabledSettings &&
             !outgoingOnly &&

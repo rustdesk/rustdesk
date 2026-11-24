@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Menangkap layar langsung dari kartu grafis melalui layanan RustDesk, tanpa permintaan berbagi layar Wayland, termasuk di layar login. Mungkin tidak berfungsi di semua perangkat; jika koneksi masih meminta berbagi layar, matikan opsi ini atau gunakan X11. Mengubahnya akan memutus sesi saat ini."),
         ("wayland-drm-tip", "Untuk akses tanpa pengawasan di Wayland, coba tangkapan layar DRM, atau gunakan X11 jika tidak berfungsi."),
         ("login-wayland-drm-tip", "Untuk mengakses layar login Wayland, coba tangkapan layar DRM atau ubah ke X11."),
+        ("App lock", "Kunci aplikasi"),
+        ("app-lock-tip", "Wajibkan sidik jari, wajah, atau kunci layar untuk membuka aplikasi."),
+        ("app-lock-no-screen-lock-tip", "Atur kunci layar di perangkat ini terlebih dahulu."),
+        ("Lock after leaving the app", "Kunci setelah meninggalkan aplikasi"),
+        ("Immediately", "Segera"),
+        ("After 1 minute", "Setelah 1 menit"),
+        ("After 5 minutes", "Setelah 5 menit"),
+        ("Unlock", "Buka kunci"),
     ].iter().cloned().collect();
 }

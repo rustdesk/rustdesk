@@ -75,6 +75,7 @@ class MainActivity : FlutterActivity() {
 
     private var pendingPicker: PendingPicker? = null
     private val documentPicker by lazy { DocumentPicker(this) }
+    private val appLock = AppLock(this)
 
     private var isAudioStart = false
     private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
@@ -130,6 +131,7 @@ class MainActivity : FlutterActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (documentPicker.onResult(requestCode, resultCode, data)) return
+        if (appLock.onResult(requestCode, resultCode)) return
         if (requestCode == REQ_IMPORT_FILES) {
             val pending = pendingPicker as? PendingPicker.ImportFiles ?: return
             pendingPicker = null
@@ -288,6 +290,7 @@ class MainActivity : FlutterActivity() {
     private fun initFlutterChannel(flutterMethodChannel: MethodChannel) {
         flutterMethodChannel.setMethodCallHandler { call, result ->
             if (documentPicker.handle(call, result)) return@setMethodCallHandler
+            if (appLock.handle(call, result)) return@setMethodCallHandler
             // make sure result will be invoked, otherwise flutter will await forever
             when (call.method) {
                 "init_service" -> {
@@ -1024,6 +1027,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onStop() {
         super.onStop()
+        appLock.onStop()
         val disableFloatingWindow = FFI.getLocalOption("disable-floating-window") == "Y"
         if (!disableFloatingWindow && MainService.isReady) {
             startService(Intent(this, FloatingWindowService::class.java))
@@ -1031,6 +1035,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onStart() {
+        // Has to reach Dart before the lifecycle message that resumes the app.
+        appLock.onStart()
         super.onStart()
         stopService(Intent(this, FloatingWindowService::class.java))
     }

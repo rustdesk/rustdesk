@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Tver ekrānu tieši no videokartes, izmantojot RustDesk pakalpojumu, bez Wayland ekrāna kopīgošanas pieprasījuma, arī pieteikšanās ekrānā. Var nedarboties visās ierīcēs; ja savienojumi joprojām pieprasa kopīgot ekrānu, izslēdziet šo vai izmantojiet X11. Mainot šo iestatījumu, pašreizējās sesijas tiek atvienotas."),
         ("wayland-drm-tip", "Neuzraudzītai piekļuvei Wayland vidē izmēģiniet DRM ekrāna tveršanu vai izmantojiet X11, ja tā nedarbojas."),
         ("login-wayland-drm-tip", "Lai piekļūtu Wayland pieteikšanās ekrānam, izmēģiniet DRM ekrāna tveršanu vai pārslēdziet to uz X11."),
+        ("App lock", "Lietotnes bloķēšana"),
+        ("app-lock-tip", "Pieprasīt pirksta nospiedumu, seju vai ekrāna bloķēšanu, lai atvērtu lietotni."),
+        ("app-lock-no-screen-lock-tip", "Vispirms šajā ierīcē iestatiet ekrāna bloķēšanu."),
+        ("Lock after leaving the app", "Bloķēt pēc iziešanas no lietotnes"),
+        ("Immediately", "Nekavējoties"),
+        ("After 1 minute", "Pēc 1 minūtes"),
+        ("After 5 minutes", "Pēc 5 minūtēm"),
+        ("Unlock", "Atbloķēt"),
     ].iter().cloned().collect();
 }

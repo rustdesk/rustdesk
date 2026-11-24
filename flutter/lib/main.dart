@@ -27,6 +27,7 @@ import 'common.dart';
 import 'consts.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
+import 'mobile/widgets/app_lock.dart';
 import 'mobile/widgets/deploy_dialog.dart';
 import 'models/platform_model.dart';
 
@@ -522,7 +523,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
                       data: MediaQuery.of(context).copyWith(
                         textScaler: TextScaler.linear(1.0),
                       ),
-                      child: child ?? Container(),
+                      child: AppLockGate(
+                          lock: appLock, child: child ?? Container()),
                     ),
                   )
               : (context, child) {

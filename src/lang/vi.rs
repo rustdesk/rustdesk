@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Chụp màn hình trực tiếp từ card đồ họa thông qua dịch vụ RustDesk, không cần xác nhận chia sẻ màn hình của Wayland, kể cả ở màn hình đăng nhập. Có thể không hoạt động trên mọi thiết bị; nếu kết nối vẫn yêu cầu chia sẻ màn hình, hãy tắt tùy chọn này hoặc dùng X11. Thay đổi tùy chọn này sẽ ngắt các phiên hiện tại."),
         ("wayland-drm-tip", "Để truy cập không giám sát trên Wayland, hãy thử chụp màn hình qua DRM, hoặc dùng X11 nếu không hoạt động."),
         ("login-wayland-drm-tip", "Để truy cập màn hình đăng nhập Wayland, hãy thử chụp màn hình qua DRM hoặc chuyển nó sang X11."),
+        ("App lock", "Khóa ứng dụng"),
+        ("app-lock-tip", "Yêu cầu vân tay, khuôn mặt hoặc khóa màn hình để mở ứng dụng."),
+        ("app-lock-no-screen-lock-tip", "Hãy thiết lập khóa màn hình trên thiết bị này trước."),
+        ("Lock after leaving the app", "Khóa sau khi rời ứng dụng"),
+        ("Immediately", "Ngay lập tức"),
+        ("After 1 minute", "Sau 1 phút"),
+        ("After 5 minutes", "Sau 5 phút"),
+        ("Unlock", "Mở khóa"),
     ].iter().cloned().collect();
 }

@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", ""),
         ("wayland-drm-tip", ""),
         ("login-wayland-drm-tip", ""),
+        ("App lock", ""),
+        ("app-lock-tip", ""),
+        ("app-lock-no-screen-lock-tip", ""),
+        ("Lock after leaving the app", ""),
+        ("Immediately", ""),
+        ("After 1 minute", ""),
+        ("After 5 minutes", ""),
+        ("Unlock", ""),
     ].iter().cloned().collect();
 }

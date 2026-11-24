@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Snímá obrazovku přímo z grafické karty prostřednictvím služby RustDesk, bez výzvy Waylandu ke sdílení obrazovky, a to i na přihlašovací obrazovce. Nemusí fungovat na všech zařízeních; pokud připojení stále žádají o sdílení obrazovky, vypněte tuto volbu nebo použijte X11. Změna této volby odpojí aktuální relace."),
         ("wayland-drm-tip", "Pro bezobslužný přístup ve Waylandu zkuste snímání obrazovky přes DRM, nebo použijte X11, pokud nefunguje."),
         ("login-wayland-drm-tip", "Pro přístup k přihlašovací obrazovce Waylandu zkuste snímání přes DRM nebo ji přepněte na X11."),
+        ("App lock", "Zámek aplikace"),
+        ("app-lock-tip", "Vyžadovat otisk prstu, obličej nebo zámek obrazovky k otevření aplikace."),
+        ("app-lock-no-screen-lock-tip", "Nejprve na tomto zařízení nastavte zámek obrazovky."),
+        ("Lock after leaving the app", "Zamknout po opuštění aplikace"),
+        ("Immediately", "Okamžitě"),
+        ("After 1 minute", "Po 1 minutě"),
+        ("After 5 minutes", "Po 5 minutách"),
+        ("Unlock", "Odemknout"),
     ].iter().cloned().collect();
 }

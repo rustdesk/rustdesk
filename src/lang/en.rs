@@ -295,5 +295,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Captures the screen directly from the graphics card through the RustDesk service, without the Wayland screen sharing prompt, including at the login screen. It may not work on every device; if connections still ask to share the screen, turn this off or use X11. Changing this disconnects current sessions."),
         ("wayland-drm-tip", "For unattended access on Wayland, try DRM screen capture, or use X11 if it does not work."),
         ("login-wayland-drm-tip", "To access the Wayland login screen, try DRM screen capture or switch it to X11."),
+        ("app-lock-tip", "Require fingerprint, face or screen lock to open the app."),
+        ("app-lock-no-screen-lock-tip", "Set a screen lock on this device first."),
     ].iter().cloned().collect();
 }
