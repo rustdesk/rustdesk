@@ -10,13 +10,15 @@ abstract class WindowController {
   WindowController();
 
   factory WindowController.fromWindowId(int id) {
-    if (experimentalWindowBackend != null) return experimentalWindowBackend!.controller(id);
+    final backend = experimentalWindowBackend;
+    if (backend != null && backend.ownsWindow(id)) {
+      return backend.controller(id);
+    }
     return WindowControllerMainImpl(id);
   }
 
   factory WindowController.main() {
-    if (experimentalWindowBackend != null) return experimentalWindowBackend!.controller(0);
-    return WindowControllerMainImpl(0);
+    return WindowController.fromWindowId(0);
   }
 
   /// The id of the window.

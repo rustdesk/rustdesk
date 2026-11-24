@@ -215,6 +215,7 @@ jobs:
 
       - name: Install flutter
         id: flutter
+        if: ${{ matrix.job.arch != 'x86_64' || !inputs.windows-x64-flutter-preview }}
         # arm64 builds with FLUTTER_WINDOWS_ARM_VERSION (>=3.44); x64 stays on FLUTTER_VERSION.
         # subosito only ships an x64 Windows SDK (Flutter's release manifest lists x64 only),
         # so it installs x64 on both arches. The arm64 runner re-bootstraps Dart to arm64 in
@@ -222,8 +223,21 @@ jobs:
         uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225  # v2.12.0; https://github.com/subosito/flutter-action/issues/277
         with:
           channel: "stable"
-          flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_WINDOWS_ARM_VERSION || inputs.windows-x64-flutter-preview && '3.50.1' || env.FLUTTER_VERSION }}
+          flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_WINDOWS_ARM_VERSION || env.FLUTTER_VERSION }}
           architecture: x64
+
+      - name: Install Flutter 3.50 windowing preview
+        if: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
+        shell: pwsh
+        run: |
+          $sdk = Join-Path $env:RUNNER_TEMP 'flutter-preview'
+          git -c core.longpaths=true clone --depth 1 --branch 3.50.1 https://github.com/flutter/flutter.git $sdk
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $revision = git -C $sdk rev-parse HEAD
+          if ($LASTEXITCODE -or $revision -ne 'ae9b586f34a8443573f82ef57c3bf914a908cbf7') {
+            throw "Unexpected Flutter revision: $revision"
+          }
+          (Join-Path $sdk 'bin') >> $env:GITHUB_PATH
 
       - name: Force arm64 Dart SDK + engine
         # The x64 SDK subosito installs bundles an x64 Dart with a matching engine-dart-sdk.stamp,
@@ -348,6 +362,8 @@ jobs:
         run: echo "SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib" >> "$GITHUB_ENV"
 
       - name: Build rustdesk
+        env:
+          FLUTTER_WINDOWING: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
         run: |
           # Windows: build RustDesk
           # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix

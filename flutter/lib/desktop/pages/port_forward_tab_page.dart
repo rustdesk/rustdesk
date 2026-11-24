@@ -7,6 +7,8 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/port_forward_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
@@ -20,7 +22,8 @@ class PortForwardTabPage extends StatefulWidget {
 }
 
 class _PortForwardTabPageState extends State<PortForwardTabPage> {
-  late final DesktopTabController tabController;
+  final tabController = DesktopTabController(tabType: DesktopTabType.portForward);
+  DesktopWindowScope? _window;
   late final bool isRDP;
 
   static const IconData selectedIcon = Icons.forward_sharp;
@@ -28,8 +31,6 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
   _PortForwardTabPageState(Map<String, dynamic> params) {
     isRDP = params['isRDP'];
-    tabController =
-        Get.put(DesktopTabController(tabType: DesktopTabType.portForward));
     tabController.onSelected = (id) {
       WindowController.fromWindowId(windowId())
           .setTitle(getWindowNameWithId(id));
@@ -56,7 +57,22 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
   @override
   void initState() {
     super.initState();
+    _window = DesktopWindowScope.read(context);
+    if (_window?.nativeTitleBar != true) Get.put(tabController);
+    final window = _window;
+    if (window != null) {
+      window.run(_registerHandler);
+    } else {
+      _registerHandler();
+    }
+    Future.delayed(Duration.zero, () {
+      if (mounted) {
+        restoreWindowPosition(WindowType.PortForward, windowId: windowId());
+      }
+    });
+  }
 
+  void _registerHandler() {
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       debugPrint(
           "[Port Forward] call ${call.method} with args ${call.arguments} from window $fromWindowId");
@@ -90,11 +106,12 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
       } else if (call.method == "onDestroy") {
         tabController.clear();
       } else if (call.method == kWindowActionRebuild) {
-        reloadCurrentWindow();
+        if (mounted && _window?.nativeTitleBar == true) {
+          RefreshWrapper.of(context)?.rebuild();
+        } else {
+          reloadCurrentWindow();
+        }
       }
-    });
-    Future.delayed(Duration.zero, () {
-      restoreWindowPosition(WindowType.PortForward, windowId: windowId());
     });
   }
 
@@ -127,7 +144,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
                   border: Border.all(color: MyTheme.color(context).border!)),
               child: child,
             ));
-    return isMacOS || kUseCompatibleUiMode
+    return isMacOS || kUseCompatibleUiMode || _window?.nativeTitleBar == true
         ? tabWidget
         : Obx(
             () => SubWindowDragToResizeArea(

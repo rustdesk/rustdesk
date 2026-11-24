@@ -10,6 +10,10 @@ typedef WindowMethodHandler = Future<dynamic> Function(
 DesktopWindowBackend? experimentalWindowBackend;
 
 abstract class DesktopWindowBackend {
+  bool acceptsWindow(String? arguments);
+  bool ownsWindow(int id);
+  bool get keepsLegacyWindows;
+  int get currentWindowId;
   Future<WindowController> createWindow(String? arguments);
   WindowController controller(int id);
   Future<dynamic> invokeMethod(int target, String method, dynamic arguments);

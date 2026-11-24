@@ -340,8 +340,12 @@ class _DesktopTabState extends State<DesktopTab>
   void initState() {
     super.initState();
     _window = DesktopWindowScope.read(context);
-    DesktopMultiWindow.addListener(this);
-    windowManager.addListener(this);
+    if (_window case final window?) {
+      window.run(() => DesktopMultiWindow.addListener(this));
+    } else {
+      DesktopMultiWindow.addListener(this);
+    }
+    if (_window?.nativeTitleBar != true) windowManager.addListener(this);
 
     Future.delayed(Duration(milliseconds: 500), () {
       if (isMainWindow) {
@@ -366,8 +370,12 @@ class _DesktopTabState extends State<DesktopTab>
 
   @override
   void dispose() {
-    DesktopMultiWindow.removeListener(this);
-    windowManager.removeListener(this);
+    if (_window case final window?) {
+      window.run(() => DesktopMultiWindow.removeListener(this));
+    } else {
+      DesktopMultiWindow.removeListener(this);
+    }
+    if (_window?.nativeTitleBar != true) windowManager.removeListener(this);
     _macOSCheckRestoreTimer?.cancel();
     super.dispose();
   }
@@ -611,12 +619,13 @@ class _DesktopTabState extends State<DesktopTab>
 
   Widget _buildBar() {
     final isIncomingHomePage = bind.isIncomingOnly() && isInHomePage();
+    final hasNativeTitleBar = _window?.nativeTitleBar == true;
     return Row(
       children: [
         Expanded(
             child: GestureDetector(
                 // custom double tap handler
-                onTap: !isIncomingHomePage && showMaximize
+                onTap: !hasNativeTitleBar && !isIncomingHomePage && showMaximize
                     ? () {
                         final current = DateTime.now().millisecondsSinceEpoch;
                         final elapsed = current - _lastClickTime;
@@ -628,7 +637,9 @@ class _DesktopTabState extends State<DesktopTab>
                         }
                       }
                     : (isIncomingHomePage ? () {} : null), // Keep tap recognizer for Windows touch.
-                onPanStart: (_) => startDragging(isMainWindow, windowId: _window?.windowId),
+                onPanStart: hasNativeTitleBar
+                    ? null
+                    : (_) => startDragging(isMainWindow, windowId: _window?.windowId),
                 onPanCancel: () {
                   // We want to disable dragging of the tab area in the tab bar.
                   // Disable dragging is needed because macOS handles dragging by default.
@@ -789,7 +800,7 @@ class WindowActionPanelState extends State<WindowActionPanel> {
           }
         }),
         if (widget.tail != null) widget.tail!,
-        if (!kUseCompatibleUiMode)
+        if (!kUseCompatibleUiMode && _window?.nativeTitleBar != true)
           Row(
             children: [
               if (widget.showMinimize && !isMacOS)

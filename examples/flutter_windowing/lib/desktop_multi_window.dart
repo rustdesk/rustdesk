@@ -32,7 +32,10 @@ class DesktopMultiWindow {
   /// NOTE: [createWindow] will only create a new window, you need to call
   /// [WindowController.show] to show the window.
   static Future<WindowController> createWindow([String? arguments]) async {
-    if (experimentalWindowBackend != null) return experimentalWindowBackend!.createWindow(arguments);
+    final backend = experimentalWindowBackend;
+    if (backend != null && backend.acceptsWindow(arguments)) {
+      return backend.createWindow(arguments);
+    }
     final windowId = await miltiWindowChannel.invokeMethod<int>(
       'createWindow',
       arguments,
@@ -50,7 +53,10 @@ class DesktopMultiWindow {
   /// [targetWindowId] which window you want to invoke the method.
   static Future<dynamic> invokeMethod(int targetWindowId, String method,
       [dynamic arguments]) {
-    if (experimentalWindowBackend != null) return experimentalWindowBackend!.invokeMethod(targetWindowId, method, arguments);
+    final backend = experimentalWindowBackend;
+    if (backend != null && backend.ownsWindow(targetWindowId)) {
+      return backend.invokeMethod(targetWindowId, method, arguments);
+    }
     return windowEventChannel.invokeMethod(method, <String, dynamic>{
       'targetWindowId': targetWindowId,
       'arguments': arguments,
@@ -65,9 +71,12 @@ class DesktopMultiWindow {
   ///
   static void setMethodHandler(
       Future<dynamic> Function(MethodCall call, int fromWindowId)? handler) {
-    if (experimentalWindowBackend != null) {
-      experimentalWindowBackend!.setMethodHandler(handler);
-      return;
+    final backend = experimentalWindowBackend;
+    if (backend != null) {
+      backend.setMethodHandler(handler);
+      if (!backend.keepsLegacyWindows || backend.currentWindowId != 0) {
+        return;
+      }
     }
     if (handler == null) {
       windowEventChannel.setMethodCallHandler(null);
@@ -89,7 +98,9 @@ class DesktopMultiWindow {
 
   /// Get all sub window id.
   static Future<List<int>> getAllSubWindowIds() async {
-    if (experimentalWindowBackend != null) return experimentalWindowBackend!.getAllSubWindowIds();
+    final backend = experimentalWindowBackend;
+    final official = await backend?.getAllSubWindowIds() ?? <int>[];
+    if (backend != null && !backend.keepsLegacyWindows) return official;
     try {
       final result = await miltiWindowChannel
           .invokeMethod<List<dynamic>>('getAllSubWindowIds');
@@ -99,10 +110,10 @@ class DesktopMultiWindow {
               ?.toList() ??
           [];
       assert(ids.every((id) => id > 0), 'id must be greater than 0');
-      return ids;
+      return [...ids, ...official];
     } catch (e) {
       print('Unreachable, plugin exception, func getAllSubWindowIds(), $e');
-      return [];
+      return official;
     }
   }
 
@@ -110,7 +121,7 @@ class DesktopMultiWindow {
       ObserverList<MultiWindowListener>();
 
   static Future<void> _windowMethodCallHandler(MethodCall call) async {
-    for (final MultiWindowListener listener in listeners) {
+    for (final MultiWindowListener listener in List.of(_listeners)) {
       if (!_listeners.contains(listener)) {
         return;
       }
@@ -139,28 +150,39 @@ class DesktopMultiWindow {
   }
 
   static List<MultiWindowListener> get listeners {
-    if (experimentalWindowBackend != null) return experimentalWindowBackend!.listeners;
+    final backend = _listenerBackend;
+    if (backend != null) return backend.listeners;
     final List<MultiWindowListener> localListeners =
         List<MultiWindowListener>.from(_listeners);
     return localListeners;
   }
 
   static bool get hasListeners {
-    if (experimentalWindowBackend != null) return experimentalWindowBackend!.listeners.isNotEmpty;
-    return _listeners.isNotEmpty;
+    return listeners.isNotEmpty;
+  }
+
+  static DesktopWindowBackend? get _listenerBackend {
+    final backend = experimentalWindowBackend;
+    if (backend == null ||
+        (backend.keepsLegacyWindows && backend.currentWindowId == 0)) {
+      return null;
+    }
+    return backend;
   }
 
   static void addListener(MultiWindowListener listener) {
-    if (experimentalWindowBackend != null) {
-      experimentalWindowBackend!.addListener(listener);
+    final backend = _listenerBackend;
+    if (backend != null) {
+      backend.addListener(listener);
       return;
     }
     _listeners.add(listener);
   }
 
   static void removeListener(MultiWindowListener listener) {
-    if (experimentalWindowBackend != null) {
-      experimentalWindowBackend!.removeListener(listener);
+    final backend = _listenerBackend;
+    if (backend != null) {
+      backend.removeListener(listener);
       return;
     }
     _listeners.remove(listener);

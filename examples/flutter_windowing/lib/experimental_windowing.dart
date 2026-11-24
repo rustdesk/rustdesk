@@ -39,16 +39,35 @@ typedef ExperimentalWindowBuilder = Widget Function(
 /// Flutter 3.50.1 Windows PoC. Importing this library alone does not opt in.
 class ExperimentalWindowingBackend implements DesktopWindowBackend {
   final ValueNotifier<int> _updates = ValueNotifier<int>(0);
-  ExperimentalWindowingBackend._(this.builder, this._existingMainView);
+  ExperimentalWindowingBackend._(
+    this.builder,
+    this._existingMainView,
+    this._useOfficialWindow,
+  ) : _nextId = _useOfficialWindow == null ? 1 : _firstOfficialId;
+  static const _firstOfficialId = 1 << 30;
   final ExperimentalWindowBuilder builder;
   final FlutterView? _existingMainView;
+  final bool Function(String?)? _useOfficialWindow;
   final Map<int, _Entry> _entries = {};
-  int _nextId = 1;
+  int _nextId;
+  @override
   int get currentWindowId => Zone.current[_windowZoneKey] as int? ?? 0;
+
+  @override
+  bool get keepsLegacyWindows => _useOfficialWindow != null;
+
+  @override
+  bool acceptsWindow(String? arguments) =>
+      _useOfficialWindow?.call(arguments) ?? true;
+
+  @override
+  bool ownsWindow(int id) =>
+      !keepsLegacyWindows || id == 0 || id >= _firstOfficialId;
 
   static ExperimentalWindowingBackend install({
     required ExperimentalWindowBuilder builder,
     bool keepImplicitMainView = false,
+    bool Function(String?)? useOfficialWindow,
   }) {
     WidgetsFlutterBinding.ensureInitialized();
     if (!Platform.isWindows || !isWindowingEnabled) {
@@ -64,7 +83,16 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
     if (keepImplicitMainView && mainView == null) {
       throw StateError('The runner must supply the implicit main view.');
     }
-    final backend = ExperimentalWindowingBackend._(builder, mainView);
+    if (useOfficialWindow != null && mainView == null) {
+      throw StateError(
+        'Legacy routing requires the runner-provided main view.',
+      );
+    }
+    final backend = ExperimentalWindowingBackend._(
+      builder,
+      mainView,
+      useOfficialWindow,
+    );
     backend._entries[0] = _Entry(ExperimentalWindowContext._(0, null));
     if (mainView == null) unawaited(backend._show(0));
     experimentalWindowBackend = backend;
@@ -311,7 +339,7 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
       _entry(currentWindowId).listeners.add(listener);
   @override
   void removeListener(MultiWindowListener listener) =>
-      _entry(currentWindowId).listeners.remove(listener);
+      _entries[currentWindowId]?.listeners.remove(listener);
 }
 
 class _Entry {
