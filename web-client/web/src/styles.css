@@ -18,24 +18,41 @@
 
 html, body, #root {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
   margin: 0;
-  width: 100%;
-  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  width: 100vw;
+  height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
+  background: #101418;
 }
 
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 input, select, textarea { font-size: 16px; }
 
-.stage {
-  position: absolute;
-  inset: 0;
+textarea {
   width: 100%;
-  height: 100%;
+  margin-top: 8px;
+  resize: vertical;
+}
+
+.stage {
+  position: fixed;
+  top: 0;
+  left: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  width: 100vw;
+  height: 100dvh;
   background: #101418;
   overflow: hidden;
 }
@@ -58,6 +75,11 @@ input, select, textarea { font-size: 16px; }
 .stage canvas {
   position: absolute;
   display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   touch-action: none;
   background: #101418;
 }
@@ -99,19 +121,27 @@ input, select, textarea { font-size: 16px; }
 
 .scrim {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 5;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   background: rgba(16, 20, 24, 0.35);
 }
 
 .sheet {
   position: absolute;
   z-index: 6;
-  top: calc(12px + env(safe-area-inset-top, 0px));
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
-  width: min(560px, calc(100vw - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
-  max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--kb, 0px));
+  width: min(560px, calc(100vw - 16px));
+  max-height: calc(100dvh - 24px - var(--kb, 0px));
   overflow: auto;
   background: var(--surface);
   border: 1px solid var(--line);
