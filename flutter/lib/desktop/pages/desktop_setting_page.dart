@@ -1023,6 +1023,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   bool locked = bind.mainIsInstalled();
   final scrollController = ScrollController();
 
+  void relock() {
+    if (mounted) setState(() => locked = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -1765,22 +1769,36 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget unlockPin() {
     bool enabled = !locked;
-    RxString unlockPin = bind.mainGetUnlockPin().obs;
+    final hasPin = RxnBool();
     update() async {
-      unlockPin.value = bind.mainGetUnlockPin();
+      try {
+        hasPin.value = usesRootUnlockPin
+            ? await rootPinRequest('pin-set')
+            : bind.mainGetUnlockPin().isNotEmpty;
+      } catch (error) {
+        debugPrint('Failed to query unlock PIN state: $error');
+      }
     }
+    update();
 
     onChanged(bool? checked) async {
-      changeUnlockPinDialog(unlockPin.value, update);
+      if (hasPin.value == null) return;
+      changeUnlockPinDialog(
+          usesRootUnlockPin ? '' : bind.mainGetUnlockPin(), update,
+          hasHiddenPin: usesRootUnlockPin && hasPin.value == true,
+          onUnlockRequired: usesRootUnlockPin ? relock : null);
     }
 
-    final isOptFixed = isOptionFixed(kOptionWhitelist);
+    final isOptFixed = !usesRootUnlockPin && isOptionFixed(kOptionWhitelist);
     return GestureDetector(
       child: Obx(() => Row(
             children: [
               Checkbox(
-                      value: unlockPin.isNotEmpty,
-                      onChanged: enabled && !isOptFixed ? onChanged : null)
+                      tristate: hasPin.value == null,
+                      value: hasPin.value,
+                      onChanged: enabled && !isOptFixed && hasPin.value != null
+                          ? onChanged
+                          : null)
                   .marginOnly(right: 5),
               Expanded(
                   child: Text(
@@ -1791,7 +1809,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           )),
       onTap: enabled
           ? () {
-              onChanged(!unlockPin.isNotEmpty);
+              onChanged(null);
             }
           : null,
     ).marginOnly(left: _kCheckBoxLeftMargin);
@@ -1819,7 +1837,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       _lock(locked, 'Unlock Network Settings', () {
         locked = false;
         setState(() => {});
-      }),
+      }, networkSettings: true),
       preventMouseKeyBuilder(
         block: locked,
         child: Column(children: [
@@ -3052,8 +3070,9 @@ Widget _SubLabeledWidget(BuildContext context, String label, Widget child,
 Widget _lock(
   bool locked,
   String label,
-  Function() onUnlock,
-) {
+  Function() onUnlock, {
+  bool networkSettings = false,
+}) {
   return Offstage(
       offstage: !locked,
       child: Row(
@@ -3075,6 +3094,13 @@ Widget _lock(
                             Text(translate(label)).marginOnly(left: 5),
                           ]).marginSymmetric(vertical: 2)),
                   onPressed: () async {
+                    if (usesRootUnlockPin) {
+                      if (await authorizeUnixSettings(
+                          networkSettings: networkSettings)) {
+                        onUnlock();
+                      }
+                      return;
+                    }
                     final unlockPin = bind.mainGetUnlockPin();
                     if (unlockPin.isEmpty || isUnlockPinDisabled()) {
                       bool checked = await callMainCheckSuperUserPermission();
@@ -3082,7 +3108,9 @@ Widget _lock(
                         onUnlock();
                       }
                     } else {
-                      checkUnlockPinDialog(unlockPin, onUnlock);
+                      if (await checkUnlockPinDialog((pin) => pin == unlockPin)) {
+                        onUnlock();
+                      }
                     }
                   },
                 ).marginSymmetric(horizontal: 2, vertical: 4),

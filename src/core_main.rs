@@ -161,12 +161,26 @@ pub fn core_main() -> Option<CoreMainAction> {
         flutter_args.retain(|arg| arg != "--install");
     }
     if args.len() > 0 {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        if args[0] == "--approve-unlock-pin" {
+            let result = match args.as_slice() {
+                [_, uid, digest] => crate::ipc::unix_unlock_pin::admin_approve(uid, digest),
+                _ => Err(hbb_common::anyhow::anyhow!("Expected a target UID and approval digest")),
+            };
+            return result.err().map(CoreMainAction::ExitFailure);
+        }
         if args[0] == "--version" {
             println!("{}", crate::VERSION);
             return None;
         } else if args[0] == "--build-date" {
             println!("{}", crate::BUILD_DATE);
             return None;
+        }
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if crate::platform::is_installed() && unsafe { hbb_common::libc::geteuid() } != 0 {
+        if let Err(err) = config::unix_unlock_pin::discard_user_copy() {
+            return Some(CoreMainAction::ExitFailure(err));
         }
     }
     #[cfg(windows)]
@@ -759,6 +773,18 @@ fn import_config(path: &str) {
     }
     let config2: Config2 = load_path(path2.into());
     if get_modified_time(&path2) > get_modified_time(&Config2::file()) {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        let config2 = if crate::platform::is_installed() {
+            if unsafe { hbb_common::libc::geteuid() } == 0 {
+                if let Err(err) = unix_unlock_pin::RootPin::load() {
+                    log::error!("Cannot preserve the root PIN during config import: {err}");
+                    return;
+                }
+            }
+            config2.without_unlock_pin()
+        } else {
+            config2
+        };
         if store_path(Config2::file(), config2).is_err() {
             log::info!("config2 written");
         }
