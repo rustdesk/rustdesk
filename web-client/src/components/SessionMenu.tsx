@@ -68,6 +68,7 @@ export interface SessionMenuProps {
   remoteClipboard: string;
   onClose: () => void;
   onOpenConnection: () => void;
+  onRestart: () => void;
   onDisconnect: () => void;
   onToggleDiagnostics: () => void;
   onToggleViewOnly: () => void;
@@ -123,6 +124,7 @@ function DesktopSessionMenu({
   remoteClipboard,
   onClose,
   onOpenConnection,
+  onRestart,
   onDisconnect,
   onToggleDiagnostics,
   onToggleViewOnly,
@@ -148,7 +150,7 @@ function DesktopSessionMenu({
   const hasMultipleDisplays = displays.length > 1;
   const hostTitle = peer?.hostname || peer?.username || 'Host';
   const platformLabel = peer?.platform || 'remote';
-  const linkLabel = peer?.encrypted ? t(locale, 'linkEncrypted') : t(locale, 'linkDirect');
+  const linkLabel = peer?.encrypted ? t(locale, 'linkEncrypted') : t(locale, 'linkPlain');
   const displayRtt = rtt || stats.delayMs;
 
   const handleSendClip = (e: React.FormEvent) => {
@@ -606,6 +608,7 @@ function DesktopSessionMenu({
 
         </div>
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--rd-divider)]">
+          {peer?.restartAllowed && <button type="button" className="rd-btn" onClick={onRestart}>{t(locale, 'restartDevice')}</button>}
           <button type="button" className="rd-btn" onClick={onOpenConnection}>
             {t(locale, 'connection')}
           </button>

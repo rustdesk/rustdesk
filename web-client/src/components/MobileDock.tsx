@@ -38,7 +38,7 @@ export function MobileDock({ locale, activePanel, onToggleKeyboard, onCollapse, 
       onPointerDown={e => e.stopPropagation()}
       onContextMenu={e => e.preventDefault()}>
       <button type="button" data-testid="mobile-dock-expand" aria-label={t(locale, 'openSessionMenu')} onClick={() => onOpenMenu('toolbar')}><ChevronLeft /></button>
-      <button type="button" data-testid="capsule-actions" aria-label={t(locale, 'moreActions')} onClick={() => onOpenMenu('actions')}><Layers2 /></button>
+      <button type="button" data-testid="capsule-keyboard" aria-label={t(locale, 'keyboard')} onClick={onToggleKeyboard}><Keyboard /></button>
     </div>
   );
 }

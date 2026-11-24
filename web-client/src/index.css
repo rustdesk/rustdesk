@@ -1888,3 +1888,11 @@ button:focus-visible {
 .remote-menu-panel dl { margin:0; }
 .remote-menu-panel dl>div { padding:6px 0; }
 .remote-menu-panel dd,.remote-menu-panel p { font-size:13px; color:#c2cad3; margin:3px 0 8px; }
+
+.quality-monitor,.restart-notice {
+  position:absolute; left:max(10px,env(safe-area-inset-left)); top:max(10px,env(safe-area-inset-top));
+  background:#20252cef; color:white; padding:5px 9px; border-radius:6px; font-size:12px;
+}
+.quality-monitor { z-index:3; pointer-events:none; }
+.restart-notice { z-index:45; }
+.restart-notice button { margin-inline-start:8px; color:inherit; text-decoration:underline; }

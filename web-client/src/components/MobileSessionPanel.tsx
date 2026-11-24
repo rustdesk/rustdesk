@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, Scaling, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Activity, RotateCcw, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, Scaling, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
@@ -56,7 +56,7 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
               {p.audioIssue && <p role="alert">{p.audioIssue}</p>}
             </div>
             <div className="tool-group">{action(Activity, 'diagTitle', p.onToggleDiagnostics)}</div>
-            <div className="tool-group">{action(LogOut, 'disconnectRemote', p.onDisconnect, true)}</div>
+            <div className="tool-group">{p.peer?.restartAllowed && action(RotateCcw, 'restartDevice', p.onRestart)}{action(LogOut, 'disconnectRemote', p.onDisconnect, true)}</div>
           </>}
           {p.mobilePanel === 'input' && <>
             <div className="tool-group tool-options mode-options">

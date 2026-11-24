@@ -67,6 +67,7 @@ export type ClientMessage =
       type: 'clipboard';
       text?: string;
     }
+  | { type: 'restart' }
   | { type: 'audio'; enabled: boolean }
   | { type: 'followWindow'; enabled: boolean }
   | {

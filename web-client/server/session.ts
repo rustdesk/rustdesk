@@ -29,7 +29,11 @@ export interface GatewayConfig {
 
 const MAX_CLIPBOARD_BYTES = 256 * 1024;
 
-function peerToJson(peer: Record<string, any>, encrypted: boolean): Record<string, unknown> {
+function canRestart(conn: ConnectedHost): boolean {
+  return conn.restartAllowed && ['windows', 'mac os', 'macos', 'linux'].includes(String(conn.peerInfo.platform).toLowerCase());
+}
+
+function peerToJson(peer: Record<string, any>, conn: ConnectedHost): Record<string, unknown> {
   const displays = Array.isArray(peer.displays)
     ? peer.displays.map((d: any, index: number) => ({
         index,
@@ -61,7 +65,9 @@ function peerToJson(peer: Record<string, any>, encrypted: boolean): Record<strin
     currentDisplay: Number(peer.current_display ?? 0),
     displays,
     encoding,
-    encrypted,
+    encrypted: conn.encrypted,
+    route: conn.route,
+    restartAllowed: canRestart(conn),
   };
 }
 
@@ -202,7 +208,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     };
     const cursorShapes = new CursorShapes();
     currentSize = initialDisplaySize(conn.peerInfo);
-    sendJson(peerToJson(conn.peerInfo, conn.encrypted));
+    sendJson(peerToJson(conn.peerInfo, conn));
     publishResolutions(Number(conn.peerInfo.current_display ?? 0), conn.peerInfo.resolutions);
     sendJson({
       type: 'status',
@@ -265,6 +271,10 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         }
 
         const permission = msg.misc?.permission_info;
+        if (permission?.permission === 5) {
+          conn.restartAllowed = permission.enabled === true;
+          sendJson({ type: 'restartPermission', allowed: canRestart(conn) });
+        }
         if (permission?.permission === 3) {
           audioAllowed = permission.enabled === true;
           if (!audioAllowed && audioRequested) {
@@ -322,7 +332,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
           if (updatedSize.width > 0 && updatedSize.height > 0) {
             currentSize = updatedSize;
           }
-          sendJson(peerToJson(msg.peer_info, conn.encrypted));
+          sendJson(peerToJson(msg.peer_info, conn));
           publishResolutions(Number(msg.peer_info.current_display ?? 0), msg.peer_info.resolutions);
         }
 
@@ -505,6 +515,20 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     if (state !== 'live') return;
 
     if (hostConn) {
+      if (parsed.type === 'restart') {
+        const conn = hostConn;
+        if (!canRestart(conn)) {
+          sendJson({ type: 'restartResult', sent: false });
+          return;
+        }
+        try {
+          await conn.stream.sendRaw(encodeMessage({ misc: { restart_remote_device: true } }));
+          sendJson({ type: 'restartResult', sent: true });
+        } catch {
+          sendJson({ type: 'restartResult', sent: false });
+        }
+        return;
+      }
       if (parsed.type === 'audio') {
         if (typeof parsed.enabled !== 'boolean') return;
         if (parsed.enabled && !audioAllowed) {

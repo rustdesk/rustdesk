@@ -103,6 +103,7 @@ import {
 } from './lib/mapping';
 import {
   decodeFrame,
+  formatBitrate,
   wsUrl,
   type ClientMessage,
   type PeerMessage,
@@ -373,6 +374,12 @@ export default function App() {
     hotY: number;
   } | null>(null);
   const [pageZoomed, setPageZoomed] = useState(false);
+  const [qualityMonitor, setQualityMonitor] = useState(false);
+  const [restartState, setRestartState] = useState<'requested' | 'waiting' | null>(null);
+  const restartDeadline = useRef(0);
+  const reconnectRequest = useRef<ConnectRequest | null>(null);
+  const connectGeneration = useRef(0);
+  const routeLabel = t(locale, peer?.route === 'relay' ? 'routeRelay' : peer?.route === 'direct' ? 'routeDirect' : 'routeUnknown');
   const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(() => {
     try {
       return new URLSearchParams(window.location.search).get('diag') === '1';
@@ -698,7 +705,7 @@ export default function App() {
 
   // Raw WebSocket ping-pong probing when Diagnostic Overlay is active during a session
   useEffect(() => {
-    if (!diagnosticsOpen || (phase !== 'live' && phase !== 'connecting')) {
+    if ((!diagnosticsOpen && !qualityMonitor) || (phase !== 'live' && phase !== 'connecting')) {
       return;
     }
 
@@ -720,7 +727,7 @@ export default function App() {
     return () => {
       window.clearInterval(timer);
     };
-  }, [diagnosticsOpen, phase]);
+  }, [diagnosticsOpen, qualityMonitor, phase]);
 
   // Fetch /api/health on mount
   useEffect(() => {
@@ -945,7 +952,12 @@ export default function App() {
   }, [phase, publishStatsSnapshot]);
 
   const connectSession = useCallback(
-    async (req?: ConnectRequest) => {
+    async (req?: ConnectRequest, retry = false) => {
+      const generation = ++connectGeneration.current;
+      if (!retry) {
+        setRestartState(null);
+        reconnectRequest.current = null;
+      }
       const activeMode = req?.mode ?? mode;
       const targetPeerId = (req?.peerId ?? peerId).replace(/\s+/g, '');
       const targetIdServer = (req?.idServer ?? idServer).trim();
@@ -985,6 +997,7 @@ export default function App() {
       }
 
       const rawSupport = await probeCodecs();
+      if (generation !== connectGeneration.current) return;
       if (
         !rawSupport.vp8 &&
         !rawSupport.vp9 &&
@@ -1117,12 +1130,18 @@ export default function App() {
         switch (msg.type) {
           case 'status':
             if (msg.state === 'live') {
+              reconnectRequest.current = {
+                mode: activeMode, peerId: targetPeerId, idServer: targetIdServer, relayServer: targetRelayServer,
+                serverKey: targetServerKey, forceRelay: targetForceRelay, host: targetHost, port: targetPortStr,
+                password: targetPassword, remember: shouldRemember,
+              };
+              setRestartState(null);
               phaseRef.current = 'live';
               setPhase('live');
               setConnectDialog(false);
               setMenuOpen(false);
               setStatusDetail(
-                msg.detail === 'encrypted' ? 'detailEncryptedSession' : 'detailDirectSession',
+                msg.detail === 'encrypted' ? 'detailEncryptedSession' : 'linkPlain',
               );
               if (shouldRemember && targetPassword) {
                 setSavedPasswords((prev) => setSavedPassword(prev, targetDeviceKey, targetPassword));
@@ -1139,6 +1158,7 @@ export default function App() {
                 setStatusDetail('connecting');
               }
             } else if (msg.state === 'error') {
+              if (msg.detail && /password|token|two.factor/i.test(msg.detail)) setRestartState(null);
               receivedTerminalError = true;
               phaseRef.current = 'error';
               setPhase('error');
@@ -1203,6 +1223,17 @@ export default function App() {
             break;
           }
 
+          case 'restartPermission':
+            setPeer(previous => previous ? { ...previous, restartAllowed: msg.allowed } : previous);
+            break;
+          case 'restartResult':
+            if (!msg.sent) {
+              setRestartState(null);
+              setDecoderError(t(locale, 'restartFailed'));
+              setMobilePanel('actions');
+              setMenuOpen(true);
+            }
+            break;
           case 'audioDenied':
             stopAudio();
             setAudioIssue('audioDenied');
@@ -1287,6 +1318,7 @@ export default function App() {
             setDecoderError(msg.message);
             setStatusDetail(null, msg.message);
             if (phaseRef.current === 'connecting') {
+              if (/password|token|two.factor/i.test(msg.message)) setRestartState(null);
               receivedTerminalError = true;
               phaseRef.current = 'error';
               setPhase('error');
@@ -1345,9 +1377,54 @@ export default function App() {
     ],
   );
 
+  useEffect(() => {
+    if (!restartState) {
+      if (phase === 'idle' || phase === 'error') reconnectRequest.current = null;
+      return;
+    }
+    if (restartState === 'requested' && phase !== 'live') {
+      setRestartState('waiting');
+      return;
+    }
+    if (restartState === 'waiting' && (phase === 'idle' || phase === 'error')) {
+      const timer = window.setTimeout(() => {
+        if (reconnectRequest.current && Date.now() < restartDeadline.current) {
+          void connectSession(reconnectRequest.current, true);
+        }
+      }, 5000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [restartState, phase, connectSession]);
+
+  useEffect(() => {
+    if (!restartState) return;
+    const timer = window.setTimeout(() => {
+      setRestartState(null);
+      setStatusDetail(restartState === 'requested' ? 'restartFailed' : 'retryEnded');
+      if (restartState === 'requested') {
+        setDecoderError(t(locale, 'restartFailed'));
+        setMobilePanel('actions');
+        setMenuOpen(true);
+      }
+    }, restartState === 'requested' ? 45000 : Math.max(0, restartDeadline.current - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [restartState, locale, setStatusDetail]);
+
+  const requestRestart = () => {
+    if (restartState || !peer?.restartAllowed || wsRef.current?.readyState !== WebSocket.OPEN) return;
+    if (!window.confirm(t(locale, 'confirmRestart'))) return;
+    restartDeadline.current = Date.now() + 180000;
+    setRestartState('requested');
+    setMenuOpen(false);
+    send({ type: 'restart' });
+  };
+
   // Disconnect cleanly and return to idle state
 
   const disconnect = useCallback(() => {
+    connectGeneration.current++;
+    reconnectRequest.current = null;
+    setRestartState(null);
     finishPendingClick();
     clearLongPress();
     if (phaseRef.current === 'live' && displayPrefsRef.current.lockAfterSessionEnd) {
@@ -2561,12 +2638,25 @@ export default function App() {
         />
       )}
 
+      {qualityMonitor && !diagnosticsOpen && phase === 'live' && (
+        <div className="quality-monitor" data-testid="quality-monitor">
+          {routeLabel} · {t(locale, 'browserGateway')} {diagSummary.currentRttMs === null ? '—' : Math.round(diagSummary.currentRttMs)} ms · {stats.fps} FPS · {formatBitrate(stats.bitrate)}
+        </div>
+      )}
+      {restartState && <div className="restart-notice" role="status">
+        {t(locale, restartState === 'requested' ? 'restartWaiting' : 'retryWaiting')}
+        <button type="button" onClick={restartState === 'requested' ? () => setRestartState(null) : disconnect}>{t(locale,'cancel')}</button>
+      </div>}
       {diagnosticsOpen && phase === 'live' && (
         <DiagnosticOverlay
           locale={locale}
           stats={stats}
           summary={diagSummary}
-          hostRttMs={rtt || stats.delayMs}
+          routeLabel={routeLabel}
+          encryptionLabel={t(locale, peer?.encrypted ? 'linkEncrypted' : 'linkPlain')}
+          monitor={qualityMonitor}
+          onToggleMonitor={() => setQualityMonitor(value => !value)}
+          hostRttMs={rtt}
           onReset={resetDiagnostics}
           onClose={() => setDiagnosticsOpen(false)}
         />
@@ -2644,6 +2734,7 @@ export default function App() {
 
       {showSessionMenu && (
         <SessionMenu
+          onRestart={requestRestart}
           mobilePanel={mobilePanel}
           locale={locale}
           audioEnabled={audioEnabled}

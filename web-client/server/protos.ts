@@ -458,6 +458,7 @@ message Misc {
     OptionMessage option = 7;
     AudioFormat audio_format = 8;
     string close_reason = 9;
+    bool restart_remote_device = 14;
     bool refresh_video = 10;
     bool video_received = 12;
   }

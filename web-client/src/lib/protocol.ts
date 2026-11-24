@@ -39,6 +39,8 @@ export interface PeerEncodingInfo {
 }
 
 export interface PeerMessage {
+  route?: 'direct' | 'relay';
+  restartAllowed?: boolean;
   type: 'peer';
   hostname: string;
   platform: string;
@@ -59,6 +61,8 @@ export interface CursorShape {
 }
 
 export type ServerMessage =
+  | { type: 'restartPermission'; allowed: boolean }
+  | { type: 'restartResult'; sent: boolean }
   | { type: 'audioDenied' }
   | { type: 'audioFormat'; sampleRate: number; channels: number }
   | { type: 'audioFrame'; packet: string }
@@ -96,6 +100,7 @@ export interface CodecSupport {
 export type QualityLevel = 'low' | 'balanced' | 'best';
 
 export type ClientMessage =
+  | { type: 'restart' }
   | { type: 'audio'; enabled: boolean }
   | { type: 'resolution'; display: number; width: number; height: number }
   | {

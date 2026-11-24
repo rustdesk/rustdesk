@@ -51,13 +51,14 @@ export function createSymmetricKeyMsg(theirPk: Uint8Array): {
   };
 }
 
-async function recvHash(stream: EncryptedFramedStream, timeoutMs = 10_000): Promise<HostHash> {
+async function recvHash(stream: EncryptedFramedStream, permissions: { restart: boolean }, timeoutMs = 10_000): Promise<HostHash> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const remaining = Math.max(50, deadline - Date.now());
     const raw = await stream.next(remaining);
     if (!raw) throw new Error('host closed the connection before sending Hash');
     const msg = decodeMessage(raw);
+    if (msg.misc?.permission_info?.permission === 5) permissions.restart = msg.misc.permission_info.enabled === true;
     if (msg.hash) {
       return {
         salt: String(msg.hash.salt ?? ''),
@@ -75,6 +76,7 @@ export async function readUntilHash(
   stream: EncryptedFramedStream,
   peerSignPk: Uint8Array | null,
   expectedId: string,
+  permissions = { restart: true },
 ): Promise<{ hash: HostHash; encrypted: boolean }> {
   const raw = await stream.next(10_000);
   if (!raw) throw new Error('host closed the connection during handshake');
@@ -107,7 +109,7 @@ export async function readUntilHash(
     if (!opened) {
       // Matches desktop client behavior: send empty PublicKey and continue unencrypted
       await stream.sendRaw(encodeMessage({ public_key: {} }));
-      const hash = await recvHash(stream);
+      const hash = await recvHash(stream, permissions);
       return { hash, encrypted: false };
     }
 
@@ -130,7 +132,7 @@ export async function readUntilHash(
       picked,
     });
 
-    const hash = await recvHash(stream);
+    const hash = await recvHash(stream, permissions);
     return { hash, encrypted: true };
   }
 

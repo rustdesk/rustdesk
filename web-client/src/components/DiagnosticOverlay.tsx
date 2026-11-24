@@ -10,6 +10,10 @@ interface DiagnosticOverlayProps {
   stats: SessionStats;
   locale: Locale;
   summary: DiagnosticsSummary;
+  routeLabel: string;
+  encryptionLabel: string;
+  monitor: boolean;
+  onToggleMonitor: () => void;
   hostRttMs: number;
   onReset: () => void;
   onClose: () => void;
@@ -49,6 +53,7 @@ export function DiagnosticOverlay({
   locale,
   stats,
   summary,
+  routeLabel, encryptionLabel, monitor, onToggleMonitor,
   hostRttMs,
   onReset,
   onClose,
@@ -119,7 +124,8 @@ export function DiagnosticOverlay({
         </div>
       </div>
 
-      {/* Primary metrics grid */}
+      <p>{routeLabel} · {encryptionLabel}</p>
+      <label><input type="checkbox" checked={monitor} onChange={onToggleMonitor} /> {t(locale, 'qualityMonitor')}</label>
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-2 text-[11px]">
         {([
           ['statSize', stats.width && stats.height ? `${stats.width}×${stats.height}` : '—'],
@@ -134,7 +140,7 @@ export function DiagnosticOverlay({
           </div>
         ))}
         <div>
-          <div className="text-[#94a3b8] text-[10px]">{t(locale, 'diagWsPing')}</div>
+          <div className="text-[#94a3b8] text-[10px]">{t(locale, 'browserGateway')}</div>
           <div
             className="font-mono-tabular text-[14px] font-semibold text-white leading-tight"
             data-testid="diag-ws-rtt"
@@ -164,7 +170,7 @@ export function DiagnosticOverlay({
         </div>
 
         <div>
-          <div className="text-[#94a3b8] text-[10px]">{t(locale, 'diagHostRtt')}</div>
+          <div className="text-[#94a3b8] text-[10px]">{t(locale, 'reportedRtt')}</div>
           <div
             className="font-mono-tabular text-[12px] font-medium text-[#e2e8f0]"
             data-testid="diag-host-rtt"
