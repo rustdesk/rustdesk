@@ -428,16 +428,44 @@ button:focus-visible {
   }
 }
 
-.sheet.sheet-menu .rd-btn:not(.primary):not(.active):not(.danger),
-.sheet.sheet-menu .display-card:not(.active) {
-  background: var(--overlay-surface-subtle);
-  border-color: var(--overlay-border);
+.sheet.sheet-menu {
+  background: var(--rd-sidebar-bg);
+  border-color: var(--line);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color-scheme: light;
 }
 
-.sheet.sheet-menu .rd-input,
-.sheet.sheet-menu .rd-select {
-  background: var(--overlay-input-bg);
-  border-color: var(--overlay-border);
+:root[data-theme="dark"] .sheet-menu {
+  color-scheme: dark;
+}
+
+.sheet-menu .session-group {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--rd-card-border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.sheet-menu .rd-btn:not(.primary):not(.active):not(.danger),
+.sheet-menu .display-card:not(.active) {
+  background: var(--surface-subtle);
+  border-color: var(--line);
+}
+
+.sheet-menu .rd-btn:not(.primary):not(.active):not(.danger):hover:not(:disabled),
+.sheet-menu .display-card:not(.active):hover:not(:disabled) {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+}
+
+.sheet-menu .rd-input,
+.sheet-menu select {
+  background: var(--rd-input-bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
 }
 
 .softbar {
@@ -621,8 +649,8 @@ button:focus-visible {
   gap: 4px;
   padding: 4px;
   border-radius: 10px;
-  background: var(--overlay-surface-subtle);
-  border: 1px solid var(--overlay-border);
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
 }
 
 .rd-session-tab {
@@ -647,14 +675,15 @@ button:focus-visible {
 }
 
 .rd-session-tab.active {
-  background: var(--overlay-surface-strong);
-  color: var(--accent);
+  background: var(--surface);
+  color: var(--accent-press);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  box-shadow: inset 0 -2px var(--accent), 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 
 :root[data-theme="dark"] .rd-session-tab.active {
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.36);
+  color: #89caff;
+  box-shadow: inset 0 -2px var(--accent), 0 1px 4px rgba(0, 0, 0, 0.36);
 }
 
 .gesture-guide {

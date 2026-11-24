@@ -268,7 +268,7 @@ export function SessionMenu({
         {activeTab === 'control' && (
           <div className="flex flex-col gap-3.5" role="tabpanel">
             {hasMultipleDisplays && (
-              <div data-testid="display-switcher">
+              <div className="session-group" data-testid="display-switcher">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="text-xs font-semibold text-[var(--ink-soft)]">
                     {t(locale, 'displays')}
@@ -342,7 +342,7 @@ export function SessionMenu({
               </div>
             )}
 
-            <div>
+            <div className="session-group">
               <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
                 {t(locale, 'view')}
               </div>
@@ -404,7 +404,7 @@ export function SessionMenu({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="session-group flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 className="rd-btn"
@@ -433,7 +433,7 @@ export function SessionMenu({
         {/* Tab 2: Input (Shortcuts, Soft Keyboard, Right Click, Clipboard) */}
         {activeTab === 'input' && (
           <div className="flex flex-col gap-3.5" role="tabpanel">
-            <div>
+            <div className="session-group">
               <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
                 {t(locale, 'input')}
               </div>
@@ -478,7 +478,7 @@ export function SessionMenu({
               </div>
             </div>
 
-            <div>
+            <div className="session-group">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <span className="text-xs font-semibold text-[var(--ink-soft)]">
                   {t(locale, 'clipboard')}
@@ -525,7 +525,7 @@ export function SessionMenu({
         {/* Tab 3: Quality & Display Options */}
         {activeTab === 'display' && (
           <div className="flex flex-col gap-3.5" role="tabpanel">
-            <div>
+            <div className="session-group">
               <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
                 {t(locale, 'qualityAndFps')}
               </div>
@@ -561,7 +561,7 @@ export function SessionMenu({
               </div>
             </div>
 
-            <div>
+            <div className="session-group">
               <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
                 {t(locale, 'sessionCodecLabel')}
               </div>
@@ -589,7 +589,7 @@ export function SessionMenu({
               </div>
             </div>
 
-            <div className="flex flex-col gap-1">
+            <div className="session-group flex flex-col gap-1">
               <label className="rd-check-row">
                 <input
                   type="checkbox"
@@ -635,7 +635,7 @@ export function SessionMenu({
         {/* Tab 4: Session Telemetry & Language */}
         {activeTab === 'session' && (
           <div className="flex flex-col gap-3.5" role="tabpanel" data-testid="telemetry">
-            <div className="grid grid-cols-3 gap-x-4 gap-y-2.5 text-xs rounded-xl bg-[var(--rd-card-bg)] border border-[var(--rd-card-border)] p-3">
+            <div className="session-group grid grid-cols-3 gap-x-4 gap-y-2.5 text-xs">
               <div>
                 <div className="text-[var(--ink-soft)]">{t(locale, 'statCodec')}</div>
                 <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="codec">
@@ -691,7 +691,7 @@ export function SessionMenu({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="session-group flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 className="rd-btn"
