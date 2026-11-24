@@ -32,11 +32,18 @@ export function PeerList({
 }: PeerListProps) {
   if (devices.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-center py-16 px-6">
+      <div
+        className="flex-1 flex flex-col items-center justify-center text-center py-16 px-6"
+        data-testid="device-list"
+        data-empty="true"
+      >
         <div className="rd-empty-icon">
           {listTab === 'favorites' ? <Star size={22} /> : <Monitor size={22} />}
         </div>
-        <p className="m-0 text-sm text-[var(--ink-soft)] max-w-[300px] leading-relaxed">
+        <p
+          className="m-0 text-sm text-[var(--ink-soft)] max-w-[300px] leading-relaxed"
+          data-testid="device-list-empty"
+        >
           {searchQuery.trim()
             ? t(locale, 'noMatchingDevices')
             : listTab === 'favorites'

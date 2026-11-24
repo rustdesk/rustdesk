@@ -601,15 +601,39 @@ export function encodeMessage(obj: Record<string, unknown>): Buffer {
   return Buffer.from(MessageProto.encode(msg).finish());
 }
 
+function wrapProtoDecodeError(err: unknown, buf: Uint8Array, kind: 'host' | 'id-server'): Error {
+  const head = Buffer.from(buf.subarray(0, Math.min(buf.length, 32))).toString('ascii');
+  if (/(?:HTTP\/\d\.\d|<!DOCTYPE|<html|Bad Request|Not Found)/i.test(head)) {
+    return new Error(
+      kind === 'id-server'
+        ? 'Not a RustDesk ID server: received an HTTP response instead of RustDesk protocol data.'
+        : 'Not a RustDesk server: received an HTTP response instead of RustDesk protocol data.',
+    );
+  }
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  if (/invalid wire type|index out of range|illegal tag|unexpected end/i.test(msg)) {
+    return new Error(
+      kind === 'id-server'
+        ? 'Not a RustDesk ID server: received invalid protocol data.'
+        : 'Not a RustDesk server: received invalid protocol data.',
+    );
+  }
+  return err instanceof Error ? err : new Error(msg);
+}
+
 export function decodeMessage(buf: Uint8Array): Record<string, any> {
-  const decoded = MessageProto.decode(buf);
-  return MessageProto.toObject(decoded, {
-    bytes: Buffer,
-    longs: String,
-    enums: Number,
-    defaults: false,
-    oneofs: true,
-  });
+  try {
+    const decoded = MessageProto.decode(buf);
+    return MessageProto.toObject(decoded, {
+      bytes: Buffer,
+      longs: String,
+      enums: Number,
+      defaults: false,
+      oneofs: true,
+    });
+  } catch (err) {
+    throw wrapProtoDecodeError(err, buf, 'host');
+  }
 }
 
 export function encodeRendezvous(obj: Record<string, unknown>): Buffer {
@@ -618,14 +642,18 @@ export function encodeRendezvous(obj: Record<string, unknown>): Buffer {
 }
 
 export function decodeRendezvous(buf: Uint8Array): Record<string, any> {
-  const decoded = RendezvousMessageProto.decode(buf);
-  return RendezvousMessageProto.toObject(decoded, {
-    bytes: Buffer,
-    longs: String,
-    enums: Number,
-    defaults: false,
-    oneofs: true,
-  });
+  try {
+    const decoded = RendezvousMessageProto.decode(buf);
+    return RendezvousMessageProto.toObject(decoded, {
+      bytes: Buffer,
+      longs: String,
+      enums: Number,
+      defaults: false,
+      oneofs: true,
+    });
+  } catch (err) {
+    throw wrapProtoDecodeError(err, buf, 'id-server');
+  }
 }
 
 export function decodeIdPk(buf: Uint8Array): { id: string; pk: Uint8Array; kx_version: number } {

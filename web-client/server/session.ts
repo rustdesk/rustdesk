@@ -206,7 +206,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
 
         // 1. TestDelay echo + RTT reporting
         if (msg.test_delay && !msg.test_delay.from_client) {
-          await conn.stream.sendRaw(encodeMessage({ test_delay: msg.test_delay }));
+          void conn.stream.sendRaw(encodeMessage({ test_delay: msg.test_delay })).catch(() => {});
           const lastDelay = Number(msg.test_delay.last_delay ?? 0);
           if (lastDelay > 0) {
             sendJson({ type: 'rtt', ms: lastDelay });
@@ -319,8 +319,10 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
               });
               sendBinary(packet);
             }
-            // RustDesk 1.5 QoS ACK once per message containing video frames
-            await conn.stream.sendRaw(encodeMessage(buildVideoReceivedMessage()));
+            // RustDesk 1.5 QoS ACK once per message containing video frames (non-blocking)
+            void conn.stream
+              .sendRaw(encodeMessage(buildVideoReceivedMessage()))
+              .catch(() => {});
           }
         }
       }
@@ -408,6 +410,8 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                   relayServer: parsed.relayServer ?? '',
                   key: parsed.key ?? '',
                   forceRelay: Boolean(parsed.forceRelay),
+                  quality: parsed.quality,
+                  fps: parsed.fps,
                 },
                 codecs,
               )
@@ -416,6 +420,8 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                   host: parsed.host ?? '',
                   port: Number(parsed.port ?? 0),
                   password: parsed.password ?? '',
+                  quality: parsed.quality,
+                  fps: parsed.fps,
                 },
                 codecs,
               );

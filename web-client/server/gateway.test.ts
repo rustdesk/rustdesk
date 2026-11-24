@@ -661,4 +661,77 @@ test('open-source hbbs compatibility: connects when hbbs sends no KeyExchange an
   }
 });
 
+test('detectNonRustDeskProtocol identifies HTTP, HTML, TLS, and SSH banners while ignoring binary frames', async () => {
+  const { detectNonRustDeskProtocol } = await import('./bytesCodec.ts');
+  assert.equal(detectNonRustDeskProtocol(Buffer.from('HTTP/1.1 400 Bad Request\r\n\r\n')), 'http');
+  assert.equal(detectNonRustDeskProtocol(Buffer.from('<!DOCTYPE html><html>')), 'http');
+  assert.equal(detectNonRustDeskProtocol(Buffer.from('SSH-2.0-OpenSSH_9.6\r\n')), 'ssh');
+  assert.equal(detectNonRustDeskProtocol(Buffer.from([0x16, 0x03, 0x03, 0x00, 0x20])), 'tls');
+  assert.equal(detectNonRustDeskProtocol(encodeBytesFrame(encodeMessage({ hash: { salt: 'a', challenge: 'b' } }))), null);
+});
+
+test('decodeMessage and decodeRendezvous wrap protobuf wire errors into clear non-RustDesk diagnostics', () => {
+  assert.throws(
+    () => decodeRendezvous(Buffer.from('TTP/1.1 400 Bad Re')),
+    /Not a RustDesk ID server/i,
+  );
+  assert.throws(
+    () => decodeMessage(Buffer.from('TTP/1.1 400 Bad Re')),
+    /Not a RustDesk/i,
+  );
+  assert.match(
+    humanizeError(new Error('invalid wire type 4 at offset 1')),
+    /Not a RustDesk server/i,
+  );
+  assert.match(
+    humanizeError(new Error('Not a RustDesk server: received an HTTP response')),
+    /HTTP\/HTTPS response/i,
+  );
+});
+
+test('connectViaId against an HTTP server fails cleanly with Not a RustDesk server instead of invalid wire type', async () => {
+  const httpLikeServer = net.createServer((socket) => {
+    socket.once('data', () => {
+      socket.end('HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nBad Request');
+    });
+  });
+
+  await new Promise<void>((resolve) => httpLikeServer.listen(0, '127.0.0.1', resolve));
+  const port = (httpLikeServer.address() as net.AddressInfo).port;
+
+  try {
+    await assert.rejects(
+      () =>
+        connectViaId(
+          {
+            peerId: '123456789',
+            password: 'secret',
+            idServer: `127.0.0.1:${port}`,
+            relayServer: '',
+            key: '',
+            forceRelay: false,
+          },
+          selectCodecs(undefined),
+        ),
+      (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        assert.match(msg, /Not a RustDesk/i);
+        assert.match(msg, /HTTP/i);
+        assert.doesNotMatch(msg, /invalid wire type/i);
+        return true;
+      },
+    );
+  } finally {
+    httpLikeServer.close();
+  }
+});
+
+test('buildLoginOptions forwards custom quality and fps preferences when provided', () => {
+  const caps = selectCodecs(undefined);
+  const opts = buildLoginOptions(caps, 'best', 60) as any;
+  assert.equal(opts.custom_fps, 60);
+  assert.equal(opts.image_quality, 4); // ImageQualityValues.Best
+});
+
+
 

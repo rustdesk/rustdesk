@@ -100,3 +100,28 @@ test('falls back cleanly for empty or unknown error messages', () => {
   assert.equal(custom.kind, 'generic');
   assert.equal(custom.message, 'Custom host policy rejected session');
 });
+
+test('classifies non-RustDesk HTTP and protobuf wire-type errors cleanly in zh and en', () => {
+  const httpZh = formatConnectionError(
+    'zh',
+    'Not a RustDesk server: received an HTTP response instead of RustDesk protocol data.',
+  );
+  assert.equal(httpZh.kind, 'network');
+  assert.equal(httpZh.title, '不是 RustDesk 服务器');
+  assert.match(httpZh.message, /HTTP/);
+  assert.doesNotMatch(httpZh.message, /wire type/i);
+
+  const wireZh = formatConnectionError('zh', 'invalid wire type 4 at offset 1');
+  assert.equal(wireZh.kind, 'network');
+  assert.equal(wireZh.title, '不是 RustDesk 服务器');
+  assert.match(wireZh.message, /ID 服务器/);
+
+  const httpEn = formatConnectionError(
+    'en',
+    'Not a RustDesk server: received an HTTP response instead of RustDesk protocol data.',
+  );
+  assert.equal(httpEn.kind, 'network');
+  assert.equal(httpEn.title, 'Not a RustDesk Server');
+  assert.match(httpEn.message, /HTTP/);
+});
+

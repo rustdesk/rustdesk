@@ -332,13 +332,17 @@ export function SessionMenu({
                 <button
                   type="button"
                   className={`rd-btn${viewMode === 'fit' ? ' primary' : ''}`}
+                  data-testid="view-fit"
+                  aria-pressed={viewMode === 'fit'}
                   onClick={onFit}
                 >
                   {t(locale, 'fit')}
                 </button>
                 <button
                   type="button"
-                  className={`rd-btn${viewMode === 'original' ? ' primary' : ''}`}
+                  className={`rd-btn${viewMode === 'original' && zoomPercent === 100 ? ' primary' : ''}`}
+                  data-testid="view-original"
+                  aria-pressed={viewMode === 'original' && zoomPercent === 100}
                   onClick={onOriginal}
                 >
                   100%

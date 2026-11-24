@@ -97,6 +97,24 @@ export function formatConnectionError(locale: Locale, rawMessage: string): Forma
     };
   }
   if (
+    lower.includes('not a rustdesk') ||
+    lower.includes('http response') ||
+    lower.includes('http/https') ||
+    lower.includes('tls/https') ||
+    lower.includes('ssh service') ||
+    lower.includes('invalid wire type') ||
+    lower.includes('index out of range') ||
+    lower.includes('frame overflow') ||
+    lower.includes('invalid protocol')
+  ) {
+    const isHttp = lower.includes('http') || lower.includes('tls');
+    return {
+      kind: 'network',
+      title: t(locale, 'errTitleNotRustDesk'),
+      message: t(locale, isHttp ? 'errMsgNotRustDeskHttp' : 'errMsgNotRustDeskProto'),
+    };
+  }
+  if (
     lower.includes('signature') ||
     lower.includes('public key') ||
     lower.includes('server key') ||

@@ -40,6 +40,7 @@ import {
   type DiagnosticsSummary,
 } from './lib/diagnostics';
 import {
+  accumulateWheelTicks,
   consumeThreeFingerScroll,
   fingerDown,
   fingerUp,
@@ -70,10 +71,12 @@ import { isModifier, mapPhysicalKeyDown, mapPhysicalKeyUp } from './lib/keys';
 import {
   clampPan,
   computeNextScaleState,
+  computePinchStep,
   computeViewTransform,
   fitScale,
   mapFromRemote,
   mapToRemote,
+  mapToRemoteClamped,
   type ViewMode,
   type ViewTransform,
 } from './lib/mapping';
@@ -85,6 +88,12 @@ import {
   type QualityLevel,
   type ServerMessage,
 } from './lib/protocol';
+import {
+  computeWindowRates,
+  createFrameWindow,
+  recordFrameSample,
+  type FrameWindow,
+} from './lib/stats';
 import {
   loadSavedTheme,
   persistTheme,
@@ -366,13 +375,16 @@ export default function App() {
   const chromeRef = useRef({ menu: false, dialog: true });
   chromeRef.current = { menu: menuOpen, dialog: connectDialog || phase !== 'live' };
 
-  // Stats accumulation ref (settles every 500ms)
-  const statAccRef = useRef({ lastTs: 0, frames: 0, bytes: 0, decoded: 0 });
+  // Sliding-window stats refs
+  const frameWindowRef = useRef<FrameWindow>(createFrameWindow());
+  const statAccRef = useRef({ decoded: 0, lastDelayMs: 0, lastCodec: '—' });
 
   // Mouse & touch gesture refs
   const cursorRef = useRef({ x: 640, y: 360 });
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchRef = useRef<PinchState | null>(null);
+  const touchFallbackPinchRef = useRef<{ midX: number; midY: number; dist: number } | null>(null);
+  const wheelAccumRef = useRef({ x: 0, y: 0 });
   const threeFingerYRef = useRef<number | null>(null);
   const threeFingerAccumRef = useRef(0);
   const touchTapRef = useRef<{
@@ -426,8 +438,7 @@ export default function App() {
   const remoteInput = phase === 'live' && !menuOpen && !connectDialog;
   const remoteInputRef = useRef(remoteInput);
   remoteInputRef.current = remoteInput;
-  const fit = fitScale(box.w, box.h, remoteW, remoteH);
-  const zoomPercent = fit > 0 ? Math.round((view.scale / fit) * 100) : 100;
+  const zoomPercent = Math.round(view.scale * 100);
 
   // Send JSON helper
   const send = useCallback((msg: ClientMessage) => {
@@ -435,6 +446,14 @@ export default function App() {
     if (sock && sock.readyState === WebSocket.OPEN) {
       sock.send(JSON.stringify(msg));
     }
+  }, []);
+
+  const cancelQueuedMove = useCallback(() => {
+    if (moveRafRef.current !== null) {
+      cancelAnimationFrame(moveRafRef.current);
+      moveRafRef.current = null;
+    }
+    queuedMoveRef.current = null;
   }, []);
 
   const flushMove = useCallback(() => {
@@ -737,41 +756,38 @@ export default function App() {
   const noteFrame = useCallback(
     (codecName: string, w: number, h: number, byteLen: number, delayMs: number) => {
       const now = performance.now();
-      const acc = statAccRef.current;
-      acc.frames += 1;
-      acc.bytes += byteLen;
-      if (acc.lastTs === 0) {
-        acc.lastTs = now;
-        setStats((prev) => ({
-          ...prev,
-          codec: codecName,
-          width: w > 0 ? w : prev.width,
-          height: h > 0 ? h : prev.height,
-          decoded: acc.decoded,
-        }));
-        return;
-      }
-      const elapsed = now - acc.lastTs;
-      if (elapsed >= 500) {
-        const fps = Math.round((acc.frames * 1000) / elapsed);
-        const bitrate = Math.round((acc.bytes * 8 * 1000) / elapsed);
-        acc.frames = 0;
-        acc.bytes = 0;
-        acc.lastTs = now;
-        setStats((prev) => ({
-          ...prev,
-          codec: codecName,
-          width: w > 0 ? w : prev.width,
-          height: h > 0 ? h : prev.height,
-          fps,
-          bitrate,
-          delayMs: Math.max(0, Math.round(delayMs)),
-          decoded: acc.decoded,
-        }));
-      }
+      frameWindowRef.current = recordFrameSample(frameWindowRef.current, now, byteLen);
+      statAccRef.current.lastCodec = codecName;
+      statAccRef.current.lastDelayMs = Math.max(0, Math.round(delayMs));
+      const rates = computeWindowRates(frameWindowRef.current, now);
+      setStats((prev) => ({
+        ...prev,
+        codec: codecName,
+        width: w > 0 ? w : prev.width,
+        height: h > 0 ? h : prev.height,
+        fps: rates.fps,
+        bitrate: rates.bitrate,
+        delayMs: statAccRef.current.lastDelayMs,
+        decoded: statAccRef.current.decoded,
+      }));
     },
     [],
   );
+
+  // Smoothly decay sliding-window FPS & bitrate when remote screen goes idle
+  useEffect(() => {
+    if (phase !== 'live') return;
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      const rates = computeWindowRates(frameWindowRef.current, now);
+      setStats((prev) =>
+        prev.fps === rates.fps && prev.bitrate === rates.bitrate
+          ? prev
+          : { ...prev, fps: rates.fps, bitrate: rates.bitrate },
+      );
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [phase]);
 
   const connectSession = useCallback(
     async (overrideMode?: ConnectionMode) => {
@@ -821,7 +837,17 @@ export default function App() {
         wsRef.current = null;
       }
       decoderRef.current?.close();
-      statAccRef.current = { lastTs: 0, frames: 0, bytes: 0, decoded: 0 };
+      frameWindowRef.current = createFrameWindow();
+      statAccRef.current = { decoded: 0, lastDelayMs: 0, lastCodec: '—' };
+
+      const initialQuality = resolveQualityLevel(
+        displayPrefsRef.current.qualityPreset,
+        displayPrefsRef.current.customBitrate,
+      );
+      const initialFps = resolveTargetFps(
+        displayPrefsRef.current.qualityPreset,
+        displayPrefsRef.current.customFps,
+      );
 
       setPeer(null);
       setStats(EMPTY_STATS);
@@ -854,6 +880,8 @@ export default function App() {
               password,
               token: gatewayToken,
               codecs: support,
+              quality: initialQuality,
+              fps: initialFps,
             }),
           );
         } else {
@@ -866,6 +894,8 @@ export default function App() {
               password,
               token: gatewayToken,
               codecs: support,
+              quality: initialQuality,
+              fps: initialFps,
             }),
           );
         }
@@ -1141,7 +1171,7 @@ export default function App() {
     };
   }, [clearLongPress, finishPendingClick]);
 
-  // Scale helper
+  // Scale helper (synchronously updates viewRef so rapid 120Hz pinch/wheel events never read stale state)
   const setScaleAround = useCallback(
     (nextScale: number, anchorX: number, anchorY: number) => {
       const next = computeNextScaleState(
@@ -1154,12 +1184,53 @@ export default function App() {
         anchorX,
         anchorY,
       );
+      viewRef.current = {
+        scale: next.scale,
+        panX: next.pan.panX,
+        panY: next.pan.panY,
+      };
       setViewMode(next.viewMode);
       setZoom(next.zoom);
       setPan(next.pan);
     },
     [box.w, box.h, remoteW, remoteH],
   );
+
+  const applyPinchStep = useCallback(
+    (
+      prevMidX: number,
+      prevMidY: number,
+      prevDist: number,
+      nextMidX: number,
+      nextMidY: number,
+      nextDist: number,
+    ) => {
+      const next = computePinchStep(
+        box.w,
+        box.h,
+        remoteW,
+        remoteH,
+        viewRef.current,
+        prevMidX,
+        prevMidY,
+        prevDist,
+        nextMidX,
+        nextMidY,
+        nextDist,
+      );
+      viewRef.current = {
+        scale: next.scale,
+        panX: next.pan.panX,
+        panY: next.pan.panY,
+      };
+      setViewMode(next.viewMode);
+      setZoom(next.zoom);
+      setPan(next.pan);
+    },
+    [box.w, box.h, remoteW, remoteH],
+  );
+  const applyPinchStepRef = useRef(applyPinchStep);
+  applyPinchStepRef.current = applyPinchStep;
 
   const panBy = useCallback(
     (dx: number, dy: number) => {
@@ -1174,6 +1245,7 @@ export default function App() {
         cur.panX + dx,
         cur.panY + dy,
       );
+      viewRef.current = { ...cur, panX: nextPan.panX, panY: nextPan.panY };
       setPan(nextPan);
       if (cur.scale > curFit + 0.01 && viewMode === 'fit') {
         setViewMode('custom');
@@ -1361,6 +1433,12 @@ export default function App() {
     [remoteW, remoteH],
   );
 
+  const remoteFromLocalClamped = useCallback(
+    (localX: number, localY: number) =>
+      mapToRemoteClamped(localX, localY, remoteW, remoteH, viewRef.current),
+    [remoteW, remoteH],
+  );
+
   const releaseStuckDrag = useCallback(() => {
     if (!touchTapRef.current.dragging) return;
     touchTapRef.current.dragging = false;
@@ -1453,19 +1531,29 @@ export default function App() {
         lastX: local.x,
         lastY: local.y,
       };
+      // Always cancel stale rAF moves and sync cursor position BEFORE mouse down so window drags hit the exact titlebar
+      cancelQueuedMove();
+      send({ type: 'mouse', action: 'move', x: pos.x, y: pos.y });
       send({ type: 'mouse', action: 'down', button: btn, x: pos.x, y: pos.y });
       return;
     }
 
     // Touch interaction
     e.preventDefault();
-    lastTouchAtRef.current = Date.now();
+    const nowTouchMs = Date.now();
+    const prevTouchMs = lastTouchAtRef.current;
+    lastTouchAtRef.current = nowTouchMs;
     if (!touchMode) {
       setVirtualCursorVisible(true);
     }
 
-    // Clean up stale pointers if a new primary pointer arrives unexpectedly
-    if (e.isPrimary && pointersRef.current.size > 0) {
+    // Clean up orphaned stale pointers ONLY after an idle gap so synthetic multi-touch pointers with isPrimary=true never wipe finger 1
+    if (
+      e.isPrimary &&
+      pointersRef.current.size > 0 &&
+      !pointersRef.current.has(e.pointerId) &&
+      nowTouchMs - prevTouchMs > 1500
+    ) {
       pointersRef.current.clear();
       pinchRef.current = null;
       threeFingerYRef.current = null;
@@ -1572,9 +1660,19 @@ export default function App() {
         return;
       }
 
-      const pos = remoteFromLocal(local.x, local.y);
+      if (displayPrefsRef.current.viewOnly) return;
+
+      const isRemoteDrag = Boolean(drag && drag.pointerId === e.pointerId && drag.mode === 'remote');
+      const pos = isRemoteDrag
+        ? remoteFromLocalClamped(local.x, local.y)
+        : remoteFromLocal(local.x, local.y);
       if (pos) {
-        queueMove(pos);
+        if (isRemoteDrag) {
+          cancelQueuedMove();
+          send({ type: 'mouse', action: 'move', x: pos.x, y: pos.y });
+        } else {
+          queueMove(pos);
+        }
       }
       return;
     }
@@ -1603,21 +1701,21 @@ export default function App() {
       return;
     }
 
-    // Two-finger pinch / pan
+    // Smooth two-finger pinch zoom + pan (zero deadzone loss on 60/120Hz touchscreens)
     if (pointersRef.current.size === 2 && pinchRef.current) {
       const pts = Array.from(pointersRef.current.values());
       const midX = (pts[0].x + pts[1].x) / 2;
       const midY = (pts[0].y + pts[1].y) / 2;
       const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-      const scaleFactor = pinchRef.current.prevDist > 0 ? dist / pinchRef.current.prevDist : 1;
 
-      if (Math.abs(scaleFactor - 1) > 0.02) {
-        setScaleAround(viewRef.current.scale * scaleFactor, midX, midY);
-      } else {
-        const dx = midX - pinchRef.current.prevX;
-        const dy = midY - pinchRef.current.prevY;
-        panBy(dx, dy);
-      }
+      applyPinchStep(
+        pinchRef.current.prevX,
+        pinchRef.current.prevY,
+        pinchRef.current.prevDist,
+        midX,
+        midY,
+        dist,
+      );
 
       pinchRef.current = {
         ...pinchRef.current,
@@ -1691,9 +1789,10 @@ export default function App() {
       if (drag && drag.pointerId === e.pointerId) {
         desktopDragRef.current = null;
         if (drag.mode === 'remote' && remoteInput) {
-          flushMove();
-          const pos = remoteFromLocal(local.x, local.y);
+          cancelQueuedMove();
+          const pos = remoteFromLocalClamped(local.x, local.y);
           if (pos) {
+            send({ type: 'mouse', action: 'move', x: pos.x, y: pos.y });
             send({ type: 'mouse', action: 'up', button: drag.button, x: pos.x, y: pos.y });
           }
         }
@@ -1792,10 +1891,24 @@ export default function App() {
 
     if (displayPrefsRef.current.viewOnly) return;
 
-    const dx = Math.sign(e.deltaX);
-    const dy = applyWheelDirection(-Math.sign(e.deltaY), displayPrefsRef.current.reverseMouseWheel);
-    if (dx !== 0 || dy !== 0) {
-      send({ type: 'mouse', action: 'wheel', x: dx, y: dy });
+    const pos = remoteFromLocal(local.x, local.y);
+    if (pos) {
+      cancelQueuedMove();
+      send({ type: 'mouse', action: 'move', x: pos.x, y: pos.y });
+    }
+
+    const { tx, ty, nextAccumX, nextAccumY } = accumulateWheelTicks(
+      e.deltaX,
+      e.deltaY,
+      e.deltaMode,
+      wheelAccumRef.current.x,
+      wheelAccumRef.current.y,
+      displayPrefsRef.current.reverseMouseWheel,
+    );
+    wheelAccumRef.current = { x: nextAccumX, y: nextAccumY };
+
+    if (tx !== 0 || ty !== 0) {
+      send({ type: 'mouse', action: 'wheel', x: tx, y: ty });
     }
   };
 
@@ -1822,20 +1935,62 @@ export default function App() {
       }
     };
 
+    const touchPairMetrics = (touches: TouchList) => {
+      const rect = el.getBoundingClientRect();
+      const t0 = touches[0];
+      const t1 = touches[1];
+      const x0 = t0.clientX - rect.left;
+      const y0 = t0.clientY - rect.top;
+      const x1 = t1.clientX - rect.left;
+      const y1 = t1.clientY - rect.top;
+      return {
+        midX: (x0 + x1) / 2,
+        midY: (y0 + y1) / 2,
+        dist: Math.hypot(x1 - x0, y1 - y0),
+      };
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
+        // Fallback two-finger pinch tracking for TouchEvent-only browsers or synthetic touch tests
+        if (e.touches.length === 2 && pointersRef.current.size < 2) {
+          touchFallbackPinchRef.current = touchPairMetrics(e.touches);
+        } else {
+          touchFallbackPinchRef.current = null;
+        }
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
       if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
+        if (e.touches.length === 2 && pointersRef.current.size < 2) {
+          const cur = touchPairMetrics(e.touches);
+          const prev = touchFallbackPinchRef.current;
+          if (prev) {
+            applyPinchStepRef.current(
+              prev.midX,
+              prev.midY,
+              prev.dist,
+              cur.midX,
+              cur.midY,
+              cur.dist,
+            );
+          }
+          touchFallbackPinchRef.current = cur;
+        }
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        touchFallbackPinchRef.current = null;
       }
     };
 
     const onWheelNative = (e: WheelEvent) => {
-      if (remoteInputRef.current && isStageSurface(e.target)) {
+      if (remoteInputRef.current && !isInsideScrollableChrome(e.target)) {
         wheelHandlerRef.current(e);
       }
     };
@@ -1867,6 +2022,8 @@ export default function App() {
     el.addEventListener('gestureend', onGesture, { passive: false });
     el.addEventListener('touchstart', onTouchStart, { passive: false });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
     el.addEventListener('wheel', onWheelNative, { passive: false });
     window.addEventListener('wheel', onWindowWheel, { passive: false, capture: true });
     window.addEventListener('mousedown', onWindowAuxOrNavMouse, true);
@@ -1880,6 +2037,8 @@ export default function App() {
       el.removeEventListener('gestureend', onGesture);
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
       el.removeEventListener('wheel', onWheelNative);
       window.removeEventListener('wheel', onWindowWheel, { capture: true });
       window.removeEventListener('mousedown', onWindowAuxOrNavMouse, true);

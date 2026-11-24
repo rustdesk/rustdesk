@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {
   clampPan,
   computeNextScaleState,
+  computePinchStep,
   computeViewTransform,
   fitScale,
   mapFromRemote,
   mapToRemote,
+  mapToRemoteClamped,
   zoomAround,
 } from './mapping';
 
@@ -67,3 +69,46 @@ test('computeNextScaleState and computeViewTransform share consistent scale boun
   assert.equal(zoomedOut.viewMode, 'original');
   assert.equal(rendered.scale, 1);
 });
+
+test('mapToRemoteClamped clamps edge coordinates instead of dropping drag/pointerup events', () => {
+  const t = { scale: 0.5, panX: 100, panY: 50 };
+  assert.deepEqual(mapToRemoteClamped(0, 0, 1280, 720, t), { x: 0, y: 0 });
+  assert.deepEqual(mapToRemoteClamped(2000, 2000, 1280, 720, t), { x: 1279, y: 719 });
+});
+
+test('computePinchStep accumulates small 60/120Hz pinch increments smoothly without deadzone loss', () => {
+  const boxW = 390;
+  const boxH = 740;
+  const remoteW = 1920;
+  const remoteH = 1080;
+  let cur = computeViewTransform(boxW, boxH, remoteW, remoteH, 'fit', 1, { panX: 0, panY: 0 });
+  const startScale = cur.scale;
+
+  // Simulate 50 smooth frames where finger distance grows 1.4% per frame (below old 2% deadzone!)
+  let dist = 100;
+  for (let i = 0; i < 50; i++) {
+    const nextDist = dist * 1.014;
+    const step = computePinchStep(
+      boxW,
+      boxH,
+      remoteW,
+      remoteH,
+      cur,
+      195,
+      370,
+      dist,
+      195,
+      370,
+      nextDist,
+    );
+    cur = { scale: step.scale, panX: step.pan.panX, panY: step.pan.panY };
+    dist = nextDist;
+  }
+
+  // Expected ~2x scale growth (1.014^50 ≈ 2.004)
+  assert.ok(
+    cur.scale > startScale * 1.9 && cur.scale < startScale * 2.1,
+    `expected scale ~${(startScale * 2).toFixed(3)}, got ${cur.scale.toFixed(3)}`,
+  );
+});
+

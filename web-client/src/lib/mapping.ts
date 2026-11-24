@@ -79,6 +79,22 @@ export function mapToRemote(
   };
 }
 
+export function mapToRemoteClamped(
+  localX: number,
+  localY: number,
+  remoteW: number,
+  remoteH: number,
+  transform: ViewTransform,
+): Point | null {
+  if (remoteW <= 0 || remoteH <= 0 || transform.scale <= 0) return null;
+  const x = (localX - transform.panX) / transform.scale;
+  const y = (localY - transform.panY) / transform.scale;
+  return {
+    x: Math.min(remoteW - 1, Math.max(0, Math.floor(x))),
+    y: Math.min(remoteH - 1, Math.max(0, Math.floor(y))),
+  };
+}
+
 export function mapFromRemote(
   remoteX: number,
   remoteY: number,
@@ -134,7 +150,7 @@ export function computeNextScaleState(
   nextScale: number,
   anchorX: number,
   anchorY: number,
-): { viewMode: ViewMode; zoom: number; pan: { panX: number; panY: number } } {
+): { viewMode: ViewMode; zoom: number; pan: { panX: number; panY: number }; scale: number } {
   const fit = fitScale(boxW, boxH, remoteW, remoteH);
   const minScale = Math.min(fit, 1);
   const maxScale = Math.max(fit * 4, 1);
@@ -155,5 +171,56 @@ export function computeNextScaleState(
         : 'custom';
   const zoom = fit === 0 ? 1 : clampedScale / fit;
   const pan = clampPan(boxW, boxH, remoteW, remoteH, clampedScale, shifted.panX, shifted.panY);
-  return { viewMode, zoom, pan };
+  return { viewMode, zoom, pan, scale: clampedScale };
+}
+
+/**
+ * Computes a single smooth pinch-zoom + two-finger pan step without destructive deadzones,
+ * keeping the remote point under the finger midpoint anchored across 60/120Hz touch frames.
+ */
+export function computePinchStep(
+  boxW: number,
+  boxH: number,
+  remoteW: number,
+  remoteH: number,
+  current: ViewTransform,
+  prevMidX: number,
+  prevMidY: number,
+  prevDist: number,
+  nextMidX: number,
+  nextMidY: number,
+  nextDist: number,
+): { viewMode: ViewMode; zoom: number; pan: { panX: number; panY: number }; scale: number } {
+  const factor = prevDist > 4 && nextDist > 4 ? nextDist / prevDist : 1;
+  const dx = nextMidX - prevMidX;
+  const dy = nextMidY - prevMidY;
+  const fit = fitScale(boxW, boxH, remoteW, remoteH);
+  const minScale = Math.min(fit, 1);
+  const maxScale = Math.max(fit * 4, 1);
+  const nextScale = Math.min(maxScale, Math.max(minScale, current.scale * factor));
+  const shifted = zoomAround(
+    prevMidX,
+    prevMidY,
+    current.scale,
+    nextScale,
+    current.panX,
+    current.panY,
+  );
+  const pan = clampPan(
+    boxW,
+    boxH,
+    remoteW,
+    remoteH,
+    nextScale,
+    shifted.panX + dx,
+    shifted.panY + dy,
+  );
+  const viewMode: ViewMode =
+    Math.abs(nextScale - fit) < 0.01
+      ? 'fit'
+      : Math.abs(nextScale - 1) < 0.01
+        ? 'original'
+        : 'custom';
+  const zoom = fit === 0 ? 1 : nextScale / fit;
+  return { viewMode, zoom, pan, scale: nextScale };
 }

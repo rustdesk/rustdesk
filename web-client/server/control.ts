@@ -39,6 +39,8 @@ export type ClientMessage =
       forceRelay?: boolean;
       token?: string;
       codecs?: Partial<CodecCaps>;
+      quality?: string;
+      fps?: number;
     }
   | {
       type: 'mouse';
@@ -173,7 +175,20 @@ export function controlKeyEnum(name: string): number | undefined {
   return CONTROL_KEY_MAP[name];
 }
 
-export function buildLoginOptions(codecs: CodecCaps): Record<string, unknown> {
+export function buildLoginOptions(
+  codecs: CodecCaps,
+  quality?: string,
+  fps?: number,
+): Record<string, unknown> {
+  let image_quality = ImageQualityValues.Balanced;
+  if (quality === 'low') image_quality = ImageQualityValues.Low;
+  else if (quality === 'best') image_quality = ImageQualityValues.Best;
+
+  const customFps =
+    typeof fps === 'number' && Number.isFinite(fps) && fps >= 5 && fps <= 120
+      ? Math.round(fps)
+      : 30;
+
   return {
     supported_decoding: {
       ability_vp8: codecs.vp8 ? 1 : 0,
@@ -184,8 +199,8 @@ export function buildLoginOptions(codecs: CodecCaps): Record<string, unknown> {
       prefer: PreferCodecValues.Auto,
       prefer_chroma: ChromaValues.I420,
     },
-    custom_fps: 30,
-    image_quality: ImageQualityValues.Balanced,
+    custom_fps: customFps,
+    image_quality,
     disable_audio: BoolOptionValues.Yes,
   };
 }
@@ -356,6 +371,20 @@ export function humanizeError(err: unknown): string {
   }
   if (lower.includes('timed out') || lower.includes('timeout') || lower.includes('etimedout')) {
     return 'The host did not answer in time. It may be offline, or a firewall is blocking the port.';
+  }
+  if (
+    lower.includes('not a rustdesk') ||
+    lower.includes('received an http response') ||
+    lower.includes('received a tls/https response') ||
+    lower.includes('ssh service') ||
+    lower.includes('invalid wire type') ||
+    lower.includes('index out of range') ||
+    lower.includes('frame overflow')
+  ) {
+    if (lower.includes('http response') || lower.includes('tls/https')) {
+      return 'Not a RustDesk ID server: the target returned an HTTP/HTTPS response. Check the server address and port (default 21116 / direct 21118).';
+    }
+    return 'Not a RustDesk server: the target returned invalid protocol data. Check the server address and port (default 21116 / direct 21118).';
   }
   if (lower.includes('gateway access token')) {
     return 'The gateway access token is missing or incorrect.';

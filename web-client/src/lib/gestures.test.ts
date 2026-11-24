@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  accumulateWheelTicks,
   consumeThreeFingerScroll,
   fingerDown,
   fingerUp,
@@ -53,6 +54,31 @@ test('consumeThreeFingerScroll emits discrete wheel ticks and preserves remainde
   assert.deepEqual(consumeThreeFingerScroll(12), { ticks: 0, remainder: 12 });
   assert.deepEqual(consumeThreeFingerScroll(52), { ticks: 2, remainder: 4 });
   assert.deepEqual(consumeThreeFingerScroll(-30), { ticks: -1, remainder: -6 });
+});
+
+test('accumulateWheelTicks translates desktop mouse wheel detents, trackpads, and line/page modes cleanly', () => {
+  // Standard desktop mouse wheel down (deltaY = +120px) => -3 RustDesk ticks (scroll down)
+  const down = accumulateWheelTicks(0, 120, 0, 0, 0, false);
+  assert.equal(down.ty, -3);
+  assert.equal(down.tx, 0);
+
+  // Reverse vertical (natural scroll) flips sign
+  const downNatural = accumulateWheelTicks(0, 120, 0, 0, 0, true);
+  assert.equal(downNatural.ty, 3);
+
+  // DOM_DELTA_LINE (Firefox) preserves line count
+  const lineUp = accumulateWheelTicks(0, -3, 1, 0, 0, false);
+  assert.equal(lineUp.ty, 3);
+
+  // DOM_DELTA_PAGE clamps to ±6
+  const pageDown = accumulateWheelTicks(0, 1, 2, 0, 0, false);
+  assert.equal(pageDown.ty, -6);
+
+  // Small trackpad events accumulate across multiple frames
+  const p1 = accumulateWheelTicks(0, 10, 0, 0, 0, false);
+  assert.equal(p1.ty, 0);
+  const p2 = accumulateWheelTicks(0, 10, 0, p1.nextAccumX, p1.nextAccumY, false);
+  assert.equal(p2.ty, -1);
 });
 
 test('physical keyboard forwards Space and Ctrl+C chord with modifiers', () => {
@@ -112,4 +138,5 @@ test('buildSoftKeyChord combines latched modifiers with target key or character'
   ]);
   assert.deepEqual(buildSoftKeyChord([], { control: 'Escape' }), [{ control: 'Escape' }]);
 });
+
 

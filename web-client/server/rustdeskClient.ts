@@ -35,6 +35,8 @@ export interface DirectTarget {
   host: string;
   port: number;
   password: string;
+  quality?: string;
+  fps?: number;
 }
 
 export interface IdTarget {
@@ -44,6 +46,8 @@ export interface IdTarget {
   relayServer: string;
   key: string;
   forceRelay: boolean;
+  quality?: string;
+  fps?: number;
 }
 
 export interface ConnectedHost {
@@ -60,6 +64,8 @@ async function loginHost(
   password: string,
   codecs: CodecCaps,
   encrypted: boolean,
+  quality?: string,
+  fps?: number,
 ): Promise<ConnectedHost> {
   const loginReq = {
     login_request: {
@@ -69,7 +75,7 @@ async function loginHost(
       my_name: 'Web Client',
       my_platform: 'Web',
       version: '1.5.3',
-      option: buildLoginOptions(codecs),
+      option: buildLoginOptions(codecs, quality, fps),
     },
   };
 
@@ -133,7 +139,16 @@ export async function connectDirect(
   const stream = await EncryptedFramedStream.connect(dial.host, dial.port, 8_000);
   try {
     const { hash, encrypted } = await readUntilHash(stream, null, '');
-    return await loginHost(stream, hash, username, target.password, codecs, encrypted);
+    return await loginHost(
+      stream,
+      hash,
+      username,
+      target.password,
+      codecs,
+      encrypted,
+      target.quality,
+      target.fps,
+    );
   } catch (err) {
     stream.close();
     throw err;
@@ -335,7 +350,16 @@ export async function connectViaId(
               );
               const { hash, encrypted } = await readUntilHash(peerStream, signPk, peerId);
               idSocket.close();
-              return await loginHost(peerStream, hash, peerId, target.password, codecs, encrypted);
+              return await loginHost(
+                peerStream,
+                hash,
+                peerId,
+                target.password,
+                codecs,
+                encrypted,
+                target.quality,
+                target.fps,
+              );
             } catch {
               if (peerStream) {
                 peerStream.close();
@@ -358,7 +382,16 @@ export async function connectViaId(
         const finalSignPk =
           signPk ?? peerSignKey(target.key, relay.pkBytes, peerId);
         const { hash, encrypted } = await readUntilHash(peerStream, finalSignPk, peerId);
-        return await loginHost(peerStream, hash, peerId, target.password, codecs, encrypted);
+        return await loginHost(
+          peerStream,
+          hash,
+          peerId,
+          target.password,
+          codecs,
+          encrypted,
+          target.quality,
+          target.fps,
+        );
       }
 
       if (msg.relay_response) {
@@ -389,7 +422,16 @@ export async function connectViaId(
         const signPk = peerSignKey(target.key, pkBytes, peerId);
         const { hash, encrypted } = await readUntilHash(peerStream, signPk, peerId);
         idSocket.close();
-        return await loginHost(peerStream, hash, peerId, target.password, codecs, encrypted);
+        return await loginHost(
+          peerStream,
+          hash,
+          peerId,
+          target.password,
+          codecs,
+          encrypted,
+          target.quality,
+          target.fps,
+        );
       }
     }
 

@@ -158,6 +158,37 @@ export class StreamCipher {
 }
 
 /**
+ * Detects common non-RustDesk server banners/responses (HTTP, HTML, TLS, SSH) on the initial TCP bytes
+ * so users receive a clear diagnostic instead of a raw protobuf wire-type error.
+ */
+export function detectNonRustDeskProtocol(chunk: Uint8Array): 'http' | 'tls' | 'ssh' | null {
+  if (!chunk || chunk.length < 4) return null;
+
+  // TLS record header: Handshake (0x16) or Alert (0x15) with TLS 1.0..1.3 version bytes (0x03 0x01..0x04)
+  if (
+    (chunk[0] === 0x16 || chunk[0] === 0x15) &&
+    chunk[1] === 0x03 &&
+    chunk[2] >= 0x00 &&
+    chunk[2] <= 0x04
+  ) {
+    return 'tls';
+  }
+
+  const head = Buffer.from(chunk.subarray(0, Math.min(chunk.length, 32))).toString('ascii');
+  if (
+    /^(?:HTTP\/\d\.\d|GET |POST |HEAD |PUT |DELETE |OPTIONS |<!DOCTYPE|<html|400 Bad Request|404 Not Found)/i.test(
+      head,
+    )
+  ) {
+    return 'http';
+  }
+  if (/^SSH-\d\.\d/i.test(head)) {
+    return 'ssh';
+  }
+  return null;
+}
+
+/**
  * Framed TCP stream supporting hbb_common BytesCodec and optional NaCl secretbox encryption.
  */
 export class EncryptedFramedStream {
@@ -171,6 +202,7 @@ export class EncryptedFramedStream {
   private closed = false;
   private fatalErr: Error | null = null;
   private cipher: StreamCipher | null = null;
+  private checkedInitialProtocol = false;
 
   constructor(socket: net.Socket) {
     this.socket = socket;
@@ -178,6 +210,37 @@ export class EncryptedFramedStream {
 
     socket.on('data', (chunk: Buffer) => {
       try {
+        if (!this.checkedInitialProtocol && !this.cipher && chunk.length > 0) {
+          this.checkedInitialProtocol = true;
+          const foreign = detectNonRustDeskProtocol(chunk);
+          if (foreign === 'http') {
+            this.fail(
+              new Error(
+                'Not a RustDesk server: received an HTTP response instead of RustDesk protocol data.',
+              ),
+            );
+            this.socket.destroy();
+            return;
+          }
+          if (foreign === 'tls') {
+            this.fail(
+              new Error(
+                'Not a RustDesk server: received a TLS/HTTPS response instead of RustDesk protocol data.',
+              ),
+            );
+            this.socket.destroy();
+            return;
+          }
+          if (foreign === 'ssh') {
+            this.fail(
+              new Error(
+                'Not a RustDesk server: target is an SSH service instead of RustDesk.',
+              ),
+            );
+            this.socket.destroy();
+            return;
+          }
+        }
         const frames = this.decoder.push(chunk);
         for (const frame of frames) {
           const waiter = this.waiters.shift();
