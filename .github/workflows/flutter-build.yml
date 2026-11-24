@@ -288,7 +288,14 @@ jobs:
         # `flutter build` then runs `pub get`, regenerating pubspec.lock for the bumped deps.
         if: ${{ matrix.job.arch == 'aarch64' || inputs.windows-x64-flutter-preview }}
         shell: bash
-        run: bash .github/patches/apply_flutter_3.44_source_patches.sh
+        env:
+          USE_FLUTTER_PREVIEW: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
+        run: |
+          if [[ "$USE_FLUTTER_PREVIEW" == "true" ]]; then
+            bash .github/patches/apply_flutter_3.50_source_patches.sh
+          else
+            bash .github/patches/apply_flutter_3.44_source_patches.sh
+          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
