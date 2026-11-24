@@ -19,6 +19,19 @@ Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitt
 
 Yet another remote desktop solution, written in Rust. Works out of the box with no configuration required. You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/server), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
+## 本分支功能 / Branch features
+
+本分支合并了 Windows 隐私背景和仅远程音频功能，以及两个功能分支中的审查修复。
+
+| 功能 | 说明 |
+| --- | --- |
+| 隐私模式 1 背景 | 在 **设置 → 显示** 中选择纯黑，或按系统布局显示桌面壁纸、固定应用图标和带实时时钟的任务栏；隐藏本机光标，保留远程点击和 `Ctrl+P` 退出。 |
+| 仅远程播放音频 | 在 **设置 → 常规 → 将音频重定向到远程客户端** 中选择“正常”或“仅远程播放”。远程连接期间自动通过 VB-CABLE 传输音频，本机不播放；最后一个连接断开后恢复原输出设备、音量和静音状态。 |
+
+Windows 被控端需要使用本分支构建的 `WindowInjection.dll`；仅远程音频需要预先安装已签名的 VB-CABLE。任务栏为渲染的空闲桌面效果，包含固定图标，不显示正在运行的应用，也不会创建新的 Windows 虚拟桌面。
+
+构建和行为细节：[隐私背景](res/windows/privacy-background.md) · [仅远程音频](docs/windows-remote-only-audio.md)。
+
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
 RustDesk welcomes contribution from everyone. See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for help getting started.
