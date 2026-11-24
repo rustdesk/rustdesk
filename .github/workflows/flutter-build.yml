@@ -404,6 +404,11 @@ jobs:
               Write-Host "Ingore the printer driver error."
           }
 
+      - name: Open a RustDesk TCP forwarding window with the official backend
+        if: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
+        shell: pwsh
+        run: ./examples/flutter_windowing/test_rustdesk_preview.ps1 -Executable ./rustdesk/rustdesk.exe
+
       - name: Run the Rust tests
         # x86_64 only: the tests are the same code on arm64, and that runner is the slow one.
         if: ${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}

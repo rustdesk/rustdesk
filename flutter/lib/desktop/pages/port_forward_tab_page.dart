@@ -33,7 +33,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
     isRDP = params['isRDP'];
     tabController.onSelected = (id) {
       WindowController.fromWindowId(windowId())
-          .setTitle(getWindowNameWithId(id));
+          .setTitle(getWindowNameWithId(id, overrideType: WindowType.PortForward));
     };
     tabController.onRemoved = (_, id) => onRemoveId(id);
     tabController.add(TabInfo(

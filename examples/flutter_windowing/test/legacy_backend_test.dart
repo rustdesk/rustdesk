@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:desktop_multi_window/src/backend.dart';
+import 'package:desktop_multi_window/src/window_controller_impl.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,6 +30,7 @@ void main() {
     });
   });
   tearDown(() {
+    experimentalWindowBackend = null;
     DesktopMultiWindow.setMethodHandler(null);
     messenger.setMockMethodCallHandler(control, null);
     messenger.setMockMethodCallHandler(events, null);
@@ -85,4 +88,64 @@ void main() {
         (data) => reply = const StandardMethodCodec().decodeEnvelope(data!));
     expect(reply, 'pong');
   });
+
+  test('a selected official window coexists with legacy windows and handlers',
+      () async {
+    final backend = _HybridBackend();
+    experimentalWindowBackend = backend;
+    final legacy = await DesktopMultiWindow.createWindow('remote');
+    final official = await DesktopMultiWindow.createWindow('port-forward');
+    expect(legacy.windowId, 7);
+    expect(official.windowId, _HybridBackend.officialId);
+    expect(calls.single.arguments, 'remote');
+    expect(await DesktopMultiWindow.getAllSubWindowIds(),
+        [7, 8, _HybridBackend.officialId]);
+    await WindowController.fromWindowId(7).show();
+    expect(calls.last.arguments, 7);
+    expect(await DesktopMultiWindow.invokeMethod(official.windowId, 'hello'),
+        'official: hello');
+
+    DesktopMultiWindow.setMethodHandler((call, from) async => 'main: $from');
+    backend.currentWindowId = official.windowId;
+    DesktopMultiWindow.setMethodHandler((call, from) async => 'child: $from');
+    expect(await backend.handlers[official.windowId]!(const MethodCall('ping'), 0),
+        'child: 0');
+    Object? reply;
+    await messenger.handlePlatformMessage(
+      events.name,
+      const StandardMethodCodec().encodeMethodCall(const MethodCall('ping', {
+        'fromWindowId': 7,
+        'arguments': null,
+      })),
+      (data) => reply = const StandardMethodCodec().decodeEnvelope(data!),
+    );
+    expect(reply, 'main: 7');
+  });
+}
+
+class _HybridBackend implements DesktopWindowBackend {
+  static const officialId = 1 << 30;
+  final handlers = <int, WindowMethodHandler?>{};
+
+  @override
+  int currentWindowId = 0;
+  @override
+  bool get keepsLegacyWindows => true;
+  @override
+  bool acceptsWindow(String? arguments) => arguments == 'port-forward';
+  @override
+  bool ownsWindow(int id) => id == 0 || id == officialId;
+  @override
+  Future<WindowController> createWindow(String? arguments) async =>
+      WindowControllerMainImpl(officialId);
+  @override
+  Future<List<int>> getAllSubWindowIds() async => [officialId];
+  @override
+  Future<dynamic> invokeMethod(int target, String method, dynamic arguments) async =>
+      'official: $method';
+  @override
+  void setMethodHandler(WindowMethodHandler? handler) =>
+      handlers[currentWindowId] = handler;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

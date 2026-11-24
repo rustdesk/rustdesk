@@ -139,6 +139,22 @@ exited with 0xC0000005 after creating two windows. A later run passed, so legacy
 stability under 3.50.1 is **not established**. No cause is asserted. Earlier
 immediate show queries also demonstrated that ShowWindowAsync needs polling.
 
+## RustDesk Windows client preview
+
+The Windows x64 experiment build uses the same pinned Flutter SDK and applies
+`.github/patches/apply_flutter_3.50_source_patches.sh`. That script selects the
+local plugin and installs the preview bootstrap. Build with
+`FLUTTER_WINDOWING=true` and launch RustDesk with `--experimental-windowing` to
+route TCP forwarding sessions through official child windows in the main
+engine. RDP and other session types still use the original native plugin.
+The preview retains the runner's primary FlutterView and uses native title
+bars for the new TCP forwarding windows.
+
+The Windows client CI smoke test invokes the real TCP forwarding launch
+path with a loopback address and checks that the same RustDesk process owns
+a visible `FLUTTER_HOST_WINDOW`. This validates window creation, not a
+successful connection to another peer.
+
 ## Upstream acceptance
 
 The experiment workflow runs the native Windows test. Full Flutter CI also runs

@@ -37,3 +37,11 @@ jobs:
         shell: pwsh
         run: |
           ./examples/flutter_windowing/experimental_example/tool/run.ps1 -FlutterSdk $env:WINDOWING_FLUTTER_SDK -SelfTest
+      - name: Verify mixed legacy and official message routing
+        shell: pwsh
+        working-directory: examples/flutter_windowing
+        env:
+          FLUTTER_WINDOWING: 'false'
+        run: |
+          & (Join-Path $env:WINDOWING_FLUTTER_SDK 'bin/flutter.bat') test test/legacy_backend_test.dart
+          exit $LASTEXITCODE
