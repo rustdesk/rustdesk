@@ -92,10 +92,16 @@ npm run build
 npm run dev    # proxies /api and /ws to 127.0.0.1:21119
 ```
 
-The canvas keeps the remote aspect ratio. Pointer and touch events are
-mapped through that letterbox into remote pixels. Keyboard capture includes
-modifiers, the toolbar chords (`Esc`, `Tab`, `Ctrl+C`, `Ctrl+V`,
-`Ctrl+Alt+Del`), and an IME / soft-keyboard field for phones.
+While disconnected, a connection dialog sits on the empty stage. A live
+session dismisses it and gives the remote picture the full viewport. A small
+Session tab on the top edge, kept inside the fullscreen element, slides
+horizontally so it can move off a remote title bar. Opening it shows Fit,
+100%, zoom, pan, touch or mouse mode, the display list, shortcuts, and
+telemetry. Keys and pointer events reach the host only while that panel is
+closed. Fit is the default; zoom (menu, Ctrl/Alt+wheel, or a two-finger
+pinch) is anchored on the cursor, and Space+drag or Pan mode moves the view
+when it is larger than the viewport. Pointer coordinates include that scale
+and pan.
 
 ## LAN self-host
 

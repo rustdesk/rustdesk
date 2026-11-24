@@ -2,7 +2,8 @@
 """Full-screen X11 target used to prove remote video, clicks, and typing.
 
 The window covers the virtual display. The top half is one button. The lower
-band is a text field. Every change is written to /tmp/rd-e2e-state.json.
+band is a text field, and the bottom strip records a horizontal drag.
+Every change is written to /tmp/rd-e2e-state.json.
 """
 
 import json
@@ -19,6 +20,8 @@ class Desktop:
     def __init__(self) -> None:
         self.clicks = 0
         self.text = ""
+        self.drag = 0
+        self.drag_origin: int | None = None
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.geometry(f"{WIDTH}x{HEIGHT}+0+0")
@@ -51,6 +54,18 @@ class Desktop:
             anchor="w",
         )
         self.clock.place(x=40, y=560, width=1200, height=48)
+
+        self.drag_label = tk.Label(
+            self.root,
+            text="DRAG 0",
+            font=("DejaVu Sans", 22),
+            bg="#e7eef6",
+            fg="#1c2430",
+        )
+        self.drag_label.place(x=0, y=620, width=WIDTH, height=100)
+        self.drag_label.bind("<Button-1>", self.on_drag_down)
+        self.drag_label.bind("<B1-Motion>", self.on_drag_move)
+        self.drag_label.bind("<ButtonRelease-1>", self.on_drag_up)
         self.write()
         self.tick()
 
@@ -66,12 +81,29 @@ class Desktop:
         self.text = self.entry.get()
         self.write()
 
+    def on_drag_down(self, event: tk.Event) -> None:
+        self.drag_origin = int(event.x)
+
+    def on_drag_move(self, event: tk.Event) -> None:
+        if self.drag_origin is None:
+            return
+        self.drag = int(event.x) - self.drag_origin
+        self.drag_label.configure(text=f"DRAG {self.drag}")
+
+    def on_drag_up(self, event: tk.Event) -> None:
+        if self.drag_origin is None:
+            return
+        self.drag = int(event.x) - self.drag_origin
+        self.drag_origin = None
+        self.drag_label.configure(text=f"DRAG {self.drag}")
+        self.write()
+
     def tick(self) -> None:
         self.clock.configure(text=time.strftime("CLOCK %H:%M:%S"))
         self.root.after(200, self.tick)
 
     def write(self) -> None:
-        payload = {"clicks": self.clicks, "text": self.text, "ts": time.time()}
+        payload = {"clicks": self.clicks, "text": self.text, "drag": self.drag, "ts": time.time()}
         STATE.write_text(json.dumps(payload), encoding="utf-8")
 
     def run(self) -> None:

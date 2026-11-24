@@ -1,3 +1,10 @@
+/** Screen pixels per remote pixel, and where the remote origin sits in the viewport. */
+export interface ViewTransform {
+  scale: number;
+  panX: number;
+  panY: number;
+}
+
 export interface VideoRect {
   x: number;
   y: number;
@@ -5,53 +12,91 @@ export interface VideoRect {
   height: number;
 }
 
-/** Letterboxed rectangle of the remote picture inside a CSS box (`object-fit: contain`). */
-export function videoRect(boxW: number, boxH: number, remoteW: number, remoteH: number): VideoRect {
-  if (remoteW <= 0 || remoteH <= 0 || boxW <= 0 || boxH <= 0) {
-    return { x: 0, y: 0, width: Math.max(0, boxW), height: Math.max(0, boxH) };
-  }
-  const boxAspect = boxW / boxH;
-  const remoteAspect = remoteW / remoteH;
-  if (boxAspect > remoteAspect) {
-    const height = boxH;
-    const width = height * remoteAspect;
-    return { x: (boxW - width) / 2, y: 0, width, height };
-  }
-  const width = boxW;
-  const height = width / remoteAspect;
-  return { x: 0, y: (boxH - height) / 2, width, height };
+/** Largest scale that fits the remote picture inside the viewport. */
+export function fitScale(boxW: number, boxH: number, remoteW: number, remoteH: number): number {
+  if (remoteW <= 0 || remoteH <= 0 || boxW <= 0 || boxH <= 0) return 1;
+  return Math.min(boxW / remoteW, boxH / remoteH);
+}
+
+/** Keep the picture centered when it is smaller than the viewport, and inside the edges when it is larger. */
+export function clampPan(
+  boxW: number,
+  boxH: number,
+  remoteW: number,
+  remoteH: number,
+  scale: number,
+  panX: number,
+  panY: number,
+): { panX: number; panY: number } {
+  const imgW = remoteW * scale;
+  const imgH = remoteH * scale;
+  const x = imgW <= boxW ? (boxW - imgW) / 2 : Math.min(0, Math.max(boxW - imgW, panX));
+  const y = imgH <= boxH ? (boxH - imgH) / 2 : Math.min(0, Math.max(boxH - imgH, panY));
+  return { panX: x, panY: y };
+}
+
+export function centeredPan(
+  boxW: number,
+  boxH: number,
+  remoteW: number,
+  remoteH: number,
+  scale: number,
+): ViewTransform {
+  const pan = clampPan(boxW, boxH, remoteW, remoteH, scale, 0, 0);
+  return { scale, ...pan };
+}
+
+/** Keep the remote point under `anchor` fixed while the scale changes. */
+export function zoomAround(
+  anchorX: number,
+  anchorY: number,
+  oldScale: number,
+  newScale: number,
+  panX: number,
+  panY: number,
+): { panX: number; panY: number } {
+  const safeOld = oldScale === 0 ? 1 : oldScale;
+  const remoteX = (anchorX - panX) / safeOld;
+  const remoteY = (anchorY - panY) / safeOld;
+  return {
+    panX: anchorX - remoteX * newScale,
+    panY: anchorY - remoteY * newScale,
+  };
+}
+
+export function videoRect(transform: ViewTransform, remoteW: number, remoteH: number): VideoRect {
+  return {
+    x: transform.panX,
+    y: transform.panY,
+    width: remoteW * transform.scale,
+    height: remoteH * transform.scale,
+  };
 }
 
 export function mapToRemote(
   localX: number,
   localY: number,
-  boxW: number,
-  boxH: number,
   remoteW: number,
   remoteH: number,
+  transform: ViewTransform,
 ): { x: number; y: number } | null {
-  if (remoteW <= 0 || remoteH <= 0) return null;
-  const rect = videoRect(boxW, boxH, remoteW, remoteH);
-  const lx = localX - rect.x;
-  const ly = localY - rect.y;
-  if (lx < 0 || ly < 0 || lx > rect.width || ly > rect.height) return null;
-  const x = Math.min(remoteW - 1, Math.max(0, Math.round((lx / rect.width) * remoteW)));
-  const y = Math.min(remoteH - 1, Math.max(0, Math.round((ly / rect.height) * remoteH)));
-  return { x, y };
+  if (remoteW <= 0 || remoteH <= 0 || transform.scale <= 0) return null;
+  const x = (localX - transform.panX) / transform.scale;
+  const y = (localY - transform.panY) / transform.scale;
+  if (x < 0 || y < 0 || x > remoteW || y > remoteH) return null;
+  return {
+    x: Math.min(remoteW - 1, Math.max(0, Math.floor(x))),
+    y: Math.min(remoteH - 1, Math.max(0, Math.floor(y))),
+  };
 }
 
 export function mapFromRemote(
   remoteX: number,
   remoteY: number,
-  boxW: number,
-  boxH: number,
-  remoteW: number,
-  remoteH: number,
-): { x: number; y: number } | null {
-  if (remoteW <= 0 || remoteH <= 0) return null;
-  const rect = videoRect(boxW, boxH, remoteW, remoteH);
+  transform: ViewTransform,
+): { x: number; y: number } {
   return {
-    x: rect.x + ((remoteX + 0.5) / remoteW) * rect.width,
-    y: rect.y + ((remoteY + 0.5) / remoteH) * rect.height,
+    x: transform.panX + (remoteX + 0.5) * transform.scale,
+    y: transform.panY + (remoteY + 0.5) * transform.scale,
   };
 }
