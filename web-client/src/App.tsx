@@ -2646,7 +2646,6 @@ export default function App() {
       {showMobileDock && (
         <MobileDock
           locale={locale}
-          stageWidth={box.w}
           stageHeight={box.h}
           activePanel={menuOpen ? mobilePanel : null}
           rightArmed={rightArmed}

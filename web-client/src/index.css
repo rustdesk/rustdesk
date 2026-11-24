@@ -501,6 +501,11 @@ button:focus-visible {
   border-radius: 6px;
 }
 
+:root {
+  --remote-toolbar-surface: #22252b;
+  --remote-toolbar-height: 48px;
+}
+
 .softbar {
   position: absolute;
   z-index: 4;
@@ -511,8 +516,8 @@ button:focus-visible {
   gap: 5px;
   height: 46px;
   padding-inline: max(4px, env(safe-area-inset-left, 0px)) max(4px, env(safe-area-inset-right, 0px));
-  background: var(--overlay-surface);
-  border-top: 1px solid var(--overlay-border);
+  background: var(--remote-toolbar-surface);
+  border-top: 1px solid #40454c;
 }
 
 .soft-key-capture {
@@ -553,9 +558,9 @@ button:focus-visible {
   min-height: 34px;
   padding: 4px 9px;
   border-radius: 7px;
-  border: 1px solid var(--overlay-border);
-  background: var(--overlay-surface-subtle);
-  color: var(--ink);
+  border: 1px solid #40454c;
+  background: #30353c;
+  color: #f3f5f8;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -564,15 +569,13 @@ button:focus-visible {
 }
 
 .soft-key-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #ffffff;
+  color: #8bcaff;
 }
 
 .soft-key-divider {
   width: 1px;
   height: 20px;
-  background: var(--overlay-border);
+  background: #40454c;
   flex-shrink: 0;
 }
 
@@ -1819,31 +1822,31 @@ button:focus-visible {
 
 /* Mobile remote-session chrome */
 .remote-tools,.remote-capsule,.remote-menu-panel {
-  background:#22252b; color:#f3f5f8; border:1px solid #40454c; color-scheme:dark;
+  background:var(--remote-toolbar-surface); color:#f3f5f8; border:1px solid #40454c; color-scheme:dark;
 }
 .remote-tools,.remote-capsule {
   position:absolute; z-index:7; display:flex; overflow:hidden; touch-action:manipulation;
 }
 .remote-tools {
   inset-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right));
-  bottom:calc(10px + env(safe-area-inset-bottom)); height:60px; border-radius:12px;
+  bottom:calc(10px + env(safe-area-inset-bottom)); height:var(--remote-toolbar-height); border-radius:12px;
 }
 .remote-tools button,.remote-capsule button {
   display:grid; place-content:center; justify-items:center; gap:3px; flex:1;
   background:transparent; border:0; color:inherit; font:inherit;
 }
-.remote-tools button { font-size:12px; }
-.remote-tools button.selected { background:#146ec7; color:white; }
+.remote-tools button { font-size:12px; gap:1px; -webkit-tap-highlight-color:transparent; }
+.remote-tools button.selected { color:#8bcaff; }
 .remote-capsule {
-  width:132px; height:44px; border-radius:24px; touch-action:none; user-select:none;
+  right:max(16px,env(safe-area-inset-right)); width:88px; height:44px; border-radius:24px; touch-action:none; user-select:none;
 }
 .remote-capsule button + button { border-left:1px solid #ffffff16; }
 .remote-capsule svg { width:21px; }
 .remote-menu-backdrop { position:absolute; inset:0; z-index:5; }
 .remote-menu-panel {
   position:absolute; inset-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right));
-  bottom:calc(77px + env(safe-area-inset-bottom)); border-radius:10px;
-  max-height:calc(100% - 96px - env(safe-area-inset-bottom) - env(safe-area-inset-top));
+  bottom:calc(var(--remote-toolbar-height) + 17px + env(safe-area-inset-bottom)); border-radius:10px;
+  max-height:calc(100% - var(--remote-toolbar-height) - 36px - env(safe-area-inset-bottom) - env(safe-area-inset-top));
   overflow:auto; overscroll-behavior:contain; touch-action:pan-y;
 }
 .tool-group { padding:3px 13px; }
