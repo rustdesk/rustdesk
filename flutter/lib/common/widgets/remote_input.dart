@@ -531,12 +531,16 @@ class _RawTouchGestureDetectorRegionState
         };
 
   makeGestures(BuildContext context) {
+    final devices = inputModel.supportsNativeTouch
+        ? (PointerDeviceKind.values.toSet()..remove(PointerDeviceKind.touch))
+        : null;
     return <Type, GestureRecognizerFactory>{
       // Official
       TapGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
               () => TapGestureRecognizer(), (instance) {
         instance
+          ..supportedDevices = devices
           ..onTapDown = onTapDown
           ..onTapUp = onTapUp
           ..onTap = onTap;
@@ -545,6 +549,7 @@ class _RawTouchGestureDetectorRegionState
           GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
               () => DoubleTapGestureRecognizer(), (instance) {
         instance
+          ..supportedDevices = devices
           ..onDoubleTapDown = onDoubleTapDown
           ..onDoubleTap = onDoubleTap;
       }),
@@ -552,6 +557,7 @@ class _RawTouchGestureDetectorRegionState
           GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
               () => LongPressGestureRecognizer(), (instance) {
         instance
+          ..supportedDevices = devices
           ..onLongPressDown = onLongPressDown
           ..onLongPressUp = onLongPressUp
           ..onLongPress = onLongPress
@@ -562,6 +568,7 @@ class _RawTouchGestureDetectorRegionState
           GestureRecognizerFactoryWithHandlers<HoldTapMoveGestureRecognizer>(
               () => HoldTapMoveGestureRecognizer(),
               (instance) => instance
+                ..supportedDevices = devices
                 ..onHoldDragStart = onHoldDragStart
                 ..onHoldDragUpdate = onHoldDragUpdate
                 ..onHoldDragCancel = onHoldDragCancel
@@ -570,6 +577,7 @@ class _RawTouchGestureDetectorRegionState
           GestureRecognizerFactoryWithHandlers<DoubleFinerTapGestureRecognizer>(
               () => DoubleFinerTapGestureRecognizer(), (instance) {
         instance
+          ..supportedDevices = devices
           ..onDoubleFinerTap = onDoubleFinerTap
           ..onDoubleFinerTapDown = onDoubleFinerTapDown;
       }),
@@ -579,6 +587,7 @@ class _RawTouchGestureDetectorRegionState
         instance.onOneFingerPanStart =
             (DragStartDetails d) => onOneFingerPanStart(context, d);
         instance
+          ..supportedDevices = devices
           ..onOneFingerPanUpdate = onOneFingerPanUpdate
           ..onOneFingerPanEnd = onOneFingerPanEnd
           ..onOneFingerPanCancel = onOneFingerPanCancel
@@ -616,13 +625,22 @@ class RawPointerMouseRegion extends StatelessWidget {
       onPointerHover: inputModel.onPointHoverImage,
       onPointerDown: (evt) {
         onPointerDown?.call(evt);
-        inputModel.onPointDownImage(evt);
+        if (!inputModel.handleNativeTouch(evt)) {
+          inputModel.onPointDownImage(evt);
+        }
       },
       onPointerUp: (evt) {
         onPointerUp?.call(evt);
-        inputModel.onPointUpImage(evt);
+        if (!inputModel.handleNativeTouch(evt)) {
+          inputModel.onPointUpImage(evt);
+        }
       },
-      onPointerMove: inputModel.onPointMoveImage,
+      onPointerMove: (evt) {
+        if (!inputModel.handleNativeTouch(evt)) {
+          inputModel.onPointMoveImage(evt);
+        }
+      },
+      onPointerCancel: inputModel.handleNativeTouch,
       onPointerSignal: inputModel.onPointerSignalImage,
       onPointerPanZoomStart: inputModel.onPointerPanZoomStart,
       onPointerPanZoomUpdate: inputModel.onPointerPanZoomUpdate,

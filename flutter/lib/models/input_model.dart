@@ -1828,6 +1828,82 @@ class InputModel {
     return dt >= 0 && dt < kTouchAfterMouseWindowMs;
   }
 
+  bool get supportsNativeTouch =>
+      isWindows &&
+      peerPlatform == kPeerPlatformWindows &&
+      !isViewCamera &&
+      parent.target?.ffiModel.pi.platformAdditions['native_touch'] == true;
+
+  static const int _maxNativeContacts = 10;
+  final Set<int> _nativeContacts = {};
+  Future<void> _nativeTouchSend = Future.value();
+
+  bool handleNativeTouch(PointerEvent event) {
+    if (event.kind != ui.PointerDeviceKind.touch || !supportsNativeTouch) {
+      return false;
+    }
+    if (!keyboardPerm || isViewOnly || relativeMouseMode.value) {
+      cancelNativeTouch();
+      return true;
+    }
+    if (event is PointerCancelEvent) {
+      cancelNativeTouch();
+      return true;
+    }
+    final id = event.pointer;
+    if (event is PointerUpEvent) {
+      if (_nativeContacts.remove(id)) {
+        _sendNativeTouch({'phase': 'up', 'id': id, 'x': 0, 'y': 0});
+      }
+      return true;
+    }
+    final down = event is PointerDownEvent;
+    if (down
+        ? _nativeContacts.length >= _maxNativeContacts
+        : !_nativeContacts.contains(id)) {
+      return true;
+    }
+    final rect = parent.target?.ffiModel.rect;
+    if (rect == null || rect.isEmpty) return true;
+    final pos = _pointerPositionForRemoteCanvas(event);
+    final remote = handlePointerDevicePos(
+      kPointerEventKindTouch,
+      pos.dx,
+      pos.dy,
+      false,
+      kMouseEventTypeDefault,
+    );
+    if (remote == null || !remote.x.isFinite || !remote.y.isFinite) return true;
+    if (down && !rect.contains(Offset(remote.x.toDouble(), remote.y.toDouble()))) {
+      return true;
+    }
+    if (down) _nativeContacts.add(id);
+    _sendNativeTouch({
+      'phase': down ? 'down' : 'move',
+      'id': id,
+      'x': remote.x.clamp(rect.left, rect.right - 1).toInt(),
+      'y': remote.y.clamp(rect.top, rect.bottom - 1).toInt(),
+    });
+    return true;
+  }
+
+  void cancelNativeTouch() {
+    if (_nativeContacts.isEmpty) return;
+    _nativeContacts.clear();
+    _sendNativeTouch({'phase': 'cancel'});
+  }
+
+  void _sendNativeTouch(Map<String, dynamic> contact) {
+    final id = sessionId;
+    final msg = json.encode({'k': 'native_touch', 'v': contact});
+    // Native phases must reach the Rust bridge in pointer-event order.
+    _nativeTouchSend = _nativeTouchSend
+        .then((_) => bind.sessionSendPointer(sessionId: id, msg: msg))
+        .catchError((Object error) {
+      debugPrint('Failed to send native touch: $error');
+    });
+  }
+
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;

@@ -187,9 +187,25 @@ message TouchEvent {
   }
 }
 
+message NativeTouchEvent {
+  enum Phase {
+    UNSPECIFIED = 0;
+    DOWN = 1;
+    MOVE = 2;
+    UP = 3;
+    CANCEL = 4; // Cancel all contacts in this session.
+  }
+  Phase phase = 1;
+  uint32 id = 2;
+  // Absolute coordinates in the remote Windows virtual desktop.
+  sint32 x = 3;
+  sint32 y = 4;
+}
+
 message PointerDeviceEvent {
   oneof union {
     TouchEvent touch_event = 1;
+    NativeTouchEvent native_touch_event = 3;
   }
   repeated ControlKey modifiers = 2;
 }

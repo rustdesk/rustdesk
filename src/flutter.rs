@@ -1949,6 +1949,44 @@ fn session_send_touch_event(
     }
 }
 
+#[cfg(windows)]
+fn session_send_native_touch(session_id: SessionID, value: &serde_json::Value) {
+    use native_touch_event::Phase;
+
+    let phase = match value.get("phase").and_then(|v| v.as_str()) {
+        Some("down") => Phase::DOWN,
+        Some("move") => Phase::MOVE,
+        Some("up") => Phase::UP,
+        Some("cancel") => Phase::CANCEL,
+        _ => return,
+    };
+    let mut touch = NativeTouchEvent::new();
+    touch.phase = phase.into();
+    if phase != Phase::CANCEL {
+        let id = value
+            .get("id")
+            .and_then(|v| v.as_u64())
+            .and_then(|v| u32::try_from(v).ok());
+        let coordinate = |key| {
+            value
+                .get(key)
+                .and_then(|v| v.as_i64())
+                .and_then(|v| i32::try_from(v).ok())
+        };
+        let (Some(id), Some(x), Some(y)) = (id, coordinate("x"), coordinate("y")) else {
+            return;
+        };
+        touch.id = id;
+        touch.x = x;
+        touch.y = y;
+    }
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        let mut event = PointerDeviceEvent::new();
+        event.set_native_touch_event(touch);
+        crate::client::send_pointer_device_event(event, false, false, false, false, session.as_ref());
+    }
+}
+
 pub fn session_send_pointer(session_id: SessionID, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&msg) {
         let alt = m.get("alt").is_some();
@@ -1958,6 +1996,8 @@ pub fn session_send_pointer(session_id: SessionID, msg: String) {
         match (m.get("k"), m.get("v")) {
             (Some(k), Some(v)) => match k.as_str() {
                 Some("touch") => session_send_touch_event(session_id, v, alt, ctrl, shift, command),
+                #[cfg(windows)]
+                Some("native_touch") => session_send_native_touch(session_id, v),
                 _ => {}
             },
             _ => {}

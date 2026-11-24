@@ -262,6 +262,10 @@ enum MessageInput {
     Key((KeyEvent, bool)),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Pointer((PointerDeviceEvent, i32)),
+    #[cfg(windows)]
+    NativeTouch(NativeTouchEvent),
+    #[cfg(windows)]
+    ResetNativeTouch,
     BlockOn,
     BlockOff,
 }
@@ -400,6 +404,8 @@ pub struct Connection {
     ip: String,
     // by peer
     disable_keyboard: bool,
+    #[cfg(windows)]
+    supports_native_touch: bool,
     // by peer
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     show_my_cursor: bool,
@@ -622,6 +628,8 @@ impl Connection {
             enable_file_transfer: false,
             disable_clipboard: false,
             disable_keyboard: false,
+            #[cfg(windows)]
+            supports_native_touch: false,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             show_my_cursor: false,
             tx_input,
@@ -816,6 +824,10 @@ impl Connection {
                             }
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
+                                #[cfg(windows)]
+                                if !enabled {
+                                    conn.tx_input.send(MessageInput::ResetNativeTouch).ok();
+                                }
                                 conn.send_permission(Permission::Keyboard, enabled).await;
                                 // Until authorized, only record the value; try_sub_monitor_services subscribes from it.
                                 if let Some(s) = conn.server.upgrade().filter(|_| conn.authorized) {
@@ -1287,6 +1299,8 @@ impl Connection {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
         let mut block_input_mode = false;
+        #[cfg(windows)]
+        let mut native_touch = crate::platform::windows::native_touch::Session::default();
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         {
             rdev::set_mouse_extra_info(enigo::ENIGO_INPUT_EXTRA_VALUE);
@@ -1323,6 +1337,10 @@ impl Connection {
                     MessageInput::Pointer((msg, id)) => {
                         handle_pointer(&msg, id);
                     }
+                    #[cfg(windows)]
+                    MessageInput::NativeTouch(event) => native_touch.handle(event),
+                    #[cfg(windows)]
+                    MessageInput::ResetNativeTouch => native_touch.reset(),
                     MessageInput::BlockOn => {
                         let (ok, msg) = crate::platform::block_input(true);
                         if ok {
@@ -2020,6 +2038,13 @@ impl Connection {
                 "is_installed".into(),
                 json!(crate::platform::is_installed()),
             );
+            self.supports_native_touch = self.is_remote()
+                && self.lr.my_platform == hbb_common::whoami::Platform::Windows.to_string()
+                && crate::platform::is_installed()
+                && crate::platform::windows::native_touch::is_supported();
+            if self.supports_native_touch {
+                platform_additions.insert("native_touch".into(), json!(true));
+            }
             if crate::platform::is_installed() {
                 platform_additions.extend(virtual_display_manager::get_platform_additions());
             }
@@ -3333,6 +3358,17 @@ impl Connection {
                         _ => Ok(()),
                     } {
                         log::debug!("call_main_service_pointer_input fail:{}", e);
+                    }
+                    #[cfg(windows)]
+                    if pde.has_native_touch_event() {
+                        if self.peer_keyboard_enabled() && self.supports_native_touch {
+                            let mut pde = pde;
+                            self.tx_input
+                                .send(MessageInput::NativeTouch(pde.take_native_touch_event()))
+                                .ok();
+                            self.update_auto_disconnect_timer();
+                        }
+                        return true;
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.peer_keyboard_enabled() {
@@ -5120,6 +5156,10 @@ impl Connection {
         if let Ok(q) = o.disable_keyboard.enum_value() {
             if q != BoolOption::NotSet {
                 self.disable_keyboard = q == BoolOption::Yes;
+                #[cfg(windows)]
+                if self.disable_keyboard {
+                    self.tx_input.send(MessageInput::ResetNativeTouch).ok();
+                }
                 if let Some(s) = self.server.upgrade() {
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
@@ -5446,6 +5486,8 @@ impl Connection {
             return;
         }
         self.closed = true;
+        #[cfg(windows)]
+        self.tx_input.send(MessageInput::ResetNativeTouch).ok();
         #[cfg(windows)]
         self.privacy_preparation.take();
         // If voice A,B -> C, and A,B has voice call

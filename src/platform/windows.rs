@@ -1034,6 +1034,9 @@ pub fn desktop_changed() -> bool {
     unsafe { inputDesktopSelected() == FALSE }
 }
 
+#[path = "windows_native_touch.rs"]
+pub(crate) mod native_touch;
+
 pub fn try_change_desktop() -> bool {
     unsafe {
         if inputDesktopSelected() == FALSE {
