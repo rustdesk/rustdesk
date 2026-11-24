@@ -843,7 +843,7 @@ export default function App() {
           statAccRef.current.width = w;
           statAccRef.current.height = h;
           statAccRef.current.decoded = renderedCount;
-          frameStatsRef.current = recordRenderedFrame(frameStatsRef.current, nowMs);
+          recordRenderedFrame(frameStatsRef.current, nowMs);
           if (renderedCount === 1 || sizeChanged) {
             publishStatsSnapshot(nowMs);
           }
@@ -868,7 +868,7 @@ export default function App() {
         (w > 0 && statAccRef.current.width !== w) ||
         (h > 0 && statAccRef.current.height !== h);
 
-      frameStatsRef.current = recordRxFrame(frameStatsRef.current, now, byteLen);
+      recordRxFrame(frameStatsRef.current, now, byteLen);
       statAccRef.current.lastCodec = codecName;
       statAccRef.current.lastDelayMs = Math.max(0, Math.round(delayMs));
       if (w > 0) statAccRef.current.width = w;

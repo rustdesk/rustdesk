@@ -53,17 +53,28 @@ export function createFrameStats(): FrameStatsState {
   };
 }
 
-function pruneSamples<T extends { ts: number }>(
-  samples: T[],
+function firstSampleInWindow(
+  samples: readonly { ts: number }[],
   nowMs: number,
   windowMs: number,
-): T[] {
+): number {
   const cutoff = nowMs - windowMs;
   let firstValid = 0;
   while (firstValid < samples.length && samples[firstValid].ts < cutoff) {
     firstValid += 1;
   }
-  return firstValid === 0 ? samples : samples.slice(firstValid);
+  return firstValid;
+}
+
+function pruneSamplesInPlace(samples: { ts: number }[], nowMs: number, windowMs: number): void {
+  const firstValid = firstSampleInWindow(samples, nowMs, windowMs);
+  if (firstValid > 0) {
+    const remaining = samples.length - firstValid;
+    for (let i = 0; i < remaining; i += 1) {
+      samples[i] = samples[i + firstValid];
+    }
+    samples.length = remaining;
+  }
 }
 
 function updateEmaInterval(prevEma: number | null, prevTs: number | null, nowMs: number): number | null {
@@ -83,38 +94,26 @@ export function recordRxFrame(
   nowMs: number,
   bytes: number,
   windowMs = DEFAULT_STATS_WINDOW_MS,
-): FrameStatsState {
-  const pruned = pruneSamples(state.rxSamples, nowMs, windowMs);
-  // Only drive EMA from rx when no render samples have been recorded yet
-  const emaIntervalMs =
-    state.totalRendered === 0
-      ? updateEmaInterval(state.emaIntervalMs, state.lastRxTs, nowMs)
-      : state.emaIntervalMs;
-
-  return {
-    ...state,
-    rxSamples: [...pruned, { ts: nowMs, bytes: Math.max(0, bytes) }],
-    emaIntervalMs,
-    lastRxTs: nowMs,
-    totalRx: state.totalRx + 1,
-  };
+): void {
+  pruneSamplesInPlace(state.rxSamples, nowMs, windowMs);
+  state.rxSamples.push({ ts: nowMs, bytes: Math.max(0, bytes) });
+  if (state.totalRendered === 0) {
+    state.emaIntervalMs = updateEmaInterval(state.emaIntervalMs, state.lastRxTs, nowMs);
+  }
+  state.lastRxTs = nowMs;
+  state.totalRx += 1;
 }
 
 export function recordRenderedFrame(
   state: FrameStatsState,
   nowMs: number,
   windowMs = DEFAULT_STATS_WINDOW_MS,
-): FrameStatsState {
-  const pruned = pruneSamples(state.renderSamples, nowMs, windowMs);
-  const emaIntervalMs = updateEmaInterval(state.emaIntervalMs, state.lastRenderTs, nowMs);
-
-  return {
-    ...state,
-    renderSamples: [...pruned, { ts: nowMs }],
-    emaIntervalMs,
-    lastRenderTs: nowMs,
-    totalRendered: state.totalRendered + 1,
-  };
+): void {
+  pruneSamplesInPlace(state.renderSamples, nowMs, windowMs);
+  state.renderSamples.push({ ts: nowMs });
+  state.emaIntervalMs = updateEmaInterval(state.emaIntervalMs, state.lastRenderTs, nowMs);
+  state.lastRenderTs = nowMs;
+  state.totalRendered += 1;
 }
 
 /**
@@ -127,18 +126,17 @@ export function recordRenderedFrame(
  *   inter-frame cadence during steady motion to eliminate WebSocket batch jitter.
  */
 function computeSamplingFps(
-  samples: Array<{ ts: number }>,
+  samples: readonly { ts: number }[],
+  firstSample: number,
   lastTs: number | null,
   emaIntervalMs: number | null,
   nowMs: number,
-  windowMs: number,
 ): number {
   if (lastTs === null) return 0;
   const silenceMs = Math.max(0, nowMs - lastTs);
   if (silenceMs >= IDLE_SILENCE_MS) return 0;
 
-  const pruned = pruneSamples(samples, nowMs, windowMs);
-  const count = pruned.length;
+  const count = samples.length - firstSample;
   if (count === 0) return 0;
 
   if (count === 1) {
@@ -146,8 +144,8 @@ function computeSamplingFps(
     return 1;
   }
 
-  const firstTs = pruned[0].ts;
-  const newestTs = pruned[count - 1].ts;
+  const firstTs = samples[firstSample].ts;
+  const newestTs = samples[samples.length - 1].ts;
   const spanMs = Math.max(1, newestTs - firstTs);
   const avgIntervalMs = spanMs / (count - 1);
 
@@ -199,40 +197,42 @@ export function computeFrameRates(
     };
   }
 
-  const rxPruned = pruneSamples(state.rxSamples, nowMs, windowMs);
-  const renderPruned = pruneSamples(state.renderSamples, nowMs, windowMs);
+  const firstRx = firstSampleInWindow(state.rxSamples, nowMs, windowMs);
+  const firstRender = firstSampleInWindow(state.renderSamples, nowMs, windowMs);
+  const rxCount = state.rxSamples.length - firstRx;
+  const renderCount = state.renderSamples.length - firstRender;
 
   const rxFps = computeSamplingFps(
-    rxPruned,
+    state.rxSamples,
+    firstRx,
     state.lastRxTs,
     state.totalRendered === 0 ? state.emaIntervalMs : null,
     nowMs,
-    windowMs,
   );
   const renderFps = computeSamplingFps(
-    renderPruned,
+    state.renderSamples,
+    firstRender,
     state.lastRenderTs,
     state.totalRendered > 0 ? state.emaIntervalMs : null,
     nowMs,
-    windowMs,
   );
 
   // Prefer actual decoded/rendered sampling FPS once WebCodecs is producing frames.
   const useRendered = state.totalRendered > 0;
   const fps = useRendered ? renderFps : rxFps;
-  const sampleCount = useRendered ? renderPruned.length : rxPruned.length;
+  const sampleCount = useRendered ? renderCount : rxCount;
 
   // Bitrate (bits/sec) over the active rx window
   let bitrate = 0;
-  if (rxPruned.length > 0) {
+  if (rxCount > 0) {
     let totalBytes = 0;
-    for (const s of rxPruned) {
-      totalBytes += s.bytes;
+    for (let i = firstRx; i < state.rxSamples.length; i += 1) {
+      totalBytes += state.rxSamples[i].bytes;
     }
     const rxElapsed =
-      rxPruned.length === 1
+      rxCount === 1
         ? windowMs
-        : Math.max(250, Math.min(windowMs, nowMs - rxPruned[0].ts));
+        : Math.max(250, Math.min(windowMs, nowMs - state.rxSamples[firstRx].ts));
     bitrate = Math.round((totalBytes * 8 * 1000) / rxElapsed);
   }
 
