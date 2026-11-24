@@ -26,6 +26,7 @@ export interface CodecCaps {
 }
 
 export type ClientMessage =
+  | { type: 'resolution'; display: number; width: number; height: number }
   | {
       type: 'connect';
       mode?: string;

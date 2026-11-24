@@ -1,3 +1,4 @@
+import { PasteKeysButton } from './PasteKeysButton';
 import React, { useState } from 'react';
 import {
   Activity,
@@ -38,6 +39,8 @@ type MenuTab = 'control' | 'input' | 'display' | 'session';
 
 interface SessionMenuProps {
   locale: Locale;
+  onPasteKeys: () => Promise<boolean>;
+  pasteDisabled: boolean;
   onToggleLocale: () => void;
   phase: ConnectionPhase;
   peer: PeerMessage | null;
@@ -52,6 +55,10 @@ interface SessionMenuProps {
   softKeys: boolean;
   isFullscreen: boolean;
   viewOnly: boolean;
+  followRemoteCursor: boolean;
+  onToggleFollowCursor: () => void;
+  sizes: { width: number; height: number }[];
+  onResolution: (width: number, height: number) => void;
   showRemoteCursor: boolean;
   diagnosticsOpen: boolean;
   stats: SessionStats;
@@ -84,6 +91,8 @@ interface SessionMenuProps {
 
 export function SessionMenu({
   locale,
+  onPasteKeys,
+  pasteDisabled,
   onToggleLocale,
   phase,
   peer,
@@ -98,6 +107,7 @@ export function SessionMenu({
   softKeys,
   isFullscreen,
   viewOnly,
+  followRemoteCursor, onToggleFollowCursor, sizes, onResolution,
   showRemoteCursor,
   diagnosticsOpen,
   stats,
@@ -493,6 +503,7 @@ export function SessionMenu({
                   {t(locale, 'send')}
                 </button>
               </form>
+              <PasteKeysButton locale={locale} onPasteKeys={onPasteKeys} pasteDisabled={pasteDisabled} className="rd-btn mt-2" />
               {remoteClipboard && (
                 <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-[var(--rd-card-bg)] border border-[var(--rd-card-border)] px-2.5 py-1.5">
                   <span
@@ -579,6 +590,27 @@ export function SessionMenu({
             </div>
 
             <div className="flex flex-col gap-1">
+              <label className="rd-check-row">
+                <input
+                  type="checkbox"
+                  checked={followRemoteCursor}
+                  onChange={onToggleFollowCursor}
+                />
+                <span>{t(locale, 'followCursor')}</span>
+              </label>
+              {sizes.length > 0 && (
+                <label className="rd-check-row">
+                  <span>{t(locale, 'remoteResolution')}</span>
+                  <select disabled={viewOnly} value={sizes.findIndex(s => s.width === stats.width && s.height === stats.height)}
+                    onChange={e => {
+                      const selected = sizes[Number(e.target.value)];
+                      if (selected) onResolution(selected.width, selected.height);
+                    }}>
+                    <option value={-1} disabled>{stats.width} × {stats.height}</option>
+                    {sizes.map((size, i) => <option key={i} value={i}>{size.width} × {size.height}</option>)}
+                  </select>
+                </label>
+              )}
               <label className="rd-check-row">
                 <input
                   type="checkbox"

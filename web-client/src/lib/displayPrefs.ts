@@ -14,6 +14,7 @@ export interface DisplayPrefs {
   codec: PreferredCodec;
   viewOnly: boolean;
   showRemoteCursor: boolean;
+  followRemoteCursor: boolean;
   disableClipboard: boolean;
   lockAfterSessionEnd: boolean;
   reverseMouseWheel: boolean;
@@ -31,6 +32,7 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   codec: 'auto',
   viewOnly: false,
   showRemoteCursor: true,
+  followRemoteCursor: false,
   disableClipboard: false,
   lockAfterSessionEnd: false,
   reverseMouseWheel: false,
@@ -75,6 +77,7 @@ export function normalizeDisplayPrefs(raw: unknown): DisplayPrefs {
     customFps: clampInt(obj.customFps, 10, 60, DEFAULT_DISPLAY_PREFS.customFps),
     codec,
     viewOnly: Boolean(obj.viewOnly),
+    followRemoteCursor: obj.followRemoteCursor === true,
     showRemoteCursor:
       typeof obj.showRemoteCursor === 'boolean'
         ? obj.showRemoteCursor

@@ -59,6 +59,7 @@ export interface CursorShape {
 }
 
 export type ServerMessage =
+  | { type: 'resolutions'; display: number; sizes: { width: number; height: number }[] }
   | { type: 'hello'; service: string }
   | { type: 'status'; state: string; detail?: string; username?: string }
   | PeerMessage
@@ -91,6 +92,7 @@ export interface CodecSupport {
 export type QualityLevel = 'low' | 'balanced' | 'best';
 
 export type ClientMessage =
+  | { type: 'resolution'; display: number; width: number; height: number }
   | {
       type: 'connect';
       mode: 'direct' | 'id';

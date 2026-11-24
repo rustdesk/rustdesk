@@ -204,6 +204,11 @@ message Resolution {
   int32 height = 2;
 }
 
+message DisplayResolution {
+  int32 display = 1;
+  Resolution resolution = 2;
+}
+
 message SupportedResolutions {
   repeated Resolution resolutions = 1;
 }
@@ -446,6 +451,8 @@ message Misc {
   oneof union {
     ChatMessage chat_message = 4;
     SwitchDisplay switch_display = 5;
+    Resolution change_resolution = 24;
+    DisplayResolution change_display_resolution = 36;
     PermissionInfo permission_info = 6;
     OptionMessage option = 7;
     AudioFormat audio_format = 8;

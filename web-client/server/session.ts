@@ -124,6 +124,8 @@ function extractEncodedFrames(
 
 export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   let state: 'awaiting-connect' | 'connecting' | 'live' | 'closed' = 'awaiting-connect';
+  let resolutionDisplay = 0;
+  let sizes: { width: number; height: number }[] = [];
   let hostConn: ConnectedHost | null = null;
   let sessionCodecs: CodecCaps | undefined;
   let warnedRawVideo = false;
@@ -189,9 +191,16 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   sendJson({ type: 'hello', service: 'rustdesk-web-gateway' });
 
   const startHostPump = async (conn: ConnectedHost) => {
+    const publishResolutions = (display: number, supported?: { resolutions?: typeof sizes }) => {
+      resolutionDisplay = display;
+      sizes = (supported?.resolutions ?? []).filter(({ width, height }) =>
+        Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0);
+      sendJson({ type: 'resolutions', display, sizes });
+    };
     const cursorShapes = new CursorShapes();
     currentSize = initialDisplaySize(conn.peerInfo);
     sendJson(peerToJson(conn.peerInfo, conn.encrypted));
+    publishResolutions(Number(conn.peerInfo.current_display ?? 0), conn.peerInfo.resolutions);
     sendJson({
       type: 'status',
       state: 'live',
@@ -238,6 +247,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
               cursorEmbedded: Boolean(sd.cursor_embedded),
               name: '',
             });
+            publishResolutions(Number(sd.display ?? 0), sd.resolutions);
           }
           if (msg.misc.close_reason) {
             const reason = String(msg.misc.close_reason);
@@ -289,6 +299,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
             currentSize = updatedSize;
           }
           sendJson(peerToJson(msg.peer_info, conn.encrypted));
+          publishResolutions(Number(msg.peer_info.current_display ?? 0), msg.peer_info.resolutions);
         }
 
         // 5. VideoFrame
@@ -470,7 +481,22 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     if (state !== 'live') return;
 
     if (hostConn) {
-      const hostMsg = toHostMessage(parsed, sessionCodecs);
+      let hostMsg;
+      if (parsed.type === 'resolution') {
+        const { display, width, height } = parsed;
+        if (display !== resolutionDisplay || !sizes.some(size => size.width === width && size.height === height)) {
+          sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });
+          return;
+        }
+        const [major, minor, patch] = String(hostConn.peerInfo.version ?? '').split('.').map(Number);
+        const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
+        const resolution = { width, height };
+        hostMsg = { misc: modern
+          ? { change_display_resolution: { display, resolution } }
+          : { change_resolution: resolution } };
+      } else {
+        hostMsg = toHostMessage(parsed, sessionCodecs);
+      }
       if (hostMsg) {
         const activeHost = hostConn;
         void activeHost.stream.sendRaw(encodeMessage(hostMsg)).catch((err) => {

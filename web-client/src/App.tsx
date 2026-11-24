@@ -350,6 +350,8 @@ export default function App() {
   const displayPrefsRef = useRef(displayPrefs);
   displayPrefsRef.current = displayPrefs;
 
+  const [resolutionOptions, setResolutionOptions] = useState<Extract<ServerMessage, { type: 'resolutions' }> | null>(null);
+  const followCursorRef = useRef<(x: number, y: number) => void>(() => {});
   const [peer, setPeer] = useState<PeerMessage | null>(null);
   const [display, setDisplay] = useState(0);
   const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
@@ -577,6 +579,7 @@ export default function App() {
     const cx = Math.min(w - 1, Math.max(0, x));
     const cy = Math.min(h - 1, Math.max(0, y));
     cursorRef.current = { x: cx, y: cy };
+    if (displayPrefsRef.current.followRemoteCursor) followCursorRef.current(cx, cy);
     if (window.__rd) {
       window.__rd.cursorX = Math.round(cx);
       window.__rd.cursorY = Math.round(cy);
@@ -1008,6 +1011,7 @@ export default function App() {
       );
 
       setPeer(null);
+      setResolutionOptions(null);
       setCursorShape(null);
       setCursorEmbedded(false);
       placeCursor(sizeRef.current.width / 2, sizeRef.current.height / 2);
@@ -1200,6 +1204,10 @@ export default function App() {
             }
             break;
           }
+
+          case 'resolutions':
+            setResolutionOptions(msg);
+            break;
 
           case 'cursorShape': {
             try {
@@ -1465,6 +1473,20 @@ export default function App() {
     [box.w, box.h, remoteW, remoteH, viewMode, panClampOptions],
   );
 
+  followCursorRef.current = (x, y) => {
+    const view = viewRef.current;
+    const point = mapFromRemote(x, y, view);
+    const visibleHeight = Math.min(box.h, window.visualViewport?.height ?? box.h) - panClampOptions.bottomInset;
+    if (box.w <= 0 || visibleHeight <= 0) return;
+    const marginX = Math.min(32, box.w / 4);
+    const marginY = Math.min(32, visibleHeight / 4);
+    const dx = remoteW * view.scale > box.w
+      ? Math.min(box.w - marginX, Math.max(marginX, point.x)) - point.x : 0;
+    const dy = remoteH * view.scale > visibleHeight
+      ? Math.min(visibleHeight - marginY, Math.max(marginY, point.y)) - point.y : 0;
+    if (dx || dy) panBy(dx, dy);
+  };
+
   // Forward text efficiently: single ASCII chars as native keystrokes, CJK/multi-char as batched seq
   const sendText = useCallback(
     (text: string) => {
@@ -1487,6 +1509,17 @@ export default function App() {
     },
     [send],
   );
+
+  const pasteClipboardKeys = async () => {
+    const socket = wsRef.current;
+    const text = await navigator.clipboard.readText();
+    if (!socket || socket !== wsRef.current || socket.readyState !== WebSocket.OPEN ||
+        phaseRef.current !== 'live' || displayPrefsRef.current.viewOnly || displayPrefsRef.current.disableClipboard) {
+      throw new Error('Clipboard input is unavailable');
+    }
+    if (text) sendText(text);
+    return Boolean(text);
+  };
 
   const tapControl = useCallback(
     (control: string) => {
@@ -2650,6 +2683,12 @@ export default function App() {
           softKeys={softKeys}
           isFullscreen={isFullscreen}
           viewOnly={displayPrefs.viewOnly}
+          followRemoteCursor={displayPrefs.followRemoteCursor}
+          onToggleFollowCursor={() => handleUpdateDisplayPrefs({ followRemoteCursor: !displayPrefs.followRemoteCursor })}
+          sizes={resolutionOptions?.display === display ? resolutionOptions.sizes : []}
+          onResolution={(width, height) => send({ type: 'resolution', display, width, height })}
+          onPasteKeys={pasteClipboardKeys}
+          pasteDisabled={displayPrefs.viewOnly || displayPrefs.disableClipboard}
           showRemoteCursor={displayPrefs.showRemoteCursor}
           diagnosticsOpen={diagnosticsOpen}
           stats={stats}
@@ -2727,6 +2766,8 @@ export default function App() {
         <SoftKeyboardBar
           locale={locale}
           inputRef={softKeyboardInputRef}
+          onPasteKeys={pasteClipboardKeys}
+          pasteDisabled={displayPrefs.viewOnly || displayPrefs.disableClipboard}
           onSendText={sendText}
           onSendControl={(action, control) => send({ type: 'key', action, control })}
           onSendChord={sendChord}
