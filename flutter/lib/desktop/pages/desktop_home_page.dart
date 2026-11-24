@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/animated_rotation_widget.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
+import 'package:flutter_hbb/common/widgets/server_profiles.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
@@ -92,6 +93,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       buildTip(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
+      buildServerProfileBoard(context),
       FutureBuilder<Widget>(
         future: Future.value(
             Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
@@ -384,6 +386,30 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         ],
       ),
     );
+  }
+
+  Widget buildServerProfileBoard(BuildContext context) {
+    if (ServerProfiles.hidden) return const Offstage();
+    return Obx(() {
+      if (ServerProfiles.instance.profiles.isEmpty) {
+        return const Offstage();
+      }
+      return Padding(
+        padding: const EdgeInsets.only(left: 20, right: 16, top: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              translate('Server'),
+              style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).textTheme.titleLarge?.color),
+            ),
+            const ServerProfileSelector(),
+          ],
+        ),
+      );
+    });
   }
 
   buildTip(BuildContext context) {

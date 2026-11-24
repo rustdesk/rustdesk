@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/api_server_warning.dart';
+import 'package:flutter_hbb/common/widgets/server_profiles.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:get/get.dart';
@@ -156,6 +157,14 @@ void showServerSettingsWithValue(
           child: Obx(() => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (!ServerProfiles.hidden) ...[
+                    ServerProfileEditor(
+                      controllers: controllers,
+                      labelWidth: isDesktop || isWeb ? labelWidth : null,
+                      labelSpacing: labelSpacing,
+                    ),
+                    SizedBox(height: 8),
+                  ],
                   buildField(translate('ID Server'), idCtrl, idServerMsg.value,
                       autofocus: true),
                   SizedBox(height: 8),
