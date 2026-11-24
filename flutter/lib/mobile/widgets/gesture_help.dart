@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:toggle_switch/toggle_switch.dart';
+
+import '../models/double_tap_zoom.dart';
 
 class GestureIcons {
   static const String _family = 'gestureicons';
@@ -58,6 +61,9 @@ class _GestureHelpState extends State<GestureHelp> {
   late int _selectedIndex;
   late bool _touchMode;
   final VirtualMouseMode _virtualMouseMode;
+
+  late double _zoomStrength = zoomStrengthFromOption(
+      bind.mainGetLocalOption(key: kOptionZoomStrength));
 
   _GestureHelpState(bool touchMode, VirtualMouseMode virtualMouseMode)
       : _virtualMouseMode = virtualMouseMode {
@@ -121,6 +127,29 @@ class _GestureHelpState extends State<GestureHelp> {
                           });
                         },
                       ),
+                      if (isAndroid)
+                        SizedBox(
+                          width: (size.width - 2 * space).clamp(0.0, 300.0).toDouble(),
+                          child: Column(
+                            children: [
+                              Row(children: [
+                                Expanded(child: Text(translate('Zoom strength'))),
+                                Text('${(_zoomStrength * 100).round()}%',
+                                    style: Theme.of(context).textTheme.labelMedium),
+                              ]),
+                              Slider(
+                                min: 0.25,
+                                max: 2.5,
+                                divisions: 9,
+                                value: _zoomStrength,
+                                onChanged: (value) => setState(() => _zoomStrength = value),
+                                onChangeEnd: (value) => bind.mainSetLocalOption(
+                                    key: kOptionZoomStrength,
+                                    value: (value * 100).round().toString()),
+                              ),
+                            ],
+                          ),
+                        ),
                       Transform.translate(
                         offset: const Offset(-10.0, 0.0),
                         child: Row(

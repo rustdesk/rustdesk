@@ -11,6 +11,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 
+import '../../mobile/models/double_tap_zoom.dart';
 import './gestures.dart';
 
 class RawKeyFocusScope extends StatelessWidget {
@@ -86,7 +87,8 @@ class RawTouchGestureDetectorRegion extends StatefulWidget {
 ///   DoubleFiner -> right click
 ///   HoldDrag -> left drag
 class _RawTouchGestureDetectorRegionState
-    extends State<RawTouchGestureDetectorRegion> {
+    extends State<RawTouchGestureDetectorRegion> with TickerProviderStateMixin {
+  AnimationController? _zoomAnimation;
   Offset _cacheLongPressPosition = Offset(0, 0);
   // Timestamp of the last long press event.
   int _cacheLongPressPositionTs = 0;
@@ -119,10 +121,18 @@ class _RawTouchGestureDetectorRegionState
 
   @override
   Widget build(BuildContext context) {
-    return RawGestureDetector(
+    final gestures = RawGestureDetector(
       child: widget.child,
       gestures: makeGestures(context),
     );
+    if (!isAndroid) return gestures;
+    return Listener(onPointerDown: (_) => _zoomAnimation?.stop(), child: gestures);
+  }
+
+  @override
+  void dispose() {
+    _zoomAnimation?.dispose();
+    super.dispose();
   }
 
   bool isNotTouchBasedDevice() {
@@ -208,6 +218,15 @@ class _RawTouchGestureDetectorRegionState
     }
   }
 
+  bool _zoomOnHold(PointerDownEvent event) {
+    if (event.kind != PointerDeviceKind.touch || canvasLocked ||
+        ffi.cursorModel.shouldBlock(event.localPosition.dx, event.localPosition.dy)) {
+      return false;
+    }
+    _stepCanvasZoom(event.position);
+    return true;
+  }
+
   onDoubleTap() async {
     if (isNotTouchBasedDevice()) {
       return;
@@ -227,6 +246,45 @@ class _RawTouchGestureDetectorRegionState
     }
     await inputModel.tap(MouseButtons.left);
     await inputModel.tap(MouseButtons.left);
+  }
+
+  void _stepCanvasZoom(Offset focalPoint) {
+    if (canvasLocked) return;
+    final image = ffi.imageModel.image;
+    final canvas = ffi.canvasModel;
+    final size = canvas.getSize();
+    if (image == null || size.isEmpty) return;
+    final fitScale = min(size.width / image.width, size.height / image.height);
+    final currentScale = canvas.scale;
+    if (currentScale <= 0) return;
+    final next = nextDoubleTapZoomScale(
+        currentScale, fitScale,
+        nativeScale: 1 / MediaQuery.devicePixelRatioOf(context),
+        amount: zoomStrengthFromOption(
+            bind.mainGetLocalOption(key: kOptionZoomStrength)));
+    _zoomAnimation?.dispose();
+    _zoomAnimation = null;
+    final start = Offset(canvas.x, canvas.y);
+    final anchor = focalPoint - Offset(0, canvas.getAdjustY());
+    final end = next == fitScale
+        ? Offset((size.width - canvas.getDisplayWidth() * next) / 2,
+            (size.height - canvas.getDisplayHeight() * next) / 2)
+        : anchor + (start - anchor) * (next / currentScale);
+
+    void applyFrame(double progress) {
+      if (canvasLocked || canvas.getSize() != size) {
+        _zoomAnimation?.stop();
+        return;
+      }
+      canvas.setMobileZoomFrame(currentScale + (next - currentScale) * progress,
+          Offset.lerp(start, end, progress)!);
+    }
+
+    if (MediaQuery.disableAnimationsOf(context)) {
+      applyFrame(1);
+    } else {
+      _zoomAnimation = animateDoubleTapZoom(this, applyFrame);
+    }
   }
 
   onLongPressDown(LongPressDownDetails d) async {
@@ -562,6 +620,7 @@ class _RawTouchGestureDetectorRegionState
           GestureRecognizerFactoryWithHandlers<HoldTapMoveGestureRecognizer>(
               () => HoldTapMoveGestureRecognizer(),
               (instance) => instance
+                ..onStationarySecondTap = isAndroid && !widget.isCamera ? _zoomOnHold : null
                 ..onHoldDragStart = onHoldDragStart
                 ..onHoldDragUpdate = onHoldDragUpdate
                 ..onHoldDragCancel = onHoldDragCancel

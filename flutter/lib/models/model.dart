@@ -2733,12 +2733,22 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
+  void setMobileZoomFrame(double scale, Offset offset) {
+    _scale = scale;
+    _x = offset.dx;
+    _y = offset.dy;
+    isMobileCanvasChanged = true;
+    notifyListeners();
+  }
+
   // mobile only
   updateScale(double v, Offset focalPoint) {
     if (parent.target?.imageModel.image == null) return;
     final s = _scale;
     _scale *= v;
-    final maxs = parent.target?.imageModel.maxScale ?? 1;
+    final pinchLimit = parent.target?.imageModel.maxScale ?? 1.0;
+    // Allow a pinch to continue smoothly from a higher step zoom level.
+    final maxs = isAndroid ? max(s, pinchLimit) : pinchLimit;
     final mins = parent.target?.imageModel.minScale ?? 1;
     if (_scale > maxs) _scale = maxs;
     if (_scale < mins) _scale = mins;

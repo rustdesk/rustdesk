@@ -202,6 +202,8 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
           supportedDevices: supportedDevices,
         );
 
+  bool Function(PointerDownEvent)? onStationarySecondTap;
+  bool _zoomed = false;
   GestureDragStartCallback? onHoldDragStart;
   GestureDragUpdateCallback? onHoldDragUpdate;
   GestureDragDownCallback? onHoldDragDown;
@@ -283,7 +285,8 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
       } else if (_secondTap != null) {
         if (event.pointer == _secondTap!.pointer) {
           if (onHoldDragEnd != null) {
-            onHoldDragEnd!(DragEndDetails());
+            if (!_zoomed) onHoldDragEnd!(DragEndDetails());
+            _zoomed = false;
             _secondTap = null;
             _isStart = false;
           }
@@ -306,7 +309,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
           if (!_isStart) {
             _resolve();
           }
-          if (onHoldDragUpdate != null) {
+          if (!_zoomed && onHoldDragUpdate != null) {
             onHoldDragUpdate!(DragUpdateDetails(
                 globalPosition: event.position,
                 localPosition: event.localPosition,
@@ -335,11 +338,15 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     }
   }
 
-  void _resolve() {
+  void _resolve({bool stationary = false}) {
     _stopSecondTapDownTimer();
     _firstTap?.entry.resolve(GestureDisposition.accepted);
     _secondTap?.entry.resolve(GestureDisposition.accepted);
     _isStart = true;
+    final event = _lastPointerDownEvent;
+    _zoomed = stationary && event != null &&
+        (onStationarySecondTap?.call(event) ?? false);
+    if (_zoomed) return;
     // TODO start details
     if (onHoldDragStart != null) {
       onHoldDragStart!(DragStartDetails(
@@ -369,6 +376,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   void _reset() {
     _isStart = false;
+    _zoomed = false;
     // debugPrint("reset");
     _stopFirstTapUpTimer();
     _stopSecondTapDownTimer();
@@ -434,7 +442,9 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
   }
 
   void _startSecondTapDownTimer() {
-    _secondTapDownTimer ??= Timer(kDoubleTapTimeout, _resolve);
+    _secondTapDownTimer ??= Timer(kDoubleTapTimeout, () {
+      if (_secondTap != null) _resolve(stationary: true);
+    });
   }
 
   void _stopFirstTapUpTimer() {
