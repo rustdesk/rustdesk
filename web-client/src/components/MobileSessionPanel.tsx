@@ -11,6 +11,7 @@ export type MobilePanel = 'toolbar' | 'actions' | 'input' | 'display';
 const gestureRows = {
   touch: [
     ['gTouchTapTitle', 'gTouchTapDesc'],
+    ['gDoubleTapTitle', 'gTouchDoubleTapDesc'],
     ['gTouchRightTitle', 'gTouchRightDesc'],
     ['gTouchDragTitle', 'gTouchDragDesc'],
     ['gTouchPinchTitle', 'gTouchPinchDesc'],
@@ -19,9 +20,11 @@ const gestureRows = {
   mouse: [
     ['gMouseSlideTitle', 'gMouseSlideDesc'],
     ['gMouseTapTitle', 'gMouseTapDesc'],
+    ['gDoubleTapTitle', 'gMouseDoubleTapDesc'],
     ['gMouseDragTitle', 'gMouseDragDesc'],
     ['gMouseRightTitle', 'gMouseRightDesc'],
     ['gMousePinchTitle', 'gMousePinchDesc'],
+    ['gTouchScrollTitle', 'gTouchScrollDesc'],
   ],
 } as const;
 
