@@ -16,6 +16,7 @@ export interface DisplayPrefs {
   showRemoteCursor: boolean;
   followWindow: boolean;
   enlargeCursor: boolean;
+  autoKeyboard: boolean;
   followRemoteCursor: boolean;
   disableClipboard: boolean;
   lockAfterSessionEnd: boolean;
@@ -36,6 +37,7 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   showRemoteCursor: true,
   followWindow: false,
   enlargeCursor: false,
+  autoKeyboard: false,
   followRemoteCursor: false,
   disableClipboard: false,
   lockAfterSessionEnd: false,
@@ -83,6 +85,7 @@ export function normalizeDisplayPrefs(raw: unknown): DisplayPrefs {
     viewOnly: Boolean(obj.viewOnly),
     followWindow: obj.followWindow === true,
     enlargeCursor: obj.enlargeCursor === true,
+    autoKeyboard: obj.autoKeyboard === true,
     followRemoteCursor: obj.followRemoteCursor === true,
     showRemoteCursor:
       typeof obj.showRemoteCursor === 'boolean'

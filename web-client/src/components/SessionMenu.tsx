@@ -55,6 +55,8 @@ export interface SessionMenuProps {
   rightArmed: boolean;
   viewOnly: boolean;
   followRemoteCursor: boolean;
+  autoKeyboard: boolean;
+  onToggleAutoKeyboard: () => void;
   onToggleFollowCursor: () => void;
   sizes: { width: number; height: number }[];
   onResolution: (width: number, height: number) => void;

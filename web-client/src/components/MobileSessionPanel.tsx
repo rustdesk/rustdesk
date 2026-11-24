@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, RotateCcw, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, Scaling, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Activity, Keyboard, RotateCcw, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, Scaling, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
@@ -64,6 +64,7 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
                 <button key={name} aria-pressed={p.touchMode === touch} onClick={() => { if (p.touchMode !== touch) p.onToggleTouchMode(); }}><Icon />{label(name)}</button>)}
             </div>
             <div className="tool-group">
+              {toggle(Keyboard, 'autoKeyboard', p.autoKeyboard, p.onToggleAutoKeyboard)}
               {toggle(MousePointer2, 'optShowRemoteCursor', p.showRemoteCursor, p.onToggleRemoteCursor)}
               {toggle(Scaling, 'enlargeCursor', p.enlargeCursor, p.onToggleEnlargeCursor, !p.showRemoteCursor || p.cursorEmbedded)}
               {toggle(Focus, 'followCursor', p.followRemoteCursor, p.onToggleFollowCursor)}
