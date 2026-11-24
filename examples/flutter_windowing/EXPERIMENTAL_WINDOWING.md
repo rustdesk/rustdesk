@@ -20,13 +20,18 @@ experimental feature without changing the user's global Flutter configuration.
 Run `experimental_example/tool/run.ps1 -FlutterSdk <sdk-path>` for the demo,
 or add `-SelfTest` for the native executable checks. A temporary unused drive
 letter avoids MSBuild's long-path failure; the mapping is removed after exit.
-The script runs until the demo is closed. No vcpkg dependencies are required
-by this isolated plugin example.
+The script runs until the demo is closed. Self-test mode checks both the
+headless engine startup and an existing implicit main view in the same build.
+No vcpkg dependencies are required by this isolated plugin example.
 
 An application must explicitly import `experimental_windowing.dart`, install
 `ExperimentalWindowingBackend`, supply a per-window widget builder, and call
-`runWidget(backend.root)`. The example Windows runner starts a headless
-`flutter::FlutterEngine`, avoiding a spare implicit runner window.
+`runWidget(backend.root)`. The standalone Windows demo starts a headless `flutter::FlutterEngine`.
+The adoption path can instead use `keepImplicitMainView: true` with an
+existing runner. The root mounts its implicit FlutterView as window 0 and
+adds official Window views for children. Main window native controls continue
+through the existing runner/plugin. The native self-test verifies this layout
+with one embedded FlutterView and two official child windows.
 Flutter's verified API is the internal
 `package:flutter/src/widgets/_window.dart`: `WindowController`, `Window`,
 `WindowControllerDelegate`, `destroy`, `activate`, `setMaximized`,

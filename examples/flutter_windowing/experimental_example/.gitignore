@@ -48,3 +48,4 @@ app.*.map.json
 .widget_preview/
 
 /poc-results.json
+/poc-implicit-main-results.json

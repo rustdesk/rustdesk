@@ -2,7 +2,7 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' show AppExitType;
+import 'dart:ui' show AppExitType, FlutterView;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -13,6 +13,7 @@ import 'package:flutter/src/widgets/_window_win32.dart'
 
 import 'src/backend.dart';
 import 'src/window_controller.dart';
+import 'src/window_controller_impl.dart';
 import 'src/window_listener.dart';
 import 'src/widgets/sub_drag_to_resize_area.dart';
 
@@ -38,14 +39,16 @@ typedef ExperimentalWindowBuilder = Widget Function(
 /// Flutter 3.50.1 Windows PoC. Importing this library alone does not opt in.
 class ExperimentalWindowingBackend implements DesktopWindowBackend {
   final ValueNotifier<int> _updates = ValueNotifier<int>(0);
-  ExperimentalWindowingBackend._(this.builder);
+  ExperimentalWindowingBackend._(this.builder, this._existingMainView);
   final ExperimentalWindowBuilder builder;
+  final FlutterView? _existingMainView;
   final Map<int, _Entry> _entries = {};
   int _nextId = 1;
   int get currentWindowId => Zone.current[_windowZoneKey] as int? ?? 0;
 
   static ExperimentalWindowingBackend install({
     required ExperimentalWindowBuilder builder,
+    bool keepImplicitMainView = false,
   }) {
     WidgetsFlutterBinding.ensureInitialized();
     if (!Platform.isWindows || !isWindowingEnabled) {
@@ -55,9 +58,15 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
     }
     if (experimentalWindowBackend != null)
       throw StateError('Backend already installed');
-    final backend = ExperimentalWindowingBackend._(builder);
+    final mainView = keepImplicitMainView
+        ? WidgetsBinding.instance.platformDispatcher.implicitView
+        : null;
+    if (keepImplicitMainView && mainView == null) {
+      throw StateError('The runner must supply the implicit main view.');
+    }
+    final backend = ExperimentalWindowingBackend._(builder, mainView);
     backend._entries[0] = _Entry(ExperimentalWindowContext._(0, null));
-    unawaited(backend._show(0));
+    if (mainView == null) unawaited(backend._show(0));
     experimentalWindowBackend = backend;
     return backend;
   }
@@ -67,6 +76,12 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
     listenable: _updates,
     builder: (context, _) => ViewCollection(
       views: [
+        if (_existingMainView != null)
+          View(
+            key: const ValueKey(0),
+            view: _existingMainView!,
+            child: builder(_entry(0).context),
+          ),
         for (final entry in _entries.values)
           if (entry.isMounted && !entry.native!.isDestroyed)
             official.Window(
@@ -79,7 +94,9 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
   );
 
   ExperimentalWindowContext contextFor(int id) => _entry(id).context;
-  int viewIdFor(int id) => _native(id).rootView.viewId;
+  int viewIdFor(int id) => id == 0 && _existingMainView != null
+      ? _existingMainView!.viewId
+      : _native(id).rootView.viewId;
   _Entry _entry(int id) =>
       _entries[id] ?? (throw StateError('Window $id is closed or unknown'));
   official.WindowController _native(int id) =>
@@ -95,6 +112,9 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
   @override
   WindowController controller(int id) {
     _entry(id);
+    if (id == 0 && _existingMainView != null) {
+      return WindowControllerMainImpl(0);
+    }
     return _Controller(this, id);
   }
 

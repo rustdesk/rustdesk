@@ -12,8 +12,10 @@ late ExperimentalWindowingBackend backend;
 int sharedGlobal = 0;
 final results = <Map<String, Object?>>[];
 
-void main() {
+void main(List<String> args) {
+  final keepImplicitMainView = args.contains('--implicit-main-self-test');
   backend = ExperimentalWindowingBackend.install(
+    keepImplicitMainView: keepImplicitMainView,
     builder: (window) => MaterialApp(
       key: ValueKey(window.windowId),
       home: WindowPage(window: window),
@@ -21,7 +23,9 @@ void main() {
   );
   runWidget(backend.root);
   if (const bool.fromEnvironment('POC_SELF_TEST')) {
-    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(runChecks()));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(runChecks(keepImplicitMainView: keepImplicitMainView)),
+    );
   }
 }
 
@@ -242,12 +246,19 @@ Future<List<dynamic>> nativeProbe([String? title, bool close = false]) async {
   return jsonDecode(result.stdout as String) as List<dynamic>;
 }
 
-Future<void> runChecks() async {
+Future<void> runChecks({required bool keepImplicitMainView}) async {
   var code = 0;
   try {
     await Future<void>.delayed(const Duration(milliseconds: 800));
     final initialViews = ui.PlatformDispatcher.instance.views.length;
     check('main official view mounted', initialViews >= 1);
+    if (keepImplicitMainView) {
+      final implicitView = ui.PlatformDispatcher.instance.implicitView;
+      check(
+        'existing main FlutterView retained',
+        implicitView != null && backend.viewIdFor(0) == implicitView.viewId,
+      );
+    }
     final a = await DesktopMultiWindow.createWindow('remote');
     final b = await DesktopMultiWindow.createWindow('file-transfer');
     check(
@@ -289,7 +300,7 @@ Future<void> runChecks() async {
     );
     final nativeWindows = await nativeProbe();
     check(
-      'three visible official HWNDs (no bootstrap window)',
+      'three visible native HWNDs (no extra bootstrap window)',
       nativeWindows.where((w) => w['visible'] == true).length == 3 &&
           nativeWindows.every((w) => w['title'] != 'windowing_poc'),
       jsonEncode(nativeWindows),
