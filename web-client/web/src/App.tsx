@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RemoteDecoder, webCodecsStatus } from "./decoder";
+import { probeCodecs, RemoteDecoder, webCodecsStatus } from "./decoder";
 import { controlFromCode, isModifier } from "./keys";
 import { mapToRemote } from "./mapping";
 import {
@@ -53,6 +53,10 @@ export default function App() {
   const [formOpen, setFormOpen] = useState(true);
   const [rightArmed, setRightArmed] = useState(false);
   const [narrow, setNarrow] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
+  const [gatewayToken, setGatewayToken] = useState("");
+  const [rtt, setRtt] = useState(0);
+  const [pixelFit, setPixelFit] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLElement>(null);
@@ -62,6 +66,15 @@ export default function App() {
   const decoderRef = useRef<RemoteDecoder | null>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const meterRef = useRef({ frames: 0, bytes: 0, at: performance.now(), delay: 0 });
+  const moveRef = useRef<{ x: number; y: number } | null>(null);
+  const moveRaf = useRef(0);
+
+  useEffect(() => {
+    fetch("/api/health")
+      .then((response) => response.json())
+      .then((body: { authRequired?: boolean }) => setAuthRequired(Boolean(body.authRequired)))
+      .catch(() => setAuthRequired(false));
+  }, []);
 
   useEffect(() => {
     const query = window.matchMedia("(max-width: 800px)");
@@ -136,6 +149,7 @@ export default function App() {
     if (!decoderRef.current) {
       const decoder = new RemoteDecoder();
       decoder.onError = (message) => setDecoderError(message);
+      decoder.onNeedRefresh = () => send({ type: "refresh" });
       decoder.onOutput = (width, height) => {
         sizeRef.current = { width, height };
       };
@@ -144,11 +158,17 @@ export default function App() {
     return decoderRef.current;
   }
 
-  function connect() {
+  async function connect() {
     if (!codecs.ok) {
       setPhase("error");
       setDetail(codecs.reason);
       setDecoderError(codecs.reason);
+      return;
+    }
+    const support = await probeCodecs();
+    if (!support.vp8 && !support.vp9 && !support.h264 && !support.h265 && !support.av1) {
+      setPhase("error");
+      setDetail("This browser cannot decode VP8, VP9, H.264, HEVC, or AV1.");
       return;
     }
     socketRef.current?.close();
@@ -156,12 +176,18 @@ export default function App() {
     decoderRef.current = null;
     setPeer(null);
     setStats(emptyStats);
+    setRtt(0);
     setDecoderError("");
     setPhase("connecting");
     setDetail("Opening the gateway socket.");
     const socket = new WebSocket(wsUrl());
     socket.binaryType = "arraybuffer";
     socketRef.current = socket;
+    const session = {
+      token: gatewayToken,
+      codecs: support,
+      password,
+    };
     socket.onopen = () => {
       setDetail("Authenticating with the host.");
       if (mode === "id") {
@@ -169,11 +195,11 @@ export default function App() {
           type: "connect",
           mode: "id",
           peerId,
-          password,
           idServer,
           relayServer,
           key: serverKey,
           forceRelay,
+          ...session,
         });
       } else {
         send({
@@ -181,7 +207,7 @@ export default function App() {
           mode: "direct",
           host,
           port: Number(port) || 21118,
-          password,
+          ...session,
         });
       }
     };
@@ -227,11 +253,13 @@ export default function App() {
       } else if (message.type === "error") {
         setDecoderError(message.message);
         setDetail(message.message);
+      } else if (message.type === "rtt") {
+        setRtt(message.ms);
       }
     };
     socket.onerror = () => {
       setPhase("error");
-      setDetail("The gateway socket failed.");
+      setDetail("Cannot reach the gateway. Start it on this machine, then connect again.");
     };
     socket.onclose = () => {
       setPhase((prev) => (prev === "error" ? prev : "idle"));
@@ -280,17 +308,37 @@ export default function App() {
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
+  function queueMove(pos: { x: number; y: number }) {
+    moveRef.current = pos;
+    if (moveRaf.current) return;
+    moveRaf.current = requestAnimationFrame(() => {
+      moveRaf.current = 0;
+      const pending = moveRef.current;
+      moveRef.current = null;
+      if (pending) send({ type: "mouse", action: "move", x: pending.x, y: pending.y });
+    });
+  }
+
+  function flushMove() {
+    if (moveRaf.current) cancelAnimationFrame(moveRaf.current);
+    moveRaf.current = 0;
+    const pending = moveRef.current;
+    moveRef.current = null;
+    if (pending) send({ type: "mouse", action: "move", x: pending.x, y: pending.y });
+  }
+
   function onPointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
     if (phase !== "live") return;
     const pos = pointerPos(event);
     if (!pos) return;
-    send({ type: "mouse", action: "move", x: pos.x, y: pos.y });
+    queueMove(pos);
   }
 
   function onPointerUp(event: React.PointerEvent<HTMLCanvasElement>) {
     if (phase !== "live") return;
     const pos = pointerPos(event);
     if (!pos) return;
+    flushMove();
     send({
       type: "mouse",
       action: "up",
@@ -363,6 +411,44 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    if (phase !== "live") return;
+    const fromPanel = (target: EventTarget | null) =>
+      target instanceof HTMLElement && Boolean(target.closest("[data-testid=connection-panel]"));
+    const onDown = (event: KeyboardEvent) => {
+      if (fromPanel(event.target)) return;
+      if (event.target instanceof HTMLElement && event.target.matches("[data-testid=capture], [data-testid=soft-input]")) {
+        return;
+      }
+      const control = controlFromCode(event.code);
+      if (control) {
+        event.preventDefault();
+        sendControl(control, "down");
+        return;
+      }
+      if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey && !event.repeat) {
+        event.preventDefault();
+        send({ type: "text", text: event.key });
+      }
+    };
+    const onUp = (event: KeyboardEvent) => {
+      if (fromPanel(event.target)) return;
+      if (event.target instanceof HTMLElement && event.target.matches("[data-testid=capture], [data-testid=soft-input]")) {
+        return;
+      }
+      const control = controlFromCode(event.code);
+      if (!control) return;
+      event.preventDefault();
+      sendControl(control, "up");
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+    };
+  }, [phase]);
+
   function toggleFullscreen() {
     const node = stageRef.current;
     if (!node) return;
@@ -383,6 +469,19 @@ export default function App() {
         <div>
           <h1>RustDesk Web Client</h1>
           <p>Control a desktop from the browser. No client install.</p>
+        </div>
+        <div className="metrics" data-testid="telemetry">
+          <span>Codec <b data-testid="codec">{stats.codec}</b></span>
+          <span>Size <b data-testid="resolution">{stats.width && stats.height ? `${stats.width}×${stats.height}` : "—"}</b></span>
+          <span>FPS <b data-testid="fps">{stats.fps || "—"}</b></span>
+          <span>RTT <b data-testid="delay">{(rtt || stats.delayMs) ? `${rtt || stats.delayMs} ms` : "—"}</b></span>
+          <span>Frames <b data-testid="decoded">{stats.decoded}</b></span>
+          <button type="button" className="ghost" data-testid="zoom" onClick={() => setPixelFit((value) => !value)}>
+            {pixelFit ? "Fit" : "100%"}
+          </button>
+          <button type="button" className="ghost" data-testid="fullscreen" onClick={toggleFullscreen}>
+            Fullscreen
+          </button>
         </div>
       </header>
       <main className="workspace">
@@ -441,6 +540,18 @@ export default function App() {
               </label>
             </>
           )}
+          {authRequired && (
+            <label>
+              Gateway token
+              <input
+                data-testid="gateway-token"
+                type="password"
+                value={gatewayToken}
+                onChange={(event) => setGatewayToken(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+          )}
           <label>
             Password
             <input
@@ -457,13 +568,13 @@ export default function App() {
             data-testid="connect"
             onClick={phase === "live" || phase === "connecting" ? disconnect : connect}
           >
-            {phase === "live" || phase === "connecting" ? "Disconnect" : "Connect"}
+            {phase === "live" || phase === "connecting" ? "Disconnect" : phase === "error" ? "Reconnect" : "Connect"}
           </button>
           <div className={`badge ${phaseClass}`} data-testid="status">
             <i />
             {phase}
           </div>
-          <p className="detail" data-testid="detail">{detail}</p>
+          <p className={phase === "error" ? "detail error" : "detail"} data-testid="detail">{detail}</p>
         </section>
 
         <section className="stage-card" ref={stageRef} data-testid="stage">
@@ -495,14 +606,15 @@ export default function App() {
               <button type="button" className="ghost" onClick={() => send({ type: "refresh" })} disabled={phase !== "live"}>
                 Refresh
               </button>
-              <button type="button" className="ghost" data-testid="fullscreen" onClick={toggleFullscreen}>
+              <button type="button" className="ghost" onClick={toggleFullscreen}>
                 Fullscreen
               </button>
             </div>
           </div>
-          <div className="viewport">
+          <div className={pixelFit ? "viewport pixel" : "viewport"}>
             <canvas
               ref={canvasRef}
+              className={pixelFit ? "pixel" : undefined}
               data-testid="canvas"
               width={1280}
               height={720}
@@ -569,13 +681,8 @@ export default function App() {
               }}
             />
           </div>
-          <div className="telemetry" data-testid="telemetry">
-            <span>Codec <b data-testid="codec">{stats.codec}</b></span>
-            <span>Resolution <b data-testid="resolution">{stats.width && stats.height ? `${stats.width}×${stats.height}` : "—"}</b></span>
-            <span>FPS <b data-testid="fps">{stats.fps || "—"}</b></span>
-            <span>Delay <b data-testid="delay">{stats.delayMs ? `${stats.delayMs} ms` : "—"}</b></span>
+          <div className="telemetry">
             <span>Bitrate <b data-testid="bitrate">{stats.bitrate ? formatBitrate(stats.bitrate) : "—"}</b></span>
-            <span>Frames <b data-testid="decoded">{stats.decoded}</b></span>
           </div>
         </section>
       </main>

@@ -56,10 +56,13 @@ cargo run --manifest-path web-client/gateway/Cargo.toml -- \
 | Variable | Flag | Default |
 | --- | --- | --- |
 | `WEB_GATEWAY_LISTEN` | `--listen` | `127.0.0.1:21119` |
-| `WEB_GATEWAY_STATIC` | `--static` | unset (API and `/ws` only) |
+| `WEB_GATEWAY_STATIC` | `--static` | `web-client/web/dist` or `/app/web` when that directory exists |
+| `GATEWAY_TOKEN` | `--token` | empty. When set, the page asks for this token before dialing a host |
 
-`GET /api/health` returns `{"ok":true,"service":"rustdesk-web-gateway"}`.
-The browser connects to `/ws` on the same origin.
+`GET /api/health` returns `{"ok":true,"service":"rustdesk-web-gateway","authRequired":false}`.
+The same process serves the built page and `/ws`, so a browser on that origin does not need a second server or CORS setup. `npm run dev` still proxies `/api` and `/ws` to `127.0.0.1:21119` for frontend work.
+
+After a video message the gateway echoes `TestDelay` unchanged and sends `Misc.video_received`, which is what keeps the host's 1.5 QoS from treating the link as stalled. The page probes `VideoDecoder.isConfigSupported` and only advertises those codecs, with `prefer_chroma = I420`.
 
 ### Binary video frame
 
@@ -109,10 +112,28 @@ modifiers, the toolbar chords (`Esc`, `Tab`, `Ctrl+C`, `Ctrl+V`,
    verification-method = "use-permanent-password"
    ```
 
-2. Build the gateway and the web app. Run the gateway with `--static`
-   pointed at `web/dist`, listening on the LAN address.
-3. Open `http://<gateway>:21119` from a desktop or phone on the same network.
-   Connect to the host's LAN address and port `21118`.
+2. Build the web app (`npm run build`) and run the gateway. If `web/dist`
+   is present it is served on the same port as `/ws`.
+3. Open `http://127.0.0.1:21119` (or `npm run dev` during UI work). Connect
+   to the host address and port `21118`.
+
+One container does the same thing:
+
+```bash
+docker compose -f web-client/docker-compose.yml up --build
+```
+
+Set `GATEWAY_TOKEN` in that compose file before publishing the port. Leave it
+empty on a trusted loopback. A wrong host password, an unreachable address,
+or a rejected token is returned as a sentence in the connection panel, and
+the button becomes Reconnect.
+
+### HTTPS in front of the gateway
+
+`deploy/Caddyfile` and `deploy/nginx.conf` terminate TLS and forward the
+page and the WebSocket on one port. Caddy's public config asks for a
+certificate automatically. The LAN config uses Caddy's internal CA; import
+that CA, or accept the browser warning, so the origin stays a secure context.
 
 ### HTTPS and WebCodecs
 

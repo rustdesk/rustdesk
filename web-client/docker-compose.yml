@@ -1,0 +1,26 @@
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: web-client/Dockerfile
+    ports:
+      - "21119:21119"
+    environment:
+      WEB_GATEWAY_LISTEN: 0.0.0.0:21119
+      WEB_GATEWAY_STATIC: /app/web
+      # Set a token before exposing this port beyond the machine.
+      GATEWAY_TOKEN: ""
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    profiles: ["https"]
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro

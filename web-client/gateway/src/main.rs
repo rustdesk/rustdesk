@@ -13,12 +13,12 @@ struct Args {
 
     /// Directory of the built web client. When omitted, a built `web/dist` next
     /// to the repository or `/app/web` is used if it is present.
-    #[arg(long, env = "WEB_GATEWAY_STATIC")]
+    #[arg(long = "static", env = "WEB_GATEWAY_STATIC")]
     static_dir: Option<PathBuf>,
 
     /// Optional access token. Empty means the gateway is open, which is the local default.
-    #[arg(long, env = "GATEWAY_TOKEN")]
-    token: Option<String>,
+    #[arg(long, env = "GATEWAY_TOKEN", default_value = "")]
+    token: String,
 }
 
 fn static_dir(explicit: Option<PathBuf>) -> Option<PathBuf> {
@@ -51,7 +51,14 @@ async fn main() -> anyhow::Result<()> {
         args.listen,
         GatewayConfig {
             static_dir: static_dir(args.static_dir),
-            token: args.token,
+            token: {
+                let token = args.token.trim();
+                if token.is_empty() {
+                    None
+                } else {
+                    Some(token.to_owned())
+                }
+            },
         },
     )
     .await?;

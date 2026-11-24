@@ -33,17 +33,32 @@ button {
 .app {
   min-height: 100%;
   display: grid;
-  grid-template-rows: 56px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .topbar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 16px;
+  padding: 8px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
 }
+
+.metrics {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics b { color: #1c2430; font-weight: 650; }
+.metrics .ghost { padding: 4px 8px; }
 
 .mark {
   width: 28px;
@@ -199,6 +214,8 @@ input:focus, select:focus, button:focus-visible {
   min-height: 1.2em;
 }
 
+.detail.error { color: var(--bad); }
+
 .stage-card {
   display: flex;
   flex-direction: column;
@@ -241,6 +258,15 @@ input:focus, select:focus, button:focus-visible {
   object-fit: contain;
   touch-action: none;
   cursor: crosshair;
+}
+
+.viewport.pixel { overflow: auto; }
+
+.viewport canvas.pixel {
+  width: auto;
+  height: auto;
+  max-width: none;
+  object-fit: none;
 }
 
 .banner {
@@ -286,7 +312,7 @@ input:focus, select:focus, button:focus-visible {
 }
 
 @media (max-width: 800px) {
-  .app { grid-template-rows: 48px minmax(0, 1fr); }
+  .metrics { margin-left: 0; width: 100%; }
   .workspace {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
