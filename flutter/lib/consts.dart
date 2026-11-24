@@ -151,6 +151,7 @@ const String kOptionEnableFileCopyPaste = "enable-file-copy-paste";
 const String kOptionDisableClipboard = "disable_clipboard";
 const String kOptionLockAfterSessionEnd = "lock_after_session_end";
 const String kOptionPrivacyMode = "privacy_mode";
+const String kOptionPrivacyModeBackground = "privacy-mode-background";
 const String kOptionTouchMode = "touch-mode";
 const String kOptionI444 = "i444";
 const String kOptionSwapLeftRightMouse = "swap-left-right-mouse";
