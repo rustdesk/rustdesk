@@ -10,6 +10,7 @@ import {
   selectCodecs,
   toHostMessage,
 } from './control.ts';
+import { CursorShapes } from './cursor.ts';
 import { decodeMessage, encodeMessage } from './protos.ts';
 import { type ConnectedHost, connectDirect, connectViaId } from './rustdeskClient.ts';
 import {
@@ -38,6 +39,7 @@ function peerToJson(peer: Record<string, any>, encrypted: boolean): Record<strin
         width: Number(d.width ?? 0),
         height: Number(d.height ?? 0),
         online: Boolean(d.online ?? true),
+        cursorEmbedded: Boolean(d.cursor_embedded),
       }))
     : [];
 
@@ -187,6 +189,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   sendJson({ type: 'hello', service: 'rustdesk-web-gateway' });
 
   const startHostPump = async (conn: ConnectedHost) => {
+    const cursorShapes = new CursorShapes();
     currentSize = initialDisplaySize(conn.peerInfo);
     sendJson(peerToJson(conn.peerInfo, conn.encrypted));
     sendJson({
@@ -230,6 +233,9 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
               display: Number(sd.display ?? 0),
               width: w,
               height: h,
+              x: Number(sd.x ?? 0),
+              y: Number(sd.y ?? 0),
+              cursorEmbedded: Boolean(sd.cursor_embedded),
               name: '',
             });
           }
@@ -263,8 +269,12 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
           }
         }
 
-        // 4. CursorPosition
-        if (msg.cursor_position) {
+        // 4. Cursor shape and position
+        if (msg.cursor_data) {
+          sendJson({ type: 'cursorShape', shape: cursorShapes.decode(msg.cursor_data) });
+        } else if (msg.cursor_id !== undefined) {
+          sendJson({ type: 'cursorShape', shape: cursorShapes.get(msg.cursor_id) });
+        } else if (msg.cursor_position) {
           sendJson({
             type: 'cursor',
             x: Number(msg.cursor_position.x ?? 0),

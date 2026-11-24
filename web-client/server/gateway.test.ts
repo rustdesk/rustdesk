@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import net from 'node:net';
+import { zstdCompressSync } from 'node:zlib';
 import nacl from 'tweetnacl';
 import {
   DEFAULT_DIRECT_PORT,
@@ -33,8 +34,10 @@ import {
   selectCodecs,
   toHostMessage,
 } from './control.ts';
+import { CursorShapes } from './cursor.ts';
 import { readUntilHash } from './handshake.ts';
 import {
+  BoolOptionValues,
   ChromaValues,
   ControlKeyValues,
   KeyboardModeValues,
@@ -293,6 +296,33 @@ test('StreamCipher kx_version=1 derives directional split keys', () => {
 
   const reply = responder.seal(Buffer.from('pong'));
   assert.equal(Buffer.from(initiator.open(reply)).toString('utf8'), 'pong');
+});
+
+test('gateway requests remote cursor updates and decodes and caches native cursor shapes', () => {
+  const capabilities = { vp8: true, vp9: false, h264: false, h265: false, av1: false, reported: true };
+  assert.equal(buildLoginOptions(capabilities).show_remote_cursor, BoolOptionValues.Yes);
+
+  const pixels = Buffer.from([20, 40, 60, 255, 10, 30, 50, 128]);
+  const id = { low: -1, high: -1, unsigned: true };
+  const frame = encodeMessage({
+    cursor_data: { id, width: 2, height: 1, hotx: 1, colors: zstdCompressSync(pixels) },
+  });
+  assert.equal(frame[0], 0x62);
+  const cursorId = encodeMessage({ cursor_id: id });
+  assert.equal(cursorId[0], 0x70);
+
+  const shapes = new CursorShapes();
+  const shape = shapes.decode(decodeMessage(frame).cursor_data);
+  assert.deepEqual(shape, { width: 2, height: 1, hotX: 1, hotY: 0, rgba: pixels.toString('base64') });
+  const decodedId = decodeMessage(cursorId).cursor_id;
+  assert.equal(decodedId, '18446744073709551615');
+  assert.deepEqual(shapes.get(decodedId), shape);
+});
+
+test('gateway falls back when a cursor bitmap is malformed or exceeds its declared dimensions', () => {
+  const shapes = new CursorShapes();
+  assert.equal(shapes.decode({ width: 1, height: 1, colors: Buffer.from('bad data') }), null);
+  assert.equal(shapes.decode({ width: 1, height: 1, colors: zstdCompressSync(Buffer.alloc(8)) }), null);
 });
 
 test('canonical RustDesk protobuf field wire tags match upstream message.proto and rendezvous.proto', () => {

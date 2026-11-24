@@ -266,11 +266,11 @@ export function RustDeskShell({
     setPendingMode(activeMode);
 
     const key = deviceKeyFor({ mode: activeMode, peerId, host, port });
-    const saved = getSavedPassword(savedPasswords, key);
+    const saved = rememberPassword ? getSavedPassword(savedPasswords, key) : '';
     const needsTokenPrompt = authRequired && !gatewayToken.trim();
     if (saved && !needsTokenPrompt && phase !== 'error') {
       onChangeField('password', saved);
-      onConnect({ mode: activeMode, password: saved, remember: true });
+      onConnect({ mode: activeMode, password: saved, remember: rememberPassword });
       return;
     }
 
@@ -290,7 +290,7 @@ export function RustDeskShell({
     setPendingMode(device.mode);
 
     const key = deviceKeyFor(device);
-    const saved = getSavedPassword(savedPasswords, key);
+    const saved = rememberPassword ? getSavedPassword(savedPasswords, key) : '';
     const needsTokenPrompt = authRequired && !gatewayToken.trim();
     if (saved && !needsTokenPrompt) {
       onChangeField('password', saved);
@@ -304,7 +304,7 @@ export function RustDeskShell({
         host: device.host,
         port: device.port || '21118',
         password: saved,
-        remember: true,
+        remember: rememberPassword,
       });
       return;
     }

@@ -1,20 +1,21 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# RustDesk Web Client
 
-# Run and deploy your AI Studio app
+The web client uses WebCodecs to display RustDesk sessions. The Node.js gateway serves the frontend and handles the WebSocket connection at `/ws`.
 
-This contains everything you need to run your app locally.
+## Local development
 
-View your app in AI Studio: https://ai.studio/apps/dc06af6e-da37-49dd-b5fe-c5bf3e50a68a
+```sh
+yarn install --frozen-lockfile
+yarn dev
+```
 
-## Run Locally
+Open `http://localhost:3000`.
 
-**Prerequisites:**  Node.js
+## Production
 
+```sh
+yarn build
+NODE_ENV=production npm start
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Use Node.js 24 for native cursor decoding. The gateway reads `PORT` and supports `RUSTDESK_GATEWAY_TOKEN` for gateway authentication. Use HTTPS for remote browser access.

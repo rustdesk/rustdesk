@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
+import { keyboardInset } from '../lib/gestures';
 import { t, type Locale } from '../lib/i18n';
 import {
   buildSoftKeyChord,
@@ -11,6 +12,7 @@ import {
 
 interface SoftKeyboardBarProps {
   locale: Locale;
+  inputRef: React.RefObject<HTMLInputElement | null>;
   onSendText: (text: string) => void;
   onSendControl: (action: 'down' | 'up', control: string) => void;
   onSendChord: (parts: SoftChordPart[]) => void;
@@ -38,27 +40,45 @@ const EXTRA_KEYS = [
 
 export function SoftKeyboardBar({
   locale,
+  inputRef,
   onSendText,
   onSendControl,
   onSendChord,
   onHide,
 }: SoftKeyboardBarProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
   const lastSentRef = useRef('');
-  const [hasDraft, setHasDraft] = useState(false);
   const [latched, setLatched] = useState<string[]>([]);
 
   useEffect(() => {
-    inputRef.current?.focus({ preventScroll: true });
-  }, []);
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    let keyboardWasVisible = false;
+    const syncKeyboard = () => {
+      const inset = keyboardInset(window.innerHeight, viewport.height, viewport.offsetTop);
+      if (inset > 80) {
+        keyboardWasVisible = true;
+      } else if (keyboardWasVisible && inset < 24) {
+        keyboardWasVisible = false;
+        onHide();
+      }
+    };
+
+    syncKeyboard();
+    viewport.addEventListener('resize', syncKeyboard);
+    viewport.addEventListener('scroll', syncKeyboard);
+    return () => {
+      viewport.removeEventListener('resize', syncKeyboard);
+      viewport.removeEventListener('scroll', syncKeyboard);
+    };
+  }, [onHide]);
 
   const resetLocalDraft = () => {
     lastSentRef.current = '';
     if (inputRef.current) {
       inputRef.current.value = '';
     }
-    setHasDraft(false);
   };
 
   const toggleModifier = (control: string) => {
@@ -94,7 +114,6 @@ export function SoftKeyboardBar({
         setLatched([]);
         // Restore local draft without leaving the shortcut character behind
         el.value = prevVal;
-        setHasDraft(prevVal.length > 0);
         if (chars.length > 0) {
           onSendText(chars.join(''));
         }
@@ -104,7 +123,6 @@ export function SoftKeyboardBar({
 
     const diff = diffTextInput(prevVal, nextVal);
     if (diff.backspaces === 0 && !diff.insert) {
-      setHasDraft(nextVal.length > 0);
       return;
     }
 
@@ -117,7 +135,6 @@ export function SoftKeyboardBar({
     }
 
     lastSentRef.current = nextVal;
-    setHasDraft(nextVal.length > 0);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -136,7 +153,7 @@ export function SoftKeyboardBar({
     if (!control || control === 'Space') return;
 
     // When the local buffer has text and no modifiers are latched, let native Backspace
-    // edit the input box smoothly and forward the exact diff via handleInput.
+    // edit the input buffer and forward the exact diff via handleInput.
     if (control === 'Backspace' && latched.length === 0 && e.currentTarget.value.length > 0) {
       return;
     }
@@ -194,8 +211,12 @@ export function SoftKeyboardBar({
       className="softbar"
       data-testid="softbar"
       onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => {
+        if (e.target instanceof Element && e.target.closest('button')) {
+          e.preventDefault();
+        }
+      }}
     >
-      {/* RustDesk Mobile-style extra special keys & sticky modifiers row */}
       <div
         className="soft-key-strip"
         data-testid="soft-key-strip"
@@ -231,48 +252,32 @@ export function SoftKeyboardBar({
         ))}
       </div>
 
-      {/* Text / IME input row */}
-      <div className="flex gap-2 items-center w-full">
-        <div className="relative flex-1 flex items-center">
-          <input
-            ref={inputRef}
-            type="text"
-            className="rd-input w-full pr-8"
-            data-testid="soft-input"
-            placeholder={
-              latched.length > 0
-                ? `${t(locale, 'softNextKeyPrefix')} ${latched.join('+')}...`
-                : t(locale, 'softPlaceholder')
-            }
-            autoCapitalize="off"
-            autoCorrect="off"
-            autoComplete="off"
-            spellCheck={false}
-            onKeyDown={handleKeyDown}
-            onKeyUp={handleKeyUp}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
-            onInput={handleInput}
-          />
-          {hasDraft && (
-            <button
-              type="button"
-              className="absolute right-2 p-1 rounded text-[var(--ink-soft)] hover:text-[var(--ink)]"
-              data-testid="soft-input-clear"
-              aria-label={t(locale, 'clearInput')}
-              onClick={() => {
-                resetLocalDraft();
-                inputRef.current?.focus({ preventScroll: true });
-              }}
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        <button type="button" className="rd-btn" data-testid="soft-hide" onClick={onHide}>
-          {t(locale, 'softHide')}
-        </button>
-      </div>
+      <button
+        type="button"
+        className="soft-key-btn"
+        data-testid="soft-hide"
+        aria-label={t(locale, 'softHide')}
+        onClick={onHide}
+      >
+        <ChevronDown size={18} aria-hidden="true" />
+      </button>
+      <input
+        ref={inputRef}
+        type="text"
+        className="soft-key-capture"
+        data-testid="soft-input"
+        aria-label={t(locale, 'softPlaceholder')}
+        tabIndex={-1}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        onKeyDown={handleKeyDown}
+        onKeyUp={handleKeyUp}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
+        onInput={handleInput}
+      />
     </div>
   );
 }

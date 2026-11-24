@@ -443,44 +443,34 @@ button:focus-visible {
 .softbar {
   position: absolute;
   z-index: 4;
-  left: calc(10px + env(safe-area-inset-left, 0px));
-  right: calc(10px + env(safe-area-inset-right, 0px));
-  bottom: calc(10px + env(safe-area-inset-bottom, 0px) + var(--kb, 0px));
+  inset-inline: 0;
+  bottom: max(env(safe-area-inset-bottom, 0px), var(--kb, 0px));
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 5px;
-  padding: 6px 8px;
+  height: 46px;
+  padding-inline: max(4px, env(safe-area-inset-left, 0px)) max(4px, env(safe-area-inset-right, 0px));
   background: var(--overlay-surface);
-  backdrop-filter: blur(16px) saturate(1.25);
-  -webkit-backdrop-filter: blur(16px) saturate(1.25);
-  border: 1px solid var(--overlay-border);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  border-top: 1px solid var(--overlay-border);
 }
 
-@media (min-width: 641px) {
-  .softbar {
-    max-width: 580px;
-    margin: 0 auto;
-  }
-}
-
-.softbar .rd-input {
-  min-height: 36px;
-  padding: 6px 10px;
-  background: var(--overlay-input-bg);
-  border-color: var(--overlay-border);
-}
-
-.softbar .rd-btn {
-  min-height: 36px;
-  padding: 6px 10px;
-  background: var(--overlay-surface-subtle);
-  border-color: var(--overlay-border);
+.soft-key-capture {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  pointer-events: none;
 }
 
 .soft-key-strip {
   display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: center;
   gap: 5px;
   overflow-x: auto;
@@ -763,14 +753,17 @@ button:focus-visible {
 .remote-cursor {
   position: absolute;
   z-index: 3;
-  width: 16px;
-  height: 16px;
-  margin: -8px 0 0 -8px;
-  border: 2px solid var(--accent);
-  border-radius: 50%;
-  background: #ffffff;
   pointer-events: none;
-  box-shadow: 0 1px 3px rgba(16, 20, 24, 0.25);
+}
+
+.remote-cursor canvas {
+  background: transparent;
+}
+
+.remote-cursor svg {
+  position: absolute;
+  left: -3px;
+  top: -2px;
 }
 
 .remote-cursor[hidden] {

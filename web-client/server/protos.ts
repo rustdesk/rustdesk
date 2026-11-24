@@ -379,6 +379,15 @@ message MultiClipboards {
   repeated Clipboard clipboards = 1;
 }
 
+message CursorData {
+  uint64 id = 1;
+  sint32 hotx = 2;
+  sint32 hoty = 3;
+  int32 width = 4;
+  int32 height = 5;
+  bytes colors = 6;
+}
+
 message CursorPosition {
   sint32 x = 1;
   sint32 y = 2;
@@ -457,7 +466,9 @@ message Message {
     Hash hash = 9;
     MouseEvent mouse_event = 10;
     AudioFrame audio_frame = 11;
+    CursorData cursor_data = 12;
     CursorPosition cursor_position = 13;
+    uint64 cursor_id = 14;
     KeyEvent key_event = 15;
     Clipboard clipboard = 16;
     Misc misc = 19;

@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { MousePointer2 } from 'lucide-react';
 import { DiagnosticOverlay } from './components/DiagnosticOverlay';
 import { MobileDock } from './components/MobileDock';
 import {
@@ -21,10 +23,7 @@ import {
   type SavedDevice,
 } from './lib/devices';
 import {
-  loadRememberPasswordPref,
-  loadSavedPasswords,
-  persistRememberPasswordPref,
-  persistSavedPasswords,
+  clearLegacyPasswordStorage,
   removeSavedPassword,
   setSavedPassword,
   type SavedPasswordMap,
@@ -178,7 +177,7 @@ export default function App() {
   }
   const prefs = initialPrefs.current;
 
-  // Connection form & session state (non-secret fields persisted locally; passwords never stored)
+  // Only non-secret connection preferences are persisted to browser storage.
   const [directIpEnabled, setDirectIpEnabled] = useState<boolean>(Boolean(prefs.directIpEnabled));
   const [mode, setMode] = useState<ConnectionMode>(
     prefs.directIpEnabled && prefs.mode === 'direct' ? 'direct' : 'id',
@@ -249,20 +248,17 @@ export default function App() {
     }
   }, []);
 
-  const [savedPasswords, setSavedPasswords] = useState<SavedPasswordMap>(() =>
-    loadSavedPasswords(),
-  );
-  const [rememberPassword, setRememberPassword] = useState<boolean>(() =>
-    loadRememberPasswordPref(),
-  );
+  const [savedPasswords, setSavedPasswords] = useState<SavedPasswordMap>({});
+  const [rememberPassword, setRememberPassword] = useState(false);
 
   useEffect(() => {
-    persistSavedPasswords(savedPasswords);
-  }, [savedPasswords]);
+    clearLegacyPasswordStorage();
+  }, []);
 
-  useEffect(() => {
-    persistRememberPasswordPref(rememberPassword);
-  }, [rememberPassword]);
+  const handleRememberPasswordChange = (enabled: boolean) => {
+    setRememberPassword(enabled);
+    if (!enabled) setSavedPasswords({});
+  };
 
   const handleToggleFavorite = useCallback((key: string) => {
     setDevices((prev) => toggleFavoriteDevice(prev, key));
@@ -383,6 +379,12 @@ export default function App() {
   const [softKeys, setSoftKeys] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [virtualCursorVisible, setVirtualCursorVisible] = useState(false);
+  const [cursorEmbedded, setCursorEmbedded] = useState(false);
+  const [cursorShape, setCursorShape] = useState<{
+    pixels: ImageData;
+    hotX: number;
+    hotY: number;
+  } | null>(null);
   const [pageZoomed, setPageZoomed] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(() => {
     try {
@@ -401,7 +403,9 @@ export default function App() {
   const stageRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cursorElRef = useRef<HTMLDivElement>(null);
+  const cursorCanvasRef = useRef<HTMLCanvasElement>(null);
   const captureRef = useRef<HTMLInputElement>(null);
+  const softKeyboardInputRef = useRef<HTMLInputElement>(null);
   const captureComposingRef = useRef(false);
   const lastCompositionEndAtRef = useRef(0);
   const pressedChrByCodeRef = useRef<Map<string, string>>(new Map());
@@ -467,7 +471,7 @@ export default function App() {
     () => ({
       allowEdgePan: true,
       edgePadding: DEFAULT_EDGE_PADDING,
-      bottomInset: softKeys ? 112 : 0,
+      bottomInset: softKeys ? 46 : 0,
     }),
     [softKeys],
   );
@@ -551,22 +555,6 @@ export default function App() {
     });
   }, [send]);
 
-  const clickButton = useCallback(
-    (button: 'left' | 'right' | 'middle', x: number, y: number) => {
-      if (displayPrefsRef.current.viewOnly) return;
-      const mapped = applyMouseButtonSwap(button, displayPrefsRef.current.swapMouseButtons);
-      finishPendingClick();
-      send({ type: 'mouse', action: 'move', x, y });
-      send({ type: 'mouse', action: 'down', button: mapped, x, y });
-      const timer = window.setTimeout(() => {
-        pendingClickRef.current = null;
-        send({ type: 'mouse', action: 'up', button: mapped, x, y });
-      }, 40);
-      pendingClickRef.current = { button: mapped, x, y, timer };
-    },
-    [finishPendingClick, send],
-  );
-
   const clearLongPress = useCallback(() => {
     if (longTimerRef.current !== null) {
       window.clearTimeout(longTimerRef.current);
@@ -596,10 +584,28 @@ export default function App() {
     const el = cursorElRef.current;
     if (el) {
       const screen = mapFromRemote(cx, cy, viewRef.current);
+      if (el.style.visibility) el.style.removeProperty('visibility');
       el.style.left = `${screen.x}px`;
       el.style.top = `${screen.y}px`;
     }
   }, []);
+
+  const clickButton = useCallback(
+    (button: 'left' | 'right' | 'middle', x: number, y: number) => {
+      if (displayPrefsRef.current.viewOnly) return;
+      const mapped = applyMouseButtonSwap(button, displayPrefsRef.current.swapMouseButtons);
+      finishPendingClick();
+      if (touchModeRef.current) placeCursor(x, y);
+      send({ type: 'mouse', action: 'move', x, y });
+      send({ type: 'mouse', action: 'down', button: mapped, x, y });
+      const timer = window.setTimeout(() => {
+        pendingClickRef.current = null;
+        send({ type: 'mouse', action: 'up', button: mapped, x, y });
+      }, 40);
+      pendingClickRef.current = { button: mapped, x, y, timer };
+    },
+    [finishPendingClick, placeCursor, send],
+  );
 
   // Keep virtual cursor DOM position synchronized on view changes
   useEffect(() => {
@@ -609,6 +615,12 @@ export default function App() {
     el.style.left = `${screen.x}px`;
     el.style.top = `${screen.y}px`;
   }, [view.scale, view.panX, view.panY, virtualCursorVisible]);
+
+  useEffect(() => {
+    if (cursorShape) {
+      cursorCanvasRef.current?.getContext('2d')?.putImageData(cursorShape.pixels, 0, 0);
+    }
+  }, [cursorShape]);
 
   // Expose window.__rd and window.__rdView on every render
   useEffect(() => {
@@ -795,6 +807,26 @@ export default function App() {
     focusDesktopCapture();
   }, [focusDesktopCapture]);
 
+  const hideSoftKeyboard = useCallback(() => {
+    setSoftKeys(false);
+    focusDesktopCapture();
+  }, [focusDesktopCapture]);
+
+  const toggleSoftKeyboard = () => {
+    if (softKeys) {
+      closeChrome();
+      hideSoftKeyboard();
+      return;
+    }
+
+    // iOS requires focus during the original tap to open the system keyboard.
+    flushSync(() => {
+      closeChrome();
+      setSoftKeys(true);
+    });
+    softKeyboardInputRef.current?.focus({ preventScroll: true });
+  };
+
   const publishStatsSnapshot = useCallback((nowMs: number) => {
     const rates = computeFrameRates(frameStatsRef.current, nowMs);
     const decMetrics = decoderRef.current?.getMetrics();
@@ -976,6 +1008,9 @@ export default function App() {
       );
 
       setPeer(null);
+      setCursorShape(null);
+      setCursorEmbedded(false);
+      placeCursor(sizeRef.current.width / 2, sizeRef.current.height / 2);
       setStats(EMPTY_STATS);
       setRtt(0);
       resetDiagnostics();
@@ -989,6 +1024,7 @@ export default function App() {
       sock.binaryType = 'arraybuffer';
       wsRef.current = sock;
       let receivedTerminalError = false;
+      let cursorDisplayOrigin = { x: 0, y: 0 };
 
       sock.onopen = () => {
         if (wsRef.current !== sock) return;
@@ -1106,6 +1142,8 @@ export default function App() {
             setPeer(msg);
             setDisplay(msg.currentDisplay);
             const chosen = msg.displays[msg.currentDisplay] ?? msg.displays[0];
+            cursorDisplayOrigin = { x: chosen?.x ?? 0, y: chosen?.y ?? 0 };
+            setCursorEmbedded(Boolean(chosen?.cursorEmbedded));
             if (chosen && chosen.width > 0 && chosen.height > 0) {
               sizeRef.current = { width: chosen.width, height: chosen.height };
               setStats((prev) => ({ ...prev, width: chosen.width, height: chosen.height }));
@@ -1140,6 +1178,8 @@ export default function App() {
 
           case 'display':
             setDisplay(msg.display);
+            cursorDisplayOrigin = { x: msg.x ?? 0, y: msg.y ?? 0 };
+            setCursorEmbedded(Boolean(msg.cursorEmbedded));
             if (msg.width > 0 && msg.height > 0) {
               sizeRef.current = { width: msg.width, height: msg.height };
               setStats((prev) => ({ ...prev, width: msg.width, height: msg.height }));
@@ -1148,6 +1188,34 @@ export default function App() {
               setPan({ panX: 0, panY: 0 });
             }
             break;
+
+          case 'cursor': {
+            const x = msg.x - cursorDisplayOrigin.x;
+            const y = msg.y - cursorDisplayOrigin.y;
+            const { width, height } = sizeRef.current;
+            if (x >= 0 && x < width && y >= 0 && y < height) {
+              placeCursor(x, y);
+            } else if (cursorElRef.current) {
+              cursorElRef.current.style.visibility = 'hidden';
+            }
+            break;
+          }
+
+          case 'cursorShape': {
+            try {
+              const shape = msg.shape;
+              if (!shape) {
+                setCursorShape(null);
+                break;
+              }
+              const { width, height, hotX, hotY, rgba } = shape;
+              const pixels = Uint8ClampedArray.from(atob(rgba), (char) => char.charCodeAt(0));
+              setCursorShape({ pixels: new ImageData(pixels, width, height), hotX, hotY });
+            } catch {
+              setCursorShape(null);
+            }
+            break;
+          }
 
           case 'clipboard':
             if (!displayPrefsRef.current.disableClipboard) {
@@ -1672,6 +1740,7 @@ export default function App() {
             finishPendingClick();
             const startPos = remoteFromLocalClamped(ef.x, ef.y);
             if (startPos) {
+              placeCursor(startPos.x, startPos.y);
               send({ type: 'mouse', action: 'move', x: startPos.x, y: startPos.y });
               send({ type: 'mouse', action: 'down', button: 'left', x: startPos.x, y: startPos.y });
             }
@@ -1681,6 +1750,7 @@ export default function App() {
             if (!remoteInputRef.current || displayPrefsRef.current.viewOnly) break;
             const curPos = remoteFromLocalClamped(ef.x, ef.y);
             if (curPos) {
+              placeCursor(curPos.x, curPos.y);
               queueMove(curPos);
             }
             break;
@@ -1896,9 +1966,6 @@ export default function App() {
     }
     if (!touchMode) {
       setVirtualCursorVisible(true);
-      if (cursorRef.current.x === 0 && cursorRef.current.y === 0) {
-        placeCursor(remoteW / 2, remoteH / 2);
-      }
     }
 
     try {
@@ -2130,8 +2197,8 @@ export default function App() {
       };
     };
 
-    const shouldUseTouchFallback = (now: number) =>
-      touchGestureRef.current.pointers.size === 0 && now - lastTouchAtRef.current > 250;
+    const shouldUseTouchFallback = (touches: TouchList) =>
+      touches.length === 2 && touchGestureRef.current.pointers.size < 2;
 
     const onTouchStart = (e: TouchEvent) => {
       const now = Date.now();
@@ -2143,12 +2210,9 @@ export default function App() {
 
       if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
-        // Fallback two-finger pinch ONLY for TouchEvent-only environments where PointerEvent does not fire
-        if (e.touches.length === 2 && shouldUseTouchFallback(now)) {
-          touchFallbackPinchRef.current = touchPairMetrics(e.touches);
-        } else {
-          touchFallbackPinchRef.current = null;
-        }
+        touchFallbackPinchRef.current = shouldUseTouchFallback(e.touches)
+          ? touchPairMetrics(e.touches)
+          : null;
       }
     };
 
@@ -2157,20 +2221,20 @@ export default function App() {
       nativeTouchInfoRef.current = { count: e.touches.length, updatedAt: now };
       if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
-        if (e.touches.length === 2 && touchFallbackPinchRef.current && shouldUseTouchFallback(now)) {
-          const cur = touchPairMetrics(e.touches);
-          const prev = touchFallbackPinchRef.current;
-          applyPinchStepRef.current(
-            prev.midX,
-            prev.midY,
-            prev.dist,
-            cur.midX,
-            cur.midY,
-            cur.dist,
-          );
-          touchFallbackPinchRef.current = cur;
-        } else if (e.touches.length !== 2) {
+        if (!shouldUseTouchFallback(e.touches)) {
           touchFallbackPinchRef.current = null;
+          return;
+        }
+
+        const cur = touchPairMetrics(e.touches);
+        const prev = touchFallbackPinchRef.current;
+        if (touchGestureRef.current.pointers.size === 1) {
+          // A partial pointer sequence must not also become a tap or long press.
+          resetAllGesturesRef.current();
+        }
+        touchFallbackPinchRef.current = cur;
+        if (prev) {
+          applyPinchStepRef.current(prev.midX, prev.midY, prev.dist, cur.midX, cur.midY, cur.dist);
         }
       }
     };
@@ -2306,8 +2370,6 @@ export default function App() {
     setTouchMode((prev) => {
       const next = !prev;
       if (!next) {
-        placeCursor(remoteW / 2, remoteH / 2);
-        // Show virtual cursor dot when switching to Mouse mode on touch or mobile viewports
         setVirtualCursorVisible(
           isCoarseDevice || isMobileViewport || Date.now() - lastTouchAtRef.current < 60_000,
         );
@@ -2334,9 +2396,11 @@ export default function App() {
   const showMobileDock = remoteInput && !softKeys && isTouchLayout;
   const liveHostTitle =
     peer?.hostname || peer?.username || (mode === 'id' ? peerId : host) || 'Remote';
-  // Appendix B fix #2: hide virtual cursor dot on desktop fine-pointer sessions
   const showRemoteCursor =
-    displayPrefs.showRemoteCursor && !touchMode && virtualCursorVisible && phase === 'live';
+    displayPrefs.showRemoteCursor &&
+    !cursorEmbedded &&
+    (isTouchLayout || virtualCursorVisible) &&
+    phase === 'live';
 
   return (
     <section
@@ -2374,7 +2438,19 @@ export default function App() {
         className="remote-cursor"
         data-testid="remote-cursor"
         hidden={!showRemoteCursor}
-      />
+        aria-hidden="true"
+      >
+        {cursorShape ? (
+          <canvas
+            ref={cursorCanvasRef}
+            width={cursorShape.pixels.width}
+            height={cursorShape.pixels.height}
+            style={{ left: -cursorShape.hotX, top: -cursorShape.hotY }}
+          />
+        ) : (
+          <MousePointer2 size={18} fill="#fff" stroke="#171717" />
+        )}
+      </div>
 
       <input
         ref={captureRef}
@@ -2465,7 +2541,7 @@ export default function App() {
             }
           }}
           onRefresh={() => send({ type: 'refresh' })}
-          onToggleKeyboard={() => setSoftKeys((prev) => !prev)}
+          onToggleKeyboard={toggleSoftKeyboard}
           onCtrlAltDel={() => handleQuickKey('Ctrl+Alt+Del')}
           onToggleFullscreen={handleToggleFullscreen}
           onOpenMenu={() => setMenuOpen(true)}
@@ -2491,7 +2567,7 @@ export default function App() {
           touchMode={touchMode}
           rightArmed={rightArmed}
           hasWarning={Boolean(decoderError)}
-          onToggleKeyboard={() => setSoftKeys(true)}
+          onToggleKeyboard={toggleSoftKeyboard}
           onToggleTouchMode={handleToggleTouchMode}
           onRightClickAction={handleMobileRightClick}
           onOpenMenu={() => setMenuOpen(true)}
@@ -2542,7 +2618,7 @@ export default function App() {
             else if (field === 'gatewayToken') setGatewayToken(val);
           }}
           onChangeForceRelay={setForceRelay}
-          onChangeRememberPassword={setRememberPassword}
+          onChangeRememberPassword={handleRememberPasswordChange}
           onClearSavedPassword={handleClearSavedPassword}
           onSelectDevice={handleSelectDevice}
           onToggleFavorite={handleToggleFavorite}
@@ -2625,10 +2701,7 @@ export default function App() {
           }}
           onQuickKey={handleQuickKey}
           onToggleRightArmed={() => setRightArmed((r) => !r)}
-          onToggleKeyboard={() => {
-            setSoftKeys((s) => !s);
-            closeChrome();
-          }}
+          onToggleKeyboard={toggleSoftKeyboard}
           onChangeQuality={(q, fps, nextCodec) => {
             setQuality(q);
             setTargetFps(fps);
@@ -2653,13 +2726,11 @@ export default function App() {
       {softKeys && remoteInput && (
         <SoftKeyboardBar
           locale={locale}
+          inputRef={softKeyboardInputRef}
           onSendText={sendText}
           onSendControl={(action, control) => send({ type: 'key', action, control })}
           onSendChord={sendChord}
-          onHide={() => {
-            setSoftKeys(false);
-            focusDesktopCapture();
-          }}
+          onHide={hideSoftKeyboard}
         />
       )}
     </section>

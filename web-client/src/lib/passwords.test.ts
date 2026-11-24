@@ -2,28 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getSavedPassword,
-  normalizeSavedPasswords,
+  clearLegacyPasswordStorage,
   removeSavedPassword,
   setSavedPassword,
 } from './passwords';
 
-test('normalizeSavedPasswords drops invalid or empty entries while preserving valid secrets', () => {
-  assert.deepEqual(normalizeSavedPasswords(null), {});
-  assert.deepEqual(normalizeSavedPasswords(['a', 'b']), {});
-  assert.deepEqual(
-    normalizeSavedPasswords({
-      'id:123456789': 'pw-1',
-      'direct:10.0.0.5:21118': 'pw-2',
-      '': 'ignored-empty-key',
-      '   ': 'ignored-blank-key',
-      'id:empty': '',
-      'id:num': 42,
-    }),
-    {
-      'id:123456789': 'pw-1',
-      'direct:10.0.0.5:21118': 'pw-2',
-    },
-  );
+test('clears only the old password storage entries', () => {
+  const storage = new Map([
+    ['rd_web_saved_passwords', '{"id:123456789":"previous-password"}'],
+    ['rd_web_remember_password', '1'],
+    ['rd_web_prefs', '{"peerId":"123456789"}'],
+  ]);
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { localStorage: { removeItem: storage.delete.bind(storage) } },
+  });
+  try {
+    clearLegacyPasswordStorage();
+    assert.deepEqual([...storage.keys()], ['rd_web_prefs']);
+  } finally {
+    Reflect.deleteProperty(globalThis, 'window');
+  }
 });
 
 test('setSavedPassword, getSavedPassword, and removeSavedPassword behave immutably', () => {

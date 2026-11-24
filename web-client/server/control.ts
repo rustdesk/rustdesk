@@ -236,6 +236,7 @@ export function buildLoginOptions(
     custom_fps: customFps,
     image_quality,
     disable_audio: BoolOptionValues.Yes,
+    show_remote_cursor: BoolOptionValues.Yes,
   };
 }
 

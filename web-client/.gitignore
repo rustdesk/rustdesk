@@ -3,3 +3,6 @@ web/dist/
 web/test-results/
 gateway/target/
 !docs/screenshots/*.png
+
+/dist/
+/server.js

@@ -28,6 +28,7 @@ export interface DisplayInfo {
   width: number;
   height: number;
   online: boolean;
+  cursorEmbedded?: boolean;
 }
 
 export interface PeerEncodingInfo {
@@ -49,13 +50,31 @@ export interface PeerMessage {
   encrypted: boolean;
 }
 
+export interface CursorShape {
+  width: number;
+  height: number;
+  hotX: number;
+  hotY: number;
+  rgba: string;
+}
+
 export type ServerMessage =
   | { type: 'hello'; service: string }
   | { type: 'status'; state: string; detail?: string; username?: string }
   | PeerMessage
-  | { type: 'display'; display: number; width: number; height: number; name?: string }
+  | {
+      type: 'display';
+      display: number;
+      width: number;
+      height: number;
+      x?: number;
+      y?: number;
+      cursorEmbedded?: boolean;
+      name?: string;
+    }
   | { type: 'clipboard'; text: string }
   | { type: 'cursor'; x: number; y: number }
+  | { type: 'cursorShape'; shape: CursorShape | null }
   | { type: 'error'; message: string }
   | { type: 'rtt'; ms: number }
   | { type: 'pong'; seq: number; clientTs: number; serverTs: number };
