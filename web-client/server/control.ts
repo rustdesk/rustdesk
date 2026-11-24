@@ -67,6 +67,8 @@ export type ClientMessage =
       type: 'clipboard';
       text?: string;
     }
+  | { type: 'audio'; enabled: boolean }
+  | { type: 'followWindow'; enabled: boolean }
   | {
       type: 'switchDisplay';
       display?: number;
@@ -332,6 +334,14 @@ export function toHostMessage(
         },
       };
     }
+
+    case 'audio':
+      if (typeof msg.enabled !== 'boolean') return null;
+      return { misc: { option: { disable_audio: msg.enabled ? BoolOptionValues.No : BoolOptionValues.Yes } } };
+
+    case 'followWindow':
+      if (typeof msg.enabled !== 'boolean') return null;
+      return { misc: { option: { follow_remote_window: msg.enabled ? BoolOptionValues.Yes : BoolOptionValues.No } } };
 
     case 'switchDisplay': {
       return {

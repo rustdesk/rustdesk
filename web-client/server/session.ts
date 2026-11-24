@@ -128,6 +128,9 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   let sizes: { width: number; height: number }[] = [];
   let hostConn: ConnectedHost | null = null;
   let sessionCodecs: CodecCaps | undefined;
+  let audioRequested = false;
+  let audioAllowed = true;
+  let audioFormat: { sampleRate: number; channels: number } | null = null;
   let warnedRawVideo = false;
   let currentSize = { width: 0, height: 0 };
 
@@ -230,6 +233,9 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
 
         // 2. Misc control events
         if (msg.misc) {
+          if (Number.isInteger(msg.misc.follow_current_display)) {
+            sendJson({ type: 'focusedDisplay', display: msg.misc.follow_current_display });
+          }
           if (msg.misc.switch_display) {
             const sd = msg.misc.switch_display;
             const w = Number(sd.width ?? 0);
@@ -256,6 +262,24 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
             cleanup(false);
             return;
           }
+        }
+
+        const permission = msg.misc?.permission_info;
+        if (permission?.permission === 3) {
+          audioAllowed = permission.enabled === true;
+          if (!audioAllowed && audioRequested) {
+            audioRequested = false;
+            sendJson({ type: 'audioDenied' });
+          }
+        }
+        if (msg.misc?.audio_format) {
+          const { sample_rate: sampleRate, channels } = msg.misc.audio_format;
+          audioFormat = { sampleRate, channels };
+          if (audioRequested && audioAllowed) sendJson({ type: 'audioFormat', ...audioFormat });
+        }
+        const packet = msg.audio_frame?.data;
+        if (audioAllowed && audioRequested && packet?.length > 0 && packet.length <= 8192 && ws.bufferedAmount < 262144) {
+          sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') });
         }
 
         // 3. Clipboard (single or RustDesk 1.4/1.5 MultiClipboards, uncompressed UTF-8 <= 256 KiB)
@@ -481,6 +505,15 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     if (state !== 'live') return;
 
     if (hostConn) {
+      if (parsed.type === 'audio') {
+        if (typeof parsed.enabled !== 'boolean') return;
+        if (parsed.enabled && !audioAllowed) {
+          sendJson({ type: 'audioDenied' });
+          return;
+        }
+        audioRequested = parsed.enabled;
+        if (audioRequested && audioFormat) sendJson({ type: 'audioFormat', ...audioFormat });
+      }
       let hostMsg;
       if (parsed.type === 'resolution') {
         const { display, width, height } = parsed;

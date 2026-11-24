@@ -3,7 +3,11 @@ import { Activity, RotateCcw, X } from 'lucide-react';
 import type { DiagnosticsSummary, LinkHealth } from '../lib/diagnostics';
 import { t, type Locale } from '../lib/i18n';
 
+import { formatBitrate } from '../lib/protocol';
+import type { SessionStats } from './SessionMenu';
+
 interface DiagnosticOverlayProps {
+  stats: SessionStats;
   locale: Locale;
   summary: DiagnosticsSummary;
   hostRttMs: number;
@@ -43,6 +47,7 @@ function healthColor(health: LinkHealth): { dot: string; badge: string } {
 
 export function DiagnosticOverlay({
   locale,
+  stats,
   summary,
   hostRttMs,
   onReset,
@@ -116,6 +121,17 @@ export function DiagnosticOverlay({
 
       {/* Primary metrics grid */}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-2 text-[11px]">
+        {([
+          ['statCodec', stats.codec],
+          ['statFps', stats.fps],
+          ['statBitrate', formatBitrate(stats.bitrate)],
+          ['statFrames', stats.decoded],
+        ] as const).map(([label, value]) => (
+          <div key={label}>
+            <div className="text-[#94a3b8] text-[10px]">{t(locale, label)}</div>
+            <div className="font-mono-tabular text-[12px] font-medium text-white">{value}</div>
+          </div>
+        ))}
         <div>
           <div className="text-[#94a3b8] text-[10px]">{t(locale, 'diagWsPing')}</div>
           <div

@@ -273,13 +273,14 @@ export function MobileDock({
             type="button"
             className={`mobile-dock-btn${rightArmed ? ' active' : ''}`}
             data-testid="dock-right-click"
+            aria-pressed={touchMode ? rightArmed : undefined}
             aria-label={
               touchMode ? t(locale, 'dockArmRight') : t(locale, 'dockRightAtCursor')
             }
             onClick={onRightClickAction}
           >
             <MousePointerClick size={18} />
-            <span>{rightArmed ? t(locale, 'dockArmed') : t(locale, 'dockRight')}</span>
+            <span className="max-w-16 whitespace-normal">{t(locale, touchMode ? 'dockArmRight' : 'dockRightAtCursor')}</span>
           </button>
 
           <button

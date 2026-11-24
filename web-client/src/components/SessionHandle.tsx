@@ -4,8 +4,6 @@ import {
   ChevronUp,
   GripVertical,
   Keyboard,
-  Maximize2,
-  Minimize2,
   Monitor,
   Pin,
   PinOff,
@@ -40,7 +38,6 @@ interface SessionHandleProps {
   onRefresh: () => void;
   onToggleKeyboard: () => void;
   onCtrlAltDel: () => void;
-  onToggleFullscreen: () => void;
   onOpenMenu: () => void;
   onDisconnect: () => void;
 }
@@ -65,7 +62,6 @@ export function SessionHandle({
   onRefresh,
   onToggleKeyboard,
   onCtrlAltDel,
-  onToggleFullscreen,
   onOpenMenu,
   onDisconnect,
 }: SessionHandleProps) {
@@ -248,18 +244,6 @@ export function SessionHandle({
         onClick={onToggleKeyboard}
       >
         <Keyboard size={15} />
-      </button>
-
-      <button
-        type="button"
-        className="rd-toolbar-btn"
-        data-testid="toolbar-fullscreen"
-        aria-label={isFullscreen ? t(locale, 'exitFullscreen') : t(locale, 'fullscreen')}
-        data-tooltip={isFullscreen ? t(locale, 'exitFullscreen') : t(locale, 'fullscreen')}
-        data-tooltip-pos="bottom"
-        onClick={onToggleFullscreen}
-      >
-        {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
       </button>
 
       <span className="rd-toolbar-sep" aria-hidden="true" />

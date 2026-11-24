@@ -2,10 +2,7 @@ import { PasteKeysButton } from './PasteKeysButton';
 import React, { useState } from 'react';
 import {
   Activity,
-  Globe,
   Keyboard,
-  Maximize2,
-  Minimize2,
   Monitor,
   Power,
   RefreshCw,
@@ -16,7 +13,7 @@ import {
 import { formatConnectionError } from '../lib/errors';
 import { statusLabel, t, type Locale } from '../lib/i18n';
 import type { ViewMode } from '../lib/mapping';
-import { formatBitrate, type PeerMessage, type QualityLevel } from '../lib/protocol';
+import { type PeerMessage, type QualityLevel } from '../lib/protocol';
 import type { ConnectionPhase } from './RustDeskShell';
 
 import type { PreferredCodec } from '../lib/displayPrefs';
@@ -41,7 +38,15 @@ interface SessionMenuProps {
   locale: Locale;
   onPasteKeys: () => Promise<boolean>;
   pasteDisabled: boolean;
-  onToggleLocale: () => void;
+  audioEnabled: boolean;
+  audioIssue: string | null;
+  onToggleAudio: () => void;
+  mobileLayout: boolean;
+  cursorEmbedded: boolean;
+  followWindow: boolean;
+  onToggleFollowWindow: () => void;
+  enlargeCursor: boolean;
+  onToggleEnlargeCursor: () => void;
   phase: ConnectionPhase;
   peer: PeerMessage | null;
   detail: string;
@@ -53,7 +58,6 @@ interface SessionMenuProps {
   touchMode: boolean;
   rightArmed: boolean;
   softKeys: boolean;
-  isFullscreen: boolean;
   viewOnly: boolean;
   followRemoteCursor: boolean;
   onToggleFollowCursor: () => void;
@@ -81,9 +85,8 @@ interface SessionMenuProps {
   onToggleTouchMode: () => void;
   onSwitchDisplay: (index: number) => void;
   onRefresh: () => void;
-  onToggleFullscreen: () => void;
   onQuickKey: (name: 'Esc' | 'Tab' | 'Ctrl+C' | 'Ctrl+V' | 'Ctrl+Alt+Del' | 'Lock') => void;
-  onToggleRightArmed: () => void;
+  onRightClick: () => void;
   onToggleKeyboard: () => void;
   onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec) => void;
   onSendClipboard: (text: string) => void;
@@ -93,7 +96,15 @@ export function SessionMenu({
   locale,
   onPasteKeys,
   pasteDisabled,
-  onToggleLocale,
+  audioEnabled,
+  audioIssue,
+  onToggleAudio,
+  mobileLayout,
+  cursorEmbedded,
+  followWindow,
+  onToggleFollowWindow,
+  enlargeCursor,
+  onToggleEnlargeCursor,
   phase,
   peer,
   detail,
@@ -105,7 +116,6 @@ export function SessionMenu({
   touchMode,
   rightArmed,
   softKeys,
-  isFullscreen,
   viewOnly,
   followRemoteCursor, onToggleFollowCursor, sizes, onResolution,
   showRemoteCursor,
@@ -130,9 +140,8 @@ export function SessionMenu({
   onToggleTouchMode,
   onSwitchDisplay,
   onRefresh,
-  onToggleFullscreen,
   onQuickKey,
-  onToggleRightArmed,
+  onRightClick,
   onToggleKeyboard,
   onChangeQuality,
   onSendClipboard,
@@ -215,18 +224,6 @@ export function SessionMenu({
             </p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              className={`rd-btn${isFullscreen ? ' active' : ''}`}
-              style={{ minWidth: 36, minHeight: 36, padding: 6 }}
-              data-testid="fullscreen"
-              aria-label={isFullscreen ? t(locale, 'exitFullscreen') : t(locale, 'fullscreen')}
-              data-tooltip={isFullscreen ? t(locale, 'exitFullscreen') : t(locale, 'fullscreen')}
-              data-tooltip-pos="bottom-end"
-              onClick={onToggleFullscreen}
-            >
-              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
             <button
               type="button"
               className="rd-btn"
@@ -438,12 +435,16 @@ export function SessionMenu({
                 {t(locale, 'input')}
               </div>
               <div className="flex flex-wrap gap-2" data-testid="quickbar">
-                <button type="button" className="rd-btn" onClick={() => onQuickKey('Esc')}>
-                  Esc
-                </button>
-                <button type="button" className="rd-btn" onClick={() => onQuickKey('Tab')}>
-                  Tab
-                </button>
+                {!mobileLayout && (
+                  <>
+                    <button type="button" className="rd-btn" onClick={() => onQuickKey('Esc')}>
+                      Esc
+                    </button>
+                    <button type="button" className="rd-btn" onClick={() => onQuickKey('Tab')}>
+                      Tab
+                    </button>
+                  </>
+                )}
                 <button type="button" className="rd-btn" onClick={() => onQuickKey('Ctrl+C')}>
                   Ctrl+C
                 </button>
@@ -460,21 +461,25 @@ export function SessionMenu({
                 <button type="button" className="rd-btn" onClick={() => onQuickKey('Lock')}>
                   {t(locale, 'lockScreen')}
                 </button>
-                <button
-                  type="button"
-                  className={`rd-btn${rightArmed ? ' active' : ''}`}
-                  onClick={onToggleRightArmed}
-                >
-                  {rightArmed ? t(locale, 'rightClickArmed') : t(locale, 'rightClick')}
-                </button>
-                <button
-                  type="button"
-                  className={`rd-btn${softKeys ? ' active' : ''}`}
-                  data-testid="keyboard"
-                  onClick={onToggleKeyboard}
-                >
-                  {t(locale, 'keyboard')}
-                </button>
+                {!mobileLayout && (
+                  <>
+                    <button
+                      type="button"
+                      className={`rd-btn${rightArmed ? ' active' : ''}`}
+                      onClick={onRightClick}
+                    >
+                      {t(locale, touchMode ? 'dockArmRight' : 'dockRightAtCursor')}
+                    </button>
+                    <button
+                      type="button"
+                      className={`rd-btn${softKeys ? ' active' : ''}`}
+                      data-testid="keyboard"
+                      onClick={onToggleKeyboard}
+                    >
+                      {t(locale, 'keyboard')}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -561,8 +566,9 @@ export function SessionMenu({
               </div>
             </div>
 
-            <div className="session-group">
-              <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
+            <details className="session-group">
+              <summary className="cursor-pointer text-xs font-semibold">{t(locale, 'advancedQuality')}</summary>
+              <div className="text-xs font-semibold text-[var(--ink-soft)] my-2">
                 {t(locale, 'sessionCodecLabel')}
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -587,7 +593,7 @@ export function SessionMenu({
                   </button>
                 ))}
               </div>
-            </div>
+            </details>
 
             <div className="session-group flex flex-col gap-1">
               <label className="rd-check-row">
@@ -598,6 +604,12 @@ export function SessionMenu({
                 />
                 <span>{t(locale, 'followCursor')}</span>
               </label>
+              {hasMultipleDisplays && (
+                <label className="rd-check-row">
+                  <input type="checkbox" checked={followWindow} onChange={onToggleFollowWindow} />
+                  <span>{t(locale, 'followWindow')}</span>
+                </label>
+              )}
               {sizes.length > 0 && (
                 <label className="rd-check-row">
                   <span>{t(locale, 'remoteResolution')}</span>
@@ -622,17 +634,17 @@ export function SessionMenu({
               <label className="rd-check-row">
                 <input
                   type="checkbox"
-                  data-testid="toggle-diagnostics"
-                  checked={diagnosticsOpen}
-                  onChange={onToggleDiagnostics}
+                  checked={enlargeCursor}
+                  disabled={!showRemoteCursor || cursorEmbedded}
+                  onChange={onToggleEnlargeCursor}
                 />
-                <span>{t(locale, 'diagnostics')}</span>
+                <span>{t(locale, 'enlargeCursor')}</span>
               </label>
             </div>
           </div>
         )}
 
-        {/* Tab 4: Session Telemetry & Language */}
+        {/* Tab 4: Session overview */}
         {activeTab === 'session' && (
           <div className="flex flex-col gap-3.5" role="tabpanel" data-testid="telemetry">
             <div className="session-group grid grid-cols-3 gap-x-4 gap-y-2.5 text-xs">
@@ -677,39 +689,25 @@ export function SessionMenu({
                   {displayRtt} ms
                 </div>
               </div>
-              <div>
-                <div className="text-[var(--ink-soft)]">{t(locale, 'statBitrate')}</div>
-                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="bitrate">
-                  {formatBitrate(stats.bitrate)}
-                </div>
-              </div>
-              <div>
-                <div className="text-[var(--ink-soft)]">{t(locale, 'statFrames')}</div>
-                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="decoded">
-                  {stats.decoded}
-                </div>
-              </div>
             </div>
 
-            <div className="session-group flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="rd-btn"
-                data-testid="lang-toggle"
-                aria-label={t(locale, 'langToggleAria')}
-                onClick={onToggleLocale}
-              >
-                <Globe size={15} />
-                <span>{t(locale, 'langToggle')}</span>
-              </button>
+            <div className="session-group">
               <button
                 type="button"
                 className={`rd-btn${diagnosticsOpen ? ' active' : ''}`}
                 onClick={onToggleDiagnostics}
               >
                 <Activity size={15} />
-                <span>{t(locale, 'diagnostics')}</span>
+                <span>{t(locale, 'diagTitle')}</span>
               </button>
+            </div>
+
+            <div className="session-group">
+              <label className="rd-check-row">
+                <input type="checkbox" checked={audioEnabled} onChange={onToggleAudio} />
+                <span>{t(locale, 'remoteAudio')}</span>
+              </label>
+              {audioIssue && <p role="alert" className="text-xs text-[var(--bad)]">{audioIssue}</p>}
             </div>
 
             {detail && phase !== 'live' && (

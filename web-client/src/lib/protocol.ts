@@ -59,6 +59,10 @@ export interface CursorShape {
 }
 
 export type ServerMessage =
+  | { type: 'audioDenied' }
+  | { type: 'audioFormat'; sampleRate: number; channels: number }
+  | { type: 'audioFrame'; packet: string }
+  | { type: 'focusedDisplay'; display: number }
   | { type: 'resolutions'; display: number; sizes: { width: number; height: number }[] }
   | { type: 'hello'; service: string }
   | { type: 'status'; state: string; detail?: string; username?: string }
@@ -92,6 +96,7 @@ export interface CodecSupport {
 export type QualityLevel = 'low' | 'balanced' | 'best';
 
 export type ClientMessage =
+  | { type: 'audio'; enabled: boolean }
   | { type: 'resolution'; display: number; width: number; height: number }
   | {
       type: 'connect';
@@ -127,6 +132,7 @@ export type ClientMessage =
     }
   | { type: 'text'; text: string }
   | { type: 'clipboard'; text: string }
+  | { type: 'followWindow'; enabled: boolean }
   | { type: 'switchDisplay'; display: number }
   | { type: 'refresh' }
   | { type: 'quality'; quality: QualityLevel; fps: number; codec?: string }

@@ -449,6 +449,7 @@ message PermissionInfo {
 
 message Misc {
   oneof union {
+    int32 follow_current_display = 38;
     ChatMessage chat_message = 4;
     SwitchDisplay switch_display = 5;
     Resolution change_resolution = 24;

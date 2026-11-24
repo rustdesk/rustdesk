@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { MousePointer2 } from 'lucide-react';
+import { RemoteAudio } from './lib/remoteAudio';
 import { DiagnosticOverlay } from './components/DiagnosticOverlay';
 import { MobileDock } from './components/MobileDock';
 import {
@@ -66,7 +67,6 @@ import {
 } from './lib/gestures';
 import {
   LOCALE_STORAGE_KEY,
-  nextLocale,
   resolveEffectiveLocale,
   resolveLocalePreference,
   t,
@@ -296,22 +296,6 @@ export default function App() {
     }
   }, []);
 
-  const toggleLocale = useCallback(() => {
-    setLocalePreference((prev) => {
-      const currentEffective = resolveEffectiveLocale(
-        prev,
-        typeof navigator !== 'undefined' ? navigator.language : null,
-      );
-      const next = nextLocale(currentEffective);
-      try {
-        window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
-      } catch {
-        // Ignore storage quota or private-mode errors
-      }
-      return next;
-    });
-  }, []);
-
   useEffect(() => {
     document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
   }, [locale]);
@@ -505,6 +489,59 @@ export default function App() {
       sock.send(JSON.stringify(msg));
     }
   }, []);
+
+  useEffect(() => {
+    if (phase === 'live' && peer && peer.displays.length > 1) {
+      send({ type: 'followWindow', enabled: displayPrefs.followWindow });
+    }
+  }, [phase, peer, displayPrefs.followWindow, send]);
+
+  const audioRef = useRef<RemoteAudio | null>(null);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [audioIssue, setAudioIssue] = useState<'audioUnsupported' | 'audioDenied' | 'audioFailed' | null>(null);
+  const stopAudio = useCallback(() => {
+    const player = audioRef.current;
+    audioRef.current = null;
+    player?.close();
+    setAudioEnabled(false);
+  }, []);
+  useEffect(() => {
+    if (phase !== 'live') {
+      stopAudio();
+      setAudioIssue(null);
+    }
+    return () => { audioRef.current?.close(); audioRef.current = null; };
+  }, [phase, stopAudio]);
+
+  const toggleAudio = async () => {
+    setAudioIssue(null);
+    if (audioRef.current) {
+      stopAudio();
+      send({ type: 'audio', enabled: false });
+      return;
+    }
+    if (typeof AudioDecoder === 'undefined' || typeof AudioContext === 'undefined') {
+      setAudioIssue('audioUnsupported');
+      return;
+    }
+    const socket = wsRef.current;
+    let player: RemoteAudio;
+    const fail = () => {
+      if (socket !== wsRef.current || (player && player !== audioRef.current)) return;
+      stopAudio();
+      setAudioIssue('audioFailed');
+      send({ type: 'audio', enabled: false });
+    };
+    try {
+      player = new RemoteAudio(fail);
+      audioRef.current = player;
+      setAudioEnabled(true);
+      await player.resume();
+      if (player === audioRef.current && socket === wsRef.current) send({ type: 'audio', enabled: true });
+    } catch {
+      fail();
+    }
+  };
 
   const cancelQueuedMove = useCallback(() => {
     if (moveRafRef.current !== null) {
@@ -1028,6 +1065,8 @@ export default function App() {
       sock.binaryType = 'arraybuffer';
       wsRef.current = sock;
       let receivedTerminalError = false;
+      let sessionDisplays: PeerMessage['displays'] = [];
+      let activeDisplay = 0;
       let cursorDisplayOrigin = { x: 0, y: 0 };
 
       sock.onopen = () => {
@@ -1143,6 +1182,8 @@ export default function App() {
             break;
 
           case 'peer': {
+            sessionDisplays = msg.displays;
+            activeDisplay = msg.currentDisplay;
             setPeer(msg);
             setDisplay(msg.currentDisplay);
             const chosen = msg.displays[msg.currentDisplay] ?? msg.displays[0];
@@ -1180,7 +1221,25 @@ export default function App() {
             break;
           }
 
+          case 'audioDenied':
+            stopAudio();
+            setAudioIssue('audioDenied');
+            break;
+          case 'audioFormat':
+            audioRef.current?.configure(msg.sampleRate, msg.channels);
+            break;
+          case 'audioFrame':
+            audioRef.current?.push(msg.packet);
+            break;
+          case 'focusedDisplay':
+            if (displayPrefsRef.current.followWindow && msg.display !== activeDisplay &&
+                sessionDisplays.some(d => d.index === msg.display && d.online !== false)) {
+              send({ type: 'switchDisplay', display: msg.display });
+            }
+            break;
+
           case 'display':
+            activeDisplay = msg.display;
             setDisplay(msg.display);
             cursorDisplayOrigin = { x: msg.x ?? 0, y: msg.y ?? 0 };
             setCursorEmbedded(Boolean(msg.cursorEmbedded));
@@ -2469,6 +2528,7 @@ export default function App() {
       <div
         ref={cursorElRef}
         className="remote-cursor"
+        style={displayPrefs.enlargeCursor ? { transform: 'scale(2)', transformOrigin: '0 0' } : undefined}
         data-testid="remote-cursor"
         hidden={!showRemoteCursor}
         aria-hidden="true"
@@ -2576,7 +2636,6 @@ export default function App() {
           onRefresh={() => send({ type: 'refresh' })}
           onToggleKeyboard={toggleSoftKeyboard}
           onCtrlAltDel={() => handleQuickKey('Ctrl+Alt+Del')}
-          onToggleFullscreen={handleToggleFullscreen}
           onOpenMenu={() => setMenuOpen(true)}
           onDisconnect={disconnect}
         />
@@ -2585,6 +2644,7 @@ export default function App() {
       {diagnosticsOpen && phase === 'live' && (
         <DiagnosticOverlay
           locale={locale}
+          stats={stats}
           summary={diagSummary}
           hostRttMs={rtt || stats.delayMs}
           onReset={resetDiagnostics}
@@ -2669,7 +2729,15 @@ export default function App() {
       {showSessionMenu && (
         <SessionMenu
           locale={locale}
-          onToggleLocale={toggleLocale}
+          audioEnabled={audioEnabled}
+          audioIssue={audioIssue ? t(locale, audioIssue) : null}
+          onToggleAudio={toggleAudio}
+          mobileLayout={isTouchLayout}
+          cursorEmbedded={cursorEmbedded}
+          followWindow={displayPrefs.followWindow}
+          onToggleFollowWindow={() => handleUpdateDisplayPrefs({ followWindow: !displayPrefs.followWindow })}
+          enlargeCursor={displayPrefs.enlargeCursor}
+          onToggleEnlargeCursor={() => handleUpdateDisplayPrefs({ enlargeCursor: !displayPrefs.enlargeCursor })}
           phase={phase}
           peer={peer}
           detail={detail}
@@ -2681,7 +2749,6 @@ export default function App() {
           touchMode={touchMode}
           rightArmed={rightArmed}
           softKeys={softKeys}
-          isFullscreen={isFullscreen}
           viewOnly={displayPrefs.viewOnly}
           followRemoteCursor={displayPrefs.followRemoteCursor}
           onToggleFollowCursor={() => handleUpdateDisplayPrefs({ followRemoteCursor: !displayPrefs.followRemoteCursor })}
@@ -2704,7 +2771,7 @@ export default function App() {
           }}
           onDisconnect={disconnect}
           onToggleDiagnostics={() => {
-            setDiagnosticsOpen((prev) => !prev);
+            setDiagnosticsOpen(true);
             setMenuOpen(false);
           }}
           onToggleViewOnly={() =>
@@ -2734,12 +2801,11 @@ export default function App() {
             send({ type: 'switchDisplay', display: idx });
           }}
           onRefresh={() => send({ type: 'refresh' })}
-          onToggleFullscreen={() => {
-            if (!isFullscreen) setMenuOpen(false);
-            handleToggleFullscreen();
-          }}
           onQuickKey={handleQuickKey}
-          onToggleRightArmed={() => setRightArmed((r) => !r)}
+          onRightClick={() => {
+            handleMobileRightClick();
+            setMenuOpen(false);
+          }}
           onToggleKeyboard={toggleSoftKeyboard}
           onChangeQuality={(q, fps, nextCodec) => {
             setQuality(q);
