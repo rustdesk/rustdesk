@@ -297,6 +297,11 @@ jobs:
             bash .github/patches/apply_flutter_3.44_source_patches.sh
           fi
 
+      - name: Verify desktop session window state on Flutter 3.50
+        if: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
+        working-directory: flutter
+        run: flutter test test/desktop_window_scope_test.dart
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:

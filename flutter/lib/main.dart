@@ -16,6 +16,7 @@ import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_terminal_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -61,12 +62,14 @@ Future<void> main(List<String> args) async {
     // to-do: No need to parse window id ?
     // Because stateGlobal.windowId is a global value.
     argument['windowId'] = windowId;
-    kWindowType = type.windowType;
-    switch (kWindowType) {
+    final windowType = type.windowType;
+    kWindowType = windowType;
+    switch (windowType) {
       case WindowType.RemoteDesktop:
         desktopType = DesktopType.remote;
         runMultiWindow(
           windowId,
+          windowType,
           argument,
           kAppTypeDesktopRemote,
         );
@@ -75,6 +78,7 @@ Future<void> main(List<String> args) async {
         desktopType = DesktopType.fileTransfer;
         runMultiWindow(
           windowId,
+          windowType,
           argument,
           kAppTypeDesktopFileTransfer,
         );
@@ -83,6 +87,7 @@ Future<void> main(List<String> args) async {
         desktopType = DesktopType.viewCamera;
         runMultiWindow(
           windowId,
+          windowType,
           argument,
           kAppTypeDesktopViewCamera,
         );
@@ -91,6 +96,7 @@ Future<void> main(List<String> args) async {
         desktopType = DesktopType.portForward;
         runMultiWindow(
           windowId,
+          windowType,
           argument,
           kAppTypeDesktopPortForward,
         );
@@ -99,6 +105,7 @@ Future<void> main(List<String> args) async {
         desktopType = DesktopType.terminal;
         runMultiWindow(
           windowId,
+          windowType,
           argument,
           kAppTypeDesktopTerminal,
         );
@@ -193,6 +200,7 @@ void runMobileApp() async {
 
 void runMultiWindow(
   int windowId,
+  WindowType windowType,
   Map<String, dynamic> argument,
   String appType,
 ) async {
@@ -239,7 +247,12 @@ void runMultiWindow(
   }
   _runApp(
     title,
-    widget,
+    DesktopWindowScope(
+      windowId: windowId,
+      windowType: windowType,
+      windowState: stateGlobal,
+      child: widget,
+    ),
     MyTheme.currentThemeMode(),
   );
   // we do not hide titlebar on win7 because of the frame overflow.
@@ -363,10 +376,19 @@ void _runApp(
   Widget home,
   ThemeMode themeMode,
 ) {
+  runApp(_buildSessionApp(title, home, themeMode, navigatorKey: globalKey));
+}
+
+Widget _buildSessionApp(
+  String title,
+  Widget home,
+  ThemeMode themeMode, {
+  required GlobalKey<NavigatorState> navigatorKey,
+}) {
   final botToastBuilder = BotToastInit();
-  runApp(RefreshWrapper(
+  return RefreshWrapper(
     builder: (context) => GetMaterialApp(
-      navigatorKey: globalKey,
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: title,
       theme: MyTheme.lightTheme,
@@ -389,7 +411,7 @@ void _runApp(
         return child;
       },
     ),
-  ));
+  );
 }
 
 void runInstallPage() async {

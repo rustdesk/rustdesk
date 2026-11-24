@@ -8,7 +8,7 @@ import './platform_model.dart';
 enum SvcStatus { notReady, connecting, ready }
 
 class StateGlobal {
-  int _windowId = -1;
+  int _windowId;
   final RxBool _fullscreen = false.obs;
   bool _isMinimized = false;
   final RxBool isMaximized = false.obs;
@@ -132,7 +132,10 @@ class StateGlobal {
     _inputSource = bind.mainGetInputSource();
   }
 
-  StateGlobal._() {
+  /// Owns the controls and UI state of one desktop view in a shared engine.
+  StateGlobal.forDesktopWindow(int windowId) : _windowId = windowId;
+
+  StateGlobal._() : _windowId = -1 {
     if (isWebDesktop) {
       platformFFI.setFullscreenCallback((v) {
         _fullscreen.value = v;
