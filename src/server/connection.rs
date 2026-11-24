@@ -4082,13 +4082,14 @@ impl Connection {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::ChangeResolution(r)) => {
                         if !self.view_camera {
-                            self.change_resolution(None, &r);
+                            self.change_resolution(None, &r).await;
                         }
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::ChangeDisplayResolution(dr)) => {
                         if !self.view_camera {
-                            self.change_resolution(Some(dr.display as _), &dr.resolution);
+                            self.change_resolution(Some(dr.display as _), &dr.resolution)
+                                .await;
                         }
                     }
                     Some(misc::Union::AutoAdjustFps(fps)) => video_service::VIDEO_QOS
@@ -4687,7 +4688,8 @@ impl Connection {
                             height: s.height,
                             ..Default::default()
                         },
-                    );
+                    )
+                    .await;
                 }
             }
 
@@ -4894,55 +4896,75 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn change_resolution(&mut self, d: Option<usize>, r: &Resolution) {
-        if self.keyboard {
-            if let Ok(displays) = display_service::try_get_displays() {
-                let display_idx = d.unwrap_or(self.display_idx);
-                if let Some(display) = displays.get(display_idx) {
-                    let name = display.name();
-                    #[cfg(windows)]
-                    if let Some(_ok) =
-                        virtual_display_manager::rustdesk_idd::change_resolution_if_is_virtual_display(
-                            &name,
-                            r.width as _,
-                            r.height as _,
-                        )
-                    {
-                        return;
-                    }
-                    #[allow(unused_mut)]
-                    let mut record_changed = true;
-                    #[cfg(windows)]
-                    if virtual_display_manager::amyuni_idd::is_my_display(&name) {
-                        record_changed = false;
-                    }
-                    #[cfg(not(target_os = "macos"))]
-                    let scale = 1.0;
-                    #[cfg(target_os = "macos")]
-                    let scale = display.scale();
-                    let original = (
-                        ((display.width() as f64) / scale).round() as _,
-                        (display.height() as f64 / scale).round() as _,
-                    );
-                    if record_changed {
-                        display_service::set_last_changed_resolution(
-                            &name,
-                            original,
-                            (r.width, r.height),
-                        );
-                    }
-                    if let Err(e) =
-                        crate::platform::change_resolution(&name, r.width as _, r.height as _)
-                    {
-                        log::error!(
-                            "Failed to change resolution '{}' to ({},{}): {:?}",
-                            &name,
-                            r.width,
-                            r.height,
-                            e
-                        );
-                    }
-                }
+    async fn change_resolution(&mut self, d: Option<usize>, r: &Resolution) {
+        if !self.keyboard {
+            return;
+        }
+        let (name, width, height) = {
+            let Ok(displays) = display_service::try_get_displays() else {
+                return;
+            };
+            let display_idx = d.unwrap_or(self.display_idx);
+            let Some(display) = displays.get(display_idx) else {
+                return;
+            };
+            let name = display.name();
+            #[cfg(windows)]
+            if let Some(_ok) =
+                virtual_display_manager::rustdesk_idd::change_resolution_if_is_virtual_display(
+                    &name,
+                    r.width as _,
+                    r.height as _,
+                )
+            {
+                return;
+            }
+            #[allow(unused_mut)]
+            let mut record_changed = true;
+            #[cfg(windows)]
+            if virtual_display_manager::amyuni_idd::is_my_display(&name) {
+                record_changed = false;
+            }
+            #[cfg(not(target_os = "macos"))]
+            let scale = 1.0;
+            #[cfg(target_os = "macos")]
+            let scale = display.scale();
+            let original = (
+                ((display.width() as f64) / scale).round() as _,
+                (display.height() as f64 / scale).round() as _,
+            );
+            if record_changed {
+                display_service::set_last_changed_resolution(
+                    &name,
+                    original,
+                    (r.width, r.height),
+                );
+            }
+            (name, r.width as usize, r.height as usize)
+        };
+        match tokio::task::spawn_blocking(move || {
+            let res = crate::platform::change_resolution(&name, width, height);
+            (name, res)
+        })
+        .await
+        {
+            Ok((_, Ok(()))) => {}
+            Ok((name, Err(e))) => {
+                log::error!(
+                    "Failed to change resolution '{}' to ({},{}): {:?}",
+                    &name,
+                    width,
+                    height,
+                    e
+                );
+            }
+            Err(e) => {
+                log::error!(
+                    "Failed to join change resolution task for ({},{}): {:?}",
+                    width,
+                    height,
+                    e
+                );
             }
         }
     }
