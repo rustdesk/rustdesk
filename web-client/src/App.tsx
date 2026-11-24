@@ -365,8 +365,6 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [connectDialog, setConnectDialog] = useState(false);
   const [softKeys, setSoftKeys] = useState(false);
-  const [layoutDirection, setLayoutDirection] = useState<'portrait' | 'landscape' | null>(null);
-  useEffect(() => { if (phase !== 'live') setLayoutDirection(null); }, [phase]);
   const [virtualCursorVisible, setVirtualCursorVisible] = useState(false);
   const [cursorEmbedded, setCursorEmbedded] = useState(false);
   const [cursorShape, setCursorShape] = useState<{
@@ -1714,9 +1712,7 @@ export default function App() {
   const stageLocalPoint = useCallback((clientX: number, clientY: number) => {
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return { x: clientX, y: clientY };
-    if (stageRef.current?.dataset.direction && getComputedStyle(stageRef.current).transform !== 'none') {
-      return { x: clientY - rect.top, y: rect.right - clientX };
-    }
+
     return { x: clientX - rect.left, y: clientY - rect.top };
   }, []);
 
@@ -2406,7 +2402,7 @@ export default function App() {
     setRightArmed((r) => !r);
   };
 
-  const isTouchLayout = isCoarseDevice || isMobileViewport || layoutDirection !== null;
+  const isTouchLayout = isCoarseDevice || isMobileViewport;
   const showConnectSheet = phase !== 'live' || connectDialog;
   const showSessionMenu = menuOpen && phase === 'live' && !connectDialog;
   const showHandle = phase === 'live' && !connectDialog && !menuOpen && !isTouchLayout;
@@ -2423,7 +2419,6 @@ export default function App() {
     <section
       ref={stageRef}
       className={`stage${hand ? ' hand' : ''}`}
-      data-direction={phase === 'live' && !softKeys && !connectDialog ? layoutDirection : undefined}
       data-testid="stage"
       data-remote-active={remoteInput ? 'true' : 'false'}
       data-scroll-style={displayPrefs.scrollStyle}
@@ -2580,8 +2575,6 @@ export default function App() {
       {showMobileDock && (
         <MobileDock
           locale={locale}
-          landscape={box.w > box.h}
-          onRotate={() => setLayoutDirection(box.w > box.h ? 'portrait' : 'landscape')}
           activePanel={menuOpen ? mobilePanel : null}
           onToggleKeyboard={toggleSoftKeyboard}
           onCollapse={closeChrome}

@@ -1888,30 +1888,3 @@ button:focus-visible {
 .remote-menu-panel dl { margin:0; }
 .remote-menu-panel dl>div { padding:6px 0; }
 .remote-menu-panel dd,.remote-menu-panel p { font-size:13px; color:#c2cad3; margin:3px 0 8px; }
-
-.capsule-hint {
-  position:absolute; right:0; bottom:calc(100% + 5px); pointer-events:none; white-space:nowrap;
-  padding:4px 8px; border-radius:5px; background:#22252b; color:white; font-size:12px;
-  animation:capsule-hint 1.6s forwards;
-}
-@keyframes capsule-hint { 80% {opacity:1} 100% {opacity:0} }
-
-@media (orientation: portrait) {
-  .stage[data-direction="landscape"] {
-    inset:0 auto auto 100%; width:100dvh; height:100dvw; transform-origin:top left; transform:rotate(90deg);
-    --view-top:env(safe-area-inset-right, 0px);
-    --view-right:env(safe-area-inset-bottom, 0px);
-    --view-bottom:env(safe-area-inset-left, 0px);
-    --view-left:env(safe-area-inset-top, 0px);
-  }
-}
-
-@media (orientation: landscape) {
-  .stage[data-direction="portrait"] {
-    inset:0 auto auto 100%; width:100dvh; height:100dvw; transform-origin:top left; transform:rotate(90deg);
-    --view-top:env(safe-area-inset-right, 0px);
-    --view-right:env(safe-area-inset-bottom, 0px);
-    --view-bottom:env(safe-area-inset-left, 0px);
-    --view-left:env(safe-area-inset-top, 0px);
-  }
-}

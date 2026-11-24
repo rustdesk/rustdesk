@@ -1,12 +1,12 @@
 import React from 'react';
-import { Activity, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, Scaling, SlidersHorizontal, Volume2, CircleHelp } from 'lucide-react';
+import { Activity, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, Scaling, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
 import type { PreferredCodec } from '../lib/displayPrefs';
 const qualityNames = { low: 'qualityLow', balanced: 'qualityBalanced', best: 'qualityBest' } as const;
 
-export type MobilePanel = 'toolbar' | 'actions' | 'input' | 'display';
+export type MobilePanel = 'toolbar' | 'actions' | 'input' | 'display' | 'gestures';
 
 const gestureRows = {
   touch: [
@@ -31,7 +31,7 @@ const gestureRows = {
 export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePanel }) {
   const label = (key: I18nKey) => t(p.locale, key);
   const monitors = p.peer?.displays ?? [];
-  const panelName = { toolbar: 'session', actions: 'moreActions', input: 'pointerSettings', display: 'screens' } as const;
+  const panelName = { toolbar: 'session', actions: 'moreActions', input: 'pointerSettings', display: 'screens', gestures: 'dockGuide' } as const;
 
   const toggle = (Icon: typeof Eye, text: I18nKey, checked: boolean, change: () => void, disabled = false) => (
     <label className="tool-row"><Icon /><span>{label(text)}</span>
@@ -68,11 +68,12 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
               {toggle(Scaling, 'enlargeCursor', p.enlargeCursor, p.onToggleEnlargeCursor, !p.showRemoteCursor || p.cursorEmbedded)}
               {toggle(Focus, 'followCursor', p.followRemoteCursor, p.onToggleFollowCursor)}
             </div>
-            <div className="tool-group"><details><summary><CircleHelp />{label('dockGuide')}</summary>
-              <dl data-testid="gesture-guide">{gestureRows[p.touchMode ? 'touch' : 'mouse'].map(([name, desc]) =>
-                <div key={name}><dt>{label(name)}</dt><dd>{label(desc)}</dd></div>)}</dl>
-            </details></div>
           </>}
+          {p.mobilePanel === 'gestures' && <div className="tool-group">
+            <h2 className="text-base font-semibold my-2">{label(p.touchMode ? 'touchModeGestures' : 'mouseModeGestures')}</h2>
+            <dl data-testid="gesture-guide">{gestureRows[p.touchMode ? 'touch' : 'mouse'].map(([name, desc]) =>
+              <div key={name}><dt>{label(name)}</dt><dd>{label(desc)}</dd></div>)}</dl>
+          </div>}
           {p.mobilePanel === 'display' && <>
             {monitors.length > 1 && <div className="tool-group tool-options">{monitors.map(d =>
               <button key={d.index} aria-pressed={d.index === p.display} disabled={d.online === false}
