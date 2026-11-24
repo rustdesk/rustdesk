@@ -255,6 +255,10 @@ pub fn get_builtin_option(key: &str) -> String {
 
 #[inline]
 pub fn set_local_option(key: String, value: String) {
+    #[cfg(windows)]
+    if key == keys::OPTION_ALLOW_UNICODE_INPUT {
+        crate::keyboard::client::set_unicode_input_enabled(value == "Y");
+    }
     LocalConfig::set_option(key.clone(), value);
 }
 

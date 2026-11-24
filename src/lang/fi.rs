@@ -830,5 +830,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Kaappaa näytön suoraan näytönohjaimelta RustDesk-palvelun kautta ilman Waylandin näytön jakamisen kehotetta, myös kirjautumisnäytössä. Ei välttämättä toimi kaikilla laitteilla; jos yhteydet pyytävät yhä näytön jakamista, poista tämä käytöstä tai käytä X11:tä. Muutos katkaisee nykyiset istunnot."),
         ("wayland-drm-tip", "Kokeile valvomattomaan käyttöön Waylandissa DRM-näytönkaappausta, tai käytä X11:tä, jos se ei toimi."),
         ("login-wayland-drm-tip", "Kokeile Waylandin kirjautumisnäyttöön DRM-näytönkaappausta tai vaihda se X11:een."),
+        ("Enable Unicode input", "Ota Unicode-syöte käyttöön"),
+        ("unicode-input-tip", "Sieppaa työkalujen (esimerkiksi KeePassXC Auto-Type) lähettämää Unicode-tekstiä. Vaatii syötelähteen 1."),
     ].iter().cloned().collect();
 }

@@ -830,5 +830,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Fiksuoja ekraną tiesiai iš vaizdo plokštės per RustDesk paslaugą, be Wayland ekrano bendrinimo užklausos, taip pat ir prisijungimo ekrane. Gali veikti ne visuose įrenginiuose; jei ryšiai vis dar prašo bendrinti ekraną, išjunkite šią parinktį arba naudokite X11. Pakeitus nutraukiami esami seansai."),
         ("wayland-drm-tip", "Neprižiūrimai prieigai Wayland aplinkoje išbandykite DRM ekrano fiksavimą arba naudokite X11, jei neveikia."),
         ("login-wayland-drm-tip", "Norėdami pasiekti Wayland prisijungimo ekraną, išbandykite DRM fiksavimą arba perjunkite jį į X11."),
+        ("Enable Unicode input", "Įgalinti Unicode įvestį"),
+        ("unicode-input-tip", "Perimti Unicode tekstą, kurį siunčia tokie įrankiai kaip KeePassXC Auto-Type. Reikalingas įvesties šaltinis 1."),
     ].iter().cloned().collect();
 }

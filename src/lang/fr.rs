@@ -830,5 +830,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Capture l’écran directement depuis la carte graphique via le service RustDesk, sans la demande de partage d’écran de Wayland, y compris sur l’écran de connexion. Peut ne pas fonctionner sur tous les appareils ; si les connexions demandent toujours de partager l’écran, désactivez cette option ou utilisez X11. La modifier déconnecte les sessions en cours."),
         ("wayland-drm-tip", "Pour un accès non assisté sous Wayland, essayez la capture d’écran DRM, ou utilisez X11 si elle ne fonctionne pas."),
         ("login-wayland-drm-tip", "Pour accéder à l’écran de connexion Wayland, essayez la capture d’écran DRM ou passez-le sous X11."),
+        ("Enable Unicode input", "Activer la saisie Unicode"),
+        ("unicode-input-tip", "Capturer le texte Unicode envoyé par des outils tels que KeePassXC Auto-Type. Nécessite la source d'entrée 1."),
     ].iter().cloned().collect();
 }
