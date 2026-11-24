@@ -6,6 +6,7 @@ interface SessionHandleProps {
   handleX: number;
   stageWidth: number;
   hasWarning: boolean;
+  isFullscreen?: boolean;
   onMoveHandle: (nextX: number) => void;
   onOpenMenu: () => void;
 }
@@ -15,6 +16,7 @@ export function SessionHandle({
   handleX,
   stageWidth,
   hasWarning,
+  isFullscreen = false,
   onMoveHandle,
   onOpenMenu,
 }: SessionHandleProps) {
@@ -67,9 +69,11 @@ export function SessionHandle({
   return (
     <button
       type="button"
-      className={`pull${hasWarning ? ' warn' : ''}`}
+      className={`pull${hasWarning ? ' warn' : ''}${isFullscreen ? ' fullscreen-subtle' : ''}`}
       data-testid="session-handle"
       aria-label={t(locale, 'openSessionMenu')}
+      data-tooltip={t(locale, 'openSessionMenu')}
+      data-tooltip-pos="bottom"
       style={{ left: `${handleX * 100}%` }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

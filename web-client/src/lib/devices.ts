@@ -1,4 +1,4 @@
-import type { ConnectionMode } from '../components/ConnectionSheet';
+import type { ConnectionMode } from '../components/RustDeskShell';
 
 export const DEVICES_STORAGE_KEY = 'rd_web_devices';
 export const MAX_SAVED_DEVICES = 20;

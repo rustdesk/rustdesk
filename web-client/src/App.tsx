@@ -1,15 +1,33 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ConnectionSheet,
-  type ConnectionMode,
-  type ConnectionPhase,
-} from './components/ConnectionSheet';
 import { DiagnosticOverlay } from './components/DiagnosticOverlay';
 import { MobileDock } from './components/MobileDock';
+import {
+  RustDeskShell,
+  type ConnectionMode,
+  type ConnectionPhase,
+} from './components/RustDeskShell';
 import { SessionHandle } from './components/SessionHandle';
 import { SessionMenu, type SessionStats } from './components/SessionMenu';
 import { SoftKeyboardBar } from './components/SoftKeyboardBar';
 import { probeCodecs, RemoteDecoder, webCodecsStatus } from './lib/decoder';
+import {
+  loadSavedDevices,
+  persistSavedDevices,
+  removeDevice,
+  toggleFavoriteDevice,
+  upsertRecentDevice,
+  type SavedDevice,
+} from './lib/devices';
+import {
+  applyMouseButtonSwap,
+  applyWheelDirection,
+  filterCodecSupport,
+  loadDisplayPrefs,
+  persistDisplayPrefs,
+  resolveQualityLevel,
+  resolveTargetFps,
+  type DisplayPrefs,
+} from './lib/displayPrefs';
 import {
   computeDiagnosticsSummary,
   createDiagnosticsState,
@@ -35,11 +53,19 @@ import {
 import {
   LOCALE_STORAGE_KEY,
   nextLocale,
-  resolveInitialLocale,
+  resolveEffectiveLocale,
+  resolveLocalePreference,
   t,
   type I18nKey,
   type Locale,
+  type LocalePreference,
 } from './lib/i18n';
+import {
+  isBrowserNavOrAuxButton,
+  shouldIsolateKeyboardEvent,
+  shouldPreventStageTouch,
+  shouldPreventWindowWheel,
+} from './lib/inputIsolation';
 import { isModifier, mapPhysicalKeyDown, mapPhysicalKeyUp } from './lib/keys';
 import {
   clampPan,
@@ -59,6 +85,12 @@ import {
   type QualityLevel,
   type ServerMessage,
 } from './lib/protocol';
+import {
+  loadSavedTheme,
+  persistTheme,
+  resolveEffectiveTheme,
+  type ThemePreference,
+} from './lib/theme';
 
 const EMPTY_STATS: SessionStats = {
   codec: '—',
@@ -91,6 +123,7 @@ const PREFS_STORAGE_KEY = 'rd_web_prefs';
 
 interface SavedConnectionPrefs {
   mode?: ConnectionMode;
+  directIpEnabled?: boolean;
   host?: string;
   port?: string;
   peerId?: string;
@@ -121,10 +154,11 @@ export default function App() {
   const prefs = initialPrefs.current;
 
   // Connection form & session state (non-secret fields persisted locally; passwords never stored)
+  const [directIpEnabled, setDirectIpEnabled] = useState<boolean>(Boolean(prefs.directIpEnabled));
   const [mode, setMode] = useState<ConnectionMode>(
-    prefs.mode === 'direct' || prefs.mode === 'id' || prefs.mode === 'demo' ? prefs.mode : 'direct',
+    prefs.directIpEnabled && prefs.mode === 'direct' ? 'direct' : 'id',
   );
-  const [host, setHost] = useState(typeof prefs.host === 'string' ? prefs.host : '127.0.0.1');
+  const [host, setHost] = useState(typeof prefs.host === 'string' ? prefs.host : '');
   const [port, setPort] = useState(typeof prefs.port === 'string' ? prefs.port : '21118');
   const [password, setPassword] = useState('');
   const [peerId, setPeerId] = useState(typeof prefs.peerId === 'string' ? prefs.peerId : '');
@@ -138,11 +172,13 @@ export default function App() {
   const [forceRelay, setForceRelay] = useState(Boolean(prefs.forceRelay));
   const [gatewayToken, setGatewayToken] = useState('');
   const [authRequired, setAuthRequired] = useState(false);
+  const [devices, setDevices] = useState<SavedDevice[]>(() => loadSavedDevices());
 
   useEffect(() => {
     try {
       const next: SavedConnectionPrefs = {
-        mode,
+        mode: directIpEnabled ? mode : 'id',
+        directIpEnabled,
         host,
         port,
         peerId,
@@ -155,20 +191,77 @@ export default function App() {
     } catch {
       // Ignore storage quota or private-mode errors
     }
-  }, [mode, host, port, peerId, idServer, relayServer, serverKey, forceRelay]);
+  }, [mode, directIpEnabled, host, port, peerId, idServer, relayServer, serverKey, forceRelay]);
 
-  // Bilingual UI locale (EN / 中文)
-  const [locale, setLocale] = useState<Locale>(() => {
+  const handleToggleDirectIp = useCallback(() => {
+    setDirectIpEnabled((prev) => {
+      const next = !prev;
+      if (!next) {
+        setMode('id');
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    persistSavedDevices(devices);
+  }, [devices]);
+
+  const handleSelectDevice = useCallback((device: SavedDevice) => {
+    if (device.mode === 'direct') {
+      setDirectIpEnabled(true);
+    }
+    setMode(device.mode);
+    if (device.mode === 'id') {
+      if (device.peerId) setPeerId(device.peerId);
+      if (device.idServer) setIdServer(device.idServer);
+      if (typeof device.relayServer === 'string') setRelayServer(device.relayServer);
+      if (typeof device.serverKey === 'string') setServerKey(device.serverKey);
+      if (typeof device.forceRelay === 'boolean') setForceRelay(device.forceRelay);
+    } else {
+      if (device.host) setHost(device.host);
+      if (device.port) setPort(device.port);
+    }
+  }, []);
+
+  const handleToggleFavorite = useCallback((key: string) => {
+    setDevices((prev) => toggleFavoriteDevice(prev, key));
+  }, []);
+
+  const handleRemoveDevice = useCallback((key: string) => {
+    setDevices((prev) => removeDevice(prev, key));
+  }, []);
+
+  // Bilingual UI locale preference ('default' follows browser language, or explicit 'zh'/'en')
+  const [localePreference, setLocalePreference] = useState<LocalePreference>(() => {
     try {
-      return resolveInitialLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY));
+      return resolveLocalePreference(window.localStorage.getItem(LOCALE_STORAGE_KEY));
     } catch {
-      return 'en';
+      return 'default';
     }
   });
 
+  const locale: Locale = resolveEffectiveLocale(
+    localePreference,
+    typeof navigator !== 'undefined' ? navigator.language : null,
+  );
+
+  const changeLocale = useCallback((next: LocalePreference) => {
+    setLocalePreference(next);
+    try {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
+    } catch {
+      // Ignore storage quota or private-mode errors
+    }
+  }, []);
+
   const toggleLocale = useCallback(() => {
-    setLocale((prev) => {
-      const next = nextLocale(prev);
+    setLocalePreference((prev) => {
+      const currentEffective = resolveEffectiveLocale(
+        prev,
+        typeof navigator !== 'undefined' ? navigator.language : null,
+      );
+      const next = nextLocale(currentEffective);
       try {
         window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
       } catch {
@@ -182,6 +275,27 @@ export default function App() {
     document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
   }, [locale]);
 
+  // Theme preference (light / dark / system) synced to <html data-theme="...">
+  const [theme, setTheme] = useState<ThemePreference>(() => loadSavedTheme());
+
+  const changeTheme = useCallback((next: ThemePreference) => {
+    setTheme(next);
+    persistTheme(next);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const apply = () => {
+      const effective = resolveEffectiveTheme(theme, Boolean(mq?.matches));
+      document.documentElement.dataset.theme = effective;
+    };
+    apply();
+    if (theme === 'system' && mq) {
+      mq.addEventListener?.('change', apply);
+      return () => mq.removeEventListener?.('change', apply);
+    }
+  }, [theme]);
+
   const [phase, setPhase] = useState<ConnectionPhase>('idle');
   const [detailKey, setDetailKey] = useState<I18nKey | null>('detailIdle');
   const [rawDetail, setRawDetail] = useState('');
@@ -190,17 +304,26 @@ export default function App() {
     setDetailKey(key);
     setRawDetail(customText);
   }, []);
+  // Display preferences (persisted locally & wired end-to-end to view, quality, codec, and input)
+  const [displayPrefs, setDisplayPrefs] = useState<DisplayPrefs>(() => loadDisplayPrefs());
+  const displayPrefsRef = useRef(displayPrefs);
+  displayPrefsRef.current = displayPrefs;
+
   const [peer, setPeer] = useState<PeerMessage | null>(null);
   const [display, setDisplay] = useState(0);
   const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
   const [decoderError, setDecoderError] = useState(initialWebCodecs.ok ? '' : initialWebCodecs.reason);
   const [rtt, setRtt] = useState(0);
-  const [quality, setQuality] = useState<QualityLevel>('balanced');
-  const [targetFps, setTargetFps] = useState(30);
+  const [quality, setQuality] = useState<QualityLevel>(() =>
+    resolveQualityLevel(displayPrefs.qualityPreset, displayPrefs.customBitrate),
+  );
+  const [targetFps, setTargetFps] = useState(() =>
+    resolveTargetFps(displayPrefs.qualityPreset, displayPrefs.customFps),
+  );
   const [remoteClipboard, setRemoteClipboard] = useState('');
 
   // Viewport & chrome state
-  const [viewMode, setViewMode] = useState<ViewMode>('fit');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => displayPrefs.viewStyle);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ panX: 0, panY: 0 });
   const [hand, setHand] = useState(false);
@@ -299,6 +422,8 @@ export default function App() {
   viewRef.current = view;
 
   const remoteInput = phase === 'live' && !menuOpen && !connectDialog;
+  const remoteInputRef = useRef(remoteInput);
+  remoteInputRef.current = remoteInput;
   const fit = fitScale(box.w, box.h, remoteW, remoteH);
   const zoomPercent = fit > 0 ? Math.round((view.scale / fit) * 100) : 100;
 
@@ -355,14 +480,16 @@ export default function App() {
 
   const clickButton = useCallback(
     (button: 'left' | 'right' | 'middle', x: number, y: number) => {
+      if (displayPrefsRef.current.viewOnly) return;
+      const mapped = applyMouseButtonSwap(button, displayPrefsRef.current.swapMouseButtons);
       finishPendingClick();
       send({ type: 'mouse', action: 'move', x, y });
-      send({ type: 'mouse', action: 'down', button, x, y });
+      send({ type: 'mouse', action: 'down', button: mapped, x, y });
       const timer = window.setTimeout(() => {
         pendingClickRef.current = null;
-        send({ type: 'mouse', action: 'up', button, x, y });
+        send({ type: 'mouse', action: 'up', button: mapped, x, y });
       }, 40);
-      pendingClickRef.current = { button, x, y, timer };
+      pendingClickRef.current = { button: mapped, x, y, timer };
     },
     [finishPendingClick, send],
   );
@@ -557,14 +684,23 @@ export default function App() {
     };
   }, [resetPageZoom]);
 
-  // Track fullscreen changes
+  // Track native fullscreen changes and Escape exit for immersive fallback fullscreen
   useEffect(() => {
     const onFs = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !document.fullscreenElement && isFullscreen && phaseRef.current !== 'live') {
+        setIsFullscreen(false);
+      }
+    };
     document.addEventListener('fullscreenchange', onFs);
-    return () => document.removeEventListener('fullscreenchange', onFs);
-  }, []);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFs);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [isFullscreen]);
 
   const closeChrome = useCallback(() => {
     chromeRef.current = { menu: false, dialog: false };
@@ -658,14 +794,21 @@ export default function App() {
         return;
       }
 
-      const support = await probeCodecs();
-      if (!support.vp8 && !support.vp9 && !support.h264 && !support.h265 && !support.av1) {
+      const rawSupport = await probeCodecs();
+      if (
+        !rawSupport.vp8 &&
+        !rawSupport.vp9 &&
+        !rawSupport.h264 &&
+        !rawSupport.h265 &&
+        !rawSupport.av1
+      ) {
         setPhase('error');
         setDecoderError(t(locale, 'detailNoCodecs'));
         setStatusDetail('detailNoCodecs');
         setConnectDialog(true);
         return;
       }
+      const support = filterCodecSupport(rawSupport, displayPrefsRef.current.codec);
 
       // Close previous socket & decoder cleanly
       if (wsRef.current) {
@@ -695,16 +838,7 @@ export default function App() {
       sock.onopen = () => {
         if (wsRef.current !== sock) return;
         setStatusDetail('detailAuthenticating');
-        if (activeMode === 'demo') {
-          sock.send(
-            JSON.stringify({
-              type: 'connect',
-              mode: 'demo',
-              token: gatewayToken,
-              codecs: support,
-            }),
-          );
-        } else if (activeMode === 'id') {
+        if (activeMode === 'id') {
           sock.send(
             JSON.stringify({
               type: 'connect',
@@ -802,6 +936,30 @@ export default function App() {
               setStats((prev) => ({ ...prev, width: chosen.width, height: chosen.height }));
               placeCursor(chosen.width / 2, chosen.height / 2);
             }
+            setDevices((prev) =>
+              upsertRecentDevice(
+                prev,
+                activeMode === 'id'
+                  ? {
+                      mode: 'id',
+                      peerId: peerId.replace(/\s+/g, ''),
+                      idServer: idServer.trim(),
+                      relayServer: relayServer.trim(),
+                      serverKey: serverKey.trim(),
+                      forceRelay,
+                      hostname: msg.hostname || '',
+                      platform: msg.platform || '',
+                    }
+                  : {
+                      mode: 'direct',
+                      host: host.trim(),
+                      port: port.trim() || '21118',
+                      hostname: msg.hostname || '',
+                      platform: msg.platform || '',
+                    },
+                Date.now(),
+              ),
+            );
             break;
           }
 
@@ -817,7 +975,9 @@ export default function App() {
             break;
 
           case 'clipboard':
-            setRemoteClipboard(msg.text);
+            if (!displayPrefsRef.current.disableClipboard) {
+              setRemoteClipboard(msg.text);
+            }
             break;
 
           case 'rtt':
@@ -851,7 +1011,11 @@ export default function App() {
       sock.onclose = () => {
         if (wsRef.current !== sock) return;
         wsRef.current = null;
-        if (phaseRef.current !== 'error') {
+        if (phaseRef.current === 'connecting') {
+          setPhase('error');
+          setConnectDialog(true);
+          setStatusDetail('detailGatewayClosed');
+        } else if (phaseRef.current !== 'error') {
           setPhase('idle');
         }
       };
@@ -876,21 +1040,15 @@ export default function App() {
     ],
   );
 
-  // Optional ?autostart=1 support for quick testing (starts Virtual Demo)
-  const autoStartedRef = useRef(false);
-  useEffect(() => {
-    if (autoStartedRef.current) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('autostart') === '1') {
-      autoStartedRef.current = true;
-      setMode('demo');
-      void connectSession('demo');
-    }
-  }, [connectSession]);
+  // Disconnect cleanly and return to idle state
 
   const disconnect = useCallback(() => {
     finishPendingClick();
     clearLongPress();
+    if (phaseRef.current === 'live' && displayPrefsRef.current.lockAfterSessionEnd) {
+      send({ type: 'key', action: 'down', control: 'LockScreen' });
+      send({ type: 'key', action: 'up', control: 'LockScreen' });
+    }
     send({ type: 'disconnect' });
     if (wsRef.current) {
       wsRef.current.onclose = null;
@@ -905,6 +1063,51 @@ export default function App() {
     setPhase('idle');
     setStatusDetail('detailDisconnected');
   }, [clearLongPress, finishPendingClick, resetDiagnostics, send, setStatusDetail]);
+
+  const handleDismissError = useCallback(() => {
+    setDecoderError('');
+    if (phaseRef.current === 'error') {
+      setPhase('idle');
+      setStatusDetail('detailIdle');
+    }
+  }, [setStatusDetail]);
+
+  const handleUpdateDisplayPrefs = useCallback(
+    (patch: Partial<DisplayPrefs>) => {
+      setDisplayPrefs((prev) => {
+        const next: DisplayPrefs = { ...prev, ...patch };
+        persistDisplayPrefs(next);
+
+        if (patch.viewStyle) {
+          setViewMode(patch.viewStyle);
+          if (patch.viewStyle === 'fit') {
+            setZoom(1);
+            setPan({ panX: 0, panY: 0 });
+          } else {
+            setPan({
+              panX: (box.w - remoteW) / 2,
+              panY: (box.h - remoteH) / 2,
+            });
+          }
+        }
+
+        if (
+          patch.qualityPreset !== undefined ||
+          patch.customBitrate !== undefined ||
+          patch.customFps !== undefined
+        ) {
+          const nextQ = resolveQualityLevel(next.qualityPreset, next.customBitrate);
+          const nextFps = resolveTargetFps(next.qualityPreset, next.customFps);
+          setQuality(nextQ);
+          setTargetFps(nextFps);
+          send({ type: 'quality', quality: nextQ, fps: nextFps });
+        }
+
+        return next;
+      });
+    },
+    [box.w, box.h, remoteW, remoteH, send],
+  );
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1017,7 +1220,32 @@ export default function App() {
     [closeChrome, sendChord, tapControl],
   );
 
-  // Global physical keyboard listener (capture phase + focus isolation + Appendix B #4 fix)
+  // Lock system-level shortcuts (Ctrl+W, Alt+Tab, etc.) when in fullscreen remote control on supporting browsers
+  useEffect(() => {
+    const nav = navigator as Navigator & {
+      keyboard?: { lock?: () => Promise<void>; unlock?: () => void };
+    };
+    if (!nav.keyboard?.lock) return;
+    if (remoteInput && isFullscreen) {
+      nav.keyboard.lock().catch(() => {
+        // Ignore unsupported or permission-denied Keyboard Lock errors
+      });
+      return () => {
+        try {
+          nav.keyboard?.unlock?.();
+        } catch {
+          // Ignore unlock errors
+        }
+      };
+    }
+    try {
+      nav.keyboard.unlock?.();
+    } catch {
+      // Ignore unlock errors
+    }
+  }, [remoteInput, isFullscreen]);
+
+  // Global physical keyboard listener (capture phase + full host-browser shortcut isolation)
   useEffect(() => {
     const isInsideChromeInput = (target: EventTarget | null): boolean => {
       if (!(target instanceof Element)) return false;
@@ -1042,27 +1270,51 @@ export default function App() {
         return;
       }
 
-      if (phaseRef.current !== 'live' || isInsideChromeInput(e.target)) {
+      if (
+        !shouldIsolateKeyboardEvent({
+          phase: phaseRef.current,
+          chromeOpen: chromeRef.current.menu || chromeRef.current.dialog,
+          insideChromeInput: isInsideChromeInput(e.target),
+        })
+      ) {
+        return;
+      }
+
+      // Always prevent host browser shortcuts (Ctrl+R/F/P/S/+/-, Tab, Space, Backspace, Alt, F1-F12, repeats)
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (displayPrefsRef.current.viewOnly) {
         return;
       }
 
       const mapped = mapPhysicalKeyDown(e);
       if (mapped) {
-        e.preventDefault();
         send(mapped);
       }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (chromeRef.current.menu || chromeRef.current.dialog) {
+      if (
+        !shouldIsolateKeyboardEvent({
+          phase: phaseRef.current,
+          chromeOpen: chromeRef.current.menu || chromeRef.current.dialog,
+          insideChromeInput: isInsideChromeInput(e.target),
+        })
+      ) {
         return;
       }
-      if (phaseRef.current !== 'live' || isInsideChromeInput(e.target)) {
+
+      // Prevent Alt/Meta keyup from focusing browser chrome menus
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (displayPrefsRef.current.viewOnly) {
         return;
       }
+
       const mapped = mapPhysicalKeyUp(e);
       if (mapped && mapped.type === 'key') {
-        e.preventDefault();
         send(mapped);
       }
     };
@@ -1151,15 +1403,18 @@ export default function App() {
         return;
       }
 
+      if (displayPrefsRef.current.viewOnly) return;
+
       const pos = remoteFromLocal(local.x, local.y);
       if (!pos) return;
-      const btn: 'left' | 'right' | 'middle' = rightArmed
+      const rawBtn: 'left' | 'right' | 'middle' = rightArmed
         ? 'right'
         : e.button === 2
           ? 'right'
           : e.button === 1
             ? 'middle'
             : 'left';
+      const btn = applyMouseButtonSwap(rawBtn, displayPrefsRef.current.swapMouseButtons);
       if (rightArmed) setRightArmed(false);
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -1313,8 +1568,12 @@ export default function App() {
       threeFingerAccumRef.current += dy;
       const { ticks, remainder } = consumeThreeFingerScroll(threeFingerAccumRef.current);
       threeFingerAccumRef.current = remainder;
-      if (ticks !== 0) {
-        send({ type: 'mouse', action: 'wheel', x: 0, y: ticks > 0 ? 1 : -1 });
+      if (ticks !== 0 && !displayPrefsRef.current.viewOnly) {
+        const dir = applyWheelDirection(
+          ticks > 0 ? 1 : -1,
+          displayPrefsRef.current.reverseMouseWheel,
+        );
+        send({ type: 'mouse', action: 'wheel', x: 0, y: dir });
       }
       return;
     }
@@ -1506,8 +1765,10 @@ export default function App() {
       return;
     }
 
+    if (displayPrefsRef.current.viewOnly) return;
+
     const dx = Math.sign(e.deltaX);
-    const dy = -Math.sign(e.deltaY);
+    const dy = applyWheelDirection(-Math.sign(e.deltaY), displayPrefsRef.current.reverseMouseWheel);
     if (dx !== 0 || dy !== 0) {
       send({ type: 'mouse', action: 'wheel', x: dx, y: dy });
     }
@@ -1520,27 +1781,59 @@ export default function App() {
     const isStageSurface = (target: EventTarget | null): boolean =>
       target === el || target === canvasRef.current;
 
+    const isInsideScrollableChrome = (target: EventTarget | null): boolean => {
+      if (!(target instanceof Element)) return false;
+      return Boolean(
+        target.closest('[data-testid="connection-panel"]') ||
+          target.closest('[data-testid="session-menu"]') ||
+          target.closest('[data-testid="softbar"]') ||
+          target.closest('[data-testid="diagnostic-overlay"]'),
+      );
+    };
+
     const onGesture = (e: Event) => {
-      if (isStageSurface(e.target) || (e.target instanceof Node && el.contains(e.target))) {
+      if (remoteInputRef.current || isStageSurface(e.target)) {
         e.preventDefault();
       }
     };
 
     const onTouchStart = (e: TouchEvent) => {
-      if (isStageSurface(e.target) && e.touches.length >= 2) {
+      if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (isStageSurface(e.target)) {
+      if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
       }
     };
 
     const onWheelNative = (e: WheelEvent) => {
-      if (isStageSurface(e.target)) {
+      if (remoteInputRef.current && isStageSurface(e.target)) {
         wheelHandlerRef.current(e);
+      }
+    };
+
+    const onWindowWheel = (e: WheelEvent) => {
+      if (shouldPreventWindowWheel(remoteInputRef.current, isInsideScrollableChrome(e.target))) {
+        e.preventDefault();
+      }
+    };
+
+    const onWindowAuxOrNavMouse = (e: MouseEvent) => {
+      if (
+        remoteInputRef.current &&
+        isBrowserNavOrAuxButton(e.button) &&
+        !isInsideScrollableChrome(e.target)
+      ) {
+        e.preventDefault();
+      }
+    };
+
+    const onWindowDragOrSelect = (e: Event) => {
+      if (remoteInputRef.current && !isInsideScrollableChrome(e.target)) {
+        e.preventDefault();
       }
     };
 
@@ -1550,6 +1843,11 @@ export default function App() {
     el.addEventListener('touchstart', onTouchStart, { passive: false });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     el.addEventListener('wheel', onWheelNative, { passive: false });
+    window.addEventListener('wheel', onWindowWheel, { passive: false, capture: true });
+    window.addEventListener('mousedown', onWindowAuxOrNavMouse, true);
+    window.addEventListener('auxclick', onWindowAuxOrNavMouse, true);
+    window.addEventListener('dragstart', onWindowDragOrSelect, true);
+    window.addEventListener('selectstart', onWindowDragOrSelect, true);
 
     return () => {
       el.removeEventListener('gesturestart', onGesture);
@@ -1558,20 +1856,37 @@ export default function App() {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('wheel', onWheelNative);
+      window.removeEventListener('wheel', onWindowWheel, { capture: true });
+      window.removeEventListener('mousedown', onWindowAuxOrNavMouse, true);
+      window.removeEventListener('auxclick', onWindowAuxOrNavMouse, true);
+      window.removeEventListener('dragstart', onWindowDragOrSelect, true);
+      window.removeEventListener('selectstart', onWindowDragOrSelect, true);
     };
   }, []);
 
-  const handleToggleFullscreen = () => {
-    const el = stageRef.current;
-    if (!el) return;
+  const handleToggleFullscreen = useCallback(() => {
+    const el = stageRef.current ?? document.documentElement;
     if (document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
-    } else {
-      el.requestFullscreen?.().catch(() => {});
+      document.exitFullscreen?.().catch(() => {
+        setIsFullscreen(false);
+      });
+      return;
     }
-  };
+    if (isFullscreen) {
+      setIsFullscreen(false);
+      return;
+    }
+    if (typeof el.requestFullscreen === 'function') {
+      el.requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch(() => setIsFullscreen(true));
+    } else {
+      setIsFullscreen(true);
+    }
+  }, [isFullscreen]);
 
-  const isMobileViewport = box.w > 0 && box.w <= 768;
+  const isMobileViewport =
+    box.w > 0 ? box.w <= 768 : typeof window !== 'undefined' && window.innerWidth <= 768;
 
   const handleToggleTouchMode = () => {
     setRightArmed(false);
@@ -1604,18 +1919,25 @@ export default function App() {
   const showHandle = phase === 'live' && !connectDialog && !menuOpen;
   const showMobileDock = remoteInput && !softKeys && (isCoarseDevice || isMobileViewport);
   // Appendix B fix #2: hide virtual cursor dot on desktop fine-pointer sessions
-  const showRemoteCursor = !touchMode && virtualCursorVisible && phase === 'live';
+  const showRemoteCursor =
+    displayPrefs.showRemoteCursor && !touchMode && virtualCursorVisible && phase === 'live';
 
   return (
     <section
       ref={stageRef}
       className={`stage${hand ? ' hand' : ''}`}
       data-testid="stage"
+      data-remote-active={remoteInput ? 'true' : 'false'}
+      data-scroll-style={displayPrefs.scrollStyle}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUpOrCancel}
       onPointerCancel={handlePointerUpOrCancel}
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => {
+        if (remoteInput || e.target === stageRef.current || e.target === canvasRef.current) {
+          e.preventDefault();
+        }
+      }}
     >
       <canvas
         ref={canvasRef}
@@ -1672,6 +1994,7 @@ export default function App() {
           handleX={handleX}
           stageWidth={box.w}
           hasWarning={Boolean(decoderError)}
+          isFullscreen={isFullscreen}
           onMoveHandle={setHandleX}
           onOpenMenu={() => setMenuOpen(true)}
         />
@@ -1700,10 +2023,18 @@ export default function App() {
       )}
 
       {showConnectSheet && (
-        <ConnectionSheet
+        <RustDeskShell
           locale={locale}
-          onToggleLocale={toggleLocale}
+          localePreference={localePreference}
+          isDesktop={!isMobileViewport}
+          isFullscreen={isFullscreen}
+          theme={theme}
+          displayPrefs={displayPrefs}
+          onChangeLocale={changeLocale}
+          onChangeTheme={changeTheme}
+          onUpdateDisplayPrefs={handleUpdateDisplayPrefs}
           mode={mode}
+          directIpEnabled={directIpEnabled}
           phase={phase}
           host={host}
           port={port}
@@ -1717,7 +2048,11 @@ export default function App() {
           authRequired={authRequired}
           detail={detail}
           decoderError={decoderError}
+          touchMode={touchMode}
+          diagnosticsOpen={diagnosticsOpen}
+          devices={devices}
           onChangeMode={setMode}
+          onToggleDirectIp={handleToggleDirectIp}
           onChangeField={(field, val) => {
             if (field === 'host') setHost(val);
             else if (field === 'port') setPort(val);
@@ -1729,8 +2064,15 @@ export default function App() {
             else if (field === 'gatewayToken') setGatewayToken(val);
           }}
           onChangeForceRelay={setForceRelay}
-          onConnect={() => void connectSession()}
+          onSelectDevice={handleSelectDevice}
+          onToggleFavorite={handleToggleFavorite}
+          onRemoveDevice={handleRemoveDevice}
+          onToggleTouchMode={handleToggleTouchMode}
+          onToggleDiagnostics={() => setDiagnosticsOpen((prev) => !prev)}
+          onToggleFullscreen={handleToggleFullscreen}
+          onConnect={(overrideMode) => void connectSession(overrideMode)}
           onDisconnect={disconnect}
+          onDismissError={handleDismissError}
           onClose={closeChrome}
         />
       )}
@@ -1788,7 +2130,10 @@ export default function App() {
             send({ type: 'switchDisplay', display: idx });
           }}
           onRefresh={() => send({ type: 'refresh' })}
-          onToggleFullscreen={handleToggleFullscreen}
+          onToggleFullscreen={() => {
+            if (!isFullscreen) setMenuOpen(false);
+            handleToggleFullscreen();
+          }}
           onQuickKey={handleQuickKey}
           onToggleRightArmed={() => setRightArmed((r) => !r)}
           onToggleKeyboard={() => {
@@ -1801,7 +2146,9 @@ export default function App() {
             send({ type: 'quality', quality: q, fps });
           }}
           onSendClipboard={(text) => {
-            send({ type: 'clipboard', text });
+            if (!displayPrefsRef.current.disableClipboard) {
+              send({ type: 'clipboard', text });
+            }
           }}
         />
       )}

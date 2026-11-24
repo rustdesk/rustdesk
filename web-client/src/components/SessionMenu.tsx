@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Activity, Globe, Monitor } from 'lucide-react';
+import { formatConnectionError } from '../lib/errors';
 import { statusLabel, t, type Locale } from '../lib/i18n';
 import type { ViewMode } from '../lib/mapping';
 import { formatBitrate, type PeerMessage, type QualityLevel } from '../lib/protocol';
-import type { ConnectionPhase } from './ConnectionSheet';
+import type { ConnectionPhase } from './RustDeskShell';
 
 export interface SessionStats {
   codec: string;
@@ -308,6 +309,8 @@ export function SessionMenu({
               className="rd-btn font-mono-tabular"
               data-testid="zoom-out"
               aria-label={t(locale, 'zoomOut')}
+              data-tooltip={t(locale, 'zoomOut')}
+              data-tooltip-pos="top"
               onClick={onZoomOut}
             >
               −
@@ -323,6 +326,8 @@ export function SessionMenu({
               className="rd-btn font-mono-tabular"
               data-testid="zoom-in"
               aria-label={t(locale, 'zoomIn')}
+              data-tooltip={t(locale, 'zoomIn')}
+              data-tooltip-pos="top"
               onClick={onZoomIn}
             >
               +
@@ -355,7 +360,7 @@ export function SessionMenu({
               data-testid="fullscreen"
               onClick={onToggleFullscreen}
             >
-              {t(locale, 'fullscreen')}
+              {isFullscreen ? t(locale, 'exitFullscreen') : t(locale, 'fullscreen')}
             </button>
           </div>
         </div>
@@ -538,11 +543,11 @@ export function SessionMenu({
 
           {decoderError && (
             <div
-              className="mt-2.5 rounded-lg border border-[#f3c4bf] bg-[#fdecea] px-3 py-2 text-xs text-[#b42318]"
+              className="mt-2.5 rounded-lg border border-[var(--rd-err-border)] bg-[var(--bad-bg)] px-3 py-2 text-xs text-[var(--bad)] leading-relaxed"
               data-testid="decoder-error"
               role="alert"
             >
-              {decoderError}
+              {formatConnectionError(locale, decoderError).message}
             </div>
           )}
         </div>

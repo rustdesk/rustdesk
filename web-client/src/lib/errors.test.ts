@@ -1,0 +1,94 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { formatConnectionError } from './errors';
+
+test('classifies wrong password into auth error in zh and en', () => {
+  const zh = formatConnectionError(
+    'zh',
+    'The host rejected the password. Check the permanent password and connect again.',
+  );
+  assert.equal(zh.kind, 'auth');
+  assert.equal(zh.title, '密码错误');
+  assert.match(zh.message, /密码/);
+
+  const en = formatConnectionError('en', 'wrong password');
+  assert.equal(en.kind, 'auth');
+  assert.equal(en.title, 'Incorrect Password');
+});
+
+test('classifies empty/required password into auth error', () => {
+  const res = formatConnectionError(
+    'zh',
+    'The host requires a password. Enter the permanent password set on the desktop and connect again.',
+  );
+  assert.equal(res.kind, 'auth');
+  assert.equal(res.title, '需要访问密码');
+});
+
+test('classifies gateway access token error into auth error', () => {
+  const res = formatConnectionError('zh', 'The gateway access token is missing or incorrect.');
+  assert.equal(res.kind, 'auth');
+  assert.equal(res.title, '网关令牌无效');
+});
+
+test('classifies offline and missing peer ID into network error', () => {
+  const res = formatConnectionError(
+    'zh',
+    'The remote desktop is offline, or the ID does not match this host.',
+  );
+  assert.equal(res.kind, 'network');
+  assert.equal(res.title, '设备不在线');
+});
+
+test('classifies server key / signature mismatch into network error', () => {
+  const res = formatConnectionError('zh', 'Invalid server public key signature');
+  assert.equal(res.kind, 'network');
+  assert.equal(res.title, '服务器公钥不匹配');
+});
+
+test('classifies connection refused / DNS / unreachable into network error', () => {
+  const refused = formatConnectionError(
+    'zh',
+    'Cannot reach the host. Check the address and port, and confirm direct IP access is enabled on the desktop.',
+  );
+  assert.equal(refused.kind, 'network');
+  assert.equal(refused.title, '无法连接到目标');
+
+  const dns = formatConnectionError('en', 'getaddrinfo ENOTFOUND hbbs.invalid');
+  assert.equal(dns.kind, 'network');
+  assert.equal(dns.title, 'Cannot Reach Host');
+});
+
+test('classifies timeout into network error', () => {
+  const res = formatConnectionError(
+    'zh',
+    'The host did not answer in time. It may be offline, or a firewall is blocking the port.',
+  );
+  assert.equal(res.kind, 'network');
+  assert.equal(res.title, '连接超时');
+});
+
+test('classifies WebCodecs and insecure context into codec error', () => {
+  const insecure = formatConnectionError('zh', 'WebCodecs requires HTTPS or a secure context');
+  assert.equal(insecure.kind, 'codec');
+  assert.equal(insecure.title, '浏览器解码异常');
+  assert.match(insecure.message, /HTTPS/);
+
+  const noCodec = formatConnectionError(
+    'zh',
+    'This browser cannot decode VP8, VP9, H.264, HEVC, or AV1.',
+  );
+  assert.equal(noCodec.kind, 'codec');
+  assert.match(noCodec.message, /VP8/);
+});
+
+test('falls back cleanly for empty or unknown error messages', () => {
+  const empty = formatConnectionError('zh', '   ');
+  assert.equal(empty.kind, 'generic');
+  assert.equal(empty.title, '连接失败');
+  assert.ok(empty.message.length > 0);
+
+  const custom = formatConnectionError('en', 'Custom host policy rejected session');
+  assert.equal(custom.kind, 'generic');
+  assert.equal(custom.message, 'Custom host policy rejected session');
+});

@@ -94,7 +94,8 @@ export function DiagnosticOverlay({
             className="diag-icon-btn"
             data-testid="diag-reset"
             aria-label={t(locale, 'diagReset')}
-            title={t(locale, 'diagReset')}
+            data-tooltip={t(locale, 'diagReset')}
+            data-tooltip-pos="bottom-end"
             onClick={onReset}
           >
             <RotateCcw size={13} />
@@ -104,7 +105,8 @@ export function DiagnosticOverlay({
             className="diag-icon-btn"
             data-testid="diag-close"
             aria-label={t(locale, 'diagClose')}
-            title={t(locale, 'diagClose')}
+            data-tooltip={t(locale, 'diagClose')}
+            data-tooltip-pos="bottom-end"
             onClick={onClose}
           >
             <X size={14} />
