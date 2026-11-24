@@ -2648,12 +2648,8 @@ export default function App() {
           locale={locale}
           stageHeight={box.h}
           activePanel={menuOpen ? mobilePanel : null}
-          rightArmed={rightArmed}
           onToggleKeyboard={toggleSoftKeyboard}
-          onRightClickAction={() => {
-            closeChrome();
-            handleMobileRightClick();
-          }}
+          onCollapse={closeChrome}
           onOpenMenu={panel => {
             setMobilePanel(menuOpen && panel === mobilePanel ? 'toolbar' : panel);
             setMenuOpen(true);

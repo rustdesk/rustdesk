@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ChevronLeft, Keyboard, Layers2, Monitor, MousePointer2, MousePointerClick } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Keyboard, Layers2, Monitor, MousePointer2 } from 'lucide-react';
 import { t, type Locale } from '../lib/i18n';
 import type { MobilePanel } from './MobileSessionPanel';
 
@@ -7,13 +7,12 @@ interface Props {
   locale: Locale;
   stageHeight: number;
   activePanel: MobilePanel | null;
-  rightArmed: boolean;
   onToggleKeyboard: () => void;
-  onRightClickAction: () => void;
+  onCollapse: () => void;
   onOpenMenu: (panel: MobilePanel) => void;
 }
 
-export function MobileDock({ locale, stageHeight, activePanel, rightArmed, onToggleKeyboard, onRightClickAction, onOpenMenu }: Props) {
+export function MobileDock({ locale, stageHeight, activePanel, onToggleKeyboard, onCollapse, onOpenMenu }: Props) {
   const [top, setTop] = useState<number | null>(null);
   const drag = useRef<{ id: number; startX: number; startY: number; y: number } | null>(null);
   const moved = useRef(false);
@@ -22,7 +21,6 @@ export function MobileDock({ locale, stageHeight, activePanel, rightArmed, onTog
   const buttons = [
     ['dock-keyboard', 'keyboard', Keyboard, onToggleKeyboard, false],
     ['dock-input-mode', 'pointerSettings', MousePointer2, () => onOpenMenu('input'), activePanel === 'input'],
-    ['dock-right-click', 'rightClick', MousePointerClick, onRightClickAction, rightArmed],
     ['dock-display', 'screens', Monitor, () => onOpenMenu('display'), activePanel === 'display'],
     ['dock-menu', 'moreActions', Layers2, () => onOpenMenu('actions'), activePanel === 'actions'],
   ] as const;
@@ -34,6 +32,9 @@ export function MobileDock({ locale, stageHeight, activePanel, rightArmed, onTog
           <Icon size={20} /><span>{t(locale, label)}</span>
         </button>
       ))}
+      <button type="button" data-testid="dock-collapse" aria-label={t(locale, 'dockHideControls')} onClick={onCollapse}>
+        <ChevronRight size={20} />
+      </button>
     </nav>
   );
 
