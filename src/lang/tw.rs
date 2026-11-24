@@ -830,5 +830,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "透過 RustDesk 服務直接從顯示卡擷取螢幕，不會再跳出 Wayland 的螢幕分享確認，登入畫面也能使用。並非所有裝置都支援；如果連線時仍要求確認螢幕分享，請關閉此選項或改用 X11。變更此選項會中斷目前的工作階段。"),
         ("wayland-drm-tip", "如需在 Wayland 上無人值守存取，請嘗試 DRM 擷取螢幕；若無法運作，請使用 X11。"),
         ("login-wayland-drm-tip", "如需存取 Wayland 登入畫面，請嘗試 DRM 擷取螢幕，或將其切換到 X11。"),
+        ("Key mapping", "按鍵對應"),
+        ("Enable key mapping in remote session", "在遠端工作階段中啟用按鍵對應"),
+        ("Configure key mapping...", "設定按鍵對應..."),
+        ("key-mapping-tip", "在按鍵傳送到遠端裝置之前重新對應，每種遠端系統可分別設定。僅在「1:1 傳輸模式」下生效。"),
+        ("Remote system", "遠端系統"),
+        ("No key mappings", "無按鍵對應"),
+        ("Add mapping", "新增對應"),
+        ("Swap Alt and Command", "交換 Alt 和 Command 鍵"),
+        ("Press a key", "請按鍵"),
+        ("Key on this device", "本機按鍵"),
+        ("Sent to remote as", "傳送到遠端為"),
     ].iter().cloned().collect();
 }

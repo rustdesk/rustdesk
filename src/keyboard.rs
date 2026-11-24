@@ -80,6 +80,7 @@ lazy_static::lazy_static! {
     };
 }
 
+pub mod remap;
 pub mod shortcuts;
 
 pub mod client {
@@ -1014,6 +1015,8 @@ pub fn event_to_key_events(
         }
         _ => {}
     }
+    let remapped = remap::remap_event(keyboard_mode, &peer, event);
+    let event = remapped.as_ref().unwrap_or(event);
 
     let mut key_event = KeyEvent::new();
     key_event.mode = keyboard_mode.into();

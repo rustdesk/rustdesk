@@ -1272,6 +1272,9 @@ impl<T: InvokeUiSession> Session<T> {
         // #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let (alt, ctrl, shift, command) =
             keyboard::client::get_modifiers_state(alt, ctrl, shift, command);
+        let (remote_alt, remote_ctrl, remote_shift, remote_command) =
+            keyboard::remap::mouse_modifiers(|| self.get_keyboard_mode(), || self.peer_platform())
+                .unwrap_or((alt, ctrl, shift, command));
         let is_left = (mask & (MOUSE_BUTTON_LEFT << 3)) > 0;
         let is_right = (mask & (MOUSE_BUTTON_RIGHT << 3)) > 0;
         if is_left ^ is_right {
@@ -1285,7 +1288,16 @@ impl<T: InvokeUiSession> Session<T> {
             }
         }
 
-        send_mouse(mask, x, y, alt, ctrl, shift, command, self);
+        send_mouse(
+            mask,
+            x,
+            y,
+            remote_alt,
+            remote_ctrl,
+            remote_shift,
+            remote_command,
+            self,
+        );
         // on macos, ctrl + left button down = right button down, up won't emit, so we need to
         // emit up myself if peer is not macos
         // to-do: how about ctrl + left from win to macos

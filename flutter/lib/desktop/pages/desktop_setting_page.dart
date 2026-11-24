@@ -12,6 +12,8 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/page_body.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_keyboard_shortcuts_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_key_mapping_page.dart';
+import 'package:flutter_hbb/models/key_mapping_model.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
@@ -424,6 +426,7 @@ class _GeneralState extends State<_General> {
         if (!isWeb) WaylandCard(),
         other(),
         if (!bind.isIncomingOnly()) keyboardShortcuts(),
+        if (!isWeb && !bind.isIncomingOnly()) keyMapping(),
       ],
     ).marginOnly(bottom: _kListViewBottomMargin);
   }
@@ -462,6 +465,37 @@ class _GeneralState extends State<_General> {
           ),
           _ShortcutsConfigureRow(),
         ],
+      ]);
+    });
+  }
+
+  Widget keyMapping() {
+    return StatefulBuilder(builder: (context, setLocalState) {
+      return _Card(title: 'Key mapping', children: [
+        _OptionCheckBox(
+          context,
+          'Enable key mapping in remote session',
+          kKeyMappingLocalConfigKey,
+          isServer: false,
+          optGetter: () => KeyMappingConfig.load().enabled,
+          // Reload first: the mapping page saves the maps on its own.
+          optSetter: (_, v) async {
+            await (KeyMappingConfig.load()..enabled = v).save();
+            setLocalState(() {});
+          },
+        ),
+        if (KeyMappingConfig.load().enabled)
+          InkWell(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const DesktopKeyMappingPage(),
+            )),
+            child: Row(children: [
+              Expanded(child: Text(translate('Configure key mapping...'))),
+              Icon(Icons.arrow_forward_ios,
+                      size: 16, color: disabledTextColor(context, true))
+                  .marginOnly(right: 4),
+            ]).marginOnly(left: _kCheckBoxLeftMargin, top: 6, bottom: 6),
+          ),
       ]);
     });
   }

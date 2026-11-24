@@ -830,5 +830,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "จับภาพหน้าจอโดยตรงจากการ์ดจอผ่านบริการ RustDesk โดยไม่มีคำขอแชร์หน้าจอของ Wayland รวมถึงที่หน้าจอเข้าสู่ระบบ อาจใช้ไม่ได้กับทุกอุปกรณ์ หากการเชื่อมต่อยังขอให้แชร์หน้าจออยู่ ให้ปิดตัวเลือกนี้หรือใช้ X11 การเปลี่ยนตัวเลือกนี้จะตัดการเชื่อมต่อเซสชันปัจจุบัน"),
         ("wayland-drm-tip", "สำหรับการเข้าถึงแบบไม่มีผู้ดูแลบน Wayland ให้ลองจับภาพหน้าจอผ่าน DRM หรือใช้ X11 หากใช้ไม่ได้"),
         ("login-wayland-drm-tip", "หากต้องการเข้าถึงหน้าจอเข้าสู่ระบบของ Wayland ให้ลองจับภาพผ่าน DRM หรือเปลี่ยนเป็น X11"),
+        ("Key mapping", ""),
+        ("Enable key mapping in remote session", ""),
+        ("Configure key mapping...", ""),
+        ("key-mapping-tip", ""),
+        ("Remote system", ""),
+        ("No key mappings", ""),
+        ("Add mapping", ""),
+        ("Swap Alt and Command", ""),
+        ("Press a key", ""),
+        ("Key on this device", ""),
+        ("Sent to remote as", ""),
     ].iter().cloned().collect();
 }

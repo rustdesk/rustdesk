@@ -830,5 +830,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "صفحه را از طریق سرویس RustDesk مستقیماً از کارت گرافیک ضبط می‌کند، بدون درخواست اشتراک‌گذاری صفحه Wayland، حتی در صفحه ورود. ممکن است روی همه دستگاه‌ها کار نکند؛ اگر اتصال‌ها هنوز اجازه اشتراک‌گذاری صفحه می‌خواهند، این گزینه را خاموش کنید یا از X11 استفاده کنید. تغییر این گزینه نشست‌های فعلی را قطع می‌کند."),
         ("wayland-drm-tip", "برای دسترسی بدون مراقبت در Wayland، ضبط صفحه با DRM را امتحان کنید و اگر کار نکرد از X11 استفاده کنید."),
         ("login-wayland-drm-tip", "برای دسترسی به صفحه ورود Wayland، ضبط صفحه با DRM را امتحان کنید یا آن را به X11 تغییر دهید."),
+        ("Key mapping", ""),
+        ("Enable key mapping in remote session", ""),
+        ("Configure key mapping...", ""),
+        ("key-mapping-tip", ""),
+        ("Remote system", ""),
+        ("No key mappings", ""),
+        ("Add mapping", ""),
+        ("Swap Alt and Command", ""),
+        ("Press a key", ""),
+        ("Key on this device", ""),
+        ("Sent to remote as", ""),
     ].iter().cloned().collect();
 }

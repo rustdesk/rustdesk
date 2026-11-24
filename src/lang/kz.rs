@@ -830,5 +830,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Экранды RustDesk қызметі арқылы тікелей бейнекартадан түсіреді, Wayland экранды бөлісу сұрауынсыз, кіру экранында да. Барлық құрылғыда жұмыс істемеуі мүмкін; қосылымдар әлі де экранды бөлісуді сұраса, мұны өшіріңіз немесе X11 қолданыңыз. Өзгерту ағымдағы сеанстарды үзеді."),
         ("wayland-drm-tip", "Wayland-та қадағалаусыз қолжетімділік үшін DRM арқылы түсіруді көріңіз, жұмыс істемесе X11 қолданыңыз."),
         ("login-wayland-drm-tip", "Wayland кіру экранына қол жеткізу үшін DRM арқылы түсіруді көріңіз немесе оны X11-ге ауыстырыңыз."),
+        ("Key mapping", ""),
+        ("Enable key mapping in remote session", ""),
+        ("Configure key mapping...", ""),
+        ("key-mapping-tip", ""),
+        ("Remote system", ""),
+        ("No key mappings", ""),
+        ("Add mapping", ""),
+        ("Swap Alt and Command", ""),
+        ("Press a key", ""),
+        ("Key on this device", ""),
+        ("Sent to remote as", ""),
     ].iter().cloned().collect();
 }
