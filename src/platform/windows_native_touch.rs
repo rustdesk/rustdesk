@@ -1,4 +1,8 @@
-use std::{io, mem, sync::OnceLock};
+use std::{
+    io, mem,
+    sync::OnceLock,
+    time::{Duration, Instant},
+};
 
 use base::message_proto::{native_touch_event::Phase, NativeTouchEvent};
 use hbb_common::log;
@@ -14,8 +18,8 @@ use windows::{
                 POINTER_TYPE_INFO, POINTER_TYPE_INFO_0,
             },
             Input::Pointer::{
-                POINTER_FLAG_DOWN, POINTER_FLAG_INCONTACT, POINTER_FLAG_INRANGE, POINTER_FLAG_UP,
-                POINTER_FLAG_UPDATE, POINTER_TOUCH_INFO,
+                POINTER_FLAGS, POINTER_FLAG_CANCELED, POINTER_FLAG_DOWN, POINTER_FLAG_INCONTACT,
+                POINTER_FLAG_INRANGE, POINTER_FLAG_UP, POINTER_FLAG_UPDATE, POINTER_TOUCH_INFO,
             },
             WindowsAndMessaging::{POINTER_INPUT_TYPE, PT_TOUCH},
         },
@@ -23,6 +27,10 @@ use windows::{
 };
 
 const MAX_CONTACTS: usize = 10;
+// Windows can cancel a synthetic touch if it stops receiving updates.
+const REFRESH_INTERVAL: Duration = Duration::from_millis(50);
+const UPDATE_CONTACT: POINTER_FLAGS =
+    POINTER_FLAGS(POINTER_FLAG_UPDATE.0 | POINTER_FLAG_INRANGE.0 | POINTER_FLAG_INCONTACT.0);
 
 type CreateDevice = unsafe extern "system" fn(
     POINTER_INPUT_TYPE,
@@ -124,8 +132,25 @@ impl Contacts {
         if phase != Phase::UP {
             self.0[changed] = Some(Contact { remote_id, point });
         }
-        let frame = self
-            .0
+        let frame = self.frame(|index| match (index == changed, phase) {
+            (true, Phase::DOWN) => {
+                POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT
+            }
+            (true, Phase::UP) => POINTER_FLAG_UP,
+            _ => UPDATE_CONTACT,
+        });
+        if phase == Phase::UP {
+            self.0[changed] = None;
+        }
+        Some(frame)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.iter().all(Option::is_none)
+    }
+
+    fn frame(&self, flags: impl Fn(usize) -> POINTER_FLAGS) -> Vec<POINTER_TYPE_INFO> {
+        self.0
             .iter()
             .enumerate()
             .filter_map(|(index, contact)| {
@@ -134,23 +159,13 @@ impl Contacts {
                 touch.pointerInfo.pointerType = PT_TOUCH;
                 touch.pointerInfo.pointerId = index as u32 + 1;
                 touch.pointerInfo.ptPixelLocation = contact.point;
-                touch.pointerInfo.pointerFlags = match (index == changed, phase) {
-                    (true, Phase::DOWN) => {
-                        POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT
-                    }
-                    (true, Phase::UP) => POINTER_FLAG_UP,
-                    _ => POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT,
-                };
+                touch.pointerInfo.pointerFlags = flags(index);
                 Some(POINTER_TYPE_INFO {
                     r#type: PT_TOUCH,
                     Anonymous: POINTER_TYPE_INFO_0 { touchInfo: touch },
                 })
             })
-            .collect();
-        if phase == Phase::UP {
-            self.0[changed] = None;
-        }
-        Some(frame)
+            .collect()
     }
 }
 
@@ -158,12 +173,44 @@ impl Contacts {
 pub(crate) struct Session {
     device: Option<Device>,
     contacts: Contacts,
+    refresh_at: Option<Instant>,
 }
 
 impl Session {
     pub(crate) fn reset(&mut self) {
-        self.device = None;
+        if let Some(device) = self.device.take() {
+            let frame = self
+                .contacts
+                .frame(|_| POINTER_FLAG_UP | POINTER_FLAG_CANCELED);
+            if !frame.is_empty() {
+                if let Err(err) = device.inject(&frame) {
+                    log::trace!("Failed to cancel native touch: {}", err);
+                }
+            }
+        }
         self.contacts = Contacts::default();
+        self.refresh_at = None;
+    }
+
+    pub(crate) fn input_wait(&self, idle: Duration) -> Duration {
+        self.refresh_at.map_or(idle, |deadline| {
+            idle.min(deadline.saturating_duration_since(Instant::now()))
+        })
+    }
+
+    pub(crate) fn refresh_if_due(&mut self) {
+        if !self
+            .refresh_at
+            .is_some_and(|deadline| deadline <= Instant::now())
+        {
+            return;
+        }
+        if super::try_change_desktop() {
+            self.reset();
+            return;
+        }
+        let frame = self.contacts.frame(|_| UPDATE_CONTACT);
+        self.submit_frame(&frame);
     }
 
     pub(crate) fn handle(&mut self, event: NativeTouchEvent) {
@@ -190,7 +237,11 @@ impl Session {
         let Some(frame) = self.contacts.apply(phase, event.id, point) else {
             return;
         };
-        if let Err(err) = self.inject(&frame) {
+        self.submit_frame(&frame);
+    }
+
+    fn submit_frame(&mut self, frame: &[POINTER_TYPE_INFO]) {
+        if let Err(err) = self.inject(frame) {
             hbb_common::throttled_log!(
                 std::time::Duration::from_secs(5),
                 warn,
@@ -198,6 +249,9 @@ impl Session {
                 err
             );
             self.reset();
+        } else {
+            self.refresh_at =
+                (!self.contacts.is_empty()).then(|| Instant::now() + REFRESH_INTERVAL);
         }
     }
 
@@ -209,6 +263,12 @@ impl Session {
             device.inject(frame)?;
         }
         Ok(())
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.reset();
     }
 }
 
@@ -245,6 +305,25 @@ mod tests {
         assert_eq!(moved.len(), 1);
         assert_eq!(info(&moved[0]).pointerId, info(&second[1]).pointerId);
         assert_eq!(info(&moved[0]).ptPixelLocation.x, 41);
+    }
+
+    #[test]
+    fn refreshes_stationary_contacts_until_the_last_one_is_released() {
+        let mut contacts = Contacts::default();
+        assert!(contacts.is_empty());
+        contacts.apply(Phase::DOWN, 3, point(10)).unwrap();
+        let down = contacts.apply(Phase::DOWN, 5, point(20)).unwrap();
+        let refresh = contacts.frame(|_| UPDATE_CONTACT);
+        assert_eq!(refresh.len(), 2);
+        for (before, now) in down.iter().zip(&refresh) {
+            assert_eq!(info(before).pointerId, info(now).pointerId);
+            assert_eq!(info(before).ptPixelLocation, info(now).ptPixelLocation);
+            assert_eq!(info(now).pointerFlags, UPDATE_CONTACT);
+        }
+        contacts.apply(Phase::UP, 3, point(0)).unwrap();
+        assert!(!contacts.is_empty());
+        contacts.apply(Phase::UP, 5, point(0)).unwrap();
+        assert!(contacts.is_empty());
     }
 
     #[test]

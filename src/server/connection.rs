@@ -1308,8 +1308,12 @@ impl Connection {
         }
         #[cfg(target_os = "macos")]
         reset_input_ondisconn();
+        let idle_timeout = std::time::Duration::from_millis(500);
         loop {
-            match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
+            let timeout = idle_timeout;
+            #[cfg(windows)]
+            let timeout = native_touch.input_wait(timeout);
+            match receiver.recv_timeout(timeout) {
                 Ok(v) => match v {
                     MessageInput::Mouse(mouse_input) => {
                         handle_mouse(
@@ -1366,6 +1370,8 @@ impl Connection {
                         }
                     }
                 },
+                #[cfg(windows)]
+                Err(std_mpsc::RecvTimeoutError::Timeout) if timeout < idle_timeout => {}
                 Err(err) => {
                     if block_input_mode {
                         let _ = crate::platform::block_input(true);
@@ -1375,6 +1381,8 @@ impl Connection {
                     }
                 }
             }
+            #[cfg(windows)]
+            native_touch.refresh_if_due();
         }
         #[cfg(target_os = "linux")]
         clear_remapped_keycode();
