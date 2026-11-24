@@ -1824,12 +1824,16 @@ button:focus-visible {
 .remote-tools,.remote-capsule,.remote-menu-panel {
   background:var(--remote-toolbar-surface); color:#f3f5f8; border:1px solid #40454c; color-scheme:dark;
 }
+.stage {
+  --dock-y: clamp(env(safe-area-inset-top, 0px), var(--dock-top, calc(100% - var(--remote-toolbar-height) - 10px - env(safe-area-inset-bottom))), calc(100% - var(--remote-toolbar-height) - env(safe-area-inset-bottom)));
+}
 .remote-tools,.remote-capsule {
+  top:var(--dock-y); height:var(--remote-toolbar-height);
   position:absolute; z-index:7; display:flex; overflow:hidden; touch-action:manipulation;
 }
 .remote-tools {
   inset-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right));
-  bottom:calc(10px + env(safe-area-inset-bottom)); height:var(--remote-toolbar-height); border-radius:12px;
+  border-radius:12px;
 }
 .remote-tools button,.remote-capsule button {
   display:grid; place-content:center; justify-items:center; gap:3px; flex:1;
@@ -1838,15 +1842,15 @@ button:focus-visible {
 .remote-tools button { font-size:12px; gap:1px; -webkit-tap-highlight-color:transparent; }
 .remote-tools button.selected { color:#8bcaff; }
 .remote-capsule {
-  right:max(16px,env(safe-area-inset-right)); width:88px; height:44px; border-radius:24px; touch-action:none; user-select:none;
+  right:max(16px,env(safe-area-inset-right)); width:88px; overflow:visible; border-radius:24px; touch-action:none; user-select:none;
 }
 .remote-capsule button + button { border-left:1px solid #ffffff16; }
 .remote-capsule svg { width:21px; }
 .remote-menu-backdrop { position:absolute; inset:0; z-index:5; }
 .remote-menu-panel {
   position:absolute; inset-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right));
-  bottom:calc(var(--remote-toolbar-height) + 17px + env(safe-area-inset-bottom)); border-radius:10px;
-  max-height:calc(100% - var(--remote-toolbar-height) - 36px - env(safe-area-inset-bottom) - env(safe-area-inset-top));
+  bottom:calc(100% - var(--dock-y) + 7px); border-radius:10px;
+  max-height:calc(var(--dock-y) - 15px - env(safe-area-inset-top));
   overflow:auto; overscroll-behavior:contain; touch-action:pan-y;
 }
 .tool-group { padding:3px 13px; }
@@ -1879,3 +1883,15 @@ button:focus-visible {
 .remote-menu-panel dl { margin:0; }
 .remote-menu-panel dl>div { padding:6px 0; }
 .remote-menu-panel dd,.remote-menu-panel p { font-size:13px; color:#c2cad3; margin:3px 0 8px; }
+
+.stage[data-panel-below=true] .remote-menu-panel {
+  bottom:auto; top:calc(var(--dock-y) + var(--remote-toolbar-height) + 7px);
+  max-height:calc(100% - var(--dock-y) - var(--remote-toolbar-height) - 15px - env(safe-area-inset-bottom));
+}
+.capsule-hint {
+  position:absolute; right:0; bottom:calc(100% + 5px); pointer-events:none; white-space:nowrap;
+  padding:4px 8px; border-radius:5px; background:#22252b; color:white; font-size:12px;
+  animation:capsule-hint 1.6s forwards;
+}
+.stage[data-panel-below=true] .capsule-hint { bottom:auto; top:calc(100% + 5px); }
+@keyframes capsule-hint { 80% {opacity:1} 100% {opacity:0} }

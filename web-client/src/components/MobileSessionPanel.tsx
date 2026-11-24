@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Activity, Clipboard, Command, Eye, Focus, LockKeyhole, LogOut, Maximize2, Monitor, MousePointer2, Pointer, RefreshCw, Scaling, SlidersHorizontal, Volume2, CircleHelp } from 'lucide-react';
+import { Activity, Clipboard, Command, Eye, Focus, LockKeyhole, LogOut, ScanEye, Monitor, MousePointer2, Pointer, RefreshCw, Scaling, SlidersHorizontal, Volume2, CircleHelp } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
 import type { PreferredCodec } from '../lib/displayPrefs';
-import type { QualityLevel } from '../lib/protocol';
+const qualityNames = { low: 'qualityLow', balanced: 'qualityBalanced', best: 'qualityBest' } as const;
 
 export type MobilePanel = 'toolbar' | 'actions' | 'input' | 'display';
 
@@ -96,7 +96,7 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
               <button key={d.index} aria-pressed={d.index === p.display} disabled={d.online === false}
                 onClick={() => p.onSwitchDisplay(d.index)}><Monitor />{d.name || label('screens')+' '+(d.index+1)}</button>)}</div>}
             <div className="tool-group">
-              <details><summary><Maximize2 />{label('view')}<small>{p.viewMode === 'fit' ? label('fit') : p.zoomPercent+'%'}</small></summary>
+              <details><summary><ScanEye />{label('view')}<small>{p.viewMode === 'fit' ? label('fit') : p.zoomPercent+'%'}</small></summary>
                 <div className="tool-options">
                   <button data-testid="view-fit" onClick={p.onFit}>{label('fit')}</button><button onClick={p.onOriginal}>100%</button>
                   <button aria-label={label('zoomOut')} onClick={p.onZoomOut}>−</button>{p.zoomPercent}%
@@ -110,20 +110,23 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
                   <option disabled value={-1}>{p.stats.width} × {p.stats.height}</option>
                   {p.sizes.map((s,i) => <option key={i} value={i}>{s.width} × {s.height}</option>)}
                 </select></label>}
-              <label className="tool-row"><SlidersHorizontal /><span>{label('qualityAndFps')}</span>
-                <select value={p.quality} onChange={e => p.onChangeQuality(e.target.value as QualityLevel, p.targetFps)}>
-                  {([['low','qualityLow'],['balanced','qualityBalanced'],['best','qualityBest']] as const).map(([v,k]) => <option key={v} value={v}>{label(k)}</option>)}
-                </select></label>
-            </div>
-            <div className="tool-group">
-              {monitors.length > 1 && toggle(Focus,'followWindow',p.followWindow,p.onToggleFollowWindow)}
-              <details><summary><SlidersHorizontal />{label('advancedQuality')}<small>{p.targetFps} FPS</small></summary>
+              <details data-testid="mobile-quality">
+                <summary><SlidersHorizontal />{label('qualityAndFps')}<small>{label(qualityNames[p.quality])} · {p.targetFps} FPS</small></summary>
+                <div className="tool-options mode-options">
+                  {(['low', 'balanced', 'best'] as const).map(level =>
+                    <button key={level} aria-pressed={p.quality === level} onClick={() => p.onChangeQuality(level, p.targetFps)}>
+                      {label(qualityNames[level])}
+                    </button>)}
+                </div>
                 <label className="tool-row"><span>{label('targetFps')}</span><select value={p.targetFps} onChange={e => p.onChangeQuality(p.quality, Number(e.target.value))}>
                   {[15,30,60].map(n => <option key={n}>{n}</option>)}</select></label>
                 <label className="tool-row"><span>{label('sessionCodecLabel')}</span><select value={p.preferredCodec} onChange={e => p.onChangeQuality(p.quality,p.targetFps,e.target.value as PreferredCodec)}>
                   {['auto','h264','vp8','vp9','av1'].map(v => <option key={v} value={v}>{v==='auto'?label('codecAuto'):v.toUpperCase()}</option>)}</select></label>
-                {action(RefreshCw,'refresh',p.onRefresh)}
               </details>
+            </div>
+            <div className="tool-group">
+              {monitors.length > 1 && toggle(Focus,'followWindow',p.followWindow,p.onToggleFollowWindow)}
+              {action(RefreshCw,'refresh',p.onRefresh)}
             </div>
           </>}
           {p.decoderError && <p role="alert">{formatConnectionError(p.locale,p.decoderError).message}</p>}

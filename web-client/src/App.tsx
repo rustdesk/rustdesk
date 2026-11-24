@@ -361,6 +361,7 @@ export default function App() {
   const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const [toolbarPinned, setToolbarPinned] = useState(false);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  const [dockTop, setDockTop] = useState<number | null>(null);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('toolbar');
   const [menuOpen, setMenuOpen] = useState(false);
   const [connectDialog, setConnectDialog] = useState(false);
@@ -2489,6 +2490,8 @@ export default function App() {
     <section
       ref={stageRef}
       className={`stage${hand ? ' hand' : ''}`}
+      style={dockTop === null ? undefined : { '--dock-top': dockTop+'px' } as React.CSSProperties}
+      data-panel-below={dockTop !== null && dockTop < (box.h - 48) / 2}
       data-testid="stage"
       data-remote-active={remoteInput ? 'true' : 'false'}
       data-scroll-style={displayPrefs.scrollStyle}
@@ -2647,6 +2650,7 @@ export default function App() {
         <MobileDock
           locale={locale}
           stageHeight={box.h}
+          onDragTo={setDockTop}
           activePanel={menuOpen ? mobilePanel : null}
           onToggleKeyboard={toggleSoftKeyboard}
           onCollapse={closeChrome}
