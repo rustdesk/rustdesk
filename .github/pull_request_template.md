@@ -47,7 +47,14 @@ Do not claim a fix based on reasoning alone.
 
 **Not tested / could not reproduce:**
 
-<!-- Attach screenshots or a short recording for UI or behavior changes. -->
+## Screenshots / video
+
+<!--
+Required if this PR adds, changes, or affects any UI, including side effects on
+existing UI. Upload a video or screenshots from the real devices above that prove
+the change; for changes to existing UI, show before and after.
+Write "No UI impact" if there is none.
+-->
 
 ## Regression surface
 
@@ -67,6 +74,7 @@ New code that only runs when the new feature is used does not need to be listed.
 - [ ] Features: a maintainer approved this in a discussion before I started (linked above).
 - [ ] I tested this end to end on real devices on every platform it touches, and the results above come from those runs.
 - [ ] Bug fixes: I reproduced the original issue on master and confirmed this PR fixes it.
+- [ ] UI added, changed, or affected: I uploaded a video or screenshots above that prove the change.
 - [ ] I re-tested the existing functionality listed under "Regression surface".
 - [ ] The diff contains only what this change needs: no unrelated refactoring, formatting, renames, or drive-by fixes.
 - [ ] I reviewed every line of this diff myself and can explain it.
