@@ -830,5 +830,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", ""),
         ("wayland-drm-tip", ""),
         ("login-wayland-drm-tip", ""),
+        ("Saved servers", ""),
+        ("No saved servers", ""),
+        ("Not saved", ""),
+        ("Save server", ""),
     ].iter().cloned().collect();
 }
