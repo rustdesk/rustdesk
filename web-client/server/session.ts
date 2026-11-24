@@ -2,6 +2,8 @@ import type { WebSocket } from 'ws';
 import { tokenMatches } from './auth.ts';
 import {
   type ClientMessage,
+  type CodecCaps,
+  buildRefreshVideoMessage,
   buildVideoReceivedMessage,
   hasAnyCodec,
   humanizeError,
@@ -121,6 +123,7 @@ function extractEncodedFrames(
 export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   let state: 'awaiting-connect' | 'connecting' | 'live' | 'closed' = 'awaiting-connect';
   let hostConn: ConnectedHost | null = null;
+  let sessionCodecs: CodecCaps | undefined;
   let warnedRawVideo = false;
   let currentSize = { width: 0, height: 0 };
 
@@ -395,6 +398,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         ws.close();
         return;
       }
+      sessionCodecs = codecs;
 
       state = 'connecting';
       sendJson({ type: 'status', state: 'connecting', detail: 'dialing the host' });
@@ -412,6 +416,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                   forceRelay: Boolean(parsed.forceRelay),
                   quality: parsed.quality,
                   fps: parsed.fps,
+                  preferCodec: parsed.codec,
                 },
                 codecs,
               )
@@ -422,6 +427,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                   password: parsed.password ?? '',
                   quality: parsed.quality,
                   fps: parsed.fps,
+                  preferCodec: parsed.codec,
                 },
                 codecs,
               );
@@ -454,13 +460,19 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     if (state !== 'live') return;
 
     if (hostConn) {
-      const hostMsg = toHostMessage(parsed);
+      const hostMsg = toHostMessage(parsed, sessionCodecs);
       if (hostMsg) {
-        try {
-          await hostConn.stream.sendRaw(encodeMessage(hostMsg));
-        } catch (err) {
-          sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
-          cleanup(false);
+        const activeHost = hostConn;
+        void activeHost.stream.sendRaw(encodeMessage(hostMsg)).catch((err) => {
+          if (state === 'live') {
+            sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+            cleanup(false);
+          }
+        });
+        if (parsed.type === 'quality') {
+          void activeHost.stream
+            .sendRaw(encodeMessage(buildRefreshVideoMessage()))
+            .catch(() => {});
         }
       }
     }

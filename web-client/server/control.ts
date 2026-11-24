@@ -41,6 +41,7 @@ export type ClientMessage =
       codecs?: Partial<CodecCaps>;
       quality?: string;
       fps?: number;
+      codec?: string;
     }
   | {
       type: 'mouse';
@@ -76,6 +77,7 @@ export type ClientMessage =
       type: 'quality';
       quality?: string;
       fps?: number;
+      codec?: string;
     }
   | {
       type: 'ping';
@@ -175,10 +177,50 @@ export function controlKeyEnum(name: string): number | undefined {
   return CONTROL_KEY_MAP[name];
 }
 
+export function resolvePreferCodecEnum(
+  codecs: CodecCaps,
+  preferCodec?: string,
+): number {
+  const pref = (preferCodec ?? 'auto').toLowerCase();
+  if (pref === 'h264' && codecs.h264) return PreferCodecValues.H264;
+  if (pref === 'h265' && codecs.h265) return PreferCodecValues.H265;
+  if (pref === 'vp8' && codecs.vp8) return PreferCodecValues.VP8;
+  if (pref === 'vp9' && codecs.vp9) return PreferCodecValues.VP9;
+  if (pref === 'av1' && codecs.av1) return PreferCodecValues.AV1;
+
+  // In 'auto' mode, prefer hardware-accelerated H.264 or ultra-fast VP8 instead of RustDesk Auto,
+  // because RustDesk Auto prioritizes CPU-bound software AV1 (3-7 fps on typical hosts).
+  if (codecs.h264) return PreferCodecValues.H264;
+  if (codecs.vp8) return PreferCodecValues.VP8;
+  if (codecs.vp9) return PreferCodecValues.VP9;
+  if (codecs.h265) return PreferCodecValues.H265;
+  return PreferCodecValues.Auto;
+}
+
+export function buildSupportedDecoding(
+  codecs: CodecCaps,
+  preferCodec?: string,
+): Record<string, unknown> {
+  const pref = (preferCodec ?? 'auto').toLowerCase();
+  const explicitAv1 = pref === 'av1' && codecs.av1;
+
+  return {
+    ability_vp8: codecs.vp8 ? 1 : 0,
+    ability_vp9: codecs.vp9 ? 1 : 0,
+    // Never advertise AV1 in auto mode so hosts without GPU AV1 do not fall back to 3-7fps software AV1
+    ability_av1: explicitAv1 ? 1 : 0,
+    ability_h264: codecs.h264 ? 1 : 0,
+    ability_h265: codecs.h265 ? 1 : 0,
+    prefer: resolvePreferCodecEnum(codecs, pref),
+    prefer_chroma: ChromaValues.I420,
+  };
+}
+
 export function buildLoginOptions(
   codecs: CodecCaps,
   quality?: string,
   fps?: number,
+  preferCodec?: string,
 ): Record<string, unknown> {
   let image_quality = ImageQualityValues.Balanced;
   if (quality === 'low') image_quality = ImageQualityValues.Low;
@@ -190,15 +232,7 @@ export function buildLoginOptions(
       : 30;
 
   return {
-    supported_decoding: {
-      ability_vp8: codecs.vp8 ? 1 : 0,
-      ability_vp9: codecs.vp9 ? 1 : 0,
-      ability_av1: codecs.av1 ? 1 : 0,
-      ability_h264: codecs.h264 ? 1 : 0,
-      ability_h265: codecs.h265 ? 1 : 0,
-      prefer: PreferCodecValues.Auto,
-      prefer_chroma: ChromaValues.I420,
-    },
+    supported_decoding: buildSupportedDecoding(codecs, preferCodec),
     custom_fps: customFps,
     image_quality,
     disable_audio: BoolOptionValues.Yes,
@@ -225,7 +259,10 @@ export function buildRefreshVideoMessage(): Record<string, unknown> {
  * Converts a browser JSON control message into a RustDesk protobuf Message object.
  * Returns null if the message produces no host protobuf packet.
  */
-export function toHostMessage(msg: ClientMessage): Record<string, unknown> | null {
+export function toHostMessage(
+  msg: ClientMessage,
+  sessionCodecs?: CodecCaps,
+): Record<string, unknown> | null {
   switch (msg.type) {
     case 'mouse': {
       return {
@@ -275,6 +312,7 @@ export function toHostMessage(msg: ClientMessage): Record<string, unknown> | nul
       return {
         key_event: {
           mode: KeyboardModeValues.Legacy,
+          down: true,
           press: true,
           seq: text,
         },
@@ -315,8 +353,11 @@ export function toHostMessage(msg: ClientMessage): Record<string, unknown> | nul
 
       const option: Record<string, unknown> = { image_quality };
       const fps = Math.trunc(Number(msg.fps ?? 0));
-      if (fps > 0) {
+      if (fps >= 5 && fps <= 120) {
         option.custom_fps = fps;
+      }
+      if (msg.codec && sessionCodecs) {
+        option.supported_decoding = buildSupportedDecoding(sessionCodecs, msg.codec);
       }
       return {
         misc: { option },

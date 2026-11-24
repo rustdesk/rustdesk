@@ -27,8 +27,8 @@ async function startServer() {
   const faviconSvg =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#1d8ef5"/><rect x="6" y="8" width="20" height="13" rx="2.5" fill="none" stroke="#ffffff" stroke-width="2.2"/><path d="M12 24h8M16 21v3" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/></svg>';
 
-  app.get('/favicon.ico', (_req, res) => {
-    res.setHeader('Content-Type', 'image/svg+xml');
+  app.get(['/favicon.ico', '/favicon.svg'], (_req, res) => {
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.status(200).send(faviconSvg);
   });

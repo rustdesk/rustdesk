@@ -85,6 +85,9 @@ export type ClientMessage =
       forceRelay?: boolean;
       token?: string;
       codecs: CodecSupport;
+      quality?: QualityLevel;
+      fps?: number;
+      codec?: string;
     }
   | {
       type: 'mouse';
@@ -105,7 +108,7 @@ export type ClientMessage =
   | { type: 'clipboard'; text: string }
   | { type: 'switchDisplay'; display: number }
   | { type: 'refresh' }
-  | { type: 'quality'; quality: QualityLevel; fps: number }
+  | { type: 'quality'; quality: QualityLevel; fps: number; codec?: string }
   | { type: 'ping'; seq: number; clientTs: number }
   | { type: 'disconnect' };
 

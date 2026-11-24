@@ -18,14 +18,20 @@ import type { ViewMode } from '../lib/mapping';
 import { formatBitrate, type PeerMessage, type QualityLevel } from '../lib/protocol';
 import type { ConnectionPhase } from './RustDeskShell';
 
+import type { PreferredCodec } from '../lib/displayPrefs';
+import type { StreamActivityState } from '../lib/stats';
+
 export interface SessionStats {
   codec: string;
   width: number;
   height: number;
   fps: number;
+  rxFps: number;
   delayMs: number;
   bitrate: number;
   decoded: number;
+  dropped: number;
+  streamState: StreamActivityState;
 }
 
 type MenuTab = 'control' | 'input' | 'display' | 'session';
@@ -52,6 +58,7 @@ interface SessionMenuProps {
   rtt: number;
   quality: QualityLevel;
   targetFps: number;
+  preferredCodec: PreferredCodec;
   remoteClipboard: string;
   onClose: () => void;
   onOpenConnection: () => void;
@@ -71,7 +78,7 @@ interface SessionMenuProps {
   onQuickKey: (name: 'Esc' | 'Tab' | 'Ctrl+C' | 'Ctrl+V' | 'Ctrl+Alt+Del' | 'Lock') => void;
   onToggleRightArmed: () => void;
   onToggleKeyboard: () => void;
-  onChangeQuality: (quality: QualityLevel, fps: number) => void;
+  onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec) => void;
   onSendClipboard: (text: string) => void;
 }
 
@@ -97,6 +104,7 @@ export function SessionMenu({
   rtt,
   quality,
   targetFps,
+  preferredCodec,
   remoteClipboard,
   onClose,
   onOpenConnection,
@@ -533,12 +541,40 @@ export function SessionMenu({
                   aria-label={t(locale, 'targetFps')}
                   data-testid="fps-select"
                   value={targetFps}
-                  onChange={(e) => onChangeQuality(quality, Number(e.target.value))}
+                  onChange={(e) => onChangeQuality(quality, Number(e.target.value), preferredCodec)}
                 >
                   <option value={15}>15 fps</option>
                   <option value={30}>30 fps</option>
                   <option value={60}>60 fps</option>
                 </select>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold text-[var(--ink-soft)] mb-2">
+                {t(locale, 'sessionCodecLabel')}
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(
+                  [
+                    { value: 'auto', label: t(locale, 'sessionCodecAuto') },
+                    { value: 'h264', label: 'H.264' },
+                    { value: 'vp8', label: 'VP8' },
+                    { value: 'vp9', label: 'VP9' },
+                    { value: 'av1', label: 'AV1' },
+                  ] as const
+                ).map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    className={`rd-btn${preferredCodec === c.value ? ' active' : ''}`}
+                    style={{ minHeight: 34, padding: '4px 10px', fontSize: 12 }}
+                    data-testid={`session-codec-${c.value}`}
+                    onClick={() => onChangeQuality(quality, targetFps, c.value)}
+                  >
+                    {c.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -585,8 +621,22 @@ export function SessionMenu({
               </div>
               <div>
                 <div className="text-[var(--ink-soft)]">{t(locale, 'statFps')}</div>
-                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="fps">
-                  {stats.fps}
+                <div
+                  className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5 flex items-center gap-1.5"
+                  data-testid="fps"
+                  data-stream-state={stats.streamState}
+                  title={
+                    stats.streamState === 'idle'
+                      ? t(locale, 'statFpsIdleTip')
+                      : undefined
+                  }
+                >
+                  <span>{stats.fps}</span>
+                  {stats.streamState === 'idle' && (
+                    <span className="text-[10px] font-normal text-[var(--ink-soft)]">
+                      {t(locale, 'statFpsIdle')}
+                    </span>
+                  )}
                 </div>
               </div>
               <div>

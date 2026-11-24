@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import { t, type Locale } from '../lib/i18n';
-import { buildSoftKeyChord, controlFromCode, type SoftChordPart } from '../lib/keys';
+import {
+  buildSoftKeyChord,
+  controlFromKeyOrCode,
+  diffTextInput,
+  isImeEvent,
+  type SoftChordPart,
+} from '../lib/keys';
 
 interface SoftKeyboardBarProps {
   locale: Locale;
@@ -38,17 +45,27 @@ export function SoftKeyboardBar({
 }: SoftKeyboardBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const composingRef = useRef(false);
+  const lastSentRef = useRef('');
+  const [hasDraft, setHasDraft] = useState(false);
   const [latched, setLatched] = useState<string[]>([]);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    inputRef.current?.focus({ preventScroll: true });
   }, []);
+
+  const resetLocalDraft = () => {
+    lastSentRef.current = '';
+    if (inputRef.current) {
+      inputRef.current.value = '';
+    }
+    setHasDraft(false);
+  };
 
   const toggleModifier = (control: string) => {
     setLatched((prev) =>
       prev.includes(control) ? prev.filter((m) => m !== control) : [...prev, control],
     );
-    inputRef.current?.focus();
+    inputRef.current?.focus({ preventScroll: true });
   };
 
   const tapExtraKey = (control: string) => {
@@ -59,44 +76,100 @@ export function SoftKeyboardBar({
       onSendControl('down', control);
       onSendControl('up', control);
     }
-    inputRef.current?.focus();
+    inputRef.current?.focus({ preventScroll: true });
   };
 
-  const dispatchTypedText = (val: string) => {
-    if (!val) return;
+  const syncInputValue = (el: HTMLInputElement) => {
+    const nextVal = el.value;
+    const prevVal = lastSentRef.current;
+
     if (latched.length > 0) {
-      const chars = Array.from(val);
-      const first = chars.shift();
-      if (first) {
-        onSendChord(buildSoftKeyChord(latched, { chr: first.toLowerCase() }));
+      const diff = diffTextInput(prevVal, nextVal);
+      if (diff.insert) {
+        const chars = Array.from(diff.insert);
+        const first = chars.shift();
+        if (first) {
+          onSendChord(buildSoftKeyChord(latched, { chr: first.toLowerCase() }));
+        }
+        setLatched([]);
+        // Restore local draft without leaving the shortcut character behind
+        el.value = prevVal;
+        setHasDraft(prevVal.length > 0);
+        if (chars.length > 0) {
+          onSendText(chars.join(''));
+        }
+        return;
       }
-      setLatched([]);
-      if (chars.length > 0) {
-        onSendText(chars.join(''));
-      }
+    }
+
+    const diff = diffTextInput(prevVal, nextVal);
+    if (diff.backspaces === 0 && !diff.insert) {
+      setHasDraft(nextVal.length > 0);
       return;
     }
-    onSendText(val);
+
+    for (let i = 0; i < diff.backspaces; i += 1) {
+      onSendControl('down', 'Backspace');
+      onSendControl('up', 'Backspace');
+    }
+    if (diff.insert) {
+      onSendText(diff.insert);
+    }
+
+    lastSentRef.current = nextVal;
+    setHasDraft(nextVal.length > 0);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.nativeEvent.isComposing || e.key === 'Process') return;
-    const control = controlFromCode(e.code);
-    if (control && control !== 'Space') {
-      e.preventDefault();
-      if (latched.length > 0) {
-        onSendChord(buildSoftKeyChord(latched, { control }));
-        setLatched([]);
-      } else {
-        onSendControl('down', control);
-      }
+    if (
+      composingRef.current ||
+      isImeEvent({
+        isComposing: e.nativeEvent.isComposing,
+        key: e.key,
+        keyCode: e.keyCode,
+      })
+    ) {
+      return;
+    }
+
+    const control = controlFromKeyOrCode(e.code, e.key);
+    if (!control || control === 'Space') return;
+
+    // When the local buffer has text and no modifiers are latched, let native Backspace
+    // edit the input box smoothly and forward the exact diff via handleInput.
+    if (control === 'Backspace' && latched.length === 0 && e.currentTarget.value.length > 0) {
+      return;
+    }
+
+    e.preventDefault();
+    if (latched.length > 0) {
+      onSendChord(buildSoftKeyChord(latched, { control }));
+      setLatched([]);
+    } else {
+      onSendControl('down', control);
+    }
+
+    if (control === 'Enter') {
+      resetLocalDraft();
     }
   };
 
   const handleKeyUp = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.nativeEvent.isComposing || e.key === 'Process') return;
-    const control = controlFromCode(e.code);
+    if (
+      composingRef.current ||
+      isImeEvent({
+        isComposing: e.nativeEvent.isComposing,
+        key: e.key,
+        keyCode: e.keyCode,
+      })
+    ) {
+      return;
+    }
+    const control = controlFromKeyOrCode(e.code, e.key);
     if (control && control !== 'Space' && latched.length === 0) {
+      if (control === 'Backspace' && e.currentTarget.value.length > 0) {
+        return;
+      }
       e.preventDefault();
       onSendControl('up', control);
     }
@@ -108,19 +181,12 @@ export function SoftKeyboardBar({
 
   const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
     composingRef.current = false;
-    if (e.data) {
-      dispatchTypedText(e.data);
-    }
-    e.currentTarget.value = '';
+    syncInputValue(e.currentTarget);
   };
 
   const handleInput = (e: React.FormEvent<HTMLInputElement>) => {
     if (composingRef.current) return;
-    const val = e.currentTarget.value;
-    if (val) {
-      dispatchTypedText(val);
-      e.currentTarget.value = '';
-    }
+    syncInputValue(e.currentTarget);
   };
 
   return (
@@ -167,26 +233,42 @@ export function SoftKeyboardBar({
 
       {/* Text / IME input row */}
       <div className="flex gap-2 items-center w-full">
-        <input
-          ref={inputRef}
-          type="text"
-          className="rd-input flex-1"
-          data-testid="soft-input"
-          placeholder={
-            latched.length > 0
-              ? `${t(locale, 'softNextKeyPrefix')} ${latched.join('+')}...`
-              : t(locale, 'softPlaceholder')
-          }
-          autoCapitalize="off"
-          autoCorrect="off"
-          autoComplete="off"
-          spellCheck={false}
-          onKeyDown={handleKeyDown}
-          onKeyUp={handleKeyUp}
-          onCompositionStart={handleCompositionStart}
-          onCompositionEnd={handleCompositionEnd}
-          onInput={handleInput}
-        />
+        <div className="relative flex-1 flex items-center">
+          <input
+            ref={inputRef}
+            type="text"
+            className="rd-input w-full pr-8"
+            data-testid="soft-input"
+            placeholder={
+              latched.length > 0
+                ? `${t(locale, 'softNextKeyPrefix')} ${latched.join('+')}...`
+                : t(locale, 'softPlaceholder')
+            }
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
+            onInput={handleInput}
+          />
+          {hasDraft && (
+            <button
+              type="button"
+              className="absolute right-2 p-1 rounded text-[var(--ink-soft)] hover:text-[var(--ink)]"
+              data-testid="soft-input-clear"
+              aria-label={t(locale, 'clearInput')}
+              onClick={() => {
+                resetLocalDraft();
+                inputRef.current?.focus({ preventScroll: true });
+              }}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
         <button type="button" className="rd-btn" data-testid="soft-hide" onClick={onHide}>
           {t(locale, 'softHide')}
         </button>

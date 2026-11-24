@@ -47,6 +47,14 @@
   --rd-err-border: #f5c2c0;
   --rd-tip-bg: #1e293b;
   --rd-tip-ink: #f8fafc;
+
+  /* In-session frosted translucent overlay tokens */
+  --overlay-surface: rgba(255, 255, 255, 0.74);
+  --overlay-surface-strong: rgba(255, 255, 255, 0.84);
+  --overlay-surface-subtle: rgba(241, 245, 249, 0.64);
+  --overlay-input-bg: rgba(255, 255, 255, 0.72);
+  --overlay-border: rgba(15, 23, 42, 0.14);
+  --overlay-scrim: rgba(15, 23, 42, 0.14);
 }
 
 :root[data-theme="dark"] {
@@ -88,6 +96,14 @@
   --rd-err-border: rgba(248, 113, 113, 0.34);
   --rd-tip-bg: #f1f5f9;
   --rd-tip-ink: #0f172a;
+
+  /* In-session frosted translucent overlay tokens (dark) */
+  --overlay-surface: rgba(20, 24, 30, 0.74);
+  --overlay-surface-strong: rgba(22, 27, 34, 0.84);
+  --overlay-surface-subtle: rgba(34, 40, 50, 0.62);
+  --overlay-input-bg: rgba(14, 18, 24, 0.66);
+  --overlay-border: rgba(241, 245, 249, 0.16);
+  --overlay-scrim: rgba(0, 0, 0, 0.24);
 }
 
 *,
@@ -187,7 +203,7 @@ button:focus-visible {
   border: 0;
   background: transparent;
   touch-action: none;
-  opacity: 0.56;
+  opacity: 0.42;
   transition: opacity 180ms ease;
 }
 
@@ -212,31 +228,28 @@ button:focus-visible {
   gap: 4px;
   height: 24px;
   padding: 0 11px;
-  border: 1px solid rgba(213, 221, 230, 0.85);
+  border: 1px solid var(--overlay-border);
   border-top: 0;
   border-radius: 0 0 9px 9px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--overlay-surface);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
   color: var(--ink);
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0.02em;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.14);
   transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
     border-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root[data-theme="dark"] .pull-pill {
-  border-color: rgba(148, 163, 184, 0.28);
-  background: rgba(24, 28, 34, 0.88);
-  color: var(--ink);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.36);
 }
 
 .pull:hover .pull-pill {
-  background: var(--surface);
+  background: var(--overlay-surface-strong);
   border-color: var(--accent);
 }
 
@@ -261,20 +274,26 @@ button:focus-visible {
   max-width: calc(100vw - 24px);
   padding: 4px 6px;
   border-radius: 12px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--overlay-border);
+  background: var(--overlay-surface);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
   color: var(--ink);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  opacity: 0.82;
+  transition: opacity 160ms ease, background-color 160ms ease;
   user-select: none;
   -webkit-user-select: none;
 }
 
+.rd-desktop-toolbar:hover,
+.rd-desktop-toolbar:focus-within {
+  opacity: 1;
+  background: var(--overlay-surface-strong);
+}
+
 :root[data-theme="dark"] .rd-desktop-toolbar {
-  background: rgba(24, 28, 34, 0.92);
-  border-color: rgba(148, 163, 184, 0.26);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.48);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42);
 }
 
 .rd-toolbar-drag {
@@ -370,7 +389,7 @@ button:focus-visible {
   position: absolute;
   inset: 0;
   z-index: 5;
-  background: rgba(16, 20, 24, 0.38);
+  background: var(--overlay-scrim);
 }
 
 .sheet {
@@ -391,11 +410,34 @@ button:focus-visible {
   overscroll-behavior: contain;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 8px 24px rgba(16, 20, 24, 0.12);
+  background: var(--overlay-surface);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  border: 1px solid var(--overlay-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+}
+
+@media (min-width: 720px) {
+  .sheet.sheet-menu {
+    left: auto;
+    right: calc(14px + env(safe-area-inset-right, 0px));
+    transform: none;
+    width: min(396px, calc(100vw - 28px));
+  }
+}
+
+.sheet.sheet-menu .rd-btn:not(.primary):not(.active):not(.danger),
+.sheet.sheet-menu .display-card:not(.active) {
+  background: var(--overlay-surface-subtle);
+  border-color: var(--overlay-border);
+}
+
+.sheet.sheet-menu .rd-input,
+.sheet.sheet-menu .rd-select {
+  background: var(--overlay-input-bg);
+  border-color: var(--overlay-border);
 }
 
 .softbar {
@@ -406,23 +448,46 @@ button:focus-visible {
   bottom: calc(10px + env(safe-area-inset-bottom, 0px) + var(--kb, 0px));
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  gap: 5px;
+  padding: 6px 8px;
+  background: var(--overlay-surface);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  border: 1px solid var(--overlay-border);
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(16, 20, 24, 0.14);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+}
+
+@media (min-width: 641px) {
+  .softbar {
+    max-width: 580px;
+    margin: 0 auto;
+  }
+}
+
+.softbar .rd-input {
+  min-height: 36px;
+  padding: 6px 10px;
+  background: var(--overlay-input-bg);
+  border-color: var(--overlay-border);
+}
+
+.softbar .rd-btn {
+  min-height: 36px;
+  padding: 6px 10px;
+  background: var(--overlay-surface-subtle);
+  border-color: var(--overlay-border);
 }
 
 .soft-key-strip {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   touch-action: pan-x;
   scrollbar-width: none;
-  padding-bottom: 2px;
+  padding-bottom: 1px;
 }
 
 .soft-key-strip::-webkit-scrollbar {
@@ -433,12 +498,12 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  min-height: 36px;
-  padding: 4px 10px;
+  min-width: 38px;
+  min-height: 34px;
+  padding: 4px 9px;
   border-radius: 7px;
-  border: 1px solid var(--line);
-  background: var(--surface-subtle);
+  border: 1px solid var(--overlay-border);
+  background: var(--overlay-surface-subtle);
   color: var(--ink);
   font-size: 12px;
   font-weight: 600;
@@ -455,8 +520,8 @@ button:focus-visible {
 
 .soft-key-divider {
   width: 1px;
-  height: 22px;
-  background: var(--line);
+  height: 20px;
+  background: var(--overlay-border);
   flex-shrink: 0;
 }
 
@@ -464,17 +529,19 @@ button:focus-visible {
   position: absolute;
   z-index: 4;
   left: 50%;
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   max-width: calc(100vw - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-  padding: 5px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  padding: 4px;
+  background: var(--overlay-surface);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  border: 1px solid var(--overlay-border);
   border-radius: 14px;
-  box-shadow: 0 8px 24px rgba(16, 20, 24, 0.18);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
 }
 
 .mobile-dock-btn {
@@ -516,22 +583,22 @@ button:focus-visible {
 .mobile-dock-orb {
   position: absolute;
   z-index: 4;
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 15px;
-  border: 1px solid rgba(213, 221, 230, 0.9);
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: 14px;
+  border: 1px solid var(--overlay-border);
+  background: var(--overlay-surface);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
   color: var(--ink);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.26);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.2);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  opacity: 0.84;
+  opacity: 0.62;
   transition: left 200ms cubic-bezier(0.16, 1, 0.3, 1),
     top 200ms cubic-bezier(0.16, 1, 0.3, 1),
     opacity 150ms ease,
@@ -539,15 +606,14 @@ button:focus-visible {
 }
 
 :root[data-theme="dark"] .mobile-dock-orb {
-  border-color: rgba(148, 163, 184, 0.32);
-  background: rgba(24, 28, 34, 0.88);
-  color: var(--ink);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.42);
 }
 
+.mobile-dock-orb:hover,
 .mobile-dock-orb:active,
 .mobile-dock-orb.dragging {
   opacity: 1;
+  background: var(--overlay-surface-strong);
   transform: scale(1.04);
   transition: opacity 120ms ease, transform 120ms ease;
 }
@@ -565,8 +631,8 @@ button:focus-visible {
   gap: 4px;
   padding: 4px;
   border-radius: 10px;
-  background: var(--surface-subtle);
-  border: 1px solid var(--rd-card-border);
+  background: var(--overlay-surface-subtle);
+  border: 1px solid var(--overlay-border);
 }
 
 .rd-session-tab {
@@ -591,7 +657,7 @@ button:focus-visible {
 }
 
 .rd-session-tab.active {
-  background: var(--surface);
+  background: var(--overlay-surface-strong);
   color: var(--accent);
   font-weight: 600;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
@@ -605,12 +671,14 @@ button:focus-visible {
   position: absolute;
   z-index: 4;
   left: 50%;
-  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   width: min(340px, calc(100vw - 24px));
   padding: 12px 14px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--overlay-surface);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  border: 1px solid var(--overlay-border);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(16, 20, 24, 0.18);
 }
@@ -626,10 +694,12 @@ button:focus-visible {
   gap: 10px;
   max-width: calc(100vw - 24px);
   padding: 6px 8px 6px 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--overlay-surface);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  border: 1px solid var(--overlay-border);
   border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(16, 20, 24, 0.22);
+  box-shadow: 0 6px 20px rgba(16, 20, 24, 0.18);
   font-size: 12px;
   color: var(--ink);
 }
@@ -639,16 +709,16 @@ button:focus-visible {
   z-index: 4;
   top: calc(12px + env(safe-area-inset-top, 0px));
   left: calc(12px + env(safe-area-inset-left, 0px));
-  width: 248px;
+  width: 240px;
   max-width: calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-  padding: 10px 12px;
+  padding: 9px 11px;
   border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(15, 23, 42, 0.88);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.68);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   color: #f8fafc;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.36);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
 .diag-icon-btn {
@@ -659,13 +729,13 @@ button:focus-visible {
   height: 26px;
   border-radius: 6px;
   border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(30, 41, 59, 0.72);
+  background: rgba(30, 41, 59, 0.62);
   color: #cbd5e1;
   transition: background-color 140ms ease, color 140ms ease;
 }
 
 .diag-icon-btn:hover {
-  background: rgba(51, 65, 85, 0.9);
+  background: rgba(51, 65, 85, 0.85);
   color: #ffffff;
 }
 
@@ -673,7 +743,7 @@ button:focus-visible {
   .diag-overlay {
     top: calc(32px + env(safe-area-inset-top, 0px));
     left: calc(10px + env(safe-area-inset-left, 0px));
-    width: min(244px, calc(100vw - 20px));
+    width: min(236px, calc(100vw - 20px));
   }
 
   .sheet.sheet-menu {
@@ -683,7 +753,7 @@ button:focus-visible {
     right: 0;
     transform: none;
     width: 100%;
-    max-height: calc(82dvh - env(safe-area-inset-top, 0px) - var(--kb, 0px));
+    max-height: calc(68dvh - env(safe-area-inset-top, 0px) - var(--kb, 0px));
     border-radius: 16px 16px 0 0;
     border-bottom: 0;
     padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));

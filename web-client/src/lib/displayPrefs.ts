@@ -128,7 +128,12 @@ export function filterCodecSupport(
   preferred: PreferredCodec,
 ): CodecSupport {
   if (preferred === 'auto' || !support[preferred]) {
-    return support;
+    const hasFastCodec = support.h264 || support.vp8 || support.vp9 || support.h265;
+    return {
+      ...support,
+      // Avoid advertising AV1 in auto/fallback mode so hosts without GPU AV1 do not drop to 3-7fps CPU encoding
+      av1: hasFastCodec ? false : support.av1,
+    };
   }
   return {
     vp8: preferred === 'vp8',

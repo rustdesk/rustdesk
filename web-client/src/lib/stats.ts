@@ -1,71 +1,247 @@
-export interface FrameSample {
+export interface RxFrameSample {
   ts: number;
   bytes: number;
 }
 
-export interface FrameWindow {
-  samples: FrameSample[];
+export interface RenderFrameSample {
+  ts: number;
 }
 
-export const DEFAULT_FPS_WINDOW_MS = 1000;
+export type StreamActivityState = 'waiting' | 'active' | 'idle';
 
-export function createFrameWindow(): FrameWindow {
-  return { samples: [] };
+export interface FrameStatsState {
+  rxSamples: RxFrameSample[];
+  renderSamples: RenderFrameSample[];
+  /** Exponentially weighted moving average of active inter-frame interval (ms). */
+  emaIntervalMs: number | null;
+  lastRxTs: number | null;
+  lastRenderTs: number | null;
+  totalRx: number;
+  totalRendered: number;
 }
 
-export function pruneFrameWindow(
-  win: FrameWindow,
+export interface FrameRatesSnapshot {
+  /** Primary real-time FPS (uses decoded/rendered sampling rate when available, else incoming rate). */
+  fps: number;
+  /** Incoming encoded packet sampling rate (fps). */
+  rxFps: number;
+  /** Decoded & painted canvas frame sampling rate (fps). */
+  renderFps: number;
+  /** Real-time video bitrate in bits/sec. */
+  bitrate: number;
+  /** Current stream activity: waiting for first frame, actively updating, or static/idle. */
+  streamState: StreamActivityState;
+  /** Number of samples currently inside the active window. */
+  sampleCount: number;
+}
+
+export const DEFAULT_STATS_WINDOW_MS = 1500;
+export const IDLE_SILENCE_MS = 1000;
+export const MAX_ACTIVE_INTERVAL_MS = 500;
+export const EMA_ALPHA = 0.28;
+export const MAX_REPORTED_FPS = 120;
+
+export function createFrameStats(): FrameStatsState {
+  return {
+    rxSamples: [],
+    renderSamples: [],
+    emaIntervalMs: null,
+    lastRxTs: null,
+    lastRenderTs: null,
+    totalRx: 0,
+    totalRendered: 0,
+  };
+}
+
+function pruneSamples<T extends { ts: number }>(
+  samples: T[],
   nowMs: number,
-  windowMs = DEFAULT_FPS_WINDOW_MS,
-): FrameWindow {
+  windowMs: number,
+): T[] {
   const cutoff = nowMs - windowMs;
   let firstValid = 0;
-  while (firstValid < win.samples.length && win.samples[firstValid].ts < cutoff) {
+  while (firstValid < samples.length && samples[firstValid].ts < cutoff) {
     firstValid += 1;
   }
-  if (firstValid === 0) return win;
-  return { samples: win.samples.slice(firstValid) };
+  return firstValid === 0 ? samples : samples.slice(firstValid);
 }
 
-export function recordFrameSample(
-  win: FrameWindow,
+function updateEmaInterval(prevEma: number | null, prevTs: number | null, nowMs: number): number | null {
+  if (prevTs === null) return prevEma;
+  const dt = nowMs - prevTs;
+  if (dt <= 0) return prevEma;
+  if (dt > MAX_ACTIVE_INTERVAL_MS) {
+    // Gap was too long (returning from static/idle screen); reset EMA so stale cadence does not bias the new burst.
+    return null;
+  }
+  if (prevEma === null) return dt;
+  return prevEma * (1 - EMA_ALPHA) + dt * EMA_ALPHA;
+}
+
+export function recordRxFrame(
+  state: FrameStatsState,
   nowMs: number,
   bytes: number,
-  windowMs = DEFAULT_FPS_WINDOW_MS,
-): FrameWindow {
-  const pruned = pruneFrameWindow(win, nowMs, windowMs);
+  windowMs = DEFAULT_STATS_WINDOW_MS,
+): FrameStatsState {
+  const pruned = pruneSamples(state.rxSamples, nowMs, windowMs);
+  // Only drive EMA from rx when no render samples have been recorded yet
+  const emaIntervalMs =
+    state.totalRendered === 0
+      ? updateEmaInterval(state.emaIntervalMs, state.lastRxTs, nowMs)
+      : state.emaIntervalMs;
+
   return {
-    samples: [...pruned.samples, { ts: nowMs, bytes: Math.max(0, bytes) }],
+    ...state,
+    rxSamples: [...pruned, { ts: nowMs, bytes: Math.max(0, bytes) }],
+    emaIntervalMs,
+    lastRxTs: nowMs,
+    totalRx: state.totalRx + 1,
+  };
+}
+
+export function recordRenderedFrame(
+  state: FrameStatsState,
+  nowMs: number,
+  windowMs = DEFAULT_STATS_WINDOW_MS,
+): FrameStatsState {
+  const pruned = pruneSamples(state.renderSamples, nowMs, windowMs);
+  const emaIntervalMs = updateEmaInterval(state.emaIntervalMs, state.lastRenderTs, nowMs);
+
+  return {
+    ...state,
+    renderSamples: [...pruned, { ts: nowMs }],
+    emaIntervalMs,
+    lastRenderTs: nowMs,
+    totalRendered: state.totalRendered + 1,
   };
 }
 
 /**
- * Computes smoothed sliding-window FPS and bitrate (bits/sec) over the recent window.
- * RustDesk hosts are damage-driven: when the remote desktop is static, 0 new frames arrive
- * and the sliding window decays accurately to 0 instead of sticking on a stale reading.
+ * Computes an unbiased sampling-rate FPS from timestamped frames inside the sliding window:
+ * - Idle silence (>= IDLE_SILENCE_MS since last frame): returns 0 (screen is static).
+ * - Single isolated frame (e.g. blinking cursor on a static desktop): returns 1 instead of
+ *   dividing by an artificial sub-second floor (which previously fabricated 4-5 fps).
+ * - Active multi-frame stream (count >= 2): computes interval-based rate `(N - 1) / span`,
+ *   accounting for trailing silence when motion tapers off, and lightly blends with EMA
+ *   inter-frame cadence during steady motion to eliminate WebSocket batch jitter.
  */
-export function computeWindowRates(
-  win: FrameWindow,
+function computeSamplingFps(
+  samples: Array<{ ts: number }>,
+  lastTs: number | null,
+  emaIntervalMs: number | null,
   nowMs: number,
-  windowMs = DEFAULT_FPS_WINDOW_MS,
-): { fps: number; bitrate: number; sampleCount: number } {
-  const pruned = pruneFrameWindow(win, nowMs, windowMs);
-  const count = pruned.samples.length;
-  if (count === 0) {
-    return { fps: 0, bitrate: 0, sampleCount: 0 };
+  windowMs: number,
+): number {
+  if (lastTs === null) return 0;
+  const silenceMs = Math.max(0, nowMs - lastTs);
+  if (silenceMs >= IDLE_SILENCE_MS) return 0;
+
+  const pruned = pruneSamples(samples, nowMs, windowMs);
+  const count = pruned.length;
+  if (count === 0) return 0;
+
+  if (count === 1) {
+    // One isolated frame inside the active window (e.g. a clock tick or cursor blink on a static screen)
+    return 1;
   }
 
-  let totalBytes = 0;
-  for (const s of pruned.samples) {
-    totalBytes += s.bytes;
+  const firstTs = pruned[0].ts;
+  const newestTs = pruned[count - 1].ts;
+  const spanMs = Math.max(1, newestTs - firstTs);
+  const avgIntervalMs = spanMs / (count - 1);
+
+  // If the stream is actively arriving (trailing silence within ~2.5 expected frame intervals),
+  // use the exact inter-frame sampling span blended with EMA cadence for responsive, steady FPS.
+  if (silenceMs <= Math.max(120, avgIntervalMs * 2.5)) {
+    const windowRate = ((count - 1) * 1000) / spanMs;
+    const blended =
+      emaIntervalMs !== null && emaIntervalMs > 0
+        ? windowRate * 0.65 + (1000 / emaIntervalMs) * 0.35
+        : windowRate;
+    return Math.min(MAX_REPORTED_FPS, Math.max(1, Math.round(blended)));
   }
 
-  // Use the full window duration once enough time has elapsed; during the first second of a
-  // burst (e.g. first 300ms after waking from idle), divide by the actual span floored at 250ms
-  // so active motion reports realistic FPS immediately instead of under-reporting by 3x.
-  const oldestTs = pruned.samples[0].ts;
-  const elapsed = Math.min(windowMs, Math.max(250, nowMs - oldestTs));
-  const fps = Math.round((count * 1000) / elapsed);
-  const bitrate = Math.round((totalBytes * 8 * 1000) / elapsed);
-  return { fps, bitrate, sampleCount: count };
+  // Motion is tapering off toward idle: include trailing silence in the elapsed span so FPS decays smoothly.
+  const effectiveSpanMs = Math.max(spanMs, nowMs - firstTs);
+  const decayingRate = ((count - 1) * 1000) / effectiveSpanMs;
+  return Math.min(MAX_REPORTED_FPS, Math.max(1, Math.round(decayingRate)));
+}
+
+export function computeFrameRates(
+  state: FrameStatsState,
+  nowMs: number,
+  windowMs = DEFAULT_STATS_WINDOW_MS,
+): FrameRatesSnapshot {
+  const hasAnyFrame = state.totalRx > 0 || state.totalRendered > 0;
+  if (!hasAnyFrame) {
+    return {
+      fps: 0,
+      rxFps: 0,
+      renderFps: 0,
+      bitrate: 0,
+      streamState: 'waiting',
+      sampleCount: 0,
+    };
+  }
+
+  const latestTs = Math.max(state.lastRxTs ?? -Infinity, state.lastRenderTs ?? -Infinity);
+  const silenceMs = Math.max(0, nowMs - latestTs);
+
+  if (silenceMs >= IDLE_SILENCE_MS) {
+    return {
+      fps: 0,
+      rxFps: 0,
+      renderFps: 0,
+      bitrate: 0,
+      streamState: 'idle',
+      sampleCount: 0,
+    };
+  }
+
+  const rxPruned = pruneSamples(state.rxSamples, nowMs, windowMs);
+  const renderPruned = pruneSamples(state.renderSamples, nowMs, windowMs);
+
+  const rxFps = computeSamplingFps(
+    rxPruned,
+    state.lastRxTs,
+    state.totalRendered === 0 ? state.emaIntervalMs : null,
+    nowMs,
+    windowMs,
+  );
+  const renderFps = computeSamplingFps(
+    renderPruned,
+    state.lastRenderTs,
+    state.totalRendered > 0 ? state.emaIntervalMs : null,
+    nowMs,
+    windowMs,
+  );
+
+  // Prefer actual decoded/rendered sampling FPS once WebCodecs is producing frames.
+  const useRendered = state.totalRendered > 0;
+  const fps = useRendered ? renderFps : rxFps;
+  const sampleCount = useRendered ? renderPruned.length : rxPruned.length;
+
+  // Bitrate (bits/sec) over the active rx window
+  let bitrate = 0;
+  if (rxPruned.length > 0) {
+    let totalBytes = 0;
+    for (const s of rxPruned) {
+      totalBytes += s.bytes;
+    }
+    const rxElapsed =
+      rxPruned.length === 1
+        ? windowMs
+        : Math.max(250, Math.min(windowMs, nowMs - rxPruned[0].ts));
+    bitrate = Math.round((totalBytes * 8 * 1000) / rxElapsed);
+  }
+
+  return {
+    fps,
+    rxFps,
+    renderFps,
+    bitrate,
+    streamState: 'active',
+    sampleCount,
+  };
 }

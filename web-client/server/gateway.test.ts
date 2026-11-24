@@ -38,6 +38,7 @@ import {
   ChromaValues,
   ControlKeyValues,
   KeyboardModeValues,
+  PreferCodecValues,
   decodeMessage,
   decodeRendezvous,
   encodeIdPk,
@@ -153,10 +154,11 @@ test('mouse mask packing matches RustDesk bit layout', () => {
 });
 
 test('text and Escape become legacy KeyEvents and video_received is a Misc flag', () => {
-  const txt = toHostMessage({ type: 'text', text: 'a' }) as any;
+  const txt = toHostMessage({ type: 'text', text: '你好' }) as any;
   assert.equal(txt.key_event.mode, KeyboardModeValues.Legacy);
+  assert.equal(txt.key_event.down, true);
   assert.equal(txt.key_event.press, true);
-  assert.equal(txt.key_event.seq, 'a');
+  assert.equal(txt.key_event.seq, '你好');
 
   const esc = toHostMessage({ type: 'key', action: 'down', control: 'Escape' }) as any;
   assert.equal(esc.key_event.control_key, ControlKeyValues.Escape);
@@ -397,6 +399,7 @@ test('adversarial NAT traversal: connectViaId automatically falls back from unre
 
   // 1. Mock hbbr relay + RustDesk host behind NAT
   let relaySeenUuid = '';
+  let postLoginOptionReceived = false;
   let refreshReceived = false;
   const hbbrServer = net.createServer(async (socket) => {
     const s = new EncryptedFramedStream(socket);
@@ -454,10 +457,15 @@ test('adversarial NAT traversal: connectViaId automatically falls back from unre
       }),
     );
 
-    const refreshRaw = await s.next(5000);
-    if (refreshRaw) {
-      const m = decodeMessage(refreshRaw);
-      if (m.misc?.refresh_video) refreshReceived = true;
+    for (let i = 0; i < 3; i += 1) {
+      const nextRaw = await s.next(5000);
+      if (!nextRaw) break;
+      const m = decodeMessage(nextRaw);
+      if (m.misc?.option) postLoginOptionReceived = true;
+      if (m.misc?.refresh_video) {
+        refreshReceived = true;
+        break;
+      }
     }
   });
 
@@ -542,8 +550,9 @@ test('adversarial NAT traversal: connectViaId automatically falls back from unre
     assert.equal(conn.encrypted, true);
     assert.equal(conn.peerInfo.hostname, 'nat-workstation');
     assert.ok(relaySeenUuid.length > 0, 'must coordinate a relay UUID with hbbr');
-    // Allow host server loop to observe RefreshVideo
+    // Allow host server loop to observe post-login Option + RefreshVideo
     await new Promise((r) => setTimeout(r, 50));
+    assert.equal(postLoginOptionReceived, true, 'must send post-login Misc.option after LoginResponse');
     assert.equal(refreshReceived, true, 'must send RefreshVideo after LoginResponse');
     conn.stream.close();
   } finally {
@@ -726,11 +735,52 @@ test('connectViaId against an HTTP server fails cleanly with Not a RustDesk serv
   }
 });
 
-test('buildLoginOptions forwards custom quality and fps preferences when provided', () => {
-  const caps = selectCodecs(undefined);
-  const opts = buildLoginOptions(caps, 'best', 60) as any;
-  assert.equal(opts.custom_fps, 60);
-  assert.equal(opts.image_quality, 4); // ImageQualityValues.Best
+test('buildLoginOptions forwards custom quality, fps, and codec negotiation safely', () => {
+  const allCaps = selectCodecs({
+    vp8: true,
+    vp9: true,
+    h264: true,
+    h265: false,
+    av1: true,
+    reported: true,
+  });
+
+  // Auto mode avoids CPU-bound software AV1 and explicitly prefers H264
+  const autoOpts = buildLoginOptions(allCaps, 'best', 60, 'auto') as any;
+  assert.equal(autoOpts.custom_fps, 60);
+  assert.equal(autoOpts.image_quality, 4); // ImageQualityValues.Best
+  assert.equal(autoOpts.supported_decoding.ability_av1, 0);
+  assert.equal(autoOpts.supported_decoding.ability_h264, 1);
+  assert.equal(autoOpts.supported_decoding.prefer, PreferCodecValues.H264);
+
+  // When H264 is unavailable, auto prefers VP8
+  const vpOnlyCaps = selectCodecs({
+    vp8: true,
+    vp9: true,
+    h264: false,
+    h265: false,
+    av1: true,
+    reported: true,
+  });
+  const vpAutoOpts = buildLoginOptions(vpOnlyCaps, 'balanced', 30, 'auto') as any;
+  assert.equal(vpAutoOpts.supported_decoding.ability_av1, 0);
+  assert.equal(vpAutoOpts.supported_decoding.prefer, PreferCodecValues.VP8);
+
+  // Explicit AV1 selection enables AV1 and requests PreferCodec.AV1
+  const av1Opts = buildLoginOptions(allCaps, 'balanced', 30, 'av1') as any;
+  assert.equal(av1Opts.supported_decoding.ability_av1, 1);
+  assert.equal(av1Opts.supported_decoding.prefer, PreferCodecValues.AV1);
+
+  // Live quality message forwards custom_fps, image_quality, and supported_decoding.prefer
+  const liveMsg = toHostMessage(
+    { type: 'quality', quality: 'balanced', fps: 30, codec: 'vp8' },
+    allCaps,
+  ) as any;
+  assert.equal(liveMsg.misc.option.custom_fps, 30);
+  assert.equal(liveMsg.misc.option.image_quality, 3);
+  assert.equal(liveMsg.misc.option.supported_decoding.prefer, PreferCodecValues.VP8);
+  assert.equal(liveMsg.misc.option.supported_decoding.ability_vp8, 1);
+  assert.equal(liveMsg.misc.option.supported_decoding.ability_av1, 0);
 });
 
 

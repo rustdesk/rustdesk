@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DiagnosticOverlay } from './components/DiagnosticOverlay';
 import { MobileDock } from './components/MobileDock';
 import {
   RustDeskShell,
+  type ConnectRequest,
   type ConnectionMode,
   type ConnectionPhase,
 } from './components/RustDeskShell';
@@ -11,6 +12,7 @@ import { SessionMenu, type SessionStats } from './components/SessionMenu';
 import { SoftKeyboardBar } from './components/SoftKeyboardBar';
 import { probeCodecs, RemoteDecoder, webCodecsStatus } from './lib/decoder';
 import {
+  deviceKeyFor,
   loadSavedDevices,
   persistSavedDevices,
   removeDevice,
@@ -18,6 +20,15 @@ import {
   upsertRecentDevice,
   type SavedDevice,
 } from './lib/devices';
+import {
+  loadRememberPasswordPref,
+  loadSavedPasswords,
+  persistRememberPasswordPref,
+  persistSavedPasswords,
+  removeSavedPassword,
+  setSavedPassword,
+  type SavedPasswordMap,
+} from './lib/passwords';
 import {
   applyMouseButtonSwap,
   applyWheelDirection,
@@ -41,15 +52,18 @@ import {
 } from './lib/diagnostics';
 import {
   accumulateWheelTicks,
-  consumeThreeFingerScroll,
-  fingerDown,
-  fingerUp,
+  createTouchGestureState,
+  gestureLongPressTimeout,
+  gesturePointerDown,
+  gesturePointerMove,
+  gesturePointerUpOrCancel,
   isPageZoomed,
-  isTwoFingerTap,
   keyboardInset,
   LONG_PRESS_MS,
-  shouldCancelLongPress,
-  TAP_SLOP_PX,
+  MAX_WHEEL_TICKS_PER_EVENT,
+  resetTouchGestureState,
+  type TouchGestureEffect,
+  type TouchGestureState,
 } from './lib/gestures';
 import {
   LOCALE_STORAGE_KEY,
@@ -67,8 +81,15 @@ import {
   shouldPreventStageTouch,
   shouldPreventWindowWheel,
 } from './lib/inputIsolation';
-import { isModifier, mapPhysicalKeyDown, mapPhysicalKeyUp } from './lib/keys';
 import {
+  isImeEvent,
+  isModifier,
+  isPrintableAscii,
+  mapPhysicalKeyDown,
+  mapPhysicalKeyUp,
+} from './lib/keys';
+import {
+  DEFAULT_EDGE_PADDING,
   clampPan,
   computeNextScaleState,
   computePinchStep,
@@ -89,10 +110,11 @@ import {
   type ServerMessage,
 } from './lib/protocol';
 import {
-  computeWindowRates,
-  createFrameWindow,
-  recordFrameSample,
-  type FrameWindow,
+  computeFrameRates,
+  createFrameStats,
+  recordRenderedFrame,
+  recordRxFrame,
+  type FrameStatsState,
 } from './lib/stats';
 import {
   loadSavedTheme,
@@ -106,9 +128,12 @@ const EMPTY_STATS: SessionStats = {
   width: 0,
   height: 0,
   fps: 0,
+  rxFps: 0,
   delayMs: 0,
   bitrate: 0,
   decoded: 0,
+  dropped: 0,
+  streamState: 'waiting',
 };
 
 function detectCoarsePointer(): boolean {
@@ -117,15 +142,6 @@ function detectCoarsePointer(): boolean {
     window.matchMedia?.('(pointer: coarse)').matches ||
     (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
   );
-}
-
-interface PinchState {
-  originX: number;
-  originY: number;
-  originDist: number;
-  prevX: number;
-  prevY: number;
-  prevDist: number;
 }
 
 const PREFS_STORAGE_KEY = 'rd_web_prefs';
@@ -233,12 +249,32 @@ export default function App() {
     }
   }, []);
 
+  const [savedPasswords, setSavedPasswords] = useState<SavedPasswordMap>(() =>
+    loadSavedPasswords(),
+  );
+  const [rememberPassword, setRememberPassword] = useState<boolean>(() =>
+    loadRememberPasswordPref(),
+  );
+
+  useEffect(() => {
+    persistSavedPasswords(savedPasswords);
+  }, [savedPasswords]);
+
+  useEffect(() => {
+    persistRememberPasswordPref(rememberPassword);
+  }, [rememberPassword]);
+
   const handleToggleFavorite = useCallback((key: string) => {
     setDevices((prev) => toggleFavoriteDevice(prev, key));
   }, []);
 
   const handleRemoveDevice = useCallback((key: string) => {
     setDevices((prev) => removeDevice(prev, key));
+    setSavedPasswords((prev) => removeSavedPassword(prev, key));
+  }, []);
+
+  const handleClearSavedPassword = useCallback((key: string) => {
+    setSavedPasswords((prev) => removeSavedPassword(prev, key));
   }, []);
 
   // Bilingual UI locale preference ('default' follows browser language, or explicit 'zh'/'en')
@@ -366,6 +402,9 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cursorElRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLInputElement>(null);
+  const captureComposingRef = useRef(false);
+  const lastCompositionEndAtRef = useRef(0);
+  const pressedChrByCodeRef = useRef<Map<string, string>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
   const decoderRef = useRef<RemoteDecoder | null>(null);
   const sizeRef = useRef({ width: 1280, height: 720 });
@@ -375,29 +414,32 @@ export default function App() {
   const chromeRef = useRef({ menu: false, dialog: true });
   chromeRef.current = { menu: menuOpen, dialog: connectDialog || phase !== 'live' };
 
-  // Sliding-window stats refs
-  const frameWindowRef = useRef<FrameWindow>(createFrameWindow());
-  const statAccRef = useRef({ decoded: 0, lastDelayMs: 0, lastCodec: '—' });
+  // Frame sampling-rate telemetry refs (avoiding 60Hz React setState per frame)
+  const frameStatsRef = useRef<FrameStatsState>(createFrameStats());
+  const statAccRef = useRef({
+    width: 0,
+    height: 0,
+    decoded: 0,
+    dropped: 0,
+    lastDelayMs: 0,
+    lastCodec: '—',
+  });
 
-  // Mouse & touch gesture refs
+  // Mouse & touch gesture refs (unified deterministic TouchGestureState FSM)
   const cursorRef = useRef({ x: 640, y: 360 });
-  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
-  const pinchRef = useRef<PinchState | null>(null);
+  const touchGestureRef = useRef<TouchGestureState>(createTouchGestureState());
   const touchFallbackPinchRef = useRef<{ midX: number; midY: number; dist: number } | null>(null);
+  const nativeTouchInfoRef = useRef<{ count: number; updatedAt: number }>({ count: 0, updatedAt: 0 });
+  const zeroTouchTimerRef = useRef<number | null>(null);
   const wheelAccumRef = useRef({ x: 0, y: 0 });
-  const threeFingerYRef = useRef<number | null>(null);
-  const threeFingerAccumRef = useRef(0);
-  const touchTapRef = useRef<{
-    x: number;
-    y: number;
-    t: number;
-    dragging: boolean;
-    longFired: boolean;
-  }>({ x: 0, y: 0, t: 0, dragging: false, longFired: false });
-  const lastTapUpRef = useRef<number | null>(null);
-  const suppressTapRef = useRef(false);
   const lastTouchAtRef = useRef(0);
   const longTimerRef = useRef<number | null>(null);
+  const touchModeRef = useRef(touchMode);
+  touchModeRef.current = touchMode;
+  const handRef = useRef(hand);
+  handRef.current = hand;
+  const rightArmedRef = useRef(rightArmed);
+  rightArmedRef.current = rightArmed;
   const pendingClickRef = useRef<{
     button: 'left' | 'right' | 'middle';
     x: number;
@@ -421,6 +463,15 @@ export default function App() {
   // Orientation change tracking
   const prevLandscapeRef = useRef<boolean | null>(null);
 
+  const panClampOptions = useMemo(
+    () => ({
+      allowEdgePan: true,
+      edgePadding: DEFAULT_EDGE_PADDING,
+      bottomInset: softKeys ? 112 : 0,
+    }),
+    [softKeys],
+  );
+
   const remoteW = stats.width > 0 ? stats.width : sizeRef.current.width;
   const remoteH = stats.height > 0 ? stats.height : sizeRef.current.height;
   const view: ViewTransform = computeViewTransform(
@@ -431,6 +482,7 @@ export default function App() {
     viewMode,
     zoom,
     pan,
+    panClampOptions,
   );
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -572,6 +624,8 @@ export default function App() {
       cursorX: Math.round(cursorRef.current.x),
       cursorY: Math.round(cursorRef.current.y),
       touchMode,
+      gesturePhase: touchGestureRef.current.phase,
+      activePointers: touchGestureRef.current.pointers.size,
     };
     window.__rdView = {
       scale: view.scale,
@@ -641,7 +695,7 @@ export default function App() {
       const rect = el.getBoundingClientRect();
       const w = Math.round(rect.width);
       const h = Math.round(rect.height);
-      setBox({ w, h });
+      setBox((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
       if (w > 0 && h > 0) {
         const isLandscape = w > h;
         if (prevLandscapeRef.current !== null && prevLandscapeRef.current !== isLandscape) {
@@ -684,16 +738,22 @@ export default function App() {
     const vv = window.visualViewport;
     if (!vv) return;
     let prevZoomed = false;
+    let prevInset = -1;
     const syncViewport = () => {
       const inset = Math.round(keyboardInset(window.innerHeight, vv.height, vv.offsetTop));
-      document.documentElement.style.setProperty('--kb', `${inset}px`);
-      const zoomed = isPageZoomed(vv.scale);
-      setPageZoomed(zoomed);
-      if (zoomed && !prevZoomed) {
-        // Attempt automatic viewport scale restoration first; keep banner if browser retains zoom
-        resetPageZoom();
+      if (inset !== prevInset) {
+        prevInset = inset;
+        document.documentElement.style.setProperty('--kb', `${inset}px`);
       }
-      prevZoomed = zoomed;
+      const zoomed = isPageZoomed(vv.scale);
+      if (zoomed !== prevZoomed) {
+        setPageZoomed(zoomed);
+        if (zoomed) {
+          // Attempt automatic viewport scale restoration first; keep banner if browser retains zoom
+          resetPageZoom();
+        }
+        prevZoomed = zoomed;
+      }
     };
     syncViewport();
     vv.addEventListener('resize', syncViewport);
@@ -723,24 +783,70 @@ export default function App() {
     };
   }, [isFullscreen]);
 
+  const focusDesktopCapture = useCallback(() => {
+    if (window.matchMedia('(pointer: coarse)').matches) return;
+    captureRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const closeChrome = useCallback(() => {
     chromeRef.current = { menu: false, dialog: false };
     setMenuOpen(false);
     setConnectDialog(false);
-    captureRef.current?.focus();
+    focusDesktopCapture();
+  }, [focusDesktopCapture]);
+
+  const publishStatsSnapshot = useCallback((nowMs: number) => {
+    const rates = computeFrameRates(frameStatsRef.current, nowMs);
+    const decMetrics = decoderRef.current?.getMetrics();
+    const acc = statAccRef.current;
+    const decoded = decMetrics ? decMetrics.renderedCount : acc.decoded;
+    const dropped = decMetrics ? decMetrics.droppedCount : acc.dropped;
+    setStats((prev) => {
+      const nextWidth = acc.width > 0 ? acc.width : prev.width;
+      const nextHeight = acc.height > 0 ? acc.height : prev.height;
+      const nextCodec = acc.lastCodec !== '—' ? acc.lastCodec : prev.codec;
+      if (
+        prev.codec === nextCodec &&
+        prev.width === nextWidth &&
+        prev.height === nextHeight &&
+        prev.fps === rates.fps &&
+        prev.rxFps === rates.rxFps &&
+        prev.bitrate === rates.bitrate &&
+        prev.delayMs === acc.lastDelayMs &&
+        prev.decoded === decoded &&
+        prev.dropped === dropped &&
+        prev.streamState === rates.streamState
+      ) {
+        return prev;
+      }
+      return {
+        codec: nextCodec,
+        width: nextWidth,
+        height: nextHeight,
+        fps: rates.fps,
+        rxFps: rates.rxFps,
+        delayMs: acc.lastDelayMs,
+        bitrate: rates.bitrate,
+        decoded,
+        dropped,
+        streamState: rates.streamState,
+      };
+    });
   }, []);
 
   const ensureDecoder = useCallback(() => {
     if (!decoderRef.current) {
       decoderRef.current = new RemoteDecoder({
-        onOutput: (w, h, decodedCount) => {
+        onOutput: (w, h, renderedCount, nowMs) => {
+          const sizeChanged = sizeRef.current.width !== w || sizeRef.current.height !== h;
           sizeRef.current = { width: w, height: h };
-          statAccRef.current.decoded = decodedCount;
-          setStats((prev) =>
-            prev.width === w && prev.height === h && prev.decoded === decodedCount
-              ? prev
-              : { ...prev, width: w, height: h, decoded: decodedCount },
-          );
+          statAccRef.current.width = w;
+          statAccRef.current.height = h;
+          statAccRef.current.decoded = renderedCount;
+          frameStatsRef.current = recordRenderedFrame(frameStatsRef.current, nowMs);
+          if (renderedCount === 1 || sizeChanged) {
+            publishStatsSnapshot(nowMs);
+          }
         },
         onError: (msg) => {
           setDecoderError(msg);
@@ -751,47 +857,59 @@ export default function App() {
       });
     }
     return decoderRef.current;
-  }, [send]);
+  }, [publishStatsSnapshot, send]);
 
   const noteFrame = useCallback(
     (codecName: string, w: number, h: number, byteLen: number, delayMs: number) => {
       const now = performance.now();
-      frameWindowRef.current = recordFrameSample(frameWindowRef.current, now, byteLen);
+      const firstOrCodecChange =
+        frameStatsRef.current.totalRx === 0 ||
+        statAccRef.current.lastCodec !== codecName ||
+        (w > 0 && statAccRef.current.width !== w) ||
+        (h > 0 && statAccRef.current.height !== h);
+
+      frameStatsRef.current = recordRxFrame(frameStatsRef.current, now, byteLen);
       statAccRef.current.lastCodec = codecName;
       statAccRef.current.lastDelayMs = Math.max(0, Math.round(delayMs));
-      const rates = computeWindowRates(frameWindowRef.current, now);
-      setStats((prev) => ({
-        ...prev,
-        codec: codecName,
-        width: w > 0 ? w : prev.width,
-        height: h > 0 ? h : prev.height,
-        fps: rates.fps,
-        bitrate: rates.bitrate,
-        delayMs: statAccRef.current.lastDelayMs,
-        decoded: statAccRef.current.decoded,
-      }));
+      if (w > 0) statAccRef.current.width = w;
+      if (h > 0) statAccRef.current.height = h;
+
+      if (firstOrCodecChange) {
+        publishStatsSnapshot(now);
+      }
     },
-    [],
+    [publishStatsSnapshot],
   );
 
-  // Smoothly decay sliding-window FPS & bitrate when remote screen goes idle
+  // Publish real-time sampling FPS, bitrate, and idle-screen decay at a steady 4Hz cadence
   useEffect(() => {
     if (phase !== 'live') return;
     const timer = window.setInterval(() => {
-      const now = performance.now();
-      const rates = computeWindowRates(frameWindowRef.current, now);
-      setStats((prev) =>
-        prev.fps === rates.fps && prev.bitrate === rates.bitrate
-          ? prev
-          : { ...prev, fps: rates.fps, bitrate: rates.bitrate },
-      );
-    }, 500);
+      publishStatsSnapshot(performance.now());
+    }, 250);
     return () => window.clearInterval(timer);
-  }, [phase]);
+  }, [phase, publishStatsSnapshot]);
 
   const connectSession = useCallback(
-    async (overrideMode?: ConnectionMode) => {
-      const activeMode = overrideMode ?? mode;
+    async (req?: ConnectRequest) => {
+      const activeMode = req?.mode ?? mode;
+      const targetPeerId = (req?.peerId ?? peerId).replace(/\s+/g, '');
+      const targetIdServer = (req?.idServer ?? idServer).trim();
+      const targetRelayServer = (req?.relayServer ?? relayServer).trim();
+      const targetServerKey = (req?.serverKey ?? serverKey).trim();
+      const targetForceRelay = req?.forceRelay ?? forceRelay;
+      const targetHost = (req?.host ?? host).trim();
+      const targetPortStr = String(req?.port ?? port).trim() || '21118';
+      const targetPort = Number(targetPortStr) || 21118;
+      const targetPassword = req?.password ?? password;
+      const shouldRemember = req?.remember ?? rememberPassword;
+      const targetDeviceKey = deviceKeyFor({
+        mode: activeMode,
+        peerId: targetPeerId,
+        host: targetHost,
+        port: targetPortStr,
+      });
+
       const wc = webCodecsStatus();
       if (!wc.ok) {
         setPhase('error');
@@ -801,12 +919,12 @@ export default function App() {
         return;
       }
 
-      if (activeMode === 'direct' && !host.trim()) {
+      if (activeMode === 'direct' && !targetHost) {
         setPhase('error');
         setStatusDetail('detailMissingHost');
         return;
       }
-      if (activeMode === 'id' && (!peerId.replace(/\s+/g, '') || !idServer.trim())) {
+      if (activeMode === 'id' && (!targetPeerId || !targetIdServer)) {
         setPhase('error');
         setStatusDetail('detailMissingId');
         return;
@@ -826,7 +944,8 @@ export default function App() {
         setConnectDialog(true);
         return;
       }
-      const support = filterCodecSupport(rawSupport, displayPrefsRef.current.codec);
+      const preferredCodec = displayPrefsRef.current.codec;
+      const support = filterCodecSupport(rawSupport, preferredCodec);
 
       // Close previous socket & decoder cleanly
       if (wsRef.current) {
@@ -837,8 +956,15 @@ export default function App() {
         wsRef.current = null;
       }
       decoderRef.current?.close();
-      frameWindowRef.current = createFrameWindow();
-      statAccRef.current = { decoded: 0, lastDelayMs: 0, lastCodec: '—' };
+      frameStatsRef.current = createFrameStats();
+      statAccRef.current = {
+        width: 0,
+        height: 0,
+        decoded: 0,
+        dropped: 0,
+        lastDelayMs: 0,
+        lastCodec: '—',
+      };
 
       const initialQuality = resolveQualityLevel(
         displayPrefsRef.current.qualityPreset,
@@ -872,16 +998,17 @@ export default function App() {
             JSON.stringify({
               type: 'connect',
               mode: 'id',
-              peerId: peerId.replace(/\s+/g, ''),
-              idServer: idServer.trim(),
-              relayServer: relayServer.trim(),
-              key: serverKey.trim(),
-              forceRelay,
-              password,
+              peerId: targetPeerId,
+              idServer: targetIdServer,
+              relayServer: targetRelayServer,
+              key: targetServerKey,
+              forceRelay: targetForceRelay,
+              password: targetPassword,
               token: gatewayToken,
               codecs: support,
               quality: initialQuality,
               fps: initialFps,
+              codec: preferredCodec,
             }),
           );
         } else {
@@ -889,13 +1016,14 @@ export default function App() {
             JSON.stringify({
               type: 'connect',
               mode: 'direct',
-              host: host.trim(),
-              port: Number(port) || 21118,
-              password,
+              host: targetHost,
+              port: targetPort,
+              password: targetPassword,
               token: gatewayToken,
               codecs: support,
               quality: initialQuality,
               fps: initialFps,
+              codec: preferredCodec,
             }),
           );
         }
@@ -935,7 +1063,12 @@ export default function App() {
               setStatusDetail(
                 msg.detail === 'encrypted' ? 'detailEncryptedSession' : 'detailDirectSession',
               );
-              captureRef.current?.focus();
+              if (shouldRemember && targetPassword) {
+                setSavedPasswords((prev) => setSavedPassword(prev, targetDeviceKey, targetPassword));
+              } else if (!shouldRemember) {
+                setSavedPasswords((prev) => removeSavedPassword(prev, targetDeviceKey));
+              }
+              focusDesktopCapture();
             } else if (msg.state === 'connecting') {
               phaseRef.current = 'connecting';
               setPhase('connecting');
@@ -950,6 +1083,10 @@ export default function App() {
               setPhase('error');
               setConnectDialog(true);
               setMenuOpen(false);
+              if (msg.detail && /password/i.test(msg.detail)) {
+                // Clear stale remembered password so the next attempt prompts cleanly
+                setSavedPasswords((prev) => removeSavedPassword(prev, targetDeviceKey));
+              }
               if (msg.detail && /token/i.test(msg.detail)) {
                 setAuthRequired(true);
                 setStatusDetail('detailTokenError');
@@ -1076,6 +1213,7 @@ export default function App() {
       host,
       port,
       password,
+      rememberPassword,
       peerId,
       idServer,
       relayServer,
@@ -1145,13 +1283,14 @@ export default function App() {
         if (
           patch.qualityPreset !== undefined ||
           patch.customBitrate !== undefined ||
-          patch.customFps !== undefined
+          patch.customFps !== undefined ||
+          patch.codec !== undefined
         ) {
           const nextQ = resolveQualityLevel(next.qualityPreset, next.customBitrate);
           const nextFps = resolveTargetFps(next.qualityPreset, next.customFps);
           setQuality(nextQ);
           setTargetFps(nextFps);
-          send({ type: 'quality', quality: nextQ, fps: nextFps });
+          send({ type: 'quality', quality: nextQ, fps: nextFps, codec: next.codec });
         }
 
         return next;
@@ -1183,6 +1322,7 @@ export default function App() {
         nextScale,
         anchorX,
         anchorY,
+        panClampOptions,
       );
       viewRef.current = {
         scale: next.scale,
@@ -1193,7 +1333,7 @@ export default function App() {
       setZoom(next.zoom);
       setPan(next.pan);
     },
-    [box.w, box.h, remoteW, remoteH],
+    [box.w, box.h, remoteW, remoteH, panClampOptions],
   );
 
   const applyPinchStep = useCallback(
@@ -1217,6 +1357,7 @@ export default function App() {
         nextMidX,
         nextMidY,
         nextDist,
+        panClampOptions,
       );
       viewRef.current = {
         scale: next.scale,
@@ -1227,7 +1368,7 @@ export default function App() {
       setZoom(next.zoom);
       setPan(next.pan);
     },
-    [box.w, box.h, remoteW, remoteH],
+    [box.w, box.h, remoteW, remoteH, panClampOptions],
   );
   const applyPinchStepRef = useRef(applyPinchStep);
   applyPinchStepRef.current = applyPinchStep;
@@ -1244,22 +1385,36 @@ export default function App() {
         cur.scale,
         cur.panX + dx,
         cur.panY + dy,
+        panClampOptions,
       );
       viewRef.current = { ...cur, panX: nextPan.panX, panY: nextPan.panY };
       setPan(nextPan);
-      if (cur.scale > curFit + 0.01 && viewMode === 'fit') {
+      if (viewMode === 'fit') {
         setViewMode('custom');
         setZoom(curFit > 0 ? cur.scale / curFit : 1);
       }
     },
-    [box.w, box.h, remoteW, remoteH, viewMode],
+    [box.w, box.h, remoteW, remoteH, viewMode, panClampOptions],
   );
 
-  // Send text per Unicode codepoint
+  // Forward text efficiently: single ASCII chars as native keystrokes, CJK/multi-char as batched seq
   const sendText = useCallback(
     (text: string) => {
-      for (const ch of text) {
-        send({ type: 'text', text: ch });
+      if (!text) return;
+      if (text === ' ') {
+        send({ type: 'key', action: 'down', control: 'Space' });
+        send({ type: 'key', action: 'up', control: 'Space' });
+        return;
+      }
+      if (isPrintableAscii(text)) {
+        send({ type: 'key', action: 'down', chr: text });
+        send({ type: 'key', action: 'up', chr: text });
+        return;
+      }
+      const chars = Array.from(text);
+      const CHUNK = 64;
+      for (let i = 0; i < chars.length; i += CHUNK) {
+        send({ type: 'text', text: chars.slice(i, i + CHUNK).join('') });
       }
     },
     [send],
@@ -1373,7 +1528,12 @@ export default function App() {
         return;
       }
 
-      // Always prevent host browser shortcuts (Ctrl+R/F/P/S/+/-, Tab, Space, Backspace, Alt, F1-F12, repeats)
+      // Let native OS IME (Chinese/Japanese/Korean) compose smoothly inside the hidden capture input
+      if (captureComposingRef.current || isImeEvent(e)) {
+        return;
+      }
+
+      // Prevent host browser shortcuts (Ctrl+R/F/P/S/+/-, Tab, Space, Backspace, Alt, F1-F12, repeats)
       e.preventDefault();
       e.stopPropagation();
 
@@ -1383,6 +1543,9 @@ export default function App() {
 
       const mapped = mapPhysicalKeyDown(e);
       if (mapped) {
+        if (mapped.type === 'key' && mapped.chr && e.code) {
+          pressedChrByCodeRef.current.set(e.code, mapped.chr);
+        }
         send(mapped);
       }
     };
@@ -1398,6 +1561,14 @@ export default function App() {
         return;
       }
 
+      if (
+        captureComposingRef.current ||
+        isImeEvent(e) ||
+        performance.now() - lastCompositionEndAtRef.current < 80
+      ) {
+        return;
+      }
+
       // Prevent Alt/Meta keyup from focusing browser chrome menus
       e.preventDefault();
       e.stopPropagation();
@@ -1406,17 +1577,28 @@ export default function App() {
         return;
       }
 
-      const mapped = mapPhysicalKeyUp(e);
+      const trackedChr = e.code ? pressedChrByCodeRef.current.get(e.code) : undefined;
+      if (e.code) {
+        pressedChrByCodeRef.current.delete(e.code);
+      }
+      const mapped = mapPhysicalKeyUp(e, trackedChr);
       if (mapped && mapped.type === 'key') {
         send(mapped);
       }
     };
 
+    const onWindowBlur = () => {
+      captureComposingRef.current = false;
+      pressedChrByCodeRef.current.clear();
+    };
+
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', onWindowBlur);
     return () => {
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('blur', onWindowBlur);
     };
   }, [closeChrome, send]);
 
@@ -1439,45 +1621,210 @@ export default function App() {
     [remoteW, remoteH],
   );
 
-  const releaseStuckDrag = useCallback(() => {
-    if (!touchTapRef.current.dragging) return;
-    touchTapRef.current.dragging = false;
-    flushMove();
-    const pos = touchMode
-      ? remoteFromLocal(touchTapRef.current.x, touchTapRef.current.y)
-      : cursorPoint();
-    if (pos) {
-      send({ type: 'mouse', action: 'up', button: 'left', x: pos.x, y: pos.y });
+  const syncGestureDebug = useCallback((state: TouchGestureState) => {
+    if (window.__rd) {
+      window.__rd.gesturePhase = state.phase;
+      window.__rd.activePointers = state.pointers.size;
     }
-  }, [cursorPoint, flushMove, remoteFromLocal, send, touchMode]);
+  }, []);
 
-  const pinchSnapshot = (): PinchState | null => {
-    const pts = Array.from(pointersRef.current.values());
-    if (pts.length < 2) return null;
-    const midX = (pts[0].x + pts[1].x) / 2;
-    const midY = (pts[0].y + pts[1].y) / 2;
-    const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-    return {
-      originX: midX,
-      originY: midY,
-      originDist: dist,
-      prevX: midX,
-      prevY: midY,
-      prevDist: dist,
-    };
-  };
+  const runTouchEffectsRef = useRef<(effects: TouchGestureEffect[]) => void>(() => {});
+
+  const runTouchEffects = useCallback(
+    (effects: TouchGestureEffect[]) => {
+      for (const ef of effects) {
+        switch (ef.type) {
+          case 'cancel-long-press':
+            clearLongPress();
+            break;
+          case 'arm-long-press': {
+            clearLongPress();
+            const targetId = ef.pointerId;
+            longTimerRef.current = window.setTimeout(() => {
+              longTimerRef.current = null;
+              const next = gestureLongPressTimeout(touchGestureRef.current, targetId);
+              touchGestureRef.current = next.state;
+              syncGestureDebug(next.state);
+              runTouchEffectsRef.current(next.effects);
+            }, LONG_PRESS_MS);
+            break;
+          }
+          case 'long-press': {
+            if (!remoteInputRef.current || displayPrefsRef.current.viewOnly) break;
+            const pos = touchModeRef.current
+              ? remoteFromLocal(ef.x, ef.y)
+              : cursorPoint();
+            if (pos) {
+              clickButton('right', pos.x, pos.y);
+            }
+            break;
+          }
+          case 'start-drag-lock': {
+            if (!remoteInputRef.current || displayPrefsRef.current.viewOnly) break;
+            finishPendingClick();
+            const pt = cursorPoint();
+            send({ type: 'mouse', action: 'move', x: pt.x, y: pt.y });
+            send({ type: 'mouse', action: 'down', button: 'left', x: pt.x, y: pt.y });
+            break;
+          }
+          case 'start-touch-drag': {
+            if (!remoteInputRef.current || displayPrefsRef.current.viewOnly) break;
+            finishPendingClick();
+            const startPos = remoteFromLocalClamped(ef.x, ef.y);
+            if (startPos) {
+              send({ type: 'mouse', action: 'move', x: startPos.x, y: startPos.y });
+              send({ type: 'mouse', action: 'down', button: 'left', x: startPos.x, y: startPos.y });
+            }
+            break;
+          }
+          case 'move-touch-drag': {
+            if (!remoteInputRef.current || displayPrefsRef.current.viewOnly) break;
+            const curPos = remoteFromLocalClamped(ef.x, ef.y);
+            if (curPos) {
+              queueMove(curPos);
+            }
+            break;
+          }
+          case 'end-drag':
+          case 'release-stuck-drag': {
+            flushMove();
+            if (displayPrefsRef.current.viewOnly) break;
+            const pos = touchModeRef.current
+              ? remoteFromLocalClamped(ef.x, ef.y)
+              : cursorPoint();
+            if (pos) {
+              send({ type: 'mouse', action: 'up', button: 'left', x: pos.x, y: pos.y });
+            }
+            break;
+          }
+          case 'cursor-move': {
+            const scale = Math.max(0.01, viewRef.current.scale);
+            placeCursor(cursorRef.current.x + ef.dx / scale, cursorRef.current.y + ef.dy / scale);
+            if (remoteInputRef.current && !displayPrefsRef.current.viewOnly) {
+              queueMove(cursorPoint());
+            }
+            break;
+          }
+          case 'tap-click': {
+            if (!remoteInputRef.current || displayPrefsRef.current.viewOnly) break;
+            const pos = touchModeRef.current
+              ? remoteFromLocal(ef.x, ef.y)
+              : cursorPoint();
+            if (pos) {
+              const btn = rightArmedRef.current ? 'right' : 'left';
+              if (rightArmedRef.current) setRightArmed(false);
+              clickButton(btn, pos.x, pos.y);
+            }
+            break;
+          }
+          case 'two-finger-tap': {
+            if (!remoteInputRef.current || displayPrefsRef.current.viewOnly) break;
+            const pos = touchModeRef.current
+              ? remoteFromLocal(ef.x, ef.y)
+              : cursorPoint();
+            if (pos) {
+              clickButton('right', pos.x, pos.y);
+            }
+            break;
+          }
+          case 'pan':
+            panBy(ef.dx, ef.dy);
+            break;
+          case 'pinch':
+            applyPinchStepRef.current(
+              ef.prevMidX,
+              ef.prevMidY,
+              ef.prevDist,
+              ef.nextMidX,
+              ef.nextMidY,
+              ef.nextDist,
+            );
+            break;
+          case 'three-finger-scroll': {
+            if (!remoteInputRef.current || displayPrefsRef.current.viewOnly) break;
+            const clamped = Math.max(
+              -MAX_WHEEL_TICKS_PER_EVENT,
+              Math.min(MAX_WHEEL_TICKS_PER_EVENT, ef.ticks),
+            );
+            const dir = applyWheelDirection(clamped, displayPrefsRef.current.reverseMouseWheel);
+            if (dir !== 0) {
+              send({ type: 'mouse', action: 'wheel', x: 0, y: dir });
+            }
+            break;
+          }
+        }
+      }
+    },
+    [
+      clearLongPress,
+      clickButton,
+      cursorPoint,
+      finishPendingClick,
+      flushMove,
+      panBy,
+      placeCursor,
+      queueMove,
+      remoteFromLocal,
+      remoteFromLocalClamped,
+      send,
+      syncGestureDebug,
+    ],
+  );
+  runTouchEffectsRef.current = runTouchEffects;
+
+  const resetAllGestures = useCallback(() => {
+    if (zeroTouchTimerRef.current !== null) {
+      window.clearTimeout(zeroTouchTimerRef.current);
+      zeroTouchTimerRef.current = null;
+    }
+    touchFallbackPinchRef.current = null;
+    wheelAccumRef.current = { x: 0, y: 0 };
+
+    const next = resetTouchGestureState(touchGestureRef.current);
+    touchGestureRef.current = next.state;
+    syncGestureDebug(next.state);
+    runTouchEffectsRef.current(next.effects);
+
+    const drag = desktopDragRef.current;
+    if (drag) {
+      desktopDragRef.current = null;
+      if (drag.mode === 'remote' && !displayPrefsRef.current.viewOnly) {
+        cancelQueuedMove();
+        const pos = remoteFromLocalClamped(drag.lastX, drag.lastY);
+        if (pos) {
+          send({ type: 'mouse', action: 'up', button: drag.button, x: pos.x, y: pos.y });
+        }
+      }
+    }
+  }, [cancelQueuedMove, remoteFromLocalClamped, send, syncGestureDebug]);
+
+  const resetAllGesturesRef = useRef(resetAllGestures);
+  resetAllGesturesRef.current = resetAllGestures;
+
+  // Cleanly reset active gestures whenever remote input pauses (menu/dialog/disconnect) or mode switches
+  useEffect(() => {
+    if (!remoteInput) {
+      resetAllGestures();
+    }
+  }, [remoteInput, resetAllGestures]);
+
+  useEffect(() => {
+    resetAllGestures();
+  }, [touchMode, hand, resetAllGestures]);
 
   // Pointer handlers on stage
   const handlePointerDown = (e: React.PointerEvent<HTMLElement>) => {
     if (!remoteInput) return;
+    // Ignore events originating from interactive overlays/chrome inside the stage
+    if (e.target !== stageRef.current && e.target !== canvasRef.current) return;
 
     if (toolbarExpanded && !toolbarPinned) {
       setToolbarExpanded(false);
     }
 
     const isTouch = e.pointerType === 'touch';
-    // Ignore browser-synthesized mouse events for 700ms after touch
-    if (!isTouch && Date.now() - lastTouchAtRef.current < 700) {
+    // Ignore browser-synthesized compatibility mouse events right after touch
+    if (!isTouch && Date.now() - lastTouchAtRef.current < 450) {
       return;
     }
 
@@ -1485,7 +1832,6 @@ export default function App() {
 
     if (!isTouch) {
       // Desktop mouse interaction
-      // Appendix B fix #2: hide virtual cursor dot during desktop fine-pointer mouse use
       setVirtualCursorVisible(false);
 
       // Middle-button drag, Pan toggle, or Alt+LeftDrag pans the viewport
@@ -1531,6 +1877,8 @@ export default function App() {
         lastX: local.x,
         lastY: local.y,
       };
+      // Arm hidden capture input on desktop clicks so OS IME (Chinese/CJK) works smoothly in remote input boxes
+      focusDesktopCapture();
       // Always cancel stale rAF moves and sync cursor position BEFORE mouse down so window drags hit the exact titlebar
       cancelQueuedMove();
       send({ type: 'mouse', action: 'move', x: pos.x, y: pos.y });
@@ -1538,112 +1886,49 @@ export default function App() {
       return;
     }
 
-    // Touch interaction
+    // Touch interaction driven strictly by deterministic TouchGestureState FSM
     e.preventDefault();
-    const nowTouchMs = Date.now();
-    const prevTouchMs = lastTouchAtRef.current;
-    lastTouchAtRef.current = nowTouchMs;
+    const now = Date.now();
+    lastTouchAtRef.current = now;
+    if (zeroTouchTimerRef.current !== null) {
+      window.clearTimeout(zeroTouchTimerRef.current);
+      zeroTouchTimerRef.current = null;
+    }
     if (!touchMode) {
       setVirtualCursorVisible(true);
+      if (cursorRef.current.x === 0 && cursorRef.current.y === 0) {
+        placeCursor(remoteW / 2, remoteH / 2);
+      }
     }
 
-    // Clean up orphaned stale pointers ONLY after an idle gap so synthetic multi-touch pointers with isPrimary=true never wipe finger 1
-    if (
-      e.isPrimary &&
-      pointersRef.current.size > 0 &&
-      !pointersRef.current.has(e.pointerId) &&
-      nowTouchMs - prevTouchMs > 1500
-    ) {
-      pointersRef.current.clear();
-      pinchRef.current = null;
-      threeFingerYRef.current = null;
-      threeFingerAccumRef.current = 0;
-      clearLongPress();
-      releaseStuckDrag();
-    }
-
-    pointersRef.current.set(e.pointerId, local);
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       // Ignore NotFoundError on synthetic or rapid multi-touch pointers
     }
 
-    // Three-finger vertical scroll (M11)
-    if (pointersRef.current.size >= 3) {
-      clearLongPress();
-      releaseStuckDrag();
-      pinchRef.current = null;
-      suppressTapRef.current = true;
-      const pts = Array.from(pointersRef.current.values());
-      threeFingerYRef.current = pts.reduce((acc, p) => acc + p.y, 0) / pts.length;
-      threeFingerAccumRef.current = 0;
-      return;
-    }
+    const liveTouchCount =
+      now - nativeTouchInfoRef.current.updatedAt <= 120
+        ? nativeTouchInfoRef.current.count
+        : null;
 
-    // Two-finger gesture start
-    if (pointersRef.current.size === 2) {
-      clearLongPress();
-      releaseStuckDrag();
-      pinchRef.current = pinchSnapshot();
-      suppressTapRef.current = true;
-      return;
-    }
-
-    if (hand) {
-      desktopDragRef.current = {
-        pointerId: e.pointerId,
-        mode: 'pan',
-        button: 'left',
-        lastX: local.x,
-        lastY: local.y,
-      };
-      return;
-    }
-
-    // Single-finger down
-    const now = Date.now();
-    const sinceLast = lastTapUpRef.current !== null ? now - lastTapUpRef.current : null;
-    const start = fingerDown(touchMode ? 'touch' : 'mouse', sinceLast);
-    touchTapRef.current = {
-      x: local.x,
-      y: local.y,
-      t: now,
-      dragging: start === 'drag-lock',
-      longFired: false,
-    };
-
-    if (start === 'drag-lock') {
-      finishPendingClick();
-      const pt = cursorPoint();
-      send({ type: 'mouse', action: 'move', x: pt.x, y: pt.y });
-      send({ type: 'mouse', action: 'down', button: 'left', x: pt.x, y: pt.y });
-      return;
-    }
-
-    if (!touchMode && cursorRef.current.x === 0 && cursorRef.current.y === 0) {
-      placeCursor(remoteW / 2, remoteH / 2);
-    }
-
-    // Arm 500ms long press -> right click
-    clearLongPress();
-    longTimerRef.current = window.setTimeout(() => {
-      if (pointersRef.current.size !== 1 || touchTapRef.current.dragging) return;
-      touchTapRef.current.longFired = true;
-      const pos = touchMode
-        ? remoteFromLocal(touchTapRef.current.x, touchTapRef.current.y)
-        : cursorPoint();
-      if (pos) {
-        clickButton('right', pos.x, pos.y);
-      }
-    }, LONG_PRESS_MS);
+    const next = gesturePointerDown(touchGestureRef.current, e.pointerId, local.x, local.y, {
+      mode: touchMode ? 'touch' : 'mouse',
+      hand,
+      now,
+      isPrimary: e.isPrimary,
+      liveTouchCount,
+    });
+    touchGestureRef.current = next.state;
+    syncGestureDebug(next.state);
+    runTouchEffects(next.effects);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLElement>) => {
     if (!remoteInput) return;
 
     const isTouch = e.pointerType === 'touch';
-    if (!isTouch && Date.now() - lastTouchAtRef.current < 700) {
+    if (!isTouch && Date.now() - lastTouchAtRef.current < 450) {
       return;
     }
 
@@ -1663,6 +1948,10 @@ export default function App() {
       if (displayPrefsRef.current.viewOnly) return;
 
       const isRemoteDrag = Boolean(drag && drag.pointerId === e.pointerId && drag.mode === 'remote');
+      if (isRemoteDrag && drag) {
+        drag.lastX = local.x;
+        drag.lastY = local.y;
+      }
       const pos = isRemoteDrag
         ? remoteFromLocalClamped(local.x, local.y)
         : remoteFromLocal(local.x, local.y);
@@ -1677,108 +1966,22 @@ export default function App() {
       return;
     }
 
-    // Touch move
-    if (!pointersRef.current.has(e.pointerId)) return;
-    const prev = pointersRef.current.get(e.pointerId)!;
-    pointersRef.current.set(e.pointerId, local);
+    if (!touchGestureRef.current.pointers.has(e.pointerId)) return;
+    const now = Date.now();
+    lastTouchAtRef.current = now;
 
-    // Three-finger vertical scroll (M11)
-    if (pointersRef.current.size >= 3 && threeFingerYRef.current !== null) {
-      const pts = Array.from(pointersRef.current.values());
-      const avgY = pts.reduce((acc, p) => acc + p.y, 0) / pts.length;
-      const dy = avgY - threeFingerYRef.current;
-      threeFingerYRef.current = avgY;
-      threeFingerAccumRef.current += dy;
-      const { ticks, remainder } = consumeThreeFingerScroll(threeFingerAccumRef.current);
-      threeFingerAccumRef.current = remainder;
-      if (ticks !== 0 && !displayPrefsRef.current.viewOnly) {
-        const dir = applyWheelDirection(
-          ticks > 0 ? 1 : -1,
-          displayPrefsRef.current.reverseMouseWheel,
-        );
-        send({ type: 'mouse', action: 'wheel', x: 0, y: dir });
-      }
-      return;
-    }
-
-    // Smooth two-finger pinch zoom + pan (zero deadzone loss on 60/120Hz touchscreens)
-    if (pointersRef.current.size === 2 && pinchRef.current) {
-      const pts = Array.from(pointersRef.current.values());
-      const midX = (pts[0].x + pts[1].x) / 2;
-      const midY = (pts[0].y + pts[1].y) / 2;
-      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-
-      applyPinchStep(
-        pinchRef.current.prevX,
-        pinchRef.current.prevY,
-        pinchRef.current.prevDist,
-        midX,
-        midY,
-        dist,
-      );
-
-      pinchRef.current = {
-        ...pinchRef.current,
-        prevX: midX,
-        prevY: midY,
-        prevDist: dist,
-      };
-      return;
-    }
-
-    if (hand && desktopDragRef.current?.pointerId === e.pointerId) {
-      const dx = local.x - desktopDragRef.current.lastX;
-      const dy = local.y - desktopDragRef.current.lastY;
-      desktopDragRef.current.lastX = local.x;
-      desktopDragRef.current.lastY = local.y;
-      panBy(dx, dy);
-      return;
-    }
-
-    if (suppressTapRef.current || touchTapRef.current.longFired) return;
-
-    const movedTotal = Math.hypot(
-      local.x - touchTapRef.current.x,
-      local.y - touchTapRef.current.y,
-    );
-
-    if (!touchMode) {
-      // Mouse mode on touch device:
-      // Appendix B fix #1: cancel long press once finger moves beyond TAP_SLOP_PX!
-      if (shouldCancelLongPress(movedTotal)) {
-        clearLongPress();
-      }
-      const dx = (local.x - prev.x) / Math.max(0.01, viewRef.current.scale);
-      const dy = (local.y - prev.y) / Math.max(0.01, viewRef.current.scale);
-      placeCursor(cursorRef.current.x + dx, cursorRef.current.y + dy);
-      // Appendix B fix #3: forward throttled hover moves too, not just during drag-lock
-      queueMove(cursorPoint());
-      return;
-    }
-
-    // Touch mode: drag past TAP_SLOP_PX begins remote left-drag from touchdown point
-    if (!touchTapRef.current.dragging && movedTotal > TAP_SLOP_PX) {
-      clearLongPress();
-      finishPendingClick();
-      touchTapRef.current.dragging = true;
-      const startPos = remoteFromLocal(touchTapRef.current.x, touchTapRef.current.y);
-      if (startPos) {
-        send({ type: 'mouse', action: 'move', x: startPos.x, y: startPos.y });
-        send({ type: 'mouse', action: 'down', button: 'left', x: startPos.x, y: startPos.y });
-      }
-    }
-
-    if (touchTapRef.current.dragging) {
-      const curPos = remoteFromLocal(local.x, local.y);
-      if (curPos) {
-        queueMove(curPos);
-      }
-    }
+    const next = gesturePointerMove(touchGestureRef.current, e.pointerId, local.x, local.y, {
+      mode: touchMode ? 'touch' : 'mouse',
+      now,
+    });
+    touchGestureRef.current = next.state;
+    syncGestureDebug(next.state);
+    runTouchEffects(next.effects);
   };
 
   const handlePointerUpOrCancel = (e: React.PointerEvent<HTMLElement>) => {
     const isTouch = e.pointerType === 'touch';
-    if (!isTouch && Date.now() - lastTouchAtRef.current < 700) {
+    if (!isTouch && Date.now() - lastTouchAtRef.current < 450) {
       return;
     }
 
@@ -1788,7 +1991,7 @@ export default function App() {
       const drag = desktopDragRef.current;
       if (drag && drag.pointerId === e.pointerId) {
         desktopDragRef.current = null;
-        if (drag.mode === 'remote' && remoteInput) {
+        if (drag.mode === 'remote' && !displayPrefsRef.current.viewOnly) {
           cancelQueuedMove();
           const pos = remoteFromLocalClamped(local.x, local.y);
           if (pos) {
@@ -1800,76 +2003,53 @@ export default function App() {
       return;
     }
 
-    // Touch up / cancel
-    const wasTwoFinger = pointersRef.current.size === 2 && pinchRef.current !== null;
-    const savedPinch = pinchRef.current;
-    pointersRef.current.delete(e.pointerId);
+    // Untracked pointer IDs (e.g. pointerup bubbling from MobileDock / SessionHandle / SoftKeyboardBar) are ignored
+    if (!touchGestureRef.current.pointers.has(e.pointerId)) return;
 
-    if (desktopDragRef.current?.pointerId === e.pointerId) {
-      desktopDragRef.current = null;
-    }
+    const now = Date.now();
+    lastTouchAtRef.current = now;
+    const kind: 'up' | 'cancel' = e.type === 'pointerup' ? 'up' : 'cancel';
 
-    if (pointersRef.current.size < 3) {
-      threeFingerYRef.current = null;
-      threeFingerAccumRef.current = 0;
-    }
-
-    if (wasTwoFinger && savedPinch) {
-      pinchRef.current = null;
-      const midShift = Math.hypot(
-        savedPinch.prevX - savedPinch.originX,
-        savedPinch.prevY - savedPinch.originY,
-      );
-      const distDelta = savedPinch.prevDist - savedPinch.originDist;
-      if (isTwoFingerTap(midShift, distDelta)) {
-        // Appendix B fix #7: in mouse mode, target local cursor position for two-finger right-click
-        const pos = touchMode ? remoteFromLocal(local.x, local.y) : cursorPoint();
-        if (pos) {
-          clickButton('right', pos.x, pos.y);
-        }
-      }
-      suppressTapRef.current = true;
-      return;
-    }
-
-    if (suppressTapRef.current) {
-      releaseStuckDrag();
-      if (pointersRef.current.size === 0) {
-        suppressTapRef.current = false;
-      }
-      return;
-    }
-
-    clearLongPress();
-    const moved = Math.hypot(
-      local.x - touchTapRef.current.x,
-      local.y - touchTapRef.current.y,
+    const next = gesturePointerUpOrCancel(
+      touchGestureRef.current,
+      e.pointerId,
+      local.x,
+      local.y,
+      kind,
+      { now },
     );
-    const action = fingerUp({
-      moved,
-      longFired: touchTapRef.current.longFired,
-      dragging: touchTapRef.current.dragging,
-    });
-    touchTapRef.current.longFired = false;
-    touchTapRef.current.dragging = false;
+    touchGestureRef.current = next.state;
+    syncGestureDebug(next.state);
+    runTouchEffects(next.effects);
+  };
 
-    if (!remoteInput) return;
+  const handleLostPointerCapture = (e: React.PointerEvent<HTMLElement>) => {
+    if (e.pointerType === 'touch') {
+      if (!touchGestureRef.current.pointers.has(e.pointerId)) return;
+      const local = stageLocalPoint(e.clientX, e.clientY);
+      const next = gesturePointerUpOrCancel(
+        touchGestureRef.current,
+        e.pointerId,
+        local.x,
+        local.y,
+        'cancel',
+        { now: Date.now() },
+      );
+      touchGestureRef.current = next.state;
+      syncGestureDebug(next.state);
+      runTouchEffects(next.effects);
+      return;
+    }
 
-    if (action === 'end-drag') {
-      flushMove();
-      const pos = touchMode ? remoteFromLocal(local.x, local.y) : cursorPoint();
-      if (pos) {
-        send({ type: 'mouse', action: 'up', button: 'left', x: pos.x, y: pos.y });
-      }
-    } else if (action === 'left-click') {
-      lastTapUpRef.current = Date.now();
-      const pos = touchMode
-        ? remoteFromLocal(touchTapRef.current.x, touchTapRef.current.y)
-        : cursorPoint();
-      if (pos) {
-        const btn = rightArmed ? 'right' : 'left';
-        if (rightArmed) setRightArmed(false);
-        clickButton(btn, pos.x, pos.y);
+    const drag = desktopDragRef.current;
+    if (drag && drag.pointerId === e.pointerId) {
+      desktopDragRef.current = null;
+      if (drag.mode === 'remote' && !displayPrefsRef.current.viewOnly) {
+        cancelQueuedMove();
+        const pos = remoteFromLocalClamped(drag.lastX, drag.lastY);
+        if (pos) {
+          send({ type: 'mouse', action: 'up', button: drag.button, x: pos.x, y: pos.y });
+        }
       }
     }
   };
@@ -1950,11 +2130,21 @@ export default function App() {
       };
     };
 
+    const shouldUseTouchFallback = (now: number) =>
+      touchGestureRef.current.pointers.size === 0 && now - lastTouchAtRef.current > 250;
+
     const onTouchStart = (e: TouchEvent) => {
+      const now = Date.now();
+      nativeTouchInfoRef.current = { count: e.touches.length, updatedAt: now };
+      if (zeroTouchTimerRef.current !== null) {
+        window.clearTimeout(zeroTouchTimerRef.current);
+        zeroTouchTimerRef.current = null;
+      }
+
       if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
-        // Fallback two-finger pinch tracking for TouchEvent-only browsers or synthetic touch tests
-        if (e.touches.length === 2 && pointersRef.current.size < 2) {
+        // Fallback two-finger pinch ONLY for TouchEvent-only environments where PointerEvent does not fire
+        if (e.touches.length === 2 && shouldUseTouchFallback(now)) {
           touchFallbackPinchRef.current = touchPairMetrics(e.touches);
         } else {
           touchFallbackPinchRef.current = null;
@@ -1963,29 +2153,60 @@ export default function App() {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      const now = Date.now();
+      nativeTouchInfoRef.current = { count: e.touches.length, updatedAt: now };
       if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
-        if (e.touches.length === 2 && pointersRef.current.size < 2) {
+        if (e.touches.length === 2 && touchFallbackPinchRef.current && shouldUseTouchFallback(now)) {
           const cur = touchPairMetrics(e.touches);
           const prev = touchFallbackPinchRef.current;
-          if (prev) {
-            applyPinchStepRef.current(
-              prev.midX,
-              prev.midY,
-              prev.dist,
-              cur.midX,
-              cur.midY,
-              cur.dist,
-            );
-          }
+          applyPinchStepRef.current(
+            prev.midX,
+            prev.midY,
+            prev.dist,
+            cur.midX,
+            cur.midY,
+            cur.dist,
+          );
           touchFallbackPinchRef.current = cur;
+        } else if (e.touches.length !== 2) {
+          touchFallbackPinchRef.current = null;
         }
       }
     };
 
-    const onTouchEnd = (e: TouchEvent) => {
+    const onTouchEndOrCancel = (e: TouchEvent) => {
+      const now = Date.now();
+      nativeTouchInfoRef.current = { count: e.touches.length, updatedAt: now };
       if (e.touches.length < 2) {
         touchFallbackPinchRef.current = null;
+      }
+      // Authoritative zombie-pointer recovery: if OS reports 0 fingers on screen while
+      // tracked pointers remain (missed pointerup/pointercancel), sweep back to 'idle' safely.
+      if (e.touches.length === 0 && touchGestureRef.current.pointers.size > 0) {
+        if (zeroTouchTimerRef.current !== null) {
+          window.clearTimeout(zeroTouchTimerRef.current);
+        }
+        const delay = e.type === 'touchcancel' ? 0 : 60;
+        zeroTouchTimerRef.current = window.setTimeout(() => {
+          zeroTouchTimerRef.current = null;
+          if (
+            nativeTouchInfoRef.current.count === 0 &&
+            touchGestureRef.current.pointers.size > 0
+          ) {
+            resetAllGesturesRef.current();
+          }
+        }, delay);
+      }
+    };
+
+    const onWindowBlur = () => {
+      resetAllGesturesRef.current();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        resetAllGesturesRef.current();
       }
     };
 
@@ -2022,9 +2243,11 @@ export default function App() {
     el.addEventListener('gestureend', onGesture, { passive: false });
     el.addEventListener('touchstart', onTouchStart, { passive: false });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    el.addEventListener('touchend', onTouchEndOrCancel, { passive: true });
+    el.addEventListener('touchcancel', onTouchEndOrCancel, { passive: true });
     el.addEventListener('wheel', onWheelNative, { passive: false });
+    window.addEventListener('blur', onWindowBlur);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('wheel', onWindowWheel, { passive: false, capture: true });
     window.addEventListener('mousedown', onWindowAuxOrNavMouse, true);
     window.addEventListener('auxclick', onWindowAuxOrNavMouse, true);
@@ -2032,14 +2255,20 @@ export default function App() {
     window.addEventListener('selectstart', onWindowDragOrSelect, true);
 
     return () => {
+      if (zeroTouchTimerRef.current !== null) {
+        window.clearTimeout(zeroTouchTimerRef.current);
+        zeroTouchTimerRef.current = null;
+      }
       el.removeEventListener('gesturestart', onGesture);
       el.removeEventListener('gesturechange', onGesture);
       el.removeEventListener('gestureend', onGesture);
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', onTouchEnd);
+      el.removeEventListener('touchend', onTouchEndOrCancel);
+      el.removeEventListener('touchcancel', onTouchEndOrCancel);
       el.removeEventListener('wheel', onWheelNative);
+      window.removeEventListener('blur', onWindowBlur);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('wheel', onWindowWheel, { capture: true });
       window.removeEventListener('mousedown', onWindowAuxOrNavMouse, true);
       window.removeEventListener('auxclick', onWindowAuxOrNavMouse, true);
@@ -2120,6 +2349,7 @@ export default function App() {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUpOrCancel}
       onPointerCancel={handlePointerUpOrCancel}
+      onLostPointerCapture={handleLostPointerCapture}
       onContextMenu={(e) => {
         if (remoteInput || e.target === stageRef.current || e.target === canvasRef.current) {
           e.preventDefault();
@@ -2148,11 +2378,37 @@ export default function App() {
 
       <input
         ref={captureRef}
+        type="text"
         className="capture"
         data-testid="capture"
         aria-hidden="true"
         tabIndex={-1}
-        readOnly
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        onCompositionStart={() => {
+          captureComposingRef.current = true;
+        }}
+        onCompositionEnd={(e) => {
+          captureComposingRef.current = false;
+          lastCompositionEndAtRef.current = performance.now();
+          const committed = e.data || e.currentTarget.value;
+          e.currentTarget.value = '';
+          if (committed && !displayPrefsRef.current.viewOnly) {
+            sendText(committed);
+          }
+        }}
+        onInput={(e) => {
+          if (captureComposingRef.current) return;
+          const val = e.currentTarget.value;
+          if (val) {
+            e.currentTarget.value = '';
+            if (!displayPrefsRef.current.viewOnly) {
+              sendText(val);
+            }
+          }
+        }}
       />
 
       {pageZoomed && (
@@ -2271,6 +2527,8 @@ export default function App() {
           touchMode={touchMode}
           diagnosticsOpen={diagnosticsOpen}
           devices={devices}
+          savedPasswords={savedPasswords}
+          rememberPassword={rememberPassword}
           onChangeMode={setMode}
           onToggleDirectIp={handleToggleDirectIp}
           onChangeField={(field, val) => {
@@ -2284,13 +2542,15 @@ export default function App() {
             else if (field === 'gatewayToken') setGatewayToken(val);
           }}
           onChangeForceRelay={setForceRelay}
+          onChangeRememberPassword={setRememberPassword}
+          onClearSavedPassword={handleClearSavedPassword}
           onSelectDevice={handleSelectDevice}
           onToggleFavorite={handleToggleFavorite}
           onRemoveDevice={handleRemoveDevice}
           onToggleTouchMode={handleToggleTouchMode}
           onToggleDiagnostics={() => setDiagnosticsOpen((prev) => !prev)}
           onToggleFullscreen={handleToggleFullscreen}
-          onConnect={(overrideMode) => void connectSession(overrideMode)}
+          onConnect={(req) => void connectSession(req)}
           onDisconnect={disconnect}
           onDismissError={handleDismissError}
           onClose={closeChrome}
@@ -2320,6 +2580,7 @@ export default function App() {
           rtt={rtt}
           quality={quality}
           targetFps={targetFps}
+          preferredCodec={displayPrefs.codec}
           remoteClipboard={remoteClipboard}
           onClose={closeChrome}
           onOpenConnection={() => {
@@ -2349,8 +2610,8 @@ export default function App() {
               panY: (box.h - remoteH) / 2,
             });
           }}
-          onZoomOut={() => setScaleAround(viewRef.current.scale / 1.15, box.w / 2, box.h / 2)}
-          onZoomIn={() => setScaleAround(viewRef.current.scale * 1.15, box.w / 2, box.h / 2)}
+          onZoomOut={() => setScaleAround(viewRef.current.scale / 1.25, box.w / 2, box.h / 2)}
+          onZoomIn={() => setScaleAround(viewRef.current.scale * 1.25, box.w / 2, box.h / 2)}
           onToggleHand={() => setHand((h) => !h)}
           onToggleTouchMode={handleToggleTouchMode}
           onSwitchDisplay={(idx) => {
@@ -2368,10 +2629,18 @@ export default function App() {
             setSoftKeys((s) => !s);
             closeChrome();
           }}
-          onChangeQuality={(q, fps) => {
+          onChangeQuality={(q, fps, nextCodec) => {
             setQuality(q);
             setTargetFps(fps);
-            send({ type: 'quality', quality: q, fps });
+            const activeCodec = nextCodec ?? displayPrefsRef.current.codec;
+            if (nextCodec && nextCodec !== displayPrefsRef.current.codec) {
+              setDisplayPrefs((prev) => {
+                const updated = { ...prev, codec: nextCodec };
+                persistDisplayPrefs(updated);
+                return updated;
+              });
+            }
+            send({ type: 'quality', quality: q, fps, codec: activeCodec });
           }}
           onSendClipboard={(text) => {
             if (!displayPrefsRef.current.disableClipboard) {
@@ -2389,7 +2658,7 @@ export default function App() {
           onSendChord={sendChord}
           onHide={() => {
             setSoftKeys(false);
-            captureRef.current?.focus();
+            focusDesktopCapture();
           }}
         />
       )}

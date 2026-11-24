@@ -112,3 +112,72 @@ test('computePinchStep accumulates small 60/120Hz pinch increments smoothly with
   );
 });
 
+test('allows dragging initial fit desktop all the way to the very top and very bottom', () => {
+  // Portrait phone (390x780) viewing 1920x1080 desktop at fit scale (~0.203, imgH ≈ 219.375)
+  const boxW = 390;
+  const boxH = 780;
+  const remoteW = 1920;
+  const remoteH = 1080;
+  const fit = fitScale(boxW, boxH, remoteW, remoteH);
+  const imgH = remoteH * fit;
+
+  const toTop = clampPan(boxW, boxH, remoteW, remoteH, fit, 0, -500, { allowEdgePan: true });
+  assert.equal(toTop.panY, 0, 'should reach the very top edge (panY = 0)');
+
+  const toBottom = clampPan(boxW, boxH, remoteW, remoteH, fit, 0, 1000, { allowEdgePan: true });
+  assert.ok(
+    Math.abs(toBottom.panY - (boxH - imgH)) < 0.01,
+    'should reach the very bottom edge (panY = boxH - imgH)',
+  );
+
+  // Two-finger pan at fit scale should switch out of locked fit so top/bottom drag persists
+  const initial = computeViewTransform(boxW, boxH, remoteW, remoteH, 'fit', 1, { panX: 0, panY: 0 });
+  const pannedUp = computePinchStep(
+    boxW,
+    boxH,
+    remoteW,
+    remoteH,
+    initial,
+    195,
+    400,
+    100,
+    195,
+    100,
+    100,
+  );
+  assert.equal(pannedUp.viewMode, 'custom');
+  assert.equal(pannedUp.pan.panY, 0);
+});
+
+test('supports zooming up to 400% native scale on phones and gives top/bottom clearance when zoomed', () => {
+  const boxW = 390;
+  const boxH = 780;
+  const remoteW = 1920;
+  const remoteH = 1080;
+  const cur = computeViewTransform(boxW, boxH, remoteW, remoteH, 'fit', 1, { panX: 0, panY: 0 });
+  const zoomed = computeNextScaleState(boxW, boxH, remoteW, remoteH, cur, 4.0, 195, 390, {
+    edgePadding: 48,
+    bottomInset: 112,
+  });
+  assert.equal(zoomed.scale, 4, 'must allow zooming up to 400% native pixels for small buttons');
+
+  const topClear = clampPan(boxW, boxH, remoteW, remoteH, 4, 0, 200, {
+    allowEdgePan: true,
+    edgePadding: 48,
+    bottomInset: 112,
+  });
+  assert.equal(topClear.panY, 48, 'zoomed top edge clears floating handle by edgePadding');
+
+  const bottomClear = clampPan(boxW, boxH, remoteW, remoteH, 4, 0, -99999, {
+    allowEdgePan: true,
+    edgePadding: 48,
+    bottomInset: 112,
+  });
+  assert.equal(
+    bottomClear.panY,
+    boxH - remoteH * 4 - 48 - 112,
+    'zoomed bottom edge clears floating bar + soft keyboard inset',
+  );
+});
+
+

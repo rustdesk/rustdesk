@@ -13,6 +13,8 @@ export interface RdRuntimeState {
   cursorX: number;
   cursorY: number;
   touchMode: boolean;
+  gesturePhase?: string;
+  activePointers?: number;
 }
 
 export interface RdViewState {

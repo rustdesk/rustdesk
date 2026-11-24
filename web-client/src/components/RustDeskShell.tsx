@@ -13,10 +13,24 @@ import {
   Star,
   X,
 } from 'lucide-react';
-import { formatPeerId, type SavedDevice } from '../lib/devices';
+import { deviceKeyFor, formatPeerId, type SavedDevice } from '../lib/devices';
 import type { DisplayPrefs } from '../lib/displayPrefs';
 import { statusLabel, t, type Locale, type LocalePreference } from '../lib/i18n';
+import { getSavedPassword, type SavedPasswordMap } from '../lib/passwords';
 import type { ThemePreference } from '../lib/theme';
+
+export interface ConnectRequest {
+  mode?: ConnectionMode;
+  peerId?: string;
+  idServer?: string;
+  relayServer?: string;
+  serverKey?: string;
+  forceRelay?: boolean;
+  host?: string;
+  port?: string;
+  password?: string;
+  remember?: boolean;
+}
 import { ErrorBanner } from './ErrorBanner';
 import { PasswordModal } from './PasswordModal';
 import { PeerList } from './PeerList';
@@ -65,17 +79,21 @@ interface RustDeskShellProps {
   touchMode: boolean;
   diagnosticsOpen: boolean;
   devices: SavedDevice[];
+  savedPasswords: SavedPasswordMap;
+  rememberPassword: boolean;
   onChangeMode: (mode: ConnectionMode) => void;
   onToggleDirectIp: () => void;
   onChangeField: (field: ConnectionField, value: string) => void;
   onChangeForceRelay: (checked: boolean) => void;
+  onChangeRememberPassword: (checked: boolean) => void;
+  onClearSavedPassword: (deviceKey: string) => void;
   onSelectDevice: (device: SavedDevice) => void;
   onToggleFavorite: (key: string) => void;
   onRemoveDevice: (key: string) => void;
   onToggleTouchMode: () => void;
   onToggleDiagnostics: () => void;
   onToggleFullscreen: () => void;
-  onConnect: (overrideMode?: ConnectionMode) => void;
+  onConnect: (req?: ConnectRequest) => void;
   onDisconnect: () => void;
   onDismissError: () => void;
   onClose: () => void;
@@ -109,10 +127,14 @@ export function RustDeskShell({
   touchMode,
   diagnosticsOpen,
   devices,
+  savedPasswords,
+  rememberPassword,
   onChangeMode,
   onToggleDirectIp,
   onChangeField,
   onChangeForceRelay,
+  onChangeRememberPassword,
+  onClearSavedPassword,
   onSelectDevice,
   onToggleFavorite,
   onRemoveDevice,
@@ -214,6 +236,13 @@ export function RustDeskShell({
     setServerDialogOpen(true);
   };
 
+  const pendingDeviceKey = deviceKeyFor({
+    mode: pendingMode,
+    peerId,
+    host,
+    port,
+  });
+
   const handleHeroSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (activeMode === 'id') {
@@ -235,6 +264,19 @@ export function RustDeskShell({
     setHeroInputError(false);
     setHeroErrorShake(false);
     setPendingMode(activeMode);
+
+    const key = deviceKeyFor({ mode: activeMode, peerId, host, port });
+    const saved = getSavedPassword(savedPasswords, key);
+    const needsTokenPrompt = authRequired && !gatewayToken.trim();
+    if (saved && !needsTokenPrompt && phase !== 'error') {
+      onChangeField('password', saved);
+      onConnect({ mode: activeMode, password: saved, remember: true });
+      return;
+    }
+
+    if (saved) {
+      onChangeField('password', saved);
+    }
     setPasswordPromptOpen(true);
   };
 
@@ -246,13 +288,35 @@ export function RustDeskShell({
       return;
     }
     setPendingMode(device.mode);
+
+    const key = deviceKeyFor(device);
+    const saved = getSavedPassword(savedPasswords, key);
+    const needsTokenPrompt = authRequired && !gatewayToken.trim();
+    if (saved && !needsTokenPrompt) {
+      onChangeField('password', saved);
+      onConnect({
+        mode: device.mode,
+        peerId: device.peerId,
+        idServer: device.idServer || idServer,
+        relayServer: device.relayServer ?? relayServer,
+        serverKey: device.serverKey ?? serverKey,
+        forceRelay: device.forceRelay ?? forceRelay,
+        host: device.host,
+        port: device.port || '21118',
+        password: saved,
+        remember: true,
+      });
+      return;
+    }
+
+    onChangeField('password', saved);
     setPasswordPromptOpen(true);
   };
 
   const handleConfirmPasswordConnect = (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordPromptOpen(false);
-    onConnect(pendingMode);
+    onConnect({ mode: pendingMode, password, remember: rememberPassword });
   };
 
   const handleIdInputChange = (raw: string) => {
@@ -781,10 +845,17 @@ export function RustDeskShell({
           locale={locale}
           targetLabel={activeTargetLabel}
           password={password}
+          rememberPassword={rememberPassword}
+          hasSavedPassword={Boolean(getSavedPassword(savedPasswords, pendingDeviceKey))}
           gatewayToken={gatewayToken}
           authRequired={authRequired}
           isConnecting={isConnecting}
           onChangePassword={(val) => onChangeField('password', val)}
+          onChangeRememberPassword={onChangeRememberPassword}
+          onClearSavedPassword={() => {
+            onClearSavedPassword(pendingDeviceKey);
+            onChangeField('password', '');
+          }}
           onChangeGatewayToken={(val) => onChangeField('gatewayToken', val)}
           onSubmit={handleConfirmPasswordConnect}
           onClose={() => setPasswordPromptOpen(false)}

@@ -1,55 +1,118 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  computeWindowRates,
-  createFrameWindow,
-  pruneFrameWindow,
-  recordFrameSample,
+  computeFrameRates,
+  createFrameStats,
+  recordRenderedFrame,
+  recordRxFrame,
 } from './stats';
 
-test('sliding window reports accurate 30fps and bitrate for steady video stream', () => {
-  let win = createFrameWindow();
-  // Simulate 30 frames arriving every ~33.3ms over 1 second, 5000 bytes each
-  for (let i = 0; i < 30; i++) {
-    const ts = 1000 + Math.round((i * 1000) / 30);
-    win = recordFrameSample(win, ts, 5000);
-  }
-  const rates = computeWindowRates(win, 2000);
-  assert.equal(rates.sampleCount, 30);
-  assert.equal(rates.fps, 30);
-  // 30 * 5000 bytes * 8 bits = 1,200,000 bps
-  assert.equal(rates.bitrate, 1_200_000);
+test('reports waiting state before any frame arrives', () => {
+  const s = createFrameStats();
+  const r = computeFrameRates(s, 1000);
+  assert.equal(r.streamState, 'waiting');
+  assert.equal(r.fps, 0);
+  assert.equal(r.bitrate, 0);
 });
 
-test('sliding window decays to 0 fps when remote desktop is static/idle', () => {
-  let win = createFrameWindow();
-  win = recordFrameSample(win, 1000, 4000);
-  win = recordFrameSample(win, 1050, 4000);
-  assert.ok(computeWindowRates(win, 1250).fps > 0);
+test('sampling-rate calculation reports exact 30fps and 60fps without fencepost bias', () => {
+  let s30 = createFrameStats();
+  for (let i = 0; i < 31; i++) {
+    const ts = 1000 + (i * 1000) / 30;
+    s30 = recordRxFrame(s30, ts, 5000);
+    s30 = recordRenderedFrame(s30, ts + 2);
+  }
+  const r30 = computeFrameRates(s30, 2005);
+  assert.equal(r30.streamState, 'active');
+  assert.equal(r30.fps, 30);
+  assert.equal(r30.renderFps, 30);
+  assert.equal(r30.rxFps, 30);
+  assert.ok(r30.bitrate > 1_000_000, `expected >1Mbps bitrate, got ${r30.bitrate}`);
 
-  // After > 1000ms without new frames, window prunes empty and reports 0
-  const idle = computeWindowRates(win, 2100);
+  let s60 = createFrameStats();
+  for (let i = 0; i < 30; i++) {
+    const ts = 5000 + (i * 1000) / 60;
+    s60 = recordRxFrame(s60, ts, 3000);
+    s60 = recordRenderedFrame(s60, ts + 1);
+  }
+  const r60 = computeFrameRates(s60, 5500);
+  assert.equal(r60.streamState, 'active');
+  assert.ok(r60.fps >= 59 && r60.fps <= 61, `expected ~60fps, got ${r60.fps}`);
+});
+
+test('waking from idle reports true sampling rate immediately after 4 frames without ramp-up lag', () => {
+  let s = createFrameStats();
+  // Earlier active frame long ago (now idle)
+  s = recordRxFrame(s, 1000, 4000);
+  s = recordRenderedFrame(s, 1005);
+  assert.equal(computeFrameRates(s, 3000).streamState, 'idle');
+
+  // New 30fps burst (4 frames over 100ms)
+  for (let i = 0; i < 4; i++) {
+    const ts = 4000 + i * 33.33;
+    s = recordRxFrame(s, ts, 4000);
+    s = recordRenderedFrame(s, ts + 1);
+  }
+  const r = computeFrameRates(s, 4110);
+  assert.equal(r.streamState, 'active');
+  assert.ok(r.fps >= 28 && r.fps <= 32, `expected ~30fps immediately on burst, got ${r.fps}`);
+});
+
+test('single isolated frame on a static screen reports 1 fps (not inflated 4-5 fps) and decays to idle', () => {
+  let s = createFrameStats();
+  s = recordRxFrame(s, 2000, 2000);
+  s = recordRenderedFrame(s, 2002);
+
+  // Immediately after 1 frame arrives: must be 1 fps, NOT 4-5 fps!
+  const immediate = computeFrameRates(s, 2010);
+  assert.equal(immediate.streamState, 'active');
+  assert.equal(immediate.fps, 1);
+
+  // 500ms later, still 1 isolated frame
+  const mid = computeFrameRates(s, 2500);
+  assert.equal(mid.streamState, 'active');
+  assert.equal(mid.fps, 1);
+
+  // >= 1000ms silence -> static/idle, 0 fps, 0 bitrate
+  const idle = computeFrameRates(s, 3050);
+  assert.equal(idle.streamState, 'idle');
   assert.equal(idle.fps, 0);
   assert.equal(idle.bitrate, 0);
-  assert.equal(idle.sampleCount, 0);
 });
 
-test('burst after idle does not under-report FPS by dividing by full 1000ms prematurely', () => {
-  let win = createFrameWindow();
-  // 10 frames in 333ms (~30 fps burst waking from idle)
-  for (let i = 0; i < 10; i++) {
-    win = recordFrameSample(win, 5000 + i * 33, 2000);
+test('prefers actual decoded/rendered frame sampling rate over raw incoming packet rate', () => {
+  let s = createFrameStats();
+  // Incoming packets arrive at 30fps, but decoder only paints 15fps
+  for (let i = 0; i < 30; i++) {
+    const ts = 1000 + (i * 1000) / 30;
+    s = recordRxFrame(s, ts, 4000);
+    if (i % 2 === 0) {
+      s = recordRenderedFrame(s, ts + 4);
+    }
   }
-  const rates = computeWindowRates(win, 5330);
-  assert.ok(rates.fps >= 28 && rates.fps <= 32, `expected ~30fps, got ${rates.fps}`);
+  const r = computeFrameRates(s, 2000);
+  assert.equal(r.rxFps, 30);
+  assert.ok(r.renderFps >= 14 && r.renderFps <= 16, `expected ~15 renderFps, got ${r.renderFps}`);
+  assert.equal(r.fps, r.renderFps);
 });
 
-test('pruneFrameWindow drops only samples older than cutoff', () => {
-  let win = createFrameWindow();
-  win = recordFrameSample(win, 100, 1000);
-  win = recordFrameSample(win, 800, 1000);
-  win = recordFrameSample(win, 1200, 1000);
-  const pruned = pruneFrameWindow(win, 1500, 1000);
-  assert.equal(pruned.samples.length, 2);
-  assert.equal(pruned.samples[0].ts, 800);
+test('tapering motion smoothly decays FPS during trailing silence before hitting idle', () => {
+  let s = createFrameStats();
+  // Short 30fps burst lasting 300ms (10 frames)
+  for (let i = 0; i < 10; i++) {
+    const ts = 1000 + i * 33.33;
+    s = recordRxFrame(s, ts, 4000);
+    s = recordRenderedFrame(s, ts + 2);
+  }
+  const peak = computeFrameRates(s, 1310).fps;
+  assert.ok(peak >= 28 && peak <= 32);
+
+  // 600ms after last frame (screen went still): FPS should smoothly taper down
+  const tapering = computeFrameRates(s, 1900).fps;
+  assert.ok(tapering < peak && tapering > 0, `expected tapering fps < ${peak}, got ${tapering}`);
+
+  // 1050ms after last frame: idle 0 fps
+  const idle = computeFrameRates(s, 2360);
+  assert.equal(idle.streamState, 'idle');
+  assert.equal(idle.fps, 0);
 });

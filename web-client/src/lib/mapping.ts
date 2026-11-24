@@ -11,6 +11,28 @@ export interface Point {
   y: number;
 }
 
+export interface PanClampOptions {
+  /**
+   * When true, allows dragging a smaller-than-viewport canvas freely from the very top/left edge
+   * to the very bottom/right edge instead of locking it rigidly in the center.
+   */
+  allowEdgePan?: boolean;
+  /**
+   * Extra top/bottom/side clearance (in CSS px) when zoomed larger than the viewport so remote
+   * top menu bars, close buttons, and bottom taskbars can be dragged clear of floating controls.
+   */
+  edgePadding?: number;
+  /**
+   * Extra bottom viewport inset (in CSS px, e.g., when SoftKeyboardBar is visible) so the
+   * bottom of the remote desktop can be dragged above the on-screen keyboard bar.
+   */
+  bottomInset?: number;
+}
+
+export const DEFAULT_EDGE_PADDING = 48;
+export const MAX_ZOOM_MULTIPLIER = 8;
+export const MIN_MAX_NATIVE_SCALE = 4;
+
 export function fitScale(
   boxW: number,
   boxH: number,
@@ -21,6 +43,18 @@ export function fitScale(
   return Math.min(boxW / remoteW, boxH / remoteH);
 }
 
+/**
+ * Returns consistent [minScale, maxScale] bounds across fit, original, zoom buttons, and pinch.
+ * Guarantees at least 400% native pixel zoom (4.0) or 8x fit scale so small remote buttons are
+ * always easy to tap/click even on phones or HiDPI remote monitors.
+ */
+export function computeScaleBounds(fit: number): { minScale: number; maxScale: number } {
+  return {
+    minScale: Math.min(fit, 1),
+    maxScale: Math.max(fit * MAX_ZOOM_MULTIPLIER, MIN_MAX_NATIVE_SCALE),
+  };
+}
+
 export function clampPan(
   boxW: number,
   boxH: number,
@@ -29,18 +63,39 @@ export function clampPan(
   scale: number,
   panX: number,
   panY: number,
+  options?: PanClampOptions,
 ): { panX: number; panY: number } {
   const imgW = remoteW * scale;
   const imgH = remoteH * scale;
+  const allowEdgePan = Boolean(options?.allowEdgePan);
+  const edgePad = Math.max(0, options?.edgePadding ?? 0);
+  const padX = Math.min(edgePad, 32);
+  const bottomInset = Math.max(0, options?.bottomInset ?? 0);
 
-  const nextX =
-    imgW <= boxW
-      ? (boxW - imgW) / 2
-      : Math.min(0, Math.max(boxW - imgW, panX));
-  const nextY =
-    imgH <= boxH
-      ? (boxH - imgH) / 2
-      : Math.min(0, Math.max(boxH - imgH, panY));
+  let nextX: number;
+  if (imgW <= boxW) {
+    if (allowEdgePan) {
+      nextX = Math.min(boxW - imgW, Math.max(0, panX));
+    } else {
+      nextX = (boxW - imgW) / 2;
+    }
+  } else {
+    nextX = Math.min(padX, Math.max(boxW - imgW - padX, panX));
+  }
+
+  let nextY: number;
+  if (imgH <= boxH) {
+    if (allowEdgePan) {
+      const usableH = Math.max(1, boxH - bottomInset);
+      const minY = Math.min(0, usableH - imgH);
+      const maxY = Math.max(0, boxH - imgH);
+      nextY = Math.min(maxY, Math.max(minY, panY));
+    } else {
+      nextY = (boxH - imgH) / 2;
+    }
+  } else {
+    nextY = Math.min(edgePad, Math.max(boxH - imgH - edgePad - bottomInset, panY));
+  }
 
   return { panX: nextX, panY: nextY };
 }
@@ -118,10 +173,10 @@ export function computeViewTransform(
   viewMode: ViewMode,
   zoom: number,
   pan: { panX: number; panY: number },
+  panOptions?: PanClampOptions,
 ): ViewTransform {
   const fit = fitScale(boxW, boxH, remoteW, remoteH);
-  const minScale = Math.min(fit, 1);
-  const maxScale = Math.max(fit * 4, 1);
+  const { minScale, maxScale } = computeScaleBounds(fit);
 
   const scale =
     viewMode === 'original'
@@ -135,9 +190,18 @@ export function computeViewTransform(
       ? { panX: (boxW - remoteW * scale) / 2, panY: (boxH - remoteH * scale) / 2 }
       : pan;
 
+  const effectiveOptions: PanClampOptions | undefined =
+    viewMode === 'fit'
+      ? undefined
+      : {
+          allowEdgePan: true,
+          edgePadding: panOptions?.edgePadding ?? 0,
+          bottomInset: panOptions?.bottomInset ?? 0,
+        };
+
   return {
     scale,
-    ...clampPan(boxW, boxH, remoteW, remoteH, scale, basePan.panX, basePan.panY),
+    ...clampPan(boxW, boxH, remoteW, remoteH, scale, basePan.panX, basePan.panY, effectiveOptions),
   };
 }
 
@@ -150,10 +214,10 @@ export function computeNextScaleState(
   nextScale: number,
   anchorX: number,
   anchorY: number,
+  panOptions?: PanClampOptions,
 ): { viewMode: ViewMode; zoom: number; pan: { panX: number; panY: number }; scale: number } {
   const fit = fitScale(boxW, boxH, remoteW, remoteH);
-  const minScale = Math.min(fit, 1);
-  const maxScale = Math.max(fit * 4, 1);
+  const { minScale, maxScale } = computeScaleBounds(fit);
   const clampedScale = Math.min(maxScale, Math.max(minScale, nextScale));
   const shifted = zoomAround(
     anchorX,
@@ -163,14 +227,29 @@ export function computeNextScaleState(
     current.panX,
     current.panY,
   );
-  const viewMode: ViewMode =
-    Math.abs(clampedScale - fit) < 0.01
-      ? 'fit'
-      : Math.abs(clampedScale - 1) < 0.01
-        ? 'original'
-        : 'custom';
+  const isAtFitScale = Math.abs(clampedScale - fit) < 0.01;
+  const pan = clampPan(
+    boxW,
+    boxH,
+    remoteW,
+    remoteH,
+    clampedScale,
+    shifted.panX,
+    shifted.panY,
+    isAtFitScale
+      ? undefined
+      : {
+          allowEdgePan: true,
+          edgePadding: panOptions?.edgePadding ?? 0,
+          bottomInset: panOptions?.bottomInset ?? 0,
+        },
+  );
+  const viewMode: ViewMode = isAtFitScale
+    ? 'fit'
+    : Math.abs(clampedScale - 1) < 0.01
+      ? 'original'
+      : 'custom';
   const zoom = fit === 0 ? 1 : clampedScale / fit;
-  const pan = clampPan(boxW, boxH, remoteW, remoteH, clampedScale, shifted.panX, shifted.panY);
   return { viewMode, zoom, pan, scale: clampedScale };
 }
 
@@ -190,13 +269,13 @@ export function computePinchStep(
   nextMidX: number,
   nextMidY: number,
   nextDist: number,
+  panOptions?: PanClampOptions,
 ): { viewMode: ViewMode; zoom: number; pan: { panX: number; panY: number }; scale: number } {
   const factor = prevDist > 4 && nextDist > 4 ? nextDist / prevDist : 1;
   const dx = nextMidX - prevMidX;
   const dy = nextMidY - prevMidY;
   const fit = fitScale(boxW, boxH, remoteW, remoteH);
-  const minScale = Math.min(fit, 1);
-  const maxScale = Math.max(fit * 4, 1);
+  const { minScale, maxScale } = computeScaleBounds(fit);
   const nextScale = Math.min(maxScale, Math.max(minScale, current.scale * factor));
   const shifted = zoomAround(
     prevMidX,
@@ -214,9 +293,17 @@ export function computePinchStep(
     nextScale,
     shifted.panX + dx,
     shifted.panY + dy,
+    {
+      allowEdgePan: true,
+      edgePadding: panOptions?.edgePadding ?? 0,
+      bottomInset: panOptions?.bottomInset ?? 0,
+    },
   );
+  const centeredX = (boxW - remoteW * nextScale) / 2;
+  const centeredY = (boxH - remoteH * nextScale) / 2;
+  const isCentered = Math.abs(pan.panX - centeredX) < 1 && Math.abs(pan.panY - centeredY) < 1;
   const viewMode: ViewMode =
-    Math.abs(nextScale - fit) < 0.01
+    Math.abs(nextScale - fit) < 0.01 && isCentered
       ? 'fit'
       : Math.abs(nextScale - 1) < 0.01
         ? 'original'

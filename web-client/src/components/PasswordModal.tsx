@@ -6,10 +6,14 @@ interface PasswordModalProps {
   locale: Locale;
   targetLabel: string;
   password: string;
+  rememberPassword: boolean;
+  hasSavedPassword: boolean;
   gatewayToken: string;
   authRequired: boolean;
   isConnecting: boolean;
   onChangePassword: (value: string) => void;
+  onChangeRememberPassword: (checked: boolean) => void;
+  onClearSavedPassword: () => void;
   onChangeGatewayToken: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   onClose: () => void;
@@ -19,10 +23,14 @@ export function PasswordModal({
   locale,
   targetLabel,
   password,
+  rememberPassword,
+  hasSavedPassword,
   gatewayToken,
   authRequired,
   isConnecting,
   onChangePassword,
+  onChangeRememberPassword,
+  onClearSavedPassword,
   onChangeGatewayToken,
   onSubmit,
   onClose,
@@ -64,7 +72,19 @@ export function PasswordModal({
 
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--ink-soft)]">
-            <span>{t(locale, 'password')}</span>
+            <span className="flex items-center justify-between gap-2">
+              <span>{t(locale, 'password')}</span>
+              {hasSavedPassword && (
+                <button
+                  type="button"
+                  className="text-[11px] font-medium text-[var(--accent)] hover:underline border-0 bg-transparent p-0 cursor-pointer"
+                  data-testid="clear-saved-password"
+                  onClick={onClearSavedPassword}
+                >
+                  {t(locale, 'clearSavedPassword')}
+                </button>
+              )}
+            </span>
             <input
               type="password"
               className="rd-input"
@@ -75,6 +95,16 @@ export function PasswordModal({
               placeholder={t(locale, 'passwordPlaceholder')}
               onChange={(e) => onChangePassword(e.target.value)}
             />
+          </label>
+
+          <label className="rd-check-row !py-0.5 text-xs">
+            <input
+              type="checkbox"
+              data-testid="remember-password"
+              checked={rememberPassword}
+              onChange={(e) => onChangeRememberPassword(e.target.checked)}
+            />
+            <span>{t(locale, 'rememberPassword')}</span>
           </label>
 
           {authRequired && (

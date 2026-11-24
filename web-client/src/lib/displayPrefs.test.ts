@@ -58,7 +58,7 @@ test('resolveQualityLevel and resolveTargetFps map presets and custom values', (
   assert.equal(resolveTargetFps('custom', 120), 60);
 });
 
-test('filterCodecSupport isolates preferred codec when browser supports it and falls back otherwise', () => {
+test('filterCodecSupport disables AV1 in auto mode when faster codecs exist, isolates explicit codecs, and falls back gracefully', () => {
   const support = {
     vp8: true,
     vp9: true,
@@ -68,7 +68,22 @@ test('filterCodecSupport isolates preferred codec when browser supports it and f
     reported: true,
   };
 
-  assert.deepEqual(filterCodecSupport(support, 'auto'), support);
+  assert.deepEqual(filterCodecSupport(support, 'auto'), {
+    vp8: true,
+    vp9: true,
+    h264: true,
+    h265: false,
+    av1: false,
+    reported: true,
+  });
+  assert.deepEqual(filterCodecSupport(support, 'av1'), {
+    vp8: false,
+    vp9: false,
+    h264: false,
+    h265: false,
+    av1: true,
+    reported: true,
+  });
   assert.deepEqual(filterCodecSupport(support, 'vp9'), {
     vp8: false,
     vp9: true,
@@ -77,8 +92,15 @@ test('filterCodecSupport isolates preferred codec when browser supports it and f
     av1: false,
     reported: true,
   });
-  // Unsupported preferred codec falls back gracefully to all supported codecs
-  assert.deepEqual(filterCodecSupport(support, 'h265'), support);
+  // Unsupported preferred codec falls back to auto (AV1 disabled when faster codecs exist)
+  assert.deepEqual(filterCodecSupport(support, 'h265'), {
+    vp8: true,
+    vp9: true,
+    h264: true,
+    h265: false,
+    av1: false,
+    reported: true,
+  });
 });
 
 test('mouse button swap and wheel inversion behave deterministically', () => {

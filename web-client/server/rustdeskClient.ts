@@ -37,6 +37,7 @@ export interface DirectTarget {
   password: string;
   quality?: string;
   fps?: number;
+  preferCodec?: string;
 }
 
 export interface IdTarget {
@@ -48,6 +49,7 @@ export interface IdTarget {
   forceRelay: boolean;
   quality?: string;
   fps?: number;
+  preferCodec?: string;
 }
 
 export interface ConnectedHost {
@@ -66,7 +68,9 @@ async function loginHost(
   encrypted: boolean,
   quality?: string,
   fps?: number,
+  preferCodec?: string,
 ): Promise<ConnectedHost> {
+  const loginOption = buildLoginOptions(codecs, quality, fps, preferCodec);
   const loginReq = {
     login_request: {
       username,
@@ -75,7 +79,7 @@ async function loginHost(
       my_name: 'Web Client',
       my_platform: 'Web',
       version: '1.5.3',
-      option: buildLoginOptions(codecs, quality, fps),
+      option: loginOption,
     },
   };
 
@@ -93,6 +97,7 @@ async function loginHost(
         throw new Error(reason || 'the host rejected the login');
       }
       if (msg.login_response.peer_info) {
+        await stream.sendRaw(encodeMessage({ misc: { option: loginOption } }));
         await stream.sendRaw(encodeMessage(buildRefreshVideoMessage()));
         return {
           stream,
@@ -103,6 +108,7 @@ async function loginHost(
       }
     }
     if (msg.peer_info) {
+      await stream.sendRaw(encodeMessage({ misc: { option: loginOption } }));
       await stream.sendRaw(encodeMessage(buildRefreshVideoMessage()));
       return {
         stream,
@@ -148,6 +154,7 @@ export async function connectDirect(
       encrypted,
       target.quality,
       target.fps,
+      target.preferCodec,
     );
   } catch (err) {
     stream.close();
@@ -359,6 +366,7 @@ export async function connectViaId(
                 encrypted,
                 target.quality,
                 target.fps,
+                target.preferCodec,
               );
             } catch {
               if (peerStream) {
@@ -391,6 +399,7 @@ export async function connectViaId(
           encrypted,
           target.quality,
           target.fps,
+          target.preferCodec,
         );
       }
 
@@ -431,6 +440,7 @@ export async function connectViaId(
           encrypted,
           target.quality,
           target.fps,
+          target.preferCodec,
         );
       }
     }
