@@ -2740,7 +2740,6 @@ export default function App() {
           onToggleEnlargeCursor={() => handleUpdateDisplayPrefs({ enlargeCursor: !displayPrefs.enlargeCursor })}
           phase={phase}
           peer={peer}
-          detail={detail}
           decoderError={decoderError}
           display={display}
           viewMode={viewMode}
@@ -2748,7 +2747,6 @@ export default function App() {
           hand={hand}
           touchMode={touchMode}
           rightArmed={rightArmed}
-          softKeys={softKeys}
           viewOnly={displayPrefs.viewOnly}
           followRemoteCursor={displayPrefs.followRemoteCursor}
           onToggleFollowCursor={() => handleUpdateDisplayPrefs({ followRemoteCursor: !displayPrefs.followRemoteCursor })}
@@ -2806,7 +2804,6 @@ export default function App() {
             handleMobileRightClick();
             setMenuOpen(false);
           }}
-          onToggleKeyboard={toggleSoftKeyboard}
           onChangeQuality={(q, fps, nextCodec) => {
             setQuality(q);
             setTargetFps(fps);

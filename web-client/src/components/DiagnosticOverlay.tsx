@@ -122,6 +122,7 @@ export function DiagnosticOverlay({
       {/* Primary metrics grid */}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-2 text-[11px]">
         {([
+          ['statSize', stats.width && stats.height ? `${stats.width}×${stats.height}` : '—'],
           ['statCodec', stats.codec],
           ['statFps', stats.fps],
           ['statBitrate', formatBitrate(stats.bitrate)],

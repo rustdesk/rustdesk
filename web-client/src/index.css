@@ -645,7 +645,7 @@ button:focus-visible {
 /* 4-Tab Categorized Session Menu Strip */
 .rd-session-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border-radius: 10px;

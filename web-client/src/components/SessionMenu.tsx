@@ -32,7 +32,7 @@ export interface SessionStats {
   streamState: StreamActivityState;
 }
 
-type MenuTab = 'control' | 'input' | 'display' | 'session';
+type MenuTab = 'control' | 'input' | 'display';
 
 interface SessionMenuProps {
   locale: Locale;
@@ -49,7 +49,6 @@ interface SessionMenuProps {
   onToggleEnlargeCursor: () => void;
   phase: ConnectionPhase;
   peer: PeerMessage | null;
-  detail: string;
   decoderError: string;
   display: number;
   viewMode: ViewMode;
@@ -57,7 +56,6 @@ interface SessionMenuProps {
   hand: boolean;
   touchMode: boolean;
   rightArmed: boolean;
-  softKeys: boolean;
   viewOnly: boolean;
   followRemoteCursor: boolean;
   onToggleFollowCursor: () => void;
@@ -87,7 +85,6 @@ interface SessionMenuProps {
   onRefresh: () => void;
   onQuickKey: (name: 'Esc' | 'Tab' | 'Ctrl+C' | 'Ctrl+V' | 'Ctrl+Alt+Del' | 'Lock') => void;
   onRightClick: () => void;
-  onToggleKeyboard: () => void;
   onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec) => void;
   onSendClipboard: (text: string) => void;
 }
@@ -107,7 +104,6 @@ export function SessionMenu({
   onToggleEnlargeCursor,
   phase,
   peer,
-  detail,
   decoderError,
   display,
   viewMode,
@@ -115,7 +111,6 @@ export function SessionMenu({
   hand,
   touchMode,
   rightArmed,
-  softKeys,
   viewOnly,
   followRemoteCursor, onToggleFollowCursor, sizes, onResolution,
   showRemoteCursor,
@@ -142,7 +137,6 @@ export function SessionMenu({
   onRefresh,
   onQuickKey,
   onRightClick,
-  onToggleKeyboard,
   onChangeQuality,
   onSendClipboard,
 }: SessionMenuProps) {
@@ -181,7 +175,6 @@ export function SessionMenu({
     { id: 'control', label: t(locale, 'menuTabControl'), icon: <Sliders size={14} /> },
     { id: 'input', label: t(locale, 'menuTabInput'), icon: <Keyboard size={14} /> },
     { id: 'display', label: t(locale, 'menuTabDisplay'), icon: <Sparkles size={14} /> },
-    { id: 'session', label: t(locale, 'menuTabSession'), icon: <Activity size={14} /> },
   ];
 
   return (
@@ -239,7 +232,7 @@ export function SessionMenu({
           </div>
         </div>
 
-        {/* Categorized 4-Tab Bar */}
+        {/* Session tabs */}
         <div
           className="rd-session-tabs my-3"
           role="tablist"
@@ -264,7 +257,7 @@ export function SessionMenu({
         {/* Tab 1: Control (View, Displays, Input Mode, Quick Actions) */}
         {activeTab === 'control' && (
           <div className="flex flex-col gap-3.5" role="tabpanel">
-            {hasMultipleDisplays && (
+            {mobileLayout && hasMultipleDisplays && (
               <div className="session-group" data-testid="display-switcher">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="text-xs font-semibold text-[var(--ink-soft)]">
@@ -402,18 +395,22 @@ export function SessionMenu({
             </div>
 
             <div className="session-group flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="rd-btn"
-                data-testid="touch-mode"
-                onClick={onToggleTouchMode}
-              >
-                {touchMode ? t(locale, 'touch') : t(locale, 'mouse')}
-              </button>
-              <button type="button" className="rd-btn" onClick={onRefresh}>
-                <RefreshCw size={14} />
-                <span>{t(locale, 'refresh')}</span>
-              </button>
+              {!mobileLayout && (
+                <button
+                  type="button"
+                  className="rd-btn"
+                  data-testid="touch-mode"
+                  onClick={onToggleTouchMode}
+                >
+                  {touchMode ? t(locale, 'touch') : t(locale, 'mouse')}
+                </button>
+              )}
+              {mobileLayout && (
+                <button type="button" className="rd-btn" onClick={onRefresh}>
+                  <RefreshCw size={14} />
+                  <span>{t(locale, 'refresh')}</span>
+                </button>
+              )}
               <button
                 type="button"
                 className={`rd-btn${viewOnly ? ' active' : ''}`}
@@ -423,6 +420,13 @@ export function SessionMenu({
               >
                 {t(locale, 'optViewOnly')}
               </button>
+            </div>
+            <div className="session-group">
+              <label className="rd-check-row">
+                <input type="checkbox" checked={audioEnabled} onChange={onToggleAudio} />
+                <span>{t(locale, 'remoteAudio')}</span>
+              </label>
+              {audioIssue && <p role="alert" className="text-xs text-[var(--bad)]">{audioIssue}</p>}
             </div>
           </div>
         )}
@@ -435,50 +439,34 @@ export function SessionMenu({
                 {t(locale, 'input')}
               </div>
               <div className="flex flex-wrap gap-2" data-testid="quickbar">
-                {!mobileLayout && (
+                {mobileLayout && (
                   <>
-                    <button type="button" className="rd-btn" onClick={() => onQuickKey('Esc')}>
-                      Esc
+                    <button type="button" className="rd-btn" onClick={() => onQuickKey('Ctrl+C')}>
+                      Ctrl+C
                     </button>
-                    <button type="button" className="rd-btn" onClick={() => onQuickKey('Tab')}>
-                      Tab
+                    <button type="button" className="rd-btn" onClick={() => onQuickKey('Ctrl+V')}>
+                      Ctrl+V
+                    </button>
+                    <button
+                      type="button"
+                      className="rd-btn"
+                      onClick={() => onQuickKey('Ctrl+Alt+Del')}
+                    >
+                      Ctrl+Alt+Del
                     </button>
                   </>
                 )}
-                <button type="button" className="rd-btn" onClick={() => onQuickKey('Ctrl+C')}>
-                  Ctrl+C
-                </button>
-                <button type="button" className="rd-btn" onClick={() => onQuickKey('Ctrl+V')}>
-                  Ctrl+V
-                </button>
-                <button
-                  type="button"
-                  className="rd-btn"
-                  onClick={() => onQuickKey('Ctrl+Alt+Del')}
-                >
-                  Ctrl+Alt+Del
-                </button>
                 <button type="button" className="rd-btn" onClick={() => onQuickKey('Lock')}>
                   {t(locale, 'lockScreen')}
                 </button>
                 {!mobileLayout && (
-                  <>
-                    <button
-                      type="button"
-                      className={`rd-btn${rightArmed ? ' active' : ''}`}
-                      onClick={onRightClick}
-                    >
-                      {t(locale, touchMode ? 'dockArmRight' : 'dockRightAtCursor')}
-                    </button>
-                    <button
-                      type="button"
-                      className={`rd-btn${softKeys ? ' active' : ''}`}
-                      data-testid="keyboard"
-                      onClick={onToggleKeyboard}
-                    >
-                      {t(locale, 'keyboard')}
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    className={`rd-btn${rightArmed ? ' active' : ''}`}
+                    onClick={onRightClick}
+                  >
+                    {t(locale, touchMode ? 'dockArmRight' : 'dockRightAtCursor')}
+                  </button>
                 )}
               </div>
             </div>
@@ -552,6 +540,14 @@ export function SessionMenu({
                     {q.label}
                   </button>
                 ))}
+
+              </div>
+            </div>
+
+            <details className="session-group">
+              <summary className="cursor-pointer text-xs font-semibold">{t(locale, 'advancedQuality')}</summary>
+              <label className="rd-check-row">
+                <span>{t(locale, 'targetFps')}</span>
                 <select
                   className="rd-select rd-select-inline font-mono-tabular"
                   aria-label={t(locale, 'targetFps')}
@@ -563,11 +559,7 @@ export function SessionMenu({
                   <option value={30}>30 fps</option>
                   <option value={60}>60 fps</option>
                 </select>
-              </div>
-            </div>
-
-            <details className="session-group">
-              <summary className="cursor-pointer text-xs font-semibold">{t(locale, 'advancedQuality')}</summary>
+              </label>
               <div className="text-xs font-semibold text-[var(--ink-soft)] my-2">
                 {t(locale, 'sessionCodecLabel')}
               </div>
@@ -644,78 +636,6 @@ export function SessionMenu({
           </div>
         )}
 
-        {/* Tab 4: Session overview */}
-        {activeTab === 'session' && (
-          <div className="flex flex-col gap-3.5" role="tabpanel" data-testid="telemetry">
-            <div className="session-group grid grid-cols-3 gap-x-4 gap-y-2.5 text-xs">
-              <div>
-                <div className="text-[var(--ink-soft)]">{t(locale, 'statCodec')}</div>
-                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="codec">
-                  {stats.codec}
-                </div>
-              </div>
-              <div>
-                <div className="text-[var(--ink-soft)]">{t(locale, 'statSize')}</div>
-                <div
-                  className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5"
-                  data-testid="resolution"
-                >
-                  {stats.width > 0 && stats.height > 0 ? `${stats.width}×${stats.height}` : '—'}
-                </div>
-              </div>
-              <div>
-                <div className="text-[var(--ink-soft)]">{t(locale, 'statFps')}</div>
-                <div
-                  className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5 flex items-center gap-1.5"
-                  data-testid="fps"
-                  data-stream-state={stats.streamState}
-                  title={
-                    stats.streamState === 'idle'
-                      ? t(locale, 'statFpsIdleTip')
-                      : undefined
-                  }
-                >
-                  <span>{stats.fps}</span>
-                  {stats.streamState === 'idle' && (
-                    <span className="text-[10px] font-normal text-[var(--ink-soft)]">
-                      {t(locale, 'statFpsIdle')}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <div className="text-[var(--ink-soft)]">{t(locale, 'statRtt')}</div>
-                <div className="font-mono-tabular font-semibold text-[var(--ink)] mt-0.5" data-testid="delay">
-                  {displayRtt} ms
-                </div>
-              </div>
-            </div>
-
-            <div className="session-group">
-              <button
-                type="button"
-                className={`rd-btn${diagnosticsOpen ? ' active' : ''}`}
-                onClick={onToggleDiagnostics}
-              >
-                <Activity size={15} />
-                <span>{t(locale, 'diagTitle')}</span>
-              </button>
-            </div>
-
-            <div className="session-group">
-              <label className="rd-check-row">
-                <input type="checkbox" checked={audioEnabled} onChange={onToggleAudio} />
-                <span>{t(locale, 'remoteAudio')}</span>
-              </label>
-              {audioIssue && <p role="alert" className="text-xs text-[var(--bad)]">{audioIssue}</p>}
-            </div>
-
-            {detail && phase !== 'live' && (
-              <p className="m-0 text-xs text-[var(--ink-soft)]">{detail}</p>
-            )}
-          </div>
-        )}
-
         {decoderError && (
           <div
             className="mt-3 rounded-lg border border-[var(--rd-err-border)] bg-[var(--bad-bg)] px-3 py-2 text-xs text-[var(--bad)] leading-relaxed"
@@ -728,6 +648,14 @@ export function SessionMenu({
 
         {/* Persistent Footer: Switch Connection + Disconnect */}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3.5 border-t border-[var(--rd-divider)]">
+          <button
+            type="button"
+            className={`rd-btn${diagnosticsOpen ? ' active' : ''}`}
+            onClick={onToggleDiagnostics}
+          >
+            <Activity size={15} />
+            <span>{t(locale, 'diagTitle')}</span>
+          </button>
           <button type="button" className="rd-btn" onClick={onOpenConnection}>
             {t(locale, 'connection')}
           </button>
