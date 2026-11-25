@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:desktop_multi_window/experimental_windowing.dart';
 import 'package:flutter/material.dart';
@@ -26,7 +27,7 @@ Widget? mountWindowingPreview(Widget mainWindow, List<String> arguments) {
       final payload = jsonDecode(arguments) as Map<String, dynamic>;
       if (payload['type'] == WindowType.FileTransfer.index) return true;
       return payload['type'] == WindowType.PortForward.index &&
-          payload['isRDP'] != true;
+          (Platform.isWindows || payload['isRDP'] != true);
     },
     builder: (window) {
       if (window.windowId == 0) return mainWindow;

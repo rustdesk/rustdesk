@@ -138,15 +138,16 @@ The Windows x64 and macOS arm64 preview jobs use the pinned Flutter SDK and appl
 `.github/patches/apply_flutter_3.50_source_patches.sh`. That script selects the
 local plugin and installs the preview bootstrap. Build with
 `FLUTTER_WINDOWING=true` and launch RustDesk with `--experimental-windowing` to
-route TCP forwarding sessions through official child windows in the main
-engine. RDP and other session types still use the original native plugin.
-The preview retains the runner's primary FlutterView and uses native title
-bars for the new TCP forwarding windows.
+route TCP forwarding and file transfer sessions through official child windows
+in the main engine. The Windows preview also routes RustDesk's RDP forwarding
+window through that backend. Remote desktop, camera and terminal sessions still
+use the original plugin. The preview retains the runner's primary FlutterView
+and uses native title bars for the official session windows.
 
-The Windows client CI smoke test invokes the real TCP forwarding launch
-path with a loopback address and checks that the same RustDesk process owns
-a visible `FLUTTER_HOST_WINDOW`. The test uses a loopback address to exercise
-window creation and does not require a successful peer connection.
+The Windows client CI smoke tests open a forwarding window and a file transfer
+window in the same RustDesk process. They exercise both the TCP and RDP launch
+paths and check for two visible `FLUTTER_HOST_WINDOW` windows and a live process.
+The tests use loopback addresses and do not require a successful peer connection.
 
 ## Upstream acceptance
 

@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory)] [string]$Executable,
-  [ValidateSet('port-forward', 'file-transfer')] [string]$Session = 'port-forward',
+  [ValidateSet('port-forward', 'file-transfer', 'rdp')] [string]$Session = 'port-forward',
   [switch]$AlsoOpenFileTransfer
 )
 
@@ -40,7 +40,7 @@ try {
   }
   Write-Output "RustDesk opened HWND $($official.handle) of class $($official.className)."
   if ($AlsoOpenFileTransfer) {
-    if ($Session -ne 'port-forward') { throw 'Start with a TCP forwarding window.' }
+    if ($Session -eq 'file-transfer') { throw 'Start with a TCP forwarding or RDP window.' }
     $second = Start-Process -FilePath $exe -WorkingDirectory $options.WorkingDirectory -WindowStyle Hidden -PassThru -ArgumentList @('--file-transfer', '127.0.0.1:2')
     try {
       $deadline = (Get-Date).AddSeconds(40)
