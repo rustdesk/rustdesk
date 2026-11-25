@@ -170,6 +170,18 @@ pub(crate) fn is_allowed_service_peer_uid(peer_uid: u32, active_uid: Option<u32>
     peer_uid == 0 || active_uid.is_some_and(|uid| uid == peer_uid)
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[inline]
+fn is_allowed_unix_main_peer_uid(peer_uid: Option<u32>, server_uid: u32) -> bool {
+    peer_uid == Some(0) || peer_uid == Some(server_uid)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+pub(super) fn verify_service_uid(peer_uid: Option<u32>) -> hbb_common::ResultType<()> {
+    hbb_common::anyhow::ensure!(peer_uid == Some(0), "Unix IPC service peer is not root");
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 #[inline]
 fn console_owner_uid() -> Option<u32> {
@@ -520,6 +532,15 @@ pub(crate) fn ensure_peer_executable_matches_current_by_fd(
 const UNAUTHORIZED_IPC_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(super) fn log_rejected_sync_client(error: anyhow::Error) {
+    hbb_common::throttled_log!(
+        UNAUTHORIZED_IPC_LOG_INTERVAL,
+        warn,
+        "Rejected service sync client: {error}"
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[inline]
 fn log_rejected_service_connection(postfix: &str, peer_uid: Option<u32>, active_uid: Option<u32>) {
     hbb_common::throttled_log!(
@@ -570,6 +591,26 @@ pub(crate) fn log_rejected_windows_ipc_connection(
         peer_is_system,
         peer_is_elevated
     );
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) fn authorize_unix_main_ipc_connection(stream: &Connection) -> bool {
+    let peer_uid = stream.peer_uid();
+    let server_uid = unsafe { libc::geteuid() };
+    if is_allowed_unix_main_peer_uid(peer_uid, server_uid)
+        && (peer_uid == Some(0)
+            || !crate::platform::is_installed()
+            || ensure_peer_executable_matches_current_by_pid_opt(stream.peer_pid(), "").is_ok())
+    {
+        return true;
+    }
+    hbb_common::throttled_log!(
+        UNAUTHORIZED_IPC_LOG_INTERVAL,
+        warn,
+        "Rejected Unix main IPC connection: peer_uid={peer_uid:?}, server_uid={server_uid}, peer_pid={:?}",
+        stream.peer_pid()
+    );
+    false
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -871,6 +912,26 @@ impl ConnectionTmpl<parity_tokio_ipc::Connection> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn service_client_requires_a_root_server() {
+        assert!(super::verify_service_uid(Some(0)).is_ok());
+        assert!(super::verify_service_uid(Some(1000)).is_err());
+        assert!(super::verify_service_uid(None).is_err());
+    }
+
+    #[test]
+    fn test_unix_main_peer_uid_policy() {
+        use super::is_allowed_unix_main_peer_uid;
+
+        assert!(is_allowed_unix_main_peer_uid(Some(0), 0));
+        assert!(!is_allowed_unix_main_peer_uid(Some(501), 0));
+        assert!(!is_allowed_unix_main_peer_uid(None, 0));
+        assert!(is_allowed_unix_main_peer_uid(Some(0), 501));
+        assert!(is_allowed_unix_main_peer_uid(Some(501), 501));
+        assert!(!is_allowed_unix_main_peer_uid(Some(502), 501));
+        assert!(!is_allowed_unix_main_peer_uid(None, 501));
+    }
+
     #[test]
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn test_service_peer_uid_policy() {

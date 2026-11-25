@@ -1,5 +1,8 @@
 #[path = "ipc/auth.rs"]
 mod ipc_auth;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "ipc/unix_credentials.rs"]
+pub(crate) mod unix_credentials;
 #[cfg(windows)]
 #[path = "ipc/windows.rs"]
 mod ipc_windows;
@@ -57,7 +60,9 @@ pub(crate) use ipc_auth::ensure_peer_executable_matches_current_by_pid_opt;
 #[cfg(windows)]
 pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use ipc_auth::{active_uid, authorize_service_scoped_ipc_connection};
+use ipc_auth::{
+    active_uid, authorize_service_scoped_ipc_connection, authorize_unix_main_ipc_connection,
+};
 #[cfg(target_os = "macos")]
 use ipc_auth::authorize_user_server_process;
 #[cfg(windows)]
@@ -145,12 +150,10 @@ pub async fn connect_service(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnC
 pub(crate) async fn connect_trusted_device_service(
     ms_timeout: u64,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
-    let connection = connect_service(ms_timeout)
+    let connection = connect_with_path(ms_timeout, &Config::ipc_path(crate::POSTFIX_SERVICE))
         .await
         .map_err(crate::trusted_devices::authority::Unavailable)?;
-    if connection.peer_uid() != Some(0) {
-        bail!("Trusted-device system service is not an authenticated root peer");
-    }
+    ipc_auth::verify_service_uid(connection.peer_uid())?;
     Ok(connection)
 }
 
@@ -632,6 +635,10 @@ pub(crate) async fn start_with_listener(postfix: &str, mut incoming: Incoming) {
                             continue;
                         }
                     }
+                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                    if postfix.is_empty() && !authorize_unix_main_ipc_connection(&stream) {
+                        continue;
+                    }
                     #[cfg(windows)]
                     if postfix.is_empty() {
                         // Windows main IPC (`postfix == ""`) is authorized here.
@@ -664,6 +671,10 @@ pub(crate) async fn start_with_listener(postfix: &str, mut incoming: Incoming) {
                                     #[cfg(any(target_os = "linux", target_os = "macos"))]
                                     if postfix == crate::POSTFIX_SERVICE {
                                         if matches!(&data, Data::SyncConfig(_)) {
+                                            if let Err(err) = unix_credentials::verify_sync_client(&stream).await {
+                                                ipc_auth::log_rejected_sync_client(err);
+                                                break;
+                                            }
                                             handle(data, &mut stream).await;
                                         } else {
                                             log::warn!(
@@ -1568,13 +1579,15 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
     }
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
+        if postfix == crate::POSTFIX_SERVICE {
+            return connect_trusted_device_service(ms_timeout).await;
+        }
         let use_user_main_ipc = USE_USER_MAIN_IPC.with(|use_user_main| use_user_main.get());
         let is_root_main_ipc =
             unsafe { hbb_common::libc::geteuid() == 0 } && postfix.is_empty() && use_user_main_ipc;
         if is_root_main_ipc {
             let uid = user_main_ipc_server_uid()?;
-            let path = Config::ipc_path_for_uid(uid, postfix);
-            return connect_with_path(ms_timeout, &path).await;
+            return unix_credentials::verified_main(ms_timeout, uid).await;
         }
         let path = Config::ipc_path(postfix);
         return connect_with_path(ms_timeout, &path).await;
@@ -1592,6 +1605,9 @@ pub async fn connect_for_uid(
     uid: u32,
     postfix: &str,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
+    if postfix == crate::POSTFIX_SERVICE {
+        return connect_trusted_device_service(ms_timeout).await;
+    }
     let path = Config::ipc_path_for_uid(uid, postfix);
     let conn = connect_with_path(ms_timeout, &path).await?;
     #[cfg(target_os = "macos")]
