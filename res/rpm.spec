@@ -57,6 +57,10 @@ case "$1" in
   2)
     # for upgrade
     systemctl stop rustdesk || true
+    for pid in $(pgrep -fx '([^ ]*/)?rustdesk( rustdesk://[^ ]*)?'); do
+        [ "/proc/$pid/exe" -ef /usr/bin/rustdesk ] || continue
+        kill -TERM "$pid" || [ ! -d "/proc/$pid" ] || exit 1
+    done
   ;;
 esac
 
