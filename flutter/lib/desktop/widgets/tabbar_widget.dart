@@ -624,6 +624,7 @@ class _DesktopTabState extends State<DesktopTab>
       children: [
         Expanded(
             child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 // custom double tap handler
                 onTap: !hasNativeTitleBar && !isIncomingHomePage && showMaximize
                     ? () {

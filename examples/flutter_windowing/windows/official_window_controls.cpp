@@ -191,7 +191,10 @@ void RegisterOfficialWindowControls(FlutterDesktopPluginRegistrarRef registrar) 
       }
     } else if (method == "startDragging" || method == "startResizing") {
       POINT cursor{};
-      WPARAM hit = HTCAPTION;
+      // A drag from Flutter's tab strip starts in the client area. Request
+      // the move directly so Flutter's host cannot re-hit-test it as HTCLIENT.
+      UINT message = WM_SYSCOMMAND;
+      WPARAM command = SC_MOVE | HTCAPTION;
       if (method == "startResizing") {
         // Ordered like SubWindowResizeEdge on the Dart side.
         constexpr std::array<WPARAM, 8> edges = {
@@ -202,7 +205,8 @@ void RegisterOfficialWindowControls(FlutterDesktopPluginRegistrarRef registrar) 
           result->Error("invalid_argument", "Expected a window resize edge");
           return;
         }
-        hit = edges[static_cast<size_t>(edge)];
+        message = WM_NCLBUTTONDOWN;
+        command = edges[static_cast<size_t>(edge)];
       }
       if (!GetCursorPos(&cursor)) {
         result->Error("win32_error", "Could not read the pointer position");
@@ -211,7 +215,7 @@ void RegisterOfficialWindowControls(FlutterDesktopPluginRegistrarRef registrar) 
       ReleaseCapture();
       // Post the native gesture so the modal move/resize loop cannot block
       // the response to Dart on the platform thread.
-      if (!PostMessage(hwnd, WM_NCLBUTTONDOWN, hit,
+      if (!PostMessage(hwnd, message, command,
                        MAKELPARAM(cursor.x, cursor.y))) {
         result->Error("win32_error", "Could not start the native window gesture");
         return;
