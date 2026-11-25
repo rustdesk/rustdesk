@@ -31,7 +31,7 @@ pub struct DrmDisplayInfo {
 
 /// Mirrors `scrap::drm_reader::drmtap_dmabuf_desc` except `dma_buf_fd` (never serializes — it rides
 /// SCM_RIGHTS ancillary), and adds `buffer_id` (fb_id tagged with a per-connection epoch; no consumer reads it today) and `has_fd`.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct DmabufDesc {
     pub buffer_id: u64,
     pub width: u32,
@@ -64,6 +64,10 @@ pub struct DmabufDesc {
     /// capture worker; the consumer only acts on a position that held still for several frames.
     #[serde(default)]
     pub cursor_pos: Option<(i32, i32)>,
+    /// Non-empty: a libdrmtap 0.6 packet (every lit plane of the CRTC, opaque) that replaces the
+    /// geometry fields above, and every fd of this message belongs to it, in order.
+    #[serde(default)]
+    pub packet: Vec<u8>,
 }
 
 pub(crate) fn drm_ipc_path() -> String {
@@ -109,10 +113,10 @@ fn new_drm_listener() -> ResultType<Incoming> {
 enum DrmProducerMsg {
     /// Enumerated displays, sent once before any frame.
     Displays(Vec<DrmDisplayInfo>),
-    /// Zero-copy path: descriptor + scanout fd; the `OwnedFd` is closed once the send has dup'd it.
+    /// Zero-copy path: descriptor + scanout fd(s); the `OwnedFd`s are closed once the send has dup'd them.
     Frame {
         desc: DmabufDesc,
-        fd: Option<OwnedFd>,
+        fds: Vec<OwnedFd>,
     },
     /// CPU-mapped fallback (packed BGRA): consumer has no convert context (`need_cpu`), or ENOTSUP.
     FrameCpu {
@@ -167,6 +171,7 @@ mod cursor_pos_tests {
             has_fd: false,
             plane_rotation: None,
             cursor_pos: None,
+            packet: Vec::new(),
         }
     }
 
@@ -189,7 +194,7 @@ mod cursor_pos_tests {
         let visible = snapshot(7);
         let hidden = snapshot(scrap::drm_reader::HIDDEN_CURSOR_ID);
 
-        let mut frame = DrmProducerMsg::Frame { desc: desc(), fd: None };
+        let mut frame = DrmProducerMsg::Frame { desc: desc(), fds: vec![] };
         stamp_cursor_pos(&mut frame, Some(&visible));
         assert!(matches!(&frame, DrmProducerMsg::Frame { desc, .. } if desc.cursor_pos == Some((10, 20))));
         stamp_cursor_pos(&mut frame, Some(&hidden));
@@ -1125,17 +1130,16 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             continue;
         }
         match latest_frame {
-            Some(DrmProducerMsg::Frame { mut desc, fd }) => {
+            Some(DrmProducerMsg::Frame { mut desc, fds }) => {
                 // Every exported frame carries its fd: the kernel can recycle an fb_id onto another
                 // buffer with the same geometry/modifier and this side cannot see the dma-buf inode
                 // that would tell the difference, so eliding it can serve a stale EGLImage. libdrmtap's
                 // import cache keys on fb_id AND inode, and can only re-import when handed a real fd.
-                let send_fd = fd.is_some();
-                desc.has_fd = send_fd;
-                let borrowed = if send_fd { fd.as_ref().map(|f| f.as_fd()) } else { None };
-                conn.send_msg(&Data::DrmFrameDmabuf(desc), borrowed).await?;
+                desc.has_fd = !fds.is_empty();
+                let borrowed: Vec<BorrowedFd> = fds.iter().map(|f| f.as_fd()).collect();
+                conn.send_msg_fds(&Data::DrmFrameDmabuf(desc), &borrowed).await?;
                 credit -= 1; // one frame in flight until the consumer acks it
-                // `fd` (OwnedFd) is closed here whether or not it was attached (the cmsg dup'd it
+                // `fds` (OwnedFd) are closed here whether or not attached (the cmsg dup'd them
                 // into the peer), which bounds our fd usage to ~1 in flight per frame.
             }
             Some(DrmProducerMsg::FrameCpu {
@@ -1333,6 +1337,17 @@ fn drm_capture_worker(
             // `stalled` is left untouched because the device is healthy -- the task bounds this
             // state itself (CREDIT_STALL) since our watchdog cannot advance.
             None
+        } else if use_dmabuf && reader.has_packet() {
+            // libdrmtap 0.6 on both ends (one deb): the packet also carries a window the compositor
+            // put on its own plane, which one descriptor cannot.
+            Some(reader.grab_packet().map(|(packet, fds)| DrmProducerMsg::Frame {
+                desc: DmabufDesc {
+                    plane_rotation: reader.plane_rotation(),
+                    packet,
+                    ..Default::default()
+                },
+                fds,
+            }))
         } else if use_dmabuf {
             // Read right after the grab: the library answers for the plane that grab read from.
             Some(match reader.grab_desc() {
@@ -1352,8 +1367,9 @@ fn drm_capture_worker(
                         has_fd: true, // every exported frame carries its fd; see the send below
                         plane_rotation: reader.plane_rotation(),
                         cursor_pos: None, // stamped below, from the one cursor read of this tick
+                        packet: Vec::new(),
                     },
-                    fd: Some(fd),
+                    fds: vec![fd],
                 }),
                 Err(err) => Err(err),
             })
@@ -1504,17 +1520,19 @@ const DRM_BODY_TIMEOUT_MS: u64 = 5_000;
 const DRM_SEND_TIMEOUT_MS: u64 = 5_000;
 
 const MAX_DRM_RAW_BYTES: usize = 512 * 1024 * 1024;
-/// `CMSG_SPACE(sizeof(int))` is 24 bytes on our targets; 64 gives headroom and the `align(8)`
-/// matches `cmsghdr` alignment.
-const DRM_CMSG_CAP: usize = 64;
+/// Most fds one message carries: the 16 of a libdrmtap packet.
+const DRM_MAX_FDS: usize = 16;
+/// `CMSG_SPACE` of `DRM_MAX_FDS` ints is 80 bytes on our targets; 128 gives headroom and the
+/// `align(8)` matches `cmsghdr` alignment. More fds than fit truncate (MSG_CTRUNC) and are refused.
+const DRM_CMSG_CAP: usize = 128;
 
 /// Aligned storage for the SCM_RIGHTS control buffer (`msg_control` must be `cmsghdr`-aligned).
 #[repr(align(8))]
 struct DrmCmsgBuf([u8; DRM_CMSG_CAP]);
 
-/// One non-blocking `sendmsg`; the cmsg is attached ONLY when a fd is present (-1 fails the call).
-/// SAFETY: `fd` a valid open socket fd, `buf` a readable slice, `pass_fd` (if any) a valid open fd.
-unsafe fn drm_sendmsg(fd: RawFd, buf: &[u8], pass_fd: Option<RawFd>) -> std::io::Result<usize> {
+/// One non-blocking `sendmsg`; the cmsg is attached ONLY when fds are present (-1 fails the call).
+/// SAFETY: `fd` a valid open socket fd, `buf` a readable slice, every `pass_fds` entry a valid open fd.
+unsafe fn drm_sendmsg(fd: RawFd, buf: &[u8], pass_fds: &[RawFd]) -> std::io::Result<usize> {
     use hbb_common::libc;
     let mut iov = libc::iovec {
         iov_base: buf.as_ptr() as *mut libc::c_void,
@@ -1524,9 +1542,13 @@ unsafe fn drm_sendmsg(fd: RawFd, buf: &[u8], pass_fd: Option<RawFd>) -> std::io:
     msg.msg_iov = &mut iov;
     msg.msg_iovlen = 1;
     let mut cbuf = DrmCmsgBuf([0u8; DRM_CMSG_CAP]);
-    if let Some(sfd) = pass_fd {
+    if pass_fds.len() > DRM_MAX_FDS {
+        return Err(std::io::ErrorKind::InvalidInput.into()); // they would overflow `cbuf`
+    }
+    if !pass_fds.is_empty() {
+        let fds_len = (pass_fds.len() * std::mem::size_of::<libc::c_int>()) as u32;
         msg.msg_control = cbuf.0.as_mut_ptr() as *mut libc::c_void;
-        msg.msg_controllen = libc::CMSG_SPACE(std::mem::size_of::<libc::c_int>() as u32) as _;
+        msg.msg_controllen = libc::CMSG_SPACE(fds_len) as _;
         let cmsg = libc::CMSG_FIRSTHDR(&msg);
         if cmsg.is_null() {
             return Err(std::io::Error::new(
@@ -1536,12 +1558,11 @@ unsafe fn drm_sendmsg(fd: RawFd, buf: &[u8], pass_fd: Option<RawFd>) -> std::io:
         }
         (*cmsg).cmsg_level = libc::SOL_SOCKET;
         (*cmsg).cmsg_type = libc::SCM_RIGHTS;
-        (*cmsg).cmsg_len = libc::CMSG_LEN(std::mem::size_of::<libc::c_int>() as u32) as _;
-        let sfd_c: libc::c_int = sfd;
+        (*cmsg).cmsg_len = libc::CMSG_LEN(fds_len) as _;
         std::ptr::copy_nonoverlapping(
-            &sfd_c as *const libc::c_int as *const u8,
+            pass_fds.as_ptr() as *const u8,
             libc::CMSG_DATA(cmsg),
-            std::mem::size_of::<libc::c_int>(),
+            fds_len as usize,
         );
     }
     let n = libc::sendmsg(fd, &msg, libc::MSG_NOSIGNAL);
@@ -1552,9 +1573,9 @@ unsafe fn drm_sendmsg(fd: RawFd, buf: &[u8], pass_fd: Option<RawFd>) -> std::io:
     }
 }
 
-/// One non-blocking `recvmsg`: keeps at most one SCM_RIGHTS fd (surplus closed), rejects MSG_CTRUNC.
+/// One non-blocking `recvmsg`: keeps the SCM_RIGHTS fds in order, rejects MSG_CTRUNC.
 /// SAFETY: `fd` must be a valid open socket fd; `buf` a valid writable slice.
-unsafe fn drm_recvmsg(fd: RawFd, buf: &mut [u8]) -> std::io::Result<(usize, Option<OwnedFd>)> {
+unsafe fn drm_recvmsg(fd: RawFd, buf: &mut [u8]) -> std::io::Result<(usize, Vec<OwnedFd>)> {
     use hbb_common::libc;
     let mut iov = libc::iovec {
         iov_base: buf.as_mut_ptr() as *mut libc::c_void,
@@ -1570,7 +1591,7 @@ unsafe fn drm_recvmsg(fd: RawFd, buf: &mut [u8]) -> std::io::Result<(usize, Opti
     if n < 0 {
         return Err(std::io::Error::last_os_error());
     }
-    let mut got: Option<OwnedFd> = None;
+    let mut got: Vec<OwnedFd> = Vec::new();
     let mut cmsg = libc::CMSG_FIRSTHDR(&msg);
     while !cmsg.is_null() {
         if (*cmsg).cmsg_level == libc::SOL_SOCKET && (*cmsg).cmsg_type == libc::SCM_RIGHTS {
@@ -1586,10 +1607,7 @@ unsafe fn drm_recvmsg(fd: RawFd, buf: &mut [u8]) -> std::io::Result<(usize, Opti
                     std::mem::size_of::<libc::c_int>(),
                 );
                 if rawfd >= 0 {
-                    let owned = OwnedFd::from_raw_fd(rawfd);
-                    if got.is_none() {
-                        got = Some(owned);
-                    } // else: surplus fd, dropped here -> closed
+                    got.push(OwnedFd::from_raw_fd(rawfd));
                 }
             }
         }
@@ -1608,7 +1626,7 @@ unsafe fn drm_recvmsg(fd: RawFd, buf: &mut [u8]) -> std::io::Result<(usize, Opti
 async fn drm_write_all(
     stream: &tokio::net::UnixStream,
     mut buf: &[u8],
-    mut pass_fd: Option<RawFd>,
+    mut pass_fds: &[RawFd],
 ) -> ResultType<()> {
     // ONE deadline for the whole write: arming it per readiness wait lets a dripping peer re-arm it.
     let deadline =
@@ -1623,13 +1641,13 @@ async fn drm_write_all(
         }
         let raw = stream.as_raw_fd();
         let chunk = buf;
-        let fd_now = pass_fd;
+        let fds_now = pass_fds;
         match stream.try_io(tokio::io::Interest::WRITABLE, || unsafe {
-            drm_sendmsg(raw, chunk, fd_now)
+            drm_sendmsg(raw, chunk, fds_now)
         }) {
             Ok(0) => bail!("drm: socket write returned 0 (peer closed)"),
             Ok(n) => {
-                pass_fd = None; // ancillary delivered with these bytes; do not re-send it
+                pass_fds = &[]; // ancillary delivered with these bytes; do not re-send it
                 buf = &buf[n..];
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
@@ -1642,14 +1660,14 @@ async fn drm_write_all(
 async fn drm_send_frame(
     stream: &tokio::net::UnixStream,
     payload: &[u8],
-    pass_fd: Option<RawFd>,
+    pass_fds: &[RawFd],
 ) -> ResultType<()> {
     if payload.len() > u32::MAX as usize {
         bail!("drm: frame too large ({} bytes)", payload.len());
     }
     let prefix = (payload.len() as u32).to_be_bytes();
-    drm_write_all(stream, &prefix, pass_fd).await?;
-    drm_write_all(stream, payload, None).await?;
+    drm_write_all(stream, &prefix, pass_fds).await?;
+    drm_write_all(stream, payload, &[]).await?;
     Ok(())
 }
 
@@ -1658,14 +1676,14 @@ async fn drm_read_full(
     buf: &mut [u8],
     want_cmsg: bool,
     progress: &mut bool,
-) -> ResultType<Option<OwnedFd>> {
+) -> ResultType<Vec<OwnedFd>> {
     use hbb_common::libc;
     let mut off = 0usize;
-    let mut got: Option<OwnedFd> = None;
+    let mut got: Vec<OwnedFd> = Vec::new();
     while off < buf.len() {
         stream.readable().await?;
         let raw = stream.as_raw_fd();
-        let use_cmsg = want_cmsg && got.is_none();
+        let use_cmsg = want_cmsg && got.is_empty();
         let n = {
             let dst: &mut [u8] = &mut buf[off..];
             match stream.try_io(tokio::io::Interest::READABLE, move || unsafe {
@@ -1676,16 +1694,14 @@ async fn drm_read_full(
                     if m < 0 {
                         Err(std::io::Error::last_os_error())
                     } else {
-                        Ok((m as usize, None))
+                        Ok((m as usize, Vec::new()))
                     }
                 }
             }) {
                 Ok((0, _fd)) => bail!("drm: socket closed by peer"),
-                Ok((m, fd)) => {
-                    if let Some(f) = fd {
-                        if got.is_none() {
-                            got = Some(f);
-                        }
+                Ok((m, fds)) => {
+                    if got.is_empty() {
+                        got = fds;
                     }
                     m
                 }
@@ -1712,9 +1728,13 @@ impl DrmConn {
     }
 
     pub async fn send_msg(&mut self, data: &Data, fd: Option<BorrowedFd<'_>>) -> ResultType<()> {
+        self.send_msg_fds(data, fd.as_slice()).await
+    }
+
+    pub async fn send_msg_fds(&mut self, data: &Data, fds: &[BorrowedFd<'_>]) -> ResultType<()> {
         let payload = serde_json::to_vec(data)?;
-        let pass_fd = fd.map(|f| f.as_raw_fd());
-        drm_send_frame(&self.stream, &payload, pass_fd).await
+        let pass_fds: Vec<RawFd> = fds.iter().map(|f| f.as_raw_fd()).collect();
+        drm_send_frame(&self.stream, &payload, &pass_fds).await
     }
 
     pub async fn send_frame_ack(&self, demand_fps: u8) -> ResultType<()> {
@@ -1764,7 +1784,7 @@ impl DrmConn {
         Ok(())
     }
 
-    pub async fn recv_msg(&mut self) -> ResultType<(Data, Option<OwnedFd>)> {
+    pub async fn recv_msg(&mut self) -> ResultType<(Data, Vec<OwnedFd>)> {
         self.consumed = false;
         let mut prefix = [0u8; 4];
         let fd = drm_read_full(&self.stream, &mut prefix, true, &mut self.consumed).await?;
@@ -1785,7 +1805,7 @@ impl DrmConn {
     pub async fn recv_msg_timeout2(
         &mut self,
         ms_timeout: u64,
-    ) -> Option<ResultType<(Data, Option<OwnedFd>)>> {
+    ) -> Option<ResultType<(Data, Vec<OwnedFd>)>> {
         let ready = timeout(ms_timeout, self.stream.readable()).await;
         match ready {
             Err(_) => None, // no frame started: clean boundary, caller re-checks `stop`
@@ -1801,7 +1821,7 @@ impl DrmConn {
     }
 
     pub async fn send_raw(&mut self, data: Bytes) -> ResultType<()> {
-        drm_send_frame(&self.stream, &data, None).await
+        drm_send_frame(&self.stream, &data, &[]).await
     }
 
     pub async fn next_raw_into(&mut self, out: &mut Vec<u8>) -> ResultType<()> {
@@ -1815,9 +1835,9 @@ impl DrmConn {
 
     async fn next_raw_into_unbounded(&mut self, out: &mut Vec<u8>) -> ResultType<()> {
         let mut prefix = [0u8; 4];
-        if drm_read_full(&self.stream, &mut prefix, true, &mut self.consumed)
+        if !drm_read_full(&self.stream, &mut prefix, true, &mut self.consumed)
             .await?
-            .is_some()
+            .is_empty()
         {
             log::warn!("drm: unexpected fd on a raw-body frame; dropping");
         }
@@ -1901,7 +1921,7 @@ mod drm_conn_tests {
             .await
             .unwrap();
         let (_data, fd) = rx.recv_msg().await.unwrap();
-        let recv_fd = fd.expect("an fd was attached, it must be received");
+        let recv_fd = fd.into_iter().next().expect("an fd was attached, it must be received");
         let sentinel = [0xABu8];
         assert_eq!(
             unsafe { libc::write(wr.as_raw_fd(), sentinel.as_ptr() as *const libc::c_void, 1) },
@@ -1913,6 +1933,27 @@ mod drm_conn_tests {
             1
         );
         assert_eq!(got[0], 0xAB, "received fd must be the same pipe");
+    }
+
+    #[tokio::test]
+    async fn a_packet_frame_carries_its_bytes_and_every_fd_in_order() {
+        let (a, b) = tokio::net::UnixStream::pair().unwrap();
+        let mut tx = DrmConn::new(a);
+        let mut rx = DrmConn::new(b);
+        let pipes: Vec<(OwnedFd, OwnedFd)> = (0..3).map(|_| pipe()).collect();
+        let read_ends: Vec<_> = pipes.iter().map(|(r, _)| r.as_fd()).collect();
+        let desc = DmabufDesc { packet: vec![1, 2, 3, 250], ..Default::default() };
+        tx.send_msg_fds(&Data::DrmFrameDmabuf(desc), &read_ends).await.unwrap();
+        let (data, fds) = rx.recv_msg().await.unwrap();
+        assert!(matches!(data, Data::DrmFrameDmabuf(d) if d.packet == [1, 2, 3, 250]));
+        assert_eq!(fds.len(), 3);
+        for (i, ((_, wr), fd)) in pipes.iter().zip(&fds).enumerate() {
+            let b = [i as u8];
+            assert_eq!(unsafe { libc::write(wr.as_raw_fd(), b.as_ptr() as *const libc::c_void, 1) }, 1);
+            let mut got = [9u8; 1];
+            assert_eq!(unsafe { libc::read(fd.as_raw_fd(), got.as_mut_ptr() as *mut libc::c_void, 1) }, 1);
+            assert_eq!(got[0], i as u8, "fd {i} must be the pipe sent at index {i}");
+        }
     }
 
     #[tokio::test]

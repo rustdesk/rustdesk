@@ -170,6 +170,36 @@ impl RenderConverter {
             Ok((data, w, h, pixfmt))
         }
     }
+
+    /// Composes a packet from `DrmReader::grab_packet` into one CRTC-sized frame; libdrmtap checks
+    /// the bytes and every fd before it uses them. Same output contract as `convert()`.
+    pub fn convert_packet(&mut self, bytes: &[u8], fds: &[RawFd]) -> io::Result<(&[u8], u32, u32, Pixfmt)> {
+        let Some((_, _, convert)) = self.lib.packet else {
+            return Err(io::Error::new(io::ErrorKind::Other, "drm: libdrmtap has no packet API"));
+        };
+        // SAFETY: self.ctx is a valid render context; `bytes` and `fds` are only read during the
+        // call; `frame` is zeroed and libdrmtap owns its pixels, as in `convert()`.
+        unsafe {
+            let mut frame: drmtap_frame_info = std::mem::zeroed();
+            let ret = convert(self.ctx, bytes.as_ptr(), bytes.len(), fds.as_ptr(), fds.len(), &mut frame);
+            let (w, h, stride) = (frame.width, frame.height, frame.stride as usize);
+            let len = stride.checked_mul(h as usize).unwrap_or(0);
+            // As in `convert()`: a stride below 32bpp or a size past the cap reads outside the frame.
+            let ok = ret == 0 && !frame.data.is_null() && w > 0 && w <= MAX_DIM && h <= MAX_DIM
+                && stride >= w as usize * 4 && len > 0 && len <= MAX_FRAME_BYTES;
+            let pixfmt = match frame.format {
+                DRM_FORMAT_XRGB8888 | DRM_FORMAT_ARGB8888 if ok => Pixfmt::BGRA,
+                DRM_FORMAT_XBGR8888 | DRM_FORMAT_ABGR8888 if ok => Pixfmt::RGBA,
+                other => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("drmtap_convert_packet: ret {ret}, frame {w}x{h} stride {stride} fourcc {other:#010x}"),
+                    ))
+                }
+            };
+            Ok((std::slice::from_raw_parts(frame.data as *const u8, len), w, h, pixfmt))
+        }
+    }
 }
 
 impl Drop for RenderConverter {

@@ -2,7 +2,7 @@
 
 use super::drmtap_dl::{
     self, drmtap_config, drmtap_ctx, drmtap_cursor_info, drmtap_device, drmtap_display,
-    drmtap_dmabuf_desc, drmtap_frame_info, DrmtapLib,
+    drmtap_dmabuf_desc, drmtap_frame_info, drmtap_packet, DrmtapLib,
 };
 use hbb_common::log;
 use std::ffi::CString;
@@ -663,6 +663,44 @@ impl DrmReader {
             desc.num_planes = planes;
             desc.dma_buf_fd = -1;
             Ok((owned, desc))
+        }
+    }
+
+    pub fn has_packet(&self) -> bool {
+        self.lib.packet.is_some()
+    }
+
+    /// libdrmtap 0.6 packet grab: every lit plane of the CRTC, so also a window the compositor
+    /// put on an overlay or underlay plane, as opaque bytes plus a CLOEXEC dup of each of its
+    /// read-only dma-buf fds, in order. Errors map like `grab_desc`. Needs `has_packet()`.
+    pub fn grab_packet(&mut self) -> io::Result<(Vec<u8>, Vec<OwnedFd>)> {
+        let Some((grab, release, _)) = self.lib.packet else {
+            return Err(io::ErrorKind::Unsupported.into());
+        };
+        use hbb_common::libc;
+        // SAFETY: self.ctx is valid and `pkt` zeroed caller storage. A successful grab owns its
+        // fds until `release`, which runs after they are dup'd; a failed grab owns none.
+        unsafe {
+            let mut pkt: drmtap_packet = std::mem::zeroed();
+            let ret = grab(self.ctx, &mut pkt);
+            if ret < 0 {
+                return Err(match -ret {
+                    libc::EAGAIN | libc::EBUSY | libc::EINTR => io::ErrorKind::WouldBlock.into(),
+                    libc::ENOTSUP => io::ErrorKind::Unsupported.into(),
+                    e => io::Error::new(io::ErrorKind::Other, format!("drmtap_grab_packet: errno {e}")),
+                });
+            }
+            self.last_plane_rotation = self.read_plane_rotation();
+            let bytes = pkt.bytes[..(pkt.len as usize).min(pkt.bytes.len())].to_vec();
+            let fds = pkt.fds[..(pkt.nfds as usize).min(pkt.fds.len())]
+                .iter()
+                .map(|&fd| match libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) {
+                    d if d >= 0 => Ok(OwnedFd::from_raw_fd(d)),
+                    _ => Err(io::Error::last_os_error()),
+                })
+                .collect::<io::Result<Vec<_>>>();
+            release(&mut pkt);
+            fds.map(|fds| (bytes, fds))
         }
     }
 

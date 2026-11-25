@@ -116,6 +116,16 @@ pub struct drmtap_cursor_info {
     pub _priv: *mut c_void,
 }
 
+/// `drmtap_packet` (libdrmtap 0.6.0): every lit plane of the CRTC as opaque bytes plus their
+/// dma-buf fds, filled by `drmtap_grab_packet` and handed as is to `drmtap_convert_packet`.
+#[repr(C)]
+pub struct drmtap_packet {
+    pub bytes: [u8; 1024],
+    pub len: u32,
+    pub nfds: u32,
+    pub fds: [c_int; 16],
+}
+
 // Resolved symbol typedefs.
 
 type FnVersion = unsafe extern "C" fn() -> c_int;
@@ -152,6 +162,16 @@ type FnPlaneRotation = unsafe extern "C" fn(*mut drmtap_ctx, *mut u32) -> c_int;
 type FnCrtcRefresh = unsafe extern "C" fn(*mut drmtap_ctx, *mut u64, *mut u64) -> c_int;
 type FnConvertDmabuf =
     unsafe extern "C" fn(*mut drmtap_ctx, *const drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
+type FnGrabPacket = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_packet) -> c_int;
+type FnPacketRelease = unsafe extern "C" fn(*mut drmtap_packet);
+type FnConvertPacket = unsafe extern "C" fn(
+    *mut drmtap_ctx,
+    *const u8,
+    usize,
+    *const c_int,
+    usize,
+    *mut drmtap_frame_info,
+) -> c_int;
 
 /// The dlopen'd libdrmtap; the `Library` is kept alive for the process lifetime, so the raw fn pointers stay valid.
 pub struct DrmtapLib {
@@ -178,6 +198,9 @@ pub struct DrmtapLib {
     /// Optional: it only exists from libdrmtap 0.5.9. Absent means the producer takes the
     /// whole-hertz refresh of the enumeration as its pacing floor.
     pub crtc_refresh: Option<FnCrtcRefresh>,
+    /// Optional: grab, release and convert of libdrmtap 0.6.0, all three or none. Absent means
+    /// frames travel as one `drmtap_dmabuf_desc`, as before.
+    pub packet: Option<(FnGrabPacket, FnPacketRelease, FnConvertPacket)>,
     pub version: (c_int, c_int, c_int),
 }
 
@@ -229,6 +252,7 @@ impl DrmtapLib {
             render_node: None,
             plane_rotation: Some(plane_rotation),
             crtc_refresh: None,
+            packet: None,
             version: (0, 5, 8),
         }
     }
@@ -246,14 +270,15 @@ const DRMTAP_ABI_MAJOR: c_int = 0;
 // has been present since 0.4.10.
 const DRMTAP_MIN_MINOR_PATCH: (c_int, c_int) = (5, 0);
 
-// The MINOR series this build's mirrored structs were verified against: libdrmtap's header freezes
-// only `drmtap_device` and `drmtap_dmabuf_desc`, so an unverified minor could be read at wrong offsets.
-const DRMTAP_ABI_MINOR: c_int = 5;
+// The newest MINOR series this build's mirrored structs were verified against: libdrmtap's header
+// freezes only `drmtap_device`, `drmtap_dmabuf_desc` and `drmtap_packet`, so an unverified minor
+// could be read at wrong offsets. 0.6 changed none of the structs 0.5 mirrors.
+const DRMTAP_ABI_MINOR: c_int = 6;
 
-/// Whether a library reporting `major.minor.patch` may be loaded (major and minor exact, patch at or above the floor).
+/// Whether a library reporting `major.minor.patch` may be loaded (major exact, minor not newer than the verified one, at or above the floor).
 fn abi_accepted(major: c_int, minor: c_int, patch: c_int) -> bool {
     major == DRMTAP_ABI_MAJOR
-        && minor == DRMTAP_ABI_MINOR
+        && minor <= DRMTAP_ABI_MINOR
         && (minor, patch) >= DRMTAP_MIN_MINOR_PATCH
 }
 
@@ -302,8 +327,8 @@ impl DrmtapLib {
                 let why = if major != DRMTAP_ABI_MAJOR {
                     "the struct layouts this build mirrors track the ABI major, so reading a \
                      frame descriptor through a mismatched one would mis-decode it"
-                } else if minor != DRMTAP_ABI_MINOR {
-                    "this build mirrors the struct layouts of one minor and only that one; \
+                } else if minor > DRMTAP_ABI_MINOR {
+                    "this build mirrors the struct layouts of the minors it was verified against; \
                      under 0.x semver the minor is the breaking axis, so an unverified minor \
                      could be read at the wrong offsets. Widening it is a deliberate act, done \
                      with the layouts re-checked field by field"
@@ -314,7 +339,7 @@ impl DrmtapLib {
                 let (min_minor, min_patch) = DRMTAP_MIN_MINOR_PATCH;
                 log::warn!(
                     "libdrmtap {name} reports v{major}.{minor}.{patch}, which this build cannot \
-                     use (needs ABI major {DRMTAP_ABI_MAJOR}, minor {DRMTAP_ABI_MINOR}, at least \
+                     use (needs ABI major {DRMTAP_ABI_MAJOR}, minor at most {DRMTAP_ABI_MINOR}, at least \
                      v{DRMTAP_ABI_MAJOR}.{min_minor}.{min_patch}): {why}. Refusing to load; \
                      falling back to PipeWire/portal."
                 );
@@ -363,6 +388,13 @@ impl DrmtapLib {
                 lib.get(b"drmtap_plane_rotation").ok().map(|s| *s);
             let crtc_refresh: Option<FnCrtcRefresh> =
                 lib.get(b"drmtap_crtc_refresh").ok().map(|s| *s);
+            let packet = (|| {
+                Some((
+                    *lib.get::<FnGrabPacket>(b"drmtap_grab_packet").ok()?,
+                    *lib.get::<FnPacketRelease>(b"drmtap_packet_release").ok()?,
+                    *lib.get::<FnConvertPacket>(b"drmtap_convert_packet").ok()?,
+                ))
+            })();
             // Log the load only now that every required symbol resolved: this fn still returns None on a missing one.
             let loaded_from = real
                 .as_ref()
@@ -439,6 +471,7 @@ impl DrmtapLib {
                 render_node,
                 plane_rotation,
                 crtc_refresh,
+                packet,
                 version: (major, minor, patch),
             })
         }
@@ -482,7 +515,7 @@ mod tests {
         // NEW verified minor must be refused -- which is what a hardcoded list did before.
         let verified = DRMTAP_ABI_MINOR;
         for (minor, patch) in [
-            (verified - 1, 99),
+            (4, 99),
             (verified + 1, 0),
             (verified + 1, 99),
             (verified + 4, 9),
