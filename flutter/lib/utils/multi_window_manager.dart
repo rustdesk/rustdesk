@@ -511,7 +511,8 @@ class RustDeskMultiWindowManager {
       if (shouldSavePos) {
         debugPrint("closing multi window, type: ${type.toString()} id: $wId");
         try {
-          await saveWindowPosition(type, windowId: wId);
+          await saveWindowPosition(type, windowId: wId,
+              flush: isOfficialSessionWindow(wId));
         } catch (e) {
           debugPrint('Failed to save window position of $wId, $e');
         }

@@ -4,6 +4,7 @@ param(
   [switch]$AlsoOpenFileTransfer,
   [switch]$AlsoOpenSamePeerCamera,
   [switch]$CloseFirstSession,
+  [switch]$ReopenClosedSession,
   [string]$PeerEndpoint = '127.0.0.1:1',
   [switch]$RequireVideoFrame
 )
@@ -113,6 +114,28 @@ try {
         throw 'Closing one session did not leave the other running independently.'
       }
       Write-Output "Closed '$($closing.title)' and kept '$($remaining.title)' open."
+      if ($ReopenClosedSession) {
+        $reopenArgs = if ($CloseFirstSession) { @("--$Session", $PeerEndpoint) } else { $secondArgs }
+        $relaunch = Start-Process -FilePath $exe -WorkingDirectory $options.WorkingDirectory -WindowStyle Hidden -PassThru -ArgumentList $reopenArgs
+        try {
+          $deadline = (Get-Date).AddSeconds(15)
+          do {
+            if ($process.HasExited) { throw "Reopening the session exited RustDesk ($($process.ExitCode))." }
+            $windows = @((& $nativeProbe -AppProcessId $process.Id | ConvertFrom-Json))
+            $reopened = $windows | Where-Object {
+              $_.className -eq 'FLUTTER_HOST_WINDOW' -and $_.visible -and $_.title -eq $closing.title
+            } | Select-Object -First 1
+            if ($reopened) { break }
+            Start-Sleep -Milliseconds 300
+          } while ((Get-Date) -lt $deadline)
+          if (!$reopened -or !($windows | Where-Object { $_.handle -eq $remaining.handle -and $_.visible })) {
+            throw 'The closed session could not reopen alongside its sibling.'
+          }
+          Write-Output "Reopened '$($closing.title)' and kept '$($remaining.title)' open."
+        } finally {
+          if (!$relaunch.HasExited) { Stop-Process -Id $relaunch.Id }
+        }
+      }
     } finally {
       if (!$second.HasExited) { Stop-Process -Id $second.Id }
     }

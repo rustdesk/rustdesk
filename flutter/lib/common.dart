@@ -1791,8 +1791,7 @@ String get windowFramePrefix =>
 
 typedef WindowKey = ({WindowType type, int? windowId});
 
-LastWindowPosition? _lastWindowPosition = null;
-final Debouncer _saveWindowDebounce = Debouncer(delay: Duration(seconds: 1));
+final _pendingWindowPositions = <WindowKey, Timer>{};
 
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
@@ -1801,6 +1800,7 @@ Future<void> saveWindowPosition(WindowType type,
   if (type != WindowType.Main && windowId == null) {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
+    return;
   }
 
   Offset? position;
@@ -1842,6 +1842,9 @@ Future<void> saveWindowPosition(WindowType type,
     default:
       final wc = WindowController.fromWindowId(windowId!);
       isMaximized = await wc.isMaximized();
+      if (isOfficialSessionWindow(windowId)) {
+        isFullscreen = await wc.isFullScreen();
+      }
       if (isFullscreen || isMaximized) {
         setPreFrame();
       } else {
@@ -1875,39 +1878,34 @@ Future<void> saveWindowPosition(WindowType type,
 
   final WindowKey key = (type: type, windowId: windowId);
 
-  final bool haveNewWindowPosition =
-      (_lastWindowPosition == null) || !pos.equals(_lastWindowPosition!);
-  final bool isPreviousNewWindowPositionPending = _saveWindowDebounce.isRunning;
-
-  if (haveNewWindowPosition || isPreviousNewWindowPositionPending) {
-    _lastWindowPosition = pos;
-
-    if (flush ?? false) {
-      // If a previous update is pending, replace it.
-      _saveWindowDebounce.cancel();
-      await _saveWindowPositionActual(key);
-    } else if (haveNewWindowPosition) {
-      _saveWindowDebounce.call(() => _saveWindowPositionActual(key));
-    }
+  _pendingWindowPositions.remove(key)?.cancel();
+  if (flush ?? false) {
+    await _saveWindowPositionActual(key, pos);
+  } else {
+    _pendingWindowPositions[key] = Timer(const Duration(seconds: 1), () async {
+      _pendingWindowPositions.remove(key);
+      try {
+        await _saveWindowPositionActual(key, pos);
+      } catch (error) {
+        debugPrint('Error saving window position: $error');
+      }
+    });
   }
 }
 
-Future<void> _saveWindowPositionActual(WindowKey key) async {
-  LastWindowPosition? pos = _lastWindowPosition;
+Future<void> _saveWindowPositionActual(
+    WindowKey key, LastWindowPosition pos) async {
+  debugPrint(
+      "Saving frame: ${key.windowId}: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
 
-  if (pos != null) {
-    debugPrint(
-        "Saving frame: ${key.windowId}: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
+  await bind.setLocalFlutterOption(
+      k: windowFramePrefix + key.type.name, v: pos.toString());
 
-    await bind.setLocalFlutterOption(
-        k: windowFramePrefix + key.type.name, v: pos.toString());
-
-    if ((key.type == WindowType.RemoteDesktop ||
-            key.type == WindowType.ViewCamera) &&
-        key.windowId != null) {
-      await _saveSessionWindowPosition(key.type, key.windowId!,
-          pos.isMaximized ?? false, pos.isFullscreen ?? false, pos);
-    }
+  if ((key.type == WindowType.RemoteDesktop ||
+          key.type == WindowType.ViewCamera) &&
+      key.windowId != null) {
+    await _saveSessionWindowPosition(key.type, key.windowId!,
+        pos.isMaximized ?? false, pos.isFullscreen ?? false, pos);
   }
 }
 
