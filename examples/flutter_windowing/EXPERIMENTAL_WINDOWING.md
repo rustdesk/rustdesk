@@ -166,7 +166,8 @@ camera capture, terminal I/O, and monitor switching still need verification.
 ## Upstream acceptance
 
 The experiment workflow runs the native Windows x64 and arm64 tests and builds a standalone
-macOS and Linux app. The Linux job opens two GTK windows under Xvfb and checks
+macOS and Linux app. The Linux job uses software rendering under Xvfb and opens
+two GTK windows to check
 message routing, per-window state, visibility, and view destruction. The macOS
 job checks the build. Full Flutter CI builds the integrated preview for Windows
 x64, Windows arm64, and macOS arm64. The remaining jobs use their current

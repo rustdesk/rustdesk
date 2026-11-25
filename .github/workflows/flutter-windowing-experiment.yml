@@ -50,8 +50,10 @@ jobs:
       - name: Check native GTK windows under X11
         if: matrix.platform == 'linux'
         working-directory: examples/flutter_windowing/experimental_example
+        env:
+          LIBGL_ALWAYS_SOFTWARE: 'true'
         run: |
-          xvfb-run -a bash -e -c '
+          xvfb-run -a -s "-screen 0 1280x1024x24 -extension DRI3" bash -e -c '
             openbox &
             trap "kill $!" EXIT
             timeout 45s ./build/linux/x64/release/bundle/windowing_poc

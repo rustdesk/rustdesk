@@ -1050,10 +1050,30 @@ jobs:
           # Do NOT use `brew install nasm` which installs NASM 3.x.
           # NASM 3.x is a complete rewrite with incompatible CLI options and removed features.
           # aom and other multimedia libraries require NASM 2.x for x86/x86_64 assembly.
-          wget https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip
-          unzip nasm-2.16.03-macosx.zip
-          sudo cp nasm-2.16.03/nasm /usr/local/bin/nasm
-          nasm --version
+          nasm_bin="$RUNNER_TEMP/rustdesk-nasm/bin"
+          mkdir -p "$nasm_bin"
+          cd "$(mktemp -d "$RUNNER_TEMP/nasm.XXXXXX")"
+          if curl --fail --silent --show-error --location \
+              --connect-timeout 10 --max-time 40 --retry 2 --retry-connrefused \
+              https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip \
+              --output nasm.zip; then
+            echo '0d29bcd8a5fc617333f4549c7c1f93d1866a4a0915c40359e0a8585bb1a5aa75  nasm.zip' | shasum -a 256 -c
+            unzip -q nasm.zip
+            install -m 0755 nasm-2.16.03/nasm "$nasm_bin/nasm"
+          else
+            # Keep the same NASM version when the release host is unreachable.
+            command -v autoconf >/dev/null && command -v automake >/dev/null ||
+              brew install autoconf automake
+            git clone --depth 1 --branch nasm-2.16.03 https://github.com/netwide-assembler/nasm.git source
+            test "$(git -C source rev-parse HEAD)" = cd37b81b320ead83ca5a6bbce5da0a6456663bc6
+            cd source
+            ./autogen.sh
+            ./configure
+            make -j "$(sysctl -n hw.logicalcpu)" nasm
+            install -m 0755 nasm "$nasm_bin/nasm"
+          fi
+          "$nasm_bin/nasm" --version
+          echo "$nasm_bin" >> "$GITHUB_PATH"
 
       - name: Install flutter
         if: ${{ matrix.job.arch != 'aarch64' || !inputs.desktop-windowing-preview }}
