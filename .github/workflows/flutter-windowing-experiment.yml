@@ -25,8 +25,6 @@ jobs:
       matrix:
         include:
           - platform: linux
-            # Match the validated GTK/Mesa stack. Ubuntu 24.04's Xvfb runner
-            # reports GLX BadAccess when two Flutter views share an engine.
             runner: ubuntu-26.04
           - platform: macos
             runner: macos-15
@@ -38,7 +36,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install GTK build and test prerequisites
         if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev ninja-build xauth xvfb openbox
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev ninja-build weston
       - name: Install Flutter SDK
         run: bash .github/patches/install_flutter_windowing.sh
       - name: Build window lifecycle smoke app
@@ -48,23 +46,31 @@ jobs:
         run: |
           flutter config --no-enable-swift-package-manager
           flutter create --platforms="$PLATFORM" --project-name windowing_poc --no-pub .
-          if [[ "$PLATFORM" == linux ]]; then
-            # Xvfb on the hosted runner does not reliably run Impeller's GL context.
-            # Use Skia for this lifecycle test without changing the RustDesk runner.
-            sed -i '/FlDartProject.*fl_dart_project_new()/a\  fl_dart_project_set_enable_impeller(project, FALSE);' linux/runner/my_application.cc
-          fi
           flutter build "$PLATFORM" --release -t lib/unix_smoke.dart
-      - name: Check native GTK windows under X11
+      - name: Check native GTK windows under Wayland
         if: matrix.platform == 'linux'
         working-directory: examples/flutter_windowing/experimental_example
         env:
           LIBGL_ALWAYS_SOFTWARE: 'true'
+          GDK_BACKEND: wayland
+          WAYLAND_DISPLAY: rustdesk-windowing
         run: |
-          xvfb-run -a -s "-screen 0 1280x1024x24 -extension DRI3" bash -e -c '
-            openbox &
-            trap "kill $!" EXIT
-            timeout 45s ./build/linux/x64/release/bundle/windowing_poc
-          '
+          export XDG_RUNTIME_DIR="$(mktemp -d "$RUNNER_TEMP/weston.XXXXXX")"
+          log="$XDG_RUNTIME_DIR/weston.log"
+          weston --backend=headless --renderer=pixman --socket="$WAYLAND_DISPLAY" \
+            --idle-time=0 --log="$log" &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for attempt in {1..100}; do
+            [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] && break
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.1
+          done
+          if [[ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] ||
+              ! timeout 45s ./build/linux/x64/release/bundle/windowing_poc; then
+            cat "$log"
+            exit 1
+          fi
 
   windows:
     name: Windows ${{ matrix.arch }} official windowing
