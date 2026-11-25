@@ -1481,13 +1481,13 @@ impl DrmCaptureSwitch {
 /// carries the whole config, and a long-lived process may hold an older copy of the rest.
 #[cfg(feature = "drm")]
 pub async fn sync_drm_capture_to_service(was_on: bool) {
-    use crate::ipc::{connect_trusted_device_service, Data};
+    use crate::ipc::{connect_root_service, Data};
     use hbb_common::config::Config2;
     if !is_root() || drm_capture_enabled() == was_on {
         return;
     }
     let result = async {
-        let mut conn = connect_trusted_device_service(1000).await?;
+        let mut conn = connect_root_service(1000).await?;
         let config2 = crate::trusted_devices::config::update(Config2::get_for_sync).await?;
         let configs = Box::new((Config::get(), config2));
         conn.send(&Data::SyncConfig(Some(configs))).await?;

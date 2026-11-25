@@ -147,7 +147,7 @@ pub async fn connect_service(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnC
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-pub(crate) async fn connect_trusted_device_service(
+pub(crate) async fn connect_root_service(
     ms_timeout: u64,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
     let connection = connect_with_path(ms_timeout, &Config::ipc_path(crate::POSTFIX_SERVICE))
@@ -1580,7 +1580,7 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         if postfix == crate::POSTFIX_SERVICE {
-            return connect_trusted_device_service(ms_timeout).await;
+            return connect_root_service(ms_timeout).await;
         }
         let use_user_main_ipc = USE_USER_MAIN_IPC.with(|use_user_main| use_user_main.get());
         let is_root_main_ipc =
@@ -1607,7 +1607,7 @@ pub async fn connect_for_uid(
     postfix: &str,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
     if postfix == crate::POSTFIX_SERVICE {
-        return connect_trusted_device_service(ms_timeout).await;
+        return connect_root_service(ms_timeout).await;
     }
     let path = Config::ipc_path_for_uid(uid, postfix);
     let conn = connect_with_path(ms_timeout, &path).await?;
