@@ -23,6 +23,9 @@ bool isOfficialSessionWindow(int windowId) =>
 
 Widget? mountWindowingPreview(Widget mainWindow, List<String> arguments) {
   if (!arguments.contains('--experimental-windowing')) return null;
+  // Cocoa must enable multiview before attaching its first view controller.
+  // RustDesk's current nib runner already has a controller at this point.
+  if (Platform.isMacOS) return null;
   final preview = ExperimentalWindowingBackend.install(
     keepImplicitMainView: true,
     useOfficialWindow: (arguments) {

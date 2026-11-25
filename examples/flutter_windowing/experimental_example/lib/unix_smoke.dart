@@ -9,7 +9,7 @@ import 'package:flutter/widgets.dart';
 void main() {
   final handlersReady = <int>{};
   final backend = ExperimentalWindowingBackend.install(
-    keepImplicitMainView: true,
+    keepImplicitMainView: Platform.isLinux,
     builder: (window) {
       if (handlersReady.add(window.windowId)) {
         window.run(() {
@@ -57,6 +57,10 @@ Future<void> checkWindows(
 ) async {
   final dispatcher = PlatformDispatcher.instance;
   final initialViews = dispatcher.views.length;
+  final mainViewId = backend.viewIdFor(0);
+  if (!dispatcher.views.any((view) => view.viewId == mainViewId)) {
+    throw StateError('The main Flutter view is missing');
+  }
   final first = await DesktopMultiWindow.createWindow('first');
   final second = await DesktopMultiWindow.createWindow('second');
   await first.show();
@@ -120,6 +124,8 @@ Future<void> checkWindows(
   await second.close();
   await waitFor(
     'the second Flutter view to close',
-    () => dispatcher.views.length == initialViews,
+    () =>
+        dispatcher.views.length == initialViews &&
+        dispatcher.views.any((view) => view.viewId == mainViewId),
   );
 }

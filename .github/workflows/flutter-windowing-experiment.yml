@@ -46,6 +46,9 @@ jobs:
         run: |
           flutter config --no-enable-swift-package-manager
           flutter create --platforms="$PLATFORM" --project-name windowing_poc --no-pub .
+          if [[ "$PLATFORM" == macos ]]; then
+            cp tool/HeadlessMainFlutterWindow.swift macos/Runner/MainFlutterWindow.swift
+          fi
           flutter build "$PLATFORM" --release -t lib/unix_smoke.dart
       - name: Check native GTK windows under Wayland
         if: matrix.platform == 'linux'
