@@ -11,7 +11,9 @@ import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
+import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
@@ -40,8 +42,9 @@ class ConnectionTabPage extends StatefulWidget {
 }
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
-  final tabController =
-      Get.put(DesktopTabController(tabType: DesktopTabType.remoteScreen));
+  final tabController = DesktopTabController(tabType: DesktopTabType.remoteScreen);
+  DesktopWindowScope? _window;
+  StateGlobal get _windowState => _window?.windowState ?? stateGlobal;
   final contentKey = UniqueKey();
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
@@ -72,7 +75,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           bind.setCurSessionId(sessionId: ffi.sessionId);
         }
         WindowController.fromWindowId(params['windowId'])
-            .setTitle(getWindowNameWithId(id));
+            .setTitle(getWindowNameWithId(id, overrideType: WindowType.RemoteDesktop));
         UnreadChatCountState.find(id).value = 0;
       };
       tabController.add(TabInfo(
@@ -108,12 +111,20 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       _update_remote_count();
     }
     tabController.onRemoved = (_, id) => onRemoveId(id);
-    rustDeskWinManager.setMethodHandler(_remoteMethodHandler);
   }
 
   @override
   void initState() {
     super.initState();
+    final window = _window = DesktopWindowScope.read(context);
+    if (window?.nativeTitleBar != true) Get.put(tabController);
+    void registerHandler() =>
+        rustDeskWinManager.setMethodHandler(_remoteMethodHandler);
+    if (window == null) {
+      registerHandler();
+    } else {
+      window.run(registerHandler);
+    }
 
     if (!_isScreenRectSet) {
       Future.delayed(Duration.zero, () {
@@ -139,7 +150,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         tail: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _RelativeMouseModeHint(tabController: tabController),
+            _RelativeMouseModeHint(
+                tabController: tabController, windowState: _windowState),
             const AddButton(),
           ],
         ),
@@ -217,6 +229,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         }),
       ),
     );
+    if (_window?.nativeTitleBar == true) return child;
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(context, child)
         : workaroundWindowBorder(
@@ -382,7 +395,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     }
     ConnectionTypeState.delete(id);
     // Clean up relative mouse mode state for this peer.
-    stateGlobal.relativeMouseModeState.remove(id);
+    _windowState.relativeMouseModeState.remove(id);
     _update_remote_count();
   }
 
@@ -438,9 +451,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       final screenRect = parseParamScreenRect(args);
       final prePeerCount = tabController.length;
       Future.delayed(Duration.zero, () async {
-        if (stateGlobal.fullscreen.isTrue) {
+        if (_windowState.fullscreen.isTrue) {
           await WindowController.fromWindowId(windowId()).setFullscreen(false);
-          stateGlobal.setFullscreen(false, procWnd: false);
+          _windowState.setFullscreen(false, procWnd: false);
         }
         await setNewConnectWindowFrame(windowId(), id!, prePeerCount,
             WindowType.RemoteDesktop, display, screenRect);
@@ -484,7 +497,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     } else if (call.method == "onDestroy") {
       tabController.clear();
     } else if (call.method == kWindowActionRebuild) {
-      reloadCurrentWindow();
+      if (!mounted) return;
+      if (_window?.nativeTitleBar == true) {
+        RefreshWrapper.of(context)?.rebuild();
+      } else {
+        reloadCurrentWindow();
+      }
     } else if (call.method == kWindowEventActiveSession) {
       final jumpOk = tabController.jumpToByKey(call.arguments);
       if (jumpOk) {
@@ -554,7 +572,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         }
       }
     } else if (call.method == kWindowEventSetFullscreen) {
-      stateGlobal.setFullscreen(call.arguments == 'true');
+      _windowState.setFullscreen(call.arguments == 'true');
     }
     _update_remote_count();
     return returnValue;
@@ -565,8 +583,10 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 /// This helps users remember how to exit relative mouse mode.
 class _RelativeMouseModeHint extends StatelessWidget {
   final DesktopTabController tabController;
+  final StateGlobal windowState;
 
-  const _RelativeMouseModeHint({Key? key, required this.tabController})
+  const _RelativeMouseModeHint(
+      {Key? key, required this.tabController, required this.windowState})
       : super(key: key);
 
   @override
@@ -586,10 +606,8 @@ class _RelativeMouseModeHint extends StatelessWidget {
       final remotePage = selectedTabInfo.page as RemotePage;
       final String peerId = remotePage.id;
 
-      // Use global state to check relative mouse mode (synced from InputModel).
-      // This avoids timing issues with FFI registration.
       final isRelativeMouseMode =
-          stateGlobal.relativeMouseModeState[peerId] ?? false;
+          windowState.relativeMouseModeState[peerId] ?? false;
 
       if (!isRelativeMouseMode) {
         return const SizedBox.shrink();

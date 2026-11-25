@@ -59,6 +59,21 @@ try {
       if ($children.Count -ne 2) { throw 'Expected two visible official session windows in one process.' }
       if ($process.WaitForExit(2000)) { throw "RustDesk exited with two active session windows ($($process.ExitCode))." }
       Write-Output "RustDesk kept both official session windows open."
+      $fileWindow = $children | Where-Object { $_.title -like '*File Transfer*' } | Select-Object -First 1
+      if (!$fileWindow) { throw 'Expected a file transfer window.' }
+      & $nativeProbe -AppProcessId $process.Id -Title $fileWindow.title -RequestClose | Out-Null
+      $deadline = (Get-Date).AddSeconds(15)
+      do {
+        if ($process.HasExited) { throw "Closing file transfer exited RustDesk ($($process.ExitCode))." }
+        $windows = @((& $nativeProbe -AppProcessId $process.Id | ConvertFrom-Json))
+        if (!($windows | Where-Object { $_.handle -eq $fileWindow.handle -and $_.visible })) { break }
+        Start-Sleep -Milliseconds 300
+      } while ((Get-Date) -lt $deadline)
+      if (($windows | Where-Object { $_.handle -eq $fileWindow.handle -and $_.visible }) -or
+          !($windows | Where-Object { $_.handle -eq $official.handle -and $_.visible })) {
+        throw 'Closing file transfer did not leave the forwarding window running independently.'
+      }
+      Write-Output "Closing file transfer left the forwarding window open."
     } finally {
       if (!$second.HasExited) { Stop-Process -Id $second.Id }
     }

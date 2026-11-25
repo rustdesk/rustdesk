@@ -106,8 +106,16 @@ class _FileManagerPageState extends State<FileManagerPage>
         connToken: widget.connToken,
         forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      if (!mounted) return;
+      _ffi.dialogManager.showLoading(translate('Connecting...'), onCancel: () {
+        if (!mounted) return;
+        final controller = widget.tabController;
+        if (controller == null) {
+          closeConnection(id: widget.id);
+        } else {
+          controller.closeBy(widget.id);
+        }
+      });
     });
     Get.put<FFI>(_ffi, tag: 'ft_${widget.id}');
     WakelockManager.enable(_uniqueKey);
