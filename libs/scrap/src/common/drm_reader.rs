@@ -691,6 +691,11 @@ impl DrmReader {
                 {
                     return Err(io::ErrorKind::WouldBlock.into());
                 }
+                // More than four lit planes and none of the kept ones covers the CRTC: keep the
+                // last frame, like grab_desc does on an underlay.
+                if errno == hbb_common::libc::E2BIG {
+                    return Err(io::ErrorKind::WouldBlock.into());
+                }
                 if errno == hbb_common::libc::ENOTSUP {
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,

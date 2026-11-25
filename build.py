@@ -628,15 +628,15 @@ def assert_so_satisfies_the_runtime_abi_gate(so_path):
             'could not parse the libdrmtap ABI gate out of drmtap_dl.rs (DRMTAP_ABI_MAJOR / '
             'DRMTAP_ABI_MINOR / DRMTAP_MIN_MINOR_PATCH). The gate moved and this check did not; '
             'fix the check rather than removing it, or the pin and the gate can drift silently.')
-    accepted = so_ver[0] == major and so_ver[1] == minor and (so_ver[1], so_ver[2]) >= floor
+    accepted = so_ver[0] == major and so_ver[1] <= minor and (so_ver[1], so_ver[2]) >= floor
     if not accepted:
         raise Exception(
             f'the libdrmtap being packaged is {so_ver[0]}.{so_ver[1]}.{so_ver[2]}, which the '
-            f'runtime loader would REFUSE: drmtap_dl.rs accepts exactly major {major}, minor '
-            f'{minor}, patch >= {floor[1]}. Shipping it produces a deb whose DRM capture can never '
+            f'runtime loader would REFUSE: drmtap_dl.rs accepts major {major}, from '
+            f'{floor[0]}.{floor[1]} up to minor {minor}. Shipping it produces a deb whose DRM capture can never '
             'start. Move the build pin and the gate together, or fix whichever one is wrong.')
     print(f'[drm] libdrmtap {so_ver[0]}.{so_ver[1]}.{so_ver[2]} satisfies the runtime ABI gate '
-          f'(major {major}, minor {minor}, patch >= {floor[1]})')
+          f'(major {major}, {floor[0]}.{floor[1]} up to minor {minor})')
 
 
 def stage_libdrmtap_into_deb(so_path):
