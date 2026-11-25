@@ -15,6 +15,7 @@ public static class PocNative {
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr GetProp(IntPtr hwnd, string name);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr w, IntPtr l);
 }
 '@
@@ -37,6 +38,7 @@ $found = [System.Collections.Generic.List[object]]::new()
         maximized=[PocNative]::IsZoomed($hwnd)
         minimized=[PocNative]::IsIconic($hwnd)
         foreground=($hwnd -eq [PocNative]::GetForegroundWindow())
+        moveCommand=[PocNative]::GetProp($hwnd, 'RustDeskPocMoveRequested').ToInt64()
       })
       if ($RequestClose) { [void][PocNative]::PostMessage($hwnd, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
     }

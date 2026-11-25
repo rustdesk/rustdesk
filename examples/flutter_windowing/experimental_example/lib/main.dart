@@ -294,6 +294,15 @@ Future<void> runChecks({required bool keepImplicitMainView}) async {
       'staged caption hidden on first show',
       (await nativeProbe('PoC test A')).single['caption'] == false,
     );
+    await a.startDragging();
+    final dragWindows = await nativeProbe();
+    check(
+      'captionless drag posts the native move command to A only',
+      dragWindows
+              .where((window) => window['moveCommand'] != 0)
+              .singleOrNull?['title'] ==
+          'PoC test A',
+    );
     await a.showTitleBar(true);
     check(
       'distinct FlutterView IDs',

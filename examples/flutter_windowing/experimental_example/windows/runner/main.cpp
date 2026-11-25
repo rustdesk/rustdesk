@@ -9,6 +9,7 @@
 
 namespace {
 void PumpMessages(flutter::FlutterEngine& engine) {
+  const bool self_test = GetEnvironmentVariableW(L"POC_RESULTS", nullptr, 0) != 0;
   while (true) {
     const auto delay = std::chrono::duration_cast<std::chrono::milliseconds>(
         engine.ProcessMessages()).count();
@@ -17,6 +18,14 @@ void PumpMessages(flutter::FlutterEngine& engine) {
     MSG message;
     while (::PeekMessage(&message, nullptr, 0, 0, PM_REMOVE)) {
       if (message.message == WM_QUIT) return;
+      // Record the move request without entering the OS modal drag loop,
+      // which requires an interactive mouse and an unlocked desktop.
+      if (self_test && message.message == WM_SYSCOMMAND &&
+          message.wParam == (SC_MOVE | HTCAPTION)) {
+        SetPropW(message.hwnd, L"RustDeskPocMoveRequested",
+                 reinterpret_cast<HANDLE>(message.wParam));
+        continue;
+      }
       ::TranslateMessage(&message);
       ::DispatchMessage(&message);
     }
