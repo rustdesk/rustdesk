@@ -434,14 +434,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 log::debug!("Exit io_loop of id={}", self.handler.get_id());
                 self.remote_mic_stop.take();
                 self.remote_mic_epoch = 0;
+                let remote_mic_interrupted = self.remote_mic_requested;
                 self.remote_mic_requested = false;
-                if !self
-                    .handler
-                    .connection_round_state
-                    .lock()
-                    .unwrap()
-                    .is_round_gt(round)
-                {
+                if remote_mic_interrupted {
                     self.handler.on_remote_microphone("interrupted", "");
                 }
                 // Stop client audio server.

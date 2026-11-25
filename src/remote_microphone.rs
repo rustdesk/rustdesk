@@ -51,8 +51,12 @@ impl Receiver {
         receiver.silence();
         let parked_at = std::time::Instant::now();
         *PARKED.lock() = Some((peer, receiver.clone(), parked_at));
+        let receiver = Arc::downgrade(&receiver);
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(20));
+            let Some(receiver) = receiver.upgrade() else {
+                return;
+            };
             let mut parked = PARKED.lock();
             if parked
                 .as_ref()
@@ -64,11 +68,18 @@ impl Receiver {
         });
     }
     pub fn new() -> Result<Self> {
-        if SOURCE_OWNED
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            hbb_common::bail!("Another session owns the remote microphone");
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        loop {
+            if SOURCE_OWNED
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                hbb_common::bail!("Another session owns the remote microphone");
+            }
+            std::thread::sleep(Duration::from_millis(10));
         }
         let lease = SourceLease;
         let decoder = Decoder::new(48000, Channels::Stereo)?;
