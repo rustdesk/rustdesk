@@ -183,4 +183,4 @@ Please ensure that you run these commands from the root of the RustDesk reposito
 
 ## Remote microphone (Android to Linux)
 
-This fork adds an optional Android-to-Linux remote microphone. See [the feature documentation](docs/remote-microphone.md) for build requirements and details.
+This fork adds optional Android-to-Linux microphone streaming. See [docs/remote-microphone.md](docs/remote-microphone.md) for setup and details.
