@@ -8,6 +8,7 @@ set(PLUGIN_NAME "desktop_multi_window_plugin")
 
 add_library(${PLUGIN_NAME} SHARED
   "desktop_multi_window_plugin.cc"
+  "official_window_controls.cc"
   "multi_window_manager.cc"
   "flutter_window.cc"
   "base_flutter_window.cc"

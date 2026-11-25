@@ -8,6 +8,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/src/foundation/_features.dart' show isWindowingEnabled;
 import 'package:flutter/src/widgets/_window.dart' as official;
+import 'package:flutter/src/widgets/_window_linux.dart'
+    show WindowControllerLinux;
+import 'package:flutter/src/widgets/_window_macos.dart'
+    show WindowControllerMacOS;
 import 'package:flutter/src/widgets/_window_win32.dart'
     show WindowControllerWin32;
 
@@ -32,11 +36,13 @@ class ExperimentalWindowContext {
 
 final Object _windowZoneKey = Object();
 const _win32 = MethodChannel('rustdesk/desktop_multi_window/win32');
+const _macos = MethodChannel('rustdesk/desktop_multi_window/macos');
+const _linux = MethodChannel('rustdesk/desktop_multi_window/linux');
 typedef ExperimentalWindowBuilder = Widget Function(
   ExperimentalWindowContext window,
 );
 
-/// Flutter 3.50.1 Windows PoC. Importing this library alone does not opt in.
+/// Flutter 3.50.1 desktop preview. Importing this library alone does not opt in.
 class ExperimentalWindowingBackend implements DesktopWindowBackend {
   final ValueNotifier<int> _updates = ValueNotifier<int>(0);
   ExperimentalWindowingBackend._(
@@ -70,9 +76,10 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
     bool Function(String?)? useOfficialWindow,
   }) {
     WidgetsFlutterBinding.ensureInitialized();
-    if (!Platform.isWindows || !isWindowingEnabled) {
+    if (!(Platform.isWindows || Platform.isMacOS || Platform.isLinux) ||
+        !isWindowingEnabled) {
       throw UnsupportedError(
-        'This PoC requires Windows, Flutter 3.50.1 and FLUTTER_WINDOWING=true.',
+        'This preview requires desktop Flutter 3.50.1 and FLUTTER_WINDOWING=true.',
       );
     }
     if (experimentalWindowBackend != null)
@@ -101,25 +108,25 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
 
   /// Mount with runWidget, never runApp. Each Window supplies its own FlutterView.
   Widget get root => ListenableBuilder(
-    listenable: _updates,
-    builder: (context, _) => ViewCollection(
-      views: [
-        if (_existingMainView != null)
-          View(
-            key: const ValueKey(0),
-            view: _existingMainView!,
-            child: builder(_entry(0).context),
-          ),
-        for (final entry in _entries.values)
-          if (entry.isMounted && !entry.native!.isDestroyed)
-            official.Window(
-              key: ValueKey(entry.context.windowId),
-              controller: entry.native!,
-              child: entry.context.run(() => builder(entry.context)),
-            ),
-      ],
-    ),
-  );
+        listenable: _updates,
+        builder: (context, _) => ViewCollection(
+          views: [
+            if (_existingMainView != null)
+              View(
+                key: const ValueKey(0),
+                view: _existingMainView!,
+                child: builder(_entry(0).context),
+              ),
+            for (final entry in _entries.values)
+              if (entry.isMounted && !entry.native!.isDestroyed)
+                official.Window(
+                  key: ValueKey(entry.context.windowId),
+                  controller: entry.native!,
+                  child: entry.context.run(() => builder(entry.context)),
+                ),
+          ],
+        ),
+      );
 
   ExperimentalWindowContext contextFor(int id) => _entry(id).context;
   int viewIdFor(int id) => id == 0 && _existingMainView != null
@@ -193,11 +200,26 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
     String method, [
     Map<String, int> args = const {},
   ]) {
-    final native = _native(id) as WindowControllerWin32;
-    return _win32.invokeMethod<T>(method, {
-      'hwnd': native.windowHandle.address,
-      ...args,
-    });
+    final native = _native(id);
+    if (native is WindowControllerWin32) {
+      return _win32.invokeMethod<T>(method, {
+        'hwnd': native.windowHandle.address,
+        ...args,
+      });
+    }
+    if (native is WindowControllerMacOS) {
+      return _macos.invokeMethod<T>(method, {
+        'handle': native.windowHandle.address,
+        ...args,
+      });
+    }
+    if (native is WindowControllerLinux) {
+      return _linux.invokeMethod<T>(method, {
+        'handle': native.windowHandle.address,
+        ...args,
+      });
+    }
+    throw UnsupportedError('No native controls for ${native.runtimeType}.');
   }
 
   Future<void> _setFrame(int id, Rect frame) async {
@@ -304,8 +326,8 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
   }
 
   dynamic _copy(dynamic value) => const StandardMessageCodec().decodeMessage(
-    const StandardMessageCodec().encodeMessage(value),
-  );
+        const StandardMessageCodec().encodeMessage(value),
+      );
 
   @override
   Future<dynamic> invokeMethod(
@@ -378,8 +400,8 @@ class _Controller extends WindowController {
   _Entry get entry => backend._entry(windowId);
   official.WindowController get native => backend._native(windowId);
   Never _unsupported(String operation) => throw UnsupportedError(
-    '$operation has no equivalent in the Flutter 3.50.1 generic Windowing API',
-  );
+        '$operation has no equivalent in the Flutter 3.50.1 generic Windowing API',
+      );
   @override
   Future<void> show() async => backend._show(windowId);
   @override

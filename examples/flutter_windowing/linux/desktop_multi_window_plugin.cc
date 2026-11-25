@@ -7,6 +7,7 @@
 
 #include "multi_window_manager.h"
 #include "desktop_multi_window_plugin_internal.h"
+#include "official_window_controls.h"
 
 #define DESKTOP_MULTI_WINDOW_PLUGIN(obj) \
   (G_TYPE_CHECK_INSTANCE_CAST((obj), desktop_multi_window_plugin_get_type(), \
@@ -206,6 +207,7 @@ void desktop_multi_window_plugin_register_with_registrar(FlPluginRegistrar *regi
     return;
   }
   desktop_multi_window_plugin_register_with_registrar_internal(registrar);
+  register_official_window_controls(registrar);
   auto view = fl_plugin_registrar_get_view(registrar);
   auto window = gtk_widget_get_toplevel(GTK_WIDGET(view));
   if (GTK_IS_WINDOW(window)) {

@@ -1,4 +1,4 @@
-# Flutter 3.50.1 official windowing PoC (Windows)
+# Flutter 3.50.1 official desktop windowing experiment
 
 Branch: `experimental/flutter-official-windowing`. Based on RustDesk's pinned
 plugin commit `cddc2e64f8fefce4f80db87b20bcda2dd019bed6`.
@@ -93,7 +93,7 @@ RustDesk build retains the full original native target and its dependencies.
   listener mutation during callbacks remain unverified.
 * Closing main requests application exit. The release executable was launched
   and exited with code 0 after an external WM_CLOSE on main.
-* No validation on macOS/Linux, multiple monitors, DPI changes, suspend/resume,
+* Windows results do not cover multiple monitors, DPI changes, suspend/resume,
   accessibility, GPU textures, remote sessions, performance, or long sessions.
 
 ## RustDesk integration boundary
@@ -102,16 +102,9 @@ The inspected RustDesk commit is
 `51f94394ce61e1f3d26229565c326b2862cbdd1f`.
 Its `flutter/lib/main.dart` re-enters main for each legacy child and sets
 `kWindowId`, `kWindowType`, `desktopType`, and global model/FFI state. A backend
-swap cannot preserve that isolation. An eventual application change must move
-that state into a per-window session and adapt bootstrap/native plugin lookup
-to view identity. This experiment makes no such business-layer change.
-
-RustDesk's Flutter 3.50.1 dependency resolution completed, with old file_picker
-plugin metadata warnings. Analysis additionally found theme data type changes,
-nullable string/numeric type issues, and absent generated native bridge code.
-Those are separate application migration work; the 608 reported diagnostics
-include many deprecations and missing-generation cascades, not 608 proven SDK
-regressions. No full RustDesk executable/remote connection was built or tested.
+swap cannot preserve that isolation. The TCP forwarding preview uses explicit
+window identity, per-window `StateGlobal` and window-local message callbacks.
+Remote desktop texture and input routing still require their own migration.
 
 ## Verification
 
@@ -139,9 +132,9 @@ exited with 0xC0000005 after creating two windows. A later run passed, so legacy
 stability under 3.50.1 is **not established**. No cause is asserted. Earlier
 immediate show queries also demonstrated that ShowWindowAsync needs polling.
 
-## RustDesk Windows client preview
+## RustDesk client preview
 
-The Windows x64 experiment build uses the same pinned Flutter SDK and applies
+The Windows x64 and macOS arm64 preview jobs use the pinned Flutter SDK and apply
 `.github/patches/apply_flutter_3.50_source_patches.sh`. That script selects the
 local plugin and installs the preview bootstrap. Build with
 `FLUTTER_WINDOWING=true` and launch RustDesk with `--experimental-windowing` to
@@ -152,18 +145,18 @@ bars for the new TCP forwarding windows.
 
 The Windows client CI smoke test invokes the real TCP forwarding launch
 path with a loopback address and checks that the same RustDesk process owns
-a visible `FLUTTER_HOST_WINDOW`. This validates window creation, not a
-successful connection to another peer.
+a visible `FLUTTER_HOST_WINDOW`. The test uses a loopback address to exercise
+window creation and does not require a successful peer connection.
 
 ## Upstream acceptance
 
-The experiment workflow runs the native Windows test. Full Flutter CI also runs
-for this branch. Its x64 Windows job builds the RustDesk application using stock
-Flutter 3.50.1 and the existing backend; other jobs use their current platform
-SDK and backend. Passing that matrix does not exercise application sessions on
-the new backend.
-A replacement PR needs a matrix that compiles the integrated client with the
-new backend selected on each supported platform.
+The experiment workflow runs the native Windows tests and builds a standalone
+macOS and Linux app. The Linux job opens two GTK windows under Xvfb and checks
+message routing, per-window state, visibility, and view destruction. The macOS
+job checks the build. Full Flutter CI builds the integrated preview for Windows
+x64 and macOS arm64. The remaining jobs use their current platform SDKs.
+Participants can use the standalone Linux result to diagnose the plugin while
+the full Linux client still uses the existing backend.
 
 The current Windows x64 build uses Flutter 3.24.5 and a separately provided
 engine to retain Windows 7 support. The experiment needs Flutter 3.50.1.
@@ -171,10 +164,8 @@ The supported Windows and macOS versions must be resolved before changing the
 production toolchain. A successful Windows 11 example run does not establish
 support on older systems.
 
-For the application integration, move launch identity, stateGlobal and event
-subscriptions to explicit window ownership, then wire a first real session view
-and its texture/input routing. Verify two simultaneous connections with close,
-reopen, tab reuse, visibility and persisted geometry before migrating the other
-window types. Add Linux/macOS runner and window-control coverage before selecting
-this backend there. Keep the normal CI jobs and require the new backend's jobs
-while both paths exist.
+Before replacing the existing backend, migrate texture/input routing and the
+remaining session types. Verify two simultaneous connections with close,
+reopen, tab reuse, visibility and persisted geometry. Extend the integrated
+builds and runtime checks to the remaining desktop targets. GTK positioning on
+Wayland depends on the compositor and needs separate runtime verification.

@@ -5,17 +5,58 @@ on:
   pull_request:
     paths:
       - 'examples/flutter_windowing/**'
+      - '.github/patches/install_flutter_windowing.sh'
       - '.github/workflows/flutter-windowing-experiment.yml'
   push:
     branches: [experimental/flutter-official-windowing]
     paths:
       - 'examples/flutter_windowing/**'
+      - '.github/patches/install_flutter_windowing.sh'
       - '.github/workflows/flutter-windowing-experiment.yml'
 
 permissions:
   contents: read
 
 jobs:
+  unix:
+    name: ${{ matrix.platform }} official windowing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-24.04
+          - platform: macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    env:
+      FLUTTER_WINDOWING: 'true'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install GTK build and test prerequisites
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libstdc++-12-dev ninja-build xvfb openbox
+      - name: Install Flutter SDK
+        run: bash .github/patches/install_flutter_windowing.sh
+      - name: Build window lifecycle smoke app
+        working-directory: examples/flutter_windowing/experimental_example
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter create --platforms="$PLATFORM" --project-name windowing_poc --no-pub .
+          flutter build "$PLATFORM" --release -t lib/unix_smoke.dart
+      - name: Check native GTK windows under X11
+        if: matrix.platform == 'linux'
+        working-directory: examples/flutter_windowing/experimental_example
+        run: |
+          xvfb-run -a bash -e -c '
+            openbox &
+            trap "kill $!" EXIT
+            timeout 45s ./build/linux/x64/release/bundle/windowing_poc
+          '
+
   windows:
     name: Windows x64 official windowing
     runs-on: windows-2025

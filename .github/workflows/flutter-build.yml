@@ -12,8 +12,8 @@ on:
       publish-update-metadata:
         type: boolean
         default: false
-      windows-x64-flutter-preview:
-        description: Build the Windows x64 client against stock Flutter 3.50.1
+      desktop-windowing-preview:
+        description: Build the Windows x64 and macOS arm64 clients against Flutter 3.50.1
         type: boolean
         default: false
 
@@ -205,7 +205,7 @@ jobs:
           # arm64 is on Flutter 3.44, so it needs the bridge generated with the same Flutter
           # (its *.freezed.dart must match the freezed the arm64 build resolves). x64 and every
           # other platform keep the default 3.22.3-generated bridge.
-          name: ${{ (matrix.job.arch == 'aarch64' || inputs.windows-x64-flutter-preview) && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
+          name: ${{ (matrix.job.arch == 'aarch64' || inputs.desktop-windowing-preview) && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
           path: ./
 
       - name: Install LLVM and Clang
@@ -215,7 +215,7 @@ jobs:
 
       - name: Install flutter
         id: flutter
-        if: ${{ matrix.job.arch != 'x86_64' || !inputs.windows-x64-flutter-preview }}
+        if: ${{ matrix.job.arch != 'x86_64' || !inputs.desktop-windowing-preview }}
         # arm64 builds with FLUTTER_WINDOWS_ARM_VERSION (>=3.44); x64 stays on FLUTTER_VERSION.
         # subosito only ships an x64 Windows SDK (Flutter's release manifest lists x64 only),
         # so it installs x64 on both arches. The arm64 runner re-bootstraps Dart to arm64 in
@@ -227,7 +227,7 @@ jobs:
           architecture: x64
 
       - name: Install Flutter 3.50 windowing preview
-        if: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
+        if: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
         shell: pwsh
         run: |
           $sdk = Join-Path $env:RUNNER_TEMP 'flutter-preview'
@@ -275,7 +275,7 @@ jobs:
       # x64 only: arm64 uses the stock native arm64 Windows engine, and the rustdesk/engine
       # windows-x64-release.zip is built for the 3.24-era x64 engine (matches FLUTTER_VERSION).
       - name: Replace engine with rustdesk custom flutter engine
-        if: ${{ matrix.job.arch == 'x86_64' && !inputs.windows-x64-flutter-preview }}
+        if: ${{ matrix.job.arch == 'x86_64' && !inputs.desktop-windowing-preview }}
         run: |
           flutter doctor -v
           flutter precache --windows
@@ -286,7 +286,7 @@ jobs:
       - name: Patch flutter
         # x64 stays on Flutter 3.24.5, which needs the dropdown filter patch.
         # arm64 is on Flutter 3.44 (patched separately below) and does not use this patch.
-        if: ${{ matrix.job.arch == 'x86_64' && !inputs.windows-x64-flutter-preview }}
+        if: ${{ matrix.job.arch == 'x86_64' && !inputs.desktop-windowing-preview }}
         shell: bash
         run: |
           cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
@@ -300,10 +300,10 @@ jobs:
         # (shared with the macOS arm64 build and the 3.44 bridge job) so the committed sources
         # stay on Flutter 3.24.5.
         # `flutter build` then runs `pub get`, regenerating pubspec.lock for the bumped deps.
-        if: ${{ matrix.job.arch == 'aarch64' || inputs.windows-x64-flutter-preview }}
+        if: ${{ matrix.job.arch == 'aarch64' || inputs.desktop-windowing-preview }}
         shell: bash
         env:
-          USE_FLUTTER_PREVIEW: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
+          USE_FLUTTER_PREVIEW: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
         run: |
           if [[ "$USE_FLUTTER_PREVIEW" == "true" ]]; then
             bash .github/patches/apply_flutter_3.50_source_patches.sh
@@ -312,7 +312,7 @@ jobs:
           fi
 
       - name: Verify desktop session window state on Flutter 3.50
-        if: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
+        if: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
         working-directory: flutter
         run: flutter test test/desktop_window_scope_test.dart
 
@@ -363,7 +363,7 @@ jobs:
 
       - name: Build rustdesk
         env:
-          FLUTTER_WINDOWING: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
+          FLUTTER_WINDOWING: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
         run: |
           # Windows: build RustDesk
           # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix
@@ -405,7 +405,7 @@ jobs:
           }
 
       - name: Open a RustDesk TCP forwarding window with the official backend
-        if: ${{ matrix.job.arch == 'x86_64' && inputs.windows-x64-flutter-preview }}
+        if: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
         shell: pwsh
         run: ./examples/flutter_windowing/test_rustdesk_preview.ps1 -Executable ./rustdesk/rustdesk.exe
 
@@ -1045,12 +1045,18 @@ jobs:
           nasm --version
 
       - name: Install flutter
+        if: ${{ matrix.job.arch != 'aarch64' || !inputs.desktop-windowing-preview }}
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: "stable"
           flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_MACOS_ARM_VERSION || env.FLUTTER_VERSION }}
 
-      - name: Keep CocoaPods for Flutter 3.44 (arm64)
+      - name: Install Flutter 3.50 windowing preview (arm64)
+        if: ${{ matrix.job.arch == 'aarch64' && inputs.desktop-windowing-preview }}
+        shell: bash
+        run: bash .github/patches/install_flutter_windowing.sh
+
+      - name: Keep CocoaPods for arm64
         # 3.44 turns on Swift Package Manager by default, which would migrate Runner.xcodeproj and
         # move some plugins off CocoaPods; every plugin still ships a podspec.
         if: ${{ matrix.job.arch == 'aarch64' }}
@@ -1073,14 +1079,20 @@ jobs:
           sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart
           grep -n '_setFramesEnabledState(false);' ../packages/flutter/lib/src/scheduler/binding.dart
 
-      - name: Patch RustDesk sources for Flutter 3.44 (arm64)
+      - name: Patch RustDesk sources for the selected Flutter SDK (arm64)
         # The script uses GNU `sed -i`, which macOS's BSD sed rejects.
         if: ${{ matrix.job.arch == 'aarch64' }}
         shell: bash
+        env:
+          USE_FLUTTER_PREVIEW: ${{ inputs.desktop-windowing-preview }}
         run: |
           brew install gnu-sed
           export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
-          bash .github/patches/apply_flutter_3.44_source_patches.sh
+          if [[ "$USE_FLUTTER_PREVIEW" == true ]]; then
+            bash .github/patches/apply_flutter_3.50_source_patches.sh
+          else
+            bash .github/patches/apply_flutter_3.44_source_patches.sh
+          fi
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -1139,6 +1151,8 @@ jobs:
           rustc -V
 
       - name: Build rustdesk
+        env:
+          FLUTTER_WINDOWING: ${{ matrix.job.arch == 'aarch64' && inputs.desktop-windowing-preview }}
         run: |
           if [ "${{ matrix.job.target }}" = "aarch64-apple-darwin" ]; then
             MIN_MACOS_VERSION="12.3"
