@@ -130,6 +130,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
         labelGetter: DesktopTab.tablabelGetter,
       ),
     );
+    if (_window?.nativeTitleBar == true) return child;
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(
             context,
@@ -144,7 +145,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
                   border: Border.all(color: MyTheme.color(context).border!)),
               child: child,
             ));
-    return isMacOS || kUseCompatibleUiMode || _window?.nativeTitleBar == true
+    return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : Obx(
             () => SubWindowDragToResizeArea(

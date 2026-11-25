@@ -456,7 +456,7 @@ class _Controller extends WindowController {
       throw ArgumentError.value(
         frame,
         'frame',
-        'Expected a positive Win32 window rectangle',
+        'Expected valid window bounds with positive width and height',
       );
     }
     if (entry.native == null) {

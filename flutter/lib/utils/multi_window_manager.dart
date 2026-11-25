@@ -177,6 +177,9 @@ class RustDeskMultiWindowManager {
     if (official) {
       try {
         await windowController.setPreventClose(true);
+        if (!withScreenRect) {
+          await restoreWindowPosition(type, windowId: windowId);
+        }
         await windowController.show();
       } catch (_) {
         try {
