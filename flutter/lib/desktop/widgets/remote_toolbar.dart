@@ -3014,7 +3014,7 @@ class _CloseMenu extends StatelessWidget {
         if (await showConnEndAuditDialogCloseCanceled(ffi: ffi)) {
           return;
         }
-        closeConnection(id: id);
+        ffi.dialogManager.closeSession(id: id);
       },
       color: _ToolbarTheme.redColor,
       hoverColor: _ToolbarTheme.hoverRedColor,
@@ -3637,7 +3637,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
               return Offstage();
             } else {
               return buttonWrapper(
-                () => closeConnection(id: widget.id),
+                () => widget.ffi.dialogManager.closeSession(id: widget.id),
                 Tooltip(
                   message: translate('Close'),
                   child: Icon(

@@ -76,6 +76,7 @@ class _TerminalPageState extends State<TerminalPage>
       forceRelay: widget.forceRelay,
       connToken: widget.connToken,
       windowState: DesktopWindowScope.read(context)?.windowState,
+      onCloseWindow: widget.tabController.onCloseWindow,
     );
 
     // Create terminal model with specific terminal ID
@@ -126,9 +127,8 @@ class _TerminalPageState extends State<TerminalPage>
 
       if (!isExistingConnection) {
         // First terminal - show loading dialog, wait for onReady
-        _ffi.dialogManager.showLoading(translate('Connecting...'), onCancel: () {
-          if (mounted) widget.tabController.onCloseWindow?.call();
-        });
+        _ffi.dialogManager.showLoading(translate('Connecting...'),
+            onCancel: _ffi.dialogManager.closeSession);
       } else {
         // Additional terminal - connection already established
         // Open the terminal directly

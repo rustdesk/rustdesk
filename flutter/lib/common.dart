@@ -785,6 +785,18 @@ class OverlayKeyState {
 }
 
 class OverlayDialogManager {
+  VoidCallback? onCloseSession;
+  bool keepSessionOnMessage = false;
+
+  void closeSession({String? id}) {
+    final close = onCloseSession;
+    if (close == null) {
+      closeConnection(id: id);
+    } else {
+      close();
+    }
+  }
+
   final Map<String, Dialog> _dialogs = {};
   var _overlayKeyState = OverlayKeyState();
   int _tagCount = 0;
@@ -1192,7 +1204,7 @@ void msgBox(SessionID sessionId, String type, String title, String text,
         value: 'N',
       );
       dialogManager.dismissAll();
-      closeConnection();
+      dialogManager.closeSession();
     }
 
     void continueSession() {
@@ -1234,8 +1246,10 @@ void msgBox(SessionID sessionId, String type, String title, String text,
       onSubmit.call();
     } else {
       // https://github.com/rustdesk/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
-      if (!type.contains("custom") && desktopType != DesktopType.portForward) {
-        closeConnection();
+      if (!type.contains("custom") &&
+          !dialogManager.keepSessionOnMessage &&
+          desktopType != DesktopType.portForward) {
+        dialogManager.closeSession();
       }
     }
   }

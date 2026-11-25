@@ -21,7 +21,6 @@ on:
 # Keep the release and upstream PR behavior independent of the preview branch.
 concurrency:
   group: full-flutter-ci-${{ github.ref == 'refs/heads/experimental/flutter-official-windowing' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/experimental/flutter-official-windowing' }}
 
 jobs:
   run-ci:

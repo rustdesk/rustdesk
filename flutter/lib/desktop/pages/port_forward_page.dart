@@ -68,6 +68,11 @@ class _PortForwardPageState extends State<PortForwardPage>
   void initState() {
     super.initState();
     _ffi = FFI(null);
+    _ffi.dialogManager
+      ..keepSessionOnMessage = true
+      ..onCloseSession = () {
+        if (mounted) widget.tabController.closeBy(widget.id);
+      };
     _ffi.start(widget.id,
         isPortForward: true,
         password: widget.password,

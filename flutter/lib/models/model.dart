@@ -407,7 +407,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'switch_back') {
         final peer_id = evt['peer_id'].toString();
         await bind.sessionSwitchSides(sessionId: sessionId);
-        closeConnection(id: peer_id);
+        parent.target?.dialogManager.closeSession(id: peer_id);
       } else if (name == 'portable_service_running') {
         _handlePortableServiceRunning(peerId, evt);
       } else if (name == 'on_url_scheme_received') {
@@ -1072,7 +1072,7 @@ class FfiModel with ChangeNotifier {
     if (showNoteEdit) {
       await showConnEndAuditDialogCloseCanceled(
           ffi: parent.target!, type: type, title: title, text: text);
-      closeConnection();
+      dialogManager.closeSession();
     } else {
       VoidCallback? onSubmit;
       if (noteAllowed && hasRetry) {
@@ -1082,7 +1082,7 @@ class FfiModel with ChangeNotifier {
           _timer = null;
           await showConnEndAuditDialogCloseCanceled(
               ffi: ffi, type: type, title: title, text: text);
-          closeConnection();
+          dialogManager.closeSession();
         };
       }
       msgBox(sessionId, type, title, text, link, dialogManager,
@@ -1123,7 +1123,7 @@ class FfiModel with ChangeNotifier {
     clearPermissions();
     dialogManager.dismissAll();
     dialogManager.showLoading(translate('Connecting...'),
-        onCancel: closeConnection);
+        onCancel: dialogManager.closeSession);
   }
 
   Future<void> showRelayHintDialog(
@@ -1146,13 +1146,13 @@ class FfiModel with ChangeNotifier {
           ffi: parent.target!, type: type, title: title, text: text2)) {
         return;
       }
-      closeConnection();
+      dialogManager.closeSession();
       return;
     }
 
     dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
       onClose() {
-        closeConnection();
+        dialogManager.closeSession();
         close();
       }
 
@@ -1184,7 +1184,7 @@ class FfiModel with ChangeNotifier {
   void showConnectedWaitingForImage(OverlayDialogManager dialogManager,
       SessionID sessionId, String type, String title, String text) {
     onClose() {
-      closeConnection();
+      dialogManager.closeSession();
     }
 
     if (waitForFirstImage.isFalse) return;

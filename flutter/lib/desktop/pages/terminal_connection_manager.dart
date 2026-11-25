@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import '../../models/model.dart';
@@ -20,6 +22,7 @@ class TerminalConnectionManager {
     required bool? forceRelay,
     required String? connToken,
     StateGlobal? windowState,
+    Future<void> Function()? onCloseWindow,
   }) {
     final existingFfi = _connections[peerId];
     if (existingFfi != null && !existingFfi.closed) {
@@ -32,6 +35,9 @@ class TerminalConnectionManager {
     // Create new FFI instance for first terminal
     debugPrint('[TerminalConnectionManager] Creating new terminal connection for peer $peerId');
     final ffi = FFI(null, windowState: windowState);
+    if (onCloseWindow != null) {
+      ffi.dialogManager.onCloseSession = () => unawaited(onCloseWindow());
+    }
     ffi.start(
       peerId,
       password: password,

@@ -165,6 +165,12 @@ class _RemotePageState extends State<RemotePage>
     _window = DesktopWindowScope.read(context);
     _ffi = FFI(widget.sessionId, windowState: _window?.windowState,
         sessionStateKey: widget.sessionStateKey);
+    final tabController = widget.tabController;
+    if (tabController != null) {
+      _ffi.dialogManager.onCloseSession = () {
+        if (mounted) tabController.closeBy(widget.id);
+      };
+    }
     if (isMacOS) {
       // SchedulerBinding.instance.lifecycleState is null in the first connection in a new window.
       _macOSLifecycleState = SchedulerBinding.instance.lifecycleState;
@@ -207,15 +213,8 @@ class _RemotePageState extends State<RemotePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       if (!mounted) return;
-      _ffi.dialogManager.showLoading(translate('Connecting...'), onCancel: () {
-        if (!mounted) return;
-        final controller = widget.tabController;
-        if (controller == null) {
-          closeConnection(id: widget.id);
-        } else {
-          controller.closeBy(widget.id);
-        }
-      });
+      _ffi.dialogManager.showLoading(translate('Connecting...'),
+          onCancel: _ffi.dialogManager.closeSession);
     });
     WakelockManager.enable(_uniqueKey);
 
