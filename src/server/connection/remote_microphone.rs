@@ -14,6 +14,14 @@ impl Connection {
             match mic.action.as_str() {
                 "query" => response.action = "available".into(),
                 "start" | "resume" if !self.voice_calling => {
+                    if self
+                        .remote_microphone
+                        .as_ref()
+                        .map(|receiver| !receiver.healthy())
+                        .unwrap_or(false)
+                    {
+                        self.remote_microphone.take();
+                    }
                     if self.remote_microphone.is_none() {
                         let peer_id = self.lr.my_id.clone();
                         match tokio::task::spawn_blocking(move || {
@@ -41,16 +49,15 @@ impl Connection {
                         response.action = "error".into();
                     }
                 }
-                "mute" | "stop" => {
+                "mute" => {
                     if let Some(receiver) = &self.remote_microphone {
                         receiver.silence();
                     }
-                    response.action = if mic.action == "mute" {
-                        "silenced"
-                    } else {
-                        "stopped"
-                    }
-                    .into();
+                    response.action = "silenced".into();
+                }
+                "stop" => {
+                    self.remote_microphone.take();
+                    response.action = "stopped".into();
                 }
                 "frame" => {
                     if let Some(receiver) = &self.remote_microphone {

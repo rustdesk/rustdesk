@@ -435,7 +435,15 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.remote_mic_stop.take();
                 self.remote_mic_epoch = 0;
                 self.remote_mic_requested = false;
-                self.handler.on_remote_microphone("interrupted", "");
+                if !self
+                    .handler
+                    .connection_round_state
+                    .lock()
+                    .unwrap()
+                    .is_round_gt(round)
+                {
+                    self.handler.on_remote_microphone("interrupted", "");
+                }
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
                     s.send(()).ok();
@@ -2622,9 +2630,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.handler.on_remote_microphone("active", "");
                         }
                         "available" | "unavailable" | "silenced" | "stopped" | "error" => {
-                            self.remote_mic_requested = false;
-                            self.remote_mic_stop.take();
-                            self.handler.on_remote_microphone(&mic.action, &mic.error);
+                            let current = mic.epoch == self.remote_mic_epoch;
+                            if mic.action != "silenced" || current {
+                                self.remote_mic_requested = false;
+                                self.remote_mic_stop.take();
+                                self.handler.on_remote_microphone(&mic.action, &mic.error);
+                            }
                         }
                         _ => {}
                     }

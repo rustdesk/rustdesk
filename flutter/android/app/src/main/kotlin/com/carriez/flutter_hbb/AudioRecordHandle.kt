@@ -279,6 +279,9 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
         Log.d(logTag, "destroy audio record handle")
 
         audioRecordStat = false
+        runCatching { audioRecorder?.stop() }
         audioThread?.join()
+        audioThread = null
+        audioRecorder?.let { releaseRecorder(it) }
     }
 }

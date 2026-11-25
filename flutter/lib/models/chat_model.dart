@@ -558,6 +558,7 @@ class ChatModel with ChangeNotifier {
   }
 
   close() {
+    remoteMicrophone.sessionClosed();
     hideChatIconOverlay();
     hideChatWindowOverlay();
     notifyListeners();

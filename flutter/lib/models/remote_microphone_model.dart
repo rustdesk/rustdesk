@@ -19,6 +19,7 @@ class RemoteMicrophoneModel {
   bool _checkingHealth = false;
   int _generation = 0;
   bool _resumeAfterReconnect = false;
+  String? _resumePeerId;
   bool _seenSession = false;
 
   void send(String action) {
@@ -54,17 +55,19 @@ class RemoteMicrophoneModel {
       send('start');
       _timeout?.cancel();
       _timeout = Timer(const Duration(seconds: 5), () {
-        if (state.value == 'starting') {
+        if (!_disposed && generation == _generation && state.value == 'starting') {
           fail('Remote microphone did not respond');
         }
       });
     } catch (failure) {
+      if (_disposed || generation != _generation) return;
       fail(failure.toString());
     }
   }
 
   void stop({bool mute = false}) {
     _resumeAfterReconnect = false;
+    _resumePeerId = null;
     if (!isAndroid || state.value == 'unavailable' && _owner != this) return;
     ++_generation;
     _timeout?.cancel();
@@ -92,10 +95,13 @@ class RemoteMicrophoneModel {
       _seenSession = true;
       state.value = 'stopped';
       error.value = '';
-      if (_resumeAfterReconnect ||
+      final resumeInterruptedPeer =
+          _resumeAfterReconnect && _resumePeerId == peerId;
+      _resumeAfterReconnect = false;
+      _resumePeerId = null;
+      if (resumeInterruptedPeer ||
           firstConnection &&
               bind.mainGetPeerOptionSync(id: peerId, key: preference) == 'Y') {
-        _resumeAfterReconnect = false;
         await start();
       }
     } else if (next == 'active') {
@@ -108,13 +114,16 @@ class RemoteMicrophoneModel {
       _health?.cancel();
       _health = Timer.periodic(const Duration(seconds: 1), (_) async {
         if (_checkingHealth || _disposed || _owner != this) return;
+        final generation = _generation;
         _checkingHealth = true;
         try {
-          if (!(await parent.target?.invokeMethod('remote_microphone_status') ??
-              false)) {
+          final healthy = await parent.target?.invokeMethod('remote_microphone_status') ?? false;
+          if (_disposed || generation != _generation) return;
+          if (!healthy) {
             fail('Android microphone capture stopped');
           }
         } catch (failure) {
+          if (_disposed || generation != _generation) return;
           fail(failure.toString());
         } finally {
           _checkingHealth = false;
@@ -126,6 +135,7 @@ class RemoteMicrophoneModel {
       _resumeAfterReconnect = next == 'interrupted' &&
           (state.value == 'active' || state.value == 'starting');
       if (_resumeAfterReconnect) {
+        _resumePeerId = peerId;
         ++_generation;
         _timeout?.cancel();
         state.value = 'interrupted';
@@ -150,9 +160,17 @@ class RemoteMicrophoneModel {
     }
   }
 
+  void sessionClosed() {
+    stop();
+    _resumeAfterReconnect = false;
+    _resumePeerId = null;
+    _seenSession = false;
+  }
+
   void dispose() {
     stop();
     _disposed = true;
     _resumeAfterReconnect = false;
+    _resumePeerId = null;
   }
 }

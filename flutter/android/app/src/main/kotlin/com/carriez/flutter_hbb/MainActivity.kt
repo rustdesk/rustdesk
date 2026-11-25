@@ -670,7 +670,9 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "remote_microphone_start" -> {
-                    if (RemoteMicrophoneService.running) {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                        result.error("unsupported_version", "Remote microphone requires Android 11 or later", null)
+                    } else if (RemoteMicrophoneService.running) {
                         result.success(true)
                     } else if (MainService.isStart || MainService.isAudioStart || isAudioStart) {
                         result.error("microphone_busy", "Stop tablet screen sharing or voice capture first", null)

@@ -612,7 +612,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         mainAxisSize: MainAxisSize.max,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Row(
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
               children: <Widget>[
                     IconButton(
                       color: Colors.white,
@@ -662,7 +665,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   (isWeb
                       ? []
                       : <Widget>[
-                          if (isAndroid) RemoteMicrophoneButton(ffi: gFFI, peerId: widget.id),
+                          if (isAndroid)
+                            RemoteMicrophoneButton(ffi: gFFI, peerId: widget.id),
                           futureBuilder(
                               future: gFFI.invokeMethod(
                                   "get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
@@ -688,7 +692,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         showActions(widget.id);
                       },
                     ),
-                  ]),
+                  ])),
+            ),
           Obx(() => IconButton(
                 color: Colors.white,
                 icon: Icon(Icons.expand_more),

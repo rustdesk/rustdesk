@@ -39,7 +39,9 @@ impl Receiver {
         let mut parked = PARKED.lock();
         if parked.as_ref().map(|(id, _, _)| id.as_str()) == Some(peer) {
             if let Some((_, receiver, _)) = parked.take() {
-                return Ok(receiver);
+                if receiver.healthy() {
+                    return Ok(receiver);
+                }
             }
         }
         drop(parked);
@@ -129,13 +131,24 @@ impl Receiver {
             return;
         }
         let mut pcm = [0f32; 11520];
-        if let Ok(frames) = self.decoder.lock().decode_float(data, &mut pcm, false) {
-            for frame in pcm[..frames * 2].chunks_exact(2) {
-                state.pcm.push_back((frame[0] + frame[1]) * 0.5);
+        match self.decoder.lock().decode_float(data, &mut pcm, false) {
+            Ok(frames) => {
+                for frame in pcm[..frames * 2].chunks_exact(2) {
+                    state.pcm.push_back((frame[0] + frame[1]) * 0.5);
+                }
+                // Keep at most 100ms; never play a growing backlog of old speech.
+                let excess = state.pcm.len().saturating_sub(4800);
+                state.pcm.drain(..excess);
             }
-            // Keep at most 100ms; never play a growing backlog of old speech.
-            let excess = state.pcm.len().saturating_sub(4800);
-            state.pcm.drain(..excess);
+            Err(error) => {
+                const DECODE_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(60);
+                hbb_common::throttled_log!(
+                    DECODE_ERROR_LOG_INTERVAL,
+                    warn,
+                    "Failed to decode remote microphone Opus frame: {}",
+                    error
+                );
+            }
         }
     }
 }
@@ -178,14 +191,23 @@ fn source(
 
     let status = std::rc::Rc::new(std::cell::RefCell::new(None));
     let callback_status = status.clone();
+    let callback_running = running.clone();
     let _listener = stream
         .add_local_listener_with_user_data(state)
-        .state_changed(move |_, _, state, _| match state {
+        .state_changed(move |_, _, _, state| match state {
             pw::stream::StreamState::Paused | pw::stream::StreamState::Streaming => {
                 *callback_status.borrow_mut() = Some(Ok(()))
             }
             pw::stream::StreamState::Error(err) => {
+                callback_running.store(false, Ordering::Release);
                 *callback_status.borrow_mut() = Some(Err(err.to_owned()))
+            }
+            pw::stream::StreamState::Unconnected => {
+                if callback_status.borrow().is_some() {
+                    callback_running.store(false, Ordering::Release);
+                    *callback_status.borrow_mut() =
+                        Some(Err("PipeWire stream became unconnected".to_string()));
+                }
             }
             _ => {}
         })

@@ -17,10 +17,11 @@ class RemoteMicrophoneService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     override fun onBind(intent: Intent?) = null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "stop") { stopSelf(); return START_NOT_STICKY }
+        if (intent?.action == "stop") { stopSelf(startId); return START_NOT_STICKY }
         if (recorder != null) return START_NOT_STICKY
         error = ""
         try {
+            check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { "Remote microphone requires Android 11 or later" }
             check(!MainService.isStart && !MainService.isAudioStart) { "Stop tablet screen sharing first" }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(NotificationChannel(CHANNEL, "Remote microphone", NotificationManager.IMPORTANCE_LOW))
