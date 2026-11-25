@@ -6,6 +6,7 @@ import 'package:desktop_multi_window/experimental_windowing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/window_scope.dart';
@@ -26,6 +27,10 @@ Widget? mountWindowingPreview(Widget mainWindow, List<String> arguments) {
       if (arguments == null) return false;
       final payload = jsonDecode(arguments) as Map<String, dynamic>;
       if (payload['type'] == WindowType.FileTransfer.index) return true;
+      if (Platform.isWindows &&
+          payload['type'] == WindowType.RemoteDesktop.index) {
+        return true;
+      }
       return payload['type'] == WindowType.PortForward.index &&
           (Platform.isWindows || payload['isRDP'] != true);
     },
@@ -62,9 +67,11 @@ class _SessionWindowState extends State<_SessionWindow> {
     final args = jsonDecode(window.arguments!) as Map<String, dynamic>;
     args['windowId'] = window.windowId;
     type = WindowType.values[args['type'] as int];
-    screen = type == WindowType.FileTransfer
-        ? DesktopFileTransferScreen(params: args)
-        : DesktopPortForwardScreen(params: args);
+    screen = switch (type) {
+      WindowType.FileTransfer => DesktopFileTransferScreen(params: args),
+      WindowType.RemoteDesktop => DesktopRemoteScreen(params: args),
+      _ => DesktopPortForwardScreen(params: args),
+    };
   }
 
   @override

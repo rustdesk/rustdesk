@@ -3880,7 +3880,8 @@ class CursorModel with ChangeNotifier {
   trySetRemoteWindowCoords() {
     Future.delayed(Duration.zero, () async {
       _windowRect =
-          await InputModel.fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords);
+          await InputModel.fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords,
+              windowId: parent.target?.windowState?.windowId);
     });
   }
 
@@ -4066,7 +4067,10 @@ class FFI {
   // Getter for terminal models
   Map<int, TerminalModel> get terminalModels => _terminalModels;
 
-  FFI(SessionID? sId) {
+  final StateGlobal? windowState;
+  StateGlobal get desktopWindowState => windowState ?? stateGlobal;
+
+  FFI(SessionID? sId, {this.windowState}) {
     sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));

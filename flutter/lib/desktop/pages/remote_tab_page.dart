@@ -65,7 +65,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final screenRect = parseParamScreenRect(params);
     _isScreenRectSet = screenRect != null;
     _display = display as int?;
-    tryMoveToScreenAndSetFullscreen(screenRect);
     if (peerId != null) {
       ConnectionTypeState.init(peerId!);
       tabController.onSelected = (id) {
@@ -126,7 +125,10 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       window.run(registerHandler);
     }
 
-    if (!_isScreenRectSet) {
+    if (_isScreenRectSet) {
+      tryMoveToScreenAndSetFullscreen(parseParamScreenRect(widget.params),
+          windowState: _windowState);
+    } else {
       Future.delayed(Duration.zero, () {
         restoreWindowPosition(
           WindowType.RemoteDesktop,
@@ -456,7 +458,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           _windowState.setFullscreen(false, procWnd: false);
         }
         await setNewConnectWindowFrame(windowId(), id!, prePeerCount,
-            WindowType.RemoteDesktop, display, screenRect);
+            WindowType.RemoteDesktop, display, screenRect, windowState: _windowState);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });

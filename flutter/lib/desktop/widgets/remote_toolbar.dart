@@ -483,11 +483,11 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   int _dockingOptionSyncSerial = 0;
   int _dragEpoch = 0;
 
-  int get windowId => stateGlobal.windowId;
+  int get windowId => widget.ffi.desktopWindowState.windowId;
 
   void _setFullscreen(bool v) {
-    stateGlobal.setFullscreen(v);
-    // stateGlobal.fullscreen is RxBool now, no need to call setState.
+    widget.ffi.desktopWindowState.setFullscreen(v);
+    // The fullscreen observable updates the toolbar.
     // setState(() {});
   }
 
@@ -1374,8 +1374,8 @@ class ScreenAdjustor {
     required this.cbExitFullscreen,
   });
 
-  bool get isFullscreen => stateGlobal.fullscreen.isTrue;
-  int get windowId => stateGlobal.windowId;
+  bool get isFullscreen => ffi.desktopWindowState.fullscreen.isTrue;
+  int get windowId => ffi.desktopWindowState.windowId;
 
   Future<bool?> isWindowMaximized() async {
     try {
@@ -1648,7 +1648,7 @@ class ScreenAdjustor {
           } catch (_) {
             return;
           }
-          stateGlobal.setMaximized(false);
+          ffi.desktopWindowState.setMaximized(false);
           // Wait for the window manager and Flutter view metrics to reflect
           // the restored window before calculating and setting its frame.
           await Future.delayed(Duration(milliseconds: 300));
@@ -1665,7 +1665,7 @@ class ScreenAdjustor {
       } catch (_) {
         return;
       }
-      stateGlobal.setMaximized(false);
+      ffi.desktopWindowState.setMaximized(false);
     }
   }
 
@@ -1733,7 +1733,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     cbExitFullscreen: () => widget.setFullscreen(false),
   );
 
-  int get windowId => stateGlobal.windowId;
+  int get windowId => ffi.desktopWindowState.windowId;
   Map<String, bool> get perms => widget.ffi.ffiModel.permissions;
   PeerInfo get pi => widget.ffi.ffiModel.pi;
   FfiModel get ffiModel => widget.ffi.ffiModel;
@@ -2301,7 +2301,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       return;
     }
     final lastGroupValue =
-        stateGlobal.getLastResolutionGroupValue(widget.id, pi.currentDisplay);
+        ffi.desktopWindowState.getLastResolutionGroupValue(widget.id, pi.currentDisplay);
     if (lastGroupValue == _kCustomResolutionValue) {
       _groupValue = _kCustomResolutionValue;
     } else {
@@ -2364,7 +2364,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     if (pi.currentDisplay == kAllDisplayValue) {
       return;
     }
-    stateGlobal.setLastResolutionGroupValue(
+    ffi.desktopWindowState.setLastResolutionGroupValue(
         widget.id, pi.currentDisplay, value);
     if (value == null) return;
 
@@ -2707,7 +2707,7 @@ class _KeyboardMenu extends StatelessWidget {
       return;
     }
     if (supportedInputSourceList.length < 2) return Offstage();
-    final inputSource = stateGlobal.getInputSource();
+    final inputSource = ffi.desktopWindowState.getInputSource();
     final enabled = !ffi.ffiModel.viewOnly;
     final children = <Widget>[Divider()];
     children.addAll(supportedInputSourceList.map((e) {
@@ -2719,7 +2719,7 @@ class _KeyboardMenu extends StatelessWidget {
         onChanged: enabled
             ? (v) async {
                 if (v != null) {
-                  await stateGlobal.setInputSource(ffi.sessionId, v);
+                  await ffi.desktopWindowState.setInputSource(ffi.sessionId, v);
                   // Release native input; see the macOS trade-offs in RemotePage.
                   if (isMacOS) ffi.inputModel.enterOrLeave(false);
                   await ffi.ffiModel.checkDesktopKeyboardMode();
@@ -3560,7 +3560,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       minimumSize: MaterialStateProperty.all(const Size(0, 0)),
       padding: MaterialStateProperty.all(EdgeInsets.zero),
     );
-    final isFullscreen = stateGlobal.fullscreen;
+    final isFullscreen = widget.ffi.desktopWindowState.fullscreen;
     const double iconSize = 20;
 
     buttonWrapper(VoidCallback? onPressed, Widget child,

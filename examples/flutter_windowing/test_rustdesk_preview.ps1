@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory)] [string]$Executable,
-  [ValidateSet('port-forward', 'file-transfer', 'rdp')] [string]$Session = 'port-forward',
+  [ValidateSet('port-forward', 'file-transfer', 'rdp', 'connect')] [string]$Session = 'port-forward',
   [switch]$AlsoOpenFileTransfer
 )
 
@@ -21,7 +21,11 @@ $options = @{
 }
 $process = Start-Process @options
 try {
-  $title = if ($Session -eq 'file-transfer') { '*File Transfer*' } else { '*Port Forward*' }
+  $title = switch ($Session) {
+    'file-transfer' { '*File Transfer*' }
+    'connect' { '*Remote Desktop*' }
+    default { '*Port Forward*' }
+  }
   $deadline = (Get-Date).AddSeconds(40)
   do {
     if ($process.HasExited) {
@@ -40,7 +44,7 @@ try {
   }
   Write-Output "RustDesk opened HWND $($official.handle) of class $($official.className)."
   if ($AlsoOpenFileTransfer) {
-    if ($Session -eq 'file-transfer') { throw 'Start with a TCP forwarding or RDP window.' }
+    if ($Session -eq 'file-transfer') { throw 'Start with a different session type than file transfer.' }
     $second = Start-Process -FilePath $exe -WorkingDirectory $options.WorkingDirectory -WindowStyle Hidden -PassThru -ArgumentList @('--file-transfer', '127.0.0.1:2')
     try {
       $deadline = (Get-Date).AddSeconds(40)
@@ -51,7 +55,7 @@ try {
         $windows = @((& $nativeProbe -AppProcessId $process.Id | ConvertFrom-Json))
         $children = @($windows | Where-Object {
           $_.className -eq 'FLUTTER_HOST_WINDOW' -and $_.visible -and
-            ($_.title -like '*Port Forward*' -or $_.title -like '*File Transfer*')
+            ($_.title -like $title -or $_.title -like '*File Transfer*')
         })
         if ($children.Count -eq 2) { break }
         Start-Sleep -Milliseconds 300
@@ -71,9 +75,9 @@ try {
       } while ((Get-Date) -lt $deadline)
       if (($windows | Where-Object { $_.handle -eq $fileWindow.handle -and $_.visible }) -or
           !($windows | Where-Object { $_.handle -eq $official.handle -and $_.visible })) {
-        throw 'Closing file transfer did not leave the forwarding window running independently.'
+        throw 'Closing file transfer did not leave the first window running independently.'
       }
-      Write-Output "Closing file transfer left the forwarding window open."
+      Write-Output "Closing file transfer left the $Session window open."
     } finally {
       if (!$second.HasExited) { Stop-Process -Id $second.Id }
     }

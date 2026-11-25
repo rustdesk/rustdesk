@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/desktop/windowing_preview.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
@@ -2074,7 +2075,9 @@ Future<bool> restoreWindowPosition(WindowType type,
     return true;
   }
   if (type == WindowType.RemoteDesktop || type == WindowType.ViewCamera) {
-    if (!isRemotePeerPos && windowId != null) {
+    if (!isRemotePeerPos &&
+        windowId != null &&
+        !isOfficialSessionWindow(windowId)) {
       if (lpos.offsetWidth != null) {
         lpos.offsetWidth = lpos.offsetWidth! + windowId * kNewWindowOffset;
       }
@@ -3480,7 +3483,8 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
 }
 
 setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount,
-    WindowType windowType, int? display, Rect? screenRect) async {
+    WindowType windowType, int? display, Rect? screenRect,
+    {StateGlobal? windowState}) async {
   if (screenRect == null) {
     // Do not restore window position to new connection if there's a pre-session.
     // https://github.com/rustdesk/rustdesk/discussions/8825
@@ -3489,19 +3493,21 @@ setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount,
           windowId: windowId, display: display, peerId: peerId);
     }
   } else {
-    await tryMoveToScreenAndSetFullscreen(screenRect);
+    await tryMoveToScreenAndSetFullscreen(screenRect, windowState: windowState);
   }
 }
 
-tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
+tryMoveToScreenAndSetFullscreen(Rect? screenRect,
+    {StateGlobal? windowState}) async {
   if (screenRect == null) {
     return;
   }
-  final wc = WindowController.fromWindowId(stateGlobal.windowId);
+  final state = windowState ?? stateGlobal;
+  final wc = WindowController.fromWindowId(state.windowId);
   final curFrame = await wc.getFrame();
   final frame =
       Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
-  if (stateGlobal.fullscreen.isTrue &&
+  if (state.fullscreen.isTrue &&
       curFrame.left <= frame.left &&
       curFrame.top <= frame.top &&
       curFrame.width >= frame.width &&
@@ -3511,7 +3517,7 @@ tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
   await wc.setFrame(frame);
   // An duration is needed to avoid the window being restored after fullscreen.
   Future.delayed(Duration(milliseconds: 300), () async {
-    stateGlobal.setFullscreen(true);
+    state.setFullscreen(true);
   });
 }
 

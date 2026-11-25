@@ -525,7 +525,7 @@ class InputModel {
     _relativeMouseModeDisposer = ever(relativeMouseMode, (bool value) {
       final peerId = id;
       if (peerId.isNotEmpty) {
-        stateGlobal.relativeMouseModeState[peerId] = value;
+        (parent.target?.windowState ?? stateGlobal).relativeMouseModeState[peerId] = value;
       }
     });
   }
@@ -1589,7 +1589,7 @@ class InputModel {
     _relativeMouseModeDisposer = null;
     final peerId = id;
     if (peerId.isNotEmpty) {
-      stateGlobal.relativeMouseModeState.remove(peerId);
+      (parent.target?.windowState ?? stateGlobal).relativeMouseModeState.remove(peerId);
     }
   }
 
@@ -1907,7 +1907,8 @@ class InputModel {
 
     if (_queryOtherWindowCoords) {
       Future.delayed(Duration.zero, () async {
-        _windowRect = await fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords);
+        _windowRect = await fillRemoteCoordsAndGetCurFrame(_remoteWindowCoords,
+            windowId: parent.target?.windowState?.windowId);
       });
       _queryOtherWindowCoords = false;
     }
@@ -1948,10 +1949,11 @@ class InputModel {
   }
 
   static Future<Rect?> fillRemoteCoordsAndGetCurFrame(
-      List<RemoteWindowCoords> remoteWindowCoords) async {
+      List<RemoteWindowCoords> remoteWindowCoords, {int? windowId}) async {
+    final id = windowId ?? kWindowId!;
     final coords =
-        await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain();
-    final wc = WindowController.fromWindowId(kWindowId!);
+        await rustDeskWinManager.getOtherRemoteWindowCoordsFromMain(windowId: id);
+    final wc = WindowController.fromWindowId(id);
     try {
       final frame = await wc.getFrame();
       for (final c in coords) {
@@ -1962,7 +1964,7 @@ class InputModel {
       return frame;
     } catch (e) {
       // Unreachable code
-      debugPrint("Failed to get frame of window $kWindowId, it may be hidden");
+      debugPrint("Failed to get frame of window $id, it may be hidden");
     }
     return null;
   }
