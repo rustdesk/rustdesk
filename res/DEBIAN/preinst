@@ -13,12 +13,4 @@ case $1 in
         ;;
 esac
 
-if [ "$1" = upgrade ]; then
-    # A desktop-launched GUI can survive the service stop. The old prerm removes /usr/bin/rustdesk.
-    for pid in $(pgrep -fx '([^ ]*/)?rustdesk( rustdesk://[^ ]*)?'); do
-        [ "/proc/$pid/exe" -ef /usr/share/rustdesk/rustdesk ] || continue
-        kill -TERM "$pid" || [ ! -d "/proc/$pid" ] || exit 1
-    done
-fi
-
 exit 0

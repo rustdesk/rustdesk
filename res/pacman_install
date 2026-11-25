@@ -18,10 +18,6 @@ post_install() {
 # arg 2:  the old package version
 pre_upgrade() {
     systemctl stop rustdesk || true
-    for pid in $(pgrep -fx '([^ ]*/)?rustdesk( rustdesk://[^ ]*)?'); do
-        [ "/proc/$pid/exe" -ef /usr/bin/rustdesk ] || continue
-        kill -TERM "$pid" || [ ! -d "/proc/$pid" ] || exit 1
-    done
 }
 
 # arg 1:  the new package version
