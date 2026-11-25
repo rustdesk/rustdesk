@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:desktop_multi_window/experimental_windowing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/window_scope.dart';
@@ -23,30 +24,32 @@ Widget? mountWindowingPreview(Widget mainWindow, List<String> arguments) {
     useOfficialWindow: (arguments) {
       if (arguments == null) return false;
       final payload = jsonDecode(arguments) as Map<String, dynamic>;
+      if (payload['type'] == WindowType.FileTransfer.index) return true;
       return payload['type'] == WindowType.PortForward.index &&
           payload['isRDP'] != true;
     },
     builder: (window) {
       if (window.windowId == 0) return mainWindow;
-      return _PortForwardWindow(key: ValueKey(window.windowId), window: window);
+      return _SessionWindow(key: ValueKey(window.windowId), window: window);
     },
   );
   _preview = preview;
   return preview.root;
 }
 
-class _PortForwardWindow extends StatefulWidget {
-  const _PortForwardWindow({super.key, required this.window});
+class _SessionWindow extends StatefulWidget {
+  const _SessionWindow({super.key, required this.window});
 
   final ExperimentalWindowContext window;
 
   @override
-  State<_PortForwardWindow> createState() => _PortForwardWindowState();
+  State<_SessionWindow> createState() => _SessionWindowState();
 }
 
-class _PortForwardWindowState extends State<_PortForwardWindow> {
+class _SessionWindowState extends State<_SessionWindow> {
   late final StateGlobal windowState;
-  late final DesktopPortForwardScreen screen;
+  late final Widget screen;
+  late final WindowType type;
   late final Zone windowZone;
 
   @override
@@ -57,8 +60,10 @@ class _PortForwardWindowState extends State<_PortForwardWindow> {
     windowZone = window.run(() => Zone.current);
     final args = jsonDecode(window.arguments!) as Map<String, dynamic>;
     args['windowId'] = window.windowId;
-    screen = DesktopPortForwardScreen(params: args);
-    debugPrint('Official Port Forward window mounted: ${window.windowId}');
+    type = WindowType.values[args['type'] as int];
+    screen = type == WindowType.FileTransfer
+        ? DesktopFileTransferScreen(params: args)
+        : DesktopPortForwardScreen(params: args);
   }
 
   @override
@@ -73,7 +78,7 @@ class _PortForwardWindowState extends State<_PortForwardWindow> {
         supportedLocales: supportedLocales,
         home: DesktopWindowScope(
           windowId: widget.window.windowId,
-          windowType: WindowType.PortForward,
+          windowType: type,
           windowState: windowState,
           zone: windowZone,
           nativeTitleBar: true,
