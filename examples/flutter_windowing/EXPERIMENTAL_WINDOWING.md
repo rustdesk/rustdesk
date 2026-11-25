@@ -150,9 +150,14 @@ They check for two visible `FLUTTER_HOST_WINDOW` windows, close one, and verify
 that the other stays visible.
 The tests also open remote desktop and camera windows for the same loopback
 peer and check that the camera window stays open when remote desktop closes.
-The tests do not require a successful peer connection. Remote video, input
-delivery, camera capture, terminal I/O, and monitor switching still need
-end-to-end verification.
+The automated checks do not require a successful peer connection. For a live
+test, start a RustDesk peer on a test desktop and enable direct IP access.
+Supply its temporary test password in `RUSTDESK_TEST_PEER_PASSWORD`, then run
+`test_rustdesk_preview.ps1 -Executable <path> -Session connect -PeerEndpoint <host:port> -RequireVideoFrame`.
+The script checks that a decoded video texture frame reaches the Dart session.
+This passed from the Windows x64 preview to RustDesk 1.5.3 on a local X11 test
+desktop. Visible rendering on an unlocked Windows desktop, input delivery,
+camera capture, terminal I/O, and monitor switching still need verification.
 
 ## Upstream acceptance
 

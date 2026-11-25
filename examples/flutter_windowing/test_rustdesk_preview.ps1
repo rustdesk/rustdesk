@@ -3,7 +3,9 @@ param(
   [ValidateSet('port-forward', 'file-transfer', 'rdp', 'connect', 'view-camera', 'terminal')] [string]$Session = 'port-forward',
   [switch]$AlsoOpenFileTransfer,
   [switch]$AlsoOpenSamePeerCamera,
-  [switch]$CloseFirstSession
+  [switch]$CloseFirstSession,
+  [string]$PeerEndpoint = '127.0.0.1:1',
+  [switch]$RequireVideoFrame
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,12 +19,25 @@ if (Get-Process rustdesk -ErrorAction SilentlyContinue) {
 $options = @{
   FilePath = $exe
   WorkingDirectory = Split-Path -Parent $exe
-  ArgumentList = @('--experimental-windowing', '--no-server', "--$Session", '127.0.0.1:1')
+  ArgumentList = @('--experimental-windowing', '--no-server', "--$Session", $PeerEndpoint)
   WindowStyle = 'Hidden'
   PassThru = $true
 }
-$process = Start-Process @options
+$stdout = $null
+if ($RequireVideoFrame) {
+  if ($Session -ne 'connect' -or !$env:RUSTDESK_TEST_PEER_PASSWORD) {
+    throw 'Video verification requires a remote desktop session and RUSTDESK_TEST_PEER_PASSWORD.'
+  }
+  if ($AlsoOpenFileTransfer -or $AlsoOpenSamePeerCamera) {
+    throw 'Run video verification with one connection.'
+  }
+  $stdout = [IO.Path]::GetTempFileName()
+  $options.RedirectStandardOutput = $stdout
+  $options.ArgumentList += @('--password', $env:RUSTDESK_TEST_PEER_PASSWORD)
+}
+$process = $null
 try {
+  $process = Start-Process @options
   $title = switch ($Session) {
     'file-transfer' { '*File Transfer*' }
     'connect' { '*Remote Desktop*' }
@@ -47,6 +62,17 @@ try {
     throw "No visible SDK-owned $Session window opened in the RustDesk process."
   }
   Write-Output "RustDesk opened HWND $($official.handle) of class $($official.className)."
+  if ($RequireVideoFrame) {
+    $deadline = (Get-Date).AddSeconds(30)
+    do {
+      if ($process.HasExited) { throw "RustDesk exited before receiving video ($($process.ExitCode))." }
+      $firstFrame = Select-String -LiteralPath $stdout -Pattern 'EventToUI_Texture display:' -Quiet
+      if ($firstFrame) { break }
+      Start-Sleep -Milliseconds 300
+    } while ((Get-Date) -lt $deadline)
+    if (!$firstFrame) { throw 'RustDesk did not deliver a decoded texture frame to Flutter.' }
+    Write-Output 'RustDesk delivered a decoded texture frame to Flutter.'
+  }
   if ($AlsoOpenFileTransfer -or $AlsoOpenSamePeerCamera) {
     if ($AlsoOpenFileTransfer -and $AlsoOpenSamePeerCamera) { throw 'Choose one second session.' }
     $secondArgs = if ($AlsoOpenSamePeerCamera) { @('--view-camera', '127.0.0.1:1') } else { @('--file-transfer', '127.0.0.1:2') }
@@ -92,8 +118,9 @@ try {
     }
   }
 } finally {
-  if (!$process.HasExited) {
+  if ($process -and !$process.HasExited) {
     Stop-Process -Id $process.Id
     $process.WaitForExit()
   }
+  if ($stdout) { Remove-Item -LiteralPath $stdout }
 }
