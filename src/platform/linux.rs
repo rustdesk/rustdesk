@@ -2258,72 +2258,57 @@ DP-0 disconnected (normal left inverted right x axis y axis)
         assert!(caps["resolutions"].contains(" 640x480 "));
     }
 
-    fn count_xrandr_zombie_children() -> usize {
-        let my_pid = std::process::id();
-        std::fs::read_dir("/proc")
-            .expect("failed to read /proc")
-            .flatten()
-            .filter(|entry| {
-                let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
-                    return false;
-                };
-                let Some((head, rest)) = stat.rsplit_once(')') else {
-                    return false;
-                };
-                let comm = head.split_once('(').map(|(_, name)| name);
-                let mut parts = rest.split_whitespace();
-                comm == Some("xrandr")
-                    && parts.next() == Some("Z")
-                    && parts.next().and_then(|s| s.parse::<u32>().ok()) == Some(my_pid)
-            })
-            .count()
-    }
-
     #[test]
-    fn change_resolution_directly_reaps_xrandr_and_reports_failure() {
-        if std::env::var("DISPLAY").is_err() || !has_cmd("xrandr") {
-            return;
+    fn change_resolution_directly_reaps_xrandr() {
+        // An unknown output changes no display, and xrandr exits with or without an X server.
+        if change_resolution_directly("rustdesk-no-such-output", 1, 1).is_err() {
+            return; // xrandr is not installed
         }
-        let Ok(output) = run_cmds("xrandr --query") else {
-            return;
+        let pid = hbb_common::sysinfo::Pid::from_u32(std::process::id());
+        let has_xrandr_child = || {
+            let mut sys = hbb_common::sysinfo::System::new();
+            sys.refresh_processes();
+            sys.processes()
+                .values()
+                .any(|p| p.parent() == Some(pid) && p.name() == "xrandr")
         };
-        let Some(conn_name) = output
-            .lines()
-            .find(|line| line.contains(" connected"))
-            .and_then(|line| line.split_whitespace().next())
-        else {
-            return;
-        };
-        if let Ok(cur) = current_resolution(conn_name) {
-            assert!(
-                change_resolution_directly(conn_name, cur.width as usize, cur.height as usize)
-                    .is_ok()
-            );
-            assert_eq!(count_xrandr_zombie_children(), 0);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while has_xrandr_child() {
+            assert!(Instant::now() < deadline, "xrandr was not reaped");
+            sleep_millis(50);
         }
-        assert!(change_resolution_directly(conn_name, 9999, 9999).is_err());
-        assert_eq!(count_xrandr_zombie_children(), 0);
     }
 }
 
 pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
-    let status = Command::new("xrandr")
+    let mut child = Command::new("xrandr")
         .args(vec![
             "--output",
             name,
             "--mode",
             &format!("{}x{}", width, height),
         ])
-        .status()?;
-    if !status.success() {
-        bail!(
+        .spawn()?;
+    // Reap on a separate thread: callers run on async workers and must not wait for xrandr.
+    let name = name.to_owned();
+    std::thread::spawn(move || match child.wait() {
+        Ok(status) if status.success() => {}
+        Ok(status) => hbb_common::throttled_log!(
+            Duration::from_secs(5),
+            error,
             "Failed to change resolution of '{}' to {}x{}, xrandr exited with {}",
             name,
             width,
             height,
             status
-        );
-    }
+        ),
+        Err(e) => hbb_common::throttled_log!(
+            Duration::from_secs(5),
+            error,
+            "Failed to wait for xrandr: {}",
+            e
+        ),
+    });
     Ok(())
 }
 
