@@ -25,7 +25,9 @@ jobs:
       matrix:
         include:
           - platform: linux
-            runner: ubuntu-24.04
+            # Match the validated GTK/Mesa stack. Ubuntu 24.04's Xvfb runner
+            # reports GLX BadAccess when two Flutter views share an engine.
+            runner: ubuntu-26.04
           - platform: macos
             runner: macos-15
     runs-on: ${{ matrix.runner }}
@@ -36,7 +38,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install GTK build and test prerequisites
         if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libstdc++-12-dev ninja-build xvfb openbox
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev ninja-build xauth xvfb openbox
       - name: Install Flutter SDK
         run: bash .github/patches/install_flutter_windowing.sh
       - name: Build window lifecycle smoke app
