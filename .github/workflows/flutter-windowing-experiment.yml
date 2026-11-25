@@ -71,6 +71,22 @@ jobs:
             cat "$log"
             exit 1
           fi
+      - name: Check native Cocoa windows
+        if: matrix.platform == 'macos'
+        working-directory: examples/flutter_windowing/experimental_example
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+          import subprocess
+
+          bundle, = Path("build/macos/Build/Products/Release").glob("*.app")
+          contents = bundle / "Contents"
+          with (contents / "Info.plist").open("rb") as info:
+              executable = plistlib.load(info)["CFBundleExecutable"]
+          subprocess.run([str(contents / "MacOS" / executable)],
+                         timeout=45, check=True)
+          PY
 
   windows:
     name: Windows ${{ matrix.arch }} official windowing

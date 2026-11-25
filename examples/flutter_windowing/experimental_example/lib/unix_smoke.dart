@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -37,11 +38,14 @@ void main() {
   });
 }
 
-Future<void> waitFor(bool Function() ready) async {
+Future<void> waitFor(
+  String description,
+  FutureOr<bool> Function() ready,
+) async {
   final timeout = Stopwatch()..start();
-  while (!ready()) {
+  while (!await ready()) {
     if (timeout.elapsed > const Duration(seconds: 10)) {
-      throw StateError('Timed out waiting for Flutter views');
+      throw StateError('Timed out waiting for $description');
     }
     await Future<void>.delayed(const Duration(milliseconds: 50));
   }
@@ -58,9 +62,16 @@ Future<void> checkWindows(
   await first.show();
   await second.show();
   await waitFor(
+    'both Flutter views to mount',
     () =>
         dispatcher.views.length == initialViews + 2 &&
         handlersReady.containsAll([first.windowId, second.windowId]),
+  );
+  // The first show request presents the native window after its first frame.
+  // Mounted Dart handlers can be ready before either window has been presented.
+  await waitFor(
+    'both native windows to become visible',
+    () async => !await first.isHidden() && !await second.isHidden(),
   );
 
   final reply =
@@ -88,16 +99,27 @@ Future<void> checkWindows(
   }
 
   await first.hide();
-  if (!await first.isHidden() || await second.isHidden()) {
-    throw StateError('Native window visibility was not isolated');
+  await waitFor('the first native window to hide', first.isHidden);
+  if (await second.isHidden()) {
+    throw StateError('Hiding the first window also hid its sibling');
   }
   await first.show();
+  await waitFor(
+    'the first native window to reopen',
+    () async => !await first.isHidden(),
+  );
   final frame = await first.getFrame();
-  if (frame.isEmpty || await first.isHidden()) {
+  if (frame.isEmpty) {
     throw StateError('Native window did not reopen: $frame');
   }
   await first.close();
-  await waitFor(() => dispatcher.views.length == initialViews + 1);
+  await waitFor(
+    'the first Flutter view to close',
+    () => dispatcher.views.length == initialViews + 1,
+  );
   await second.close();
-  await waitFor(() => dispatcher.views.length == initialViews);
+  await waitFor(
+    'the second Flutter view to close',
+    () => dispatcher.views.length == initialViews,
+  );
 }

@@ -171,8 +171,8 @@ macOS and Linux app. The Linux standalone job opens two GTK windows in a
 headless Weston Wayland session to check
 message routing, per-window state, visibility, and view destruction. The
 hosted Xvfb check hit GLX BadAccess. The Wayland check does not cover X11 window
-placement or graphics. The macOS job checks the build. Full Flutter CI builds
-the integrated preview for Windows
+placement or graphics. The macOS job runs the same lifecycle checks against
+native Cocoa windows. Full Flutter CI builds the integrated preview for Windows
 x64, Windows arm64, Linux x64, and macOS arm64. The remaining jobs use their current
 platform SDKs.
 Participants can use the standalone Linux result to diagnose the plugin while
