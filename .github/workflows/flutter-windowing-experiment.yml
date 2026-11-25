@@ -46,6 +46,11 @@ jobs:
         run: |
           flutter config --no-enable-swift-package-manager
           flutter create --platforms="$PLATFORM" --project-name windowing_poc --no-pub .
+          if [[ "$PLATFORM" == linux ]]; then
+            # Xvfb on the hosted runner does not reliably run Impeller's GL context.
+            # Use Skia for this lifecycle test without changing the RustDesk runner.
+            sed -i '/FlDartProject.*fl_dart_project_new()/a\  fl_dart_project_set_enable_impeller(project, FALSE);' linux/runner/my_application.cc
+          fi
           flutter build "$PLATFORM" --release -t lib/unix_smoke.dart
       - name: Check native GTK windows under X11
         if: matrix.platform == 'linux'

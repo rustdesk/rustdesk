@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
       desktop-windowing-preview:
-        description: Build the Windows and macOS arm64 clients against Flutter 3.50.1
+        description: Build the Windows, Linux x64, and macOS arm64 clients against Flutter 3.50.1
         type: boolean
         default: false
 
@@ -256,9 +256,11 @@ jobs:
           $flutterRoot = $env:FLUTTER_ROOT_PATH
           Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
           Write-Host "Flutter root: $flutterRoot"
-          Remove-Item -Force "$flutterRoot\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
-          & "$flutterRoot\bin\internal\update_dart_sdk.ps1"
-          # Confirm the Dart we ended up with is arm64 ("on windows_arm64"); fail loudly if not.
+          if (Test-Path "$flutterRoot\bin\cache\engine.stamp") {
+            Remove-Item -Force "$flutterRoot\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
+          }
+          # dart.bat initializes engine.stamp on a fresh checkout and
+          # reboots an existing SDK when its Dart stamp has been removed.
           $dartVer = & "$flutterRoot\bin\dart.bat" --version 2>&1 | Out-String
           Write-Host $dartVer
           if ($dartVer -notmatch "windows_arm64") {
@@ -2080,7 +2082,7 @@ jobs:
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: bridge-artifact
+          name: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
           path: ./
 
       # vcpkg 2026.07.29's SPDX scripts require CMake 4.3+, but this ARM64 runner selects CMake 3.31.
@@ -2124,7 +2126,7 @@ jobs:
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: bridge-artifact
+          name: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
           path: ./
 
       # The container's meson is too old to build libdrmtap, so build it here from the pin in
@@ -2247,8 +2249,13 @@ jobs:
             esac
             popd
             pushd /opt
-            wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
-            tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            preview="${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}"
+            if [[ "$preview" == true ]]; then
+              bash /workspace/.github/patches/install_flutter_windowing.sh /opt/flutter
+            else
+              wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+              tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            fi
             case ${{ matrix.job.arch }} in
               aarch64)
                 # clone repo and reset to flutter ${{ env.FLUTTER_VERSION }}
@@ -2267,7 +2274,7 @@ jobs:
               ;;
             esac
 
-            if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
+            if [[ "$preview" != true && "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
               case ${{ matrix.job.arch }} in
                 aarch64)
                   pushd /opt/flutter-elinux/flutter
@@ -2282,9 +2289,12 @@ jobs:
 
             # build flutter
             pushd /workspace
+            if [[ "$preview" == true ]]; then
+              bash .github/patches/apply_flutter_3.50_source_patches.sh
+            fi
             export CARGO_INCREMENTAL=0
             export DEB_ARCH=${{ matrix.job.deb_arch }}
-            python3 ./build.py --flutter --skip-cargo
+            FLUTTER_WINDOWING="$preview" python3 ./build.py --flutter --skip-cargo
             if [[ "${{ matrix.job.arch }}" == "x86_64" && "${{ inputs.upload-artifact }}" == "false" ]]; then
               pushd /workspace/flutter
               flutter test --no-pub --timeout 60s || exit 1

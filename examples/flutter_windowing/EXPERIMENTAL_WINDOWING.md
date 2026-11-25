@@ -138,7 +138,8 @@ immediate show queries also demonstrated that ShowWindowAsync needs polling.
 
 ## RustDesk client preview
 
-The Windows x64, Windows arm64, and macOS arm64 preview jobs use the pinned Flutter SDK and apply
+The Windows x64 and arm64, Linux x64, and macOS arm64 preview jobs use the
+pinned Flutter SDK and apply
 `.github/patches/apply_flutter_3.50_source_patches.sh`. That script selects the
 local plugin and installs the preview bootstrap. Build with
 `FLUTTER_WINDOWING=true` and launch RustDesk with `--experimental-windowing` to
@@ -166,11 +167,11 @@ camera capture, terminal I/O, and monitor switching still need verification.
 ## Upstream acceptance
 
 The experiment workflow runs the native Windows x64 and arm64 tests and builds a standalone
-macOS and Linux app. The Linux job uses software rendering under Xvfb and opens
-two GTK windows to check
+macOS and Linux app. The Linux standalone job uses Skia software rendering under
+Xvfb and opens two GTK windows to check
 message routing, per-window state, visibility, and view destruction. The macOS
 job checks the build. Full Flutter CI builds the integrated preview for Windows
-x64, Windows arm64, and macOS arm64. The remaining jobs use their current
+x64, Windows arm64, Linux x64, and macOS arm64. The remaining jobs use their current
 platform SDKs.
 Participants can use the standalone Linux result to diagnose the plugin while
 the full Linux client still uses the existing backend.

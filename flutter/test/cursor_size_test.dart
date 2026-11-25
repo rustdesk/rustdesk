@@ -73,6 +73,9 @@ class _Peer extends Fake implements FfiModel {
 class _FFI extends Fake implements FFI {
   _FFI(this.canvasModel);
   @override
+  String stateKeyFor(String peerId) => peerId;
+
+  @override
   final CanvasModel canvasModel;
   @override
   final ffiModel = _Peer();
