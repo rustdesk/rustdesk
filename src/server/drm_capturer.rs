@@ -914,8 +914,14 @@ async fn recv_thread(
                         let mut buf = shared.slot.lock().unwrap().take_free().unwrap_or_default();
                         buf.clear();
                         buf.extend_from_slice(data);
+                        // A packet's rotation is known after the convert (composed or one layer).
+                        let rotation = if desc.packet.is_empty() {
+                            desc.plane_rotation
+                        } else {
+                            conv.plane_rotation()
+                        };
                         let mut slot = shared.slot.lock().unwrap();
-                        slot.publish(w as usize, h as usize, fmt, desc.plane_rotation, buf);
+                        slot.publish(w as usize, h as usize, fmt, rotation, buf);
                         shared.cv.notify_one();
                     }
                     Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}

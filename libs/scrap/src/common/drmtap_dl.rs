@@ -172,6 +172,7 @@ type FnConvertPacket = unsafe extern "C" fn(
     usize,
     *mut drmtap_frame_info,
 ) -> c_int;
+type FnAbi = unsafe extern "C" fn(*mut u32, *mut u32);
 
 /// The dlopen'd libdrmtap; the `Library` is kept alive for the process lifetime, so the raw fn pointers stay valid.
 pub struct DrmtapLib {
@@ -274,6 +275,9 @@ const DRMTAP_MIN_MINOR_PATCH: (c_int, c_int) = (5, 0);
 // freezes only `drmtap_device`, `drmtap_dmabuf_desc` and `drmtap_packet`, so an unverified minor
 // could be read at wrong offsets. 0.6 changed none of the structs 0.5 mirrors.
 const DRMTAP_ABI_MINOR: c_int = 6;
+// `DRMTAP_ABI_LEVEL` of the header this build mirrors (0.6.0). Level 2 adds the packet API; a
+// library without `drmtap_abi` (0.5.x) is level 1.
+const DRMTAP_ABI_LEVEL: u32 = 2;
 
 /// Whether a library reporting `major.minor.patch` may be loaded (major exact, minor not newer than the verified one, at or above the floor).
 fn abi_accepted(major: c_int, minor: c_int, patch: c_int) -> bool {
@@ -345,6 +349,23 @@ impl DrmtapLib {
                 );
                 return None;
             }
+            // The level range the library serves; it must include the level this build was written for.
+            let abi_level = match lib.get::<FnAbi>(b"drmtap_abi") {
+                Ok(abi) => {
+                    let (mut current, mut oldest) = (0u32, 0u32);
+                    abi(&mut current, &mut oldest);
+                    if !(oldest..=current).contains(&DRMTAP_ABI_LEVEL) {
+                        log::warn!(
+                            "libdrmtap {name} v{major}.{minor}.{patch} serves ABI levels \
+                             {oldest}..={current}, not {DRMTAP_ABI_LEVEL}. Refusing to load; \
+                             falling back to PipeWire/portal."
+                        );
+                        return None;
+                    }
+                    current
+                }
+                Err(_) => 1,
+            };
             let open: FnOpen = *lib.get(b"drmtap_open").ok()?;
             let close: FnClose = *lib.get(b"drmtap_close").ok()?;
             let list_displays: FnListDisplays = *lib.get(b"drmtap_list_displays").ok()?;
@@ -389,6 +410,9 @@ impl DrmtapLib {
             let crtc_refresh: Option<FnCrtcRefresh> =
                 lib.get(b"drmtap_crtc_refresh").ok().map(|s| *s);
             let packet = (|| {
+                if abi_level < 2 {
+                    return None;
+                }
                 Some((
                     *lib.get::<FnGrabPacket>(b"drmtap_grab_packet").ok()?,
                     *lib.get::<FnPacketRelease>(b"drmtap_packet_release").ok()?,
@@ -495,7 +519,9 @@ pub fn get() -> Option<&'static DrmtapLib> {
 
 #[cfg(test)]
 mod tests {
-    use super::{abi_accepted, DRMTAP_ABI_MAJOR, DRMTAP_ABI_MINOR, DRMTAP_MIN_MINOR_PATCH};
+    use super::{
+        abi_accepted, drmtap_packet, DRMTAP_ABI_MAJOR, DRMTAP_ABI_MINOR, DRMTAP_MIN_MINOR_PATCH,
+    };
 
     #[test]
     fn abi_gate_accepts_the_floor_and_later_patches_of_the_same_minor() {
@@ -507,6 +533,8 @@ mod tests {
                 "v0.{minor}.{patch} is a patch of the verified minor and must be accepted"
             );
         }
+        // Accepting 0.6 relies on its frozen `drmtap_packet`: bytes[1024], len, nfds, fds[16].
+        assert_eq!(std::mem::size_of::<drmtap_packet>(), 1024 + 4 + 4 + 16 * 4);
     }
 
     #[test]
@@ -514,12 +542,7 @@ mod tests {
         // Relative to DRMTAP_ABI_MINOR, so the next bump cannot leave this test asserting that the
         // NEW verified minor must be refused -- which is what a hardcoded list did before.
         let verified = DRMTAP_ABI_MINOR;
-        for (minor, patch) in [
-            (4, 99),
-            (verified + 1, 0),
-            (verified + 1, 99),
-            (verified + 4, 9),
-        ] {
+        for (minor, patch) in [(verified + 1, 0), (verified + 1, 99), (verified + 4, 9)] {
             assert!(
                 !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
                 "v0.{minor}.{patch} is an unverified minor and must be refused"

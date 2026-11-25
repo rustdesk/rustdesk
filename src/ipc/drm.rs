@@ -2,7 +2,7 @@
 
 use super::ipc_auth::active_uid_cached;
 use super::*;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct DrmDisplayInfo {
@@ -30,7 +30,7 @@ pub struct DrmDisplayInfo {
 }
 
 /// Mirrors `scrap::drm_reader::drmtap_dmabuf_desc` except `dma_buf_fd` (never serializes — it rides
-/// SCM_RIGHTS ancillary), and adds `buffer_id` (fb_id tagged with a per-connection epoch; no consumer reads it today) and `has_fd`.
+/// SCM_RIGHTS ancillary), and adds `buffer_id` (fb_id tagged with a per-connection epoch; no consumer reads it today), `has_fd` and `packet`.
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct DmabufDesc {
     pub buffer_id: u64,
@@ -114,10 +114,7 @@ enum DrmProducerMsg {
     /// Enumerated displays, sent once before any frame.
     Displays(Vec<DrmDisplayInfo>),
     /// Zero-copy path: descriptor + scanout fd(s); the `OwnedFd`s are closed once the send has dup'd them.
-    Frame {
-        desc: DmabufDesc,
-        fds: Vec<OwnedFd>,
-    },
+    Frame { desc: DmabufDesc, fds: Vec<OwnedFd> },
     /// CPU-mapped fallback (packed BGRA): consumer has no convert context (`need_cpu`), or ENOTSUP.
     FrameCpu {
         width: u32,
@@ -194,7 +191,10 @@ mod cursor_pos_tests {
         let visible = snapshot(7);
         let hidden = snapshot(scrap::drm_reader::HIDDEN_CURSOR_ID);
 
-        let mut frame = DrmProducerMsg::Frame { desc: desc(), fds: vec![] };
+        let mut frame = DrmProducerMsg::Frame {
+            desc: desc(),
+            fds: vec![],
+        };
         stamp_cursor_pos(&mut frame, Some(&visible));
         assert!(matches!(&frame, DrmProducerMsg::Frame { desc, .. } if desc.cursor_pos == Some((10, 20))));
         stamp_cursor_pos(&mut frame, Some(&hidden));
@@ -1136,11 +1136,12 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 // that would tell the difference, so eliding it can serve a stale EGLImage. libdrmtap's
                 // import cache keys on fb_id AND inode, and can only re-import when handed a real fd.
                 desc.has_fd = !fds.is_empty();
-                let borrowed: Vec<BorrowedFd> = fds.iter().map(|f| f.as_fd()).collect();
-                conn.send_msg_fds(&Data::DrmFrameDmabuf(desc), &borrowed).await?;
+                let raw: Vec<RawFd> = fds.iter().map(|f| f.as_raw_fd()).collect();
+                let payload = serde_json::to_vec(&Data::DrmFrameDmabuf(desc))?;
+                drm_send_frame(&conn.stream, &payload, &raw).await?;
                 credit -= 1; // one frame in flight until the consumer acks it
                 // `fds` (OwnedFd) are closed here whether or not attached (the cmsg dup'd them
-                // into the peer), which bounds our fd usage to ~1 in flight per frame.
+                // into the peer), which bounds our fd usage to one frame's fds in flight.
             }
             Some(DrmProducerMsg::FrameCpu {
                 width,
@@ -1341,8 +1342,8 @@ fn drm_capture_worker(
             // libdrmtap 0.6 on both ends (one deb): the packet also carries a window the compositor
             // put on its own plane, which one descriptor cannot.
             Some(reader.grab_packet().map(|(packet, fds)| DrmProducerMsg::Frame {
+                // No plane_rotation: the consumer asks its converting context after the convert.
                 desc: DmabufDesc {
-                    plane_rotation: reader.plane_rotation(),
                     packet,
                     ..Default::default()
                 },
@@ -1407,7 +1408,11 @@ fn drm_capture_worker(
                     log::debug!(
                         "drm: first frame for crtc {target_crtc} in {:?} ({} path)",
                         t_conn.elapsed(),
-                        if use_dmabuf { "dma-buf" } else { "cpu" }
+                        match (use_dmabuf, reader.has_packet()) {
+                            (true, true) => "dma-buf packet",
+                            (true, false) => "dma-buf",
+                            (false, _) => "cpu",
+                        }
                     );
                 }
                 if frame_tx.blocking_send(msg).is_err() {
@@ -1427,7 +1432,7 @@ fn drm_capture_worker(
             }
             Some(Err(err)) if use_dmabuf && err.kind() == std::io::ErrorKind::Unsupported => {
                 log::warn!(
-                    "drm: grab_desc unsupported ({err}); switching to CPU-mapped fallback for this connection"
+                    "drm: dma-buf grab unsupported ({err}); switching to CPU-mapped fallback for this connection"
                 );
                 use_dmabuf = false;
                 logged_first = false;
@@ -1728,13 +1733,9 @@ impl DrmConn {
     }
 
     pub async fn send_msg(&mut self, data: &Data, fd: Option<BorrowedFd<'_>>) -> ResultType<()> {
-        self.send_msg_fds(data, fd.as_slice()).await
-    }
-
-    pub async fn send_msg_fds(&mut self, data: &Data, fds: &[BorrowedFd<'_>]) -> ResultType<()> {
         let payload = serde_json::to_vec(data)?;
-        let pass_fds: Vec<RawFd> = fds.iter().map(|f| f.as_raw_fd()).collect();
-        drm_send_frame(&self.stream, &payload, &pass_fds).await
+        let pass_fd = fd.map(|f| f.as_raw_fd());
+        drm_send_frame(&self.stream, &payload, pass_fd.as_slice()).await
     }
 
     pub async fn send_frame_ack(&self, demand_fps: u8) -> ResultType<()> {
@@ -1921,7 +1922,10 @@ mod drm_conn_tests {
             .await
             .unwrap();
         let (_data, fd) = rx.recv_msg().await.unwrap();
-        let recv_fd = fd.into_iter().next().expect("an fd was attached, it must be received");
+        let recv_fd = fd
+            .into_iter()
+            .next()
+            .expect("an fd was attached, it must be received");
         let sentinel = [0xABu8];
         assert_eq!(
             unsafe { libc::write(wr.as_raw_fd(), sentinel.as_ptr() as *const libc::c_void, 1) },
@@ -1938,20 +1942,32 @@ mod drm_conn_tests {
     #[tokio::test]
     async fn a_packet_frame_carries_its_bytes_and_every_fd_in_order() {
         let (a, b) = tokio::net::UnixStream::pair().unwrap();
-        let mut tx = DrmConn::new(a);
+        let tx = DrmConn::new(a);
         let mut rx = DrmConn::new(b);
         let pipes: Vec<(OwnedFd, OwnedFd)> = (0..3).map(|_| pipe()).collect();
-        let read_ends: Vec<_> = pipes.iter().map(|(r, _)| r.as_fd()).collect();
-        let desc = DmabufDesc { packet: vec![1, 2, 3, 250], ..Default::default() };
-        tx.send_msg_fds(&Data::DrmFrameDmabuf(desc), &read_ends).await.unwrap();
+        let read_ends: Vec<RawFd> = pipes.iter().map(|(r, _)| r.as_raw_fd()).collect();
+        let desc = DmabufDesc {
+            packet: vec![1, 2, 3, 250],
+            ..Default::default()
+        };
+        let payload = serde_json::to_vec(&Data::DrmFrameDmabuf(desc)).unwrap();
+        drm_send_frame(&tx.stream, &payload, &read_ends)
+            .await
+            .unwrap();
         let (data, fds) = rx.recv_msg().await.unwrap();
         assert!(matches!(data, Data::DrmFrameDmabuf(d) if d.packet == [1, 2, 3, 250]));
         assert_eq!(fds.len(), 3);
         for (i, ((_, wr), fd)) in pipes.iter().zip(&fds).enumerate() {
             let b = [i as u8];
-            assert_eq!(unsafe { libc::write(wr.as_raw_fd(), b.as_ptr() as *const libc::c_void, 1) }, 1);
+            assert_eq!(
+                unsafe { libc::write(wr.as_raw_fd(), b.as_ptr() as *const libc::c_void, 1) },
+                1
+            );
             let mut got = [9u8; 1];
-            assert_eq!(unsafe { libc::read(fd.as_raw_fd(), got.as_mut_ptr() as *mut libc::c_void, 1) }, 1);
+            assert_eq!(
+                unsafe { libc::read(fd.as_raw_fd(), got.as_mut_ptr() as *mut libc::c_void, 1) },
+                1
+            );
             assert_eq!(got[0], i as u8, "fd {i} must be the pipe sent at index {i}");
         }
     }
