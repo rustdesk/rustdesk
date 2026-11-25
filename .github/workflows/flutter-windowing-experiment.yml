@@ -58,9 +58,19 @@ jobs:
           '
 
   windows:
-    name: Windows x64 official windowing
-    runs-on: windows-2025
+    name: Windows ${{ matrix.arch }} official windowing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2025
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
+    env:
+      FLUTTER_HOST_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Check out the tested Flutter SDK

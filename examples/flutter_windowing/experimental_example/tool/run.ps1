@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $flutter = Join-Path (Resolve-Path $FlutterSdk).Path 'bin/flutter.bat'
+$dart = Join-Path (Resolve-Path $FlutterSdk).Path 'bin/dart.bat'
 $drive = @('Z','Y','X','W','V','U','T','S') | Where-Object { !(Test-Path "${_}:\") } | Select-Object -First 1
 if (!$drive) { throw 'No unused drive letter for the Windows short-path build.' }
 $oldWindowing = $env:FLUTTER_WINDOWING
@@ -14,6 +15,14 @@ if ($LASTEXITCODE) { throw 'Could not create temporary short-path mapping.' }
 Push-Location "${drive}:\experimental_example"
 try {
   $env:FLUTTER_WINDOWING = 'true'
+  $dartVersion = & $dart --version 2>&1 | Out-String
+  if ($LASTEXITCODE -or $dartVersion -notmatch 'windows_(x64|arm64)') {
+    throw "Could not determine the native Dart SDK architecture: $dartVersion"
+  }
+  $arch = $Matches[1]
+  if ($env:FLUTTER_HOST_ARCH -and $arch -ne $env:FLUTTER_HOST_ARCH) {
+    throw "Expected $env:FLUTTER_HOST_ARCH Dart, got $arch."
+  }
   & $flutter clean
   if ($LASTEXITCODE) { throw 'Could not clear the generated example build.' }
   & $flutter pub get
@@ -23,7 +32,7 @@ try {
   if ($SelfTest) { $buildArguments += '--dart-define=POC_SELF_TEST=true' }
   & $flutter @buildArguments
   if ($LASTEXITCODE) { throw 'Windows build failed.' }
-  $exe = Join-Path $PWD "build/windows/x64/runner/$mode/windowing_poc.exe"
+  $exe = Join-Path $PWD "build/windows/$arch/runner/$mode/windowing_poc.exe"
   if ($SelfTest) {
     $selfTests = @(
       @{ Arguments = @(); Report = 'poc-results.json' },

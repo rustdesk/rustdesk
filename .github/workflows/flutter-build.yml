@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
       desktop-windowing-preview:
-        description: Build the Windows x64 and macOS arm64 clients against Flutter 3.50.1
+        description: Build the Windows and macOS arm64 clients against Flutter 3.50.1
         type: boolean
         default: false
 
@@ -215,7 +215,7 @@ jobs:
 
       - name: Install flutter
         id: flutter
-        if: ${{ matrix.job.arch != 'x86_64' || !inputs.desktop-windowing-preview }}
+        if: ${{ !inputs.desktop-windowing-preview }}
         # arm64 builds with FLUTTER_WINDOWS_ARM_VERSION (>=3.44); x64 stays on FLUTTER_VERSION.
         # subosito only ships an x64 Windows SDK (Flutter's release manifest lists x64 only),
         # so it installs x64 on both arches. The arm64 runner re-bootstraps Dart to arm64 in
@@ -227,7 +227,8 @@ jobs:
           architecture: x64
 
       - name: Install Flutter 3.50 windowing preview
-        if: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
+        id: flutter-preview
+        if: ${{ inputs.desktop-windowing-preview }}
         shell: pwsh
         run: |
           $sdk = Join-Path $env:RUNNER_TEMP 'flutter-preview'
@@ -238,6 +239,7 @@ jobs:
             throw "Unexpected Flutter revision: $revision"
           }
           (Join-Path $sdk 'bin') >> $env:GITHUB_PATH
+          "sdk=$sdk" >> $env:GITHUB_OUTPUT
 
       - name: Force arm64 Dart SDK + engine
         # The x64 SDK subosito installs bundles an x64 Dart with a matching engine-dart-sdk.stamp,
@@ -247,8 +249,11 @@ jobs:
         # re-running update_dart_sdk.ps1 pulls the arm64 Dart (available since Flutter 3.44.0).
         # https://github.com/flutter/flutter/issues/186730#issuecomment-4573214964
         if: ${{ matrix.job.arch == 'aarch64' }}
+        env:
+          FLUTTER_HOST_ARCH: arm64
+          FLUTTER_ROOT_PATH: ${{ steps.flutter-preview.outputs.sdk || steps.flutter.outputs['CACHE-PATH'] }}
         run: |
-          $flutterRoot = "${{ steps.flutter.outputs['CACHE-PATH'] }}"
+          $flutterRoot = $env:FLUTTER_ROOT_PATH
           Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
           Write-Host "Flutter root: $flutterRoot"
           Remove-Item -Force "$flutterRoot\bin\cache\engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
@@ -303,7 +308,7 @@ jobs:
         if: ${{ matrix.job.arch == 'aarch64' || inputs.desktop-windowing-preview }}
         shell: bash
         env:
-          USE_FLUTTER_PREVIEW: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
+          USE_FLUTTER_PREVIEW: ${{ inputs.desktop-windowing-preview }}
         run: |
           if [[ "$USE_FLUTTER_PREVIEW" == "true" ]]; then
             bash .github/patches/apply_flutter_3.50_source_patches.sh
@@ -312,7 +317,7 @@ jobs:
           fi
 
       - name: Verify desktop session window state on Flutter 3.50
-        if: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
+        if: ${{ inputs.desktop-windowing-preview }}
         working-directory: flutter
         run: flutter test test/desktop_window_scope_test.dart
 
@@ -363,7 +368,7 @@ jobs:
 
       - name: Build rustdesk
         env:
-          FLUTTER_WINDOWING: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
+          FLUTTER_WINDOWING: ${{ inputs.desktop-windowing-preview }}
         run: |
           # Windows: build RustDesk
           # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix
@@ -405,7 +410,7 @@ jobs:
           }
 
       - name: Open two RustDesk session windows with the official backend
-        if: ${{ matrix.job.arch == 'x86_64' && inputs.desktop-windowing-preview }}
+        if: ${{ inputs.desktop-windowing-preview }}
         shell: pwsh
         run: |
           ./examples/flutter_windowing/test_rustdesk_preview.ps1 -Executable ./rustdesk/rustdesk.exe -AlsoOpenFileTransfer
