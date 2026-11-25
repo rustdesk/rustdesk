@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import '../../models/model.dart';
+import '../../models/state_model.dart';
 
 /// Manages terminal connections to ensure one FFI instance per peer
 class TerminalConnectionManager {
@@ -18,6 +19,7 @@ class TerminalConnectionManager {
     required bool? isSharedPassword,
     required bool? forceRelay,
     required String? connToken,
+    StateGlobal? windowState,
   }) {
     final existingFfi = _connections[peerId];
     if (existingFfi != null && !existingFfi.closed) {
@@ -29,7 +31,7 @@ class TerminalConnectionManager {
 
     // Create new FFI instance for first terminal
     debugPrint('[TerminalConnectionManager] Creating new terminal connection for peer $peerId');
-    final ffi = FFI(null);
+    final ffi = FFI(null, windowState: windowState);
     ffi.start(
       peerId,
       password: password,

@@ -140,16 +140,16 @@ local plugin and installs the preview bootstrap. Build with
 `FLUTTER_WINDOWING=true` and launch RustDesk with `--experimental-windowing` to
 route TCP forwarding and file transfer sessions through official child windows
 in the main engine. The Windows preview also routes RDP forwarding and remote
-desktop and camera through that backend. Terminal sessions still use the
-original plugin. The preview retains the runner's primary FlutterView
+desktop, camera and terminal through that backend. The preview retains the
+runner's primary FlutterView
 and uses native title bars for the official session windows.
 
 The Windows client CI smoke tests open TCP forwarding, RDP forwarding,
-remote desktop, or camera alongside file transfer in the same process. They
-check for two visible `FLUTTER_HOST_WINDOW` windows and close file transfer
-independently.
+remote desktop, camera, or terminal alongside file transfer in the same process.
+They check for two visible `FLUTTER_HOST_WINDOW` windows, close one, and verify
+that the other stays visible.
 The tests use loopback addresses and do not require a successful peer connection.
-Remote video, input delivery, and camera capture still need end-to-end
+Remote video, input delivery, camera capture, and terminal I/O still need end-to-end
 verification. Some connection and toolbar state still uses peer ID keys.
 Verify isolation when multiple displays or session types use the same peer.
 

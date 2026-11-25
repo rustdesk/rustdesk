@@ -1,7 +1,8 @@
 param(
   [Parameter(Mandatory)] [string]$Executable,
-  [ValidateSet('port-forward', 'file-transfer', 'rdp', 'connect', 'view-camera')] [string]$Session = 'port-forward',
-  [switch]$AlsoOpenFileTransfer
+  [ValidateSet('port-forward', 'file-transfer', 'rdp', 'connect', 'view-camera', 'terminal')] [string]$Session = 'port-forward',
+  [switch]$AlsoOpenFileTransfer,
+  [switch]$CloseFirstSession
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +26,7 @@ try {
     'file-transfer' { '*File Transfer*' }
     'connect' { '*Remote Desktop*' }
     'view-camera' { '*View Camera*' }
+    'terminal' { '*Terminal*' }
     default { '*Port Forward*' }
   }
   $deadline = (Get-Date).AddSeconds(40)
@@ -66,19 +68,21 @@ try {
       Write-Output "RustDesk kept both official session windows open."
       $fileWindow = $children | Where-Object { $_.title -like '*File Transfer*' } | Select-Object -First 1
       if (!$fileWindow) { throw 'Expected a file transfer window.' }
-      & $nativeProbe -AppProcessId $process.Id -Title $fileWindow.title -RequestClose | Out-Null
+      $closing = if ($CloseFirstSession) { $official } else { $fileWindow }
+      $remaining = if ($CloseFirstSession) { $fileWindow } else { $official }
+      & $nativeProbe -AppProcessId $process.Id -Title $closing.title -RequestClose | Out-Null
       $deadline = (Get-Date).AddSeconds(15)
       do {
-        if ($process.HasExited) { throw "Closing file transfer exited RustDesk ($($process.ExitCode))." }
+        if ($process.HasExited) { throw "Closing a session exited RustDesk ($($process.ExitCode))." }
         $windows = @((& $nativeProbe -AppProcessId $process.Id | ConvertFrom-Json))
-        if (!($windows | Where-Object { $_.handle -eq $fileWindow.handle -and $_.visible })) { break }
+        if (!($windows | Where-Object { $_.handle -eq $closing.handle -and $_.visible })) { break }
         Start-Sleep -Milliseconds 300
       } while ((Get-Date) -lt $deadline)
-      if (($windows | Where-Object { $_.handle -eq $fileWindow.handle -and $_.visible }) -or
-          !($windows | Where-Object { $_.handle -eq $official.handle -and $_.visible })) {
-        throw 'Closing file transfer did not leave the first window running independently.'
+      if (($windows | Where-Object { $_.handle -eq $closing.handle -and $_.visible }) -or
+          !($windows | Where-Object { $_.handle -eq $remaining.handle -and $_.visible })) {
+        throw 'Closing one session did not leave the other running independently.'
       }
-      Write-Output "Closing file transfer left the $Session window open."
+      Write-Output "Closed '$($closing.title)' and kept '$($remaining.title)' open."
     } finally {
       if (!$second.HasExited) { Stop-Process -Id $second.Id }
     }
