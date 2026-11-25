@@ -82,9 +82,12 @@ RustDesk build retains the full original native target and its dependencies.
   before acting. Windows may still deny foreground activation. The self-test
   checks visibility and geometry against the actual window and reports the
   foreground result separately.
-* Custom drag/resize, movable, frame autosave, XID, and initial native
-  background color still return UnsupportedError. The native caption toggle does
-  not implement legacy custom non-client drawing or its event ordering.
+* On Windows, the custom drag and resize entry points post native non-client
+  pointer messages to the SDK-owned window. Dragging the empty tab strip uses
+  the same entry point. Interactive drag and resize still need manual verification.
+  Movable, frame autosave, XID, and initial native background color still return
+  UnsupportedError. The native caption toggle does not implement legacy custom
+  non-client drawing or its event ordering.
   Frame coordinates are Win32 screen pixels. Mixed DPI and multiple monitors
   have not been verified.
 * Close, focus/blur, maximize/unmaximize, minimize/restore, fullscreen, and resize

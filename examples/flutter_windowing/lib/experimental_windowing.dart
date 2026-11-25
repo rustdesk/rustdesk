@@ -504,10 +504,16 @@ class _Controller extends WindowController {
   }
 
   @override
-  Future<void> startDragging() async => _unsupported('startDragging');
+  Future<void> startDragging() async {
+    if (!Platform.isWindows) _unsupported('startDragging');
+    await backend._control<void>(windowId, 'startDragging');
+  }
+
   @override
-  Future<void> startResizing(SubWindowResizeEdge edge) async =>
-      _unsupported('startResizing');
+  Future<void> startResizing(SubWindowResizeEdge edge) async {
+    if (!Platform.isWindows) _unsupported('startResizing');
+    await backend._control<void>(windowId, 'startResizing', {'edge': edge.index});
+  }
   @override
   Future<void> setMovable(bool value) async => _unsupported('setMovable');
   @override

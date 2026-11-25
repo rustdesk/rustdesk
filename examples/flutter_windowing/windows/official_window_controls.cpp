@@ -5,6 +5,7 @@
 #include <flutter/standard_method_codec.h>
 #include <windows.h>
 
+#include <array>
 #include <limits>
 
 namespace {
@@ -110,6 +111,33 @@ void RegisterOfficialWindowControls(FlutterDesktopPluginRegistrarRef registrar) 
           !SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE |
                         SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED)) {
         result->Error("win32_error", "Could not update title bar");
+        return;
+      }
+    } else if (method == "startDragging" || method == "startResizing") {
+      POINT cursor{};
+      WPARAM hit = HTCAPTION;
+      if (method == "startResizing") {
+        // Ordered like SubWindowResizeEdge on the Dart side.
+        constexpr std::array<WPARAM, 8> edges = {
+            HTTOP, HTLEFT, HTRIGHT, HTBOTTOM,
+            HTTOPLEFT, HTBOTTOMLEFT, HTTOPRIGHT, HTBOTTOMRIGHT};
+        const auto edge = ReadInteger(*values, "edge", -1);
+        if (edge < 0 || edge >= static_cast<int64_t>(edges.size())) {
+          result->Error("invalid_argument", "Expected a window resize edge");
+          return;
+        }
+        hit = edges[static_cast<size_t>(edge)];
+      }
+      if (!GetCursorPos(&cursor)) {
+        result->Error("win32_error", "Could not read the pointer position");
+        return;
+      }
+      ReleaseCapture();
+      // Post the native gesture so the modal move/resize loop cannot block
+      // the response to Dart on the platform thread.
+      if (!PostMessage(hwnd, WM_NCLBUTTONDOWN, hit,
+                       MAKELPARAM(cursor.x, cursor.y))) {
+        result->Error("win32_error", "Could not start the native window gesture");
         return;
       }
     } else if (method == "hide") {

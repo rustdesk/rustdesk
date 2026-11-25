@@ -637,7 +637,7 @@ class _DesktopTabState extends State<DesktopTab>
                         }
                       }
                     : (isIncomingHomePage ? () {} : null), // Keep tap recognizer for Windows touch.
-                onPanStart: hasNativeTitleBar
+                onPanStart: hasNativeTitleBar && !isWindows
                     ? null
                     : (_) => startDragging(isMainWindow, windowId: _window?.windowId),
                 onPanCancel: () {
