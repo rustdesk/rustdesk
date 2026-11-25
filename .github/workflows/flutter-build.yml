@@ -1078,26 +1078,26 @@ jobs:
           echo "$nasm_bin" >> "$GITHUB_PATH"
 
       - name: Install flutter
-        if: ${{ matrix.job.arch != 'aarch64' || !inputs.desktop-windowing-preview }}
+        if: ${{ !inputs.desktop-windowing-preview }}
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: "stable"
           flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_MACOS_ARM_VERSION || env.FLUTTER_VERSION }}
 
-      - name: Install Flutter 3.50 windowing preview (arm64)
-        if: ${{ matrix.job.arch == 'aarch64' && inputs.desktop-windowing-preview }}
+      - name: Install Flutter 3.50 windowing preview
+        if: ${{ inputs.desktop-windowing-preview }}
         shell: bash
         run: bash .github/patches/install_flutter_windowing.sh
 
-      - name: Keep CocoaPods for arm64
-        # 3.44 turns on Swift Package Manager by default, which would migrate Runner.xcodeproj and
+      - name: Keep CocoaPods on recent Flutter SDKs
+        # Recent Flutter enables Swift Package Manager, which would migrate Runner.xcodeproj and
         # move some plugins off CocoaPods; every plugin still ships a podspec.
-        if: ${{ matrix.job.arch == 'aarch64' }}
+        if: ${{ matrix.job.arch == 'aarch64' || inputs.desktop-windowing-preview }}
         run: flutter config --no-enable-swift-package-manager
 
       - name: Patch flutter
-        # Flutter 3.44 (arm64) already has this dropdown fix.
-        if: ${{ matrix.job.arch == 'x86_64' }}
+        # Recent Flutter SDKs already have this dropdown fix.
+        if: ${{ matrix.job.arch == 'x86_64' && !inputs.desktop-windowing-preview }}
         run: |
           cd $(dirname $(dirname $(which flutter)))
           if [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]]; then
@@ -1112,9 +1112,9 @@ jobs:
           sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart
           grep -n '_setFramesEnabledState(false);' ../packages/flutter/lib/src/scheduler/binding.dart
 
-      - name: Patch RustDesk sources for the selected Flutter SDK (arm64)
+      - name: Patch RustDesk sources for the selected Flutter SDK
         # The script uses GNU `sed -i`, which macOS's BSD sed rejects.
-        if: ${{ matrix.job.arch == 'aarch64' }}
+        if: ${{ matrix.job.arch == 'aarch64' || inputs.desktop-windowing-preview }}
         shell: bash
         env:
           USE_FLUTTER_PREVIEW: ${{ inputs.desktop-windowing-preview }}
@@ -1141,12 +1141,11 @@ jobs:
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          # arm64's *.freezed.dart must match the freezed it resolves under Flutter 3.44.
-          name: ${{ matrix.job.arch == 'aarch64' && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
+          # Generated Dart must match the Freezed version used by the selected SDK path.
+          name: ${{ (matrix.job.arch == 'aarch64' || inputs.desktop-windowing-preview) && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
           path: ./
 
       - name: Run the Dart tests
-        # x86_64 tests the Flutter 3.24.5 sources most platforms ship, arm64 the patched 3.44 ones.
         if: ${{ !inputs.upload-artifact }}
         working-directory: flutter
         run: flutter test --timeout 60s
@@ -1185,9 +1184,9 @@ jobs:
 
       - name: Build rustdesk
         env:
-          FLUTTER_WINDOWING: ${{ matrix.job.arch == 'aarch64' && inputs.desktop-windowing-preview }}
+          FLUTTER_WINDOWING: ${{ inputs.desktop-windowing-preview }}
         run: |
-          if [ "${{ matrix.job.target }}" = "aarch64-apple-darwin" ]; then
+          if [[ "${{ matrix.job.arch }}" == aarch64 || "$FLUTTER_WINDOWING" == true ]]; then
             MIN_MACOS_VERSION="12.3"
             sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
             sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
