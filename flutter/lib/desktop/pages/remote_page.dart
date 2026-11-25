@@ -38,6 +38,7 @@ class RemotePage extends StatefulWidget {
   RemotePage({
     Key? key,
     required this.id,
+    this.sessionStateKey,
     required this.toolbarState,
     this.sessionId,
     this.tabWindowId,
@@ -50,10 +51,12 @@ class RemotePage extends StatefulWidget {
     this.forceRelay,
     this.isSharedPassword,
   }) : super(key: key) {
-    initSharedStates(id);
+    initSharedStates(stateKey);
   }
 
   final String id;
+  final String? sessionStateKey;
+  String get stateKey => sessionStateKey ?? id;
   final SessionID? sessionId;
   final int? tabWindowId;
   final int? display;
@@ -78,7 +81,7 @@ class RemotePage extends StatefulWidget {
 
   @override
   State<RemotePage> createState() {
-    final state = _RemotePageState(id);
+    final state = _RemotePageState(stateKey);
     _lastState.value = state;
     return state;
   }
@@ -160,7 +163,8 @@ class _RemotePageState extends State<RemotePage>
   void initState() {
     super.initState();
     _window = DesktopWindowScope.read(context);
-    _ffi = FFI(widget.sessionId, windowState: _window?.windowState);
+    _ffi = FFI(widget.sessionId, windowState: _window?.windowState,
+        sessionStateKey: widget.sessionStateKey);
     if (isMacOS) {
       // SchedulerBinding.instance.lifecycleState is null in the first connection in a new window.
       _macOSLifecycleState = SchedulerBinding.instance.lifecycleState;
@@ -719,7 +723,7 @@ class _RemotePageState extends State<RemotePage>
     if (_window?.nativeTitleBar != true) {
       await Get.delete<FFI>(tag: widget.id);
     }
-    removeSharedStates(widget.id);
+    removeSharedStates(widget.stateKey);
   }
 
   Widget emptyOverlay() => BlockableOverlay(
@@ -991,7 +995,7 @@ class _RemotePageState extends State<RemotePage>
           canvasModel: _ffi.canvasModel,
           inputModel: _ffi.inputModel,
           child: Builder(builder: (context) {
-            final peerDisplay = CurrentDisplayState.find(widget.id);
+            final peerDisplay = CurrentDisplayState.find(widget.stateKey);
             return Obx(
               () => _ffi.ffiModel.pi.isSet.isFalse
                   ? Container(color: Colors.transparent)

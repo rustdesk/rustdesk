@@ -155,7 +155,7 @@ class TextureModel {
     final ffi = parent.target;
     if (ffi == null) return;
     if (!ffi.ffiModel.pi.isSupportMultiDisplay) {
-      final currentDisplay = CurrentDisplayState.find(ffi.id).value;
+      final currentDisplay = CurrentDisplayState.find(ffi.stateKeyFor(ffi.id)).value;
       if (currentDisplay != display) {
         debugPrint(
             "setTextureType: currentDisplay=$currentDisplay, isGpuTexture=$gpuTexture");

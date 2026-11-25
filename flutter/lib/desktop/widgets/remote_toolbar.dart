@@ -805,7 +805,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     final List<Widget> toolbarItems = [];
     toolbarItems.add(_PinMenu(state: widget.state));
     toolbarItems.add(Obx(() {
-      final privacyModeState = PrivacyModeState.find(widget.id);
+      final privacyModeState = PrivacyModeState.find(widget.ffi.stateKeyFor(widget.id));
       if ((privacyModeState.isEmpty ||
               allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
           pi.displaysCount.value > 1 &&
@@ -820,7 +820,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
 
     toolbarItems.add(Obx(() {
-      final privacyModeState = PrivacyModeState.find(widget.id);
+      final privacyModeState = PrivacyModeState.find(widget.ffi.stateKeyFor(widget.id));
       if ((privacyModeState.isEmpty ||
               allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
           pi.displaysCount.value > 1) {
@@ -982,7 +982,7 @@ class _MonitorCycle {
 
   PeerInfo get _pi => ffi.ffiModel.pi;
   int get total => _pi.displays.length;
-  int get _current => CurrentDisplayState.find(id).value;
+  int get _current => CurrentDisplayState.find(ffi.stateKeyFor(id)).value;
   bool get _inRange => _current >= 0 && _current < total;
 
   String get label => _inRange ? '${_current + 1}' : '*';
@@ -1152,7 +1152,7 @@ class _MonitorMenu extends StatelessWidget {
     final pi = ffi.ffiModel.pi;
 
     buildMonitorButton(int i) => Obx(() {
-          RxInt display = CurrentDisplayState.find(id);
+          RxInt display = CurrentDisplayState.find(ffi.stateKeyFor(id));
 
           final isAllMonitors = i == kAllDisplayValue;
           final width = SimpleWrapper<double>(0);
@@ -1212,7 +1212,7 @@ class _MonitorMenu extends StatelessWidget {
       SimpleWrapper<double> width, Color activeTextColor, Color activeBgColor) {
     getMonitors() {
       final pi = ffi.ffiModel.pi;
-      RxInt display = CurrentDisplayState.find(id);
+      RxInt display = CurrentDisplayState.find(ffi.stateKeyFor(id));
       final rect = ffi.ffiModel.globalDisplaysRect();
       if (rect == null) {
         return Offstage();
@@ -1284,7 +1284,7 @@ class _MonitorMenu extends StatelessWidget {
       // If show monitors in toolbar(`buildMultiMonitorMenu()`), then the menu will dismiss automatically.
       _menuDismissCallback(ffi);
     }
-    RxInt display = CurrentDisplayState.find(id);
+    RxInt display = CurrentDisplayState.find(ffi.stateKeyFor(id));
     if (display.value != i) {
       final isChooseDisplayToOpenInNewWindow = pi.isSupportMultiDisplay &&
           bind.sessionGetDisplaysAsIndividualWindows(
@@ -1781,7 +1781,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         toggles(),
       ];
       // privacy mode
-      final privacyModeState = PrivacyModeState.find(id);
+      final privacyModeState = PrivacyModeState.find(ffi.stateKeyFor(id));
       if (ffi.connType == ConnType.defaultConn &&
           (pi.features.privacyMode || privacyModeState.isNotEmpty) &&
           (ffiModel.keyboard || privacyModeState.isNotEmpty)) {
@@ -3772,7 +3772,7 @@ class _MinimizedMonitorSwitchButton extends StatelessWidget {
         return const Offstage();
       }
       if (cycle.total < 2) return const Offstage();
-      final privacyModeState = PrivacyModeState.find(id);
+      final privacyModeState = PrivacyModeState.find(ffi.stateKeyFor(id));
       if (privacyModeState.isNotEmpty &&
           !allowDisplaySwitchInPrivacyMode(
               ffi.ffiModel.pi, privacyModeState.value)) {

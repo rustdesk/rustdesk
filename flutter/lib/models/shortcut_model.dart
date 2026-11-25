@@ -353,7 +353,7 @@ void registerSessionShortcutActions(
   // view via these shortcuts.
   void switchDisplayBy(int delta) {
     final pi = ffi.ffiModel.pi;
-    final privacyMode = PrivacyModeState.find(ffi.id).value;
+    final privacyMode = PrivacyModeState.find(ffi.stateKeyFor(ffi.id)).value;
     if (privacyMode.isNotEmpty &&
         !allowDisplaySwitchInPrivacyMode(pi, privacyMode)) {
       return;
@@ -392,7 +392,7 @@ void registerSessionShortcutActions(
   // view never engages.
   ffi.shortcutModel.register(kShortcutActionSwitchDisplayAll, () {
     final pi = ffi.ffiModel.pi;
-    final privacyMode = PrivacyModeState.find(ffi.id).value;
+    final privacyMode = PrivacyModeState.find(ffi.stateKeyFor(ffi.id)).value;
     if (privacyMode.isNotEmpty &&
         !allowDisplaySwitchInPrivacyMode(pi, privacyMode)) {
       return;
@@ -544,7 +544,7 @@ void registerSessionShortcutActions(
   ffi.shortcutModel.register(kShortcutActionPlugOutAllVirtualDisplays, () {
     if (ffi.connType != ConnType.defaultConn ||
         !showVirtualDisplayMenu(ffi) ||
-        PrivacyModeState.find(ffi.id).value.isNotEmpty ||
+        PrivacyModeState.find(ffi.stateKeyFor(ffi.id)).value.isNotEmpty ||
         (ffi.ffiModel.pi.isAmyuniIdd &&
             ffi.ffiModel.pi.amyuniVirtualDisplayCount == 0)) {
       return;
@@ -578,7 +578,7 @@ void registerSessionShortcutActions(
   bool checkPrivacyModeAllowed(String implKey) {
     final ffiModel = ffi.ffiModel;
     final pi = ffiModel.pi;
-    final privacyMode = PrivacyModeState.find(ffi.id).value;
+    final privacyMode = PrivacyModeState.find(ffi.stateKeyFor(ffi.id)).value;
     if (ffi.connType != ConnType.defaultConn ||
         ffiModel.viewOnly ||
         (privacyMode.isEmpty &&
@@ -617,7 +617,7 @@ void registerSessionShortcutActions(
     bind.sessionTogglePrivacyMode(
       sessionId: sessionId,
       implKey: implKey,
-      on: PrivacyModeState.find(ffi.id).value != implKey,
+      on: PrivacyModeState.find(ffi.stateKeyFor(ffi.id)).value != implKey,
     );
   });
   ffi.shortcutModel.register(kShortcutActionPrivacyMode2, () {
@@ -627,7 +627,7 @@ void registerSessionShortcutActions(
     bind.sessionTogglePrivacyMode(
       sessionId: sessionId,
       implKey: implKey,
-      on: PrivacyModeState.find(ffi.id).value != implKey,
+      on: PrivacyModeState.find(ffi.stateKeyFor(ffi.id)).value != implKey,
     );
   });
 

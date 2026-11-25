@@ -2,6 +2,7 @@ param(
   [Parameter(Mandatory)] [string]$Executable,
   [ValidateSet('port-forward', 'file-transfer', 'rdp', 'connect', 'view-camera', 'terminal')] [string]$Session = 'port-forward',
   [switch]$AlsoOpenFileTransfer,
+  [switch]$AlsoOpenSamePeerCamera,
   [switch]$CloseFirstSession
 )
 
@@ -46,9 +47,12 @@ try {
     throw "No visible SDK-owned $Session window opened in the RustDesk process."
   }
   Write-Output "RustDesk opened HWND $($official.handle) of class $($official.className)."
-  if ($AlsoOpenFileTransfer) {
-    if ($Session -eq 'file-transfer') { throw 'Start with a different session type than file transfer.' }
-    $second = Start-Process -FilePath $exe -WorkingDirectory $options.WorkingDirectory -WindowStyle Hidden -PassThru -ArgumentList @('--file-transfer', '127.0.0.1:2')
+  if ($AlsoOpenFileTransfer -or $AlsoOpenSamePeerCamera) {
+    if ($AlsoOpenFileTransfer -and $AlsoOpenSamePeerCamera) { throw 'Choose one second session.' }
+    $secondArgs = if ($AlsoOpenSamePeerCamera) { @('--view-camera', '127.0.0.1:1') } else { @('--file-transfer', '127.0.0.1:2') }
+    $secondTitle = if ($AlsoOpenSamePeerCamera) { '*View Camera*' } else { '*File Transfer*' }
+    if ($title -eq $secondTitle) { throw 'Start with a different session type.' }
+    $second = Start-Process -FilePath $exe -WorkingDirectory $options.WorkingDirectory -WindowStyle Hidden -PassThru -ArgumentList $secondArgs
     try {
       $deadline = (Get-Date).AddSeconds(40)
       do {
@@ -58,7 +62,7 @@ try {
         $windows = @((& $nativeProbe -AppProcessId $process.Id | ConvertFrom-Json))
         $children = @($windows | Where-Object {
           $_.className -eq 'FLUTTER_HOST_WINDOW' -and $_.visible -and
-            ($_.title -like $title -or $_.title -like '*File Transfer*')
+            ($_.title -like $title -or $_.title -like $secondTitle)
         })
         if ($children.Count -eq 2) { break }
         Start-Sleep -Milliseconds 300
@@ -66,10 +70,10 @@ try {
       if ($children.Count -ne 2) { throw 'Expected two visible official session windows in one process.' }
       if ($process.WaitForExit(2000)) { throw "RustDesk exited with two active session windows ($($process.ExitCode))." }
       Write-Output "RustDesk kept both official session windows open."
-      $fileWindow = $children | Where-Object { $_.title -like '*File Transfer*' } | Select-Object -First 1
-      if (!$fileWindow) { throw 'Expected a file transfer window.' }
-      $closing = if ($CloseFirstSession) { $official } else { $fileWindow }
-      $remaining = if ($CloseFirstSession) { $fileWindow } else { $official }
+      $secondWindow = $children | Where-Object { $_.title -like $secondTitle } | Select-Object -First 1
+      if (!$secondWindow) { throw "Expected a second window matching $secondTitle." }
+      $closing = if ($CloseFirstSession) { $official } else { $secondWindow }
+      $remaining = if ($CloseFirstSession) { $secondWindow } else { $official }
       & $nativeProbe -AppProcessId $process.Id -Title $closing.title -RequestClose | Out-Null
       $deadline = (Get-Date).AddSeconds(15)
       do {

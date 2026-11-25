@@ -148,10 +148,11 @@ The Windows client CI smoke tests open TCP forwarding, RDP forwarding,
 remote desktop, camera, or terminal alongside file transfer in the same process.
 They check for two visible `FLUTTER_HOST_WINDOW` windows, close one, and verify
 that the other stays visible.
-The tests use loopback addresses and do not require a successful peer connection.
-Remote video, input delivery, camera capture, and terminal I/O still need end-to-end
-verification. Some connection and toolbar state still uses peer ID keys.
-Verify isolation when multiple displays or session types use the same peer.
+The tests also open remote desktop and camera windows for the same loopback
+peer and check that the camera window stays open when remote desktop closes.
+The tests do not require a successful peer connection. Remote video, input
+delivery, camera capture, terminal I/O, and monitor switching still need
+end-to-end verification.
 
 ## Upstream acceptance
 

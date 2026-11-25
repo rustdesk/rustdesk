@@ -227,7 +227,7 @@ class FfiModel with ChangeNotifier {
     });
     // Only inited at remote page
     if (parent.target?.connType == ConnType.defaultConn) {
-      KeyboardEnabledState.find(id).value = _permissions['keyboard'] != false;
+      KeyboardEnabledState.find(parent.target?.stateKeyFor(id) ?? id).value = _permissions['keyboard'] != false;
     }
 
     // If keyboard permission was revoked while relative mouse mode is active,
@@ -272,7 +272,7 @@ class FfiModel with ChangeNotifier {
     _secure = secure;
     _direct = direct;
     try {
-      var connectionType = ConnectionTypeState.find(peerId);
+      var connectionType = ConnectionTypeState.find(parent.target?.stateKeyFor(peerId) ?? peerId);
       connectionType.setSecure(secure);
       connectionType.setDirect(direct);
       connectionType.setStreamType(streamType);
@@ -429,7 +429,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'update_voice_call_state') {
         parent.target?.serverModel.updateVoiceCallState(evt);
       } else if (name == 'fingerprint') {
-        FingerprintState.find(peerId).value = evt['fingerprint'] ?? '';
+        FingerprintState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value = evt['fingerprint'] ?? '';
       } else if (name == "sync_peer_hash_password_to_personal_ab") {
         if (desktopType == DesktopType.main || isWeb || isMobile) {
           final id = evt['id'];
@@ -852,7 +852,7 @@ class FfiModel with ChangeNotifier {
 
     if (!_pi.isSupportMultiUiSession) {
       try {
-        CurrentDisplayState.find(peerId).value = display;
+        CurrentDisplayState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value = display;
       } catch (e) {
         //
       }
@@ -1384,7 +1384,7 @@ class FfiModel with ChangeNotifier {
     }
 
     try {
-      CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
+      CurrentDisplayState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value = _pi.currentDisplay;
     } catch (e) {
       //
     }
@@ -1562,7 +1562,7 @@ class FfiModel with ChangeNotifier {
     );
     _pi.currentDisplay = 0;
     try {
-      CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
+      CurrentDisplayState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value = _pi.currentDisplay;
     } catch (e) {
       //
     }
@@ -1763,7 +1763,7 @@ class FfiModel with ChangeNotifier {
       }
       _pi.currentDisplay = int.parse(evt['display_idx']);
       try {
-        CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
+        CurrentDisplayState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value = _pi.currentDisplay;
       } catch (e) {
         //
       }
@@ -1783,7 +1783,7 @@ class FfiModel with ChangeNotifier {
     pi.currentDisplay = display;
     updateCurDisplay(sessionId, updateCursorPos: updateCursorPos);
     try {
-      CurrentDisplayState.find(peerId).value = display;
+      CurrentDisplayState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value = display;
     } catch (e) {
       //
     }
@@ -1793,7 +1793,7 @@ class FfiModel with ChangeNotifier {
     _inputBlocked = evt['input_state'] == 'on';
     notifyListeners();
     try {
-      BlockInputState.find(peerId).value = evt['input_state'] == 'on';
+      BlockInputState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value = evt['input_state'] == 'on';
     } catch (e) {
       //
     }
@@ -1810,10 +1810,10 @@ class FfiModel with ChangeNotifier {
             sessionId: sessionId, arg: 'privacy-mode-impl-key');
         // For compatibility, version < 1.2.4, the default value is 'privacy_mode_impl_mag'.
         final initDefaultPrivacyMode = 'privacy_mode_impl_mag';
-        PrivacyModeState.find(peerId).value =
+        PrivacyModeState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value =
             privacyModeImpl ?? initDefaultPrivacyMode;
       } else {
-        PrivacyModeState.find(peerId).value = '';
+        PrivacyModeState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value = '';
       }
     } catch (e) {
       //
@@ -1827,9 +1827,9 @@ class FfiModel with ChangeNotifier {
     // current our flutter code quality is fucking shit now. !!!!!!!!!!!!!!!!
     try {
       if (value) {
-        ShowRemoteCursorState.find(id).value = value;
+        ShowRemoteCursorState.find(parent.target?.stateKeyFor(id) ?? id).value = value;
       } else {
-        ShowRemoteCursorState.find(id).value = bind.sessionGetToggleOptionSync(
+        ShowRemoteCursorState.find(parent.target?.stateKeyFor(id) ?? id).value = bind.sessionGetToggleOptionSync(
             sessionId: sessionId, arg: 'show-remote-cursor');
       }
     } catch (e) {
@@ -2530,7 +2530,7 @@ class CanvasModel with ChangeNotifier {
   void activateLocalCursor() {
     if (isDesktop || isWebDesktop) {
       try {
-        RemoteCursorMovedState.find(id).value = false;
+        RemoteCursorMovedState.find(parent.target?.stateKeyFor(id) ?? id).value = false;
       } catch (e) {
         //
       }
@@ -2546,7 +2546,7 @@ class CanvasModel with ChangeNotifier {
         parent.target!.cursorModel.moveLocal(x, y);
       } else {
         try {
-          RemoteCursorMovedState.find(id).value = false;
+          RemoteCursorMovedState.find(parent.target?.stateKeyFor(id) ?? id).value = false;
         } catch (e) {
           //
         }
@@ -3705,7 +3705,7 @@ class CursorModel with ChangeNotifier {
   /// Whether the desktop paints the peer's cursor over the remote image.
   @protected
   bool get showsRemoteCursor {
-    final tag = ShowRemoteCursorState.tag(parent.target?.id ?? '');
+    final tag = ShowRemoteCursorState.tag(parent.target?.stateKeyFor(parent.target?.id ?? '') ?? '');
     return Get.isRegistered<RxBool>(tag: tag) &&
         Get.find<RxBool>(tag: tag).value;
   }
@@ -3820,7 +3820,7 @@ class CursorModel with ChangeNotifier {
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {
-      RemoteCursorMovedState.find(id).value = true;
+      RemoteCursorMovedState.find(parent.target?.stateKeyFor(id) ?? id).value = true;
     } catch (e) {
       //
     }
@@ -4068,9 +4068,11 @@ class FFI {
   Map<int, TerminalModel> get terminalModels => _terminalModels;
 
   final StateGlobal? windowState;
+  final String? sessionStateKey;
+  String stateKeyFor(String peerId) => sessionStateKey ?? peerId;
   StateGlobal get desktopWindowState => windowState ?? stateGlobal;
 
-  FFI(SessionID? sId, {this.windowState}) {
+  FFI(SessionID? sId, {this.windowState, this.sessionStateKey}) {
     sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));

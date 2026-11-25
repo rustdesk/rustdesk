@@ -34,6 +34,7 @@ class ViewCameraPage extends StatefulWidget {
   ViewCameraPage({
     Key? key,
     required this.id,
+    this.sessionStateKey,
     required this.toolbarState,
     this.sessionId,
     this.tabWindowId,
@@ -46,10 +47,12 @@ class ViewCameraPage extends StatefulWidget {
     this.forceRelay,
     this.isSharedPassword,
   }) : super(key: key) {
-    initSharedStates(id);
+    initSharedStates(stateKey);
   }
 
   final String id;
+  final String? sessionStateKey;
+  String get stateKey => sessionStateKey ?? id;
   final SessionID? sessionId;
   final int? tabWindowId;
   final int? display;
@@ -116,7 +119,8 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   void initState() {
     super.initState();
     _window = DesktopWindowScope.read(context);
-    _ffi = FFI(widget.sessionId, windowState: _window?.windowState);
+    _ffi = FFI(widget.sessionId, windowState: _window?.windowState,
+        sessionStateKey: widget.sessionStateKey);
     if (_window?.nativeTitleBar != true) Get.put<FFI>(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       showKBLayoutTypeChooserIfNeeded(
@@ -267,7 +271,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     if (_window?.nativeTitleBar != true) {
       await Get.delete<FFI>(tag: widget.id);
     }
-    removeSharedStates(widget.id);
+    removeSharedStates(widget.stateKey);
   }
 
   Widget emptyOverlay() => BlockableOverlay(
@@ -476,7 +480,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       }, child: LayoutBuilder(builder: (context, constraints) {
         final c = Provider.of<CanvasModel>(context, listen: false);
         Future.delayed(Duration.zero, () => c.updateViewStyle());
-        final peerDisplay = CurrentDisplayState.find(widget.id);
+        final peerDisplay = CurrentDisplayState.find(widget.stateKey);
         return Obx(
           () => _ffi.ffiModel.pi.isSet.isFalse
               ? Container(color: Colors.transparent)

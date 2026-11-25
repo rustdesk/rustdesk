@@ -14,6 +14,7 @@ import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/window_scope.dart';
+import 'package:flutter_hbb/desktop/windowing_preview.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
@@ -55,7 +56,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
-  _ConnectionTabPageState(Map<String, dynamic> params) {
+  final int _sessionWindowId;
+  String _stateKey(String id) =>
+      isOfficialSessionWindow(_sessionWindowId) ? '$_sessionWindowId:$id' : id;
+
+  _ConnectionTabPageState(Map<String, dynamic> params)
+      : _sessionWindowId = params['windowId'] as int? ?? 0 {
     RemoteCountState.init();
     peerId = params['id'];
     final sessionId = params['session_id'];
@@ -66,7 +72,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     _isScreenRectSet = screenRect != null;
     _display = display as int?;
     if (peerId != null) {
-      ConnectionTypeState.init(peerId!);
+      ConnectionTypeState.init(_stateKey(peerId!));
       tabController.onSelected = (id) {
         final remotePage = tabController.widget(id);
         if (remotePage is RemotePage) {
@@ -75,7 +81,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         }
         WindowController.fromWindowId(params['windowId'])
             .setTitle(getWindowNameWithId(id, overrideType: WindowType.RemoteDesktop));
-        UnreadChatCountState.find(id).value = 0;
+        UnreadChatCountState.find(_stateKey(id)).value = 0;
       };
       tabController.add(TabInfo(
         key: peerId!,
@@ -94,6 +100,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         page: RemotePage(
           key: ValueKey(peerId),
           id: peerId!,
+          sessionStateKey: _stateKey(peerId!),
           sessionId: sessionId == null ? null : SessionID(sessionId),
           tabWindowId: tabWindowId,
           display: display,
@@ -161,7 +168,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         pageViewBuilder: (pageView) => pageView,
         labelGetter: DesktopTab.tablabelGetter,
         tabBuilder: (key, icon, label, themeConf) => Obx(() {
-          final connectionType = ConnectionTypeState.find(key);
+          final connectionType = ConnectionTypeState.find(_stateKey(key));
           if (!connectionType.isValid()) {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -178,7 +185,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             String msgConn = getConnectionText(
                 secure, direct, connectionType.stream_type.value);
             var msgFingerprint = '${translate('Fingerprint')}:\n';
-            var fingerprint = FingerprintState.find(key).value;
+            var fingerprint = FingerprintState.find(_stateKey(key)).value;
             if (fingerprint.isEmpty) {
               fingerprint = 'N/A';
             }
@@ -203,7 +210,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                   ).paddingOnly(right: 5),
                 ),
                 label,
-                unreadMessageCountBuilder(UnreadChatCountState.find(key))
+                unreadMessageCountBuilder(UnreadChatCountState.find(_stateKey(key)))
                     .marginOnly(left: 4),
               ],
             );
@@ -336,7 +343,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           translate('Copy Fingerprint'),
           style: style,
         ),
-        proc: () => onCopyFingerprint(FingerprintState.find(key).value),
+        proc: () => onCopyFingerprint(FingerprintState.find(_stateKey(key)).value),
         padding: padding,
         dismissOnClicked: true,
         dismissCallback: cancelFunc,
@@ -395,7 +402,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
       loopCloseWindow();
     }
-    ConnectionTypeState.delete(id);
+    ConnectionTypeState.delete(_stateKey(id));
     // Clean up relative mouse mode state for this peer.
     _windowState.relativeMouseModeState.remove(id);
     _update_remote_count();
@@ -463,7 +470,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           await windowOnTop(windowId());
         });
       });
-      ConnectionTypeState.init(id);
+      ConnectionTypeState.init(_stateKey(id));
       tabController.add(TabInfo(
         key: id,
         label: id,
@@ -481,6 +488,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         page: RemotePage(
           key: ValueKey(id),
           id: id,
+          sessionStateKey: _stateKey(id),
           sessionId: sessionId == null ? null : SessionID(sessionId),
           tabWindowId: tabWindowId,
           display: display,

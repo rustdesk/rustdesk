@@ -1846,7 +1846,7 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   bool? direct;
   try {
     direct =
-        ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
+        ConnectionTypeState.find(ffi.stateKeyFor(id)).direct.value == ConnectionType.strDirect;
   } catch (_) {}
   bool hideFps = (await bind.mainIsUsingPublicServer() && direct != true) ||
       versionCmp(ffi.ffiModel.pi.version, '1.2.0') < 0;

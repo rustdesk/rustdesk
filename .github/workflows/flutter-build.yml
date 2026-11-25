@@ -413,6 +413,7 @@ jobs:
           ./examples/flutter_windowing/test_rustdesk_preview.ps1 -Executable ./rustdesk/rustdesk.exe -Session connect -AlsoOpenFileTransfer
           ./examples/flutter_windowing/test_rustdesk_preview.ps1 -Executable ./rustdesk/rustdesk.exe -Session view-camera -AlsoOpenFileTransfer
           ./examples/flutter_windowing/test_rustdesk_preview.ps1 -Executable ./rustdesk/rustdesk.exe -Session terminal -AlsoOpenFileTransfer -CloseFirstSession
+          ./examples/flutter_windowing/test_rustdesk_preview.ps1 -Executable ./rustdesk/rustdesk.exe -Session connect -AlsoOpenSamePeerCamera -CloseFirstSession
 
       - name: Run the Rust tests
         # x86_64 only: the tests are the same code on arm64, and that runner is the slow one.
