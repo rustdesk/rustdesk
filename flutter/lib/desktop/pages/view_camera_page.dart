@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/remote_input.dart';
@@ -99,11 +100,24 @@ class _ViewCameraPageState extends State<ViewCameraPage>
 
   void _initStates(String id) {}
 
+  DesktopWindowScope? _window;
+  StateGlobal get _windowState => _window?.windowState ?? stateGlobal;
+
+  void _runInWindow(VoidCallback action) {
+    final window = _window;
+    if (window == null) {
+      action();
+    } else {
+      window.run(action);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    _ffi = FFI(widget.sessionId);
-    Get.put<FFI>(_ffi, tag: widget.id);
+    _window = DesktopWindowScope.read(context);
+    _ffi = FFI(widget.sessionId, windowState: _window?.windowState);
+    if (_window?.nativeTitleBar != true) Get.put<FFI>(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       showKBLayoutTypeChooserIfNeeded(
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);
@@ -124,15 +138,23 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-      _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      if (!mounted) return;
+      _ffi.dialogManager.showLoading(translate('Connecting...'), onCancel: () {
+        if (!mounted) return;
+        final controller = widget.tabController;
+        if (controller == null) {
+          closeConnection(id: widget.id);
+        } else {
+          controller.closeBy(widget.id);
+        }
+      });
     });
     WakelockManager.enable(_uniqueKey);
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     _ffi.dialogManager.loadMobileActionsOverlayVisible();
-    DesktopMultiWindow.addListener(this);
+    _runInWindow(() => DesktopMultiWindow.addListener(this));
     // if (!_isCustomCursorInited) {
     //   customCursorController.registerNeedUpdateCursorCallback(
     //       (String? lastKey, String? currentKey) async {
@@ -164,7 +186,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       // and let OS to handle events instead.
       _rawKeyFocusNode.unfocus();
     }
-    stateGlobal.isFocused.value = false;
+    _windowState.isFocused.value = false;
   }
 
   @override
@@ -174,7 +196,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     if (isWindows) {
       _isWindowBlur = false;
     }
-    stateGlobal.isFocused.value = true;
+    _windowState.isFocused.value = true;
   }
 
   @override
@@ -205,7 +227,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   void onWindowEnterFullScreen() {
     super.onWindowEnterFullScreen();
     if (isMacOS) {
-      stateGlobal.setFullscreen(true);
+      _windowState.setFullscreen(true);
     }
   }
 
@@ -213,7 +235,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   void onWindowLeaveFullScreen() {
     super.onWindowLeaveFullScreen();
     if (isMacOS) {
-      stateGlobal.setFullscreen(false);
+      _windowState.setFullscreen(false);
     }
   }
 
@@ -229,7 +251,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       // ensure we leave this session, this is a double check
       _ffi.inputModel.enterOrLeave(false);
     }
-    DesktopMultiWindow.removeListener(this);
+    _runInWindow(() => DesktopMultiWindow.removeListener(this));
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.imageModel.disposeImage();
     _ffi.cursorModel.disposeImages();
@@ -242,7 +264,9 @@ class _ViewCameraPageState extends State<ViewCameraPage>
           overlays: SystemUiOverlay.values);
     }
     WakelockManager.disable(_uniqueKey);
-    await Get.delete<FFI>(tag: widget.id);
+    if (_window?.nativeTitleBar != true) {
+      await Get.delete<FFI>(tag: widget.id);
+    }
     removeSharedStates(widget.id);
   }
 

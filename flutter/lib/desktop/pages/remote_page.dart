@@ -168,7 +168,7 @@ class _RemotePageState extends State<RemotePage>
       _tabStateSubscription =
           widget.tabController?.state.listen(_onMacOSTabStateChanged);
     }
-    Get.put<FFI>(_ffi, tag: widget.id);
+    if (_window?.nativeTitleBar != true) Get.put<FFI>(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       _ffi.canvasModel.activateLocalCursor();
       showKBLayoutTypeChooserIfNeeded(
@@ -716,7 +716,9 @@ class _RemotePageState extends State<RemotePage>
           overlays: SystemUiOverlay.values);
     }
     WakelockManager.disable(_uniqueKey);
-    await Get.delete<FFI>(tag: widget.id);
+    if (_window?.nativeTitleBar != true) {
+      await Get.delete<FFI>(tag: widget.id);
+    }
     removeSharedStates(widget.id);
   }
 

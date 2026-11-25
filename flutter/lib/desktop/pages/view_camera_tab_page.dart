@@ -11,6 +11,8 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/view_camera_page.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
+import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
@@ -40,8 +42,9 @@ class ViewCameraTabPage extends StatefulWidget {
 }
 
 class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
-  final tabController =
-      Get.put(DesktopTabController(tabType: DesktopTabType.viewCamera));
+  final tabController = DesktopTabController(tabType: DesktopTabType.viewCamera);
+  DesktopWindowScope? _window;
+  StateGlobal get _windowState => _window?.windowState ?? stateGlobal;
   final contentKey = UniqueKey();
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
@@ -62,7 +65,6 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
     final screenRect = parseParamScreenRect(params);
     _isScreenRectSet = screenRect != null;
     _display = display as int?;
-    tryMoveToScreenAndSetFullscreen(screenRect);
     if (peerId != null) {
       ConnectionTypeState.init(peerId!);
       tabController.onSelected = (id) {
@@ -72,7 +74,8 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
           bind.setCurSessionId(sessionId: ffi.sessionId);
         }
         WindowController.fromWindowId(params['windowId'])
-            .setTitle(getWindowNameWithId(id));
+            .setTitle(getWindowNameWithId(id,
+                overrideType: WindowType.ViewCamera));
         UnreadChatCountState.find(id).value = 0;
       };
       tabController.add(TabInfo(
@@ -108,15 +111,26 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
       _update_remote_count();
     }
     tabController.onRemoved = (_, id) => onRemoveId(id);
-    rustDeskWinManager.setMethodHandler(_remoteMethodHandler);
   }
 
   @override
   void initState() {
     super.initState();
 
-    if (!_isScreenRectSet) {
+    final window = _window = DesktopWindowScope.read(context);
+    if (window?.nativeTitleBar != true) Get.put(tabController);
+    if (window == null) {
+      rustDeskWinManager.setMethodHandler(_remoteMethodHandler);
+    } else {
+      window.run(
+          () => rustDeskWinManager.setMethodHandler(_remoteMethodHandler));
+    }
+    if (_isScreenRectSet) {
+      tryMoveToScreenAndSetFullscreen(parseParamScreenRect(widget.params),
+          windowState: _windowState);
+    } else {
       Future.delayed(Duration.zero, () {
+        if (!mounted) return;
         restoreWindowPosition(
           WindowType.ViewCamera,
           windowId: windowId(),
@@ -212,6 +226,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         }),
       ),
     );
+    if (_window?.nativeTitleBar == true) return child;
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(context, child)
         : workaroundWindowBorder(
@@ -220,7 +235,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
                   decoration: BoxDecoration(
                     border: Border.all(
                         color: MyTheme.color(context).border!,
-                        width: stateGlobal.windowBorderWidth.value),
+                        width: _windowState.windowBorderWidth.value),
                   ),
                   child: child,
                 )));
@@ -231,9 +246,9 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
               child: tabWidget,
               // Specially configured for a better resize area and remote control.
               childPadding: kDragToResizeAreaPadding,
-              resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+              resizeEdgeSize: _windowState.resizeEdgeSize.value,
               enableResizeEdges: subWindowManagerEnableResizeEdges,
-              windowId: stateGlobal.windowId,
+              windowId: _windowState.windowId,
             ));
   }
 
@@ -401,12 +416,13 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
       final screenRect = parseParamScreenRect(args);
       final prePeerCount = tabController.length;
       Future.delayed(Duration.zero, () async {
-        if (stateGlobal.fullscreen.isTrue) {
+        if (_windowState.fullscreen.isTrue) {
           await WindowController.fromWindowId(windowId()).setFullscreen(false);
-          stateGlobal.setFullscreen(false, procWnd: false);
+          _windowState.setFullscreen(false, procWnd: false);
         }
         await setNewConnectWindowFrame(windowId(), id!, prePeerCount,
-            WindowType.ViewCamera, display, screenRect);
+            WindowType.ViewCamera, display, screenRect,
+            windowState: _windowState);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });
@@ -447,7 +463,12 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
     } else if (call.method == "onDestroy") {
       tabController.clear();
     } else if (call.method == kWindowActionRebuild) {
-      reloadCurrentWindow();
+      if (!mounted) return;
+      if (_window?.nativeTitleBar == true) {
+        RefreshWrapper.of(context)?.rebuild();
+      } else {
+        reloadCurrentWindow();
+      }
     } else if (call.method == kWindowEventActiveSession) {
       final jumpOk = tabController.jumpToByKey(call.arguments);
       if (jumpOk) {
@@ -516,7 +537,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         }
       }
     } else if (call.method == kWindowEventSetFullscreen) {
-      stateGlobal.setFullscreen(call.arguments == 'true');
+      _windowState.setFullscreen(call.arguments == 'true');
     }
     _update_remote_count();
     return returnValue;

@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory)] [string]$Executable,
-  [ValidateSet('port-forward', 'file-transfer', 'rdp', 'connect')] [string]$Session = 'port-forward',
+  [ValidateSet('port-forward', 'file-transfer', 'rdp', 'connect', 'view-camera')] [string]$Session = 'port-forward',
   [switch]$AlsoOpenFileTransfer
 )
 
@@ -24,6 +24,7 @@ try {
   $title = switch ($Session) {
     'file-transfer' { '*File Transfer*' }
     'connect' { '*Remote Desktop*' }
+    'view-camera' { '*View Camera*' }
     default { '*Port Forward*' }
   }
   $deadline = (Get-Date).AddSeconds(40)
