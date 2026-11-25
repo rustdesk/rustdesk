@@ -91,8 +91,9 @@ RustDesk build retains the full original native target and its dependencies.
   Frame coordinates are Win32 screen pixels. Mixed DPI and multiple monitors
   have not been verified.
 * Close, focus/blur, maximize/unmaximize, minimize/restore, fullscreen, and resize
-  events are adapted from controller state/lifetime. Move/moved and
-  resize-finished events are not provided. Event ordering/count parity and
+  events are adapted from controller state/lifetime. Windows also forwards
+  native move, moved and resized events to the listeners of the associated
+  window. Event ordering/count parity and
   listener mutation during callbacks remain unverified.
 * Closing main requests application exit. The release executable was launched
   and exited with code 0 after an external WM_CLOSE on main.

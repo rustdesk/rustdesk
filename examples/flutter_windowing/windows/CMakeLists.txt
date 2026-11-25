@@ -7,14 +7,14 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 set(PLUGIN_NAME "desktop_multi_window_plugin")
 
 # Standalone official-backend harness: no RustDesk-specific legacy plugins.
-# OFF preserves the original RustDesk native build verbatim.
+# OFF also includes the RustDesk-specific legacy plugins.
 option(DESKTOP_MULTI_WINDOW_OFFICIAL_ONLY "Build experimental official-only harness" OFF)
 if(DESKTOP_MULTI_WINDOW_OFFICIAL_ONLY)
   add_library(${PLUGIN_NAME} SHARED "official_only_plugin.cpp" "official_window_controls.cpp")
   apply_standard_settings(${PLUGIN_NAME})
   target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
   target_include_directories(${PLUGIN_NAME} INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-  target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
+  target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin comctl32)
   set(desktop_multi_window_bundled_libraries "" PARENT_SCOPE)
   return()
 endif()
@@ -33,7 +33,7 @@ set_target_properties(${PLUGIN_NAME} PROPERTIES
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin flutter_wrapper_app url_launcher_windows_plugin window_size_plugin texture_rgba_renderer_plugin)
+target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin flutter_wrapper_app url_launcher_windows_plugin window_size_plugin texture_rgba_renderer_plugin comctl32)
 
 # List of absolute paths to libraries that should be bundled with the plugin
 set(desktop_multi_window_bundled_libraries

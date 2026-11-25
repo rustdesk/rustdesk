@@ -4,9 +4,12 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 #include <windows.h>
+#include <commctrl.h>
 
 #include <array>
 #include <limits>
+#include <map>
+#include <memory>
 
 namespace {
 using flutter::EncodableMap;
@@ -20,15 +23,79 @@ int64_t ReadInteger(const EncodableMap& values, const char* key,
   if (const auto* value = std::get_if<int32_t>(&it->second)) return *value;
   return fallback;
 }
+
+constexpr auto kControlsChannel = "rustdesk/desktop_multi_window/win32";
+
+class WindowGeometryEvents {
+ public:
+  explicit WindowGeometryEvents(flutter::BinaryMessenger* messenger)
+      : channel_(messenger, kControlsChannel,
+                 &flutter::StandardMethodCodec::GetInstance()) {}
+
+  ~WindowGeometryEvents() {
+    for (const auto& window : windows_) {
+      RemoveWindowSubclass(window.first, OnWindowMessage, SubclassId());
+    }
+  }
+
+  bool Track(HWND window, int64_t id) {
+    if (!SetWindowSubclass(window, OnWindowMessage, SubclassId(),
+                           reinterpret_cast<DWORD_PTR>(this))) {
+      return false;
+    }
+    windows_.insert_or_assign(window, id);
+    return true;
+  }
+
+ private:
+  UINT_PTR SubclassId() const { return reinterpret_cast<UINT_PTR>(this); }
+
+  static LRESULT CALLBACK OnWindowMessage(HWND window, UINT message,
+                                          WPARAM wparam, LPARAM lparam,
+                                          UINT_PTR subclass_id,
+                                          DWORD_PTR reference) {
+    auto* events = reinterpret_cast<WindowGeometryEvents*>(reference);
+    switch (message) {
+      case WM_MOVING:
+        events->Emit(window, "move");
+        break;
+      case WM_MOVE:
+        events->Emit(window, "moved");
+        break;
+      case WM_SIZE:
+        events->Emit(window, "resized");
+        break;
+      case WM_NCDESTROY:
+        RemoveWindowSubclass(window, OnWindowMessage, subclass_id);
+        events->windows_.erase(window);
+        break;
+    }
+    return DefSubclassProc(window, message, wparam, lparam);
+  }
+
+  void Emit(HWND window, const char* event) {
+    const auto it = windows_.find(window);
+    if (it == windows_.end()) return;
+    channel_.InvokeMethod("geometryEvent",
+        std::make_unique<EncodableValue>(EncodableMap{
+            {EncodableValue("windowId"), EncodableValue(it->second)},
+            {EncodableValue("event"), EncodableValue(event)},
+        }));
+  }
+
+  flutter::MethodChannel<EncodableValue> channel_;
+  std::map<HWND, int64_t> windows_;
+};
 }  // namespace
 
 void RegisterOfficialWindowControls(FlutterDesktopPluginRegistrarRef registrar) {
   auto* plugin_registrar = flutter::PluginRegistrarManager::GetInstance()
       ->GetRegistrar<flutter::PluginRegistrarWindows>(registrar);
+  auto events = std::make_shared<WindowGeometryEvents>(plugin_registrar->messenger());
   flutter::MethodChannel<EncodableValue> channel(
-      plugin_registrar->messenger(), "rustdesk/desktop_multi_window/win32",
+      plugin_registrar->messenger(), kControlsChannel,
       &flutter::StandardMethodCodec::GetInstance());
-  channel.SetMethodCallHandler([](const auto& call, auto result) {
+  channel.SetMethodCallHandler([events](const auto& call, auto result) {
     const auto* values = std::get_if<EncodableMap>(call.arguments());
     const auto hwnd = values ? reinterpret_cast<HWND>(
         static_cast<intptr_t>(ReadInteger(*values, "hwnd", 0))) : nullptr;
@@ -42,6 +109,15 @@ void RegisterOfficialWindowControls(FlutterDesktopPluginRegistrarRef registrar) 
     }
 
     const auto& method = call.method_name();
+    if (method == "trackGeometry") {
+      const auto id = ReadInteger(*values, "windowId", -1);
+      if (id < 0 || !events->Track(hwnd, id)) {
+        result->Error("win32_error", "Could not track window geometry");
+        return;
+      }
+      result->Success();
+      return;
+    }
     if (method == "isHidden") {
       result->Success(EncodableValue(!IsWindowVisible(hwnd)));
       return;

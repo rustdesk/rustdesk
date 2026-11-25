@@ -226,8 +226,14 @@ Future<void> rejected(
 
 class CloseListener extends MultiWindowListener {
   int closes = 0;
+  int moves = 0;
+  int resizes = 0;
   @override
   void onWindowClose() => closes++;
+  @override
+  void onWindowMoved() => moves++;
+  @override
+  void onWindowResized() => resizes++;
 }
 
 Future<List<dynamic>> nativeProbe([String? title, bool close = false]) async {
@@ -411,8 +417,24 @@ Future<void> runChecks({required bool keepImplicitMainView}) async {
           (await nativeProbe('PoC test A')).single['visible'] == false,
     );
     check('hide leaves B visible', !await b.isHidden());
+    final listener = CloseListener();
+    final siblingListener = CloseListener();
+    backend
+        .contextFor(a.windowId)
+        .run(() => DesktopMultiWindow.addListener(listener));
+    backend
+        .contextFor(b.windowId)
+        .run(() => DesktopMultiWindow.addListener(siblingListener));
     const frame = Rect.fromLTWH(75, 100, 530, 365);
     await a.setFrame(frame);
+    await poll(
+      'native frame change reaches its window listener',
+      () => listener.moves > 0 && listener.resizes > 0,
+    );
+    check(
+      'native frame events stay out of the sibling window',
+      siblingListener.moves == 0 && siblingListener.resizes == 0,
+    );
     check('setFrame preserves hidden state', await a.isHidden());
     check('Win32 outer frame round trips', await a.getFrame() == frame);
     await a.show();
@@ -443,10 +465,6 @@ Future<void> runChecks({required bool keepImplicitMainView}) async {
       'title bar toggling leaves B unchanged',
       (await nativeProbe('PoC test B')).single['caption'] == true,
     );
-    final listener = CloseListener();
-    backend
-        .contextFor(a.windowId)
-        .run(() => DesktopMultiWindow.addListener(listener));
     await a.setPreventClose(true);
     await a.close();
     check(

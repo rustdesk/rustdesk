@@ -101,6 +101,9 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
       useOfficialWindow,
     );
     backend._entries[0] = _Entry(ExperimentalWindowContext._(0, null));
+    if (Platform.isWindows) {
+      _win32.setMethodCallHandler(backend._handleWindowsGeometryEvent);
+    }
     if (mainView == null) unawaited(backend._show(0));
     experimentalWindowBackend = backend;
     return backend;
@@ -165,6 +168,9 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
       final showGeneration = ++entry.pendingShow;
       // Apply staged controls before mounting any Flutter content in the view.
       try {
+        if (Platform.isWindows) {
+          await _control<void>(id, 'trackGeometry', {'windowId': id});
+        }
         final titleBarVisible = entry.titleBarVisible;
         if (titleBarVisible != null) {
           await _control<void>(id, 'showTitleBar', {
@@ -258,6 +264,20 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
     }
   }
 
+  Future<void> _handleWindowsGeometryEvent(MethodCall call) async {
+    if (call.method != 'geometryEvent') return;
+    final arguments = call.arguments as Map<Object?, Object?>;
+    final id = arguments['windowId'] as int;
+    final entry = _entries[id];
+    if (entry == null || !entry.isMounted || entry.native!.isDestroyed) return;
+    final event = arguments['event'];
+    if (event == kWindowEventMove ||
+        event == kWindowEventMoved ||
+        event == kWindowEventResized) {
+      _emit(id, event as String);
+    }
+  }
+
   void _emit(int id, String event) {
     final entry = _entry(id);
     entry.context.run(() {
@@ -287,6 +307,15 @@ class ExperimentalWindowingBackend implements DesktopWindowBackend {
             break;
           case kWindowEventResize:
             listener.onWindowResize();
+            break;
+          case kWindowEventMove:
+            listener.onWindowMove();
+            break;
+          case kWindowEventMoved:
+            listener.onWindowMoved();
+            break;
+          case kWindowEventResized:
+            listener.onWindowResized();
             break;
           case kWindowEventEnterFullScreen:
             listener.onWindowEnterFullScreen();
