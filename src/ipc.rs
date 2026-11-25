@@ -1729,6 +1729,16 @@ where
             .await
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(crate) async fn send_takeover_close(&mut self, ms_timeout: u64) -> ResultType<()> {
+        // The listener needs our PID for its executable check before it can reply.
+        self.send(&Data::OnlineStatus(None)).await?;
+        let Some(Data::OnlineStatus(Some(_))) = self.next_timeout(ms_timeout).await? else {
+            bail!("Unexpected status response during main IPC takeover");
+        };
+        self.send(&Data::Close).await
+    }
+
     #[cfg(any(
         feature = "hwcodec",
         all(test, any(target_os = "linux", target_os = "macos"))
@@ -2482,6 +2492,33 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 mod test {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn takeover_waits_for_listener_before_sending_close() {
+        const TIMEOUT_MS: u64 = 1_000;
+        let (sender, listener) = tokio::net::UnixStream::pair().unwrap();
+        let mut listener = ConnectionTmpl::new(listener);
+        let sender = tokio::spawn(async move {
+            ConnectionTmpl::new(sender)
+                .send_takeover_close(TIMEOUT_MS)
+                .await
+        });
+        assert!(matches!(
+            listener.next_timeout(TIMEOUT_MS).await.unwrap(),
+            Some(Data::OnlineStatus(None))
+        ));
+        assert!(!sender.is_finished());
+        listener
+            .send(&Data::OnlineStatus(Some((0, false))))
+            .await
+            .unwrap();
+        assert!(matches!(
+            listener.next_timeout(TIMEOUT_MS).await.unwrap(),
+            Some(Data::Close)
+        ));
+        sender.await.unwrap().unwrap();
+    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[tokio::test]

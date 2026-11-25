@@ -987,9 +987,18 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn stop_main_window_process() {
+    const IPC_TIMEOUT_MS: u64 = 1_000;
     // this may also kill another --server process,
     // but --server usually can be auto restarted by --service, so it is ok
-    if let Ok(mut conn) = crate::ipc::connect(1000, "").await {
+    if let Ok(mut conn) = crate::ipc::connect(IPC_TIMEOUT_MS, "").await {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        if unsafe { hbb_common::libc::geteuid() } != 0 && crate::platform::is_installed() {
+            allow_err!(
+                conn.send_takeover_close(IPC_TIMEOUT_MS).await,
+                "Main IPC takeover failed"
+            );
+            return;
+        }
         conn.send(&crate::ipc::Data::Close).await.ok();
     }
     #[cfg(windows)]
