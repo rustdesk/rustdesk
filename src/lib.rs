@@ -14,6 +14,8 @@ mod server;
 #[cfg(not(any(target_os = "ios")))]
 pub use self::server::*;
 mod client;
+#[cfg(all(target_os = "linux", feature = "remote-microphone"))]
+mod remote_microphone;
 mod lan;
 #[cfg(not(any(target_os = "ios")))]
 mod rendezvous_mediator;

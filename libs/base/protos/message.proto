@@ -1002,6 +1002,15 @@ message PortForwardChannel {
   }
 }
 
+// A separate message keeps remote microphone audio out of voice-call playback.
+message RemoteMicrophone {
+  string action = 1;
+  uint64 epoch = 2;
+  bytes data = 3;
+  string error = 4;
+  int64 captured_at = 5;
+}
+
 message Message {
   oneof union {
     SignedId signed_id = 3;
@@ -1037,5 +1046,6 @@ message Message {
     PortForwardChannel port_forward_channel = 33;
     // Auto Login: the peer types the password only if it is at its logon or lock screen.
     OSLogin os_login = 34;
+    RemoteMicrophone remote_microphone = 35;
   }
 }

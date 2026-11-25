@@ -37,6 +37,7 @@ drm = ["scrap/drm"]
 # kind of operation and deserves a switch that can remove it from the binary entirely, without
 # giving up DRM capture: `--features drm` builds the capture path with no wake code compiled in.
 drm-wake = ["drm"]
+remote-microphone = ["dep:pipewire", "dep:parking_lot"]
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
 unix-file-copy-paste = [
     "dep:x11-clipboard",
@@ -189,6 +190,8 @@ ttf-parser = "0.25"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libxdo-sys = "0.11"
+pipewire = { version = "0.10", features = ["v0_3_49"], optional = true }
+parking_lot = { version = "0.12", optional = true }
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }
 rust-pulsectl = { git = "https://github.com/rustdesk-org/pulsectl" }

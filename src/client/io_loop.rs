@@ -78,6 +78,9 @@ pub struct Remote<T: InvokeUiSession> {
     sender: mpsc::UnboundedSender<Data>,
     // Stop sending local audio to remote client.
     stop_voice_call_sender: Option<std::sync::mpsc::Sender<()>>,
+    remote_mic_stop: Option<std::sync::mpsc::Sender<()>>,
+    remote_mic_epoch: u64,
+    remote_mic_requested: bool,
     voice_call_request_timestamp: Option<NonZeroI64>,
     read_jobs: Vec<fs::TransferJob>,
     write_jobs: Vec<fs::TransferJob>,
@@ -148,6 +151,9 @@ impl<T: InvokeUiSession> Remote<T> {
             data_count: Arc::new(AtomicUsize::new(0)),
             video_format: CodecFormat::Unknown,
             stop_voice_call_sender: None,
+            remote_mic_stop: None,
+            remote_mic_epoch: 0,
+            remote_mic_requested: false,
             voice_call_request_timestamp: None,
             elevation_requested: false,
             peer_info: Default::default(),
@@ -426,6 +432,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 log::debug!("Exit io_loop of id={}", self.handler.get_id());
+                self.remote_mic_stop.take();
+                self.remote_mic_epoch = 0;
+                self.remote_mic_requested = false;
+                self.handler.on_remote_microphone("interrupted", "");
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
                     s.send(()).ok();
@@ -666,6 +676,47 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
+    fn start_remote_microphone(&mut self, _epoch: u64) -> Option<std::sync::mpsc::Sender<()>> {
+        #[cfg(target_os = "android")]
+        {
+            if self.handler.is_file_transfer() || self.handler.is_port_forward()
+                || self.handler.is_terminal() || self.handler.is_view_camera() { return None; }
+            let (tx, rx) = std::sync::mpsc::channel();
+            let (audio_tx, mut audio_rx) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+            let id = CLIENT_SERVER.write().unwrap().get_new_id();
+            let subscriber = ConnInner::new(id, Some(audio_tx), None);
+            CLIENT_SERVER.write().unwrap().subscribe(audio_service::NAME, subscriber.clone(), true);
+            let outgoing = self.sender.clone();
+            std::thread::spawn(move || {
+                loop {
+                    match rx.try_recv() {
+                        Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+                        Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                    }
+                    match audio_rx.try_recv() {
+                        Ok((instant, data)) if instant.elapsed() <= Duration::from_millis(100) => {
+                            if let Some(message::Union::AudioFrame(frame)) = &data.union {
+                                let mut message = Message::new();
+                                message.set_remote_microphone(RemoteMicrophone {
+                                    action: "frame".into(), epoch: _epoch, data: frame.data.clone(),
+                                    captured_at: get_time(), ..Default::default()
+                                });
+                                if outgoing.send(Data::Message(message)).is_err() { break; }
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(TryRecvError::Disconnected) => break,
+                        Err(TryRecvError::Empty) => std::thread::sleep(std::time::Duration::from_millis(1)),
+                    }
+                }
+                CLIENT_SERVER.write().unwrap().subscribe(audio_service::NAME, subscriber, false);
+            });
+            Some(tx)
+        }
+        #[cfg(not(target_os = "android"))]
+        { None }
+    }
+
     async fn send_close_reason(&mut self, peer: &mut Stream, reason: &str) {
         if self.sent_close_reason {
             return;
@@ -797,7 +848,29 @@ impl<T: InvokeUiSession> Remote<T> {
                     allow_err!(peer.send(&msg).await);
                 }
             }
-            Data::Message(msg) => {
+            Data::Message(mut msg) => {
+                if let Some(message::Union::RemoteMicrophone(mic)) = msg.union.as_mut() {
+                    if !self.is_connected { return true; }
+                    match mic.action.as_str() {
+                        "start" | "resume" => {
+                            if self.stop_voice_call_sender.is_some() || self.voice_call_request_timestamp.is_some() {
+                                self.handler.on_remote_microphone("error", "Stop the voice call first");
+                                return true;
+                            }
+                            self.remote_mic_requested = true;
+                            self.remote_mic_epoch = (get_time() as u64).max(self.remote_mic_epoch.wrapping_add(1));
+                            mic.epoch = self.remote_mic_epoch;
+                        }
+                        "mute" | "stop" => {
+                            self.remote_mic_requested = false;
+                            self.remote_mic_stop.take();
+                            mic.epoch = self.remote_mic_epoch;
+                            self.remote_mic_epoch = self.remote_mic_epoch.wrapping_add(1).max(1);
+                        }
+                        "frame" if mic.epoch != self.remote_mic_epoch || self.remote_mic_stop.is_none() || get_time().saturating_sub(mic.captured_at) > 150 => return true,
+                        _ => {}
+                    }
+                }
                 let msg = self.trusted_device.outgoing(msg);
                 // The Flutter clipboard broadcast is process-wide, so a clipboard can reach this
                 // round's queue before the round has logged in; it is dropped here, on the round
@@ -1343,6 +1416,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.elevation_requested = true;
             }
             Data::NewVoiceCall => {
+                if self.remote_mic_requested {
+                    self.handler.msgbox("error", "Remote microphone", "Stop the remote microphone first", "");
+                    return true;
+                }
                 let msg = new_voice_call_request(true);
                 // Save the voice call request timestamp for the further validation.
                 self.voice_call_request_timestamp = Some(
@@ -2537,6 +2614,21 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handler
                         .msgbox(&msgbox.msgtype, &msgbox.title, &msgbox.text, &link);
                 }
+                Some(message::Union::RemoteMicrophone(mic)) => {
+                    match mic.action.as_str() {
+                        "active" if self.remote_mic_requested && mic.epoch == self.remote_mic_epoch => {
+                            self.remote_mic_stop.take();
+                            self.remote_mic_stop = self.start_remote_microphone(mic.epoch);
+                            self.handler.on_remote_microphone("active", "");
+                        }
+                        "available" | "unavailable" | "silenced" | "stopped" | "error" => {
+                            self.remote_mic_requested = false;
+                            self.remote_mic_stop.take();
+                            self.handler.on_remote_microphone(&mic.action, &mic.error);
+                        }
+                        _ => {}
+                    }
+                }
                 Some(message::Union::VoiceCallRequest(request)) => {
                     if request.is_connect {
                         // TODO: maybe we will do a voice call from the peer in the future.
@@ -2592,6 +2684,12 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn set_peer_info(&mut self, pi: &PeerInfo) {
+        #[cfg(target_os = "android")]
+        if !self.handler.is_file_transfer() && !self.handler.is_port_forward() && !self.handler.is_terminal() {
+            let mut msg = Message::new();
+            msg.set_remote_microphone(RemoteMicrophone { action: "query".into(), ..Default::default() });
+            let _ = self.sender.send(Data::Message(msg));
+        }
         self.last_auto_fps = None;
         self.peer_info.platform = pi.platform.clone();
 

@@ -391,6 +391,14 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn toggle_option(&self, name: String) {
+        if let Some(action) = name.strip_prefix("remote-microphone:") {
+            let mut msg = Message::new();
+            msg.set_remote_microphone(RemoteMicrophone {
+                action: action.to_owned(), ..Default::default()
+            });
+            self.send(Data::Message(msg));
+            return;
+        }
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
         if name == keys::OPTION_ENABLE_FILE_COPY_PASTE {
@@ -1750,6 +1758,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
     fn portable_service_running(&self, running: bool);
+    fn on_remote_microphone(&self, _state: &str, _error: &str) {}
     fn on_voice_call_started(&self);
     fn on_voice_call_closed(&self, reason: &str);
     fn on_voice_call_waiting(&self);

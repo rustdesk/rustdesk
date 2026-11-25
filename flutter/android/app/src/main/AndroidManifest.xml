@@ -29,7 +29,7 @@
     <application
         android:name=".MainApplication"
         android:icon="@mipmap/ic_launcher"
-        android:label="RustDesk"
+        android:label="${installerAppLabel}"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true">
 
@@ -45,6 +45,8 @@
             </intent-filter>
         </receiver>
 
+        <service android:name=".RemoteMicrophoneService"
+            android:exported="false" android:foregroundServiceType="microphone" />
         <service
             android:name=".InputService"
             android:enabled="true"

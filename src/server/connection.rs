@@ -1,3 +1,4 @@
+mod remote_microphone;
 #[cfg(target_os = "windows")]
 use super::login_failure_check::try_acquire_os_credential_login_gate;
 use super::login_failure_check::{
@@ -432,6 +433,8 @@ pub struct Connection {
     from_switch: bool,
     voice_call_request_timestamp: Option<NonZeroI64>,
     voice_calling: bool,
+    #[cfg(all(target_os = "linux", feature = "remote-microphone"))]
+    remote_microphone: Option<Arc<crate::remote_microphone::Receiver>>,
     options_in_login: Option<OptionMessage>,
     #[cfg(not(any(target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
@@ -641,6 +644,8 @@ impl Connection {
             audio_sender: None,
             voice_call_request_timestamp: None,
             voice_calling: false,
+            #[cfg(all(target_os = "linux", feature = "remote-microphone"))]
+            remote_microphone: None,
             options_in_login: None,
             #[cfg(not(any(target_os = "ios")))]
             pressed_modifiers: Default::default(),
@@ -4163,7 +4168,15 @@ impl Connection {
                         }
                     }
                 }
+                Some(message::Union::RemoteMicrophone(mic)) => {
+                    return self.handle_remote_microphone(mic).await;
+                }
                 Some(message::Union::VoiceCallRequest(request)) => {
+                    #[cfg(all(target_os = "linux", feature = "remote-microphone"))]
+                    if request.is_connect && self.remote_microphone.as_ref().map(|r| r.is_active()).unwrap_or(false) {
+                        self.send(new_voice_call_response(request.req_timestamp, false)).await;
+                        return true;
+                    }
                     if request.is_connect {
                         self.voice_call_request_timestamp = Some(
                             NonZeroI64::new(request.req_timestamp)
@@ -5442,6 +5455,10 @@ impl Connection {
     }
 
     async fn on_close(&mut self, reason: &str, lock: bool) {
+        #[cfg(all(target_os = "linux", feature = "remote-microphone"))]
+        { if let Some(receiver) = self.remote_microphone.take() {
+            crate::remote_microphone::Receiver::park(self.lr.my_id.clone(), receiver);
+        } }
         if self.closed {
             return;
         }

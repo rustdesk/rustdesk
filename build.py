@@ -116,6 +116,8 @@ def make_parser():
         default='',
         help='Integrate features, windows only.'
              'Available: [Not used for now]. Special value is "ALL" and empty "". Default is empty.')
+    parser.add_argument('--remote-microphone', action='store_true',
+                        help='Enable the Linux PipeWire microphone receiver (Rust 1.80+)', default=False)
     parser.add_argument('--flutter', action='store_true',
                         help='Build flutter package', default=False)
     parser.add_argument(
@@ -313,6 +315,10 @@ def linux_packaging_branch():
 
 def get_features(args):
     features = ['inline'] if not args.flutter else []
+    if getattr(args, 'remote_microphone', False):
+        if windows or osx:
+            raise ValueError('--remote-microphone requires Linux/PipeWire')
+        features.append('remote-microphone')
     if args.hwcodec:
         features.append('hwcodec')
     if args.vram:

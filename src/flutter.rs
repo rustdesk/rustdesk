@@ -1088,6 +1088,10 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn on_remote_microphone(&self, state: &str, error: &str) {
+        self.push_event("remote_microphone", &[("state", state), ("error", error)], &[]);
+    }
+
     fn on_voice_call_started(&self) {
         self.push_event::<&str>("on_voice_call_started", &[], &[]);
     }

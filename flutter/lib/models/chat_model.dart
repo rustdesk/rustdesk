@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'remote_microphone_model.dart';
 
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -66,6 +67,7 @@ class ChatModel with ChangeNotifier {
   RxBool isWindowFocus = true.obs;
   BlockableOverlayState _blockableOverlayState = BlockableOverlayState();
   final Rx<VoiceCallStatus> _voiceCallStatus = Rx(VoiceCallStatus.notStarted);
+  late final remoteMicrophone = RemoteMicrophoneModel(parent);
   final RxBool _softKeyboardRequested = false.obs;
   bool _usingPhysicalChatInput = false;
 
@@ -85,6 +87,7 @@ class ChatModel with ChangeNotifier {
 
   @override
   void dispose() {
+    remoteMicrophone.dispose();
     inputNode.removeListener(_updateChatInputControl);
     _restoreChatInputControl();
     textController.dispose();

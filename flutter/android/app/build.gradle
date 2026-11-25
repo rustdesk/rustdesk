@@ -99,7 +99,8 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.carriez.flutter_hbb"
+        applicationId project.findProperty("installerApplicationId") ?: "com.carriez.flutter_hbb"
+        manifestPlaceholders += [installerAppLabel: project.findProperty("installerAppLabel") ?: "RustDesk"]
         minSdkVersion 22
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
@@ -119,7 +120,7 @@ android {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig signingConfigs.release
+            signingConfig project.hasProperty("installerLocalSigning") ? signingConfigs.debug : signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules'
         }
     }

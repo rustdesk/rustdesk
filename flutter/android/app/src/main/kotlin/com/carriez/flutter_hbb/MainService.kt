@@ -532,6 +532,7 @@ class MainService : Service() {
 
     @Synchronized
     private fun switchToVoiceCall(): Boolean {
+        if (RemoteMicrophoneService.running) return false
         if (captureRestartPending) {
             captureRestartInVoiceCall = true
         }
@@ -550,6 +551,7 @@ class MainService : Service() {
 
     @Synchronized
     fun onVoiceCallStarted(): Boolean {
+        if (RemoteMicrophoneService.running) return false
         if (captureRestartPending) {
             captureRestartInVoiceCall = true
         }
@@ -572,6 +574,7 @@ class MainService : Service() {
 
     @Synchronized
     private fun startCapture(inVoiceCall: Boolean): Boolean {
+        if (RemoteMicrophoneService.running) return false
         if (isStart) {
             return true
         }

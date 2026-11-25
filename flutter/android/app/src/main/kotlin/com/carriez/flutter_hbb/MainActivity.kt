@@ -264,6 +264,7 @@ class MainActivity : FlutterActivity() {
         // for recreation (configuration change, "don't keep activities"),
         // which must not tear down a live session.
         if (isFinishing) {
+            stopService(Intent(this, RemoteMicrophoneService::class.java))
             FFI.closeAllSessions()
         }
         mainService?.let {
@@ -668,6 +669,29 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                 }
+                "remote_microphone_start" -> {
+                    if (RemoteMicrophoneService.running) {
+                        result.success(true)
+                    } else if (MainService.isStart || MainService.isAudioStart || isAudioStart) {
+                        result.error("microphone_busy", "Stop tablet screen sharing or voice capture first", null)
+                    } else if (androidx.core.content.ContextCompat.checkSelfPermission(this,
+                            android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        androidx.core.app.ActivityCompat.requestPermissions(this,
+                            arrayOf(android.Manifest.permission.RECORD_AUDIO), 9041)
+                        result.success(false)
+                    } else {
+                        val intent = Intent(this, RemoteMicrophoneService::class.java)
+                        try {
+                            androidx.core.content.ContextCompat.startForegroundService(this, intent)
+                            result.success(true)
+                        } catch (error: Exception) { result.error("microphone", error.message, null) }
+                    }
+                }
+                "remote_microphone_stop" -> {
+                    stopService(Intent(this, RemoteMicrophoneService::class.java))
+                    result.success(true)
+                }
+                "remote_microphone_status" -> result.success(RemoteMicrophoneService.running && RemoteMicrophoneService.error.isEmpty())
                 "on_voice_call_started" -> {
                     onVoiceCallStarted()
                 }

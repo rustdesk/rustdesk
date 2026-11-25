@@ -830,5 +830,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Экранды RustDesk қызметі арқылы тікелей бейнекартадан түсіреді, Wayland экранды бөлісу сұрауынсыз, кіру экранында да. Барлық құрылғыда жұмыс істемеуі мүмкін; қосылымдар әлі де экранды бөлісуді сұраса, мұны өшіріңіз немесе X11 қолданыңыз. Өзгерту ағымдағы сеанстарды үзеді."),
         ("wayland-drm-tip", "Wayland-та қадағалаусыз қолжетімділік үшін DRM арқылы түсіруді көріңіз, жұмыс істемесе X11 қолданыңыз."),
         ("login-wayland-drm-tip", "Wayland кіру экранына қол жеткізу үшін DRM арқылы түсіруді көріңіз немесе оны X11-ге ауыстырыңыз."),
+        ("Remote microphone", ""),
+        ("Stop remote microphone", ""),
+        ("Start microphone automatically for this PC", ""),
     ].iter().cloned().collect();
 }

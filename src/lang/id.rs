@@ -830,5 +830,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Menangkap layar langsung dari kartu grafis melalui layanan RustDesk, tanpa permintaan berbagi layar Wayland, termasuk di layar login. Mungkin tidak berfungsi di semua perangkat; jika koneksi masih meminta berbagi layar, matikan opsi ini atau gunakan X11. Mengubahnya akan memutus sesi saat ini."),
         ("wayland-drm-tip", "Untuk akses tanpa pengawasan di Wayland, coba tangkapan layar DRM, atau gunakan X11 jika tidak berfungsi."),
         ("login-wayland-drm-tip", "Untuk mengakses layar login Wayland, coba tangkapan layar DRM atau ubah ke X11."),
+        ("Remote microphone", ""),
+        ("Stop remote microphone", ""),
+        ("Start microphone automatically for this PC", ""),
     ].iter().cloned().collect();
 }

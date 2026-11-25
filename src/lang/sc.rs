@@ -830,5 +830,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", ""),
         ("wayland-drm-tip", ""),
         ("login-wayland-drm-tip", ""),
+        ("Remote microphone", ""),
+        ("Stop remote microphone", ""),
+        ("Start microphone automatically for this PC", ""),
     ].iter().cloned().collect();
 }

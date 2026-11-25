@@ -18,6 +18,7 @@ import '../../common.dart';
 import '../../common/widgets/overlay.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/remote_input.dart';
+import '../../common/widgets/remote_microphone.dart';
 import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
@@ -661,6 +662,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   (isWeb
                       ? []
                       : <Widget>[
+                          if (isAndroid) RemoteMicrophoneButton(ffi: gFFI, peerId: widget.id),
                           futureBuilder(
                               future: gFFI.invokeMethod(
                                   "get_value", "KEY_IS_SUPPORT_VOICE_CALL"),

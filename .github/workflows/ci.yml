@@ -129,6 +129,7 @@ jobs:
                libgstreamer1.0-dev \
                libgstreamer-plugins-base1.0-dev \
                libgtk-3-dev \
+               libpipewire-0.3-dev \
                libpulse-dev \
                libva-dev \
                libvdpau-dev \
@@ -257,3 +258,7 @@ jobs:
         cargo test --locked --target=${{ matrix.job.target }} --lib --features drm,drm-wake
         cargo test --locked --target=${{ matrix.job.target }} -p scrap --features drm
         cargo test --locked --target=${{ matrix.job.target }} -p clipboard --features unix-file-copy-paste
+
+    - name: Check remote microphone source
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu'
+      run: cargo check --locked --target=${{ matrix.job.target }} --lib --features remote-microphone
