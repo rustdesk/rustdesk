@@ -177,12 +177,6 @@ pub fn core_main() -> Option<CoreMainAction> {
             return None;
         }
     }
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    if crate::platform::is_installed() && unsafe { hbb_common::libc::geteuid() } != 0 {
-        if let Err(err) = config::unix_unlock_pin::discard_user_copy() {
-            return Some(CoreMainAction::ExitFailure(err));
-        }
-    }
     #[cfg(windows)]
     {
         _is_quick_support |= !crate::platform::is_installed()
@@ -206,6 +200,12 @@ pub fn core_main() -> Option<CoreMainAction> {
         }
     }
     hbb_common::init_log(false, &log_name);
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if crate::platform::is_installed() && unsafe { hbb_common::libc::geteuid() } != 0 {
+        if let Err(err) = config::unix_unlock_pin::discard_user_copy() {
+            log::warn!("Could not remove the legacy user unlock PIN: {err}");
+        }
+    }
 
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]

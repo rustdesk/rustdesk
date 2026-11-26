@@ -118,6 +118,13 @@ impl Grants {
     }
 }
 
+pub(super) fn preserve_legacy_root_pin() -> ResultType<()> {
+    // Serialize first-use migration with an administrator setting a new PIN.
+    let _grants = GRANTS.get_or_init(Default::default).lock().unwrap();
+    RootPin::load()?;
+    Ok(())
+}
+
 fn perform(peer: u32, request: Request) -> ResultType<bool> {
     ensure!(
         unsafe { libc::geteuid() } == 0 && crate::platform::is_installed(),
@@ -142,6 +149,9 @@ fn perform(peer: u32, request: Request) -> ResultType<bool> {
             );
             ensure!(!Config::is_disable_unlock_pin(), "Unlock PIN is disabled");
             super::validate_unlock_pin(&pin, false)?;
+            if peer != 0 {
+                RootPin::load()?;
+            }
             RootPin::set(&pin)?;
             Ok(true)
         }

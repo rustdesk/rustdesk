@@ -630,11 +630,15 @@ fn legacy_hot_measured() -> bool {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn start(postfix: &str) -> ResultType<()> {
+    let incoming = new_listener(postfix).await?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     if postfix == crate::POSTFIX_SERVICE && crate::platform::is_installed() {
-        tokio::task::spawn_blocking(config::unix_unlock_pin::RootPin::load).await??;
+        if let Err(err) =
+            crate::trusted_devices::config::update(unix_unlock_pin::preserve_legacy_root_pin).await
+        {
+            log::warn!("Could not initialize the root unlock PIN: {err}");
+        }
     }
-    let incoming = new_listener(postfix).await?;
     start_with_listener(postfix, incoming).await;
     Ok(())
 }
@@ -1160,6 +1164,11 @@ async fn handle(data: Data, stream: &mut Connection) {
             if let Err(error) = crate::trusted_devices::config::update(move || {
                 #[cfg(any(target_os = "linux", target_os = "macos"))]
                 {
+                    if unsafe { hbb_common::libc::geteuid() } == 0
+                        && crate::platform::is_installed()
+                    {
+                        unix_unlock_pin::preserve_legacy_root_pin()?;
+                    }
                     crate::trusted_devices::config::sync_config(config, config2)
                 }
                 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
