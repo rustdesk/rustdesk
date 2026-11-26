@@ -476,6 +476,9 @@ pub fn core_main() -> Option<CoreMainAction> {
             #[cfg(feature = "flutter")]
             if args.len() == 2 {
                 if crate::platform::is_installed() && is_root() {
+                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                    set_unix_pin_cli(|| crate::ipc::set_unlock_pin(args[1].to_owned(), false));
+                    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
                     if let Err(err) = crate::ipc::set_unlock_pin(args[1].to_owned(), false) {
                         println!("{err}");
                     } else {
@@ -952,4 +955,49 @@ fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool) {
 fn is_quick_support_exe(exe: &str) -> bool {
     let exe = exe.to_lowercase();
     exe.contains("-qs-") || exe.contains("-qs.exe") || exe.contains("_qs.exe")
+}
+
+#[cfg(all(
+    any(feature = "flutter", test),
+    any(target_os = "linux", target_os = "macos")
+))]
+fn set_unix_pin_cli(write_pin: impl FnOnce() -> hbb_common::ResultType<()>) {
+    if let Err(err) = write_pin() {
+        println!("{err}");
+        std::process::exit(hbb_common::libc::EXIT_FAILURE);
+    } else {
+        println!("Done!");
+    }
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+mod tests {
+    use hbb_common::libc::{EXIT_FAILURE, EXIT_SUCCESS};
+    use std::{env, os::unix::net::UnixStream, process::Command};
+
+    #[test]
+    fn unix_unlock_pin_command_exit_status() {
+        const CASE: &str = "RUSTDESK_TEST_PIN_CLI_CASE";
+        const TEST: &str = "core_main::tests::unix_unlock_pin_command_exit_status";
+        if let Some(case) = env::var_os(CASE) {
+            return super::set_unix_pin_cli(|| match case.to_str() {
+                Some("confirmed") => Ok(()),
+                Some("offline") => {
+                    let path = env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+                    UnixStream::connect(path).map(drop).map_err(Into::into)
+                }
+                _ => panic!("Unknown PIN test case {case:?}"),
+            });
+        }
+        for (case, expected) in [("offline", EXIT_FAILURE), ("confirmed", EXIT_SUCCESS)] {
+            let output = Command::new(env::current_exe().unwrap())
+                .args(["--exact", TEST, "--nocapture"])
+                .env(CASE, case)
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(expected), "{output:?}");
+            let done = String::from_utf8_lossy(&output.stdout).contains("Done!");
+            assert_eq!(done, case == "confirmed", "{output:?}");
+        }
+    }
 }
