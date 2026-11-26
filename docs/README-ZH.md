@@ -20,6 +20,19 @@
 或者[自己设置](https://rustdesk.com/server)，
 亦或者[开发您的版本](https://github.com/rustdesk/rustdesk-server-demo)。
 
+## 本分支功能
+
+这个分支给 Windows 被控端加了两个功能。
+
+| 功能 | 在哪开 | 效果 |
+| --- | --- | --- |
+| 隐私模式背景 | 设置 → 显示 → 隐私模式背景 | 进入隐私模式 1 后，本机屏幕显示纯黑，或者显示当前壁纸和一个只有固定图标的任务栏，时钟照常走。 |
+| 仅远程播放音频 | 设置 → 常规 → 将音频重定向到远程客户端 → 仅远程播放 | 有人连着的时候，声音只在控制端播放。最后一个连接断开后，恢复原来的输出设备、音量和静音状态。 |
+
+只有被控的 Windows 电脑需要换成这个分支的构建，控制端用官方版就行。用仓库里的 GitHub Actions 构建 Windows 版，会自动带上打过补丁的 `WindowInjection.dll`；在本地编译的话，这个 DLL 要自己编。仅远程播放还需要先装好 VB-CABLE 驱动。
+
+构建和行为细节：[隐私背景](../res/windows/privacy-background.md) · [仅远程音频](windows-remote-only-audio.md)（英文）
+
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
 RustDesk 期待各位的贡献. 如何参与开发? 详情请看 [CONTRIBUTING-ZH.md](CONTRIBUTING-ZH.md).
