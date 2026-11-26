@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/common.dart' show ColorThemeExtension, globalKey;
+import 'package:flutter_hbb/common.dart'
+    show ColorThemeExtension, gFFI, globalKey, initGlobalFFI, isTest;
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -12,6 +14,25 @@ class _SettingsBinding extends Fake implements RustdeskImpl {
   String unlockMethod = 'offline';
   bool approved = false;
   bool securityApproved = false;
+  String storedPin = '4321';
+
+  @override
+  String mainGetLocalOption({required String key, dynamic hint}) => '';
+  @override
+  String getLocalFlutterOption({required String k, dynamic hint}) => '';
+  @override
+  bool isDisableAb({dynamic hint}) => true;
+  @override
+  bool isDisableGroupPanel({dynamic hint}) => true;
+
+  @override
+  int mainMaxEncryptLen({dynamic hint}) => 128;
+
+  @override
+  String mainSetUnlockPin({required String pin, dynamic hint}) {
+    storedPin = pin;
+    return '';
+  }
 
   @override
   bool mainIsInstalled({dynamic hint}) => true;
@@ -86,4 +107,48 @@ void main() {
     expect(find.text('Service is not running. $action'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   }, skip: !(Platform.isLinux || Platform.isMacOS));
+
+  Future<void> pumpPinDialog(
+      WidgetTester tester, _SettingsBinding binding) async {
+    platformFFI.setBindingForTesting(binding);
+    isTest = true;
+    await initGlobalFFI();
+    await tester.pumpWidget(MaterialApp(
+      navigatorKey: globalKey,
+      theme: ThemeData(extensions: [ColorThemeExtension.light]),
+      home: const Scaffold(),
+    ));
+    addTearDown(gFFI.dialogManager.dismissAll);
+  }
+
+  testWidgets('only Remove clears an installed Unix PIN', (tester) async {
+    final binding = _SettingsBinding();
+    await pumpPinDialog(tester, binding);
+    changeUnlockPinDialog(null, (_) {});
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(binding.storedPin, '4321');
+
+    changeUnlockPinDialog(null, (_) {}, hasHiddenPin: true);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    expect(binding.storedPin, isEmpty);
+  });
+
+  testWidgets('cancel ignores a pending PIN verification', (tester) async {
+    await pumpPinDialog(tester, _SettingsBinding());
+    final verification = Completer<bool>();
+    final accepted = checkUnlockPinDialog((_) => verification.future);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(await accepted, isFalse);
+
+    verification.complete(false);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
 }

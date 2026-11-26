@@ -1767,38 +1767,58 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     ];
   }
 
-  Widget unlockPin() {
-    bool enabled = !locked;
-    final hasPin = RxnBool();
-    update() async {
-      try {
-        hasPin.value = usesRootUnlockPin
-            ? await rootPinRequest('pin-set')
-            : bind.mainGetUnlockPin().isNotEmpty;
-      } catch (error) {
-        debugPrint('Failed to query unlock PIN state: $error');
+  Future<bool?> _readRootPinStatus({bool showError = false}) async {
+    try {
+      return await rootPinRequest('pin-set');
+    } catch (error) {
+      debugPrint('Failed to query unlock PIN state: $error');
+      if (showError && mounted) {
+        final message = error is StateError ? error.message : error.toString();
+        showToast(translate(message));
       }
+      return null;
     }
-    update();
+  }
 
-    onChanged(bool? checked) async {
-      if (hasPin.value == null) return;
+  Widget unlockPin() {
+    final enabled = !locked;
+    final rootManaged = usesRootUnlockPin;
+    var localPin = rootManaged ? null : bind.mainGetUnlockPin();
+    final hasPin = RxnBool(localPin?.isNotEmpty);
+    final initialRead = rootManaged
+        ? _readRootPinStatus().then((value) => hasPin.value = value)
+        : null;
+    var opening = false;
+    Future<void> edit() async {
+      if (hasPin.value == null) {
+        if (opening) return;
+        opening = true;
+        await initialRead;
+        if (mounted && hasPin.value == null) {
+          hasPin.value = await _readRootPinStatus(showError: true);
+        }
+        opening = false;
+        if (!mounted || hasPin.value == null) return;
+      }
       changeUnlockPinDialog(
-          usesRootUnlockPin ? '' : bind.mainGetUnlockPin(), update,
-          hasHiddenPin: usesRootUnlockPin && hasPin.value == true,
-          onUnlockRequired: usesRootUnlockPin ? relock : null);
+        localPin,
+        (pin) {
+          if (!rootManaged) localPin = bind.mainGetUnlockPin();
+          hasPin.value = (localPin ?? pin).isNotEmpty;
+        },
+        hasHiddenPin: rootManaged && hasPin.value == true,
+        onUnlockRequired: rootManaged ? relock : null,
+      );
     }
 
-    final isOptFixed = !usesRootUnlockPin && isOptionFixed(kOptionWhitelist);
+    final isOptFixed = !rootManaged && isOptionFixed(kOptionWhitelist);
     return GestureDetector(
       child: Obx(() => Row(
             children: [
               Checkbox(
                       tristate: hasPin.value == null,
                       value: hasPin.value,
-                      onChanged: enabled && !isOptFixed && hasPin.value != null
-                          ? onChanged
-                          : null)
+                      onChanged: enabled && !isOptFixed ? (_) => edit() : null)
                   .marginOnly(right: 5),
               Expanded(
                   child: Text(
@@ -1807,11 +1827,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               ))
             ],
           )),
-      onTap: enabled
-          ? () {
-              onChanged(null);
-            }
-          : null,
+      onTap: enabled ? edit : null,
     ).marginOnly(left: _kCheckBoxLeftMargin);
   }
 }

@@ -2707,7 +2707,7 @@ void CommonConfirmDialog(OverlayDialogManager dialogManager, String content,
   });
 }
 
-void changeUnlockPinDialog(String oldPin, Function() callback,
+void changeUnlockPinDialog(String? oldPin, ValueChanged<String> onSaved,
     {bool hasHiddenPin = false, VoidCallback? onUnlockRequired}) {
   final pinController = TextEditingController(text: oldPin);
   final confirmController = TextEditingController(text: oldPin);
@@ -2720,7 +2720,7 @@ void changeUnlockPinDialog(String oldPin, Function() callback,
       confirmationErrorText = null;
       final pin = remove ? '' : pinController.text.trim();
       final confirm = remove ? '' : confirmController.text.trim();
-      if (hasHiddenPin && !remove && pin.isEmpty && confirm.isEmpty) {
+      if (oldPin == null && !remove && pin.isEmpty && confirm.isEmpty) {
         close();
         return;
       }
@@ -2744,7 +2744,7 @@ void changeUnlockPinDialog(String oldPin, Function() callback,
         });
         return;
       }
-      callback.call();
+      onSaved(pin);
       close();
     }
 
@@ -2829,11 +2829,14 @@ Future<bool> authorizeUnixSettings({bool networkSettings = false}) async {
 Future<bool> checkUnlockPinDialog(FutureOr<bool> Function(String) verify) async {
   final controller = TextEditingController();
   String? errorText;
+  var dialogOpen = true;
   final accepted = await gFFI.dialogManager.show<bool>((setState, close, context) {
     submit() async {
       final pin = controller.text.trim();
       try {
-        if (await verify(pin)) {
+        final valid = await verify(pin);
+        if (!dialogOpen) return;
+        if (valid) {
           close(true);
           return;
         }
@@ -2841,6 +2844,7 @@ Future<bool> checkUnlockPinDialog(FutureOr<bool> Function(String) verify) async 
           errorText = translate('Wrong PIN');
         });
       } catch (error) {
+        if (!dialogOpen) return;
         final message = error is StateError ? error.message : error.toString();
         setState(() => errorText = translate(message));
       }
@@ -2866,6 +2870,7 @@ Future<bool> checkUnlockPinDialog(FutureOr<bool> Function(String) verify) async 
       onCancel: close,
     );
   });
+  dialogOpen = false;
   return accepted == true;
 }
 
