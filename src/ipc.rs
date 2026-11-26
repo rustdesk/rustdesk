@@ -1714,12 +1714,32 @@ where
         ms_timeout: u64,
     ) -> ResultType<Option<config::Socks5Server>> {
         let expected = (!value.proxy.is_empty()).then(|| value.clone());
+        self.send(&Data::Socks(None)).await?;
+        let Some(Data::Socks(previous)) = self.next_timeout(ms_timeout).await? else {
+            bail!("The host did not provide the previous proxy configuration");
+        };
         self.send(&Data::Socks(Some(value))).await?;
         // The daemon processes messages in order on one connection.
         self.send(&Data::Socks(None)).await?;
+        let confirmation = self.next_timeout2(ms_timeout).await.transpose()?;
+        if matches!(&confirmation, Some(Some(Data::Socks(actual))) if actual == &expected) {
+            return Ok(expected);
+        }
+
+        self.send(&Data::Socks(Some(previous.clone().unwrap_or_default())))
+            .await?;
+        if confirmation.is_none() {
+            // Discard the late reply to the first read before checking the rollback.
+            if !matches!(self.next_timeout(ms_timeout).await?, Some(Data::Socks(_))) {
+                bail!("The host did not confirm restoration of the previous proxy");
+            }
+        }
+        self.send(&Data::Socks(None)).await?;
         match self.next_timeout(ms_timeout).await? {
-            Some(Data::Socks(actual)) if actual == expected => Ok(actual),
-            _ => bail!("The host did not confirm the proxy configuration"),
+            Some(Data::Socks(actual)) if actual == previous => {
+                bail!("The host did not confirm the new proxy; the previous proxy was restored")
+            }
+            _ => bail!("The host did not confirm restoration of the previous proxy"),
         }
     }
 
@@ -2463,14 +2483,66 @@ mod test {
             client.set_socks_and_confirm(proxy.clone(), 1_000),
             async {
                 assert!(matches!(
-                    host.next().await.unwrap(),
+                    host.next_timeout(2_000).await.unwrap(),
+                    Some(Data::Socks(None))
+                ));
+                host.send(&Data::Socks(None)).await.unwrap();
+                assert!(matches!(
+                    host.next_timeout(2_000).await.unwrap(),
                     Some(Data::Socks(Some(value))) if value == proxy
                 ));
-                assert!(matches!(host.next().await.unwrap(), Some(Data::Socks(None))));
+                assert!(matches!(
+                    host.next_timeout(2_000).await.unwrap(),
+                    Some(Data::Socks(None))
+                ));
                 host.send(&Data::Socks(Some(proxy.clone()))).await.unwrap();
             }
         );
         assert_eq!(result.unwrap(), Some(proxy));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn proxy_confirmation_timeout_restores_the_previous_proxy_in_order() {
+        let (client, host) = tokio::io::duplex(1024);
+        let mut client = ConnectionTmpl::new(client);
+        let mut host = ConnectionTmpl::new(host);
+        let previous = config::Socks5Server {
+            proxy: "127.0.0.1:1080".into(),
+            ..Default::default()
+        };
+        let target = config::Socks5Server {
+            proxy: "127.0.0.1:1081".into(),
+            ..Default::default()
+        };
+        let (result, ()) = tokio::join!(
+            client.set_socks_and_confirm(target.clone(), 1_000),
+            async {
+                assert!(matches!(
+                    host.next_timeout(2_000).await.unwrap(),
+                    Some(Data::Socks(None))
+                ));
+                host.send(&Data::Socks(Some(previous.clone()))).await.unwrap();
+                assert!(matches!(
+                    host.next_timeout(2_000).await.unwrap(),
+                    Some(Data::Socks(Some(value))) if value == target
+                ));
+                assert!(matches!(
+                    host.next_timeout(2_000).await.unwrap(),
+                    Some(Data::Socks(None))
+                ));
+                assert!(matches!(
+                    host.next_timeout(2_000).await.unwrap(),
+                    Some(Data::Socks(Some(value))) if value == previous
+                ));
+                host.send(&Data::Socks(Some(target.clone()))).await.unwrap();
+                assert!(matches!(
+                    host.next_timeout(2_000).await.unwrap(),
+                    Some(Data::Socks(None))
+                ));
+                host.send(&Data::Socks(Some(previous.clone()))).await.unwrap();
+            }
+        );
+        assert!(result.unwrap_err().to_string().contains("was restored"));
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

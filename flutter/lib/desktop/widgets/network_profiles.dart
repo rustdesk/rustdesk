@@ -63,14 +63,13 @@ class _NetworkProfile {
   bool matches(_NetworkProfile other) =>
       mapEquals(options, other.options) && listEquals(proxy, other.proxy);
 
-  Future<void> write(_NetworkProfile previous,
-      {bool restoreProxy = false}) async {
+  Future<void> write(_NetworkProfile previous) async {
     for (final key in _optionKeys) {
       if (options[key] != previous.options[key]) {
         await bind.mainSetOption(key: key, value: options[key]!);
       }
     }
-    if (restoreProxy || !listEquals(proxy, previous.proxy)) {
+    if (!listEquals(proxy, previous.proxy)) {
       await bind.mainSetSocks(
         proxy: proxy[0],
         username: proxy[1],
@@ -305,10 +304,7 @@ class _NetworkProfileButtonState extends State<NetworkProfileButton> {
       try {
         await target.write(current);
       } catch (_) {
-        await current.write(
-          await _NetworkProfile.read(),
-          restoreProxy: !listEquals(target.proxy, current.proxy),
-        );
+        await current.write(await _NetworkProfile.read());
         rethrow;
       }
       await bind.mainSetLocalOption(key: _activeKey, value: name);

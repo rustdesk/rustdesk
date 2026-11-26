@@ -3290,14 +3290,18 @@ void changeSocks5Proxy() async {
   final isOptFixed = isOptionFixed(optionProxyUrl);
 
   var isInProgress = false;
-  gFFI.dialogManager.show((setState, close, context) {
+  var dialogOpen = true;
+  await gFFI.dialogManager.show((setState, close, context) {
     submit() async {
+      if (!dialogOpen || isInProgress) return;
       setState(() {
         proxyMsg = '';
         isInProgress = true;
       });
-      cancel() {
+      void showProxyError(String message) {
+        if (!dialogOpen) return;
         setState(() {
+          proxyMsg = message;
           isInProgress = false;
         });
       }
@@ -3311,12 +3315,11 @@ void changeSocks5Proxy() async {
         if (domainPort.contains('://')) {
           domainPort = domainPort.split('://')[1];
         }
-        proxyMsg = translate(await bind.mainTestIfValidServer(
+        final message = translate(await bind.mainTestIfValidServer(
             server: domainPort, testWithProxy: false));
-        if (proxyMsg.isEmpty) {
-          // ignore
-        } else {
-          cancel();
+        if (!dialogOpen) return;
+        if (message.isNotEmpty) {
+          showProxyError(message);
           return;
         }
       }
@@ -3324,12 +3327,11 @@ void changeSocks5Proxy() async {
         await bind.mainSetSocks(
             proxy: proxy, username: username, password: password);
       } catch (_) {
-        proxyMsg = translate('Connection Error');
-        cancel();
+        showProxyError(translate('Connection Error'));
         return;
       }
       if (networkProfilesAvailable) notifyNetworkProfileChange();
-      close();
+      if (dialogOpen) close();
     }
 
     return CustomAlertDialog(
@@ -3442,7 +3444,7 @@ void changeSocks5Proxy() async {
       onSubmit: submit,
       onCancel: close,
     );
-  });
+  }).whenComplete(() => dialogOpen = false);
 }
 
 //#endregion
