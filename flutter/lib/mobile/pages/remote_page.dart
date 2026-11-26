@@ -94,6 +94,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   String _value = '';
   Orientation? _currentOrientation;
   final _uniqueKey = UniqueKey();
+  final _bottomBarKey = GlobalKey();
   Timer? _iosKeyboardWorkaroundTimer;
 
   final _blockableOverlayState = BlockableOverlayState();
@@ -482,11 +483,22 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     });
   }
 
-  Widget _bottomWidget() => _showGestureHelp
-      ? getGestureHelp()
-      : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
-          ? getBottomAppBar()
-          : Offstage());
+  Widget _bottomWidget() {
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _updateBottomBarHeight());
+    return _showGestureHelp
+        ? getGestureHelp()
+        : (_showBar && gFFI.ffiModel.pi.displays.isNotEmpty
+            ? getBottomAppBar()
+            : Offstage());
+  }
+
+  void _updateBottomBarHeight() {
+    if (!mounted) return;
+    final box = _bottomBarKey.currentContext?.findRenderObject();
+    gFFI.canvasModel.setMobileBottomBarHeight(
+        box is RenderBox && box.hasSize ? box.size.height : 0.0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -605,6 +617,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Widget getBottomAppBar() {
     final ffiModel = Provider.of<FfiModel>(context);
     return BottomAppBar(
+      key: _bottomBarKey,
       elevation: 10,
       color: MyTheme.accent,
       child: Row(
