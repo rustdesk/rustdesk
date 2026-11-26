@@ -2016,7 +2016,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                 divider,
                 listTile(
                   icon: Icons.save_outlined,
-                  title: saveNetworkProfileLabel,
+                  title: 'Save network profile',
                   onTap: () => saveNetworkProfile(context),
                 ),
               ],

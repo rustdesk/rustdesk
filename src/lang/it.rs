@@ -830,5 +830,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", ""),
         ("wayland-drm-tip", ""),
         ("login-wayland-drm-tip", ""),
+        ("Save network profile", ""),
+        ("Profile name", ""),
+        ("Profile will be replaced", ""),
+        ("Network profile saved", ""),
+        ("Could not save network profile", ""),
+        ("Network profiles", ""),
+        ("Save a profile in Network settings.", ""),
+        ("Could not load network profiles", ""),
+        ("Could not delete network profile", ""),
+        ("Network profile changes locked settings", ""),
+        ("Network profile applied", ""),
+        ("Could not apply network profile", ""),
     ].iter().cloned().collect();
 }

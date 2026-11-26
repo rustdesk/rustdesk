@@ -23,34 +23,9 @@ const _optionKeys = [
 const _proxyKey = 'proxy-url';
 final networkProfileChanges = ValueNotifier(0);
 
-String get saveNetworkProfileLabel => _profileText('Save network profile');
-
-String _profileText(String key) {
-  const russian = {
-    'Save network profile': 'Сохранить профиль сети',
-    'Profile name': 'Имя профиля',
-    'Profile will be replaced': 'Профиль будет заменён',
-    'Network profile saved': 'Профиль сети сохранён',
-    'Could not save network profile': 'Не удалось сохранить профиль сети',
-    'Network profiles': 'Профили сети',
-    'Save a profile in Network settings.':
-        'Сохраните профиль в разделе «Настройки → Сеть».',
-    'Could not load network profiles': 'Не удалось загрузить профили сети',
-    'Could not delete network profile': 'Не удалось удалить профиль сети',
-    'Network profile changes locked settings':
-        'Профиль меняет заблокированные настройки сети',
-    'Network profile applied': 'Профиль сети применён',
-    'Could not apply network profile': 'Не удалось применить профиль сети',
-  };
-  final language = bind.mainGetLocalOption(key: kCommConfKeyLang);
-  final locale = language.isEmpty || language == 'default'
-      ? localeName.toString().split(RegExp('[-_]')).first
-      : language;
-  return locale == 'ru' ? russian[key] ?? translate(key) : translate(key);
-}
-
 bool get networkProfilesAvailable =>
     isWindows &&
+    !bind.isDisableSettings() &&
     [
       kOptionHideNetworkSetting,
       kOptionHideServerSetting,
@@ -140,14 +115,14 @@ Future<void> saveNetworkProfile(BuildContext context) async {
             }
 
             return AlertDialog(
-              title: Text(_profileText('Save network profile')),
+              title: Text(translate('Save network profile')),
               content: TextField(
                 autofocus: true,
                 maxLength: 80,
                 decoration: InputDecoration(
-                  labelText: _profileText('Profile name'),
+                  labelText: translate('Profile name'),
                   helperText:
-                      exists ? _profileText('Profile will be replaced') : null,
+                      exists ? translate('Profile will be replaced') : null,
                 ),
                 onChanged: (value) => setState(() => name = value.trim()),
                 onSubmitted: (_) => submit(),
@@ -173,9 +148,9 @@ Future<void> saveNetworkProfile(BuildContext context) async {
     await _storeProfiles(updated);
     await bind.mainSetLocalOption(key: _activeKey, value: name);
     notifyNetworkProfileChange();
-    showToast(_profileText('Network profile saved'));
+    showToast(translate('Network profile saved'));
   } catch (_) {
-    showToast(_profileText('Could not save network profile'));
+    showToast(translate('Could not save network profile'));
   }
 }
 
@@ -245,7 +220,7 @@ class _NetworkProfileButtonState extends State<NetworkProfileButton> {
         await bind.mainSetLocalOption(key: _activeKey, value: '');
       }
     } catch (_) {
-      showToast(_profileText('Could not delete network profile'));
+      showToast(translate('Could not delete network profile'));
     } finally {
       notifyNetworkProfileChange();
     }
@@ -260,13 +235,12 @@ class _NetworkProfileButtonState extends State<NetworkProfileButton> {
       final selection = await showDialog<({String name, bool delete})>(
         context: context,
         builder: (context) => SimpleDialog(
-          title: Text(_profileText('Network profiles')),
+          title: Text(translate('Network profiles')),
           children: [
             if (profiles.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child:
-                    Text(_profileText('Save a profile in Network settings.')),
+                child: Text(translate('Save a profile in Network settings.')),
               ),
             for (final name in profiles.keys)
               ListTile(
@@ -307,7 +281,7 @@ class _NetworkProfileButtonState extends State<NetworkProfileButton> {
       }
       await _applyWithFeedback(name, target);
     } catch (_) {
-      showToast(_profileText('Could not load network profiles'));
+      showToast(translate('Could not load network profiles'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -323,7 +297,7 @@ class _NetworkProfileButtonState extends State<NetworkProfileButton> {
               isOptionFixed(key)) ||
           (!listEquals(target.proxy, current.proxy) &&
               isOptionFixed(_proxyKey))) {
-        showToast(_profileText('Network profile changes locked settings'));
+        showToast(translate('Network profile changes locked settings'));
         return;
       }
       final oldApi = await bind.mainGetApiServer();
@@ -339,9 +313,9 @@ class _NetworkProfileButtonState extends State<NetworkProfileButton> {
           gFFI.userModel.isLogin) {
         await gFFI.userModel.logOut(apiServer: oldApi);
       }
-      showToast(_profileText('Network profile applied'));
+      showToast(translate('Network profile applied'));
     } catch (_) {
-      showToast(_profileText('Could not apply network profile'));
+      showToast(translate('Could not apply network profile'));
     } finally {
       notifyNetworkProfileChange();
       if (mounted) setState(() => _busy = false);
@@ -363,7 +337,7 @@ class _NetworkProfileButtonState extends State<NetworkProfileButton> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                snapshot.data ?? _profileText('Network profiles'),
+                snapshot.data ?? translate('Network profiles'),
                 overflow: TextOverflow.ellipsis,
               ),
             ),

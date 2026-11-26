@@ -830,5 +830,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Pantaila zuzenean txartel grafikotik kapturatzen du RustDesk zerbitzuaren bidez, Wayland-en pantaila partekatzeko eskaerarik gabe, saio-hasierako pantailan ere bai. Baliteke gailu guztietan ez ibiltzea; konexioek pantaila partekatzeko eskatzen jarraitzen badute, desaktibatu hau edo erabili X11. Aldatzeak uneko saioak deskonektatzen ditu."),
         ("wayland-drm-tip", "Wayland-en arretarik gabeko sarrerarako, probatu DRM pantaila-kaptura, edo erabili X11 ez badabil."),
         ("login-wayland-drm-tip", "Wayland-en saio-hasierako pantailara sartzeko, probatu DRM pantaila-kaptura edo aldatu X11-ra."),
+        ("Save network profile", ""),
+        ("Profile name", ""),
+        ("Profile will be replaced", ""),
+        ("Network profile saved", ""),
+        ("Could not save network profile", ""),
+        ("Network profiles", ""),
+        ("Save a profile in Network settings.", ""),
+        ("Could not load network profiles", ""),
+        ("Could not delete network profile", ""),
+        ("Network profile changes locked settings", ""),
+        ("Network profile applied", ""),
+        ("Could not apply network profile", ""),
     ].iter().cloned().collect();
 }

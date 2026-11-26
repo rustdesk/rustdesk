@@ -830,5 +830,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Sníma obrazovku priamo z grafickej karty prostredníctvom služby RustDesk, bez výzvy Waylandu na zdieľanie obrazovky, a to aj na prihlasovacej obrazovke. Nemusí fungovať na všetkých zariadeniach; ak pripojenia stále žiadajú o zdieľanie obrazovky, vypnite túto voľbu alebo použite X11. Zmena tejto voľby odpojí aktuálne relácie."),
         ("wayland-drm-tip", "Pre bezobslužný prístup vo Waylande skúste snímanie obrazovky cez DRM, alebo použite X11, ak nefunguje."),
         ("login-wayland-drm-tip", "Pre prístup k prihlasovacej obrazovke Waylandu skúste snímanie cez DRM alebo ju prepnite na X11."),
+        ("Save network profile", ""),
+        ("Profile name", ""),
+        ("Profile will be replaced", ""),
+        ("Network profile saved", ""),
+        ("Could not save network profile", ""),
+        ("Network profiles", ""),
+        ("Save a profile in Network settings.", ""),
+        ("Could not load network profiles", ""),
+        ("Could not delete network profile", ""),
+        ("Network profile changes locked settings", ""),
+        ("Network profile applied", ""),
+        ("Could not apply network profile", ""),
     ].iter().cloned().collect();
 }
