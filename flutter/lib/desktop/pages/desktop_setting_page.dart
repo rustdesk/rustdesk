@@ -13,6 +13,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/page_body.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_keyboard_shortcuts_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/desktop/widgets/network_profiles.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -1813,6 +1814,21 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   final scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    networkProfileChanges.addListener(_refreshNetworkSettings);
+  }
+
+  @override
+  void dispose() {
+    networkProfileChanges.removeListener(_refreshNetworkSettings);
+    scrollController.dispose();
+    super.dispose();
+  }
+
+  void _refreshNetworkSettings() => setState(() {});
+
+  @override
   Widget build(BuildContext context) {
     super.build(context);
     return ListView(controller: scrollController, children: [
@@ -1908,9 +1924,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
             value: mainGetBoolOptionSync(optionKey),
             onChanged: locked || isOptionFixed(optionKey)
                 ? null
-                : (value) {
-                    mainSetBoolOption(optionKey, value);
-                    setState(() {});
+                : (value) async {
+                    await mainSetBoolOption(optionKey, value);
+                    if (mounted) setState(() {});
+                    if (networkProfilesAvailable) notifyNetworkProfileChange();
                   },
           ),
         );
@@ -1929,7 +1946,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                 listTile(
                   icon: Icons.dns_outlined,
                   title: 'ID/Relay Server',
-                  onTap: () => showServerSettings(gFFI.dialogManager, setState),
+                  onTap: () => showServerSettings(gFFI.dialogManager, (update) {
+                    if (mounted) setState(update);
+                    if (networkProfilesAvailable) notifyNetworkProfileChange();
+                  }),
                 ),
               if (!hideProxy && !hideServer) divider,
               if (!hideProxy)
@@ -1980,7 +2000,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                                             await bind.mainSetOption(
                                                 key: kOptionDisableUdp,
                                                 value: value ? 'Y' : 'N');
-                                            setState(() {});
+                                            if (mounted) setState(() {});
+                                            if (networkProfilesAvailable) {
+                                              notifyNetworkProfileChange();
+                                            }
                                           },
                               ),
                             ),
@@ -1989,6 +2012,14 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                     }
                   },
                 ),
+              if (networkProfilesAvailable) ...[
+                divider,
+                listTile(
+                  icon: Icons.save_outlined,
+                  title: saveNetworkProfileLabel,
+                  onTap: () => saveNetworkProfile(context),
+                ),
+              ],
             ],
           ),
         ),
@@ -3291,6 +3322,7 @@ void changeSocks5Proxy() async {
       }
       await bind.mainSetSocks(
           proxy: proxy, username: username, password: password);
+      if (networkProfilesAvailable) notifyNetworkProfileChange();
       close();
     }
 
