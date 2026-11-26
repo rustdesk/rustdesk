@@ -1132,7 +1132,11 @@ pub fn main_test_if_valid_server(server: String, test_with_proxy: bool) -> Strin
     test_if_valid_server(server, test_with_proxy)
 }
 
-pub fn main_set_socks(proxy: String, username: String, password: String) {
+pub fn main_set_socks(
+    proxy: String,
+    username: String,
+    password: String,
+) -> hbb_common::anyhow::Result<()> {
     set_socks(proxy, username, password)
 }
 

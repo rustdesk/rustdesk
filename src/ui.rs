@@ -365,7 +365,7 @@ impl UI {
     }
 
     fn set_socks(&self, proxy: String, username: String, password: String) {
-        set_socks(proxy, username, password)
+        hbb_common::allow_err!(set_socks(proxy, username, password));
     }
 
     fn is_installed(&self) -> bool {

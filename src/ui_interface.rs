@@ -544,14 +544,14 @@ pub fn get_socks() -> Vec<String> {
 }
 
 #[inline]
-pub fn set_socks(proxy: String, username: String, password: String) {
+pub fn set_socks(proxy: String, username: String, password: String) -> hbb_common::ResultType<()> {
     let socks = config::Socks5Server {
         proxy,
         username,
         password,
     };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    ipc::set_socks(socks).ok();
+    ipc::set_socks(socks)?;
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _nat = crate::CheckTestNatType::new();
@@ -566,6 +566,7 @@ pub fn set_socks(proxy: String, username: String, password: String) {
     {
         crate::RendezvousMediator::restart();
     }
+    Ok(())
 }
 
 #[inline]

@@ -1708,6 +1708,21 @@ where
         Ok(())
     }
 
+    async fn set_socks_and_confirm(
+        &mut self,
+        value: config::Socks5Server,
+        ms_timeout: u64,
+    ) -> ResultType<Option<config::Socks5Server>> {
+        let expected = (!value.proxy.is_empty()).then(|| value.clone());
+        self.send(&Data::Socks(Some(value))).await?;
+        // The daemon processes messages in order on one connection.
+        self.send(&Data::Socks(None)).await?;
+        match self.next_timeout(ms_timeout).await? {
+            Some(Data::Socks(actual)) if actual == expected => Ok(actual),
+            _ => bail!("The host did not confirm the proxy configuration"),
+        }
+    }
+
     async fn send_config(&mut self, name: &str, value: String) -> ResultType<()> {
         self.send(&Data::Config((name.to_owned(), Some(value))))
             .await
@@ -2142,15 +2157,9 @@ pub async fn get_socks() -> Option<config::Socks5Server> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
     let _nat = CheckTestNatType::new();
-    Config::set_socks(if value.proxy.is_empty() {
-        None
-    } else {
-        Some(value.clone())
-    });
-    connect(1_000, "")
-        .await?
-        .send(&Data::Socks(Some(value)))
-        .await?;
+    let mut connection = connect(1_000, "").await?;
+    let confirmed = connection.set_socks_and_confirm(value, 1_000).await?;
+    Config::set_socks(confirmed);
     Ok(())
 }
 
@@ -2439,8 +2448,30 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 
 #[cfg(test)]
 mod test {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
     use super::*;
+
+    #[tokio::test]
+    async fn proxy_write_waits_for_confirmation_on_the_same_connection() {
+        let (client, host) = tokio::io::duplex(1024);
+        let mut client = ConnectionTmpl::new(client);
+        let mut host = ConnectionTmpl::new(host);
+        let proxy = config::Socks5Server {
+            proxy: "127.0.0.1:1080".into(),
+            ..Default::default()
+        };
+        let (result, ()) = tokio::join!(
+            client.set_socks_and_confirm(proxy.clone(), 1_000),
+            async {
+                assert!(matches!(
+                    host.next().await.unwrap(),
+                    Some(Data::Socks(Some(value))) if value == proxy
+                ));
+                assert!(matches!(host.next().await.unwrap(), Some(Data::Socks(None))));
+                host.send(&Data::Socks(Some(proxy.clone()))).await.unwrap();
+            }
+        );
+        assert_eq!(result.unwrap(), Some(proxy));
+    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]

@@ -3320,8 +3320,14 @@ void changeSocks5Proxy() async {
           return;
         }
       }
-      await bind.mainSetSocks(
-          proxy: proxy, username: username, password: password);
+      try {
+        await bind.mainSetSocks(
+            proxy: proxy, username: username, password: password);
+      } catch (_) {
+        proxyMsg = translate('Connection Error');
+        cancel();
+        return;
+      }
       if (networkProfilesAvailable) notifyNetworkProfileChange();
       close();
     }
