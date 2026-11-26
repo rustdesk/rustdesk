@@ -71,7 +71,9 @@ use winapi::{
     },
 };
 use windows::Win32::{
-    Foundation::{CloseHandle as WinCloseHandle, HANDLE as WinHANDLE},
+    Foundation::{
+        CloseHandle as WinCloseHandle, ERROR_SERVICE_DOES_NOT_EXIST, HANDLE as WinHANDLE,
+    },
     Security::{
         GetTokenInformation as WinGetTokenInformation, IsWellKnownSid, TokenUser,
         WinLocalSystemSid, TOKEN_QUERY as WIN_TOKEN_QUERY, TOKEN_USER,
@@ -89,10 +91,11 @@ use windows::Win32::{
 use windows_service::{
     define_windows_service,
     service::{
-        ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus,
-        ServiceType,
+        ServiceAccess, ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState,
+        ServiceStatus, ServiceType,
     },
     service_control_handler::{self, ServiceControlHandlerResult},
+    service_manager::{ServiceManager, ServiceManagerAccess},
 };
 use winreg::{enums::*, RegKey};
 
@@ -1563,6 +1566,31 @@ pub fn remove_meta_toml_cmd(is_msi: bool, path: &str) -> String {
     }
 }
 
+fn resolve_firewall_rules(
+    args: impl Iterator<Item = OsString>,
+    read_saved: impl FnOnce() -> io::Result<String>,
+) -> &'static str {
+    let value = args
+        .filter_map(|arg| {
+            let arg = arg.to_string_lossy();
+            let (key, value) = arg.split_once('=')?;
+            key.eq_ignore_ascii_case("FIREWALLRULES")
+                .then(|| value.to_owned())
+        })
+        .last()
+        .map(Ok)
+        .unwrap_or_else(read_saved);
+    let error = match value.as_deref() {
+        Ok("0" | "N" | "n") => return "0",
+        Ok("1" | "Y" | "y") => return "1",
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return "1",
+        Err(error) => error.to_string(),
+        _ => "FIREWALLRULES must be 0, 1, Y, or N".to_owned(),
+    };
+    log::warn!("Failed to resolve FIREWALLRULES: {error}; using the default value 1 and continuing installation");
+    "1"
+}
+
 fn get_after_install(
     exe: &str,
     reg_value_start_menu_shortcuts: Option<String>,
@@ -1571,6 +1599,12 @@ fn get_after_install(
 ) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
+    // Resolve the saved choice before the reinstall script deletes its registry key.
+    let firewall_rules = resolve_firewall_rules(std::env::args_os().skip(1), || {
+        RegKey::predef(HKEY_CLASSES_ROOT)
+            .open_subkey(format!(".{ext}"))?
+            .get_value("FIREWALLRULES")
+    });
     let nested_exe = escape_nested_cmd_ampersands(exe);
 
     // reg delete HKEY_CURRENT_USER\Software\Classes for
@@ -1618,8 +1652,12 @@ fn get_after_install(
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{nested_exe}\\\" \\\"%%1\\\"\"
+    reg add HKEY_CLASSES_ROOT\\.{ext} /f /v FIREWALLRULES /t REG_SZ /d \"{firewall_rules}\"
+    if not \"%errorlevel%\"==\"0\" echo WARNING: Failed to save FIREWALLRULES. Continuing installation; future upgrades may use the default. 1>&2
+    if \"{firewall_rules}\"==\"1\" (
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=out action=allow program=\"{exe}\" enable=yes
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=in action=allow program=\"{exe}\" enable=yes
+    )
     {create_service}
     reg add HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /f /v SoftwareSASGeneration /t REG_DWORD /d 1
     ", create_service=get_create_service(&exe))
@@ -3441,21 +3479,25 @@ copy /Y \"%RUSTDESK_OUTPUT_DIR%\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsof
 }
 
 pub fn install_service() -> bool {
+    let Some(_installing) = crate::platform::InstallingService::try_new() else {
+        log::trace!("Service installation is already in progress");
+        return true;
+    };
     log::info!("Installing service...");
-    let _installing = crate::platform::InstallingService::new();
     let (_, path, _, exe) = get_install_info();
+    let previous_stop_service = Config::get_option("stop-service");
     Config::set_option("stop-service".into(), "".into());
     let cmds = match get_install_service_commands(&path, &exe) {
         Ok(cmds) => cmds,
         Err(err) => {
-            Config::set_option("stop-service".into(), "Y".into());
+            Config::set_option("stop-service".into(), previous_stop_service);
             log::error!("Failed to prepare service installation: {err}");
             return true;
         }
     };
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
     if let Err(err) = run_cmds(cmds, false, "install") {
-        Config::set_option("stop-service".into(), "Y".into());
+        Config::set_option("stop-service".into(), previous_stop_service);
         crate::ipc::EXIT_RECV_CLOSE.store(true, Ordering::Relaxed);
         log::debug!("{err}");
         return true;
@@ -4321,6 +4363,29 @@ pub fn is_service_running(service_name: &str) -> bool {
     }
 }
 
+pub fn is_installed_daemon() -> bool {
+    const SERVICE_QUERY_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+    let service_name = crate::get_app_name();
+    let service = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
+        .and_then(|manager| manager.open_service(&service_name, ServiceAccess::QUERY_STATUS));
+    match service {
+        Ok(_) => true,
+        Err(windows_service::Error::Winapi(error))
+            if error.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST.0 as i32) =>
+        {
+            false
+        }
+        Err(error) => {
+            hbb_common::throttled_log!(
+                SERVICE_QUERY_LOG_INTERVAL,
+                error,
+                "Failed to query service registration for {service_name}; suppressing installation tip: {error:?}"
+            );
+            true
+        }
+    }
+}
+
 pub fn is_x64() -> bool {
     const PROCESSOR_ARCHITECTURE_AMD64: u16 = 9;
 
@@ -4432,7 +4497,7 @@ pub fn try_set_window_foreground(window: HWND) {
 }
 
 pub mod reg_display_settings {
-    use hbb_common::ResultType;
+    use hbb_common::{bail, ResultType};
     use serde_derive::{Deserialize, Serialize};
     use std::collections::HashMap;
     use winreg::{enums::*, RegValue};
@@ -4496,6 +4561,7 @@ pub mod reg_display_settings {
     }
 
     pub fn restore_reg_connectivity(reg_recovery: RegRecovery, force: bool) -> ResultType<()> {
+        connectivity_subkey(&reg_recovery)?;
         let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
         let reg_item = hklm.open_subkey_with_flags(&reg_recovery.path, KEY_READ | KEY_WRITE)?;
         if !force {
@@ -4535,6 +4601,60 @@ pub mod reg_display_settings {
             10 => RegType::REG_RESOURCE_REQUIREMENTS_LIST,
             11 => RegType::REG_QWORD,
             _ => RegType::REG_NONE,
+        }
+    }
+
+    fn connectivity_subkey(recovery: &RegRecovery) -> ResultType<&str> {
+        let prefix = format!("{}\\{}\\", REG_GRAPHICS_DRIVERS_PATH, REG_CONNECTIVITY_PATH);
+        let Some(subkey) = recovery.path.strip_prefix(&prefix) else {
+            bail!("Invalid display connectivity recovery target");
+        };
+        if recovery.key != "Recent"
+            || subkey.is_empty()
+            || matches!(subkey, "." | "..")
+            || subkey.chars().any(|c| matches!(c, '\\' | '/' | '\0'))
+        {
+            bail!("Invalid display connectivity recovery target");
+        }
+        Ok(subkey)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use winreg::types::ToRegValue;
+
+        #[test]
+        fn registry_recovery_rejects_external_targets_before_access() {
+            for force in [false, true] {
+                let recovery = RegRecovery {
+                    path: format!("SOFTWARE\\RustDesk\\{}", uuid::Uuid::new_v4()),
+                    key: "Recent".to_owned(),
+                    old: (vec![0x22; 4], RegType::REG_DWORD as isize),
+                    new: (vec![0x11; 4], RegType::REG_DWORD as isize),
+                };
+                let error = restore_reg_connectivity(recovery, force).unwrap_err();
+                assert_eq!(
+                    error.to_string(),
+                    "Invalid display connectivity recovery target"
+                );
+            }
+        }
+
+        #[test]
+        fn registry_recovery_accepts_display_changes() {
+            let connectivity = |value: &str| {
+                HashMap::from([(
+                    "monitor".to_owned(),
+                    HashMap::from([("Recent".to_owned(), value.to_reg_value())]),
+                )])
+            };
+            let recovery = diff_recent_connectivity(
+                connectivity("before"),
+                connectivity("after-layout-change"),
+            )
+            .unwrap();
+            assert_eq!(connectivity_subkey(&recovery).unwrap(), "monitor");
         }
     }
 }

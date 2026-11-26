@@ -135,7 +135,7 @@ Ujistěte se, že tyto příkazy spouštíte z kořenového adresáře RustDesk,
 
 ## Struktura souborů
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: kodek videa, nastavení, obalovaní tcp/udp, vyrovnávací paměť protokolu, funkce souborového systému pro přenos souborů a pár dalších podpůrných funkcí
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: kodek videa, nastavení, obalovaní tcp/udp, vyrovnávací paměť protokolu, funkce souborového systému pro přenos souborů a pár dalších podpůrných funkcí
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: zachytávání obsahu obrazovky
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: ovládání klávesnice/myši pro jednotlivé platformy
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: grafické uživatelské rozhraní

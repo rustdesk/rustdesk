@@ -35,6 +35,7 @@ import kotlin.math.max
 import hbb.MessageOuterClass.KeyEvent
 import hbb.MessageOuterClass.KeyboardMode
 import hbb.KeyEventConverter
+import ffi.FFI
 
 // const val BUTTON_UP = 2
 // const val BUTTON_BACK = 0x08
@@ -79,6 +80,8 @@ class InputService : AccessibilityService() {
     }
 
     private fun notifyInputState() {
+        // The Flutter UI may not be running to forward this, e.g. when enabled from system settings.
+        FFI.setInputServiceOpen(isOpen)
         val inputState = isOpen.toString()
         Handler(Looper.getMainLooper()).post {
             MainActivity.flutterMethodChannel?.invokeMethod(

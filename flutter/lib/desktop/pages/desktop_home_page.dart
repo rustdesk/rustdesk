@@ -429,6 +429,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
+    if (isWindows &&
+        !bind.isDisableInstallation() &&
+        bind.mainIsInstalled() &&
+        !bind.isOutgoingOnly() &&
+        !mainGetBoolOptionSync(kOptionStopService) &&
+        !bind.mainIsInstalledDaemon(prompt: false)) {
+      return buildInstallCard("", "install_daemon_tip", "Install", () async {
+        await rustDeskWinManager.closeAllSubWindows();
+        await start_service(true);
+      });
+    }
     if (!bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
@@ -521,25 +532,29 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         return Container();
       }
       final LinuxCards = <Widget>[];
-      if (bind.isSelinuxEnforcing()) {
-        // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.
-        final keyShowSelinuxHelpTip = "show-selinux-help-tip";
-        if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
+      final drmSupported = bind.mainIsInstalled() &&
+          bind.mainGetCommonSync(key: 'is-drm-capture-supported') == 'true';
+      if (drmSupported && mainGetBoolOptionSync(kOptionAllowDrmCapture)) {
+        // DRM capture reaches the session and the login screen: no warning.
+      } else if (drmSupported &&
+          !isOptionFixed(kOptionAllowDrmCapture) &&
+          !bind.isDisableSettings()) {
+        final currentIsWayland = bind.mainCurrentIsWayland();
+        if (currentIsWayland || bind.mainIsLoginWayland()) {
           LinuxCards.add(buildInstallCard(
-            "Warning",
-            "selinux_tip",
-            "",
-            () async {},
-            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
-            help: 'Help',
-            link:
-                'https://rustdesk.com/docs/en/client/linux/#permissions-issue',
-            closeButton: true,
-            closeOption: keyShowSelinuxHelpTip,
-          ));
+              "Warning",
+              currentIsWayland ? "wayland-drm-tip" : "login-wayland-drm-tip",
+              "Enable", () async {
+            await mainSetBoolOption(kOptionAllowDrmCapture, true);
+            setState(() {});
+          },
+              marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
+              help: 'Help',
+              link: currentIsWayland
+                  ? 'https://rustdesk.com/docs/en/client/linux/#x11-required'
+                  : 'https://rustdesk.com/docs/en/client/linux/#login-screen'));
         }
-      }
-      if (bind.mainCurrentIsWayland()) {
+      } else if (bind.mainCurrentIsWayland()) {
         LinuxCards.add(buildInstallCard(
             "Warning", "wayland_experiment_tip", "", () async {},
             marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,

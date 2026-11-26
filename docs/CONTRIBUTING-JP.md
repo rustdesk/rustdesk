@@ -21,7 +21,7 @@ RustDesk またはその依存関係へのコントリビュートは、GitHub �
 - コミットは、各コミットが独立して正しい（すなわち、各コミットがコンパイルされ、テストに合格する）ことを保証しながら、
   可能な限り小さくすべきです。
 
-- コミットには、Developer Certificate of Origin (http://developercertificate.org) の sign-off を添えてください。
+- コミットには、Developer Certificate of Origin (https://developercertificate.org) の sign-off を添えてください。
   これは、あなた（および該当する場合はあなたの雇用主）が [プロジェクトのライセンス](../LICENCE) の条項に拘束されることに
   同意していることを示すものです。git では、これは `git commit` の `-s` オプションを使います。
 

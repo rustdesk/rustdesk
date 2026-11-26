@@ -188,7 +188,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("pull_group_failed_tip", "Failed to refresh group"),
         ("doc_fix_wayland", "https://rustdesk.com/docs/en/client/linux/#x11-required"),
         ("display_is_plugged_out_msg", "The display is plugged out, switch to the first display."),
-        ("selinux_tip", "SELinux is enabled on your device, which may prevent RustDesk from running properly as controlled side."),
         ("id_input_tip", "You can input an ID, a direct IP, or a domain with a port (<domain>:<port>).\nIf you want to access a device on another server, please append the server address (<id>@<server_address>?key=<key_value>), for example,\n9123456234@192.168.16.1:21117?key=5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=.\nIf you want to access a device on a public server, please input \"<id>@public\", the key is not needed for public server.\n\nIf you want to force the use of a relay connection on the first connection, add \"/r\" at the end of the ID, for example, \"9123456234/r\"."),
         ("privacy_mode_impl_mag_tip", "Mode 1"),
         ("privacy_mode_impl_virtual_display_tip", "Mode 2"),
@@ -292,6 +291,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("api_server_empty_tip", "With API Server empty, your custom server defaults to HTTP. Contact your administrator to enable HTTPS."),
         ("android-logs-folder-tip", "Choose Android → media to store log files."),
         ("install-directory-not-empty-tip", "The selected folder is not empty. Installation may delete existing data. Consider choosing a different folder."),
+        ("username-login-disabled-oidc-unavailable", "Username and password login is disabled, and no OIDC login methods are available."),
+        ("drm-capture-tip", "Captures the screen directly from the graphics card through the RustDesk service, without the Wayland screen sharing prompt, including at the login screen. It may not work on every device; if connections still ask to share the screen, turn this off or use X11. Changing this disconnects current sessions."),
+        ("wayland-drm-tip", "For unattended access on Wayland, try DRM screen capture, or use X11 if it does not work."),
+        ("login-wayland-drm-tip", "To access the Wayland login screen, try DRM screen capture or switch it to X11."),
         ("mcp-server-tip", "Let MCP clients such as Claude control remote computers through RustDesk. Listens on 127.0.0.1 only and requires an access token. Connections and control requests need your approval unless you turn that off below."),
         ("mcp-read-access-tip", "Enabling MCP lets local MCP clients that hold the access token list your open remote sessions and take screenshots of them without asking for control."),
     ].iter().cloned().collect();

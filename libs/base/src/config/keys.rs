@@ -89,6 +89,7 @@ pub const OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE: &str =
     "enable-android-software-encoding-half-scale";
 pub const OPTION_ENABLE_TRUSTED_DEVICES: &str = "enable-trusted-devices";
 pub const OPTION_TRUSTED_DEVICE_EXPIRATION: &str = "trusted-device-expiration-days";
+pub const OPTION_ALLOW_DRM_CAPTURE: &str = "allow-drm-capture";
 pub const OPTION_AV1_TEST: &str = "av1-test";
 /// Maximum number of files allowed during a single file transfer request.
 ///
@@ -123,6 +124,7 @@ pub const OPTION_HIDE_PROXY_SETTINGS: &str = "hide-proxy-settings";
 pub const OPTION_HIDE_REMOTE_PRINTER_SETTINGS: &str = "hide-remote-printer-settings";
 pub const OPTION_HIDE_WEBSOCKET_SETTINGS: &str = "hide-websocket-settings";
 pub const OPTION_HIDE_STOP_SERVICE: &str = "hide-stop-service";
+pub const OPTION_HIDE_ACCOUNT_PASSWORD_LOGIN: &str = "hide-account-password-login";
 pub const OPTION_QUIT_BUTTON_TEXT: &str = "quit-button-text";
 pub const OPTION_ALLOW_COMMAND_LINE_SETTINGS_WHEN_SETTINGS_DISABLED: &str =
     "allow-command-line-settings-when-settings-disabled";
@@ -334,6 +336,7 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_ALLOW_AUTO_UPDATE,
     OPTION_ALLOW_KCP_CC,
     OPTION_ALLOW_WEBRTC_CC,
+    OPTION_ALLOW_DRM_CAPTURE,
 ];
 
 // BUILDIN_SETTINGS
@@ -352,6 +355,7 @@ pub const KEYS_BUILDIN_SETTINGS: &[&str] = &[
     OPTION_HIDE_REMOTE_PRINTER_SETTINGS,
     OPTION_HIDE_WEBSOCKET_SETTINGS,
     OPTION_HIDE_STOP_SERVICE,
+    OPTION_HIDE_ACCOUNT_PASSWORD_LOGIN,
     OPTION_HIDE_USERNAME_ON_CARD,
     OPTION_HIDE_HELP_CARDS,
     OPTION_DEFAULT_CONNECT_PASSWORD,

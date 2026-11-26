@@ -317,7 +317,15 @@ class _FloatingMouseState extends State<FloatingMouse> {
     final RenderBox? renderBox =
         _cursorPaintKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox != null) {
-      return renderBox.localToGlobal(Offset.zero);
+      // The handle lives in window coordinates, but the mouse mapping expects
+      // the visible canvas area, see InputModel._pointerPositionForRemoteCanvas.
+      final mediaData = MediaQueryData.fromView(
+          WidgetsBinding.instance.platformDispatcher.views.first);
+      final position = renderBox.localToGlobal(Offset.zero);
+      return Offset(
+        position.dx - mediaData.padding.left,
+        position.dy - mediaData.padding.top - _canvasModel.getAdjustY(),
+      );
     } else {
       return _position;
     }

@@ -7,5 +7,5 @@ edition = "2021"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 hbb_common = { version = "0.1.0", path = "../hbb_common" }
-winapi = { version = "0.3" }
+winapi = { version = "0.3", features = ["minwindef", "ntdef", "winbase", "winerror", "winnt", "winspool", "winuser"] }
 windows-strings = "0.3.1"

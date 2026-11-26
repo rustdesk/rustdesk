@@ -210,7 +210,8 @@ target/release/rustdesk
 
 ## 文件结构
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: 视频编解码, 配置, tcp/udp 封装, protobuf, 文件传输相关文件系统操作函数, 以及一些其他实用函数
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: 视频编解码, 配置, tcp/udp 封装, 以及其他与服务端共享的实用函数
+- **[libs/base](https://github.com/rustdesk/rustdesk/tree/master/libs/base)**: 仅供本应用使用的 protobuf, 文件传输相关文件系统操作函数, 键盘及平台相关代码
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: 屏幕截取
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: 平台相关的鼠标键盘输入
 - **[libs/clipboard](https://github.com/rustdesk/rustdesk/tree/master/libs/clipboard)**: Windows、Linux、macOS 的文件复制和粘贴实现

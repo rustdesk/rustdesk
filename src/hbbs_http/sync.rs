@@ -145,10 +145,6 @@ async fn start_hbbs_sync_async() {
                     if !ab_alias.is_empty() {
                         v[keys::OPTION_PRESET_ADDRESS_BOOK_ALIAS] = json!(ab_alias);
                     }
-                    let ab_password = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD);
-                    if !ab_password.is_empty() {
-                        v[keys::OPTION_PRESET_ADDRESS_BOOK_PASSWORD] = json!(ab_password);
-                    }
                     let ab_note = Config::get_option(keys::OPTION_PRESET_ADDRESS_BOOK_NOTE);
                     if !ab_note.is_empty() {
                         v[keys::OPTION_PRESET_ADDRESS_BOOK_NOTE] = json!(ab_note);
@@ -260,7 +256,13 @@ async fn start_hbbs_sync_async() {
                         }
                         if let Some(strategy) = rsp.remove("strategy") {
                             if let Ok(strategy) = serde_json::from_value::<StrategyOptions>(strategy) {
-                                if let Err(error) = handle_config_options(strategy.config_options).await {
+                                #[cfg(all(target_os = "linux", feature = "drm"))]
+                                let drm_capture_was_on = crate::platform::linux::drm_capture_enabled();
+                                let result = handle_config_options(strategy.config_options).await;
+                                // Also after a rejected update: the options outside authentication are applied.
+                                #[cfg(all(target_os = "linux", feature = "drm"))]
+                                crate::platform::linux::sync_drm_capture_to_service(drm_capture_was_on).await;
+                                if let Err(error) = result {
                                     hbb_common::throttled_log!(API_LOG_INTERVAL, error, "Strategy update rejected: {error}");
                                     continue;
                                 }

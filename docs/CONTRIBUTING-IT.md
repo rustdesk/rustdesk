@@ -20,7 +20,7 @@ Questo per evitare duplicati sforzi dei contributori sullo stesso problema.
 
 - Le modifiche dovrebbero essere le più piccole possibile, assicurando al tempo stesso che ogni modifica sia corretta in modo indipendente (ovvero, ogni modifica dovrebbe essere compilabile e superare i test).
 
-- Le modifiche devono essere accompagnati da un certificato di origine per sviluppatori firmato (http://developercertificate.org), che indica che tu (e il tuo datore di lavoro se applicabile) accetti di essere vincolato dai termini della [licenza progetto](../LICENCE). In git, questa è l'opzione `-s` di `git commit`
+- Le modifiche devono essere accompagnati da un certificato di origine per sviluppatori firmato (https://developercertificate.org), che indica che tu (e il tuo datore di lavoro se applicabile) accetti di essere vincolato dai termini della [licenza progetto](../LICENCE). In git, questa è l'opzione `-s` di `git commit`
 
 - Se la tua patch non viene esaminata o hai bisogno che una persona specifica la esamini, puoi @-rispondere ad un revisore chiedendo una revisione nella richiesta pull o un commento, oppure puoi chiedere una revisione tramite [email](mailto:info@rustdesk.com).
 

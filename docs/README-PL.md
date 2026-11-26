@@ -146,7 +146,7 @@ Upewnij się, że uruchamiasz te polecenia z katalogu głównego repozytorium Ru
 
 ## Struktura plików
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: kodek wideo, konfiguracja, obsługa tcp/udp, protobuf, funkcje systemu plików do transferu plików i kilka innych funkcji użytkowych
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: kodek wideo, konfiguracja, obsługa tcp/udp, protobuf, funkcje systemu plików do transferu plików i kilka innych funkcji użytkowych
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: przechwytywanie ekranu
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: specyficzne dla danej platformy sterowanie klawiaturą/myszą
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI

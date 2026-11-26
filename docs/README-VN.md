@@ -23,7 +23,7 @@ RustDesk là một phần mềm điểu khiển máy tính từ xa mã nguồn m
 
 [**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
-[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/FAQreleases/tag/nightly)
+[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Get it on F-Droid"
@@ -139,7 +139,7 @@ Hãy đảm bảo rằng bạn đang chạy các lệnh này từ gốc của th
 
 ## Cấu trúc tệp tin
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, cấu hình, tcp/udp wrapper, protobuf, fs functions để truyền file, và một số hàm tiện ích khác
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: video codec, cấu hình, tcp/udp wrapper, protobuf, fs functions để truyền file, và một số hàm tiện ích khác
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: ghi lại màn hình
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: điều khiển máy tính/chuột trên các nền tảng khác nhau
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: giao diện người dùng

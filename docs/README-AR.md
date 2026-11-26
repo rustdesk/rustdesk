@@ -150,7 +150,7 @@ RustDesk يرجى التأكد من أنك تنفذ هذه الأوامر من �
 
 ## هيكل الملف
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: وظائف  لنقل الملفات، وبعض وظائف المرافق الأخرى tcp/udp، protobuf ترميز الفيديو، إعدادات
+- **[libs/hbb_common](https://github.com/rustdesk/hbb_common)**: وظائف  لنقل الملفات، وبعض وظائف المرافق الأخرى tcp/udp، protobuf ترميز الفيديو، إعدادات
 
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: التقاط الشاشة
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: التحكم في لوحة المفاتيح/الماوس الخاصة بكل منصة

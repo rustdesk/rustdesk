@@ -1757,10 +1757,6 @@ class RustdeskImpl {
     return versionToNumber(v: version) > versionToNumber(v: '1.2.4');
   }
 
-  bool isSelinuxEnforcing({dynamic hint}) {
-    return false;
-  }
-
   String mainDefaultPrivacyModeImpl({dynamic hint}) {
     throw UnimplementedError("mainDefaultPrivacyModeImpl");
   }
