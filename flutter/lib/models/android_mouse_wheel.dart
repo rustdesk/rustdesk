@@ -41,18 +41,18 @@ class AndroidMouseWheel {
       }
     }
     if (event is PointerDownEvent) {
-      _pointer = null;
-      _position = null;
-      _remainder = 0;
-      _moves = 0;
-      _seqDy = 0;
-      _seqTicks = 0;
+      // Checked before touching the state: an unrelated pointer going down must
+      // not discard a wheel sequence that is still in flight.
       if (!_isSyntheticTouch(event)) {
         if (event.kind != PointerDeviceKind.unknown) _mousePosition = null;
         return null;
       }
       _pointer = event.pointer;
       _position = event.position;
+      _remainder = 0;
+      _moves = 0;
+      _seqDy = 0;
+      _seqTicks = 0;
       // The synthetic sequence always starts at the cursor, so it is also the
       // best position to dispatch the resulting scroll at.
       _mousePosition = event.position;
