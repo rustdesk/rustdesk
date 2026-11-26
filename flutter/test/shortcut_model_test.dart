@@ -56,6 +56,10 @@ class _LegacyBinding extends _ChatBinding {
   final keys = <(String, bool, bool)>[];
 
   @override
+  String sessionGetAgentControl({required SessionID sessionId, dynamic hint}) => '';
+
+
+  @override
   bool sessionGetToggleOptionSync(
           {required SessionID sessionId, required String arg, dynamic hint}) =>
       false;

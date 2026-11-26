@@ -295,5 +295,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Captures the screen directly from the graphics card through the RustDesk service, without the Wayland screen sharing prompt, including at the login screen. It may not work on every device; if connections still ask to share the screen, turn this off or use X11. Changing this disconnects current sessions."),
         ("wayland-drm-tip", "For unattended access on Wayland, try DRM screen capture, or use X11 if it does not work."),
         ("login-wayland-drm-tip", "To access the Wayland login screen, try DRM screen capture or switch it to X11."),
+        ("mcp-server-tip", "Let MCP clients such as Claude control remote computers through RustDesk. Listens on 127.0.0.1 only and requires an access token. Connections and control requests need your approval unless you turn that off below."),
+        ("mcp-read-access-tip", "Enabling MCP lets local MCP clients that hold the access token list your open remote sessions and take screenshots of them without asking for control."),
     ].iter().cloned().collect();
 }

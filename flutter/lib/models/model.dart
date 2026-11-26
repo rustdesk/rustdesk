@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/mcp/mcp_utils.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
@@ -125,6 +126,7 @@ class FfiModel with ChangeNotifier {
   bool _androidDocumentPickerActive = false;
   bool _androidDocumentPickerInterruptedConnection = false;
   bool _viewOnly = false;
+  McpConnectionStatus? mcpPendingStatus;
   bool _showMyCursor = false;
   WeakReference<FFI> parent;
   late final SessionID sessionId;
@@ -166,7 +168,10 @@ class FfiModel with ChangeNotifier {
   bool get isPeerLinux => _pi.platform == kPeerPlatformLinux;
   bool get isPeerWindows => _pi.platform == kPeerPlatformWindows;
 
-  bool get viewOnly => _viewOnly;
+  bool get viewOnly => _viewOnly || agentControl;
+  String get agentControlGrant =>
+      bind.sessionGetAgentControl(sessionId: sessionId);
+  bool get agentControl => agentControlGrant.isNotEmpty;
   bool get showMyCursor => _showMyCursor;
 
   set inputBlocked(v) {
@@ -249,6 +254,7 @@ class FfiModel with ChangeNotifier {
 
   clear() {
     _pi = PeerInfo();
+    mcpPendingStatus = null;
     lastUserDisplay = null;
     _cancelPendingMonitorRestore();
     _secure = null;
@@ -332,18 +338,21 @@ class FfiModel with ChangeNotifier {
     return (evt) async {
       var name = evt['name'];
       if (name == 'msgbox') {
+        mcpPendingStatus = mcpConnectionDialog(evt) ?? mcpPendingStatus;
         handleMsgBox(evt, sessionId, peerId);
       } else if (name == 'toast') {
         handleToast(evt, sessionId, peerId);
       } else if (name == 'set_multiple_windows_session') {
         handleMultipleWindowsSession(evt, sessionId, peerId);
       } else if (name == 'peer_info') {
+        mcpPendingStatus = null;
         handlePeerInfo(evt, peerId, false);
       } else if (name == 'sync_peer_info') {
         handleSyncPeerInfo(evt, sessionId, peerId);
       } else if (name == 'sync_platform_additions') {
         handlePlatformAdditions(evt, sessionId, peerId);
       } else if (name == 'connection_ready') {
+        mcpPendingStatus = null;
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
         resetRestartReconnectState();
@@ -1119,6 +1128,7 @@ class FfiModel with ChangeNotifier {
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
     _cancelPendingMonitorRestore();
+    mcpPendingStatus = (state: 'connecting', message: null);
     bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
     clearPermissions();
     dialogManager.dismissAll();
@@ -1840,6 +1850,8 @@ class FfiModel with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  void refreshAgentControl() => notifyListeners();
 
   void setShowMyCursor(bool value) {
     if (_showMyCursor != value) {

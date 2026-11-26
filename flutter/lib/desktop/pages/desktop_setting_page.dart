@@ -14,6 +14,7 @@ import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/page_body.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_keyboard_shortcuts_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
+import 'package:flutter_hbb/mcp/mcp_manager.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
@@ -412,8 +413,11 @@ class _GeneralState extends State<_General> {
   @override
   Widget build(BuildContext context) {
     final scrollController = ScrollController();
+    final showMcpServer = !isWeb && !bind.isIncomingOnly();
     return ListView(
       controller: scrollController,
+      // The MCP card makes lazy scroll-extent estimates jump at the bottom.
+      cacheExtent: showMcpServer ? double.infinity : null,
       children: [
         if (!isWeb) service(),
         theme(),
@@ -423,6 +427,7 @@ class _GeneralState extends State<_General> {
         if (!isWeb) record(context),
         if (!isWeb) WaylandCard(),
         other(),
+        if (showMcpServer) mcpServer(),
         if (!bind.isIncomingOnly()) keyboardShortcuts(),
       ],
     ).marginOnly(bottom: _kListViewBottomMargin);
@@ -713,6 +718,46 @@ class _GeneralState extends State<_General> {
       ));
     }
     return _Card(title: 'Other', children: children);
+  }
+
+  Widget mcpServer() {
+    return _Card(title: 'MCP server', children: [
+      Tooltip(
+        message: translate('mcp-server-tip'),
+        child: _OptionCheckBox(
+          context,
+          'Enable MCP server',
+          kOptionEnableMcpServer,
+          isServer: false,
+          update: (_) async {
+            await McpServerManager.instance.sync();
+            if (mounted) setState(() {});
+          },
+        ),
+      ),
+      Align(
+        alignment: Alignment.topLeft,
+        child: Text(translate('mcp-read-access-tip'),
+            style: TextStyle(fontSize: 12, color: Colors.orange.shade800)),
+      ).marginOnly(left: 35, right: 10, bottom: 4),
+      if (mainGetLocalBoolOptionSync(kOptionEnableMcpServer)) ...[
+        _OptionCheckBox(
+          context,
+          'Automatically approve new connections and initial agent control',
+          kOptionMcpAutoApproveConnect,
+          isServer: false,
+        ),
+        _OptionCheckBox(
+          context,
+          'Automatically approve agent takeover of existing sessions',
+          kOptionMcpAutoApproveControl,
+          isServer: false,
+        ),
+        _McpConnectionInfo(() {
+          if (mounted) setState(() {});
+        }),
+      ],
+    ]);
   }
 
   Widget wallpaper() {
@@ -3408,3 +3453,106 @@ void changeSocks5Proxy() async {
 }
 
 //#endregion
+
+class _McpConnectionInfo extends StatelessWidget {
+  final VoidCallback onTokenChanged;
+  const _McpConnectionInfo(this.onTokenChanged);
+
+  @override
+  Widget build(BuildContext context) {
+    final m = McpServerManager.instance;
+    final theme = Theme.of(context);
+    final hasError = m.lastError != null;
+    final statusColor = hasError
+        ? Colors.red
+        : (m.running ? Colors.green : theme.disabledColor);
+    final status = hasError
+        ? m.lastError!
+        : (m.running ? translate('Running') : translate('Starting...'));
+    final buttonStyle = OutlinedButton.styleFrom(
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration:
+                  BoxDecoration(color: statusColor, shape: BoxShape.circle),
+            ).marginOnly(right: 8),
+            Flexible(
+              child: Text(status,
+                  style: TextStyle(fontSize: 13, color: statusColor),
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(top: 10, bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            border: Border.all(color: theme.dividerColor),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: SelectableText(
+            m.endpoint(),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+          ),
+        ),
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            ElevatedButton.icon(
+              style: buttonStyle.copyWith(
+                backgroundColor: MaterialStatePropertyAll(MyTheme.accent),
+                foregroundColor: const MaterialStatePropertyAll(Colors.white),
+                elevation: const MaterialStatePropertyAll(0),
+              ),
+              icon: const Icon(Icons.save_alt_rounded, size: 16),
+              label: Text(translate('Export MCP client config')),
+              onPressed: () async {
+                try {
+                  final timestamp = DateTime.now().millisecondsSinceEpoch;
+                  final path = await FilePicker.platform.saveFile(
+                    dialogTitle: translate('Export MCP client config'),
+                    fileName: 'rustdesk-mcp-$timestamp.json',
+                    type: FileType.custom,
+                    allowedExtensions: ['json'],
+                  );
+                  if (path == null) return;
+                  await m.exportConfig(path);
+                  showToast(translate('Successful'));
+                } catch (e) {
+                  showToast('${translate('Failed')}: $e');
+                }
+              },
+            ),
+            OutlinedButton.icon(
+              style: buttonStyle.copyWith(
+                foregroundColor:
+                    MaterialStatePropertyAll(Colors.orange.shade800),
+                side: MaterialStatePropertyAll(
+                    BorderSide(color: Colors.orange.shade800)),
+              ),
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: Text(translate('Regenerate token')),
+              onPressed: () async {
+                final error = await m.regenerateToken();
+                onTokenChanged();
+                showToast(error ?? translate('Successful'));
+              },
+            ),
+          ],
+        ),
+      ],
+    ).marginOnly(left: 35, right: 10, top: 4, bottom: 8);
+  }
+}

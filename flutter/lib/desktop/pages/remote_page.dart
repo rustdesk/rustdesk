@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_hbb/mcp/mcp_remote_window.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 
 import '../../consts.dart';
@@ -885,7 +886,7 @@ class _RemotePageState extends State<RemotePage>
   void leaveView(PointerExitEvent evt) {
     _ffi.canvasModel.disableEdgeScroll();
 
-    if (_ffi.ffiModel.keyboard) {
+    if (_ffi.ffiModel.keyboard && !_ffi.ffiModel.agentControl) {
       _ffi.inputModel.tryMoveEdgeOnExit(evt.position);
     }
 
@@ -1012,6 +1013,7 @@ class _RemotePageState extends State<RemotePage>
             QualityMonitor(_ffi.qualityMonitorModel), null, null),
       ),
     );
+    paints.add(AgentControlBanner(ffi: _ffi));
     return Stack(
       children: paints,
     );

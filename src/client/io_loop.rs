@@ -209,7 +209,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     .connection_round_state
                     .lock()
                     .unwrap()
-                    .set_connected();
+                    .set_connected(round);
                 let is_secured = peer.is_secured();
                 let trust = crate::trusted_devices::client::Session::new(
                     &self.handler.lc.read().unwrap(),
@@ -306,7 +306,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                             self.handler.update_received(true);
                                         }
                                         self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
-                                        if !self.handle_msg_from_peer(bytes, &mut peer).await {
+                                        if !self.handle_msg_from_peer(bytes, &mut peer, round).await {
                                             break
                                         }
                                     }
@@ -1693,7 +1693,7 @@ impl<T: InvokeUiSession> Remote<T> {
         return false;
     }
 
-    async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
+    async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream, round: u32) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
                 Some(message::Union::VideoFrame(vf)) => {
@@ -1768,6 +1768,13 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.handler.lc.write().unwrap().handle_peer_info(&pi);
                                 return false;
                             }
+                        }
+                        if self.handler.is_default() && !pi.displays.is_empty() {
+                            self.handler
+                                .connection_round_state
+                                .lock()
+                                .unwrap()
+                                .set_desktop_ready(round);
                         }
                         self.handler.handle_peer_info(pi);
                         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
@@ -2568,6 +2575,12 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::PeerInfo(pi)) => {
                     self.handler.set_displays(&pi.displays);
                     self.handler.set_platform_additions(&pi.platform_additions);
+                }
+                #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+                Some(message::Union::ScreenshotResponse(response))
+                    if crate::flutter_mcp::is_requested_screenshot(&response) =>
+                {
+                    crate::flutter_mcp::store_screenshot(response);
                 }
                 Some(message::Union::ScreenshotResponse(response)) => {
                     crate::client::screenshot::set_screenshot(response.data);

@@ -972,6 +972,16 @@ class RustdeskImpl {
     return v;
   }
 
+  Future<String> mainGetLocalOptionFromFile(
+      {required String key, dynamic hint}) async {
+    throw UnsupportedError('Local config files are unavailable on web');
+  }
+
+  Future<void> mainWriteMcpConfig(
+      {required String path, required String config, dynamic hint}) async {
+    throw UnsupportedError('MCP config export is only available on desktop');
+  }
+
   // Do not return the real environment variables.
   // Use the global variable as the environment variable in web.
   String mainGetEnv({required String key, dynamic hint}) {
@@ -1373,6 +1383,14 @@ class RustdeskImpl {
       {required UuidValue sessionId, required String msg, dynamic hint}) {
     return Future(
         () => js.context.callMethod('setByName', ['send_mouse', msg]));
+  }
+
+  Future<void> sessionSendMcpMouse(
+      {required UuidValue sessionId,
+      required String grantId,
+      required String msg,
+      dynamic hint}) {
+    throw UnsupportedError('MCP is only supported on desktop');
   }
 
   Future<void> sessionRestartRemoteDevice(
@@ -1972,6 +1990,86 @@ class RustdeskImpl {
       {required UuidValue sessionId, required int display, dynamic hint}) {
     throw UnimplementedError("sessionTakeScreenshot");
   }
+
+  Future<void> sessionTakeMcpScreenshot(
+      {required UuidValue sessionId,
+      required int display,
+      required String requestId,
+      dynamic hint}) {
+    throw UnimplementedError("sessionTakeMcpScreenshot");
+  }
+
+  Future<String?> sessionSaveMcpScreenshot(
+      {required UuidValue sessionId,
+      required String requestId,
+      required String path,
+      dynamic hint}) {
+    throw UnimplementedError("sessionSaveMcpScreenshot");
+  }
+
+  String sessionMcpConnectionId({required UuidValue sessionId, dynamic hint}) => '';
+
+  String mcpSessionId({required String connectionId, dynamic hint}) => '';
+
+  void mcpReleaseInput(
+      {required String connectionId,
+      required String grantId,
+      required bool revoke,
+      dynamic hint}) {
+    throw UnimplementedError('mcpReleaseInput');
+  }
+
+  Future<String> sessionInputMcpKey(
+          {required UuidValue sessionId,
+          required String grantId,
+          required String name,
+          required bool down,
+          required bool press,
+          required bool alt,
+          required bool ctrl,
+          required bool shift,
+          required bool command,
+          dynamic hint}) async =>
+      'Not supported';
+
+  Future<String> sessionInputMcpString(
+          {required UuidValue sessionId,
+          required String grantId,
+          required String value,
+          dynamic hint}) async =>
+      'Not supported';
+
+  Future<String> sessionSetMcpClipboard(
+          {required UuidValue sessionId,
+          required String grantId,
+          required String value,
+          dynamic hint}) async =>
+      'Not supported';
+
+  Future<String> sessionMcpRemoteAction(
+          {required UuidValue sessionId,
+          required String grantId,
+          required String action,
+          dynamic hint}) async =>
+      'Not supported';
+
+  bool sessionMcpAuthenticate(
+          {required UuidValue sessionId,
+          required String grantId,
+          String? password,
+          String? twoFactorCode,
+          dynamic hint}) =>
+      false;
+
+  bool sessionTrySetAgentControl(
+          {required UuidValue sessionId,
+          required String connectionId,
+          required String grantId,
+          required bool initial,
+          dynamic hint}) =>
+      false;
+
+  String sessionGetAgentControl({required UuidValue sessionId, dynamic hint}) => '';
 
   Future<void> sessionOpenTerminal(
       {required UuidValue sessionId,

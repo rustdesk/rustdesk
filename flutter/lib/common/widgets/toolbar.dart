@@ -494,7 +494,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
             icon: Icon(Icons.edit, color: isMobile ? MyTheme.accent : null),
           ),
         ),
-        onPressed: () => handleOsPasswordAction(sessionId, ffi.dialogManager),
+        onPressed: ffi.ffiModel.viewOnly
+            ? null
+            : () => handleOsPasswordAction(sessionId, ffi.dialogManager),
       ),
     );
   }
@@ -504,33 +506,36 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
       perms['keyboard'] != false) {
     v.add(TTextMenu(
         child: Text(translate('Send clipboard keystrokes')),
-        onPressed: () async {
-          Future<void> sendClipboardKeystrokes() async {
-            ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-            if (data != null && data.text != null) {
-              bind.sessionInputString(
-                  sessionId: sessionId, value: data.text ?? "");
-            }
-          }
+        onPressed: ffi.ffiModel.viewOnly
+            ? null
+            : () async {
+                Future<void> sendClipboardKeystrokes() async {
+                  ClipboardData? data =
+                      await Clipboard.getData(Clipboard.kTextPlain);
+                  if (data != null && data.text != null) {
+                    bind.sessionInputString(
+                        sessionId: sessionId, value: data.text ?? "");
+                  }
+                }
 
-          final allowWaylandKeyboard =
-              mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard);
-          if (shouldShowWaylandKeyboardPrompt(
-            connectionId: sessionId.toString(),
-            isWaylandPeer: isWaylandPeer,
-            allowWaylandKeyboardRemembered: allowWaylandKeyboard,
-          )) {
-            ffi.inputModel.keyboardInputAllowed = false;
-            showWaylandKeyboardInputWarningDialog(
-              id: id,
-              connectionId: sessionId.toString(),
-              ffi: ffi,
-              onEnable: sendClipboardKeystrokes,
-            );
-            return;
-          }
-          await sendClipboardKeystrokes();
-        },
+                final allowWaylandKeyboard = mainGetPeerBoolOptionSync(
+                    id, kPeerOptionAllowWaylandKeyboard);
+                if (shouldShowWaylandKeyboardPrompt(
+                  connectionId: sessionId.toString(),
+                  isWaylandPeer: isWaylandPeer,
+                  allowWaylandKeyboardRemembered: allowWaylandKeyboard,
+                )) {
+                  ffi.inputModel.keyboardInputAllowed = false;
+                  showWaylandKeyboardInputWarningDialog(
+                    id: id,
+                    connectionId: sessionId.toString(),
+                    ffi: ffi,
+                    onEnable: sendClipboardKeystrokes,
+                  );
+                  return;
+                }
+                await sendClipboardKeystrokes();
+              },
         actionId: kShortcutActionSendClipboardKeystrokes));
   }
   if (isDefaultConn &&

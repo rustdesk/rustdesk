@@ -4,6 +4,9 @@ use base::message_proto::*;
 use hbb_common::ResultType;
 use std::sync::Mutex;
 
+// MCP requests carry both a session UUID and a request UUID in the echoed sid.
+pub(crate) const MCP_REQUEST_SEPARATOR: char = '#';
+
 lazy_static::lazy_static! {
     static ref SCREENSHOT: Mutex<Screenshot> = Default::default();
 }

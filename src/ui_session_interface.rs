@@ -101,6 +101,7 @@ pub struct ChangeDisplayRecord {
 enum ConnectionState {
     Connecting,
     Connected,
+    DesktopReady,
     Disconnected,
 }
 
@@ -117,8 +118,10 @@ impl ConnectionRoundState {
         self.round
     }
 
-    pub fn set_connected(&mut self) {
-        self.state = ConnectionState::Connected;
+    pub fn set_connected(&mut self, round: u32) {
+        if self.round == round {
+            self.state = ConnectionState::Connected;
+        }
     }
 
     pub fn is_round_gt(&self, round: u32) -> bool {
@@ -139,7 +142,20 @@ impl ConnectionRoundState {
     }
 
     pub fn is_connected(&self) -> bool {
-        matches!(self.state, ConnectionState::Connected)
+        matches!(
+            self.state,
+            ConnectionState::Connected | ConnectionState::DesktopReady
+        )
+    }
+
+    pub fn set_desktop_ready(&mut self, round: u32) {
+        if self.round == round && self.is_connected() {
+            self.state = ConnectionState::DesktopReady;
+        }
+    }
+
+    pub fn is_desktop_ready(&self) -> bool {
+        matches!(self.state, ConnectionState::DesktopReady)
     }
 }
 
@@ -1317,7 +1333,9 @@ impl<T: InvokeUiSession> Session<T> {
         if self.thread.lock().unwrap().is_some() {
             match connection_round_state_lock.state {
                 ConnectionState::Connecting => return,
-                ConnectionState::Connected => self.send(Data::Close),
+                ConnectionState::Connected | ConnectionState::DesktopReady => {
+                    self.send(Data::Close)
+                }
                 ConnectionState::Disconnected => {}
             }
         }

@@ -41,6 +41,13 @@ mod bridge_generated;
 pub mod flutter;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 pub mod flutter_ffi;
+#[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+mod flutter_mcp;
+#[cfg(all(
+    any(test, feature = "flutter"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
+mod mcp_config;
 use common::*;
 mod auth_2fa;
 mod trusted_devices;
