@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/utils/relative_mouse_accumulator.dart';
+import 'package:flutter_hbb/utils/relative_mouse_position_tracker.dart';
 import 'package:get/get.dart';
 
 import '../common.dart';
@@ -148,8 +149,7 @@ class RelativeMouseModel {
   // Pointer region top-left in Flutter view coordinates.
   // Computed from PointerEvent.position - PointerEvent.localPosition.
   Offset? _pointerRegionTopLeftGlobal;
-  // Last pointer position in LOCAL widget coordinates (fallback when center is not ready).
-  Offset? _lastPointerLocalPos;
+  final _pointerPosition = RelativeMousePositionTracker();
 
   // Track whether we currently have an OS-level cursor clip active (Windows only).
   // TODO(accuracy): Revisit window/client/border clipping math if users report misaligned
@@ -507,9 +507,6 @@ class RelativeMouseModel {
     });
   }
 
-  // Flag to skip the first mouse move event after recenter (it's the recenter itself).
-  bool _skipNextMouseMove = false;
-
   /// Handle relative mouse movement based on current local pointer position.
   /// Returns true if the event was handled in relative mode, false otherwise.
   bool handleRelativeMouseMove(Offset localPosition) {
@@ -523,15 +520,8 @@ class RelativeMouseModel {
     // Pointer move/hover implies we're inside the remote image.
     _ensurePointerLockEngaged();
 
-    // Skip the mouse move event triggered by recenter operation itself.
-    if (_skipNextMouseMove) {
-      _skipNextMouseMove = false;
-      _lastPointerLocalPos = localPosition;
-      return true;
-    }
-
-    final lastLocal = _lastPointerLocalPos;
-    _lastPointerLocalPos = localPosition;
+    final delta = _pointerPosition.update(localPosition);
+    if (delta == null) return true;
 
     // Linux-specific: Proactive recenter check before processing delta.
     // On Linux, we don't have clip_cursor, so if the cursor moves too fast
@@ -541,13 +531,8 @@ class RelativeMouseModel {
       _recenterIfNearEdgeLinux(localPosition);
     }
 
-    // Calculate delta from last position (not from center).
-    // This avoids issues with CGWarpMouseCursorPosition integer rounding.
-    if (lastLocal != null) {
-      final delta = localPosition - lastLocal;
-      if (delta.dx != 0 || delta.dy != 0) {
-        sendRelativeMouseMove(delta.dx, delta.dy);
-      }
+    if (delta != Offset.zero) {
+      sendRelativeMouseMove(delta.dx, delta.dy);
     }
 
     return true;
@@ -642,7 +627,7 @@ class RelativeMouseModel {
 
   /// Recenter the cursor only if it's near the edge of the image widget.
   void _recenterIfNearEdge() {
-    final lastPos = _lastPointerLocalPos;
+    final lastPos = _pointerPosition.lastPosition;
     final size = _imageWidgetSize;
     if (lastPos == null || size == null) return;
 
@@ -730,6 +715,7 @@ class RelativeMouseModel {
       if (!getPointerInsideImage()) return;
 
       final center = _pointerLockCenterScreen;
+      final localCenter = _pointerLockCenterLocal;
       if (center == null) {
         return;
       }
@@ -743,8 +729,7 @@ class RelativeMouseModel {
           y: center.dy.toInt(),
         );
         if (ok) {
-          // Skip the next mouse move event - it's triggered by the recenter itself.
-          _skipNextMouseMove = true;
+          _pointerPosition.recenterTo(localCenter);
           return;
         }
 
@@ -1006,8 +991,7 @@ class RelativeMouseModel {
     _pointerLockCenterLocal = null;
     _pointerLockCenterScreen = null;
     _pointerRegionTopLeftGlobal = null;
-    _lastPointerLocalPos = null;
-    _skipNextMouseMove = false;
+    _pointerPosition.reset();
     setPointerInsideImage(false);
     _cursorClipApplied = false;
     _exitShortcutKeyDown = false;
