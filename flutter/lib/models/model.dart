@@ -2391,14 +2391,7 @@ class CanvasModel with ChangeNotifier {
   void setMobileBottomBarHeight(double height) {
     if (!isMobile || _mobileBottomBarHeight == height) return;
     _mobileBottomBarHeight = height;
-    if (_scale == _lastViewStyle.scale) {
-      updateViewStyle();
-    } else {
-      // Keep the user's pinch zoom.
-      updateSize();
-      _resetCanvasOffset(getDisplayWidth(), getDisplayHeight());
-      notifyListeners();
-    }
+    updateViewStyle();
   }
 
   updateViewStyle({refreshMousePos = true, notify = true}) async {
@@ -2792,6 +2785,7 @@ class CanvasModel with ChangeNotifier {
     _scale = 1.0;
     _locked = false;
     _lastViewStyle = ViewStyle.defaultViewStyle();
+    _mobileBottomBarHeight = 0;
     _timerMobileFocusCanvasCursor?.cancel();
     _timerMobileRestoreCanvasOffset?.cancel();
     _offsetBeforeMobileSoftKeyboard = null;
