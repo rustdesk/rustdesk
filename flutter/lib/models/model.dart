@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/mcp/mcp_utils.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
@@ -125,7 +126,7 @@ class FfiModel with ChangeNotifier {
   bool _androidDocumentPickerActive = false;
   bool _androidDocumentPickerInterruptedConnection = false;
   bool _viewOnly = false;
-  Map<String, String>? mcpLastMsgBox;
+  McpConnectionStatus? mcpPendingStatus;
   bool _showMyCursor = false;
   WeakReference<FFI> parent;
   late final SessionID sessionId;
@@ -253,6 +254,7 @@ class FfiModel with ChangeNotifier {
 
   clear() {
     _pi = PeerInfo();
+    mcpPendingStatus = null;
     lastUserDisplay = null;
     _cancelPendingMonitorRestore();
     _secure = null;
@@ -336,18 +338,21 @@ class FfiModel with ChangeNotifier {
     return (evt) async {
       var name = evt['name'];
       if (name == 'msgbox') {
+        mcpPendingStatus = mcpConnectionDialog(evt) ?? mcpPendingStatus;
         handleMsgBox(evt, sessionId, peerId);
       } else if (name == 'toast') {
         handleToast(evt, sessionId, peerId);
       } else if (name == 'set_multiple_windows_session') {
         handleMultipleWindowsSession(evt, sessionId, peerId);
       } else if (name == 'peer_info') {
+        mcpPendingStatus = null;
         handlePeerInfo(evt, peerId, false);
       } else if (name == 'sync_peer_info') {
         handleSyncPeerInfo(evt, sessionId, peerId);
       } else if (name == 'sync_platform_additions') {
         handlePlatformAdditions(evt, sessionId, peerId);
       } else if (name == 'connection_ready') {
+        mcpPendingStatus = null;
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
         resetRestartReconnectState();
@@ -896,7 +901,6 @@ class FfiModel with ChangeNotifier {
     final title = evt['title'];
     final text = evt['text'];
     final link = evt['link'];
-    mcpLastMsgBox = {'type': '$type', 'title': '$title', 'text': '$text'};
 
     // The peer-gone detector reconnects under `restarting-show` rather than an error title, so
     // it needs naming here too. By its own title, not the type: an explicitly restarted remote
@@ -939,7 +943,6 @@ class FfiModel with ChangeNotifier {
       if (_restartReconnectDelayTimer == null) {
         parent.target?.inputModel.setRelativeMouseMode(false);
         _cancelPendingMonitorRestore();
-        mcpLastMsgBox = null;
         bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
         clearPermissions();
         // Retry once more after the silent window so restart reconnect attempts
@@ -1125,7 +1128,7 @@ class FfiModel with ChangeNotifier {
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
     _cancelPendingMonitorRestore();
-    mcpLastMsgBox = null;
+    mcpPendingStatus = (state: 'connecting', message: null);
     bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
     clearPermissions();
     dialogManager.dismissAll();

@@ -723,29 +723,22 @@ void main() {
   });
 
   group('backend helpers', () {
-    test('connection state follows the last dialog', () {
-      String state(String? type, {String? title, bool ready = false}) =>
-          mcpConnectionState(ready: ready, msgType: type, msgTitle: title)
-              .state;
-      expect(state(null), 'connecting');
+    test('recognizes connection dialogs from the native session', () {
+      String? state(String type, {String? title}) =>
+          mcpConnectionDialog({'type': type, 'title': title})?.state;
       expect(state('input-password'), 'needs_password');
       expect(state('re-input-password'), 'wrong_password');
       expect(state('input-2fa'), 'needs_2fa');
       expect(state('wait-remote-accept-nook'), 'waiting_for_remote_accept');
       expect(state('error'), 'error');
-      expect(state('custom-error'), 'error');
-      expect(state('info', title: 'Connection Error'), 'error');
-      expect(state('input-password', ready: true), 'ready');
-      expect(
-          mcpConnectionState(ready: false, msgType: 'error', msgText: 'Offline')
-              .message,
+      expect(state('custom-error', title: 'Privacy mode'), isNull);
+      expect(state('restarting-show'), 'connecting');
+      expect(state('relay-hint', title: 'Connection Error'), 'error');
+      expect(mcpConnectionDialog({'type': 'error', 'text': 'Offline'})?.message,
           'Offline');
       expect(
-          mcpConnectionState(
-                  ready: false,
-                  msgType: 'input-2fa',
-                  msgTitle: 'Wrong 2FA Code')
-              .message,
+          mcpConnectionDialog({'type': 'input-2fa', 'title': 'Wrong 2FA Code'})
+              ?.message,
           'The 2FA code was rejected.');
     });
   });

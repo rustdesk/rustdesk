@@ -125,14 +125,13 @@ const Set<String> kMcpBlockedStates = {
   'error',
 };
 
-({String state, String? message}) mcpConnectionState({
-  required bool ready,
-  String? msgType,
-  String? msgTitle,
-  String? msgText,
-}) {
-  if (ready) return (state: 'ready', message: null);
-  switch (msgType) {
+typedef McpConnectionStatus = ({String state, String? message});
+
+McpConnectionStatus? mcpConnectionDialog(Map<String, dynamic> evt) {
+  switch (evt['type']) {
+    case 'restarting':
+    case 'restarting-show':
+      return (state: 'connecting', message: null);
     case 'input-password':
       return (state: 'needs_password', message: null);
     case 're-input-password':
@@ -142,17 +141,15 @@ const Set<String> kMcpBlockedStates = {
       return (
         state: 'needs_2fa',
         message:
-            msgTitle == 'Wrong 2FA Code' ? 'The 2FA code was rejected.' : null
+            evt['title'] == 'Wrong 2FA Code' ? 'The 2FA code was rejected.' : null
       );
     case 'wait-remote-accept-nook':
       return (state: 'waiting_for_remote_accept', message: null);
   }
-  if (msgType == 'error' ||
-      msgTitle == 'Connection Error' ||
-      (msgType != null && msgType.contains('error'))) {
-    return (state: 'error', message: msgText);
+  if (evt['type'] == 'error' || evt['title'] == 'Connection Error') {
+    return (state: 'error', message: evt['text']?.toString());
   }
-  return (state: 'connecting', message: null);
+  return null;
 }
 
 String? mcpNextStep(String state) {

@@ -1,7 +1,7 @@
 //! Native state behind the MCP server that runs in the Flutter main window.
 
 use crate::{
-    client::{Data, Interface, Key, KEY_MAP},
+    client::{screenshot::MCP_REQUEST_SEPARATOR, Data, Interface, Key, KEY_MAP},
     flutter_ffi::SessionID,
     input::{
         MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_MASK, MOUSE_TYPE_UP,
@@ -16,13 +16,9 @@ use std::{
     collections::{HashSet, VecDeque},
     fs::OpenOptions,
     io::Write,
-    sync::{Mutex, RwLock},
+    sync::{Mutex, OnceLock, RwLock},
 };
 
-// Joins a session id and a request id into the sid of a screenshot request.
-// The peer echoes the sid, so a result is matched with the request that asked
-// for it instead of going to the cache the screenshot dialog reads.
-const REQUEST_SEPARATOR: char = '#';
 // Results nobody collects, e.g. after a timeout, are dropped oldest first.
 const MAX_SCREENSHOTS: usize = 4;
 
@@ -32,6 +28,7 @@ lazy_static::lazy_static! {
 
 pub struct ConnectionInput {
     pub id: SessionID,
+    pub(crate) creator_session: OnceLock<SessionID>,
     owner: RwLock<InputOwner>,
     /// Keys the human holds through the legacy key API, which reports names
     /// instead of forwarded events. Recorded under the same gate as the send,
@@ -43,6 +40,7 @@ impl Default for ConnectionInput {
     fn default() -> Self {
         Self {
             id: SessionID::new_v4(),
+            creator_session: Default::default(),
             owner: Default::default(),
             human_keys: Default::default(),
         }
@@ -91,6 +89,7 @@ fn send_agent_key(
 #[derive(Default)]
 struct InputOwner {
     grant_id: String,
+    human_epoch: u64,
     human_buttons: i32,
     agent_buttons: i32,
     agent_keys: HashSet<String>,
@@ -98,6 +97,14 @@ struct InputOwner {
 }
 
 impl InputOwner {
+    fn reset(&mut self) {
+        // A password queued before a grant must stay cancelled even if the human takes over again.
+        *self = Self {
+            human_epoch: self.human_epoch.wrapping_add(1),
+            ..Self::default()
+        };
+    }
+
     fn accepts(&self, grant_id: Option<&str>) -> bool {
         match grant_id {
             Some(id) => !id.is_empty() && self.grant_id == id,
@@ -176,19 +183,32 @@ impl InputOwner {
     }
 }
 
-pub fn set_agent_control(session_id: SessionID, grant_id: String) {
+pub fn try_set_agent_control(
+    session_id: SessionID,
+    connection_id: &str,
+    grant_id: String,
+    initial: bool,
+) -> bool {
     let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
-        return;
+        return false;
     };
-    let mut owner = session.ui_handler.mcp.owner.write().unwrap();
-    // A pending grant may have resolved this connection before its last tab closed.
-    if crate::flutter::sessions::mcp_session_id(&session.ui_handler.mcp.id.to_string()).is_none() {
-        return;
+    let mcp = &session.ui_handler.mcp;
+    if mcp.id.to_string() != connection_id
+        || (initial && mcp.creator_session.get() != Some(&session_id))
+    {
+        return false;
+    }
+    let mut owner = mcp.owner.write().unwrap();
+    // The originating tab may have closed while the grant waited for the owner lock.
+    if !crate::flutter::sessions::get_session_by_session_id(&session_id)
+        .is_some_and(|current| current.ui_handler.mcp.id == mcp.id)
+    {
+        return false;
     }
     owner.release_agent(&session);
     if grant_id.is_empty() {
-        *owner = InputOwner::default();
-        return;
+        owner.reset();
+        return true;
     }
     // Human keys held through the legacy key API are not part of the forwarded
     // event tracker, so release them here. The owner lock is held, so no human
@@ -232,6 +252,7 @@ pub fn set_agent_control(session_id: SessionID, grant_id: String) {
             session.send_touch_pan_event("pan_end", x, y, false, false, false, false);
         }
     });
+    true
 }
 
 // Hold the connection itself across cleanup; UI tabs can disappear independently.
@@ -245,7 +266,7 @@ pub fn release_input(connection_id: &str, grant_id: &str, revoke: bool) {
     }
     owner.release_agent(&session);
     if revoke {
-        *owner = InputOwner::default();
+        owner.reset();
     }
 }
 
@@ -254,7 +275,7 @@ pub fn close_connection(session: &crate::flutter::FlutterSession) {
     let mut owner = session.ui_handler.mcp.owner.write().unwrap();
     owner.release_agent(session);
     session.ui_handler.mcp.human_keys.lock().unwrap().clear();
-    *owner = InputOwner::default();
+    owner.reset();
 }
 
 pub fn input_key(
@@ -430,18 +451,39 @@ pub fn with_human_key_input(
 }
 
 pub fn input_os_password(session_id: SessionID, value: String) {
-    with_human_input(session_id, || {
-        std::thread::spawn(move || {
-            // The existing sequence sleeps before typing. Keep the grant out until
-            // all of its clicks and keystrokes have been submitted.
-            with_human_input(session_id, || {
-                if let Some(session) =
-                    crate::flutter::sessions::get_session_by_session_id(&session_id)
-                {
-                    crate::client::_input_os_password(value, true, (*session).clone());
-                }
-            });
+    let Some(session) = crate::flutter::sessions::get_session_by_session_id(&session_id) else {
+        return;
+    };
+    let epoch = {
+        let owner = session.ui_handler.mcp.owner.read().unwrap();
+        if !owner.accepts(None) {
+            return;
+        }
+        owner.human_epoch
+    };
+    std::thread::spawn(move || {
+        let human_owner = || {
+            let current = crate::flutter::sessions::get_session_by_session_id(&session_id)?;
+            if !std::sync::Arc::ptr_eq(&current, &session) {
+                return None;
+            }
+            let owner = session.ui_handler.mcp.owner.read().unwrap();
+            (owner.accepts(None) && owner.human_epoch == epoch).then_some(owner)
+        };
+        let activated = crate::client::activate_os_while(&*session, !value.is_empty(), |send| {
+            let Some(_owner) = human_owner() else {
+                return false;
+            };
+            send();
+            true
         });
+        if !activated || value.is_empty() {
+            return;
+        }
+        std::thread::sleep(crate::client::OS_PASSWORD_PROMPT_DELAY);
+        if let Some(_owner) = human_owner() {
+            crate::client::_input_os_password(value, false, (*session).clone());
+        }
     });
 }
 
@@ -568,11 +610,11 @@ pub fn agent_control_grant(session_id: &SessionID) -> String {
 }
 
 pub fn screenshot_sid(session_id: &SessionID, request_id: &str) -> String {
-    format!("{session_id}{REQUEST_SEPARATOR}{request_id}")
+    format!("{session_id}{MCP_REQUEST_SEPARATOR}{request_id}")
 }
 
 pub fn is_requested_screenshot(response: &ScreenshotResponse) -> bool {
-    response.sid.contains(REQUEST_SEPARATOR)
+    response.sid.contains(MCP_REQUEST_SEPARATOR)
 }
 
 pub fn store_screenshot(response: ScreenshotResponse) {
@@ -672,6 +714,64 @@ mod tests {
             session.clone(),
         );
         (id, session)
+    }
+
+    fn set_agent_control(session_id: SessionID, grant_id: String) {
+        let connection = crate::flutter_ffi::session_mcp_connection_id(session_id).0;
+        assert!(try_set_agent_control(
+            session_id, &connection, grant_id, false
+        ));
+    }
+
+    #[test]
+    fn initial_control_requires_the_tab_that_created_the_native_connection() {
+        let (creator, session) = session();
+        let sibling = SessionID::new_v4();
+        let connection = session.ui_handler.mcp.id.to_string();
+        crate::flutter::sessions::insert_session(
+            sibling,
+            hbb_common::rendezvous_proto::ConnType::DEFAULT_CONN,
+            std::sync::Arc::new(crate::ui_session_interface::Session {
+                lc: session.lc.clone(),
+                ..Default::default()
+            }),
+        );
+        assert!(!try_set_agent_control(
+            sibling, &connection, "other-launch".into(), true
+        ));
+        assert_eq!(agent_control_grant(&creator), "");
+        assert!(try_set_agent_control(
+            creator, &connection, "new-launch".into(), true
+        ));
+        assert_eq!(agent_control_grant(&sibling), "new-launch");
+        crate::flutter_ffi::session_close(sibling);
+        crate::flutter_ffi::session_close(creator);
+    }
+
+    #[test]
+    fn desktop_readiness_requires_login_in_the_current_round() {
+        let (id, session) = session();
+        let ready = || {
+            crate::flutter_ffi::session_get_common(id, "is_desktop_ready".into(), String::new())
+                .as_deref() == Some("true")
+        };
+        let state = || session.connection_round_state.lock().unwrap();
+        let first = state().new_round();
+        state().set_connected(first);
+        assert!(!ready());
+        state().set_desktop_ready(first);
+        assert!(ready());
+        state().set_disconnected(first);
+        assert!(!ready());
+        let next = state().new_round();
+        state().set_connected(next);
+        state().set_desktop_ready(first);
+        assert!(!ready());
+        state().set_desktop_ready(next);
+        state().set_connected(first);
+        state().set_disconnected(first);
+        assert!(ready());
+        crate::flutter_ffi::session_close(id);
     }
 
     #[test]
@@ -920,6 +1020,40 @@ mod tests {
             panic!("expected text");
         };
         assert_eq!(text.key_event().seq(), "human");
+        crate::flutter_ffi::session_close(id);
+    }
+
+    #[test]
+    fn pointer_and_handoff_do_not_wait_for_the_password_prompt() {
+        use hbb_common::tokio::{runtime::Builder, time::timeout};
+        use std::time::Duration;
+
+        let (id, session) = session();
+        let mut outgoing = capture(&session);
+        let rt = Builder::new_current_thread().enable_time().build().unwrap();
+        input_os_password(id, "test-only".into());
+        rt.block_on(async {
+            // Wait for the wake-up click to reach the peer before moving the pointer.
+            timeout(Duration::from_secs(3), async {
+                for action in [MOUSE_TYPE_DOWN, MOUSE_TYPE_UP] {
+                    let mask = MOUSE_BUTTON_LEFT << 3 | action;
+                    loop {
+                        let packet = outgoing.recv().await.unwrap();
+                        if matches!(packet, Data::Message(m) if m.has_mouse_event() && m.mouse_event().mask == mask) {
+                            break;
+                        }
+                    }
+                }
+            }).await.unwrap();
+            assert!(send_mouse(id, None, 0, || {
+                crate::client::send_mouse(0, 37, 12, false, false, false, false, &*session);
+            }));
+            let next = outgoing.try_recv().unwrap();
+            assert!(matches!(next, Data::Message(m) if m.has_mouse_event() && m.mouse_event().x == 37));
+            set_agent_control(id, "grant".into());
+            set_agent_control(id, String::new());
+            assert!(timeout(crate::client::OS_PASSWORD_PROMPT_DELAY + Duration::from_millis(250), outgoing.recv()).await.is_err());
+        });
         crate::flutter_ffi::session_close(id);
     }
 

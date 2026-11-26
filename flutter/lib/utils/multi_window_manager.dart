@@ -231,10 +231,12 @@ class RustDeskMultiWindowManager {
     bool? isRDP,
     bool? isSharedPassword,
     String? connToken,
+    String? sessionId,
   }) async {
     var params = {
       "type": type.index,
       "id": remoteId,
+      if (sessionId != null) 'session_id': sessionId,
       "password": password,
       "forceRelay": forceRelay
     };
@@ -278,12 +280,14 @@ class RustDeskMultiWindowManager {
     bool? isSharedPassword,
     String? switchUuid,
     bool? forceRelay,
+    String? sessionId,
   }) async {
     return await newSession(
       WindowType.RemoteDesktop,
       kWindowEventNewRemoteDesktop,
       remoteId,
       _remoteDesktopWindows,
+      sessionId: sessionId,
       password: password,
       loginMethod: loginMethod,
       forceRelay: forceRelay,

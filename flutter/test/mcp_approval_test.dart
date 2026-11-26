@@ -11,6 +11,7 @@ import 'package:flutter_hbb/mcp/mcp_remote_window.dart';
 import 'package:flutter_hbb/main.dart' show kWindowId;
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,6 +26,45 @@ class _Binding extends Fake implements RustdeskImpl {
   @override
   String mainGetLocalOption({required String key, dynamic hint}) =>
       options[key] ?? '';
+
+  String tab = '';
+  String grant = '';
+
+  @override
+  String mainGetAppNameSync({dynamic hint}) => 'RustDesk';
+
+  @override
+  String mainGetPeerOptionSync(
+          {required String id, required String key, dynamic hint}) =>
+      '';
+
+  @override
+  String mainGetPeerSync({required String id, dynamic hint}) => '{"info":{}}';
+
+  @override
+  String sessionMcpConnectionId({required UuidValue sessionId, dynamic hint}) =>
+      sessionId.toString() == tab ? 'connection' : '';
+
+  @override
+  String mcpSessionId({required String connectionId, dynamic hint}) => tab;
+
+  @override
+  bool sessionTrySetAgentControl(
+      {required UuidValue sessionId,
+      required String connectionId,
+      required String grantId,
+      required bool initial,
+      dynamic hint}) {
+    expect(initial, isTrue);
+    expect(sessionId.toString(), tab);
+    expect(connectionId, 'connection');
+    grant = grantId;
+    return true;
+  }
+
+  @override
+  String sessionGetAgentControl({required UuidValue sessionId, dynamic hint}) =>
+      grant;
 }
 
 class _Session extends Fake implements FFI {
@@ -91,6 +131,61 @@ void main() {
             'connect again to get that session.'));
     expect(binding.options[kOptionMcpAutoApproveControl], isNull);
   });
+
+  for (final reuse in [false, true]) {
+    test(
+        reuse
+            ? 'a tab reused by the window stays under human control'
+            : 'the launched tab receives initial control', () async {
+      binding.options[kOptionOpenNewConnInTabs] = 'Y';
+      final backend = RustDeskMcpBackend(approveConnect: (_) async => true);
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const windows = MethodChannel('mixin.one/flutter_multi_window');
+      const events = MethodChannel('mixin.one/flutter_multi_window_channel');
+      messenger.setMockMethodCallHandler(windows, (call) async {
+        return call.method == 'createWindow' ? 1 : null;
+      });
+      final humanTab = Uuid().v4();
+      messenger.setMockMethodCallHandler(events, (call) async {
+        if (call.method == kWindowEventNewRemoteDesktop) {
+          final args = jsonDecode(call.arguments['arguments']);
+          binding.tab = reuse ? humanTab : args['session_id'] as String;
+        } else if (call.method == kWindowEventMcpListSessions) {
+          if (binding.tab.isEmpty) return '[]';
+          return jsonEncode([
+            {
+              'peer_id': '123',
+              'session_id': binding.tab,
+              'ready': true,
+              'state': 'ready'
+            }
+          ]);
+        }
+        return null;
+      });
+      addTearDown(() {
+        rustDeskWinManager.clearWindowType(WindowType.RemoteDesktop);
+        messenger.setMockMethodCallHandler(windows, null);
+        messenger.setMockMethodCallHandler(events, null);
+      });
+      // The window is registered before its human tab has mounted.
+      await rustDeskWinManager.newRemoteDesktop(reuse ? '123' : '456');
+      if (reuse) {
+        await expectLater(
+            backend.connect('123'),
+            toolError(
+                'The user opened 123 meanwhile. Call connect again to get that session.'));
+        expect(binding.grant, isEmpty);
+        expect((await backend.connect('123'))['mode'], 'human');
+      } else {
+        final session = await backend.connect('123');
+        expect(session['session_id'], binding.tab);
+        expect(session['mode'], 'agent');
+        expect(binding.grant, isNotEmpty);
+      }
+    });
+  }
 
   testWidgets('control cancellation and expiry have different results',
       (tester) async {

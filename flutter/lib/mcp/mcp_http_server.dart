@@ -1,19 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'mcp_dispatcher.dart';
 
 const int kMcpDefaultPort = 21119;
 const String kMcpEndpointPath = '/mcp';
 const int _kMaxBodyBytes = 1 << 20;
-
-String generateMcpToken() {
-  final rng = Random.secure();
-  final bytes = List<int>.generate(32, (_) => rng.nextInt(256));
-  return base64Url.encode(bytes).replaceAll('=', '');
-}
 
 bool _constantTimeEquals(String a, String b) {
   final x = utf8.encode(a), y = utf8.encode(b);

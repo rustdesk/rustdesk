@@ -409,12 +409,18 @@ pub fn session_mcp_authenticate(
 }
 
 #[allow(unused_variables)]
-pub fn session_set_agent_control(session_id: SessionID, grant_id: String) -> SyncReturn<()> {
+pub fn session_try_set_agent_control(
+    session_id: SessionID,
+    connection_id: String,
+    grant_id: String,
+    initial: bool,
+) -> SyncReturn<bool> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        crate::flutter_mcp::set_agent_control(session_id, grant_id);
-    }
-    SyncReturn(())
+    return SyncReturn(crate::flutter_mcp::try_set_agent_control(
+        session_id, &connection_id, grant_id, initial,
+    ));
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(false)
 }
 
 #[allow(unused_variables)]
@@ -1422,6 +1428,20 @@ pub fn main_http_request(url: String, method: String, body: Option<String>, head
 
 pub fn main_get_local_option(key: String) -> SyncReturn<String> {
     SyncReturn(get_local_option(key))
+}
+
+pub fn main_get_local_option_from_file(key: String) -> String {
+    LocalConfig::get_option_from_file(&key)
+}
+
+pub fn main_write_mcp_config(path: String, config: String) -> hbb_common::anyhow::Result<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::mcp_config::write(&path, &config).map_err(Into::into);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let _ = (path, config);
+        hbb_common::bail!("MCP config export is only available on desktop")
+    }
 }
 
 pub fn main_get_use_texture_render() -> SyncReturn<bool> {
@@ -3265,6 +3285,8 @@ pub fn session_get_common(
     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
         let v = if key == "is_screenshot_supported" {
             s.is_screenshot_supported().to_string()
+        } else if key == "is_desktop_ready" {
+            s.connection_round_state.lock().unwrap().is_desktop_ready().to_string()
         } else if key == "login_method" {
             s.lc.read().unwrap().get_login_method().to_owned()
         } else {

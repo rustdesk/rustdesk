@@ -4,12 +4,12 @@ import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart' show kWindowId;
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
-
-import 'mcp_utils.dart';
 
 const Duration _kControlRequestTimeout = Duration(seconds: 60);
 
@@ -58,7 +58,7 @@ Future<dynamic> handleMcpWindowCall(
         return false;
       }
       ffi.dialogManager.dismissAll();
-      ffi.ffiModel.mcpLastMsgBox = null;
+      ffi.ffiModel.mcpPendingStatus = (state: 'connecting', message: null);
       return true;
     case kWindowEventMcpClose:
       final args = jsonDecode(arguments as String);
@@ -71,6 +71,10 @@ Future<dynamic> handleMcpWindowCall(
           grantId.isEmpty ||
           entry.value.ffiModel.agentControlGrant != grantId) {
         return false;
+      }
+      if (allowAskForNoteAtEndOfConnection(entry.value, true)) {
+        return 'Ask the user to close this session in the RustDesk window so '
+            'they can enter an audit note or cancel.';
       }
       closeTab(entry.key);
       return true;
@@ -89,22 +93,34 @@ Future<dynamic> handleMcpWindowCall(
 
 Map<String, dynamic> _describe(String peerId, FFI ffi) {
   final pi = ffi.ffiModel.pi;
-  final ready = pi.isSet.value;
-  final box = ffi.ffiModel.mcpLastMsgBox;
-  final status = mcpConnectionState(
-      ready: ready,
-      msgType: box?['type'],
-      msgTitle: box?['title'],
-      msgText: box?['text']);
+  final pending = ffi.ffiModel.mcpPendingStatus;
+  final ready = pending == null &&
+      pi.isSet.value &&
+      bind.sessionGetCommonSync(
+              sessionId: ffi.sessionId, key: 'is_desktop_ready', param: '') ==
+          'true';
+  final screenshots = ready &&
+      bind.sessionGetCommonSync(
+              sessionId: ffi.sessionId,
+              key: 'is_screenshot_supported',
+              param: '') ==
+          'true';
   return {
     'peer_id': peerId,
     'session_id': ffi.sessionId.toString(),
     'mode': ffi.ffiModel.agentControl ? 'agent' : 'human',
     'ready': ready,
     'is_wayland': pi.isWayland,
-    'state': status.state,
-    if (status.message != null) 'message': status.message,
-    if (ready)
+    'state': pending?.state ?? (ready ? 'ready' : 'connecting'),
+    if (pending?.message != null) 'message': pending!.message,
+    if (ready) ...{
+      'screenshot_supported': screenshots,
+      'screenshot_displays': [
+        if (screenshots)
+          for (var i = 0; i < pi.displays.length; i++)
+            if (pi.currentDisplay == i || pi.currentDisplay == kAllDisplayValue)
+              i,
+      ],
       'displays': [
         for (var i = 0; i < pi.displays.length; i++)
           {
@@ -113,8 +129,11 @@ Map<String, dynamic> _describe(String peerId, FFI ffi) {
             'y': pi.displays[i].y.round(),
             'width': pi.displays[i].width,
             'height': pi.displays[i].height,
+            if (ffi.ffiModel.isPeerLinux && pi.scaleOfDisplay(i) != 1)
+              'input_scale': pi.scaleOfDisplay(i),
           }
       ],
+    },
   };
 }
 

@@ -972,6 +972,16 @@ class RustdeskImpl {
     return v;
   }
 
+  Future<String> mainGetLocalOptionFromFile(
+      {required String key, dynamic hint}) async {
+    throw UnsupportedError('Local config files are unavailable on web');
+  }
+
+  Future<void> mainWriteMcpConfig(
+      {required String path, required String config, dynamic hint}) async {
+    throw UnsupportedError('MCP config export is only available on desktop');
+  }
+
   // Do not return the real environment variables.
   // Use the global variable as the environment variable in web.
   String mainGetEnv({required String key, dynamic hint}) {
@@ -2051,8 +2061,13 @@ class RustdeskImpl {
           dynamic hint}) =>
       false;
 
-  void sessionSetAgentControl(
-      {required UuidValue sessionId, required String grantId, dynamic hint}) {}
+  bool sessionTrySetAgentControl(
+          {required UuidValue sessionId,
+          required String connectionId,
+          required String grantId,
+          required bool initial,
+          dynamic hint}) =>
+      false;
 
   String sessionGetAgentControl({required UuidValue sessionId, dynamic hint}) => '';
 

@@ -122,7 +122,7 @@ const _sessionIdProp = {
 
 const _displayProp = {
   'type': 'integer',
-  'description': 'Remote display index, default 0 (primary). Coordinates are '
+  'description': 'Remote display index, default 0. Coordinates are '
       'measured from this display\'s top-left corner.',
 };
 
@@ -150,8 +150,8 @@ final _modifiersProp = {
 const _screenshotAfterProp = {
   'type': 'integer',
   'description': 'If set, wait this many milliseconds (0 to 5000) after the '
-      'input and return a screenshot of `display`. This is a fixed wait: it '
-      'does not wait for a page to load or an app to finish.',
+      'input and return a screenshot of `display`. Choose an index from '
+      '`screenshot_displays`. The delay is a fixed wait.',
 };
 
 const _sessionSchema = {
@@ -180,6 +180,13 @@ const _sessionSchema = {
     },
     'message': {'type': 'string'},
     'next_step': {'type': 'string'},
+    'screenshot_supported': {'type': 'boolean'},
+    'screenshot_displays': {
+      'type': 'array',
+      'items': {'type': 'integer'},
+      'description':
+          'Display indices available for screenshots on this connection.',
+    },
     'displays': {
       'type': 'array',
       'items': {
@@ -190,6 +197,11 @@ const _sessionSchema = {
           'y': {'type': 'integer'},
           'width': {'type': 'integer'},
           'height': {'type': 'integer'},
+          'input_scale': {
+            'type': 'number',
+            'description':
+                'Physical pixels per input unit. RustDesk applies this factor.',
+          },
         },
         'required': ['index', 'x', 'y', 'width', 'height'],
       },
@@ -411,7 +423,8 @@ class McpDispatcher {
           'session_id': _sessionIdProp,
           'display': {
             'type': 'integer',
-            'description': 'Remote display index, default 0 (primary).',
+            'description':
+                'Choose an index in the session\'s screenshot_displays. Default 0.',
           },
           'scale': {
             'type': 'number',

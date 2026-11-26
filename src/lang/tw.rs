@@ -834,7 +834,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable MCP server", "啟用 MCP 伺服器"),
         ("Running", "執行中"),
         ("Starting...", "正在啟動..."),
-        ("Copy MCP client config", "複製 MCP 用戶端設定"),
+        ("Export MCP client config", "匯出 MCP 用戶端設定"),
         ("Regenerate token", "重新產生權杖"),
         ("MCP connection request", "MCP 連線請求"),
         ("Agent control request", "Agent 控制請求"),

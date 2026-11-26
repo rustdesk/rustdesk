@@ -834,7 +834,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable MCP server", ""),
         ("Running", ""),
         ("Starting...", ""),
-        ("Copy MCP client config", ""),
+        ("Export MCP client config", ""),
         ("Regenerate token", ""),
         ("MCP connection request", ""),
         ("Agent control request", ""),

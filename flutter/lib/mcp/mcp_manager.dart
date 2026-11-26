@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -10,6 +11,7 @@ import 'mcp_backend.dart';
 import 'mcp_dispatcher.dart';
 import 'mcp_http_server.dart';
 import 'mcp_input.dart';
+import 'mcp_token.dart';
 
 class McpServerManager {
   McpServerManager._();
@@ -28,21 +30,33 @@ class McpServerManager {
     return v != null && v > 0 && v < 65536 ? v : kMcpDefaultPort;
   }
 
-  Future<String> token() => _operations.run(() => _token());
+  Future<String> _token({bool regenerate = false}) => loadMcpToken(
+        effective: () => bind.mainGetLocalOption(key: kOptionMcpServerToken),
+        persisted: () =>
+            bind.mainGetLocalOptionFromFile(key: kOptionMcpServerToken),
+        save: (token) =>
+            bind.mainSetLocalOption(key: kOptionMcpServerToken, value: token),
+        regenerate: regenerate,
+      );
 
-  Future<String> _token({bool regenerate = false}) async {
-    var t = bind.mainGetLocalOption(key: kOptionMcpServerToken);
-    if (t.isEmpty || regenerate) {
-      t = generateMcpToken();
-      await bind.mainSetLocalOption(key: kOptionMcpServerToken, value: t);
-    }
-    return t;
-  }
+  Future<void> exportConfig(String path) => _operations.run(() async {
+        final token = await _token();
+        final config = const JsonEncoder.withIndent('  ').convert({
+          'mcpServers': {
+            'rustdesk': {
+              'type': 'http',
+              'url': endpoint(),
+              'headers': {'Authorization': 'Bearer $token'},
+            }
+          }
+        });
+        await bind.mainWriteMcpConfig(path: path, config: config);
+      });
 
   Future<String?> regenerateToken() => _run(() async {
         await _stop();
-        await _token(regenerate: true);
-        await _sync();
+        final token = await _token(regenerate: true);
+        await _sync(token: token);
       });
 
   String endpoint() => 'http://127.0.0.1:$port$kMcpEndpointPath';
@@ -63,7 +77,7 @@ class McpServerManager {
         return lastError;
       });
 
-  Future<void> _sync() async {
+  Future<void> _sync({String? token}) async {
     final enabled = mainGetLocalBoolOptionSync(kOptionEnableMcpServer) &&
         !bind.isIncomingOnly();
     if (!enabled) {
@@ -73,7 +87,8 @@ class McpServerManager {
     if (running && _server?.port == currentPort) return;
     await _stop();
     final backend = RustDeskMcpBackend(approveConnect: _askUser);
-    final server = McpHttpServer(McpDispatcher(backend), await _token());
+    final server =
+        McpHttpServer(McpDispatcher(backend), token ?? await _token());
     await server.start(port: currentPort);
     _server = server;
     _backend = backend;

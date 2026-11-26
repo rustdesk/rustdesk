@@ -2319,7 +2319,15 @@ pub mod sessions {
             .write()
             .unwrap()
             .entry((session.get_id(), conn_type))
-            .or_insert(session)
+            .or_insert_with(|| {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                session
+                    .ui_handler
+                    .mcp
+                    .creator_session
+                    .get_or_init(|| session_id);
+                session
+            })
             .ui_handler
             .session_handlers
             .write()

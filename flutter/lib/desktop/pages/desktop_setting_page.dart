@@ -753,7 +753,9 @@ class _GeneralState extends State<_General> {
           kOptionMcpAutoApproveControl,
           isServer: false,
         ),
-        _McpConnectionInfo(),
+        _McpConnectionInfo(() {
+          if (mounted) setState(() {});
+        }),
       ],
     ]);
   }
@@ -3452,21 +3454,9 @@ void changeSocks5Proxy() async {
 
 //#endregion
 
-/// Shows how to connect an MCP client and copies its configuration.
 class _McpConnectionInfo extends StatelessWidget {
-  Future<String> _config() async {
-    final m = McpServerManager.instance;
-    final token = await m.token();
-    return const JsonEncoder.withIndent('  ').convert({
-      'mcpServers': {
-        'rustdesk': {
-          'type': 'http',
-          'url': m.endpoint(),
-          'headers': {'Authorization': 'Bearer $token'},
-        }
-      }
-    });
-  }
+  final VoidCallback onTokenChanged;
+  const _McpConnectionInfo(this.onTokenChanged);
 
   @override
   Widget build(BuildContext context) {
@@ -3526,11 +3516,23 @@ class _McpConnectionInfo extends StatelessWidget {
                 foregroundColor: const MaterialStatePropertyAll(Colors.white),
                 elevation: const MaterialStatePropertyAll(0),
               ),
-              icon: const Icon(Icons.copy_rounded, size: 16),
-              label: Text(translate('Copy MCP client config')),
+              icon: const Icon(Icons.save_alt_rounded, size: 16),
+              label: Text(translate('Export MCP client config')),
               onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: await _config()));
-                showToast(translate('Copied'));
+                try {
+                  final timestamp = DateTime.now().millisecondsSinceEpoch;
+                  final path = await FilePicker.platform.saveFile(
+                    dialogTitle: translate('Export MCP client config'),
+                    fileName: 'rustdesk-mcp-$timestamp.json',
+                    type: FileType.custom,
+                    allowedExtensions: ['json'],
+                  );
+                  if (path == null) return;
+                  await m.exportConfig(path);
+                  showToast(translate('Successful'));
+                } catch (e) {
+                  showToast('${translate('Failed')}: $e');
+                }
               },
             ),
             OutlinedButton.icon(
@@ -3544,6 +3546,7 @@ class _McpConnectionInfo extends StatelessWidget {
               label: Text(translate('Regenerate token')),
               onPressed: () async {
                 final error = await m.regenerateToken();
+                onTokenChanged();
                 showToast(error ?? translate('Successful'));
               },
             ),

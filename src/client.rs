@@ -4387,33 +4387,37 @@ pub fn send_pointer_device_event(
 /// * `interface` - The interface for sending data.
 /// * `send_left_click` - Whether to send a click event.
 fn activate_os(interface: &impl Interface, send_left_click: bool) {
-    let left_down = MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_DOWN;
-    let left_up = MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_UP;
-    let right_down = MOUSE_BUTTON_RIGHT << 3 | MOUSE_TYPE_DOWN;
-    let right_up = MOUSE_BUTTON_RIGHT << 3 | MOUSE_TYPE_UP;
-    send_mouse(left_up, 0, 0, false, false, false, false, interface);
-    std::thread::sleep(Duration::from_millis(50));
-    send_mouse(0, 0, 0, false, false, false, false, interface);
-    std::thread::sleep(Duration::from_millis(50));
-    send_mouse(0, 3, 3, false, false, false, false, interface);
-    let (click_down, click_up) = if send_left_click {
-        (left_down, left_up)
-    } else {
-        (right_down, right_up)
-    };
-    std::thread::sleep(Duration::from_millis(50));
-    send_mouse(click_down, 0, 0, false, false, false, false, interface);
-    send_mouse(click_up, 0, 0, false, false, false, false, interface);
-    /*
-    let mut key_event = KeyEvent::new();
-    // do not use Esc, which has problem with Linux
-    key_event.set_control_key(ControlKey::RightArrow);
-    key_event.press = true;
-    let mut msg_out = Message::new();
-    msg_out.set_key_event(key_event.clone());
-    interface.send(Data::Message(msg_out.clone()));
-    */
+    activate_os_while(interface, send_left_click, |send| {
+        send();
+        true
+    });
 }
+
+pub(crate) fn activate_os_while(
+    interface: &impl Interface,
+    send_left_click: bool,
+    allow: impl Fn(&dyn Fn()) -> bool,
+) -> bool {
+    let mouse = |mask, x, y| send_mouse(mask, x, y, false, false, false, false, interface);
+    let left_up = MOUSE_BUTTON_LEFT << 3 | MOUSE_TYPE_UP;
+    for (mask, x, y) in [(left_up, 0, 0), (0, 0, 0), (0, 3, 3)] {
+        if !allow(&|| mouse(mask, x, y)) {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let button = if send_left_click {
+        MOUSE_BUTTON_LEFT
+    } else {
+        MOUSE_BUTTON_RIGHT
+    };
+    allow(&|| {
+        mouse(button << 3 | MOUSE_TYPE_DOWN, 0, 0);
+        mouse(button << 3 | MOUSE_TYPE_UP, 0, 0);
+    })
+}
+
+pub(crate) const OS_PASSWORD_PROMPT_DELAY: Duration = Duration::from_millis(1200);
 
 /// Input the OS's password.
 ///
@@ -4440,7 +4444,7 @@ pub(crate) fn _input_os_password(p: String, activate: bool, interface: impl Inte
     if activate {
         // Click event is used to bring up the password input box.
         activate_os(&interface, input_password);
-        std::thread::sleep(Duration::from_millis(1200));
+        std::thread::sleep(OS_PASSWORD_PROMPT_DELAY);
     }
     if !input_password {
         return;
@@ -4467,7 +4471,7 @@ pub fn auto_login(p: String, pi: &PeerInfo, interface: impl Interface) {
     }
     std::thread::spawn(move || {
         activate_os(&interface, true);
-        std::thread::sleep(Duration::from_millis(1200));
+        std::thread::sleep(OS_PASSWORD_PROMPT_DELAY);
         let mut msg_out = Message::new();
         msg_out.set_os_login(OSLogin {
             password: p,

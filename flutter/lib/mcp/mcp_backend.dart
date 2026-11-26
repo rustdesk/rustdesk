@@ -11,6 +11,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:uuid/uuid.dart';
 
 import 'mcp_dispatcher.dart';
+import 'mcp_display.dart';
 import 'mcp_input.dart';
 import 'mcp_utils.dart';
 
@@ -29,6 +30,8 @@ class McpWindowBusy extends McpToolException {
       : super('The RustDesk window did not respond. If it was just opened, '
             'try again in a moment.');
 }
+
+enum _ControlApproval { newConnection, prompt, autoTakeover }
 
 class RustDeskMcpBackend implements McpBackend {
   /// True grants initial control too; false denies, null means approval expired.
@@ -110,17 +113,24 @@ class RustDeskMcpBackend implements McpBackend {
       return i < 0 || answers[i] != null;
     });
     final sessions = <Map<String, dynamic>>[];
+    final byConnection = <String, List<Map<String, dynamic>>>{};
     for (var i = 0; i < windows.length; i++) {
       for (final s in (answers[i] ?? const []).cast<Map<String, dynamic>>()) {
-        _windowOf[s['session_id'] as String] = windows[i];
-        sessions.add(_withNextStep({
+        final id = s['session_id'] as String;
+        _windowOf[id] = windows[i];
+        final connection =
+            bind.sessionMcpConnectionId(sessionId: UuidValue(id));
+        final session = _withNextStep({
           ...s,
-          'mode': _inputFor(s['session_id'] as String)?.active == true
-              ? 'agent'
-              : 'human',
-        }));
+          'mode': _input[connection]?.active == true ? 'agent' : 'human',
+        });
+        sessions.add(session);
+        if (connection.isNotEmpty && session['ready'] == true) {
+          (byConnection[connection] ??= []).add(session);
+        }
       }
     }
+    byConnection.values.forEach(mcpShareScreenshotDisplays);
     _input.removeWhere((id, _) => bind.mcpSessionId(connectionId: id).isEmpty);
     return sessions;
   }
@@ -158,15 +168,6 @@ class RustDeskMcpBackend implements McpBackend {
     return s;
   }
 
-  Map<String, dynamic> _display(Map<String, dynamic> session, int display) {
-    final displays = (session['displays'] as List?) ?? const [];
-    if (display < 0 || display >= displays.length) {
-      throw McpToolException(
-          'Display $display does not exist; this session has ${displays.length}.');
-    }
-    return displays[display] as Map<String, dynamic>;
-  }
-
   /// Connections still waiting for approval or for their window, by peer id.
   /// They outlive the call that started them, so a late answer is kept.
   final _opening = McpSingleFlight<({String sessionId, McpInputState input})>();
@@ -177,7 +178,7 @@ class RustDeskMcpBackend implements McpBackend {
 
   /// The last screenshot request. Screenshots run one at a time because a
   /// peer keeps one pending request per display and drops the older one.
-  Future<void> _lastScreenshot = Future.value();
+  Future<void>? _lastScreenshot;
 
   final Map<String, McpInputState> _input = {};
 
@@ -345,30 +346,33 @@ class RustDeskMcpBackend implements McpBackend {
     _checkRunning();
     // The password is not passed to the new window: its arguments are
     // printed to the debug log. It is submitted once asked for.
-    await rustDeskWinManager.newRemoteDesktop(peerId);
-    final opened = DateTime.now().add(_kSessionWaitTimeout);
-    String? sessionId;
-    while (sessionId == null && DateTime.now().isBefore(opened)) {
+    final sessionId = Uuid().v4();
+    await rustDeskWinManager
+        .newRemoteDesktop(peerId, sessionId: sessionId)
+        .timeout(_kSessionWaitTimeout, onTimeout: () => throw McpWindowBusy());
+    final deadline = DateTime.now().add(_kSessionWaitTimeout);
+    while (true) {
       _checkRunning();
+      Iterable<Map<String, dynamic>> sessions = const [];
       try {
-        for (final s in await listSessions()) {
-          if (s['peer_id'] == peerId) sessionId = s['session_id'] as String;
-        }
+        sessions = (await listSessions()).where((s) => s['peer_id'] == peerId);
       } on McpWindowBusy {
         // The window is still starting; poll again.
       }
-      if (sessionId == null) {
-        await Future.delayed(const Duration(milliseconds: 250));
+      if (!DateTime.now().isBefore(deadline)) {
+        throw McpToolException(
+            'Timed out waiting for the session window to open.');
       }
+      if (sessions.any((s) => s['session_id'] == sessionId)) break;
+      if (sessions.isNotEmpty) {
+        throw McpToolException('The user opened $peerId meanwhile. Call '
+            'connect again to get that session.');
+      }
+      await Future.delayed(const Duration(milliseconds: 250));
     }
-    if (sessionId == null) {
-      throw McpToolException(
-          'Timed out waiting for the session window to open.');
-    }
-    _checkRunning();
-    // Connecting approves initial control of this new session. The separate
-    // control setting governs taking over sessions that are already open.
-    final input = await _requestControl(sessionId, ask: false);
+    // A new tab can still be attached to an existing native connection.
+    final input =
+        await _requestControl(sessionId, _ControlApproval.newConnection);
     return (sessionId: sessionId, input: input);
   }
 
@@ -376,8 +380,11 @@ class RustDeskMcpBackend implements McpBackend {
   Future<String> requestControl(String sessionId) async {
     await _find(sessionId);
     try {
-      await _requestControl(sessionId,
-          ask: !mainGetLocalBoolOptionSync(kOptionMcpAutoApproveControl));
+      await _requestControl(
+          sessionId,
+          mainGetLocalBoolOptionSync(kOptionMcpAutoApproveControl)
+              ? _ControlApproval.autoTakeover
+              : _ControlApproval.prompt);
       return 'Granted. The connection is now under agent control.';
     } on TimeoutException {
       return 'Not granted yet: the user has not answered the request in the '
@@ -385,17 +392,24 @@ class RustDeskMcpBackend implements McpBackend {
     }
   }
 
-  Future<McpInputState> _requestControl(String sessionId,
-      {required bool ask}) async {
+  Future<McpInputState> _requestControl(
+      String sessionId, _ControlApproval approval) async {
     _checkRunning();
     final connectionId = _connectionId(sessionId);
     var request = _controlRequests[connectionId];
     final current = _input[connectionId];
+    if (approval == _ControlApproval.newConnection &&
+        (request != null || current?.active == true)) {
+      throw McpToolException('Control has already been requested for this '
+          'connection. Call connect again to get its current state.');
+    }
     if (request == null && current != null && current.active) return current;
     if (request == null) {
       final id = Uuid().v4();
-      request =
-          (id: id, result: _grantControl(sessionId, connectionId, ask, id));
+      request = (
+        id: id,
+        result: _grantControl(sessionId, connectionId, id, approval)
+      );
       _controlRequests[connectionId] = request;
     }
     try {
@@ -418,8 +432,8 @@ class RustDeskMcpBackend implements McpBackend {
     }
   }
 
-  Future<McpInputState?> _grantControl(
-      String sessionId, String connectionId, bool ask, String grantId) async {
+  Future<McpInputState?> _grantControl(String sessionId, String connectionId,
+      String grantId, _ControlApproval approval) async {
     void checkCurrent() {
       _checkRunning();
       if (_controlRequests[connectionId]?.id != grantId ||
@@ -431,7 +445,7 @@ class RustDeskMcpBackend implements McpBackend {
     // Yield before checking the request so the caller can register it.
     await _releaseConnection(connectionId);
     checkCurrent();
-    if (ask) {
+    if (approval == _ControlApproval.prompt) {
       final granted = await _callWindow(
           kWindowEventMcpRequestControl,
           {'session_id': sessionId, 'request_id': grantId},
@@ -445,12 +459,23 @@ class RustDeskMcpBackend implements McpBackend {
     await _find(sessionId);
     checkCurrent();
     final input = McpInputState(grantId);
-    bind.sessionSetAgentControl(
-        sessionId: UuidValue(sessionId), grantId: input.grantId);
+    if (!bind.sessionTrySetAgentControl(
+        sessionId: UuidValue(sessionId),
+        connectionId: connectionId,
+        grantId: input.grantId,
+        initial: approval == _ControlApproval.newConnection)) {
+      throw McpToolException('Control was not granted. Call connect again to '
+          'get the current session, then use request_control.');
+    }
     _input[connectionId] = input;
-    await _refreshControl();
-    _checkGrant(sessionId, input);
-    return input;
+    try {
+      await _refreshControl();
+      _checkGrant(sessionId, input);
+      return input;
+    } catch (_) {
+      await _releaseInput(connectionId, input);
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> _waitForSettled(
@@ -471,8 +496,12 @@ class RustDeskMcpBackend implements McpBackend {
       if (state == 'error') {
         final reason = s['message'] ?? 'unknown error';
         if (closeOnError && input != null) {
-          await _callWindow(kWindowEventMcpClose,
+          final result = await _callWindow(kWindowEventMcpClose,
               {'session_id': sessionId, 'grant_id': input.grantId});
+          if (result is String) {
+            await takeOver(sessionId, input.grantId);
+            throw McpToolException('Connection failed: $reason. $result');
+          }
           throw McpToolException('Connection failed: $reason.');
         }
         throw McpToolException('Connection failed: $reason. ${s['next_step']}');
@@ -564,20 +593,25 @@ class RustDeskMcpBackend implements McpBackend {
 
   @override
   Future<McpImage> screenshot(String sessionId, {int display = 0}) async {
+    Future<void> checkDisplay() async =>
+        mcpCheckScreenshotDisplay(await _ready(sessionId), display);
+    await checkDisplay();
     final previous = _lastScreenshot;
     final done = Completer<void>();
     _lastScreenshot = done.future;
     try {
-      await previous;
+      if (previous != null) {
+        await previous;
+        await checkDisplay();
+      }
       return await _screenshot(sessionId, display);
     } finally {
       done.complete();
+      if (_lastScreenshot == done.future) _lastScreenshot = null;
     }
   }
 
   Future<McpImage> _screenshot(String sessionId, int display) async {
-    final s = await _ready(sessionId);
-    _display(s, display);
     final sid = UuidValue(sessionId);
     // The result carries this id back, so a late result of an earlier
     // request is never taken for this one.
@@ -612,17 +646,6 @@ class RustDeskMcpBackend implements McpBackend {
     _checkGrant(sid.toString(), input);
     await bind.sessionSendMcpMouse(
         sessionId: sid, grantId: input.grantId, msg: jsonEncode(msg));
-  }
-
-  ({int x, int y}) _toRemote(
-      Map<String, dynamic> session, int display, int x, int y) {
-    final d = _display(session, display);
-    final width = d['width'] as int, height = d['height'] as int;
-    if (x < 0 || y < 0 || x >= width || y >= height) {
-      throw McpToolException(
-          'Point ($x, $y) is outside display $display (${width}x$height).');
-    }
-    return (x: (d['x'] as int) + x, y: (d['y'] as int) + y);
   }
 
   /// Holds [modifiers] as real key presses around [body]. The remote side
@@ -669,8 +692,9 @@ class RustDeskMcpBackend implements McpBackend {
       _serialized(sessionId, (input) async {
         final s = await _writable(sessionId);
         final sid = UuidValue(sessionId);
-        final p = _toRemote(s, display, x, y);
-        final end = action == 'drag' ? _toRemote(s, display, toX!, toY!) : null;
+        final p = mcpRemotePoint(s, display, x, y);
+        final end =
+            action == 'drag' ? mcpRemotePoint(s, display, toX!, toY!) : null;
         return _holding(input, sid, modifiers, () async {
           input.checkActive();
           await _sendMouse(input, sid,
@@ -727,7 +751,7 @@ class RustDeskMcpBackend implements McpBackend {
       _serialized(sessionId, (input) async {
         final s = await _writable(sessionId);
         final sid = UuidValue(sessionId);
-        final p = _toRemote(s, display, x, y);
+        final p = mcpRemotePoint(s, display, x, y);
         return _holding(input, sid, modifiers, () async {
           input.checkActive();
           await _sendMouse(input, sid,
@@ -854,7 +878,12 @@ class RustDeskMcpBackend implements McpBackend {
         _clearHeld(connectionId, input);
       }
     });
-    if (await closing != true) {
+    final result = await closing;
+    if (result is String) {
+      await _refreshControl();
+      throw McpToolException(result);
+    }
+    if (result != true) {
       throw McpToolException('Control changed or the session was closed.');
     }
   }

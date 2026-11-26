@@ -4179,7 +4179,14 @@ impl Connection {
                     // TODO: Maybe we can do a voice call from cm directly.
                 }
                 Some(message::Union::ScreenshotRequest(request)) => {
-                    if let Some(tx) = self.inner.tx.clone() {
+                    if let Some(reply) = Self::inactive_mcp_screenshot(
+                        &request,
+                        self.video_source(),
+                        &self.server,
+                        self.inner.id(),
+                    ) {
+                        self.send(reply).await;
+                    } else if let Some(tx) = self.inner.tx.clone() {
                         crate::video_service::set_take_screenshot(
                             self.video_source(),
                             request.display as _,
@@ -4659,6 +4666,42 @@ impl Connection {
             true
         };
         ((failure, time), res)
+    }
+
+    fn inactive_mcp_screenshot(
+        request: &ScreenshotRequest,
+        source: VideoSource,
+        server: &ServerPtrWeak,
+        conn_id: i32,
+    ) -> Option<Message> {
+        if !request
+            .sid
+            .contains(crate::client::screenshot::MCP_REQUEST_SEPARATOR)
+        {
+            return None;
+        }
+        // A monitor may be switched after the controller's capture check. A refresh
+        // can only produce a screenshot while the capture service is subscribed.
+        let name = video_service::get_service_name(source, request.display as usize);
+        if server.upgrade().is_some_and(|s| {
+            s.read()
+                .unwrap()
+                .services
+                .get(&name)
+                .is_some_and(|svc| svc.is_subed(conn_id))
+        }) {
+            return None;
+        }
+        let mut reply = Message::new();
+        reply.set_screenshot_response(ScreenshotResponse {
+            sid: request.sid.clone(),
+            msg: format!(
+                "Display {} is not being captured by this connection.",
+                request.display
+            ),
+            ..Default::default()
+        });
+        Some(reply)
     }
 
     fn refresh_video_display(&self, display: Option<usize>) {
@@ -7377,6 +7420,36 @@ mod test {
 
     fn unauthorized_count() -> usize {
         UNAUTHORIZED_CONNS.lock().unwrap().len()
+    }
+
+    #[test]
+    fn mcp_screenshot_requires_this_connections_capture() {
+        let server = crate::server::new_for_test();
+        let source = VideoSource::Monitor;
+        let name = video_service::get_service_name(source, 2);
+        let service = GenericService::new(name, false);
+        service.on_subscribe(ConnInner {
+            id: 7,
+            ..Default::default()
+        });
+        server.write().unwrap().add_service(Box::new(service));
+        let check = |sid: &str, id| {
+            Connection::inactive_mcp_screenshot(
+                &ScreenshotRequest {
+                    sid: sid.to_owned(),
+                    display: 2,
+                    ..Default::default()
+                },
+                source,
+                &Arc::downgrade(&server),
+                id,
+            )
+        };
+        assert!(check("session", 3).is_none());
+        assert!(check("session#request", 7).is_none());
+        let reply = check("session#request", 3).unwrap();
+        assert!(matches!(reply.union, Some(message::Union::ScreenshotResponse(r))
+            if r.sid == "session#request" && r.msg.contains("not being captured")));
     }
 
     #[test]

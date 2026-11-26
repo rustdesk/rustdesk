@@ -1,12 +1,12 @@
 # Desktop MCP server
 
-Enable the MCP server in desktop Settings → General. Copy its client configuration into an MCP client supporting Streamable HTTP. The endpoint defaults to `http://127.0.0.1:21119/mcp`; it requires a Bearer token and accepts loopback Host/Origin values only. The server is disabled by default.
+Enable the MCP server in desktop Settings → General. Choose **Export MCP client config**, save the JSON to a new file in a private local folder, and import its `mcpServers.rustdesk` entry into a client supporting Streamable HTTP. RustDesk creates the file with restricted permissions and keeps the configuration off the system clipboard. The endpoint defaults to `http://127.0.0.1:21119/mcp` and requires a Bearer token. It accepts loopback Host/Origin values only. The server is disabled by default.
 
 ## Token storage and regeneration
 
-The Bearer token is stored as a plain-text local option, `mcp-server-token`, in `RustDesk_local.toml` in RustDesk's configuration directory. It is not stored in the operating system credential store. Keep that file and copied MCP client configurations private; both contain the token. It authenticates access to this controller's MCP service, not to a remote machine.
+The Bearer token is stored as a plain-text local option, `mcp-server-token`, in `RustDesk_local.toml` in RustDesk's configuration directory. It is not stored in the operating system credential store. Keep that file and exported client configurations private because both contain the token. It authenticates access to this controller's MCP service, not to a remote machine.
 
-**Regenerate token** stops the MCP server, generates and saves a replacement token, then restarts the service if enabled. The old token no longer authenticates new requests, and existing server connections are closed. Copy the updated client configuration to every MCP client that should retain access. Remote RustDesk passwords are separate and are not changed by this operation.
+**Regenerate token** stops the MCP server and closes existing server connections. RustDesk writes a new token, verifies it against both the saved and effective settings, and restarts the service if enabled. After success, export a fresh configuration for each client that should retain access. If verification fails, the service stays stopped and reports an error. The previous token may still work after you restart RustDesk. Correct the local settings and regenerate again to revoke it. Remote RustDesk passwords are separate.
 
 ## Connection and takeover approval
 
@@ -19,13 +19,15 @@ Both default to off. For existing installations, the original `allow-mcp-auto-ap
 
 An unanswered connection or takeover prompt expires after 60 seconds and reports an approval timeout, distinct from an explicit denial. Tool calls wait for at most about 25 seconds at a time; if approval is still pending, call the same tool again to keep waiting on that request.
 
-## Screenshot scaling
+## Screenshots and pointer coordinates
+
+`get_session` and `list_sessions` report `screenshot_supported` and `screenshot_displays` for each ready session. Choose a display index from `screenshot_displays` for `screenshot` or `screenshot_after_ms`. These indices include the monitors shown in other windows of the same connection. To capture another monitor, select it in a remote window. The default display index is `0`. On older peers, the controller relies on the monitor selections reported by the windows. If a monitor is added or capture changes during a request, a screenshot may still time out. Reselect the monitor and retry.
 
 `screenshot` accepts an optional `scale` greater than zero and at most one, for example `{"session_id":"…","scale":0.5}`. The default, `1`, returns the original PNG. Scaling happens on the controller after capture: it reduces returned image bytes and model image-processing work, not the remote capture or transfer time.
 
 The result reports the returned image's `width` and `height`, the original `remote_width` and `remote_height`, and `coordinate_scale_x` / `coordinate_scale_y`. Mouse and scroll coordinates always use **original remote display pixels**, measured from that display's top-left corner. Multiply coordinates observed in the scaled image by these factors to map them back. Use the reported factors rather than simply dividing by `scale`, because integer image dimensions are rounded. Regions/cropping are not supported.
 
-Screenshots attached through `screenshot_after_ms` remain at original resolution.
+RustDesk maps those original pixels to the selected monitor's input coordinates, including per-monitor scaling on Wayland. Screenshots attached through `screenshot_after_ms` use the original resolution. If an input succeeds and its screenshot is unavailable, the tool reports both outcomes.
 
 ## Remote session actions
 
