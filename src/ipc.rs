@@ -1091,7 +1091,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                 }
                 #[cfg(all(target_os = "linux", feature = "drm"))]
                 let drm_capture_was_on = crate::platform::linux::drm_capture_enabled();
-                if let Err(error) = crate::trusted_devices::config::update_options(value).await {
+                if let Err(error) = crate::trusted_devices::config::update_ipc_options(value).await
+                {
                     allow_err!(
                         stream
                             .send(&Data::SecurityConfigError(error.to_string()))
@@ -2024,7 +2025,7 @@ async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     let mut c = connect(ms_timeout, "").await?;
     c.send(&Data::Options(None)).await?;
     if let Some(Data::Options(Some(value))) = c.next_timeout(ms_timeout).await? {
-        Config::set_options(value.clone());
+        base::config::set_ipc_options(value.clone());
         Ok(value)
     } else {
         Ok(Config::get_options())
@@ -2081,7 +2082,7 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
             _ => {}
         }
     }
-    Config::set_options(value);
+    base::config::set_ipc_options(value);
     Ok(())
 }
 
@@ -2436,6 +2437,10 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
     }
     Ok(())
 }
+
+#[cfg(all(windows, test))]
+#[path = "ipc/config_tests.rs"]
+pub(crate) mod config_tests;
 
 #[cfg(test)]
 mod test {

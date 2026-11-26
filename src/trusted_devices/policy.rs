@@ -40,10 +40,28 @@ pub fn changes_authentication(options: &HashMap<String, String>) -> bool {
 }
 
 pub async fn update_options(options: HashMap<String, String>) -> ResultType<()> {
+    update_options_with(options, config::set_options).await
+}
+
+#[cfg(not(target_os = "ios"))]
+pub async fn update_ipc_options(options: HashMap<String, String>) -> ResultType<()> {
+    update_options_with(options, |options| {
+        change_options(config::effective_options(options.clone()), || {
+            base::config::set_ipc_options(options);
+            Ok(())
+        })
+    })
+    .await
+}
+
+async fn update_options_with(
+    options: HashMap<String, String>,
+    apply: fn(HashMap<String, String>) -> ResultType<()>,
+) -> ResultType<()> {
     let old = Config::get_options();
     let new = config::effective_options(options.clone());
     let revoke = authentication_changed(&old, &new);
-    config::update_auth(revoke, move || config::set_options(options)).await
+    config::update_auth(revoke, move || apply(options)).await
 }
 
 pub(super) fn change_options<T>(

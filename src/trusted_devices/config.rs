@@ -1,4 +1,6 @@
 use super::policy;
+#[cfg(not(target_os = "ios"))]
+pub use super::policy::update_ipc_options;
 pub use super::policy::{changes_authentication, update_options};
 use base::config::keys;
 use hbb_common::{
@@ -47,7 +49,7 @@ pub async fn update_auth<T: Send + 'static>(
 pub fn sync_config(value: Config, options: Config2) -> ResultType<()> {
     let _storage = super::storage()?;
     Config::set(value);
-    Config2::set(options.clone());
+    base::config::set_ipc_config2(options.clone());
     snapshot()?;
     // Explicit configuration sync carries the source's grants and removals.
     options.sync_trusted_devices()
@@ -270,7 +272,7 @@ pub fn set_config(value: Config) -> ResultType<bool> {
 
 pub fn set_config2(value: Config2) -> ResultType<bool> {
     policy::change_options(effective_options(value.options.clone()), || {
-        Ok(Config2::set(value))
+        Ok(base::config::set_ipc_config2(value))
     })
 }
 
