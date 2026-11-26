@@ -15,9 +15,17 @@ use base::config::keys;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-const TIME_HEARTBEAT: Duration = Duration::from_secs(15);
 const UPLOAD_SYSINFO_TIMEOUT: Duration = Duration::from_secs(120);
 const TIME_CONN: Duration = Duration::from_secs(3);
+
+#[cfg(any(not(target_os = "ios"), test))]
+fn idle_heartbeat_interval() -> Duration {
+    const MIN_SECS: u64 = 15;
+    const MAX_SECS: u64 = 300;
+    let value = Config::get_option(keys::OPTION_API_IDLE_HEARTBEAT_INTERVAL_SECONDS);
+    let seconds = value.trim().parse::<u64>().unwrap_or(MIN_SECS);
+    Duration::from_secs(seconds.clamp(MIN_SECS, MAX_SECS))
+}
 
 #[cfg(not(any(target_os = "ios")))]
 lazy_static::lazy_static! {
@@ -225,7 +233,7 @@ async fn start_hbbs_sync_async() {
                         }
                     }
                 }
-                if conns.is_empty() && last_sent.map(|x| x.elapsed() < TIME_HEARTBEAT).unwrap_or(false) {
+                if conns.is_empty() && last_sent.map(|x| x.elapsed() < idle_heartbeat_interval()).unwrap_or(false) {
                     continue;
                 }
                 last_sent = Some(Instant::now());
@@ -515,6 +523,25 @@ mod tests {
         ]
         .concat();
         assert_eq!(switch_grant_signed_msg("id1", "c1", "1700000000"), expected);
+    }
+}
+
+#[cfg(test)]
+mod heartbeat_tests {
+    use super::{config::OVERWRITE_SETTINGS, idle_heartbeat_interval, keys};
+
+    #[test]
+    fn configured_idle_heartbeat_interval() {
+        let key = keys::OPTION_API_IDLE_HEARTBEAT_INTERVAL_SECONDS;
+        let actual = ["", "invalid", "10", "60", "600"].map(|value| {
+            OVERWRITE_SETTINGS
+                .write()
+                .unwrap()
+                .insert(key.into(), value.into());
+            idle_heartbeat_interval().as_secs()
+        });
+        OVERWRITE_SETTINGS.write().unwrap().remove(key);
+        assert_eq!(actual, [15, 15, 15, 60, 300]);
     }
 }
 
