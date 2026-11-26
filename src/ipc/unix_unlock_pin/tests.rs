@@ -12,6 +12,24 @@ fn network_pin_verification_does_not_authorize_pin_changes() {
 }
 
 #[test]
+fn security_unlock_reports_a_full_grant_table() {
+    let uid = 1000;
+    let new_key = Some([u8::MAX; 32]);
+    for (valid, key, expected) in [
+        (true, new_key, Err("Please try later".to_owned())),
+        (false, new_key, Ok(false)),
+        (true, None, Ok(true)),
+    ] {
+        let mut grants = Grants::default();
+        for index in 0..MAX_GRANTS {
+            assert!(grants.approve(uid, [index as u8; 32]));
+        }
+        let result = grants.verify(uid, key, || Ok(valid));
+        assert_eq!(result.map_err(|err| err.to_string()), expected);
+    }
+}
+
+#[test]
 fn pin_management_requires_the_users_own_approved_token() {
     let token = [42; 32];
     let mut grants = Grants::default();

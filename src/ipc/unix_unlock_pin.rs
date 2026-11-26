@@ -103,18 +103,18 @@ impl Grants {
         true
     }
 
-    fn verify(
-        &mut self,
-        uid: u32,
-        key: Option<Token>,
-        matches_pin: impl FnOnce() -> ResultType<bool>,
-    ) -> ResultType<bool> {
+    fn verify<F>(&mut self, uid: u32, key: Option<Token>, matches_pin: F) -> ResultType<bool>
+    where
+        F: FnOnce() -> ResultType<bool>,
+    {
         let now = Instant::now();
-        if self.last_attempt.is_some_and(|last| now - last < RETRY) {
-            return Err(anyhow!("Too frequent"));
-        }
+        let too_frequent = self.last_attempt.is_some_and(|last| now - last < RETRY);
+        ensure!(!too_frequent, "Too frequent");
         self.last_attempt = Some(now);
-        Ok(matches_pin()? && key.map_or(true, |key| self.approve(uid, key)))
+        let valid = matches_pin()?;
+        let grant_denied = valid && key.is_some_and(|key| !self.approve(uid, key));
+        ensure!(!grant_denied, "Please try later");
+        Ok(valid)
     }
 }
 
