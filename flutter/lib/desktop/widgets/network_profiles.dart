@@ -36,6 +36,7 @@ String _profileText(String key) {
     'Save a profile in Network settings.':
         'Сохраните профиль в разделе «Настройки → Сеть».',
     'Could not load network profiles': 'Не удалось загрузить профили сети',
+    'Could not delete network profile': 'Не удалось удалить профиль сети',
     'Network profile changes locked settings':
         'Профиль меняет заблокированные настройки сети',
     'Network profile applied': 'Профиль сети применён',
@@ -114,6 +115,16 @@ Map<String, _NetworkProfile> _loadProfiles() {
       key as String, _NetworkProfile.fromJson(value as Map<String, dynamic>)));
 }
 
+Future<void> _storeProfiles(Map<String, _NetworkProfile> profiles) async {
+  final encoded = profiles.isEmpty
+      ? ''
+      : transformWindowsUserData(jsonEncode(profiles), protect: true);
+  await bind.mainSetLocalOption(key: _storageKey, value: encoded);
+  if (bind.mainGetLocalOption(key: _storageKey) != encoded) {
+    throw StateError('Network profiles did not match');
+  }
+}
+
 Future<void> saveNetworkProfile(BuildContext context) async {
   try {
     final profiles = _loadProfiles();
@@ -159,12 +170,7 @@ Future<void> saveNetworkProfile(BuildContext context) async {
     if (name == null) return;
     final profile = await _NetworkProfile.read();
     final updated = _loadProfiles()..[name] = profile;
-    final encoded =
-        transformWindowsUserData(jsonEncode(updated), protect: true);
-    await bind.mainSetLocalOption(key: _storageKey, value: encoded);
-    if (bind.mainGetLocalOption(key: _storageKey) != encoded) {
-      throw StateError('Network profiles did not match');
-    }
+    await _storeProfiles(updated);
     await bind.mainSetLocalOption(key: _activeKey, value: name);
     notifyNetworkProfileChange();
     showToast(_profileText('Network profile saved'));
@@ -212,13 +218,46 @@ class _NetworkProfileButtonState extends State<NetworkProfileButton> {
 
   void _refresh() => setState(() => _activeName = _findActiveName());
 
+  Future<void> _deleteProfile(String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(translate('Confirm Delete')),
+        content: Text(name),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(translate('Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(translate('Delete')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final profiles = _loadProfiles();
+      if (profiles.remove(name) == null) return;
+      await _storeProfiles(profiles);
+      if (bind.mainGetLocalOption(key: _activeKey) == name) {
+        await bind.mainSetLocalOption(key: _activeKey, value: '');
+      }
+    } catch (_) {
+      showToast(_profileText('Could not delete network profile'));
+    } finally {
+      notifyNetworkProfileChange();
+    }
+  }
+
   Future<void> _selectProfile() async {
     setState(() => _busy = true);
     try {
       final profiles = _loadProfiles();
       final active = await _findActiveName();
       if (!mounted) return;
-      final name = await showDialog<String>(
+      final selection = await showDialog<({String name, bool delete})>(
         context: context,
         builder: (context) => SimpleDialog(
           title: Text(_profileText('Network profiles')),
@@ -230,20 +269,28 @@ class _NetworkProfileButtonState extends State<NetworkProfileButton> {
                     Text(_profileText('Save a profile in Network settings.')),
               ),
             for (final name in profiles.keys)
-              SimpleDialogOption(
-                onPressed: () => Navigator.of(context).pop(name),
-                child: Row(
-                  children: [
+              ListTile(
+                leading:
                     Icon(name == active ? Icons.check : Icons.lan_outlined),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(name)),
-                  ],
+                title: Text(name),
+                onTap: () =>
+                    Navigator.of(context).pop((name: name, delete: false)),
+                trailing: IconButton(
+                  tooltip: translate('Delete'),
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () =>
+                      Navigator.of(context).pop((name: name, delete: true)),
                 ),
               ),
           ],
         ),
       );
-      if (name == null || !mounted) return;
+      if (selection == null || !mounted) return;
+      final name = selection.name;
+      if (selection.delete) {
+        await _deleteProfile(name);
+        return;
+      }
       final target = profiles[name]!;
       if (target.matches(await _NetworkProfile.read())) {
         await bind.mainSetLocalOption(key: _activeKey, value: name);
