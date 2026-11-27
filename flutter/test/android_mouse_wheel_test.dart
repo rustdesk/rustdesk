@@ -10,6 +10,8 @@ void main() {
     const origin = Offset(100, 100);
     final signals = <Offset>[];
     final touches = <PointerDownEvent>[];
+    tester.view.physicalSize = const Size(1600, 1200);
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(AccessibilityListener(
       child: Listener(
         behavior: HitTestBehavior.opaque,
@@ -26,35 +28,45 @@ void main() {
         kind: PointerDeviceKind.mouse, position: origin));
     await tester.sendEventToBinding(const PointerHoverEvent(
         kind: PointerDeviceKind.mouse, position: origin));
-    for (final direction in [1, -1]) {
-      await tester.sendEventToBinding(PointerDownEvent(
-          pointer: 1,
-          kind: PointerDeviceKind.unknown,
-          buttons: kPrimaryButton,
-          size: 1,
-          position: origin));
-      for (final distance in [32, 64]) {
-        await tester.sendEventToBinding(PointerMoveEvent(
+    for (final dpr in [1.0, 2.25, 3.5]) {
+      tester.view.devicePixelRatio = dpr;
+      await tester.pump();
+      for (final direction in [1, -1]) {
+        await tester.sendEventToBinding(PointerDownEvent(
             pointer: 1,
             kind: PointerDeviceKind.unknown,
             buttons: kPrimaryButton,
             size: 1,
-            position: origin + Offset(0, distance * direction.toDouble()),
-            delta: Offset(0, 32 * direction.toDouble())));
+            position: origin));
+        for (final distance in [72 / dpr, 144 / dpr]) {
+          await tester.sendEventToBinding(PointerMoveEvent(
+              pointer: 1,
+              kind: PointerDeviceKind.unknown,
+              buttons: kPrimaryButton,
+              size: 1,
+              position: origin + Offset(0, distance * direction.toDouble()),
+              delta: Offset(0, 72 / dpr * direction.toDouble())));
+        }
+        await tester.sendEventToBinding(PointerUpEvent(
+            pointer: 1,
+            kind: PointerDeviceKind.unknown,
+            size: 1,
+            position: origin + Offset(0, 144 / dpr * direction.toDouble())));
       }
-      await tester.sendEventToBinding(PointerUpEvent(
-          pointer: 1,
-          kind: PointerDeviceKind.unknown,
-          size: 1,
-          position: origin + Offset(0, 64 * direction.toDouble())));
     }
-    expect(signals, [const Offset(0, -64), const Offset(0, 64)]);
+    expect(signals, [
+      for (var i = 0; i < 3; i++) ...[
+        const Offset(0, -64),
+        const Offset(0, 64),
+      ]
+    ]);
     expect(touches, isEmpty);
 
     // Unmatched accessibility input must retain the existing touch workaround.
     await tester.sendEventToBinding(const PointerDownEvent(
         pointer: 2,
         kind: PointerDeviceKind.unknown,
+        buttons: kPrimaryButton,
         size: 1,
         position: Offset(300, 100)));
     await tester.sendEventToBinding(const PointerUpEvent(

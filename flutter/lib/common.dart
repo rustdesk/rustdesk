@@ -1487,7 +1487,9 @@ class _AccessibilityListenerState extends State<AccessibilityListener> {
   final _mouseWheel = AndroidMouseWheel();
 
   bool _handleMouseWheel(PointerEvent event) {
-    final ticks = _mouseWheel.handle(event);
+    final ticks = _mouseWheel.handle(event,
+        logicalPixelsPerNotch: AndroidMouseWheel.physicalPixelsPerNotch /
+            View.of(context).devicePixelRatio);
     if (ticks == null) return false;
     for (var i = 0; i < ticks.abs(); i++) {
       GestureBinding.instance.handlePointerEvent(PointerScrollEvent(

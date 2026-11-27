@@ -3,6 +3,8 @@ import 'package:flutter/gestures.dart';
 /// Converts Android wheel input delivered as unknown touch sequences.
 class AndroidMouseWheel {
   static const scrollDistance = 64.0;
+  // The measured notch is 144 physical pixels (64 logical pixels at DPR 2.25).
+  static const physicalPixelsPerNotch = 144.0;
 
   Offset? _mousePosition;
   int? _pointer;
@@ -13,7 +15,8 @@ class AndroidMouseWheel {
   Offset get scrollPosition => _mousePosition!;
 
   /// Returns null for unrelated input, otherwise the number of complete notches.
-  int? handle(PointerEvent event) {
+  int? handle(PointerEvent event,
+      {double logicalPixelsPerNotch = scrollDistance}) {
     if ((event is PointerHoverEvent || event is PointerUpEvent) &&
         event.kind == PointerDeviceKind.mouse) {
       _mousePosition = event.buttons == 0 ? event.position : null;
@@ -49,12 +52,11 @@ class AndroidMouseWheel {
       _pointer = null;
       return null;
     }
-    // The observed synthetic wheel notch consists of two 32-logical-pixel moves.
     _remainder += event.position.dy - _position!.dy;
     _position = event.position;
-    final notches = _remainder / scrollDistance;
+    final notches = _remainder / logicalPixelsPerNotch;
     final ticks = (notches + notches.sign * 0.000001).truncate();
-    _remainder -= ticks * scrollDistance;
+    _remainder -= ticks * logicalPixelsPerNotch;
     return ticks;
   }
 }
