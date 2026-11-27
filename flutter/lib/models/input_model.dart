@@ -209,84 +209,78 @@ class ToReleaseRawKeys {
     lastSuperKeyEvent = null;
   }
 
+  Iterable<RawKeyEvent> get pressedKeys => [
+        lastLShiftKeyEvent,
+        lastRShiftKeyEvent,
+        lastLCtrlKeyEvent,
+        lastRCtrlKeyEvent,
+        lastLAltKeyEvent,
+        lastRAltKeyEvent,
+        lastLCommandKeyEvent,
+        lastRCommandKeyEvent,
+        lastSuperKeyEvent,
+      ].whereType<RawKeyEvent>();
+
   updateKeyDown(LogicalKeyboardKey logicKey, RawKeyDownEvent e) {
-    if (e.isAltPressed) {
-      if (logicKey == LogicalKeyboardKey.altLeft) {
-        lastLAltKeyEvent = e;
-      } else if (logicKey == LogicalKeyboardKey.altRight) {
-        lastRAltKeyEvent = e;
-      }
-    } else if (e.isControlPressed) {
-      if (logicKey == LogicalKeyboardKey.controlLeft) {
-        lastLCtrlKeyEvent = e;
-      } else if (logicKey == LogicalKeyboardKey.controlRight) {
-        lastRCtrlKeyEvent = e;
-      }
-    } else if (e.isShiftPressed) {
-      if (logicKey == LogicalKeyboardKey.shiftLeft) {
-        lastLShiftKeyEvent = e;
-      } else if (logicKey == LogicalKeyboardKey.shiftRight) {
-        lastRShiftKeyEvent = e;
-      }
-    } else if (e.isMetaPressed) {
-      if (logicKey == LogicalKeyboardKey.metaLeft) {
-        lastLCommandKeyEvent = e;
-      } else if (logicKey == LogicalKeyboardKey.metaRight) {
-        lastRCommandKeyEvent = e;
-      } else if (logicKey == LogicalKeyboardKey.superKey) {
-        lastSuperKeyEvent = e;
-      }
+    // Track the mapped modifier itself; other held modifiers must not hide it.
+    if (logicKey == LogicalKeyboardKey.altLeft) {
+      lastLAltKeyEvent = e;
+    } else if (logicKey == LogicalKeyboardKey.altRight) {
+      lastRAltKeyEvent = e;
+    } else if (logicKey == LogicalKeyboardKey.controlLeft) {
+      lastLCtrlKeyEvent = e;
+    } else if (logicKey == LogicalKeyboardKey.controlRight) {
+      lastRCtrlKeyEvent = e;
+    } else if (logicKey == LogicalKeyboardKey.shiftLeft) {
+      lastLShiftKeyEvent = e;
+    } else if (logicKey == LogicalKeyboardKey.shiftRight) {
+      lastRShiftKeyEvent = e;
+    } else if (logicKey == LogicalKeyboardKey.metaLeft) {
+      lastLCommandKeyEvent = e;
+    } else if (logicKey == LogicalKeyboardKey.metaRight) {
+      lastRCommandKeyEvent = e;
+    } else if (logicKey == LogicalKeyboardKey.superKey) {
+      lastSuperKeyEvent = e;
     }
   }
 
-  updateKeyUp(LogicalKeyboardKey logicKey, RawKeyUpEvent e) {
-    if (e.isAltPressed) {
-      if (logicKey == LogicalKeyboardKey.altLeft) {
-        lastLAltKeyEvent = null;
-      } else if (logicKey == LogicalKeyboardKey.altRight) {
-        lastRAltKeyEvent = null;
-      }
-    } else if (e.isControlPressed) {
-      if (logicKey == LogicalKeyboardKey.controlLeft) {
-        lastLCtrlKeyEvent = null;
-      } else if (logicKey == LogicalKeyboardKey.controlRight) {
-        lastRCtrlKeyEvent = null;
-      }
-    } else if (e.isShiftPressed) {
-      if (logicKey == LogicalKeyboardKey.shiftLeft) {
-        lastLShiftKeyEvent = null;
-      } else if (logicKey == LogicalKeyboardKey.shiftRight) {
-        lastRShiftKeyEvent = null;
-      }
-    } else if (e.isMetaPressed) {
-      if (logicKey == LogicalKeyboardKey.metaLeft) {
-        lastLCommandKeyEvent = null;
-      } else if (logicKey == LogicalKeyboardKey.metaRight) {
-        lastRCommandKeyEvent = null;
-      } else if (logicKey == LogicalKeyboardKey.superKey) {
-        lastSuperKeyEvent = null;
-      }
+  updateKeyUp(RawKeyUpEvent e) {
+    // Layout switches and shifted Alt can change the logical key on release.
+    if (lastLAltKeyEvent?.physicalKey == e.physicalKey) {
+      lastLAltKeyEvent = null;
+    }
+    if (lastRAltKeyEvent?.physicalKey == e.physicalKey) {
+      lastRAltKeyEvent = null;
+    }
+    if (lastLCtrlKeyEvent?.physicalKey == e.physicalKey) {
+      lastLCtrlKeyEvent = null;
+    }
+    if (lastRCtrlKeyEvent?.physicalKey == e.physicalKey) {
+      lastRCtrlKeyEvent = null;
+    }
+    if (lastLShiftKeyEvent?.physicalKey == e.physicalKey) {
+      lastLShiftKeyEvent = null;
+    }
+    if (lastRShiftKeyEvent?.physicalKey == e.physicalKey) {
+      lastRShiftKeyEvent = null;
+    }
+    if (lastLCommandKeyEvent?.physicalKey == e.physicalKey) {
+      lastLCommandKeyEvent = null;
+    }
+    if (lastRCommandKeyEvent?.physicalKey == e.physicalKey) {
+      lastRCommandKeyEvent = null;
+    }
+    if (lastSuperKeyEvent?.physicalKey == e.physicalKey) {
+      lastSuperKeyEvent = null;
     }
   }
 
   release(KeyEventResult Function(RawKeyEvent e) handleRawKeyEvent) {
-    for (final key in [
-      lastLShiftKeyEvent,
-      lastRShiftKeyEvent,
-      lastLCtrlKeyEvent,
-      lastRCtrlKeyEvent,
-      lastLAltKeyEvent,
-      lastRAltKeyEvent,
-      lastLCommandKeyEvent,
-      lastRCommandKeyEvent,
-      lastSuperKeyEvent,
-    ]) {
-      if (key != null) {
-        handleRawKeyEvent(RawKeyUpEvent(
-          data: key.data,
-          character: key.character,
-        ));
-      }
+    for (final key in pressedKeys) {
+      handleRawKeyEvent(RawKeyUpEvent(
+        data: key.data,
+        character: key.character,
+      ));
     }
   }
 }
@@ -750,6 +744,9 @@ class InputModel {
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (_localFlutterShortcuts.tryDispatchRaw(e)) return KeyEventResult.handled;
     if (isViewOnly) {
+      if (e is RawKeyUpEvent) {
+        toReleaseRawKeys.updateKeyUp(e);
+      }
       if (isWeb && !isInputSourceFlutter) return KeyEventResult.ignored;
       _tryDispatchRawFlutterShortcut(e, releaseModifiers: false);
       return KeyEventResult.handled;
@@ -789,22 +786,26 @@ class InputModel {
       toReleaseRawKeys.updateKeyDown(key, e);
     }
     if (e is RawKeyUpEvent) {
-      if (key == LogicalKeyboardKey.altLeft ||
-          key == LogicalKeyboardKey.altRight) {
-        alt = false;
-      } else if (key == LogicalKeyboardKey.controlLeft ||
-          key == LogicalKeyboardKey.controlRight) {
-        ctrl = false;
-      } else if (key == LogicalKeyboardKey.shiftRight ||
-          key == LogicalKeyboardKey.shiftLeft) {
-        shift = false;
-      } else if (key == LogicalKeyboardKey.metaLeft ||
-          key == LogicalKeyboardKey.metaRight ||
-          key == LogicalKeyboardKey.superKey) {
-        command = false;
+      // Resolve against the saved down event before updateKeyUp removes it.
+      switch (releasedModifier(key, e.physicalKey,
+          pressedKeys: toReleaseRawKeys.pressedKeys, releaseData: e.data)) {
+        case ModifierKind.alt:
+          alt = false;
+          break;
+        case ModifierKind.ctrl:
+          ctrl = false;
+          break;
+        case ModifierKind.shift:
+          shift = false;
+          break;
+        case ModifierKind.command:
+          command = false;
+          break;
+        case null:
+          break;
       }
 
-      toReleaseRawKeys.updateKeyUp(key, e);
+      toReleaseRawKeys.updateKeyUp(e);
     }
 
     // On some mobile soft-keyboard paths, Flutter may leave cached Shift state
@@ -1425,6 +1426,7 @@ class InputModel {
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   void resetModifiers() {
     shift = ctrl = alt = command = false;
+    toReleaseRawKeys.reset();
     if (parent.target?.closed == true) _localFlutterShortcuts.clear();
   }
 

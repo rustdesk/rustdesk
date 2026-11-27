@@ -199,3 +199,103 @@ String _applyTerminalCtrlModifier(String data) {
   }
   return data;
 }
+
+enum ModifierKind { alt, ctrl, shift, command }
+
+/// Resolve a release using its down event, keeping modifiers held by other keys.
+ModifierKind? releasedModifier(
+    LogicalKeyboardKey logical, PhysicalKeyboardKey physical,
+    {Iterable<RawKeyEvent> pressedKeys = const [],
+    RawKeyEventData? releaseData}) {
+  // Mod3-Mod5 and virtual Super/Hyper/Meta can identify genuine Meta mappings.
+  // Mod2 is NumLock, which is on in many sessions.
+  const gtkNonAltModifiers = 0xe0 | (7 << 26);
+  bool hasGtkMask(RawKeyEventData? data, int mask) =>
+      data is RawKeyEventDataLinux &&
+      data.keyHelper is GtkKeyHelper &&
+      data.modifiers & (gtkNonAltModifiers | mask) == mask;
+  final altMask = hasGtkMask(releaseData, GtkKeyHelper.modifierMod1);
+  final down = pressedKeys.where((event) => event.physicalKey == physical);
+  // GTK recognizes Super down from its keysym, before Mod4 enters the mask.
+  final superWithAlt = down.isNotEmpty &&
+      hasGtkMask(down.first.data, GtkKeyHelper.modifierMod1) &&
+      down.first.data.isMetaPressed;
+  final kind = down.isEmpty
+      ? _modifierKind(logical, physical)
+      : _rawModifierKind(down.first, logical, altMask);
+  final stillPressed = pressedKeys.any((event) =>
+      event.physicalKey != physical &&
+      _rawModifierKind(event, event.logicalKey,
+              altMask || (superWithAlt && hasGtkMask(event.data, 0))) ==
+          kind);
+  return stillPressed ? null : kind;
+}
+
+ModifierKind? _rawModifierKind(
+    RawKeyEvent event, LogicalKeyboardKey logical, bool altMask) {
+  const gtkMetaLeft = 0xffe7;
+  const gtkMetaRight = 0xffe8;
+  final data = event.data;
+  // Use the saved Shift mask: RawKeyEvent modifier getters read current state.
+  // GTK reports shifted Alt as Meta, including Alt at remapped positions.
+  if ((logical == LogicalKeyboardKey.altLeft ||
+          logical == LogicalKeyboardKey.altRight ||
+          (data.isShiftPressed &&
+              (altMask ||
+                  _releasedPhysicalModifier(event.physicalKey) ==
+                      ModifierKind.alt))) &&
+      data is RawKeyEventDataLinux &&
+      data.keyHelper is GtkKeyHelper &&
+      (data.keyCode == gtkMetaLeft || data.keyCode == gtkMetaRight)) {
+    return ModifierKind.alt;
+  }
+  return _modifierKind(event.logicalKey, event.physicalKey);
+}
+
+ModifierKind? _modifierKind(
+    LogicalKeyboardKey logical, PhysicalKeyboardKey physical) {
+  if (logical == LogicalKeyboardKey.altLeft ||
+      logical == LogicalKeyboardKey.altRight) {
+    return ModifierKind.alt;
+  }
+  if (logical == LogicalKeyboardKey.controlLeft ||
+      logical == LogicalKeyboardKey.controlRight) {
+    return ModifierKind.ctrl;
+  }
+  if (logical == LogicalKeyboardKey.shiftLeft ||
+      logical == LogicalKeyboardKey.shiftRight) {
+    return ModifierKind.shift;
+  }
+  if (logical == LogicalKeyboardKey.metaLeft ||
+      logical == LogicalKeyboardKey.metaRight ||
+      logical == LogicalKeyboardKey.superKey) {
+    return ModifierKind.command;
+  }
+  return _isGroupSwitch(logical) ? _releasedPhysicalModifier(physical) : null;
+}
+
+bool _isGroupSwitch(LogicalKeyboardKey logical) =>
+    logical == LogicalKeyboardKey.groupPrevious ||
+    logical == LogicalKeyboardKey.groupNext ||
+    logical == LogicalKeyboardKey.groupFirst ||
+    logical == LogicalKeyboardKey.groupLast;
+
+ModifierKind? _releasedPhysicalModifier(PhysicalKeyboardKey physical) {
+  if (physical == PhysicalKeyboardKey.altLeft ||
+      physical == PhysicalKeyboardKey.altRight) {
+    return ModifierKind.alt;
+  }
+  if (physical == PhysicalKeyboardKey.controlLeft ||
+      physical == PhysicalKeyboardKey.controlRight) {
+    return ModifierKind.ctrl;
+  }
+  if (physical == PhysicalKeyboardKey.shiftLeft ||
+      physical == PhysicalKeyboardKey.shiftRight) {
+    return ModifierKind.shift;
+  }
+  if (physical == PhysicalKeyboardKey.metaLeft ||
+      physical == PhysicalKeyboardKey.metaRight) {
+    return ModifierKind.command;
+  }
+  return null;
+}
