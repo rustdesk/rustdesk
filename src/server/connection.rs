@@ -226,6 +226,17 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     x == 0
 }
 
+async fn wait_for_webrtc_peer_close(stream: &mut Stream) {
+    if let Stream::WebRTC(peer) = stream {
+        // The controller closes after reading CloseReason. Closing our side first can
+        // discard the queued reason and make the controller reconnect.
+        let _ = time::timeout(Duration::from_secs(1), async {
+            while let Some(Ok(_)) = peer.next().await {}
+        })
+        .await;
+    }
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn should_use_terminal_os_login_scope(is_terminal: bool, os_login_username: &str) -> bool {
     cfg!(target_os = "windows") && is_terminal && !os_login_username.trim().is_empty()
@@ -436,6 +447,7 @@ pub struct Connection {
     #[cfg(not(any(target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
     closed: bool,
+    sent_close_reason: bool,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     start_cm_ipc_para: Option<StartCmIpcPara>,
     auto_disconnect_timer: Option<(Instant, u64)>,
@@ -645,6 +657,7 @@ impl Connection {
             #[cfg(not(any(target_os = "ios")))]
             pressed_modifiers: Default::default(),
             closed: false,
+            sent_close_reason: false,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             start_cm_ipc_para: Some(StartCmIpcPara {
                 rx_to_cm,
@@ -1281,6 +1294,9 @@ impl Connection {
             try_stop_record_cursor_pos();
         }
         conn.on_close("End", true).await;
+        if conn.sent_close_reason {
+            wait_for_webrtc_peer_close(&mut conn.stream).await;
+        }
         log::info!("#{} connection loop exited", id);
     }
 
@@ -5472,7 +5488,10 @@ impl Connection {
         }
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
-        self.send(msg_out).await;
+        match self.stream.send(&msg_out).await {
+            Ok(()) => self.sent_close_reason = true,
+            Err(err) => log::debug!("Failed to send CloseReason: {err}"),
+        }
         raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
     }
 
@@ -7355,6 +7374,36 @@ mod test {
 
     fn unauthorized_count() -> usize {
         UNAUTHORIZED_CONNS.lock().unwrap().len()
+    }
+
+    #[tokio::test]
+    async fn webrtc_controller_receives_manual_disconnect_reason() {
+        use hbb_common::webrtc::WebRTCStream;
+
+        let (mut controller, mut controlled) = timeout(30_000, async {
+            let offerer = WebRTCStream::new("", false, 5000).await.unwrap();
+            let offer = offerer.get_local_endpoint().await.unwrap();
+            let answerer = WebRTCStream::new(&offer, false, 5000).await.unwrap();
+            let answer = answerer.get_local_endpoint().await.unwrap();
+            offerer.set_remote_endpoint(&answer).await.unwrap();
+            (Stream::WebRTC(offerer), Stream::WebRTC(answerer))
+        })
+        .await
+        .expect("WebRTC setup timed out");
+
+        let reason = "Closed manually by the peer";
+        let message = misc_msg(|m| m.set_close_reason(reason.into()));
+        let ping = msg(|m| m.set_test_delay(TestDelay::new()));
+        controller.send(&ping).await.unwrap();
+        controlled.send(&message).await.unwrap();
+        let reader = tokio::spawn(async move {
+            time::sleep(Duration::from_millis(100)).await;
+            let frame = controller.next_timeout(3000).await.expect("close reason");
+            Message::parse_from_bytes(&frame.unwrap()).unwrap()
+        });
+        wait_for_webrtc_peer_close(&mut controlled).await;
+        drop(controlled);
+        assert_eq!(reader.await.unwrap().misc().close_reason(), reason);
     }
 
     #[test]
