@@ -2260,6 +2260,7 @@ DP-0 disconnected (normal left inverted right x axis y axis)
 
     #[test]
     fn change_resolution_directly_reaps_xrandr() {
+        crate::server::check_zombie();
         // An unknown output changes no display, and xrandr exits with or without an X server.
         if change_resolution_directly("rustdesk-no-such-output", 1, 1).is_err() {
             return; // xrandr is not installed
@@ -2281,40 +2282,15 @@ DP-0 disconnected (normal left inverted right x axis y axis)
 }
 
 pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
-    // Spawn the waiter before xrandr so thread-creation failure returns Err instead of panicking or leaking a child.
-    let (tx, rx) = std::sync::mpsc::sync_channel::<std::process::Child>(1);
-    let log_name = name.to_owned();
-    std::thread::Builder::new()
-        .name("xrandr-reap".into())
-        .spawn(move || {
-            let Ok(mut child) = rx.recv() else {
-                return;
-            };
-            match child.wait() {
-                Ok(status) if status.success() => {}
-                Ok(status) => hbb_common::throttled_log!(
-                    Duration::from_secs(5),
-                    error,
-                    "Failed to change resolution of '{}' to {}x{}, xrandr exited with {}",
-                    log_name,
-                    width,
-                    height,
-                    status
-                ),
-                Err(e) => hbb_common::throttled_log!(
-                    Duration::from_secs(5),
-                    error,
-                    "Failed to wait for xrandr: {}",
-                    e
-                ),
-            }
-        })?;
     let child = Command::new("xrandr")
-        .args(["--output", name, "--mode", &format!("{}x{}", width, height)])
+        .args(vec![
+            "--output",
+            name,
+            "--mode",
+            &format!("{}x{}", width, height),
+        ])
         .spawn()?;
-    if let Err(std::sync::mpsc::SendError(mut child)) = tx.send(child) {
-        let _ = child.wait();
-    }
+    crate::server::CHILD_PROCESS.lock().unwrap().push(child);
     Ok(())
 }
 
