@@ -1,5 +1,8 @@
 #[path = "ipc/auth.rs"]
 mod ipc_auth;
+#[cfg(all(windows, test))]
+#[path = "ipc/config_tests.rs"]
+pub(crate) mod config_tests;
 #[cfg(windows)]
 #[path = "ipc/windows.rs"]
 mod ipc_windows;
@@ -850,30 +853,6 @@ impl Drop for CheckIfRestart {
     }
 }
 
-#[cfg(windows)]
-fn config_reply(
-    mut reply: Data,
-    shares_profile: impl FnOnce() -> ResultType<bool>,
-) -> ResultType<Data> {
-    let options = match &mut reply {
-        Data::Options(Some(options)) => options,
-        Data::SyncConfig(Some(configs)) => &mut configs.1.options,
-        _ => return Ok(reply),
-    };
-    // Older clients write the entire reply back, sometimes into the host's own file.
-    if options.contains_key(keys::OPTION_REG_RECOVERY) && !shares_profile()? {
-        options.remove(keys::OPTION_REG_RECOVERY);
-    }
-    Ok(reply)
-}
-
-async fn send_config_snapshot(stream: &mut Connection, reply: Data) -> ResultType<()> {
-    #[cfg(windows)]
-    let reply = config_reply(reply, || stream.client_shares_profile())
-        .unwrap_or_else(|err| Data::SecurityConfigError(err.to_string()));
-    stream.send(&reply).await
-}
-
 async fn handle(data: Data, stream: &mut Connection) {
     match data {
         Data::SystemInfo(_) => {
@@ -1104,8 +1083,9 @@ async fn handle(data: Data, stream: &mut Connection) {
         },
         Data::Options(value) => match value {
             None => {
-                let reply = Data::Options(Some(Config::get_options()));
-                allow_err!(send_config_snapshot(stream, reply).await);
+                let mut v = Config::get_options();
+                v.remove(keys::OPTION_REG_RECOVERY);
+                allow_err!(stream.send(&Data::Options(Some(v))).await);
             }
             Some(value) => {
                 let _chk = CheckIfRestart::new();
@@ -1183,8 +1163,13 @@ async fn handle(data: Data, stream: &mut Connection) {
             };
             #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
             let config2 = Config2::get();
-            let reply = Data::SyncConfig(Some((Config::get(), config2).into()));
-            allow_err!(send_config_snapshot(stream, reply).await);
+            let mut config2 = config2;
+            config2.options.remove(keys::OPTION_REG_RECOVERY);
+            allow_err!(
+                stream
+                    .send(&Data::SyncConfig(Some((Config::get(), config2).into())))
+                    .await
+            );
         }
         #[cfg(windows)]
         Data::SyncWinCpuUsage(None) => {
@@ -1989,13 +1974,14 @@ async fn sync_security_config_from_server(
     const TIMEOUT_MS: u64 = 1000;
     // MSI removal can reactivate this user copy without running our uninstall hooks.
     async {
-        let peer = connection.config_peer()?;
         connection.send(&Data::SyncConfig(None)).await?;
         match connection.next_timeout(TIMEOUT_MS).await? {
             Some(Data::SyncConfig(Some(configs))) => {
                 let (config, config2) = *configs;
-                crate::trusted_devices::config::update(move || peer.sync_config(config, config2))
-                    .await
+                crate::trusted_devices::config::update(move || {
+                    crate::trusted_devices::config::sync_config(config, config2)
+                })
+                .await
             }
             Some(Data::SecurityConfigError(error)) => bail!(error),
             _ => bail!("The host did not provide its current configuration"),
@@ -2040,36 +2026,24 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
     }
 }
 
-async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
-    let mut c = connect(ms_timeout, "").await?;
-    read_options(&mut c, ms_timeout).await
+fn cache_ipc_options(options: HashMap<String, String>) {
+    // A GUI hosting its own IPC receives the same filtered snapshot as any other client.
+    if cfg!(windows) && crate::common::is_server_running() {
+        Config::set_options_preserving_option(options, keys::OPTION_REG_RECOVERY);
+    } else {
+        Config::set_options(options);
+    }
 }
 
-async fn read_options(
-    c: &mut ConnectionTmpl<ConnClient>,
-    ms_timeout: u64,
-) -> ResultType<HashMap<String, String>> {
-    #[cfg(windows)]
-    let peer = c.config_peer()?;
+async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
+    let mut c = connect(ms_timeout, "").await?;
     c.send(&Data::Options(None)).await?;
-    let value = match c.next_timeout(ms_timeout).await? {
-        Some(Data::Options(Some(value))) => value,
-        Some(Data::SecurityConfigError(error)) => bail!(error),
-        _ => bail!("The host did not provide its current options"),
-    };
-    #[cfg(windows)]
-    let mirrored = peer.mirror_options(&value).await;
-    #[cfg(not(windows))]
-    let mirrored = Config::set_profile_options(value.clone(), Some(keys::OPTION_REG_RECOVERY));
-    if let Err(error) = mirrored {
-        const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
-        hbb_common::throttled_log!(
-            LOG_INTERVAL,
-            warn,
-            "Failed to cache host options: {error:#}"
-        );
+    if let Some(Data::Options(Some(value))) = c.next_timeout(ms_timeout).await? {
+        cache_ipc_options(value.clone());
+        Ok(value)
+    } else {
+        Ok(Config::get_options())
     }
-    Ok(value)
 }
 
 pub async fn get_options_async() -> HashMap<String, String> {
@@ -2090,108 +2064,43 @@ pub async fn get_option_async(key: &str) -> String {
 }
 
 pub fn set_option(key: &str, value: &str) {
-    allow_err!(try_set_option(key, value));
-}
-
-const AUTH_HOST_UNAVAILABLE: &str =
-    "The host is unavailable; authentication settings were not changed";
-
-async fn options_connection() -> ResultType<Option<ConnectionTmpl<ConnClient>>> {
-    match connect(1000, "").await {
-        Ok(c) => Ok(Some(c)),
-        #[cfg(windows)]
-        Err(error) if !error.is::<ipc_windows::PipeNotFound>() => Err(error),
-        Err(_) => Ok(None),
-    }
-}
-
-#[tokio::main(flavor = "current_thread")]
-pub(crate) async fn try_set_option(key: &str, value: &str) -> ResultType<HashMap<String, String>> {
-    let mut connection = options_connection().await?;
-    let mut options = match connection.as_mut() {
-        Some(c) => read_options(c, 1000).await?,
-        #[cfg(windows)]
-        None => {
-            let (key, value) = (key.to_owned(), value.to_owned());
-            return crate::trusted_devices::config::update(move || set_offline_option(key, value))
-                .await;
-        }
-        #[cfg(not(windows))]
-        None => Config::get_options(),
-    };
-    edit_option(&mut options, key, value);
-    write_options(options.clone(), connection).await?;
-    Ok(options)
-}
-
-fn edit_option(options: &mut HashMap<String, String>, key: &str, value: &str) {
+    let mut options = get_options();
     if value.is_empty() {
         options.remove(key);
     } else {
         options.insert(key.to_owned(), value.to_owned());
     }
-}
-
-#[cfg(windows)]
-fn set_offline_option(key: String, value: String) -> ResultType<HashMap<String, String>> {
-    use crate::trusted_devices::config::{changes_authentication, is_auth_option};
-
-    let _nat = CheckTestNatType::new();
-    if key == keys::OPTION_REG_RECOVERY || is_auth_option(&key) {
-        Config::refresh_shared_options()?;
-        let mut requested = Config::get_options();
-        edit_option(&mut requested, &key, &value);
-        if changes_authentication(&requested) {
-            bail!(AUTH_HOST_UNAVAILABLE);
-        }
-    } else {
-        Config::set_stored_option(&key, value)?;
-    }
-    Ok(Config::get_options())
+    allow_err!(set_options(options));
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
-    write_options(value, options_connection().await?).await
-}
-
-async fn write_options(
-    value: HashMap<String, String>,
-    connection: Option<ConnectionTmpl<ConnClient>>,
-) -> ResultType<()> {
+pub async fn set_options(mut value: HashMap<String, String>) -> ResultType<()> {
+    value.remove(keys::OPTION_REG_RECOVERY);
     let _nat = CheckTestNatType::new();
     let affected = crate::trusted_devices::config::changes_authentication(&value);
-    if affected && connection.is_none() {
-        bail!(AUTH_HOST_UNAVAILABLE);
+    let connection = connect(1000, "").await;
+    if affected && connection.is_err() {
+        bail!("The host is unavailable; authentication settings were not changed");
     }
-    if let Some(mut c) = connection {
-        #[cfg(windows)]
-        let peer = c.config_peer()?;
-        let require_ack = cfg!(windows) || affected;
+    if let Ok(mut c) = connection {
         c.send(&Data::Options(Some(value.clone()))).await?;
         // do not put below before connect, because we need to check should_exit
         match c.next_timeout(1000).await {
             #[cfg(target_os = "windows")]
             Ok(Some(Data::Options(None))) if affected => {
                 sync_security_config_from_server(&mut c).await?;
-                return Ok(());
             }
             Ok(Some(Data::Options(None))) => {}
             Ok(Some(Data::SecurityConfigError(error))) => bail!(error),
-            Err(error) if require_ack => return Err(error),
-            _ if require_ack => bail!("The host did not confirm the configuration update"),
+            Err(error) if affected => return Err(error),
+            _ if affected => bail!("The host did not confirm the configuration update"),
             _ => {}
         }
-        #[cfg(windows)]
-        return peer.mirror_options(&value).await;
+        cache_ipc_options(value);
+    } else {
+        Config::set_options_preserving_option(value, keys::OPTION_REG_RECOVERY);
     }
-    #[cfg(windows)]
-    return crate::trusted_devices::config::update(move || {
-        Config::set_profile_options(value, Some(keys::OPTION_REG_RECOVERY))
-    })
-    .await;
-    #[cfg(not(windows))]
-    Config::set_profile_options(value, Some(keys::OPTION_REG_RECOVERY))
+    Ok(())
 }
 
 /// For the CLI, a process that just loaded the config. With no `--server` up to apply the change,
@@ -2545,10 +2454,6 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
     }
     Ok(())
 }
-
-#[cfg(all(windows, test))]
-#[path = "ipc/config_tests.rs"]
-pub(crate) mod config_tests;
 
 #[cfg(test)]
 mod test {

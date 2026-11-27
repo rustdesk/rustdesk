@@ -601,14 +601,16 @@ impl PrivacyMode for PrivacyModeImpl {
         ));
         let reg_connectivity_2 = reg_display_settings::read_reg_connectivity()?;
 
-        let recovery = match reg_display_settings::diff_recent_connectivity(
-            reg_connectivity_1,
-            reg_connectivity_2,
-        ) {
-            Some(record) => serde_json::to_string(&record)?,
-            None => String::new(),
+        if let Some(reg_recovery) =
+            reg_display_settings::diff_recent_connectivity(reg_connectivity_1, reg_connectivity_2)
+        {
+            Config::set_option(
+                CONFIG_KEY_REG_RECOVERY.to_owned(),
+                serde_json::to_string(&reg_recovery)?,
+            );
+        } else {
+            reset_config_reg_connectivity();
         };
-        Config::set_stored_option(CONFIG_KEY_REG_RECOVERY, recovery)?;
 
         check_current_displays()?;
 
@@ -668,6 +670,11 @@ impl Drop for PrivacyModeImpl {
     }
 }
 
+#[inline]
+fn reset_config_reg_connectivity() {
+    Config::set_option(CONFIG_KEY_REG_RECOVERY.to_owned(), "".to_owned());
+}
+
 pub fn restore_reg_connectivity(plug_out_monitors: bool, force: bool) {
     let config_recovery_value = Config::get_option(CONFIG_KEY_REG_RECOVERY);
     if config_recovery_value.is_empty() {
@@ -683,13 +690,7 @@ pub fn restore_reg_connectivity(plug_out_monitors: bool, force: bool) {
             log::error!("Failed restore_reg_connectivity, error: {}", e);
         }
     }
-    if let Err(error) = Config::set_stored_option(CONFIG_KEY_REG_RECOVERY, String::new()) {
-        hbb_common::throttled_log!(
-            STATE_CHECK_LOG_INTERVAL,
-            error,
-            "Failed to clear display recovery record: {error:#}"
-        );
-    }
+    reset_config_reg_connectivity();
 }
 
 #[cfg(test)]

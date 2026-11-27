@@ -47,7 +47,11 @@ pub async fn update_auth<T: Send + 'static>(
 pub fn sync_config(value: Config, options: Config2) -> ResultType<()> {
     let _storage = super::storage()?;
     Config::set(value);
-    Config2::set(options.clone());
+    if cfg!(windows) && crate::common::is_server_running() {
+        Config2::set_preserving_option(options.clone(), keys::OPTION_REG_RECOVERY);
+    } else {
+        Config2::set(options.clone());
+    }
     snapshot()?;
     // Explicit configuration sync carries the source's grants and removals.
     options.sync_trusted_devices()
@@ -60,18 +64,16 @@ pub async fn refresh_from_server() -> ResultType<()> {
     const TIMEOUT_MS: u64 = 1000;
     let response = async {
         let mut connection = connect(TIMEOUT_MS, "").await?;
-        let peer = connection.config_peer();
         connection.send(&Data::SyncConfig(None)).await?;
-        let data = connection.next_timeout(TIMEOUT_MS).await?;
-        Ok::<_, hbb_common::anyhow::Error>((peer, data))
+        connection.next_timeout(TIMEOUT_MS).await
     }
     .await;
     match response {
-        Ok((peer, Some(Data::SyncConfig(Some(configs))))) => {
+        Ok(Some(Data::SyncConfig(Some(configs)))) => {
             let (config, config2) = *configs;
-            update(move || peer?.sync_config(config, config2)).await
+            update(move || sync_config(config, config2)).await
         }
-        Ok((_, Some(Data::SecurityConfigError(error)))) => bail!(error),
+        Ok(Some(Data::SecurityConfigError(error))) => bail!(error),
         Ok(_) => bail!("The host did not provide its current configuration"),
         Err(error) => {
             hbb_common::log::warn!(
@@ -228,15 +230,9 @@ pub(super) fn change<T>(affected: bool, apply: impl FnOnce() -> ResultType<T>) -
 
 pub fn set_options(options: HashMap<String, String>) -> ResultType<()> {
     policy::change_options(effective_options(options.clone()), || {
-        Config::set_profile_options(options, Some(keys::OPTION_REG_RECOVERY))
+        Config::set_options_preserving_option(options, keys::OPTION_REG_RECOVERY);
+        Ok(())
     })
-}
-
-pub(crate) fn is_auth_option(key: &str) -> bool {
-    matches!(
-        key,
-        "2fa" | keys::OPTION_ENABLE_TRUSTED_DEVICES | keys::OPTION_TRUSTED_DEVICE_EXPIRATION
-    )
 }
 
 pub fn set_password(value: &str) -> ResultType<bool> {
@@ -278,10 +274,10 @@ pub fn set_config(value: Config) -> ResultType<bool> {
 
 pub fn set_config2(value: Config2) -> ResultType<bool> {
     policy::change_options(effective_options(value.options.clone()), || {
-        #[cfg(windows)]
-        return Config2::set_preserving_option(value, keys::OPTION_REG_RECOVERY);
-        #[cfg(not(windows))]
-        Ok(Config2::set(value))
+        Ok(Config2::set_preserving_option(
+            value,
+            keys::OPTION_REG_RECOVERY,
+        ))
     })
 }
 

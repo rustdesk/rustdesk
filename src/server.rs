@@ -741,8 +741,6 @@ pub async fn start_server(is_server: bool, no_server: bool) {
     } else {
         match crate::ipc::connect(1000, "").await {
             Ok(mut conn) => {
-                #[cfg(windows)]
-                let peer = conn.config_peer();
                 if conn.send(&Data::SyncConfig(None)).await.is_ok() {
                     if let Ok(Some(data)) = conn.next_timeout(1000).await {
                         match data {
@@ -751,7 +749,7 @@ pub async fn start_server(is_server: bool, no_server: bool) {
                                 #[cfg(target_os = "windows")]
                                 allow_err!(
                                     crate::trusted_devices::config::update(move || {
-                                        peer?.sync_config(config, config2)
+                                        crate::trusted_devices::config::sync_config(config, config2)
                                     })
                                     .await
                                 );

@@ -1,15 +1,7 @@
 use crate::platform::windows as platform;
-use base::{config::keys::OPTION_REG_RECOVERY, platform::windows::RAIIHandle};
-use hbb_common::{
-    anyhow::Context,
-    bail,
-    config::{self, Config, Config2},
-    tokio::time::sleep,
-    ResultType,
-};
+use hbb_common::{anyhow::Context, bail, config, tokio::time::sleep, ResultType};
 use parity_tokio_ipc::{ConnectionClient, SecurityAttributes};
 use std::{
-    collections::HashMap,
     ffi::c_void,
     fs::OpenOptions,
     io,
@@ -31,10 +23,7 @@ use windows::{
         Storage::FileSystem::{
             FILE_FLAG_OVERLAPPED, FILE_GENERIC_READ, FILE_WRITE_DATA, SECURITY_IDENTIFICATION,
         },
-        System::{
-            Pipes::{GetNamedPipeServerProcessId, GetNamedPipeServerSessionId},
-            Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
-        },
+        System::Pipes::{GetNamedPipeServerProcessId, GetNamedPipeServerSessionId},
     },
 };
 
@@ -44,19 +33,9 @@ const CLIENT_ACCESS: u32 = FILE_GENERIC_READ.0 | FILE_WRITE_DATA.0;
 const PIPE_BUSY_RETRY: Duration = Duration::from_millis(50);
 const AUTH_LOG_INTERVAL: Duration = Duration::from_secs(5);
 const SYSTEM_SID: &str = "S-1-5-18";
-const LOCAL_SERVICE_SID: &str = "S-1-5-19";
 const ACCESS_ALLOWED_ACE_TYPE_U8: u8 = 0;
 
 struct LocalAllocation(*mut c_void);
-
-#[derive(Debug)]
-pub(super) struct PipeNotFound;
-
-impl std::fmt::Display for PipeNotFound {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("IPC pipe does not exist")
-    }
-}
 
 impl Drop for LocalAllocation {
     fn drop(&mut self) {
@@ -90,22 +69,15 @@ pub(super) fn listener_security_attributes() -> io::Result<SecurityAttributes> {
     SecurityAttributes::from_sddl(&sddl)
 }
 
-fn open_pipe(path: &str) -> ResultType<ConnectionClient> {
-    let file = match OpenOptions::new()
+fn open_pipe(path: &str) -> io::Result<ConnectionClient> {
+    let file = OpenOptions::new()
         .access_mode(CLIENT_ACCESS)
         .share_mode(0)
         .custom_flags(FILE_FLAG_OVERLAPPED.0)
         .security_qos_flags(SECURITY_IDENTIFICATION.0)
-        .open(path)
-    {
-        Ok(file) => file,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            return Err(hbb_common::anyhow::Error::new(error).context(PipeNotFound));
-        }
-        Err(error) => return Err(error.into()),
-    };
+        .open(path)?;
     // Tokio takes ownership of the handle, including when registration fails.
-    Ok(unsafe { ConnectionClient::from_raw_handle(file.into_raw_handle()) }?)
+    unsafe { ConnectionClient::from_raw_handle(file.into_raw_handle()) }
 }
 
 /// Authenticates a main/service pipe before exposing it for application data.
@@ -117,15 +89,10 @@ pub(super) async fn connect(path: &str, postfix: &str) -> ResultType<ConnectionC
     let client = loop {
         match open_pipe(path) {
             Ok(client) => break client,
-            Err(error)
-                if error
-                    .downcast_ref::<io::Error>()
-                    .and_then(io::Error::raw_os_error)
-                    == Some(ERROR_PIPE_BUSY.0 as i32) =>
-            {
+            Err(error) if error.raw_os_error() == Some(ERROR_PIPE_BUSY.0 as i32) => {
                 sleep(PIPE_BUSY_RETRY).await;
             }
-            Err(error) => return Err(error),
+            Err(error) => return Err(error.into()),
         }
     };
     // The UI can own the main pipe while an installed service is unavailable.
@@ -144,7 +111,12 @@ pub(super) async fn connect(path: &str, postfix: &str) -> ResultType<ConnectionC
 
 fn ensure_server(client: &ConnectionClient, require_system: bool) -> ResultType<()> {
     let pipe = HANDLE(client.as_raw_handle());
-    let pid = server_pid(pipe)?;
+    let mut pid = 0;
+    unsafe { GetNamedPipeServerProcessId(pipe, &mut pid) }
+        .context("Failed to resolve IPC server process")?;
+    if pid == 0 {
+        bail!("IPC server process is unavailable");
+    }
     if ensure_pipe_security(pipe, require_system)? {
         return Ok(());
     }
@@ -159,95 +131,6 @@ fn ensure_server(client: &ConnectionClient, require_system: bool) -> ResultType<
         bail!("IPC server is less privileged than the client");
     }
     Ok(())
-}
-
-fn server_pid(pipe: HANDLE) -> ResultType<u32> {
-    let mut pid = 0;
-    unsafe { GetNamedPipeServerProcessId(pipe, &mut pid) }
-        .context("Failed to resolve IPC server process")?;
-    if pid == 0 {
-        bail!("IPC server process is unavailable");
-    }
-    Ok(pid)
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum ConfigPeer {
-    ThisProcess,
-    SharedProfile,
-    SeparateProfile,
-}
-
-// hbb_common maps the SYSTEM configuration directory to LocalService's profile.
-fn config_profile_sid(sid: &str) -> &str {
-    if sid == SYSTEM_SID {
-        LOCAL_SERVICE_SID
-    } else {
-        sid
-    }
-}
-
-impl super::Connection {
-    pub(super) fn client_shares_profile(&self) -> ResultType<bool> {
-        let pid = self.peer_pid().context("Missing IPC client process ID")?;
-        if pid == std::process::id() {
-            return Ok(true);
-        }
-        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }?;
-        let _process = RAIIHandle(process.0.cast());
-        let client = platform::process_user_sid_string(process)?;
-        let host = platform::current_process_user_sid_string()?;
-        Ok(config_profile_sid(&client) == config_profile_sid(&host))
-    }
-}
-
-impl super::ConnectionTmpl<ConnectionClient> {
-    pub(crate) fn config_peer(&self) -> ResultType<ConfigPeer> {
-        let pipe = HANDLE(self.inner.get_ref().as_raw_handle());
-        if server_pid(pipe)? == std::process::id() {
-            return Ok(ConfigPeer::ThisProcess);
-        }
-        // Main IPC accepts only SYSTEM or the current user.
-        if ensure_pipe_security(pipe, false)?
-            && config_profile_sid(&platform::current_process_user_sid_string()?)
-                != LOCAL_SERVICE_SID
-        {
-            return Ok(ConfigPeer::SeparateProfile);
-        }
-        Ok(ConfigPeer::SharedProfile)
-    }
-}
-
-impl ConfigPeer {
-    pub(super) async fn mirror_options(self, options: &HashMap<String, String>) -> ResultType<()> {
-        match self {
-            Self::ThisProcess => Ok(()),
-            Self::SharedProfile => {
-                crate::trusted_devices::config::update(Config::refresh_shared_options).await
-            }
-            Self::SeparateProfile => {
-                // An older host still needs its original map back on a settings edit.
-                let mut options = options.clone();
-                options.remove(OPTION_REG_RECOVERY);
-                crate::trusted_devices::config::update(move || {
-                    Config::set_profile_options(options, None)
-                })
-                .await
-            }
-        }
-    }
-
-    pub(crate) fn sync_config(self, config: Config, mut config2: Config2) -> ResultType<()> {
-        match self {
-            Self::ThisProcess => Ok(()),
-            Self::SharedProfile => Config::cache_shared_config(config, config2),
-            Self::SeparateProfile => {
-                config2.options.remove(OPTION_REG_RECOVERY);
-                Config::set_stored_option(OPTION_REG_RECOVERY, String::new())?;
-                crate::trusted_devices::config::sync_config(config, config2)
-            }
-        }
-    }
 }
 
 fn ensure_pipe_security(pipe: HANDLE, require_system: bool) -> ResultType<bool> {
