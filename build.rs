@@ -60,7 +60,8 @@ fn build_android_ifaddrs() {
 // The Linux unit tests (src/platform/android_ifaddrs_tests.rs) exercise the
 // same file. Its functions are renamed so they cannot replace glibc's. Built for
 // debug builds only (`cargo test` uses that profile), so no release artifact,
-// including the staticlib, carries the test copy.
+// including the staticlib, carries the test copy. The `rd_ifaddrs_test` cfg
+// tells the test module the archive exists, so the two cannot disagree.
 fn build_android_ifaddrs_test() {
     let file = "src/platform/android_ifaddrs.c";
     cc::Build::new()
@@ -70,6 +71,7 @@ fn build_android_ifaddrs_test() {
         .define("getifaddrs", "rd_test_getifaddrs")
         .define("freeifaddrs", "rd_test_freeifaddrs")
         .compile("android_ifaddrs_test");
+    println!("cargo:rustc-cfg=rd_ifaddrs_test");
     println!("cargo:rerun-if-changed={}", file);
 }
 
@@ -114,6 +116,7 @@ fn main() {
     #[cfg(windows)]
     build_windows();
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    println!("cargo:rustc-check-cfg=cfg(rd_ifaddrs_test)");
     if target_os == "macos" {
         #[cfg(target_os = "macos")]
         build_mac();

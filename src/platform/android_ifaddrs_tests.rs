@@ -131,7 +131,8 @@ fn stable_run() -> Option<(Entries, [Result<Entries, i32>; 4])> {
 #[test]
 fn matches_libc_with_and_without_the_link_dump() {
     let Some((want, [allowed, eacces, eperm, eio])) = stable_run() else {
-        panic!("the host's addresses kept changing; nothing stable to compare");
+        eprintln!("skipped: the host's addresses kept changing; nothing stable to compare");
+        return;
     };
     if want.is_empty() {
         // e.g. a network-less build sandbox, where even lo has no address.
