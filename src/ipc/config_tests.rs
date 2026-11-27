@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "config_tests/offline.rs"]
+mod offline;
+
 const RECORD: &str = "reg_recovery";
 const SETTING: &str = "ipc-recovery-test-setting";
 const TIMEOUT_MS: u64 = 1000;
@@ -26,6 +29,7 @@ pub(crate) async fn ipc_preserves_reg_recovery() {
             Config::set_option(RECORD.into(), cached.into());
             if cached != stored {
                 set_disk_record(stored);
+                Config::set_nat_type(i32::from(Config::get_nat_type() == 0));
             }
             let mut snapshot = Config2::get();
             if let Some(value) = returned {
@@ -56,7 +60,7 @@ pub(crate) async fn ipc_preserves_reg_recovery() {
     busy_pipe_save().await;
     drop((replies, receiver));
     sync_profile_options().await;
-    offline_save().await;
+    offline::save().await;
 }
 
 async fn busy_pipe_save() {
@@ -124,36 +128,6 @@ async fn sync_profile_options() {
         .sync_config(Config::get(), service)
         .unwrap();
     assert_saved(None, "full-sync");
-}
-
-async fn offline_save() {
-    let cleared = std::fs::read(Config2::file()).unwrap();
-    let mut options = Config::get_options();
-    options.insert(SETTING.into(), "offline".into());
-    Config::set_option(RECORD.into(), "previous".into());
-    // Another process cleared recovery after this process last cached its options.
-    std::fs::write(Config2::file(), cleared).unwrap();
-    tokio::task::spawn_blocking(move || set_options(options))
-        .await
-        .unwrap()
-        .unwrap();
-    assert_saved(None, "offline");
-    let mut offline = Config2::get();
-    offline
-        .options
-        .insert(SETTING.into(), "other-process".into());
-    config::store_path(Config2::file(), offline).unwrap();
-    Config::set_stored_option(RECORD, "new".into()).unwrap();
-    assert_saved(Some("new"), "other-process");
-    std::fs::write(Config2::file(), "[").unwrap();
-    let mut options = Config::get_options();
-    options.insert(SETTING.into(), "offline-repaired".into());
-    tokio::task::spawn_blocking(move || set_options(options))
-        .await
-        .unwrap()
-        .unwrap();
-    assert_saved(None, "offline-repaired");
-    Config::set_option(SETTING.into(), String::new());
 }
 
 fn set_disk_record(value: &str) {
@@ -242,6 +216,20 @@ async fn shared_profile_save(incoming: &mut Incoming) {
 
 async fn gui_save_after_recovery(incoming: Incoming) {
     let listener = tokio::spawn(start_with_listener("", incoming));
+    Config::set_option(
+        "privacy-mode-impl-key".into(),
+        "inactive-test-display".into(),
+    );
+    let expiration = keys::OPTION_TRUSTED_DEVICE_EXPIRATION;
+    tokio::task::spawn_blocking(move || {
+        crate::ui_interface::set_auth_option(expiration.into(), "30".into())
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(Config::get_option(expiration), "30");
+    Config::set_option(expiration.into(), String::new());
+    Config::set_option("privacy-mode-impl-key".into(), String::new());
     Config::set_option(RECORD.into(), "current".into());
     let mut cached = get_options_(TIMEOUT_MS).await.unwrap();
     assert_eq!(cached[RECORD], "current");

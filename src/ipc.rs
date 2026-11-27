@@ -2093,6 +2093,9 @@ pub fn set_option(key: &str, value: &str) {
     allow_err!(try_set_option(key, value));
 }
 
+const AUTH_HOST_UNAVAILABLE: &str =
+    "The host is unavailable; authentication settings were not changed";
+
 async fn options_connection() -> ResultType<Option<ConnectionTmpl<ConnClient>>> {
     match connect(1000, "").await {
         Ok(c) => Ok(Some(c)),
@@ -2107,15 +2110,44 @@ pub(crate) async fn try_set_option(key: &str, value: &str) -> ResultType<HashMap
     let mut connection = options_connection().await?;
     let mut options = match connection.as_mut() {
         Some(c) => read_options(c, 1000).await?,
+        #[cfg(windows)]
+        None => {
+            let (key, value) = (key.to_owned(), value.to_owned());
+            return crate::trusted_devices::config::update(move || set_offline_option(key, value))
+                .await;
+        }
+        #[cfg(not(windows))]
         None => Config::get_options(),
     };
+    edit_option(&mut options, key, value);
+    write_options(options.clone(), connection).await?;
+    Ok(options)
+}
+
+fn edit_option(options: &mut HashMap<String, String>, key: &str, value: &str) {
     if value.is_empty() {
         options.remove(key);
     } else {
         options.insert(key.to_owned(), value.to_owned());
     }
-    write_options(options.clone(), connection).await?;
-    Ok(options)
+}
+
+#[cfg(windows)]
+fn set_offline_option(key: String, value: String) -> ResultType<HashMap<String, String>> {
+    use crate::trusted_devices::config::{changes_authentication, is_auth_option};
+
+    let _nat = CheckTestNatType::new();
+    if key == keys::OPTION_REG_RECOVERY || is_auth_option(&key) {
+        Config::refresh_shared_options()?;
+        let mut requested = Config::get_options();
+        edit_option(&mut requested, &key, &value);
+        if changes_authentication(&requested) {
+            bail!(AUTH_HOST_UNAVAILABLE);
+        }
+    } else {
+        Config::set_stored_option(&key, value)?;
+    }
+    Ok(Config::get_options())
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -2130,7 +2162,7 @@ async fn write_options(
     let _nat = CheckTestNatType::new();
     let affected = crate::trusted_devices::config::changes_authentication(&value);
     if affected && connection.is_none() {
-        bail!("The host is unavailable; authentication settings were not changed");
+        bail!(AUTH_HOST_UNAVAILABLE);
     }
     if let Some(mut c) = connection {
         #[cfg(windows)]

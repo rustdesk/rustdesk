@@ -441,8 +441,8 @@ pub fn try_set_options(m: HashMap<String, String>) -> hbb_common::ResultType<()>
 
 #[cfg(windows)]
 fn save_windows_option(key: &str, value: &str) -> hbb_common::ResultType<()> {
-    let mut cached = OPTIONS.lock().unwrap();
-    *cached = ipc::try_set_option(key, value)?;
+    let options = ipc::try_set_option(key, value)?;
+    *OPTIONS.lock().unwrap() = options;
     Ok(())
 }
 
@@ -471,10 +471,7 @@ pub fn set_auth_option(key: String, value: String) -> hbb_common::ResultType<()>
 
 #[inline]
 pub fn set_option(key: String, value: String) {
-    if key == "2fa"
-        || key == keys::OPTION_ENABLE_TRUSTED_DEVICES
-        || key == keys::OPTION_TRUSTED_DEVICE_EXPIRATION
-    {
+    if crate::trusted_devices::config::is_auth_option(&key) {
         hbb_common::allow_err!(set_auth_option(key, value));
         return;
     }

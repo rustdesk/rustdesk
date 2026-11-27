@@ -232,6 +232,13 @@ pub fn set_options(options: HashMap<String, String>) -> ResultType<()> {
     })
 }
 
+pub(crate) fn is_auth_option(key: &str) -> bool {
+    matches!(
+        key,
+        "2fa" | keys::OPTION_ENABLE_TRUSTED_DEVICES | keys::OPTION_TRUSTED_DEVICE_EXPIRATION
+    )
+}
+
 pub fn set_password(value: &str) -> ResultType<bool> {
     change(changes_password(value), || {
         Ok(Config::set_permanent_password(value))
