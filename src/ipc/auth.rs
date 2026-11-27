@@ -731,7 +731,7 @@ where
 
 #[cfg(windows)]
 impl ConnectionTmpl<parity_tokio_ipc::Connection> {
-    fn peer_pid(&self) -> Option<u32> {
+    pub(super) fn peer_pid(&self) -> Option<u32> {
         let pipe_handle = self.inner.get_ref().as_raw_handle();
         if pipe_handle.is_null() {
             return None;

@@ -850,6 +850,30 @@ impl Drop for CheckIfRestart {
     }
 }
 
+#[cfg(windows)]
+fn config_reply(
+    mut reply: Data,
+    shares_profile: impl FnOnce() -> ResultType<bool>,
+) -> ResultType<Data> {
+    let options = match &mut reply {
+        Data::Options(Some(options)) => options,
+        Data::SyncConfig(Some(configs)) => &mut configs.1.options,
+        _ => return Ok(reply),
+    };
+    // Older clients write the entire reply back, sometimes into the host's own file.
+    if options.contains_key(keys::OPTION_REG_RECOVERY) && !shares_profile()? {
+        options.remove(keys::OPTION_REG_RECOVERY);
+    }
+    Ok(reply)
+}
+
+async fn send_config_snapshot(stream: &mut Connection, reply: Data) -> ResultType<()> {
+    #[cfg(windows)]
+    let reply = config_reply(reply, || stream.client_shares_profile())
+        .unwrap_or_else(|err| Data::SecurityConfigError(err.to_string()));
+    stream.send(&reply).await
+}
+
 async fn handle(data: Data, stream: &mut Connection) {
     match data {
         Data::SystemInfo(_) => {
@@ -1080,8 +1104,8 @@ async fn handle(data: Data, stream: &mut Connection) {
         },
         Data::Options(value) => match value {
             None => {
-                let v = Config::get_options();
-                allow_err!(stream.send(&Data::Options(Some(v))).await);
+                let reply = Data::Options(Some(Config::get_options()));
+                allow_err!(send_config_snapshot(stream, reply).await);
             }
             Some(value) => {
                 let _chk = CheckIfRestart::new();
@@ -1091,8 +1115,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 }
                 #[cfg(all(target_os = "linux", feature = "drm"))]
                 let drm_capture_was_on = crate::platform::linux::drm_capture_enabled();
-                if let Err(error) = crate::trusted_devices::config::update_ipc_options(value).await
-                {
+                if let Err(error) = crate::trusted_devices::config::update_options(value).await {
                     allow_err!(
                         stream
                             .send(&Data::SecurityConfigError(error.to_string()))
@@ -1160,11 +1183,8 @@ async fn handle(data: Data, stream: &mut Connection) {
             };
             #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
             let config2 = Config2::get();
-            allow_err!(
-                stream
-                    .send(&Data::SyncConfig(Some((Config::get(), config2).into())))
-                    .await
-            );
+            let reply = Data::SyncConfig(Some((Config::get(), config2).into()));
+            allow_err!(send_config_snapshot(stream, reply).await);
         }
         #[cfg(windows)]
         Data::SyncWinCpuUsage(None) => {
@@ -2023,11 +2043,13 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     let mut c = connect(ms_timeout, "").await?;
     #[cfg(windows)]
-    let peer = c.config_peer();
+    let peer = c.config_peer()?;
     c.send(&Data::Options(None)).await?;
     if let Some(Data::Options(Some(value))) = c.next_timeout(ms_timeout).await? {
         #[cfg(windows)]
-        if let Err(error) = async { peer?.mirror_options(value.clone()).await }.await {
+        let mut value = value;
+        #[cfg(windows)]
+        if let Err(error) = peer.mirror_options(&mut value).await {
             const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
             hbb_common::throttled_log!(
                 LOG_INTERVAL,
@@ -2036,7 +2058,7 @@ async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
             );
         }
         #[cfg(not(windows))]
-        base::config::set_ipc_options(value.clone());
+        Config::set_options_preserving_option(value.clone(), keys::OPTION_REG_RECOVERY);
         Ok(value)
     } else {
         Ok(Config::get_options())
@@ -2093,17 +2115,21 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
                 sync_security_config_from_server(&mut c).await?;
                 return Ok(());
             }
-            Ok(Some(Data::Options(None))) => {
-                #[cfg(windows)]
-                return peer.mirror_options(value).await;
-            }
+            Ok(Some(Data::Options(None))) => {}
             Ok(Some(Data::SecurityConfigError(error))) => bail!(error),
             Err(error) if require_ack => return Err(error),
             _ if require_ack => bail!("The host did not confirm the configuration update"),
             _ => {}
         }
+        #[cfg(windows)]
+        {
+            let mut value = value;
+            return peer.mirror_options(&mut value).await;
+        }
     }
-    base::config::set_ipc_options(value);
+    #[cfg(windows)]
+    Config::refresh_shared_options()?;
+    Config::set_options_preserving_option(value, keys::OPTION_REG_RECOVERY);
     Ok(())
 }
 

@@ -1,6 +1,4 @@
 use super::policy;
-#[cfg(not(target_os = "ios"))]
-pub use super::policy::update_ipc_options;
 pub use super::policy::{changes_authentication, update_options};
 use base::config::keys;
 use hbb_common::{
@@ -230,7 +228,7 @@ pub(super) fn change<T>(affected: bool, apply: impl FnOnce() -> ResultType<T>) -
 
 pub fn set_options(options: HashMap<String, String>) -> ResultType<()> {
     policy::change_options(effective_options(options.clone()), || {
-        Config::set_options(options);
+        Config::set_options_preserving_option(options, keys::OPTION_REG_RECOVERY);
         Ok(())
     })
 }
@@ -274,7 +272,13 @@ pub fn set_config(value: Config) -> ResultType<bool> {
 
 pub fn set_config2(value: Config2) -> ResultType<bool> {
     policy::change_options(effective_options(value.options.clone()), || {
-        Ok(base::config::set_ipc_config2(value))
+        #[cfg(windows)]
+        return Ok(Config2::set_preserving_option(
+            value,
+            keys::OPTION_REG_RECOVERY,
+        ));
+        #[cfg(not(windows))]
+        Ok(Config2::set(value))
     })
 }
 

@@ -1,6 +1,5 @@
 use super::{PrivacyMode, PrivacyModeState, INVALID_PRIVACY_MODE_CONN_ID, NO_PHYSICAL_DISPLAYS};
 use crate::{platform::windows::reg_display_settings, virtual_display_manager};
-use base::config::keys::OPTION_REG_RECOVERY;
 use hbb_common::{
     allow_err, bail, config::Config, log, tokio::sync::mpsc::UnboundedSender, ResultType,
 };
@@ -32,6 +31,7 @@ use winapi::{
 
 pub(super) const PRIVACY_MODE_IMPL: &str = super::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY;
 
+const CONFIG_KEY_REG_RECOVERY: &str = base::config::keys::OPTION_REG_RECOVERY;
 const STATE_CHECK_LOG_INTERVAL: Duration = Duration::from_secs(60);
 
 fn check_active_displays(displays: impl Iterator<Item = DISPLAY_DEVICEW>) -> ResultType<()> {
@@ -605,7 +605,7 @@ impl PrivacyMode for PrivacyModeImpl {
             reg_display_settings::diff_recent_connectivity(reg_connectivity_1, reg_connectivity_2)
         {
             Config::set_option(
-                OPTION_REG_RECOVERY.to_owned(),
+                CONFIG_KEY_REG_RECOVERY.to_owned(),
                 serde_json::to_string(&reg_recovery)?,
             );
         } else {
@@ -672,11 +672,11 @@ impl Drop for PrivacyModeImpl {
 
 #[inline]
 fn reset_config_reg_connectivity() {
-    Config::set_option(OPTION_REG_RECOVERY.to_owned(), "".to_owned());
+    Config::set_option(CONFIG_KEY_REG_RECOVERY.to_owned(), "".to_owned());
 }
 
 pub fn restore_reg_connectivity(plug_out_monitors: bool, force: bool) {
-    let config_recovery_value = Config::get_option(OPTION_REG_RECOVERY);
+    let config_recovery_value = Config::get_option(CONFIG_KEY_REG_RECOVERY);
     if config_recovery_value.is_empty() {
         return;
     }

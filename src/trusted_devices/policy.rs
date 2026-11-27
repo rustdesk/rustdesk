@@ -46,20 +46,6 @@ pub async fn update_options(options: HashMap<String, String>) -> ResultType<()> 
     config::update_auth(revoke, move || config::set_options(options)).await
 }
 
-#[cfg(not(target_os = "ios"))]
-pub async fn update_ipc_options(options: HashMap<String, String>) -> ResultType<()> {
-    let old = Config::get_options();
-    let new = config::effective_options(options.clone());
-    let revoke = authentication_changed(&old, &new);
-    config::update_auth(revoke, move || {
-        change_options(config::effective_options(options.clone()), || {
-            base::config::set_ipc_options(options);
-            Ok(())
-        })
-    })
-    .await
-}
-
 pub(super) fn change_options<T>(
     options: HashMap<String, String>,
     apply: impl FnOnce() -> ResultType<T>,

@@ -46,19 +46,68 @@ pub(crate) async fn ipc_preserves_reg_recovery() {
 
     shared_profile_save(&mut incoming).await;
     gui_save_after_recovery(incoming).await;
-    let service = Config2::get();
+    sync_profile_options().await;
+}
+
+async fn sync_profile_options() {
+    let mut service = Config2::get();
     let mut stale = service.clone();
     stale.options.insert(RECORD.into(), "previous".into());
     ipc_windows::ConfigPeer::SharedProfile
         .sync_config(Config::get(), stale)
         .unwrap();
     assert_saved(None, "gui");
+    service.options.insert(RECORD.into(), "host".into());
+    service
+        .options
+        .insert(SETTING.into(), "options-sync".into());
     Config::set_option(RECORD.into(), "previous".into());
+    let mut options = service.options.clone();
+    ipc_windows::ConfigPeer::SeparateProfile
+        .mirror_options(&mut options)
+        .await
+        .unwrap();
+    assert_saved(None, "options-sync");
+    assert!(!options.contains_key(RECORD));
+    Config::set_option(RECORD.into(), "previous".into());
+    service.options.insert(SETTING.into(), "full-sync".into());
     ipc_windows::ConfigPeer::SeparateProfile
         .sync_config(Config::get(), service)
         .unwrap();
-    assert_saved(None, "gui");
+    assert_saved(None, "full-sync");
+    let cleared = std::fs::read(Config2::file()).unwrap();
+    let mut options = Config::get_options();
+    options.insert(SETTING.into(), "offline".into());
+    Config::set_option(RECORD.into(), "previous".into());
+    // Another process cleared recovery after this process last cached its options.
+    std::fs::write(Config2::file(), cleared).unwrap();
+    tokio::task::spawn_blocking(move || set_options(options))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_saved(None, "offline");
     Config::set_option(SETTING.into(), String::new());
+}
+
+#[test]
+fn separate_profile_config_replies_omit_only_recovery() {
+    let mut config = Config2::default();
+    config.options = HashMap::from([
+        (RECORD.into(), "host".into()),
+        (SETTING.into(), "edit".into()),
+    ]);
+    for reply in [
+        Data::Options(Some(config.options.clone())),
+        Data::SyncConfig(Some((Config::default(), config).into())),
+    ] {
+        assert!(config_reply(reply.clone(), || bail!("unknown client profile")).is_err());
+        let filtered = match config_reply(reply, || Ok(false)).unwrap() {
+            Data::Options(Some(options)) => options,
+            Data::SyncConfig(Some(configs)) => configs.1.options,
+            _ => panic!("expected a configuration snapshot"),
+        };
+        assert_eq!(filtered, HashMap::from([(SETTING.into(), "edit".into())]));
+    }
 }
 
 pub(crate) async fn shared_profile_client() -> bool {

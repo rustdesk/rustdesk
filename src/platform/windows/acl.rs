@@ -194,14 +194,18 @@ pub fn set_path_permission(dir: &Path, access_mask: u32) -> ResultType<()> {
 /// - Official SID-to-string API (`ConvertSidToStringSidW`):
 ///   https://learn.microsoft.com/en-us/windows/win32/api/sddl/nf-sddl-convertsidtostringsidw
 pub(crate) fn current_process_user_sid_string() -> ResultType<String> {
+    process_user_sid_string(unsafe { GetCurrentProcess() })
+}
+
+pub(crate) fn process_user_sid_string(process: HANDLE) -> ResultType<String> {
     let mut token = HANDLE::default();
     let result = (|| -> ResultType<String> {
         unsafe {
-            OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token)
-                .map_err(|e| anyhow!("Failed to open current process token: {}", e))?;
+            OpenProcessToken(process, TOKEN_QUERY, &mut token)
+                .map_err(|e| anyhow!("Failed to open process token: {}", e))?;
         }
 
-        let buffer = unsafe { read_token_user_buffer(token, "current process")? };
+        let buffer = unsafe { read_token_user_buffer(token, "process")? };
         let token_user: TOKEN_USER =
             unsafe { std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER) };
         if token_user.User.Sid.0.is_null() {
@@ -211,10 +215,7 @@ pub(crate) fn current_process_user_sid_string() -> ResultType<String> {
         let mut sid_string_ptr = PWSTR::null();
         unsafe {
             ConvertSidToStringSidW(token_user.User.Sid, &mut sid_string_ptr).map_err(|e| {
-                anyhow!(
-                    "ConvertSidToStringSidW failed for current process token SID: {}",
-                    e
-                )
+                anyhow!("ConvertSidToStringSidW failed for process token SID: {}", e)
             })?;
         }
         if sid_string_ptr.is_null() {

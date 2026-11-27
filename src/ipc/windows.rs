@@ -1,4 +1,5 @@
 use crate::platform::windows as platform;
+use base::{config::keys::OPTION_REG_RECOVERY, platform::windows::RAIIHandle};
 use hbb_common::{
     anyhow::Context,
     bail,
@@ -30,7 +31,10 @@ use windows::{
         Storage::FileSystem::{
             FILE_FLAG_OVERLAPPED, FILE_GENERIC_READ, FILE_WRITE_DATA, SECURITY_IDENTIFICATION,
         },
-        System::Pipes::{GetNamedPipeServerProcessId, GetNamedPipeServerSessionId},
+        System::{
+            Pipes::{GetNamedPipeServerProcessId, GetNamedPipeServerSessionId},
+            Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+        },
     },
 };
 
@@ -153,19 +157,39 @@ pub(crate) enum ConfigPeer {
     SeparateProfile,
 }
 
+// hbb_common maps the SYSTEM configuration directory to LocalService's profile.
+fn config_profile_sid(sid: &str) -> &str {
+    if sid == SYSTEM_SID {
+        LOCAL_SERVICE_SID
+    } else {
+        sid
+    }
+}
+
+impl super::Connection {
+    pub(super) fn client_shares_profile(&self) -> ResultType<bool> {
+        let pid = self.peer_pid().context("Missing IPC client process ID")?;
+        if pid == std::process::id() {
+            return Ok(true);
+        }
+        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }?;
+        let _process = RAIIHandle(process.0.cast());
+        let client = platform::process_user_sid_string(process)?;
+        let host = platform::current_process_user_sid_string()?;
+        Ok(config_profile_sid(&client) == config_profile_sid(&host))
+    }
+}
+
 impl super::ConnectionTmpl<ConnectionClient> {
     pub(crate) fn config_peer(&self) -> ResultType<ConfigPeer> {
         let pipe = HANDLE(self.inner.get_ref().as_raw_handle());
         if server_pid(pipe)? == std::process::id() {
             return Ok(ConfigPeer::ThisProcess);
         }
-        // Main IPC accepts only SYSTEM or the current user. hbb_common maps
-        // SYSTEM's configuration directory to the LocalService profile.
+        // Main IPC accepts only SYSTEM or the current user.
         if ensure_pipe_security(pipe, false)?
-            && !matches!(
-                platform::current_process_user_sid_string()?.as_str(),
-                SYSTEM_SID | LOCAL_SERVICE_SID
-            )
+            && config_profile_sid(&platform::current_process_user_sid_string()?)
+                != LOCAL_SERVICE_SID
         {
             return Ok(ConfigPeer::SeparateProfile);
         }
@@ -174,23 +198,35 @@ impl super::ConnectionTmpl<ConnectionClient> {
 }
 
 impl ConfigPeer {
-    pub(super) async fn mirror_options(self, options: HashMap<String, String>) -> ResultType<()> {
-        crate::trusted_devices::config::update(move || {
-            match self {
-                Self::ThisProcess => (),
-                Self::SharedProfile => return Config::refresh_shared_options(),
-                Self::SeparateProfile => base::config::set_ipc_options(options),
+    pub(super) async fn mirror_options(
+        self,
+        options: &mut HashMap<String, String>,
+    ) -> ResultType<()> {
+        match self {
+            Self::ThisProcess => return Ok(()),
+            Self::SharedProfile => {
+                return crate::trusted_devices::config::update(Config::refresh_shared_options).await
             }
+            Self::SeparateProfile => {
+                options.remove(OPTION_REG_RECOVERY);
+            }
+        }
+        let options = options.clone();
+        crate::trusted_devices::config::update(move || {
+            Config::set_options(options);
             Ok(())
         })
         .await
     }
 
-    pub(crate) fn sync_config(self, config: Config, config2: Config2) -> ResultType<()> {
+    pub(crate) fn sync_config(self, config: Config, mut config2: Config2) -> ResultType<()> {
         match self {
             Self::ThisProcess => Ok(()),
             Self::SharedProfile => Config::cache_shared_config(config, config2),
-            Self::SeparateProfile => crate::trusted_devices::config::sync_config(config, config2),
+            Self::SeparateProfile => {
+                config2.options.remove(OPTION_REG_RECOVERY);
+                crate::trusted_devices::config::sync_config(config, config2)
+            }
         }
     }
 }
