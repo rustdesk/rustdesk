@@ -425,6 +425,7 @@ pub fn set_options(m: HashMap<String, String>) {
 pub fn try_set_options(m: HashMap<String, String>) -> hbb_common::ResultType<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
+        #[cfg(not(windows))]
         if !crate::trusted_devices::config::changes_authentication(&m) {
             *OPTIONS.lock().unwrap() = m.clone();
             hbb_common::allow_err!(ipc::set_options(m));
@@ -438,22 +439,34 @@ pub fn try_set_options(m: HashMap<String, String>) -> hbb_common::ResultType<()>
     Ok(())
 }
 
+#[cfg(windows)]
+fn save_windows_option(key: &str, value: &str) -> hbb_common::ResultType<()> {
+    let mut cached = OPTIONS.lock().unwrap();
+    *cached = ipc::try_set_option(key, value)?;
+    Ok(())
+}
+
 pub fn set_auth_option(key: String, value: String) -> hbb_common::ResultType<()> {
     if key == keys::OPTION_TRUSTED_DEVICE_EXPIRATION
         && !matches!(value.as_str(), "" | "1" | "7" | "30" | "90" | "0")
     {
         hbb_common::bail!("Invalid trusted-device expiration period");
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let mut options = ipc::get_options();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    let mut options = Config::get_options();
-    if value.is_empty() {
-        options.remove(&key);
-    } else {
-        options.insert(key, value);
+    #[cfg(windows)]
+    return save_windows_option(&key, &value);
+    #[cfg(not(windows))]
+    {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let mut options = ipc::get_options();
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let mut options = Config::get_options();
+        if value.is_empty() {
+            options.remove(&key);
+        } else {
+            options.insert(key, value);
+        }
+        try_set_options(options)
     }
-    try_set_options(options)
 }
 
 #[inline]
@@ -492,7 +505,9 @@ pub fn set_option(key: String, value: String) {
         #[cfg(not(target_os = "ios"))]
         crate::audio_service::restart();
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(windows)]
+    hbb_common::allow_err!(save_windows_option(&key, &value));
+    #[cfg(not(any(windows, target_os = "android", target_os = "ios")))]
     {
         let mut options = OPTIONS.lock().unwrap();
         if value.is_empty() {

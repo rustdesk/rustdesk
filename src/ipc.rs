@@ -2042,27 +2042,34 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
 
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     let mut c = connect(ms_timeout, "").await?;
+    read_options(&mut c, ms_timeout).await
+}
+
+async fn read_options(
+    c: &mut ConnectionTmpl<ConnClient>,
+    ms_timeout: u64,
+) -> ResultType<HashMap<String, String>> {
     #[cfg(windows)]
     let peer = c.config_peer()?;
     c.send(&Data::Options(None)).await?;
-    if let Some(Data::Options(Some(value))) = c.next_timeout(ms_timeout).await? {
-        #[cfg(windows)]
-        let mut value = value;
-        #[cfg(windows)]
-        if let Err(error) = peer.mirror_options(&mut value).await {
-            const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
-            hbb_common::throttled_log!(
-                LOG_INTERVAL,
-                warn,
-                "Failed to cache host options: {error:#}"
-            );
-        }
-        #[cfg(not(windows))]
-        Config::set_options_preserving_option(value.clone(), keys::OPTION_REG_RECOVERY);
-        Ok(value)
-    } else {
-        Ok(Config::get_options())
+    let value = match c.next_timeout(ms_timeout).await? {
+        Some(Data::Options(Some(value))) => value,
+        Some(Data::SecurityConfigError(error)) => bail!(error),
+        _ => bail!("The host did not provide its current options"),
+    };
+    #[cfg(windows)]
+    let mirrored = peer.mirror_options(&value).await;
+    #[cfg(not(windows))]
+    let mirrored = Config::set_profile_options(value.clone(), Some(keys::OPTION_REG_RECOVERY));
+    if let Err(error) = mirrored {
+        const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+        hbb_common::throttled_log!(
+            LOG_INTERVAL,
+            warn,
+            "Failed to cache host options: {error:#}"
+        );
     }
+    Ok(value)
 }
 
 pub async fn get_options_async() -> HashMap<String, String> {
@@ -2083,30 +2090,52 @@ pub async fn get_option_async(key: &str) -> String {
 }
 
 pub fn set_option(key: &str, value: &str) {
-    let mut options = get_options();
+    allow_err!(try_set_option(key, value));
+}
+
+async fn options_connection() -> ResultType<Option<ConnectionTmpl<ConnClient>>> {
+    match connect(1000, "").await {
+        Ok(c) => Ok(Some(c)),
+        #[cfg(windows)]
+        Err(error) if !error.is::<ipc_windows::PipeNotFound>() => Err(error),
+        Err(_) => Ok(None),
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub(crate) async fn try_set_option(key: &str, value: &str) -> ResultType<HashMap<String, String>> {
+    let mut connection = options_connection().await?;
+    let mut options = match connection.as_mut() {
+        Some(c) => read_options(c, 1000).await?,
+        None => Config::get_options(),
+    };
     if value.is_empty() {
         options.remove(key);
     } else {
         options.insert(key.to_owned(), value.to_owned());
     }
-    allow_err!(set_options(options));
+    write_options(options.clone(), connection).await?;
+    Ok(options)
 }
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
+    write_options(value, options_connection().await?).await
+}
+
+async fn write_options(
+    value: HashMap<String, String>,
+    connection: Option<ConnectionTmpl<ConnClient>>,
+) -> ResultType<()> {
     let _nat = CheckTestNatType::new();
     let affected = crate::trusted_devices::config::changes_authentication(&value);
-    let connection = connect(1000, "").await;
-    if affected && connection.is_err() {
+    if affected && connection.is_none() {
         bail!("The host is unavailable; authentication settings were not changed");
     }
-    if let Ok(mut c) = connection {
+    if let Some(mut c) = connection {
         #[cfg(windows)]
         let peer = c.config_peer()?;
-        #[cfg(windows)]
-        let require_ack = affected || !matches!(peer, ipc_windows::ConfigPeer::SeparateProfile);
-        #[cfg(not(windows))]
-        let require_ack = affected;
+        let require_ack = cfg!(windows) || affected;
         c.send(&Data::Options(Some(value.clone()))).await?;
         // do not put below before connect, because we need to check should_exit
         match c.next_timeout(1000).await {
@@ -2122,15 +2151,15 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
             _ => {}
         }
         #[cfg(windows)]
-        {
-            let mut value = value;
-            return peer.mirror_options(&mut value).await;
-        }
+        return peer.mirror_options(&value).await;
     }
     #[cfg(windows)]
-    Config::refresh_shared_options()?;
-    Config::set_options_preserving_option(value, keys::OPTION_REG_RECOVERY);
-    Ok(())
+    return crate::trusted_devices::config::update(move || {
+        Config::set_profile_options(value, Some(keys::OPTION_REG_RECOVERY))
+    })
+    .await;
+    #[cfg(not(windows))]
+    Config::set_profile_options(value, Some(keys::OPTION_REG_RECOVERY))
 }
 
 /// For the CLI, a process that just loaded the config. With no `--server` up to apply the change,

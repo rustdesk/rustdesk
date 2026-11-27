@@ -228,8 +228,7 @@ pub(super) fn change<T>(affected: bool, apply: impl FnOnce() -> ResultType<T>) -
 
 pub fn set_options(options: HashMap<String, String>) -> ResultType<()> {
     policy::change_options(effective_options(options.clone()), || {
-        Config::set_options_preserving_option(options, keys::OPTION_REG_RECOVERY);
-        Ok(())
+        Config::set_profile_options(options, Some(keys::OPTION_REG_RECOVERY))
     })
 }
 
@@ -273,10 +272,7 @@ pub fn set_config(value: Config) -> ResultType<bool> {
 pub fn set_config2(value: Config2) -> ResultType<bool> {
     policy::change_options(effective_options(value.options.clone()), || {
         #[cfg(windows)]
-        return Ok(Config2::set_preserving_option(
-            value,
-            keys::OPTION_REG_RECOVERY,
-        ));
+        return Config2::set_preserving_option(value, keys::OPTION_REG_RECOVERY);
         #[cfg(not(windows))]
         Ok(Config2::set(value))
     })

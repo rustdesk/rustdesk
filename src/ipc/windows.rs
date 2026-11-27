@@ -49,6 +49,15 @@ const ACCESS_ALLOWED_ACE_TYPE_U8: u8 = 0;
 
 struct LocalAllocation(*mut c_void);
 
+#[derive(Debug)]
+pub(super) struct PipeNotFound;
+
+impl std::fmt::Display for PipeNotFound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("IPC pipe does not exist")
+    }
+}
+
 impl Drop for LocalAllocation {
     fn drop(&mut self) {
         unsafe { LocalFree(Some(HLOCAL(self.0))) };
@@ -81,15 +90,22 @@ pub(super) fn listener_security_attributes() -> io::Result<SecurityAttributes> {
     SecurityAttributes::from_sddl(&sddl)
 }
 
-fn open_pipe(path: &str) -> io::Result<ConnectionClient> {
-    let file = OpenOptions::new()
+fn open_pipe(path: &str) -> ResultType<ConnectionClient> {
+    let file = match OpenOptions::new()
         .access_mode(CLIENT_ACCESS)
         .share_mode(0)
         .custom_flags(FILE_FLAG_OVERLAPPED.0)
         .security_qos_flags(SECURITY_IDENTIFICATION.0)
-        .open(path)?;
+        .open(path)
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(hbb_common::anyhow::Error::new(error).context(PipeNotFound));
+        }
+        Err(error) => return Err(error.into()),
+    };
     // Tokio takes ownership of the handle, including when registration fails.
-    unsafe { ConnectionClient::from_raw_handle(file.into_raw_handle()) }
+    Ok(unsafe { ConnectionClient::from_raw_handle(file.into_raw_handle()) }?)
 }
 
 /// Authenticates a main/service pipe before exposing it for application data.
@@ -101,10 +117,15 @@ pub(super) async fn connect(path: &str, postfix: &str) -> ResultType<ConnectionC
     let client = loop {
         match open_pipe(path) {
             Ok(client) => break client,
-            Err(error) if error.raw_os_error() == Some(ERROR_PIPE_BUSY.0 as i32) => {
+            Err(error)
+                if error
+                    .downcast_ref::<io::Error>()
+                    .and_then(io::Error::raw_os_error)
+                    == Some(ERROR_PIPE_BUSY.0 as i32) =>
+            {
                 sleep(PIPE_BUSY_RETRY).await;
             }
-            Err(error) => return Err(error.into()),
+            Err(error) => return Err(error),
         }
     };
     // The UI can own the main pipe while an installed service is unavailable.
@@ -198,25 +219,22 @@ impl super::ConnectionTmpl<ConnectionClient> {
 }
 
 impl ConfigPeer {
-    pub(super) async fn mirror_options(
-        self,
-        options: &mut HashMap<String, String>,
-    ) -> ResultType<()> {
+    pub(super) async fn mirror_options(self, options: &HashMap<String, String>) -> ResultType<()> {
         match self {
-            Self::ThisProcess => return Ok(()),
+            Self::ThisProcess => Ok(()),
             Self::SharedProfile => {
-                return crate::trusted_devices::config::update(Config::refresh_shared_options).await
+                crate::trusted_devices::config::update(Config::refresh_shared_options).await
             }
             Self::SeparateProfile => {
+                // An older host still needs its original map back on a settings edit.
+                let mut options = options.clone();
                 options.remove(OPTION_REG_RECOVERY);
+                crate::trusted_devices::config::update(move || {
+                    Config::set_profile_options(options, None)
+                })
+                .await
             }
         }
-        let options = options.clone();
-        crate::trusted_devices::config::update(move || {
-            Config::set_options(options);
-            Ok(())
-        })
-        .await
     }
 
     pub(crate) fn sync_config(self, config: Config, mut config2: Config2) -> ResultType<()> {
@@ -225,6 +243,7 @@ impl ConfigPeer {
             Self::SharedProfile => Config::cache_shared_config(config, config2),
             Self::SeparateProfile => {
                 config2.options.remove(OPTION_REG_RECOVERY);
+                Config::set_stored_option(OPTION_REG_RECOVERY, String::new())?;
                 crate::trusted_devices::config::sync_config(config, config2)
             }
         }

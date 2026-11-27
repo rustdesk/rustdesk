@@ -14,14 +14,19 @@ pub(crate) async fn ipc_preserves_reg_recovery() {
     let mut replies = connect(TIMEOUT_MS, "").await.unwrap();
     let mut receiver = Connection::new(incoming.next().await.unwrap().unwrap());
     for full_config in [false, true] {
-        for (stored, returned, edit) in [
-            ("current", Some("current"), "identical"),
-            ("current", Some("previous"), "changed"),
-            ("current", None, "omitted"),
-            ("current", Some(""), "empty"),
-            ("", Some("previous"), "absent"),
+        for (cached, stored, returned, edit) in [
+            ("current", "current", Some("current"), "identical"),
+            ("current", "current", Some("previous"), "changed"),
+            ("current", "current", None, "omitted"),
+            ("current", "current", Some(""), "empty"),
+            ("", "created", None, "created-elsewhere"),
+            ("current", "", Some("previous"), "cleared-elsewhere"),
+            ("", "", Some("previous"), "absent"),
         ] {
-            Config::set_option(RECORD.into(), stored.into());
+            Config::set_option(RECORD.into(), cached.into());
+            if cached != stored {
+                set_disk_record(stored);
+            }
             let mut snapshot = Config2::get();
             if let Some(value) = returned {
                 snapshot.options.insert(RECORD.into(), value.into());
@@ -44,9 +49,41 @@ pub(crate) async fn ipc_preserves_reg_recovery() {
         }
     }
 
+    denied_options_read(&mut incoming).await;
     shared_profile_save(&mut incoming).await;
     gui_save_after_recovery(incoming).await;
+    // The connected pair keeps the pipe busy after its listener has stopped.
+    busy_pipe_save().await;
+    drop((replies, receiver));
     sync_profile_options().await;
+    offline_save().await;
+}
+
+async fn busy_pipe_save() {
+    let mut options = Config::get_options();
+    options.insert(SETTING.into(), "busy".into());
+    assert!(tokio::task::spawn_blocking(move || set_options(options))
+        .await
+        .unwrap()
+        .is_err());
+    assert_saved(None, "gui");
+}
+
+async fn denied_options_read(incoming: &mut Incoming) {
+    let edit = tokio::task::spawn_blocking(|| try_set_option(SETTING, "rejected"));
+    let mut conn = Connection::new(incoming.next().await.unwrap().unwrap());
+    assert!(matches!(
+        conn.next().await.unwrap(),
+        Some(Data::Options(None))
+    ));
+    conn.send(&Data::SecurityConfigError("profile unavailable".into()))
+        .await
+        .unwrap();
+    assert_eq!(
+        edit.await.unwrap().unwrap_err().to_string(),
+        "profile unavailable"
+    );
+    assert_saved(None, "absent");
 }
 
 async fn sync_profile_options() {
@@ -62,19 +99,34 @@ async fn sync_profile_options() {
         .options
         .insert(SETTING.into(), "options-sync".into());
     Config::set_option(RECORD.into(), "previous".into());
-    let mut options = service.options.clone();
+    let options = service.options.clone();
     ipc_windows::ConfigPeer::SeparateProfile
-        .mirror_options(&mut options)
+        .mirror_options(&options)
         .await
         .unwrap();
     assert_saved(None, "options-sync");
-    assert!(!options.contains_key(RECORD));
+    // An older host needs its original full map back when an unrelated option is edited.
+    assert_eq!(options.get(RECORD).map(String::as_str), Some("host"));
+    set_disk_record("previous");
+    ipc_windows::ConfigPeer::SeparateProfile
+        .mirror_options(&options)
+        .await
+        .unwrap();
+    assert_saved(None, "options-sync");
     Config::set_option(RECORD.into(), "previous".into());
     service.options.insert(SETTING.into(), "full-sync".into());
+    ipc_windows::ConfigPeer::SeparateProfile
+        .sync_config(Config::get(), service.clone())
+        .unwrap();
+    assert_saved(None, "full-sync");
+    set_disk_record("previous");
     ipc_windows::ConfigPeer::SeparateProfile
         .sync_config(Config::get(), service)
         .unwrap();
     assert_saved(None, "full-sync");
+}
+
+async fn offline_save() {
     let cleared = std::fs::read(Config2::file()).unwrap();
     let mut options = Config::get_options();
     options.insert(SETTING.into(), "offline".into());
@@ -86,7 +138,34 @@ async fn sync_profile_options() {
         .unwrap()
         .unwrap();
     assert_saved(None, "offline");
+    let mut offline = Config2::get();
+    offline
+        .options
+        .insert(SETTING.into(), "other-process".into());
+    config::store_path(Config2::file(), offline).unwrap();
+    Config::set_stored_option(RECORD, "new".into()).unwrap();
+    assert_saved(Some("new"), "other-process");
+    std::fs::write(Config2::file(), "[").unwrap();
+    let mut options = Config::get_options();
+    options.insert(SETTING.into(), "offline-repaired".into());
+    tokio::task::spawn_blocking(move || set_options(options))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_saved(None, "offline-repaired");
     Config::set_option(SETTING.into(), String::new());
+}
+
+fn set_disk_record(value: &str) {
+    let file = Config2::file();
+    let mut stored: Config2 =
+        hbb_common::toml::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    if value.is_empty() {
+        stored.options.remove(RECORD);
+    } else {
+        stored.options.insert(RECORD.into(), value.into());
+    }
+    config::store_path(file, stored).unwrap();
 }
 
 #[test]
@@ -167,13 +246,19 @@ async fn gui_save_after_recovery(incoming: Incoming) {
     let mut cached = get_options_(TIMEOUT_MS).await.unwrap();
     assert_eq!(cached[RECORD], "current");
     Config::set_option(RECORD.into(), String::new());
-    cached.insert(SETTING.into(), "gui".into());
+    cached.insert(SETTING.into(), "gui-bulk".into());
     tokio::task::spawn_blocking(move || set_options(cached))
         .await
         .unwrap()
         .unwrap();
+    assert_saved(None, "gui-bulk");
+    tokio::task::spawn_blocking(|| crate::ui_interface::set_option(SETTING.into(), "gui".into()))
+        .await
+        .unwrap();
     assert_saved(None, "gui");
+    assert_eq!(crate::ui_interface::get_option(SETTING), "gui");
     listener.abort();
+    assert!(listener.await.unwrap_err().is_cancelled());
 }
 
 fn assert_saved(record: Option<&str>, edit: &str) {
