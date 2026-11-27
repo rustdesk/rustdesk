@@ -49,7 +49,7 @@ pub fn sync_config(value: Config, options: Config2) -> ResultType<()> {
     let _storage = super::storage()?;
     Config::set(value);
     if uses_windows_host_profile() {
-        Config2::set_preserving_option(options.clone(), keys::OPTION_REG_RECOVERY);
+        Config2::set_preserving_keys(options.clone(), keys::IPC_PRESERVED_KEYS);
     } else {
         Config2::set(options.clone());
     }
@@ -231,7 +231,7 @@ pub(super) fn change<T>(affected: bool, apply: impl FnOnce() -> ResultType<T>) -
 
 pub fn set_options(options: HashMap<String, String>) -> ResultType<()> {
     policy::change_options(effective_options(options.clone()), || {
-        Config::set_options_preserving_option(options, keys::OPTION_REG_RECOVERY);
+        Config::set_options_preserving_keys(options, keys::IPC_PRESERVED_KEYS);
         Ok(())
     })
 }
@@ -275,9 +275,9 @@ pub fn set_config(value: Config) -> ResultType<bool> {
 
 pub fn set_config2(value: Config2) -> ResultType<bool> {
     policy::change_options(effective_options(value.options.clone()), || {
-        Ok(Config2::set_preserving_option(
+        Ok(Config2::set_preserving_keys(
             value,
-            keys::OPTION_REG_RECOVERY,
+            keys::IPC_PRESERVED_KEYS,
         ))
     })
 }

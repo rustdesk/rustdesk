@@ -188,6 +188,8 @@ pub const OPTION_DISABLE_GROUP_PANEL: &str = "disable-group-panel";
 pub const OPTION_DISABLE_DISCOVERY_PANEL: &str = "disable-discovery-panel";
 pub const OPTION_PRE_ELEVATE_SERVICE: &str = "pre-elevate-service";
 
+pub const IPC_PRESERVED_KEYS: &[&str] = &[OPTION_REG_RECOVERY];
+
 // DEFAULT_DISPLAY_SETTINGS, OVERWRITE_DISPLAY_SETTINGS
 pub const KEYS_DISPLAY_SETTINGS: &[&str] = &[
     OPTION_VIEW_ONLY,

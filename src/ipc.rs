@@ -1084,7 +1084,7 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::Options(value) => match value {
             None => {
                 let mut v = Config::get_options();
-                v.remove(keys::OPTION_REG_RECOVERY);
+                remove_preserved_keys(&mut v);
                 allow_err!(stream.send(&Data::Options(Some(v))).await);
             }
             Some(value) => {
@@ -1164,7 +1164,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
             let config2 = Config2::get();
             let mut config2 = config2;
-            config2.options.remove(keys::OPTION_REG_RECOVERY);
+            remove_preserved_keys(&mut config2.options);
             allow_err!(
                 stream
                     .send(&Data::SyncConfig(Some((Config::get(), config2).into())))
@@ -2026,9 +2026,15 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
     }
 }
 
+fn remove_preserved_keys(options: &mut HashMap<String, String>) {
+    for &key in keys::IPC_PRESERVED_KEYS {
+        options.remove(key);
+    }
+}
+
 fn cache_ipc_options(options: HashMap<String, String>) {
     if crate::trusted_devices::config::uses_windows_host_profile() {
-        Config::set_options_preserving_option(options, keys::OPTION_REG_RECOVERY);
+        Config::set_options_preserving_keys(options, keys::IPC_PRESERVED_KEYS);
     } else {
         Config::set_options(options);
     }
@@ -2074,7 +2080,7 @@ pub fn set_option(key: &str, value: &str) {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(mut value: HashMap<String, String>) -> ResultType<()> {
-    value.remove(keys::OPTION_REG_RECOVERY);
+    remove_preserved_keys(&mut value);
     let _nat = CheckTestNatType::new();
     let affected = crate::trusted_devices::config::changes_authentication(&value);
     let connection = connect(1000, "").await;
@@ -2097,7 +2103,7 @@ pub async fn set_options(mut value: HashMap<String, String>) -> ResultType<()> {
         }
         cache_ipc_options(value);
     } else {
-        Config::set_options_preserving_option(value, keys::OPTION_REG_RECOVERY);
+        Config::set_options_preserving_keys(value, keys::IPC_PRESERVED_KEYS);
     }
     Ok(())
 }
