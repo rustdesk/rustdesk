@@ -105,6 +105,7 @@ async fn start_hbbs_sync_async() {
         TIME_CONN,
     ));
     let mut last_sent = None;
+    let mut http_client = None;
     let mut info_uploaded = InfoUploaded::default();
     let mut sysinfo_ver = "".to_owned();
     loop {
@@ -201,7 +202,7 @@ async fn start_hbbs_sync_async() {
                         let ver = config::Status::get("sysinfo_ver"); // sysinfo_ver is the version of sysinfo on server's side
                         if hash == old_hash {
                             // When the api doesn't exist, Ok("") will be returned in test.
-                            let samever = match crate::post_request(url.replace("heartbeat", "sysinfo_ver"), "".to_owned(), "").await {
+                            let samever = match post_request_kept(&mut http_client, url.replace("heartbeat", "sysinfo_ver"), "".to_owned()).await {
                                 Ok(x)  => {
                                     sysinfo_ver = x.clone();
                                     *PRO.lock().unwrap() = true;
@@ -219,7 +220,7 @@ async fn start_hbbs_sync_async() {
                             }
                         }
                     }
-                    match crate::post_request(url.replace("heartbeat", "sysinfo"), v, "").await {
+                    match post_request_kept(&mut http_client, url.replace("heartbeat", "sysinfo"), v).await {
                         Ok(x)  => {
                             if x == "SYSINFO_UPDATED" {
                                 info_uploaded = InfoUploaded::uploaded(url.clone(), id.clone(), sys_username);
@@ -253,7 +254,7 @@ async fn start_hbbs_sync_async() {
                 }
                 let modified_at = LocalConfig::get_option("strategy_timestamp").parse::<i64>().unwrap_or(0);
                 v["modified_at"] = json!(modified_at);
-                let response = crate::post_request(url, v.to_string(), "").await;
+                let response = post_request_kept(&mut http_client, url, v.to_string()).await;
                 if let Err(err) = &response {
                     hbb_common::throttled_log!(API_LOG_INTERVAL, warn, "Heartbeat failed: {err:?}");
                 }
@@ -296,6 +297,90 @@ async fn start_hbbs_sync_async() {
             }
         }
     }
+}
+
+#[cfg(not(any(target_os = "ios")))]
+struct KeptHttpClient {
+    // What the client was built from.
+    proxy: Option<config::Socks5Server>,
+    tls_type: u8,
+    danger_accept_invalid_cert: bool,
+    client: reqwest::Client,
+    // A whole response came back on it, so it may hold a pooled connection that has died since.
+    served: bool,
+}
+
+/// `crate::post_request`, with its HTTP attempt made on a client that outlives the call, so that
+/// a request goes out on the connection the previous one left open. A client built for one
+/// request starts with an empty pool: every heartbeat resolved the API host and connected again.
+///
+/// The connection is driven by the runtime that opened it, so `kept` must live and die with the
+/// runtime of its caller.
+#[cfg(not(any(target_os = "ios")))]
+async fn post_request_kept(
+    kept: &mut Option<KeptHttpClient>,
+    url: String,
+    body: String,
+) -> hbb_common::ResultType<String> {
+    use crate::{
+        common::{post_request_via_tcp_proxy, with_tcp_proxy_fallback},
+        hbbs_http::{create_http_client_async, get_url_for_tls},
+    };
+    use hbb_common::{
+        anyhow::{anyhow, Error},
+        tls::{get_cached_tls_accept_invalid_cert, get_cached_tls_type},
+    };
+
+    let proxy = Config::get_socks();
+    let tls_url = get_url_for_tls(&url, &proxy);
+    let tls = get_cached_tls_type(tls_url).zip(get_cached_tls_accept_invalid_cert(tls_url));
+    // Finding out the TLS settings of a server stays with `post_request`.
+    let Some((tls_type, danger_accept_invalid_cert)) = tls else {
+        *kept = None;
+        return crate::post_request(url, body, "").await;
+    };
+    let http = async {
+        let fits = matches!(kept, Some(k) if k.proxy == proxy && k.tls_type == tls_type as u8
+            && k.danger_accept_invalid_cert == danger_accept_invalid_cert);
+        if !fits {
+            *kept = None;
+        }
+        let kept = kept.get_or_insert_with(|| KeptHttpClient {
+            proxy,
+            tls_type: tls_type as u8,
+            danger_accept_invalid_cert,
+            client: create_http_client_async(tls_type, danger_accept_invalid_cert),
+            served: false,
+        });
+        let post = |client: &reqwest::Client| {
+            client
+                .post(&url)
+                .header("Content-Type", "application/json")
+                .body(body.clone())
+                .timeout(Duration::from_secs(12))
+                .send()
+        };
+        let mut response = post(&kept.client).await;
+        if let Err(e) = &response {
+            // The client of a failed attempt is replaced, so a later request starts from scratch,
+            // as every request used to. If it had served, the request is tried again right away:
+            // its pooled connection may be all that failed.
+            let retry = kept.served;
+            kept.client = create_http_client_async(tls_type, danger_accept_invalid_cert);
+            kept.served = false;
+            if retry {
+                log::trace!("kept connection failed, trying a new one: {e:?}");
+                response = post(&kept.client).await;
+            }
+        }
+        let response = response.map_err(|e| anyhow!("{:?}", e))?;
+        let status = response.status().as_u16();
+        let text = response.text().await?;
+        kept.served = true;
+        Ok::<_, Error>((status, text))
+    };
+    let tcp = post_request_via_tcp_proxy(&url, &body, "");
+    with_tcp_proxy_fallback(&url, "POST", http, tcp).await
 }
 
 fn heartbeat_url() -> String {
@@ -668,5 +753,101 @@ mod strategy_tests {
             filter_config_options(&mut options);
             assert_eq!(options, expected);
         }
+    }
+}
+
+#[cfg(all(test, not(target_os = "ios")))]
+mod kept_client_tests {
+    use super::post_request_kept;
+    use hbb_common::tokio::{
+        self,
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    /// An HTTP server that answers `{}` to the first `answers` requests of a connection and
+    /// hangs up on the next one. Returns its URL and the number of connections it has accepted.
+    async fn http_stub(answers: usize) -> (String, Arc<AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/api/heartbeat", listener.local_addr().unwrap());
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let counter = accepted.clone();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                counter.fetch_add(1, Ordering::SeqCst);
+                tokio::spawn(async move {
+                    let mut received = Vec::new();
+                    let mut buf = [0u8; 1024];
+                    let mut answered = 0;
+                    loop {
+                        // A whole request is its head plus the body length the head announces.
+                        let head_end = received.windows(4).position(|w| w == b"\r\n\r\n");
+                        if let Some(head_end) = head_end {
+                            let head = String::from_utf8_lossy(&received[..head_end]);
+                            let body_len = head
+                                .lines()
+                                .filter_map(|line| line.split_once(':'))
+                                .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                                .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+                                .unwrap_or(0);
+                            let request_len = head_end + 4 + body_len;
+                            if received.len() >= request_len {
+                                if answered == answers {
+                                    return;
+                                }
+                                answered += 1;
+                                received.drain(..request_len);
+                                let response = b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n{}";
+                                if stream.write_all(response).await.is_err() {
+                                    return;
+                                }
+                                continue;
+                            }
+                        }
+                        match stream.read(&mut buf).await {
+                            Ok(n) if n > 0 => received.extend_from_slice(&buf[..n]),
+                            _ => return,
+                        }
+                    }
+                });
+            }
+        });
+        (url, accepted)
+    }
+
+    #[tokio::test]
+    async fn heartbeats_share_one_connection() {
+        let (url, accepted) = http_stub(usize::MAX).await;
+        let mut kept = None;
+        for _ in 0..3 {
+            let response = post_request_kept(&mut kept, url.clone(), "{}".to_owned()).await;
+            assert_eq!(response.unwrap(), "{}");
+        }
+        assert_eq!(accepted.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn a_server_that_never_answers_gets_one_attempt() {
+        let (url, accepted) = http_stub(0).await;
+        let mut kept = None;
+        assert!(post_request_kept(&mut kept, url, "{}".to_owned())
+            .await
+            .is_err());
+        assert_eq!(accepted.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn a_heartbeat_survives_a_connection_the_server_dropped() {
+        let (url, accepted) = http_stub(1).await;
+        let mut kept = None;
+        for _ in 0..2 {
+            let response = post_request_kept(&mut kept, url.clone(), "{}".to_owned()).await;
+            assert_eq!(response.unwrap(), "{}");
+        }
+        assert_eq!(accepted.load(Ordering::SeqCst), 2);
     }
 }
