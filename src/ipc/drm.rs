@@ -27,6 +27,9 @@ pub struct DrmDisplayInfo {
     /// mode TRANSPOSED whatever the compositor reports (gamescope's wl_output has no transform).
     #[serde(default)]
     pub plane_transposed: bool,
+    /// The primary plane's `rotation` mask at enumeration; None when it cannot be read.
+    #[serde(default)]
+    pub primary_rotation: Option<u32>,
 }
 
 /// Mirrors `scrap::drm_reader::drmtap_dmabuf_desc` except `dma_buf_fd` (never serializes — it rides
@@ -282,17 +285,22 @@ fn drm_displays_from_reader(
             }
             true
         })
-        .map(|d| DrmDisplayInfo {
-            plane_transposed: plane_transposed(device, d.crtc_id),
-            name: d.name,
-            crtc_id: d.crtc_id,
-            x: d.x,
-            y: d.y,
-            width: d.width,
-            height: d.height,
-            active: d.active,
-            render_node: render_node.clone(),
-            device: device.to_owned(),
+        .map(|d| {
+            let primary_rotation = primary_rotation(device, d.crtc_id);
+            DrmDisplayInfo {
+                plane_transposed: primary_rotation
+                    .is_some_and(|m| m & (DRM_MODE_ROTATE_90 | DRM_MODE_ROTATE_270) != 0),
+                primary_rotation,
+                name: d.name,
+                crtc_id: d.crtc_id,
+                x: d.x,
+                y: d.y,
+                width: d.width,
+                height: d.height,
+                active: d.active,
+                render_node: render_node.clone(),
+                device: device.to_owned(),
+            }
         })
         .collect();
     (displays, undriven)
@@ -303,26 +311,24 @@ const DRM_MODE_ROTATE_270: u32 = 0x8;
 
 /// Through a reader bound to `crtc_id`: the enumerating reader is bound to whichever crtc
 /// auto-select picked.
-fn plane_transposed(device: &str, crtc_id: u32) -> bool {
+fn primary_rotation(device: &str, crtc_id: u32) -> Option<u32> {
     let dev = (!device.is_empty()).then_some(device);
-    let Some(mut r) = scrap::drm_reader::DrmReader::open(dev, crtc_id) else {
-        return false;
-    };
-    let transposed = match r.query_plane_rotation() {
-        Some(m) => m & (DRM_MODE_ROTATE_90 | DRM_MODE_ROTATE_270) != 0,
+    let mut r = scrap::drm_reader::DrmReader::open(dev, crtc_id)?;
+    let rotation = r.query_plane_rotation();
+    match rotation {
+        Some(m) if m & (DRM_MODE_ROTATE_90 | DRM_MODE_ROTATE_270) != 0 => {
+            log::trace!("drm: crtc {crtc_id} ({device:?}) is rotated 90/270 by its plane");
+        }
+        Some(_) => {}
         None => {
             hbb_common::throttled_log!(
                 std::time::Duration::from_secs(600),
                 debug,
                 "drm: crtc {crtc_id} ({device:?}): plane rotation unreadable; sized as unrotated"
             );
-            false
         }
-    };
-    if transposed {
-        log::trace!("drm: crtc {crtc_id} ({device:?}) is rotated 90/270 by its plane");
     }
-    transposed
+    rotation
 }
 
 /// Active displays of every DRM device + the connected-but-undriven identities, from ONE look.
