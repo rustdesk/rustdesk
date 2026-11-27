@@ -26,7 +26,7 @@ pub mod gtk_sudo;
 #[cfg(target_os = "android")]
 pub mod android_log;
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, debug_assertions, target_os = "linux"))]
 mod android_ifaddrs_tests;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

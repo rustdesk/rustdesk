@@ -272,6 +272,8 @@ static int rd_link_by_index(unsigned int index, struct rd_link_info *out)
     if (if_indextoname(index, out->name) == NULL)
         return -1;
     out->index = index;
+    /* Flags stay 0 if this fails, as in bionic; ifr_flags is a short, so only the
+     * low 16 bits (UP, BROADCAST, POINTOPOINT, ...) are available this way. */
     fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     if (fd >= 0) {
         memset(&ifr, 0, sizeof(ifr));
@@ -433,7 +435,9 @@ int getifaddrs(struct ifaddrs **ifap)
 
     if (rd_nl_dump(fd, RTM_GETLINK, RTM_NEWLINK, 1, rd_link_cb, &links) != 0) {
         /* Refused for apps targeting API 30+ on Android 11+; anything else
-         * is a real failure. Retry the address dump on a fresh socket. */
+         * is a real failure. A refused sendto() queues nothing, but a refusal
+         * reported as NLMSG_ERROR may leave the rest of that reply unread, so
+         * the address dump gets a fresh socket. */
         if (errno != EACCES && errno != EPERM)
             goto fail;
         close(fd);
