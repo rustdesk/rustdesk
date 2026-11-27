@@ -1667,7 +1667,8 @@ pub fn is_write_need_confirmation(
         // We decide to give the decision whether to override the existing file to users,
         // which obey the behavior of the file manager in our system.
         let mut is_identical = false;
-        if remote_mt == local_mt && digest.file_size == metadata.len() {
+        // The peer's digest only carries whole seconds (see `get_current_digest()`).
+        if remote_mt.as_secs() == local_mt.as_secs() && digest.file_size == metadata.len() {
             is_identical = true;
         }
         Ok(DigestCheckResult::NeedConfirm(FileTransferDigest {
@@ -1916,6 +1917,25 @@ mod tests {
 
         assert!(!src.exists());
         assert!(dst.exists());
+    }
+
+    #[test]
+    fn write_confirmation_compares_modified_time_in_seconds() {
+        let tmp_root = TestTempDir::new("rustdesk_digest_secs");
+        std::fs::create_dir_all(&tmp_root.path).expect("create temp dir");
+        let file = tmp_root.join("same.txt");
+        std::fs::write(&file, b"content").expect("create file");
+        let mtime = filetime::FileTime::from_unix_time(1_700_000_000, 500_000_000);
+        filetime::set_file_mtime(&file, mtime).expect("set mtime");
+        let digest = FileTransferDigest {
+            last_modified: 1_700_000_000,
+            file_size: 7,
+            ..Default::default()
+        };
+        assert!(matches!(
+            is_write_need_confirmation(false, &file.to_string_lossy(), &digest).unwrap(),
+            DigestCheckResult::NeedConfirm(d) if d.is_identical
+        ));
     }
 
     #[test]
