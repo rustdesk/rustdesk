@@ -392,8 +392,49 @@ fn run_pos(sp: EmptyExtraFieldService, state: &mut StatePos) -> ResultType<()> {
     Ok(())
 }
 
+#[cfg(windows)]
+const HIDDEN_CURSOR_HANDLE: u64 = u64::MAX;
+
+#[cfg(windows)]
+fn hidden_cursor_data() -> CursorData {
+    const SIZE: i32 = 32;
+    CursorData {
+        width: SIZE,
+        height: SIZE,
+        colors: vec![0u8; (SIZE * SIZE * 4) as usize].into(),
+        ..Default::default()
+    }
+}
+
+// Without a mouse, Windows keeps the pointer hidden for good; the controller still needs one.
+#[cfg(windows)]
+fn arrow_if_no_mouse() -> Option<u64> {
+    use winapi::um::winuser::{GetSystemMetrics, LoadCursorW, IDC_ARROW, SM_MOUSEPRESENT};
+    unsafe {
+        if GetSystemMetrics(SM_MOUSEPRESENT) != 0 {
+            return None;
+        }
+        Some(LoadCursorW(std::ptr::null_mut(), IDC_ARROW) as u64)
+    }
+}
+
 fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()> {
-    if let Some(hcursor) = crate::get_cursor()? {
+    let cursor = crate::get_cursor()?;
+    #[cfg(windows)]
+    let cursor = cursor.or_else(arrow_if_no_mouse);
+    // An app that hides the pointer (e.g. AutoCAD over its drawing area) makes GetCursorInfo
+    // report it as not showing. Sending nothing leaves the controller drawing the last shape,
+    // an arrow over the app's own crosshair, so send a transparent shape instead.
+    #[cfg(windows)]
+    if cursor.is_none() && state.hcursor != HIDDEN_CURSOR_HANDLE {
+        let msg = cursor_shape_message(hidden_cursor_data(), hbb_common::compress::compress);
+        state.hcursor = HIDDEN_CURSOR_HANDLE;
+        if !Arc::ptr_eq(&msg, &state.cursor_data) {
+            sp.send_shared(msg.clone());
+            state.cursor_data = msg;
+        }
+    }
+    if let Some(hcursor) = cursor {
         if hcursor != state.hcursor {
             let msg;
             // On the DRM path get_cursor_data() may return a snapshot whose id has advanced past the
