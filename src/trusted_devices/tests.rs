@@ -80,7 +80,9 @@ fn legacy_proof(hwid: &[u8], info: &DeviceInfo, supports_v2: bool) -> host::Logi
 async fn password_and_configuration_revocation_gate_real_persisted_grants() {
     let mut options = configure();
     #[cfg(windows)]
-    crate::ipc::config_tests::ipc_preserves_reg_recovery().await;
+    crate::ipc::config_tests::ipc_preserves_reg_recovery()
+        .await
+        .unwrap();
     configuration::malformed_host_field_preserves_authentication();
     configuration::legacy_settings_survive_saving().await;
     configuration::expiration_changes_preserve_grants().await;
