@@ -24,6 +24,13 @@
 # sources are CRLF on the windows-11-arm runner; the substitutions below are anchor-free and
 # therefore CRLF-safe. The calls are GNU sed (`sed -i` without a suffix); the macOS arm64 job
 # puts GNU sed first on PATH because BSD sed rejects them.
+#
+# flutter_3.44_pubspec.lock.diff holds the lock entries the dependency bumps change, as a diff
+# against flutter/pubspec.lock. Every other package keeps following the committed lock, and a
+# change there that the diff no longer fits fails here or at `flutter pub get --enforce-lockfile`
+# instead of resolving live. To regenerate it, with Flutter 3.44 on PATH: make the two
+# pubspec.yaml bumps below by hand, run `flutter pub get` in flutter/, and save
+# `git diff flutter/pubspec.lock` to that file.
 set -euo pipefail
 
 readonly NO_MATCHES=0
@@ -149,6 +156,9 @@ sed -i '/static ThemeData darkTheme = ThemeData(/,/scrollbarTheme: scrollbarThem
 # Dependency bumps required by the newer Dart/Flutter:
 sed -i 's/extended_text: 14.0.0/extended_text: 15.0.2/' flutter/pubspec.yaml
 sed -i 's/google_fonts: \^6.2.1/google_fonts: ^8.1.0/' flutter/pubspec.yaml
+# Their lock entries (see the header). Both sides go in as LF, whatever the checkout made them.
+sed -i 's/\r$//' flutter/pubspec.lock
+sed 's/\r$//' .github/patches/flutter_3.44_pubspec.lock.diff | git apply
 # DialogTextField keeps the caret when a desktop field regains focus (see the header):
 sed -i 's/inputFormatters: inputFormatters,/inputFormatters: inputFormatters,\
                 selectAllOnFocus: isDesktop ? false : null,/' flutter/lib/common/widgets/dialog.dart

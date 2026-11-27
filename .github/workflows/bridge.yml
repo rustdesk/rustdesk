@@ -91,12 +91,16 @@ jobs:
           if [[ "${{ matrix.job.flutter-version }}" == "3.22.3" ]]; then
             # Default Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.
             sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
+            # The lock entries that downgrade changes, as a diff against flutter/pubspec.lock so every
+            # other package keeps following it. To regenerate, with Flutter 3.22.3 on PATH: run the sed
+            # above and `flutter pub get` in flutter/, then save `git diff flutter/pubspec.lock` to it.
+            git apply .github/patches/flutter_3.22_bridge_pubspec.lock.diff
           else
             # Flutter 3.44 bridge for Windows/macOS arm64: match those builds' source/pubspec state so
             # the generated *.freezed.dart compiles against the same Flutter/freezed they resolve.
             bash .github/patches/apply_flutter_3.44_source_patches.sh
           fi
-          pushd flutter && flutter pub get && popd
+          pushd flutter && flutter pub get --enforce-lockfile && popd
 
       - name: Run flutter rust bridge
         run: |
