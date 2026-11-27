@@ -43,11 +43,19 @@ pub async fn update_auth<T: Send + 'static>(
     .await
 }
 
+pub(crate) fn uses_windows_host_profile() -> bool {
+    // LocalSystem CLI commands share the service's configuration file.
+    #[cfg(windows)]
+    return crate::common::is_server_running() || crate::platform::is_root();
+    #[cfg(not(windows))]
+    false
+}
+
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos", test))]
 pub fn sync_config(value: Config, options: Config2) -> ResultType<()> {
     let _storage = super::storage()?;
     Config::set(value);
-    if cfg!(windows) && crate::common::is_server_running() {
+    if uses_windows_host_profile() {
         Config2::set_preserving_option(options.clone(), keys::OPTION_REG_RECOVERY);
     } else {
         Config2::set(options.clone());

@@ -2027,8 +2027,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
 }
 
 fn cache_ipc_options(options: HashMap<String, String>) {
-    // A GUI hosting its own IPC receives the same filtered snapshot as any other client.
-    if cfg!(windows) && crate::common::is_server_running() {
+    if crate::trusted_devices::config::uses_windows_host_profile() {
         Config::set_options_preserving_option(options, keys::OPTION_REG_RECOVERY);
     } else {
         Config::set_options(options);

@@ -59,17 +59,28 @@ pub(crate) async fn ipc_preserves_reg_recovery() {
     else {
         panic!("expected full configuration");
     };
-    let (config, settings) = *configs;
+    let (config, mut settings) = *configs;
     assert!(!settings.options.contains_key(RECORD));
     assert_eq!(settings.options[SETTING], "gui");
     crate::trusted_devices::config::sync_config(config.clone(), settings.clone()).unwrap();
     assert_eq!(Config::get_option(RECORD), "active");
     crate::common::set_server_running(false);
-    crate::trusted_devices::config::sync_config(config, settings).unwrap();
-    assert!(!Config2::get().options.contains_key(RECORD));
+    let expected = crate::platform::is_root().then_some("active");
+    let queried = get_options_(TIMEOUT_MS).await.unwrap();
+    assert_eq!(queried[SETTING], "gui");
+    assert!(!queried.contains_key(RECORD));
     let stored: Config2 = config::load_path(Config2::file());
-    assert!(!stored.options.contains_key(RECORD));
-    assert_eq!(stored.options[SETTING], "gui");
+    assert_eq!(stored.options.get(RECORD).map(String::as_str), expected);
+
+    Config::set_option(RECORD.into(), "active".into());
+    settings.options.insert(SETTING.into(), "synced".into());
+    crate::trusted_devices::config::sync_config(config, settings).unwrap();
+    let stored: Config2 = config::load_path(Config2::file());
+    let current = Config2::get();
+    assert_eq!(current.options.get(RECORD), stored.options.get(RECORD));
+    assert_eq!(stored.options.get(RECORD).map(String::as_str), expected);
+    assert_eq!(stored.options[SETTING], "synced");
+    Config::set_option(RECORD.into(), String::new());
     Config::set_option(SETTING.into(), String::new());
     listener.abort();
 }
