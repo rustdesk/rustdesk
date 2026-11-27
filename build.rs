@@ -57,6 +57,20 @@ fn build_android_ifaddrs() {
     println!("cargo:rerun-if-changed={}", file);
 }
 
+// The Linux unit tests (src/platform/android_ifaddrs_tests.rs) exercise the
+// same file. Its functions are renamed so they cannot replace glibc's, and only
+// the tests reference them, so the linker leaves this archive out of real builds.
+fn build_android_ifaddrs_test() {
+    let file = "src/platform/android_ifaddrs.c";
+    cc::Build::new()
+        .file(file)
+        .define("RD_IFADDRS_TEST", None)
+        .define("getifaddrs", "rd_test_getifaddrs")
+        .define("freeifaddrs", "rd_test_freeifaddrs")
+        .compile("android_ifaddrs_test");
+    println!("cargo:rerun-if-changed={}", file);
+}
+
 fn install_android_deps() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os != "android" {
@@ -105,6 +119,9 @@ fn main() {
     }
     if target_os == "android" {
         build_android_ifaddrs();
+    }
+    if target_os == "linux" {
+        build_android_ifaddrs_test();
     }
     println!("cargo:rerun-if-changed=build.rs");
 }

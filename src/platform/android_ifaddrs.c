@@ -28,6 +28,13 @@
 
 typedef int (*rd_nl_cb)(struct nlmsghdr *nlh, void *ctx);
 
+#ifdef RD_IFADDRS_TEST
+/* Test builds only (build.rs compiles this file for Linux unit tests): a
+ * nonzero value makes the RTM_GETLINK request fail with that errno, the way
+ * Android 11+ refuses it to apps targeting API 30 or later. */
+int rd_ifaddrs_test_getlink_errno = 0;
+#endif
+
 struct rd_link_info {
     unsigned int index;
     unsigned int flags;
@@ -130,6 +137,12 @@ static int rd_nl_dump(int fd, unsigned short request_type, unsigned short reply_
     memset(&kernel, 0, sizeof(kernel));
     kernel.nl_family = AF_NETLINK;
 
+#ifdef RD_IFADDRS_TEST
+    if (request_type == RTM_GETLINK && rd_ifaddrs_test_getlink_errno != 0) {
+        errno = rd_ifaddrs_test_getlink_errno;
+        return -1;
+    }
+#endif
     for (;;) {
         if (sendto(fd, &req, req.nlh.nlmsg_len, 0, (struct sockaddr *)&kernel,
                    sizeof(kernel)) >= 0)
