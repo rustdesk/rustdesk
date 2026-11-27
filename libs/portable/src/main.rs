@@ -9,6 +9,8 @@ use bin_reader::{normalize_path, BinaryReader};
 
 pub mod bin_reader;
 #[cfg(windows)]
+mod secure_update;
+#[cfg(windows)]
 mod ui;
 
 #[cfg(windows)]
@@ -298,6 +300,11 @@ fn main() -> Result<(), String> {
 
     let mut ui = false;
     let reader = BinaryReader::new()?;
+    #[cfg(windows)]
+    if args.first().map(String::as_str) == Some("--update") {
+        return secure_update::execute_update(&reader, &args)
+            .map_err(|error| format!("Protected full update did not complete cleanly: {error}"));
+    }
     if let Some(exe) = setup(
         reader,
         None,

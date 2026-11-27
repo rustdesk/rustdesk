@@ -471,6 +471,8 @@ jobs:
           pushd ./libs/portable
           pip3 install -r requirements.txt
           python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          cargo test --locked --release -p rustdesk-portable-packer --no-run
+          timeout 60s cargo test --locked --release -p rustdesk-portable-packer
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
@@ -765,6 +767,8 @@ jobs:
           pushd ./libs/portable
           pip3 install -r requirements.txt
           python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
+          cargo test --locked --release -p rustdesk-portable-packer --no-run
+          timeout 60s cargo test --locked --release -p rustdesk-portable-packer
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
