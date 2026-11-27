@@ -14,6 +14,7 @@
 
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
@@ -51,6 +52,10 @@ struct rd_ifaddrs_storage {
 
 struct rd_addr_ctx {
     const struct rd_link_table *links;
+    /* Set when the RTM_GETLINK dump was refused: names and flags then come
+     * from if_indextoname() and SIOCGIFFLAGS, as bionic's own getifaddrs()
+     * does for apps that may not dump links. */
+    int links_refused;
     struct ifaddrs *head;
     struct ifaddrs *tail;
 };
@@ -242,6 +247,29 @@ static const struct rd_link_info *rd_link_find(const struct rd_link_table *t,
     return NULL;
 }
 
+/* Name and flags of one interface without RTM_GETLINK. Android 11+ refuses
+ * that dump (SELinux nlmsg_readpriv) to apps targeting API 30 or later, while
+ * RTM_GETADDR, if_indextoname() and SIOCGIFFLAGS stay allowed. */
+static int rd_link_by_index(unsigned int index, struct rd_link_info *out)
+{
+    struct ifreq ifr;
+    int fd;
+
+    memset(out, 0, sizeof(*out));
+    if (if_indextoname(index, out->name) == NULL)
+        return -1;
+    out->index = index;
+    fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    if (fd >= 0) {
+        memset(&ifr, 0, sizeof(ifr));
+        memcpy(ifr.ifr_name, out->name, IFNAMSIZ - 1);
+        if (ioctl(fd, SIOCGIFFLAGS, &ifr) == 0)
+            out->flags = (unsigned short)ifr.ifr_flags;
+        close(fd);
+    }
+    return 0;
+}
+
 static void rd_fill_mask(unsigned char *out, int len, unsigned int prefix)
 {
     int i;
@@ -274,6 +302,7 @@ static int rd_addr_cb(struct nlmsghdr *nlh, void *ctx)
     struct rtattr *tb[IFA_BROADCAST + 1];
     struct rtattr *ra;
     const struct rd_link_info *link;
+    struct rd_link_info fallback;
     struct rd_ifaddrs_storage *st;
     int payload;
 
@@ -285,6 +314,11 @@ static int rd_addr_cb(struct nlmsghdr *nlh, void *ctx)
 
     /* Without the link entry there is no name, and callers deref ifa_name. */
     link = rd_link_find(c->links, ifa->ifa_index);
+    if (link == NULL && c->links_refused) {
+        if (rd_link_by_index(ifa->ifa_index, &fallback) != 0)
+            return 0;
+        link = &fallback;
+    }
     if (link == NULL)
         return 0;
 
@@ -384,8 +418,19 @@ int getifaddrs(struct ifaddrs **ifap)
     if (fd < 0)
         return -1;
 
-    if (rd_nl_dump(fd, RTM_GETLINK, RTM_NEWLINK, 1, rd_link_cb, &links) != 0)
-        goto fail;
+    if (rd_nl_dump(fd, RTM_GETLINK, RTM_NEWLINK, 1, rd_link_cb, &links) != 0) {
+        /* Refused for apps targeting API 30+ on Android 11+; anything else
+         * is a real failure. Retry the address dump on a fresh socket. */
+        if (errno != EACCES && errno != EPERM)
+            goto fail;
+        close(fd);
+        free(links.items);
+        memset(&links, 0, sizeof(links));
+        ctx.links_refused = 1;
+        fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
+        if (fd < 0)
+            return -1;
+    }
     if (rd_nl_dump(fd, RTM_GETADDR, RTM_NEWADDR, 2, rd_addr_cb, &ctx) != 0)
         goto fail;
 
