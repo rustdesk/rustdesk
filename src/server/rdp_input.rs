@@ -315,6 +315,64 @@ pub mod client {
                 .unwrap_or(false);
     }
 
+    // xdg-desktop-portal-kde 6.8 and older pass each discrete step to KWin fake input as one
+    // axis unit without a wheel step, and ten units scroll as far as one wheel click. Its
+    // libei backend, released after 6.8, sends real wheel steps.
+    const KWIN_FAKE_INPUT_UNITS_PER_STEP: i32 = 10;
+
+    fn kwin_fake_input_units_per_step(kwin_version: &str) -> i32 {
+        let mut parts = kwin_version
+            .trim()
+            .split('.')
+            .map(|part| part.parse::<u32>().ok());
+        match (parts.next().flatten(), parts.next().flatten()) {
+            (Some(major), Some(minor)) => {
+                let patch = parts.next().flatten().unwrap_or(0);
+                if (major, minor, patch) < (6, 8, 80) {
+                    KWIN_FAKE_INPUT_UNITS_PER_STEP
+                } else {
+                    1
+                }
+            }
+            _ => 1,
+        }
+    }
+
+    fn kwin_version(conn: &SyncConnection) -> Result<String, dbus::Error> {
+        let proxy = conn.with_proxy("org.kde.KWin", "/KWin", std::time::Duration::from_secs(2));
+        let (info,): (String,) = proxy.method_call("org.kde.KWin", "supportInformation", ())?;
+        Ok(info
+            .lines()
+            .find_map(|line| line.strip_prefix("KWin version:"))
+            .unwrap_or_default()
+            .trim()
+            .to_owned())
+    }
+
+    fn portal_scroll_steps(conn: &SyncConnection, length: i32) -> i32 {
+        static UNITS_PER_STEP: std::sync::OnceLock<i32> = std::sync::OnceLock::new();
+        let units = *UNITS_PER_STEP.get_or_init(|| {
+            let is_kde = std::env::var(XDG_CURRENT_DESKTOP)
+                .map(|desktop| desktop == DISPLAY_DESKTOP_KDE)
+                .unwrap_or(false);
+            if !is_kde {
+                return 1;
+            }
+            match kwin_version(conn) {
+                Ok(version) => {
+                    let units = kwin_fake_input_units_per_step(&version);
+                    log::info!("KWin {version:?}: {units} portal scroll unit(s) per wheel step");
+                    units
+                }
+                Err(e) => {
+                    log::warn!("Failed to get the KWin version, portal scroll is not scaled: {e}");
+                    1
+                }
+            }
+        });
+        length.saturating_mul(units)
+    }
+
     pub struct RdpInputMouse {
         conn: Arc<SyncConnection>,
         session: Path<'static>,
@@ -371,6 +429,17 @@ pub mod client {
             assert!(desktop_is_niri("NIRI"));
             assert!(desktop_is_niri("GNOME:niri"));
             assert!(!desktop_is_niri("GNOME"));
+        }
+
+        #[test]
+        fn scales_portal_scroll_only_for_kwin_fake_input() {
+            use super::{kwin_fake_input_units_per_step as units, KWIN_FAKE_INPUT_UNITS_PER_STEP};
+
+            assert_eq!(units("5.27.11"), KWIN_FAKE_INPUT_UNITS_PER_STEP);
+            assert_eq!(units("6.8.3"), KWIN_FAKE_INPUT_UNITS_PER_STEP);
+            assert_eq!(units("6.8.80"), 1);
+            assert_eq!(units("6.9.0"), 1);
+            assert_eq!(units(""), 1);
         }
     }
 
@@ -439,22 +508,23 @@ pub mod client {
         }
         fn mouse_scroll_x(&mut self, length: i32) {
             let portal = get_portal(&self.conn);
-            let _ = remote_desktop_portal::notify_pointer_axis(
+            // `length` is in wheel steps, but NotifyPointerAxis takes smooth-scroll pixels.
+            let _ = remote_desktop_portal::notify_pointer_axis_discrete(
                 &portal,
                 &self.session,
                 HashMap::new(),
-                length as f64,
-                0 as f64,
+                1, // horizontal
+                portal_scroll_steps(&self.conn, length),
             );
         }
         fn mouse_scroll_y(&mut self, length: i32) {
             let portal = get_portal(&self.conn);
-            let _ = remote_desktop_portal::notify_pointer_axis(
+            let _ = remote_desktop_portal::notify_pointer_axis_discrete(
                 &portal,
                 &self.session,
                 HashMap::new(),
-                0 as f64,
-                length as f64,
+                0, // vertical
+                portal_scroll_steps(&self.conn, length),
             );
         }
     }
