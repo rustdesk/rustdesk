@@ -1,4 +1,5 @@
 use super::policy;
+pub(crate) use super::policy::uses_windows_host_profile;
 pub use super::policy::{changes_authentication, update_options};
 use base::config::keys;
 use hbb_common::{
@@ -41,14 +42,6 @@ pub async fn update_auth<T: Send + 'static>(
         apply()
     })
     .await
-}
-
-pub(crate) fn uses_windows_host_profile() -> bool {
-    // LocalSystem CLI commands share the service's configuration file.
-    #[cfg(windows)]
-    return crate::common::is_server_running() || crate::platform::is_root();
-    #[cfg(not(windows))]
-    false
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos", test))]
