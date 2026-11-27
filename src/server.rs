@@ -90,6 +90,7 @@ type ConnMap = HashMap<i32, ConnInner>;
 pub struct ConnectionMeta {
     pub control_permissions: Option<ControlPermissions>,
     pub controlled_context: Option<ControlledContext>,
+    pub is_kcp: bool,
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

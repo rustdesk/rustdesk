@@ -226,12 +226,13 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     x == 0
 }
 
-async fn wait_for_webrtc_peer_close(stream: &mut Stream) {
-    if let Stream::WebRTC(peer) = stream {
+async fn wait_for_peer_close(stream: &mut Stream, is_kcp: bool) {
+    if is_kcp || matches!(stream, Stream::WebRTC(_)) {
         // The controller closes after reading CloseReason. Closing our side first can
         // discard the queued reason and make the controller reconnect.
+        // This wait timed out in all six KCP tests.
         let _ = time::timeout(Duration::from_secs(1), async {
-            while let Some(Ok(_)) = peer.next().await {}
+            while let Some(Ok(_)) = stream.next().await {}
         })
         .await;
     }
@@ -553,6 +554,7 @@ impl Connection {
         let super::ConnectionMeta {
             control_permissions,
             controlled_context,
+            is_kcp,
         } = meta;
         // Android is not supported yet, so we always set control_permissions to None.
         #[cfg(target_os = "android")]
@@ -1295,7 +1297,7 @@ impl Connection {
         }
         conn.on_close("End", true).await;
         if conn.sent_close_reason {
-            wait_for_webrtc_peer_close(&mut conn.stream).await;
+            wait_for_peer_close(&mut conn.stream, is_kcp).await;
         }
         log::info!("#{} connection loop exited", id);
     }
@@ -7401,9 +7403,32 @@ mod test {
             let frame = controller.next_timeout(3000).await.expect("close reason");
             Message::parse_from_bytes(&frame.unwrap()).unwrap()
         });
-        wait_for_webrtc_peer_close(&mut controlled).await;
+        wait_for_peer_close(&mut controlled, false).await;
         drop(controlled);
         assert_eq!(reader.await.unwrap().misc().close_reason(), reason);
+    }
+
+    #[tokio::test]
+    async fn kcp_controller_receives_manual_disconnect_reason() {
+        let ((_controller_guard, mut controller), (controlled_guard, mut controlled)) =
+            crate::kcp_stream::tests::establish().await;
+        let reason = "Closed manually by the peer";
+        let sender = tokio::spawn(async move {
+            let message = misc_msg(|m| m.set_close_reason(reason.into()));
+            controlled.send(&message).await.unwrap();
+            wait_for_peer_close(&mut controlled, true).await;
+            drop(controlled);
+            drop(controlled_guard);
+        });
+        let frame = controller
+            .next_timeout(3000)
+            .await
+            .expect("close reason")
+            .unwrap();
+        let message = Message::parse_from_bytes(&frame).unwrap();
+        assert_eq!(message.misc().close_reason(), reason);
+        drop(controller);
+        sender.await.unwrap();
     }
 
     #[test]
