@@ -476,10 +476,13 @@ fn child(su_user: Option<String>, args: Vec<String>) -> ResultType<()> {
     params.push(CMD_SH.to_string());
     params.push("-c".to_string());
 
+    let literal_args = std::env::args().nth(2).as_deref() == Some("credential");
     let command = args
         .iter()
         .map(|s| {
-            if su_user.is_some() {
+            if literal_args {
+                format!("'{}'", s.replace('\'', "'\\''"))
+            } else if su_user.is_some() {
                 s.to_string()
             } else {
                 quote_shell_arg(s, true)

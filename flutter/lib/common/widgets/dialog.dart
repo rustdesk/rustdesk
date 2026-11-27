@@ -2707,18 +2707,23 @@ void CommonConfirmDialog(OverlayDialogManager dialogManager, String content,
   });
 }
 
-void changeUnlockPinDialog(String oldPin, Function() callback) {
+void changeUnlockPinDialog(String? oldPin, ValueChanged<String> onSaved,
+    {bool hasHiddenPin = false, VoidCallback? onUnlockRequired}) {
   final pinController = TextEditingController(text: oldPin);
   final confirmController = TextEditingController(text: oldPin);
   String? pinErrorText;
   String? confirmationErrorText;
   final maxLength = bind.mainMaxEncryptLen();
   gFFI.dialogManager.show((setState, close, context) {
-    submit() async {
+    submit([bool remove = false]) {
       pinErrorText = null;
       confirmationErrorText = null;
-      final pin = pinController.text.trim();
-      final confirm = confirmController.text.trim();
+      final pin = remove ? '' : pinController.text.trim();
+      final confirm = remove ? '' : confirmController.text.trim();
+      if (oldPin == null && !remove && pin.isEmpty && confirm.isEmpty) {
+        close();
+        return;
+      }
       if (pin != confirm) {
         setState(() {
           confirmationErrorText =
@@ -2727,13 +2732,19 @@ void changeUnlockPinDialog(String oldPin, Function() callback) {
         return;
       }
       final errorMsg = bind.mainSetUnlockPin(pin: pin);
+      if (errorMsg == 'Authentication Required' && onUnlockRequired != null) {
+        close();
+        onUnlockRequired();
+        showToast(translate(errorMsg));
+        return;
+      }
       if (errorMsg != '') {
         setState(() {
           pinErrorText = translate(errorMsg);
         });
         return;
       }
-      callback.call();
+      onSaved(pin);
       close();
     }
 
@@ -2759,6 +2770,8 @@ void changeUnlockPinDialog(String oldPin, Function() callback) {
       ).marginOnly(bottom: 12),
       actions: [
         dialogButton(translate("Cancel"), onPressed: close, isOutline: true),
+        if (hasHiddenPin)
+          dialogButton(translate("Remove"), onPressed: () => submit(true)),
         dialogButton(translate("OK"), onPressed: submit),
       ],
       onSubmit: submit,
@@ -2767,20 +2780,76 @@ void changeUnlockPinDialog(String oldPin, Function() callback) {
   });
 }
 
-void checkUnlockPinDialog(String correctPin, Function() passCallback) {
+bool get usesRootUnlockPin =>
+    !isWeb && (isLinux || isMacOS) && bind.mainIsInstalled();
+
+Future<String> _unixUnlockRequest(String action) async {
+  final result = await bind.mainGetCommon(key: 'unix-unlock-pin:$action');
+  if (result.startsWith('error:')) throw StateError(result.substring(6));
+  return result;
+}
+
+Future<bool> rootPinRequest(String action) async {
+  final result = await _unixUnlockRequest(action);
+  if (result == 'true') return true;
+  if (result == 'false') return false;
+  throw StateError('Unexpected settings authorization response');
+}
+
+Future<bool> authorizeUnixSettings({bool networkSettings = false}) async {
+  if (!usesRootUnlockPin) return true;
+  try {
+    switch (await _unixUnlockRequest('unlock-method')) {
+      case 'root':
+        return true;
+      case 'pin':
+        final action = networkSettings ? 'check-pin' : 'pin';
+        return await checkUnlockPinDialog(
+            (pin) => rootPinRequest('$action:$pin'));
+      case 'admin':
+        return networkSettings
+            ? await callMainCheckSuperUserPermission()
+            : await rootPinRequest('admin');
+      case 'offline':
+        if (networkSettings || isUnlockPinDisabled()) {
+          return await callMainCheckSuperUserPermission();
+        }
+        final hint = isMacOS && !bind.mainIsInstalledDaemon(prompt: false)
+            ? 'install_daemon_tip'
+            : 'Start service';
+        showToast('${translate('Service is not running')}. ${translate(hint)}');
+        return false;
+      default:
+        throw StateError('Unexpected settings authorization response');
+    }
+  } catch (error) {
+    showToast(translate(error.toString()));
+    return false;
+  }
+}
+
+Future<bool> checkUnlockPinDialog(FutureOr<bool> Function(String) verify) async {
   final controller = TextEditingController();
   String? errorText;
-  gFFI.dialogManager.show((setState, close, context) {
+  var dialogOpen = true;
+  final accepted = await gFFI.dialogManager.show<bool>((setState, close, context) {
     submit() async {
       final pin = controller.text.trim();
-      if (correctPin != pin) {
+      try {
+        final valid = await verify(pin);
+        if (!dialogOpen) return;
+        if (valid) {
+          close(true);
+          return;
+        }
         setState(() {
           errorText = translate('Wrong PIN');
         });
-        return;
+      } catch (error) {
+        if (!dialogOpen) return;
+        final message = error is StateError ? error.message : error.toString();
+        setState(() => errorText = translate(message));
       }
-      passCallback.call();
-      close();
     }
 
     return CustomAlertDialog(
@@ -2803,6 +2872,8 @@ void checkUnlockPinDialog(String correctPin, Function() passCallback) {
       onCancel: close,
     );
   });
+  dialogOpen = false;
+  return accepted == true;
 }
 
 void confrimDeleteTrustedDevicesDialog(

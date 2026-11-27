@@ -1023,6 +1023,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   bool locked = bind.mainIsInstalled();
   final scrollController = ScrollController();
 
+  void relock() {
+    if (mounted) setState(() => locked = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -1763,24 +1767,58 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     ];
   }
 
+  Future<bool?> _readRootPinStatus({bool showError = false}) async {
+    try {
+      return await rootPinRequest('pin-set');
+    } catch (error) {
+      debugPrint('Failed to query unlock PIN state: $error');
+      if (showError && mounted) {
+        final message = error is StateError ? error.message : error.toString();
+        showToast(translate(message));
+      }
+      return null;
+    }
+  }
+
   Widget unlockPin() {
-    bool enabled = !locked;
-    RxString unlockPin = bind.mainGetUnlockPin().obs;
-    update() async {
-      unlockPin.value = bind.mainGetUnlockPin();
+    final enabled = !locked;
+    final rootManaged = usesRootUnlockPin;
+    var localPin = rootManaged ? null : bind.mainGetUnlockPin();
+    final hasPin = RxnBool(localPin?.isNotEmpty);
+    final initialRead = rootManaged
+        ? _readRootPinStatus().then((value) => hasPin.value = value)
+        : null;
+    var opening = false;
+    Future<void> edit() async {
+      if (hasPin.value == null) {
+        if (opening) return;
+        opening = true;
+        await initialRead;
+        if (mounted && hasPin.value == null) {
+          hasPin.value = await _readRootPinStatus(showError: true);
+        }
+        opening = false;
+        if (!mounted || hasPin.value == null) return;
+      }
+      changeUnlockPinDialog(
+        localPin,
+        (pin) {
+          if (!rootManaged) localPin = bind.mainGetUnlockPin();
+          hasPin.value = (localPin ?? pin).isNotEmpty;
+        },
+        hasHiddenPin: rootManaged && hasPin.value == true,
+        onUnlockRequired: rootManaged ? relock : null,
+      );
     }
 
-    onChanged(bool? checked) async {
-      changeUnlockPinDialog(unlockPin.value, update);
-    }
-
-    final isOptFixed = isOptionFixed(kOptionWhitelist);
+    final isOptFixed = !rootManaged && isOptionFixed(kOptionWhitelist);
     return GestureDetector(
       child: Obx(() => Row(
             children: [
               Checkbox(
-                      value: unlockPin.isNotEmpty,
-                      onChanged: enabled && !isOptFixed ? onChanged : null)
+                      tristate: hasPin.value == null,
+                      value: hasPin.value,
+                      onChanged: enabled && !isOptFixed ? (_) => edit() : null)
                   .marginOnly(right: 5),
               Expanded(
                   child: Text(
@@ -1789,11 +1827,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               ))
             ],
           )),
-      onTap: enabled
-          ? () {
-              onChanged(!unlockPin.isNotEmpty);
-            }
-          : null,
+      onTap: enabled ? edit : null,
     ).marginOnly(left: _kCheckBoxLeftMargin);
   }
 }
@@ -1819,7 +1853,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
       _lock(locked, 'Unlock Network Settings', () {
         locked = false;
         setState(() => {});
-      }),
+      }, networkSettings: true),
       preventMouseKeyBuilder(
         block: locked,
         child: Column(children: [
@@ -3052,8 +3086,9 @@ Widget _SubLabeledWidget(BuildContext context, String label, Widget child,
 Widget _lock(
   bool locked,
   String label,
-  Function() onUnlock,
-) {
+  Function() onUnlock, {
+  bool networkSettings = false,
+}) {
   return Offstage(
       offstage: !locked,
       child: Row(
@@ -3075,6 +3110,13 @@ Widget _lock(
                             Text(translate(label)).marginOnly(left: 5),
                           ]).marginSymmetric(vertical: 2)),
                   onPressed: () async {
+                    if (usesRootUnlockPin) {
+                      if (await authorizeUnixSettings(
+                          networkSettings: networkSettings)) {
+                        onUnlock();
+                      }
+                      return;
+                    }
                     final unlockPin = bind.mainGetUnlockPin();
                     if (unlockPin.isEmpty || isUnlockPinDisabled()) {
                       bool checked = await callMainCheckSuperUserPermission();
@@ -3082,7 +3124,9 @@ Widget _lock(
                         onUnlock();
                       }
                     } else {
-                      checkUnlockPinDialog(unlockPin, onUnlock);
+                      if (await checkUnlockPinDialog((pin) => pin == unlockPin)) {
+                        onUnlock();
+                      }
                     }
                   },
                 ).marginSymmetric(horizontal: 2, vertical: 4),

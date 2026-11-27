@@ -6,6 +6,9 @@ mod ipc_windows;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "ipc/fs.rs"]
 mod ipc_fs;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "ipc/unix_unlock_pin.rs"]
+pub(crate) mod unix_unlock_pin;
 // The DRM/KMS capture producer, the `_drm` channel and its SCM_RIGHTS framing live in their own
 // module, declared the same way as the other pieces of this file, so the opt-in feature adds a
 // bounded, self-contained surface here instead of ~1800 lines in the middle of the shared IPC.
@@ -386,7 +389,17 @@ pub enum Data {
     Socks(Option<config::Socks5Server>),
     FS(FS),
     Test,
-    SyncConfig(Option<Box<(Config, Config2)>>),
+    SyncConfig(
+        #[cfg_attr(
+            any(target_os = "linux", target_os = "macos"),
+            serde(with = "unix_unlock_pin::sync_config")
+        )]
+        Option<Box<(Config, Config2)>>,
+    ),
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    UnlockPin(unix_unlock_pin::Request),
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    UnlockPinResult(Result<bool, String>),
     #[cfg(target_os = "windows")]
     ClipboardFile(ClipboardFile),
     ClipboardFileEnabled(bool),
@@ -615,6 +628,14 @@ fn legacy_hot_measured() -> bool {
 #[tokio::main(flavor = "current_thread")]
 pub async fn start(postfix: &str) -> ResultType<()> {
     let incoming = new_listener(postfix).await?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if postfix == crate::POSTFIX_SERVICE && crate::platform::is_installed() {
+        if let Err(err) =
+            crate::trusted_devices::config::update(unix_unlock_pin::preserve_legacy_root_pin).await
+        {
+            log::warn!("Could not initialize the root unlock PIN: {err}");
+        }
+    }
     start_with_listener(postfix, incoming).await;
     Ok(())
 }
@@ -650,24 +671,21 @@ pub(crate) async fn start_with_listener(postfix: &str, mut incoming: Incoming) {
                                     break;
                                 }
                                 Ok(Some(data)) => {
-                                    // On Linux/macOS, the protected `_service` channel is used only for
-                                    // syncing config between root service and the active user process.
-                                    //
-                                    // NOTE: `is_service_ipc_postfix()` also includes `_uinput_*`, but those
-                                    // channels are handled by the dedicated uinput listener/protocol in
-                                    // `src/server/uinput.rs` and therefore do not share this Data enum
-                                    // allowlist. The SyncConfig allowlist here is intentionally scoped to the
-                                    // `_service` channel only.
-                                    //
-                                    // Keep this explicit branch to avoid policy drift between `_service` and
-                                    // uinput IPC paths while still minimizing exposed message surface here.
                                     #[cfg(any(target_os = "linux", target_os = "macos"))]
                                     if postfix == crate::POSTFIX_SERVICE {
+                                        // Uinput has its own listener. This endpoint admits only PIN requests and full sync.
+                                        if let Data::UnlockPin(request) = data {
+                                            if let Err(err) = unix_unlock_pin::reply(request, &mut stream).await {
+                                                log::trace!("Failed to answer root PIN request: {err}");
+                                                break;
+                                            }
+                                            continue;
+                                        }
                                         if matches!(&data, Data::SyncConfig(_)) {
                                             handle(data, &mut stream).await;
                                         } else {
                                             log::warn!(
-                                                "Rejected non-sync data on protected _service IPC channel: postfix={}, data_kind={:?}, peer_uid={:?}",
+                                                "Rejected unexpected data on protected _service IPC channel: postfix={}, data_kind={:?}, peer_uid={:?}",
                                                 postfix,
                                                 std::mem::discriminant(&data),
                                                 stream.peer_uid()
@@ -851,6 +869,17 @@ impl Drop for CheckIfRestart {
 }
 
 async fn handle(data: Data, stream: &mut Connection) {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if matches!(&data, Data::Config((name, _)) if name == "unlock-pin")
+        && crate::platform::is_installed()
+    {
+        allow_err!(
+            stream
+                .send(&Data::SecurityConfigError("Unlock PIN is managed by the root service".into()))
+                .await
+        );
+        return;
+    }
     match data {
         Data::SystemInfo(_) => {
             let info = format!(
@@ -1124,6 +1153,11 @@ async fn handle(data: Data, stream: &mut Connection) {
             if let Err(error) = crate::trusted_devices::config::update(move || {
                 #[cfg(any(target_os = "linux", target_os = "macos"))]
                 {
+                    if unsafe { hbb_common::libc::geteuid() } == 0
+                        && crate::platform::is_installed()
+                    {
+                        unix_unlock_pin::preserve_legacy_root_pin()?;
+                    }
                     crate::trusted_devices::config::sync_config(config, config2)
                 }
                 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -1899,8 +1933,23 @@ async fn set_permanent_password_with_ack_async(v: String) -> ResultType<bool> {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn set_unlock_pin(v: String, translate: bool) -> ResultType<()> {
     let v = v.trim().to_owned();
+    validate_unlock_pin(&v, translate)?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if crate::platform::is_installed() {
+        return unix_unlock_pin::set(v);
+    }
+    Config::set_unlock_pin(&v);
+    set_config("unlock-pin", v)
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    all(feature = "flutter", not(any(target_os = "android", target_os = "ios")))
+))]
+fn validate_unlock_pin(v: &str, translate: bool) -> ResultType<()> {
     let min_len = 4;
-    let max_len = crate::ui_interface::max_encrypt_len();
+    let max_len = hbb_common::config::ENCRYPT_MAX_LEN;
     let len = v.chars().count();
     if !v.is_empty() {
         if len < min_len {
@@ -1918,13 +1967,16 @@ pub fn set_unlock_pin(v: String, translate: bool) -> ResultType<()> {
             bail!("No more than {max_len} characters");
         }
     }
-    Config::set_unlock_pin(&v);
-    set_config("unlock-pin", v)
+    Ok(())
 }
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_unlock_pin() -> String {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if crate::platform::is_installed() {
+        return String::new();
+    }
     if let Ok(Some(v)) = get_config("unlock-pin") {
         Config::set_unlock_pin(&v);
         v

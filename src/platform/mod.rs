@@ -23,6 +23,9 @@ pub mod linux;
 #[cfg(target_os = "linux")]
 pub mod gtk_sudo;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) mod unix_approval;
+
 #[cfg(target_os = "android")]
 pub mod android_log;
 
