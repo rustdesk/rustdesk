@@ -5074,6 +5074,69 @@ mod tests {
     use super::*;
 
     #[test]
+    fn remote_cursor_changes_on_hover_from_resize_edge_to_client_area() {
+        // Keep WindowFromPoint and the mouse button state independent of the user's desktop.
+        let name = wide_string(&format!("RustDeskHoverTest{}", std::process::id()));
+        let desktop = unsafe {
+            CreateDesktopW(
+                name.as_ptr(),
+                std::ptr::null(),
+                null_mut(),
+                0,
+                DESKTOP_CREATEWINDOW | DESKTOP_READOBJECTS | DESKTOP_WRITEOBJECTS,
+                null_mut(),
+            )
+        };
+        assert!(!desktop.is_null(), "{}", io::Error::last_os_error());
+        let desktop_id = desktop as usize;
+        let result = std::thread::spawn(move || unsafe {
+            assert_ne!(SetThreadDesktop(desktop_id as _), 0);
+            let class = wide_string("RustDeskHoverTestFrame");
+            let mut wc: WNDCLASSW = mem::zeroed();
+            wc.lpfnWndProc = Some(DefWindowProcW);
+            wc.hInstance = winapi::um::libloaderapi::GetModuleHandleW(std::ptr::null());
+            wc.lpszClassName = class.as_ptr();
+            assert_ne!(RegisterClassW(&wc), 0);
+            let window = CreateWindowExW(
+                WS_EX_NOACTIVATE,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                100,
+                100,
+                400,
+                260,
+                null_mut(),
+                null_mut(),
+                wc.hInstance,
+                null_mut(),
+            );
+            assert!(!window.is_null(), "{}", io::Error::last_os_error());
+            let mut rect: RECT = mem::zeroed();
+            assert_ne!(GetWindowRect(window, &mut rect), 0);
+            let arrow = LoadCursorW(null_mut(), IDC_ARROW);
+            let resize = LoadCursorW(null_mut(), IDC_SIZEWE);
+            assert!(!arrow.is_null() && !resize.is_null());
+            let mut ci: CURSORINFO = mem::zeroed();
+            ci.hCursor = arrow; // Windows reports an arrow while local drawing is hidden.
+            ci.ptScreenPos = POINT {
+                x: rect.left + 1,
+                y: (rect.top + rect.bottom) / 2,
+            };
+            let edge = remote_cursor_handle(&ci);
+            ci.ptScreenPos.x = (rect.left + rect.right) / 2;
+            let client = remote_cursor_handle(&ci);
+            DestroyWindow(window);
+            UnregisterClassW(class.as_ptr(), wc.hInstance);
+            assert_eq!(edge, Some(resize as u64));
+            assert_eq!(client, Some(arrow as u64));
+        })
+        .join();
+        unsafe { CloseDesktop(desktop) };
+        result.unwrap();
+    }
+
+    #[test]
     fn remote_cursor_leaves_resize_when_windows_stops_drawing_the_pointer() {
         unsafe {
             let mut ci: CURSORINFO = mem::zeroed();
