@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart'
     show ColorThemeExtension, gFFI, globalKey, initGlobalFFI, isTest;
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/consts.dart' show kOptionDisableUnlockPin;
 import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +15,12 @@ class _SettingsBinding extends Fake implements RustdeskImpl {
   String unlockMethod = 'offline';
   bool approved = false;
   bool securityApproved = false;
+  bool pinDisabled = false;
   String storedPin = '4321';
+
+  @override
+  String mainGetBuildinOption({required String key, dynamic hint}) =>
+      key == kOptionDisableUnlockPin && pinDisabled ? 'Y' : '';
 
   @override
   String mainGetLocalOption({required String key, dynamic hint}) => '';
@@ -88,13 +94,15 @@ void main() {
     binding.securityApproved = true;
     expect(await authorizeUnixSettings(), isTrue);
     binding.securityApproved = false;
+    binding.pinDisabled = true;
     expect(await authorizeUnixSettings(), isFalse);
   }, skip: !(Platform.isLinux || Platform.isMacOS));
 
   testWidgets(
-      'offline Security settings stay locked and show the service action',
+      'offline Security settings require the service unless the PIN is disabled',
       (tester) async {
-    platformFFI.setBindingForTesting(_SettingsBinding()..approved = true);
+    final binding = _SettingsBinding()..approved = true;
+    platformFFI.setBindingForTesting(binding);
     await tester.pumpWidget(MaterialApp(
       navigatorKey: globalKey,
       theme: ThemeData(extensions: [ColorThemeExtension.light]),
@@ -106,6 +114,11 @@ void main() {
     final action = Platform.isMacOS ? 'install_daemon_tip' : 'Start service';
     expect(find.text('Service is not running. $action'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
+
+    binding.pinDisabled = true;
+    expect(await authorizeUnixSettings(), isTrue);
+    binding.approved = false;
+    expect(await authorizeUnixSettings(), isFalse);
   }, skip: !(Platform.isLinux || Platform.isMacOS));
 
   Future<void> pumpPinDialog(

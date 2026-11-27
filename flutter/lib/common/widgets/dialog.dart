@@ -2811,7 +2811,9 @@ Future<bool> authorizeUnixSettings({bool networkSettings = false}) async {
             ? await callMainCheckSuperUserPermission()
             : await rootPinRequest('admin');
       case 'offline':
-        if (networkSettings) return await callMainCheckSuperUserPermission();
+        if (networkSettings || isUnlockPinDisabled()) {
+          return await callMainCheckSuperUserPermission();
+        }
         final hint = isMacOS && !bind.mainIsInstalledDaemon(prompt: false)
             ? 'install_daemon_tip'
             : 'Start service';
