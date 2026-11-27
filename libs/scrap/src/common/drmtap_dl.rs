@@ -548,5 +548,11 @@ mod tests {
                 "v0.{minor}.{patch} is an unverified minor and must be refused"
             );
         }
+        // Below the floor (0.4.x) is refused too.
+        let below = DRMTAP_MIN_MINOR_PATCH.0 - 1;
+        assert!(
+            !abi_accepted(DRMTAP_ABI_MAJOR, below, 99),
+            "v0.{below}.99 is below the floor"
+        );
     }
 }

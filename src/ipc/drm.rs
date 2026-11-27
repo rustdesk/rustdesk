@@ -972,7 +972,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     };
 
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
-    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool)>();
+    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool, bool)>();
     let stop = Arc::new(AtomicBool::new(false));
     let _stop_guard = DrmStopGuard(stop.clone());
     let worker_stop = stop.clone();
@@ -1003,8 +1003,15 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     };
     conn.send_msg(&Data::DrmDisplayList(displays.clone()), None).await?;
 
-    let (display_idx, need_cpu) = match conn.recv_msg_timeout2(10_000).await {
-        Some(Ok((Data::DrmStart { display, need_cpu }, _fd))) => (display, need_cpu),
+    let (display_idx, need_cpu, no_packet) = match conn.recv_msg_timeout2(10_000).await {
+        Some(Ok((
+            Data::DrmStart {
+                display,
+                need_cpu,
+                no_packet,
+            },
+            _fd,
+        ))) => (display, need_cpu, no_packet),
         Some(Ok((_, _fd))) => {
             log::info!("drm: peer sent something other than DrmStart in the handshake; closing");
             return Ok(());
@@ -1024,7 +1031,10 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         );
         return Ok(());
     }
-    if crtc_tx.send((target_device, target_crtc, need_cpu)).is_err() {
+    if crtc_tx
+        .send((target_device, target_crtc, need_cpu, no_packet))
+        .is_err()
+    {
         return Ok(());
     }
 
@@ -1271,7 +1281,7 @@ fn drm_worker_wake(now: std::time::Instant, next_frame: std::time::Instant) -> s
 
 fn drm_capture_worker(
     frame_tx: tokio::sync::mpsc::Sender<DrmProducerMsg>,
-    crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool)>,
+    crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
     demand_fps: std::sync::Arc<std::sync::atomic::AtomicU8>,
@@ -1298,7 +1308,7 @@ fn drm_capture_worker(
         return;
     }
 
-    let (target_device, target_crtc, need_cpu) = match crtc_rx.recv() {
+    let (target_device, target_crtc, need_cpu, no_packet) = match crtc_rx.recv() {
         Ok(c) => c,
         Err(_) => return,
     };
@@ -1344,7 +1354,7 @@ fn drm_capture_worker(
             // `stalled` is left untouched because the device is healthy -- the task bounds this
             // state itself (CREDIT_STALL) since our watchdog cannot advance.
             None
-        } else if use_dmabuf && reader.has_packet() {
+        } else if use_dmabuf && reader.has_packet() && !no_packet {
             // libdrmtap 0.6 on both ends (one deb): the packet also carries a window the compositor
             // put on its own plane, which one descriptor cannot.
             Some(reader.grab_packet().map(|(packet, fds)| DrmProducerMsg::Frame {
@@ -1414,7 +1424,7 @@ fn drm_capture_worker(
                     log::debug!(
                         "drm: first frame for crtc {target_crtc} in {:?} ({} path)",
                         t_conn.elapsed(),
-                        match (use_dmabuf, reader.has_packet()) {
+                        match (use_dmabuf, reader.has_packet() && !no_packet) {
                             (true, true) => "dma-buf packet",
                             (true, false) => "dma-buf",
                             (false, _) => "cpu",

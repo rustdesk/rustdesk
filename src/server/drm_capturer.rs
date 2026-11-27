@@ -373,6 +373,8 @@ struct DisplayHealth {
     /// The dma-buf convert failed for this display. The COMMON cause is multi-GPU: our render node
     /// is not the GPU that exported the scanout. Follows the monitor for the process run.
     prefer_cpu: bool,
+    /// A packet convert failed: ask for one descriptor first, `prefer_cpu` if that fails too.
+    no_packet: bool,
     /// The PipeWire fallback for this display was rejected on geometry (a transposed stream), so
     /// the lone-display carve-out in `mark_demoted_displays` must not keep advertising it online.
     fallback_rejected: bool,
@@ -387,6 +389,7 @@ impl DisplayHealth {
             last_build: None,
             rapid_builds: 0,
             prefer_cpu: false,
+            no_packet: false,
             fallback_rejected: false,
         }
     }
@@ -439,14 +442,26 @@ fn drm_prefer_cpu(key: &Option<String>) -> bool {
     })
 }
 
-fn drm_set_prefer_cpu(key: &Option<String>) {
-    if let Some(k) = key {
+fn drm_no_packet(key: &Option<String>) -> bool {
+    key.as_ref().is_some_and(|k| {
         DRM_DISPLAY_HEALTH
             .lock()
             .unwrap()
-            .entry(k.clone())
-            .or_insert_with(DisplayHealth::new)
-            .prefer_cpu = true;
+            .get(k)
+            .is_some_and(|h| h.no_packet)
+    })
+}
+
+/// A failed packet convert sets `no_packet`, a failed descriptor convert `prefer_cpu`.
+fn drm_note_convert_failed(key: &Option<String>, packet: bool) {
+    if let Some(k) = key {
+        let mut health = DRM_DISPLAY_HEALTH.lock().unwrap();
+        let h = health.entry(k.clone()).or_insert_with(DisplayHealth::new);
+        if packet {
+            h.no_packet = true;
+        } else {
+            h.prefer_cpu = true;
+        }
     }
 }
 
@@ -840,6 +855,7 @@ async fn recv_thread(
             &Data::DrmStart {
                 display: wire_idx as i32,
                 need_cpu,
+                no_packet: drm_no_packet(&our_key),
             },
             None,
         )
@@ -946,7 +962,7 @@ async fn recv_thread(
                     }
                     Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
                     Err(err) => {
-                        drm_set_prefer_cpu(&our_key);
+                        drm_note_convert_failed(&our_key, !desc.packet.is_empty());
                         break format!("convert: {err}");
                     }
                 }
