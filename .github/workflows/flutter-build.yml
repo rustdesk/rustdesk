@@ -1069,6 +1069,11 @@ jobs:
         working-directory: flutter
         run: flutter test --timeout 60s
 
+      - name: Test Web keyboard mode in Chrome
+        if: ${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}
+        working-directory: flutter
+        run: flutter test --no-pub --platform chrome --timeout 60s test/web_keyboard_mode_test.dart
+
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
