@@ -78,6 +78,10 @@ fn legacy_proof(hwid: &[u8], info: &DeviceInfo, supports_v2: bool) -> host::Logi
 
 #[hbb_common::tokio::test]
 async fn password_and_configuration_revocation_gate_real_persisted_grants() {
+    #[cfg(windows)]
+    if crate::ipc::config_tests::shared_profile_client().await {
+        return;
+    }
     let mut options = configure();
     #[cfg(windows)]
     crate::ipc::config_tests::ipc_preserves_reg_recovery().await;

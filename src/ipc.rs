@@ -1969,14 +1969,13 @@ async fn sync_security_config_from_server(
     const TIMEOUT_MS: u64 = 1000;
     // MSI removal can reactivate this user copy without running our uninstall hooks.
     async {
+        let peer = connection.config_peer()?;
         connection.send(&Data::SyncConfig(None)).await?;
         match connection.next_timeout(TIMEOUT_MS).await? {
             Some(Data::SyncConfig(Some(configs))) => {
                 let (config, config2) = *configs;
-                crate::trusted_devices::config::update(move || {
-                    crate::trusted_devices::config::sync_config(config, config2)
-                })
-                .await
+                crate::trusted_devices::config::update(move || peer.sync_config(config, config2))
+                    .await
             }
             Some(Data::SecurityConfigError(error)) => bail!(error),
             _ => bail!("The host did not provide its current configuration"),
@@ -2023,8 +2022,20 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
 
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     let mut c = connect(ms_timeout, "").await?;
+    #[cfg(windows)]
+    let peer = c.config_peer();
     c.send(&Data::Options(None)).await?;
     if let Some(Data::Options(Some(value))) = c.next_timeout(ms_timeout).await? {
+        #[cfg(windows)]
+        if let Err(error) = async { peer?.mirror_options(value.clone()).await }.await {
+            const LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+            hbb_common::throttled_log!(
+                LOG_INTERVAL,
+                warn,
+                "Failed to cache host options: {error:#}"
+            );
+        }
+        #[cfg(not(windows))]
         base::config::set_ipc_options(value.clone());
         Ok(value)
     } else {
@@ -2068,17 +2079,27 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
         bail!("The host is unavailable; authentication settings were not changed");
     }
     if let Ok(mut c) = connection {
+        #[cfg(windows)]
+        let peer = c.config_peer()?;
+        #[cfg(windows)]
+        let require_ack = affected || !matches!(peer, ipc_windows::ConfigPeer::SeparateProfile);
+        #[cfg(not(windows))]
+        let require_ack = affected;
         c.send(&Data::Options(Some(value.clone()))).await?;
         // do not put below before connect, because we need to check should_exit
         match c.next_timeout(1000).await {
             #[cfg(target_os = "windows")]
             Ok(Some(Data::Options(None))) if affected => {
                 sync_security_config_from_server(&mut c).await?;
+                return Ok(());
             }
-            Ok(Some(Data::Options(None))) => {}
+            Ok(Some(Data::Options(None))) => {
+                #[cfg(windows)]
+                return peer.mirror_options(value).await;
+            }
             Ok(Some(Data::SecurityConfigError(error))) => bail!(error),
-            Err(error) if affected => return Err(error),
-            _ if affected => bail!("The host did not confirm the configuration update"),
+            Err(error) if require_ack => return Err(error),
+            _ if require_ack => bail!("The host did not confirm the configuration update"),
             _ => {}
         }
     }

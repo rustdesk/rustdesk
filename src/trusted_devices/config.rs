@@ -49,7 +49,7 @@ pub async fn update_auth<T: Send + 'static>(
 pub fn sync_config(value: Config, options: Config2) -> ResultType<()> {
     let _storage = super::storage()?;
     Config::set(value);
-    base::config::set_ipc_config2(options.clone());
+    Config2::set(options.clone());
     snapshot()?;
     // Explicit configuration sync carries the source's grants and removals.
     options.sync_trusted_devices()
@@ -62,16 +62,18 @@ pub async fn refresh_from_server() -> ResultType<()> {
     const TIMEOUT_MS: u64 = 1000;
     let response = async {
         let mut connection = connect(TIMEOUT_MS, "").await?;
+        let peer = connection.config_peer();
         connection.send(&Data::SyncConfig(None)).await?;
-        connection.next_timeout(TIMEOUT_MS).await
+        let data = connection.next_timeout(TIMEOUT_MS).await?;
+        Ok::<_, hbb_common::anyhow::Error>((peer, data))
     }
     .await;
     match response {
-        Ok(Some(Data::SyncConfig(Some(configs)))) => {
+        Ok((peer, Some(Data::SyncConfig(Some(configs))))) => {
             let (config, config2) = *configs;
-            update(move || sync_config(config, config2)).await
+            update(move || peer?.sync_config(config, config2)).await
         }
-        Ok(Some(Data::SecurityConfigError(error))) => bail!(error),
+        Ok((_, Some(Data::SecurityConfigError(error)))) => bail!(error),
         Ok(_) => bail!("The host did not provide its current configuration"),
         Err(error) => {
             hbb_common::log::warn!(

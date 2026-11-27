@@ -3,6 +3,10 @@ use super::*;
 const RECORD: &str = "reg_recovery";
 const SETTING: &str = "ipc-recovery-test-setting";
 const TIMEOUT_MS: u64 = 1000;
+const CHILD_TIMEOUT_MS: u64 = 10_000;
+const CHILD_PROFILE: &str = "RUSTDESK_TEST_SHARED_IPC_PROFILE";
+const HOST_TEST: &str =
+    "trusted_devices::tests::password_and_configuration_revocation_gate_real_persisted_grants";
 
 // Called from the serialized configuration tests, after they select a fresh app profile.
 pub(crate) async fn ipc_preserves_reg_recovery() {
@@ -40,8 +44,72 @@ pub(crate) async fn ipc_preserves_reg_recovery() {
         }
     }
 
+    shared_profile_save(&mut incoming).await;
     gui_save_after_recovery(incoming).await;
+    let service = Config2::get();
+    let mut stale = service.clone();
+    stale.options.insert(RECORD.into(), "previous".into());
+    ipc_windows::ConfigPeer::SharedProfile
+        .sync_config(Config::get(), stale)
+        .unwrap();
+    assert_saved(None, "gui");
+    Config::set_option(RECORD.into(), "previous".into());
+    ipc_windows::ConfigPeer::SeparateProfile
+        .sync_config(Config::get(), service)
+        .unwrap();
+    assert_saved(None, "gui");
     Config::set_option(SETTING.into(), String::new());
+}
+
+pub(crate) async fn shared_profile_client() -> bool {
+    let Ok(profile) = std::env::var(CHILD_PROFILE) else {
+        return false;
+    };
+    assert!(profile.starts_with("RustDeskV2Test"));
+    *config::APP_NAME.write().unwrap() = profile;
+    assert!(!Config2::get().options.contains_key(RECORD));
+    for (record, edit) in [(Some("current"), "shared-on"), (None, "shared-off")] {
+        let mut options = get_options_(TIMEOUT_MS).await.unwrap();
+        assert_eq!(options.get(RECORD).map(String::as_str), record);
+        options.insert(SETTING.into(), edit.into());
+        tokio::task::spawn_blocking(move || set_options(options))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_saved(record, edit);
+    }
+    true
+}
+
+async fn shared_profile_save(incoming: &mut Incoming) {
+    let mut child = tokio::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", HOST_TEST])
+        .env(CHILD_PROFILE, config::APP_NAME.read().unwrap().as_str())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    for record in ["current", ""] {
+        for read in [true, false] {
+            let socket = timeout(CHILD_TIMEOUT_MS, incoming.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            let mut conn = Connection::new(socket);
+            let request = conn.next_timeout(TIMEOUT_MS).await.unwrap().unwrap();
+            assert_eq!(matches!(request, Data::Options(None)), read);
+            if read {
+                Config::set_option(RECORD.into(), record.into());
+            }
+            handle(request, &mut conn).await;
+        }
+    }
+    assert!(timeout(CHILD_TIMEOUT_MS, child.wait())
+        .await
+        .unwrap()
+        .unwrap()
+        .success());
+    assert_saved(None, "shared-off");
 }
 
 async fn gui_save_after_recovery(incoming: Incoming) {
@@ -62,7 +130,7 @@ async fn gui_save_after_recovery(incoming: Incoming) {
 fn assert_saved(record: Option<&str>, edit: &str) {
     let file = std::fs::read_to_string(Config2::file()).unwrap();
     let persisted: Config2 = hbb_common::toml::from_str(&file).unwrap();
-    for saved in [Config2::get(), persisted] {
+    for saved in [persisted, Config2::get()] {
         assert_eq!(
             saved.options.get(RECORD).map(String::as_str),
             record,

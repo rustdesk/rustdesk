@@ -1,7 +1,14 @@
 use crate::platform::windows as platform;
-use hbb_common::{anyhow::Context, bail, config, tokio::time::sleep, ResultType};
+use hbb_common::{
+    anyhow::Context,
+    bail,
+    config::{self, Config, Config2},
+    tokio::time::sleep,
+    ResultType,
+};
 use parity_tokio_ipc::{ConnectionClient, SecurityAttributes};
 use std::{
+    collections::HashMap,
     ffi::c_void,
     fs::OpenOptions,
     io,
@@ -33,6 +40,7 @@ const CLIENT_ACCESS: u32 = FILE_GENERIC_READ.0 | FILE_WRITE_DATA.0;
 const PIPE_BUSY_RETRY: Duration = Duration::from_millis(50);
 const AUTH_LOG_INTERVAL: Duration = Duration::from_secs(5);
 const SYSTEM_SID: &str = "S-1-5-18";
+const LOCAL_SERVICE_SID: &str = "S-1-5-19";
 const ACCESS_ALLOWED_ACE_TYPE_U8: u8 = 0;
 
 struct LocalAllocation(*mut c_void);
@@ -111,12 +119,7 @@ pub(super) async fn connect(path: &str, postfix: &str) -> ResultType<ConnectionC
 
 fn ensure_server(client: &ConnectionClient, require_system: bool) -> ResultType<()> {
     let pipe = HANDLE(client.as_raw_handle());
-    let mut pid = 0;
-    unsafe { GetNamedPipeServerProcessId(pipe, &mut pid) }
-        .context("Failed to resolve IPC server process")?;
-    if pid == 0 {
-        bail!("IPC server process is unavailable");
-    }
+    let pid = server_pid(pipe)?;
     if ensure_pipe_security(pipe, require_system)? {
         return Ok(());
     }
@@ -131,6 +134,65 @@ fn ensure_server(client: &ConnectionClient, require_system: bool) -> ResultType<
         bail!("IPC server is less privileged than the client");
     }
     Ok(())
+}
+
+fn server_pid(pipe: HANDLE) -> ResultType<u32> {
+    let mut pid = 0;
+    unsafe { GetNamedPipeServerProcessId(pipe, &mut pid) }
+        .context("Failed to resolve IPC server process")?;
+    if pid == 0 {
+        bail!("IPC server process is unavailable");
+    }
+    Ok(pid)
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum ConfigPeer {
+    ThisProcess,
+    SharedProfile,
+    SeparateProfile,
+}
+
+impl super::ConnectionTmpl<ConnectionClient> {
+    pub(crate) fn config_peer(&self) -> ResultType<ConfigPeer> {
+        let pipe = HANDLE(self.inner.get_ref().as_raw_handle());
+        if server_pid(pipe)? == std::process::id() {
+            return Ok(ConfigPeer::ThisProcess);
+        }
+        // Main IPC accepts only SYSTEM or the current user. hbb_common maps
+        // SYSTEM's configuration directory to the LocalService profile.
+        if ensure_pipe_security(pipe, false)?
+            && !matches!(
+                platform::current_process_user_sid_string()?.as_str(),
+                SYSTEM_SID | LOCAL_SERVICE_SID
+            )
+        {
+            return Ok(ConfigPeer::SeparateProfile);
+        }
+        Ok(ConfigPeer::SharedProfile)
+    }
+}
+
+impl ConfigPeer {
+    pub(super) async fn mirror_options(self, options: HashMap<String, String>) -> ResultType<()> {
+        crate::trusted_devices::config::update(move || {
+            match self {
+                Self::ThisProcess => (),
+                Self::SharedProfile => return Config::refresh_shared_options(),
+                Self::SeparateProfile => base::config::set_ipc_options(options),
+            }
+            Ok(())
+        })
+        .await
+    }
+
+    pub(crate) fn sync_config(self, config: Config, config2: Config2) -> ResultType<()> {
+        match self {
+            Self::ThisProcess => Ok(()),
+            Self::SharedProfile => Config::cache_shared_config(config, config2),
+            Self::SeparateProfile => crate::trusted_devices::config::sync_config(config, config2),
+        }
+    }
 }
 
 fn ensure_pipe_security(pipe: HANDLE, require_system: bool) -> ResultType<bool> {
