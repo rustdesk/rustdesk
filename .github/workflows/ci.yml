@@ -25,6 +25,18 @@ on:
       - "flatpak/**"
 
 jobs:
+  test-macos-enigo:
+    name: macOS Enigo library tests
+    runs-on: macos-14
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        submodules: recursive
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+      with:
+        toolchain: stable
+    - run: cargo test --locked --release --lib -p enigo
+
   # ensure_cargo_fmt:
   #   name: Ensure 'cargo fmt' has been run
   #   runs-on: ubuntu-20.04
