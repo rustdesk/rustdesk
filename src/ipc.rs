@@ -550,7 +550,13 @@ pub enum Data {
     // (drmtap_open_render failed, e.g. no /dev/dri/renderD* access). The service then streams the
     // CPU-converted `DrmFrame` path for this connection instead of a dma-buf fd the consumer cannot
     // detile, so a render-node-less seat still captures instead of losing the stream.
-    DrmStart { display: i32, need_cpu: bool },
+    // `no_packet`: a libdrmtap packet failed to convert here, so stream one descriptor instead.
+    DrmStart {
+        display: i32,
+        need_cpu: bool,
+        #[serde(default)]
+        no_packet: bool,
+    },
     /// Service -> client: the enumerated DRM displays (sent once, before frames).
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmDisplayList(Vec<DrmDisplayInfo>),

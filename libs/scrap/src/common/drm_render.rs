@@ -170,6 +170,97 @@ impl RenderConverter {
             Ok((data, w, h, pixfmt))
         }
     }
+
+    /// Composes a packet from `DrmReader::grab_packet` into one CRTC-sized frame; libdrmtap checks
+    /// the bytes and every fd before it uses them. Same output contract and checks as `convert()`.
+    pub fn convert_packet(
+        &mut self,
+        bytes: &[u8],
+        fds: &[RawFd],
+    ) -> io::Result<(&[u8], u32, u32, Pixfmt)> {
+        let Some((_, _, convert_packet)) = self.lib.packet else {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "drm: libdrmtap has no packet API",
+            ));
+        };
+        // SAFETY: self.ctx is a valid render context; `bytes` and `fds` are only read during the
+        // call; `frame` is zeroed and libdrmtap owns its pixels, as in `convert()`.
+        unsafe {
+            let mut frame: drmtap_frame_info = std::mem::zeroed();
+            let ret = convert_packet(
+                self.ctx,
+                bytes.as_ptr(),
+                bytes.len(),
+                fds.as_ptr(),
+                fds.len(),
+                &mut frame,
+            );
+            if ret < 0 {
+                let errno = -ret;
+                if errno == hbb_common::libc::EAGAIN
+                    || errno == hbb_common::libc::EBUSY
+                    || errno == hbb_common::libc::EINTR
+                {
+                    return Err(io::ErrorKind::WouldBlock.into());
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("drmtap_convert_packet failed: errno {errno}"),
+                ));
+            }
+            if frame.data.is_null() || frame.width == 0 || frame.height == 0 || frame.stride == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "drmtap_convert_packet produced an empty frame",
+                ));
+            }
+            let w = frame.width;
+            let h = frame.height;
+            let stride = frame.stride as usize;
+            if w > MAX_DIM || h > MAX_DIM || stride < (w as usize) * 4 {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "drmtap_convert_packet bad geometry {w}x{h} stride {stride} fourcc {:#010x}",
+                        frame.format
+                    ),
+                ));
+            }
+            let len = match stride.checked_mul(h as usize) {
+                Some(sz) if sz > 0 && sz <= MAX_FRAME_BYTES => sz,
+                other => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("drmtap_convert_packet frame size out of range ({other:?} bytes)"),
+                    ));
+                }
+            };
+            let pixfmt = match frame.format {
+                DRM_FORMAT_XRGB8888 | DRM_FORMAT_ARGB8888 => Pixfmt::BGRA,
+                DRM_FORMAT_XBGR8888 | DRM_FORMAT_ABGR8888 => Pixfmt::RGBA,
+                other => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("drmtap_convert_packet produced an unsupported output fourcc {other:#010x}"),
+                    ));
+                }
+            };
+            let data = std::slice::from_raw_parts(frame.data as *const u8, len);
+            Ok((data, w, h, pixfmt))
+        }
+    }
+
+    /// The DRM `rotation` of the frame the last `convert_packet` produced: rotate-0 for a composed
+    /// frame, the plane's own for one layer converted as its buffer. Same answers as
+    /// `DrmReader::plane_rotation`.
+    pub fn plane_rotation(&mut self) -> Option<u32> {
+        let f = self.lib.plane_rotation?;
+        let mut rotation: u32 = 0;
+        // SAFETY: self.ctx is a live context and `rotation` outlives the call.
+        let rc = unsafe { f(self.ctx, &mut rotation) };
+        super::drm_reader::plane_rotation_answer(rc, rotation)
+    }
 }
 
 impl Drop for RenderConverter {

@@ -179,6 +179,9 @@ pub struct IpcDrmCapturer {
     // unless the plane rotated the scanout (`frame_transform`). Fixed per session; a rotation
     // rebuilds the capturer.
     transform: i32,
+    // The primary plane's rotation at enumeration: what turns a frame in CRTC raster back when
+    // the plane rotated (`frame_transform`).
+    primary_rotation: Option<u32>,
     // The wayland snapshot generation this session was built from: a later invalidation means
     // the layout (a rotation included) may have changed, and frame() asks for a rebuild.
     snapshot_gen: u64,
@@ -320,10 +323,16 @@ const PLANE_ROTATE_0: u32 = 0x1;
 /// out what the compositor drew, and the frame is turned by the whole transform. `None` (a
 /// libdrmtap before 0.5.8, or nothing the library could read) keeps the pre-0.5.8 rule: 90/270
 /// turned, 180 left alone. The cursor does not go through this: see `Shared::cursor_transform`.
-fn frame_transform(wl_transform: i32, plane_rotation: Option<u32>) -> i32 {
+/// A frame composed of several planes (libdrmtap 0.6) answers rotate-0 too: it is the CRTC
+/// raster. When the primary plane rotated at enumeration, that rotation is the CRTC transform,
+/// panel orientation included, so a rotate-0 frame is turned by it instead of `wl_transform`.
+fn frame_transform(wl_transform: i32, plane_rotation: Option<u32>, primary: Option<u32>) -> i32 {
     match plane_rotation {
         Some(mask) if mask != PLANE_ROTATE_0 => 0,
-        Some(_) => wl_transform,
+        Some(_) => match primary.map(plane_degrees) {
+            Some(d) if d != 0 => d,
+            _ => wl_transform,
+        },
         None => {
             if wl_transform == 90 || wl_transform == 270 {
                 wl_transform
@@ -331,6 +340,16 @@ fn frame_transform(wl_transform: i32, plane_rotation: Option<u32>) -> i32 {
                 0
             }
         }
+    }
+}
+
+/// The turn that undoes a plane `rotation` mask: DRM rotates counter-clockwise, like `wl_output`.
+fn plane_degrees(mask: u32) -> i32 {
+    match mask & 0xf {
+        0x2 => 90,
+        0x4 => 180,
+        0x8 => 270,
+        _ => 0,
     }
 }
 
@@ -354,6 +373,8 @@ struct DisplayHealth {
     /// The dma-buf convert failed for this display. The COMMON cause is multi-GPU: our render node
     /// is not the GPU that exported the scanout. Follows the monitor for the process run.
     prefer_cpu: bool,
+    /// A packet convert failed: ask for one descriptor first, `prefer_cpu` if that fails too.
+    no_packet: bool,
     /// The PipeWire fallback for this display was rejected on geometry (a transposed stream), so
     /// the lone-display carve-out in `mark_demoted_displays` must not keep advertising it online.
     fallback_rejected: bool,
@@ -368,6 +389,7 @@ impl DisplayHealth {
             last_build: None,
             rapid_builds: 0,
             prefer_cpu: false,
+            no_packet: false,
             fallback_rejected: false,
         }
     }
@@ -420,14 +442,26 @@ fn drm_prefer_cpu(key: &Option<String>) -> bool {
     })
 }
 
-fn drm_set_prefer_cpu(key: &Option<String>) {
-    if let Some(k) = key {
+fn drm_no_packet(key: &Option<String>) -> bool {
+    key.as_ref().is_some_and(|k| {
         DRM_DISPLAY_HEALTH
             .lock()
             .unwrap()
-            .entry(k.clone())
-            .or_insert_with(DisplayHealth::new)
-            .prefer_cpu = true;
+            .get(k)
+            .is_some_and(|h| h.no_packet)
+    })
+}
+
+/// A failed packet convert sets `no_packet`, a failed descriptor convert `prefer_cpu`.
+fn drm_note_convert_failed(key: &Option<String>, packet: bool) {
+    if let Some(k) = key {
+        let mut health = DRM_DISPLAY_HEALTH.lock().unwrap();
+        let h = health.entry(k.clone()).or_insert_with(DisplayHealth::new);
+        if packet {
+            h.no_packet = true;
+        } else {
+            h.prefer_cpu = true;
+        }
     }
 }
 
@@ -527,6 +561,7 @@ impl IpcDrmCapturer {
                     )
                 }),
                 transform: wl_transform,
+                primary_rotation: displays.get(wire_idx).and_then(|d| d.primary_rotation),
                 snapshot_gen,
                 cur: Vec::new(),
                 cur_w: 0,
@@ -626,7 +661,7 @@ impl TraitCapturer for IpcDrmCapturer {
                 // over the landscape mode and `t` is 90; both land on the session size.
                 // convert_to_yuv only refuses a LARGER source (a smaller one leaves stale edges);
                 // first frame: CRTC mode vs scanout fb.
-                let t = frame_transform(self.transform, plane_rotation);
+                let t = frame_transform(self.transform, plane_rotation, self.primary_rotation);
                 let (fw, fh) = rotated_dims(t, w, h);
                 if self.session_size.is_some_and(|(sw, sh)| (fw, fh) != (sw, sh)) {
                     self.shared.slot.lock().unwrap().recycle(buf);
@@ -820,6 +855,7 @@ async fn recv_thread(
             &Data::DrmStart {
                 display: wire_idx as i32,
                 need_cpu,
+                no_packet: drm_no_packet(&our_key),
             },
             None,
         )
@@ -876,7 +912,7 @@ async fn recv_thread(
                 };
                 // Valid in THIS process; -1 is an import-once cache hit on `fb_id`.
                 let received_fd: RawFd = if desc.has_fd {
-                    match recv_fd.as_ref() {
+                    match recv_fd.first() {
                         Some(f) => f.as_raw_fd(),
                         None => {
                             break "dma-buf frame set has_fd but carried no SCM_RIGHTS fd".to_owned()
@@ -900,7 +936,13 @@ async fn recv_thread(
                     hdr_eotf: desc.hdr_eotf,
                     hdr_max_nits: desc.hdr_max_nits,
                 };
-                match conv.convert(&mut ddesc, received_fd) {
+                let converted = if desc.packet.is_empty() {
+                    conv.convert(&mut ddesc, received_fd)
+                } else {
+                    let fds: Vec<RawFd> = recv_fd.iter().map(|f| f.as_raw_fd()).collect();
+                    conv.convert_packet(&desc.packet, &fds)
+                };
+                match converted {
                     Ok((data, w, h, fmt)) => {
                         // Borrowed from the render context, valid only until the next convert.
                         // Copy into a recycled buffer, and OUTSIDE the slot lock, so a
@@ -908,13 +950,19 @@ async fn recv_thread(
                         let mut buf = shared.slot.lock().unwrap().take_free().unwrap_or_default();
                         buf.clear();
                         buf.extend_from_slice(data);
+                        // A packet's rotation is known after the convert (composed or one layer).
+                        let rotation = if desc.packet.is_empty() {
+                            desc.plane_rotation
+                        } else {
+                            conv.plane_rotation()
+                        };
                         let mut slot = shared.slot.lock().unwrap();
-                        slot.publish(w as usize, h as usize, fmt, desc.plane_rotation, buf);
+                        slot.publish(w as usize, h as usize, fmt, rotation, buf);
                         shared.cv.notify_one();
                     }
                     Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
                     Err(err) => {
-                        drm_set_prefer_cpu(&our_key);
+                        drm_note_convert_failed(&our_key, !desc.packet.is_empty());
                         break format!("convert: {err}");
                     }
                 }
@@ -2529,6 +2577,7 @@ mod drm_capturer_tests {
             connector,
             session_size: session,
             transform: 0,
+            primary_rotation: None,
             snapshot_gen: scrap::wayland::display::wayland_snapshot_generation(),
             cur: Vec::new(),
             cur_w: 0,
@@ -2749,10 +2798,46 @@ mod drm_capturer_tests {
     /// master delivered it upright. So the plane answer is not measured against `wl_output`.
     #[test]
     fn a_plane_that_rotated_holds_the_logical_desktop_whatever_wl_output_says() {
-        assert_eq!(frame_transform(0, Some(0x4)), 0);
-        assert_eq!(frame_transform(90, Some(0x4)), 0);
-        assert_eq!(frame_transform(180, Some(0x2)), 0);
-        assert_eq!(frame_transform(90, Some(0x8)), 0);
+        assert_eq!(frame_transform(0, Some(0x4), None), 0);
+        assert_eq!(frame_transform(90, Some(0x4), None), 0);
+        assert_eq!(frame_transform(180, Some(0x2), None), 0);
+        assert_eq!(frame_transform(90, Some(0x8), None), 0);
+    }
+
+    /// A frame of several planes answers rotate-0, also on a panel whose primary plane rotated
+    /// for its orientation, which `wl_output` does not carry: it is turned by the primary plane.
+    #[test]
+    fn a_composed_frame_on_a_rotated_panel_is_turned_by_the_primary_plane() {
+        use scrap::TraitPixelBuffer;
+        let upright = vec![vec![1, 2, 3], vec![4, 5, 6]];
+        // Portrait panel used as landscape: the plane turned the 3x2 desktop 90 counter-clockwise.
+        let (raster, rw, rh) = px_frame(&[&[3, 6], &[2, 5], &[1, 4]], 0);
+        let mut c = capturer_with(Some((rh, rw)));
+        c.primary_rotation = Some(0x2);
+        put_frame_with(&c, rw, rh, Some(0x1), &raster);
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => {
+                assert_eq!((pb.width(), pb.height()), (rh, rw));
+                assert_eq!(labels_of(pb.data(), rh, rw), upright);
+            }
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
+        }
+        // Panel mounted upside down: composed comes back upright, one layer is left alone.
+        let (src, w, h) = px_frame(&[&[6, 5, 4], &[3, 2, 1]], 0);
+        let mut c = capturer_with(Some((w, h)));
+        c.primary_rotation = Some(0x4);
+        for (rotation, want) in [
+            (0x1, upright.clone()),
+            (0x4, vec![vec![6, 5, 4], vec![3, 2, 1]]),
+        ] {
+            put_frame_with(&c, w, h, Some(rotation), &src);
+            match c.frame(Duration::from_millis(50)) {
+                Ok(Frame::PixelBuffer(pb)) => assert_eq!(labels_of(pb.data(), w, h), want),
+                Ok(_) => panic!("expected a pixel-buffer frame"),
+                Err(err) => panic!("expected a delivered frame, got {err}"),
+            }
+        }
     }
 
     #[test]
@@ -3104,7 +3189,10 @@ mod drm_capturer_tests {
         }
         // A plane that rotated folds 180 to 0 for the FRAME; that fold must never reach the
         // calibration.
-        assert_eq!(frame_transform(transform_and_origin(&drm, 0, &one(180)).0, Some(0x4)), 0);
+        assert_eq!(
+            frame_transform(transform_and_origin(&drm, 0, &one(180)).0, Some(0x4), None),
+            0
+        );
         // Partial snapshot: two connectors, one output, even one with a matching name.
         let two = [
             drm_display("HDMI-A-1", 1920, 1080),
@@ -3193,6 +3281,7 @@ mod drm_capturer_tests {
             render_node: String::new(),
             device: String::new(),
             plane_transposed: false,
+            primary_rotation: None,
         }
     }
 

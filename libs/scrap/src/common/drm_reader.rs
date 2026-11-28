@@ -2,7 +2,7 @@
 
 use super::drmtap_dl::{
     self, drmtap_config, drmtap_ctx, drmtap_cursor_info, drmtap_device, drmtap_display,
-    drmtap_dmabuf_desc, drmtap_frame_info, DrmtapLib,
+    drmtap_dmabuf_desc, drmtap_frame_info, drmtap_packet, DrmtapLib,
 };
 use hbb_common::log;
 use std::ffi::CString;
@@ -666,6 +666,62 @@ impl DrmReader {
         }
     }
 
+    pub fn has_packet(&self) -> bool {
+        self.lib.packet.is_some()
+    }
+
+    /// libdrmtap 0.6 packet grab: every lit plane of the CRTC, so also a window the compositor
+    /// put on an overlay or underlay plane, as opaque bytes plus a CLOEXEC dup of each of its
+    /// read-only dma-buf fds, in order. Errors map like `grab_desc`. Needs `has_packet()`. The
+    /// rotation of the frame is known only after the convert, so it is asked on that side.
+    pub fn grab_packet(&mut self) -> io::Result<(Vec<u8>, Vec<OwnedFd>)> {
+        let Some((grab, release, _)) = self.lib.packet else {
+            return Err(io::ErrorKind::Unsupported.into());
+        };
+        // SAFETY: self.ctx is valid and `pkt` zeroed caller storage. A successful grab owns its
+        // fds until `release`, which runs after they are dup'd; a failed grab owns none.
+        unsafe {
+            let mut pkt: drmtap_packet = std::mem::zeroed();
+            let ret = grab(self.ctx, &mut pkt);
+            if ret < 0 {
+                let errno = -ret;
+                if errno == hbb_common::libc::EAGAIN
+                    || errno == hbb_common::libc::EBUSY
+                    || errno == hbb_common::libc::EINTR
+                {
+                    return Err(io::ErrorKind::WouldBlock.into());
+                }
+                // More than four lit planes and none of the kept ones covers the CRTC: keep the
+                // last frame, like grab_desc does on an underlay.
+                if errno == hbb_common::libc::E2BIG {
+                    return Err(io::ErrorKind::WouldBlock.into());
+                }
+                if errno == hbb_common::libc::ENOTSUP {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "drmtap_grab_packet: no transferable dma-buf (ENOTSUP)",
+                    ));
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("drmtap_grab_packet failed: errno {errno}"),
+                ));
+            }
+            let bytes = pkt.bytes[..(pkt.len as usize).min(pkt.bytes.len())].to_vec();
+            let fds = pkt.fds[..(pkt.nfds as usize).min(pkt.fds.len())]
+                .iter()
+                .map(|&fd| {
+                    match hbb_common::libc::fcntl(fd, hbb_common::libc::F_DUPFD_CLOEXEC, 0) {
+                        d if d >= 0 => Ok(OwnedFd::from_raw_fd(d)),
+                        _ => Err(io::Error::last_os_error()),
+                    }
+                })
+                .collect::<io::Result<Vec<_>>>();
+            release(&mut pkt);
+            fds.map(|fds| (bytes, fds))
+        }
+    }
+
     /// Read the hardware cursor plane: the hidden sentinel when the plane reports the cursor invisible, the real shape when visible, and `None` when the read fails.
     pub fn cursor(&mut self) -> Option<CursorSnapshot> {
         // SAFETY: ctx valid; c zeroed; released on EVERY path after a successful get_cursor. Only a failed get_cursor returns without releasing, because then there is nothing to release.
@@ -912,7 +968,7 @@ const DRM_MODE_ROTATE_0: u32 = 1 << 0;
 /// turned the scanout, so the frame arrives turned by the whole output transform, which is the
 /// virtio-gpu and vmwgfx case this exists for. Anything else (`-ENOENT` with no plane bound, a
 /// failed property read) is `None`, and the consumer keeps its pre-0.5.8 rule.
-fn plane_rotation_answer(rc: c_int, rotation: u32) -> Option<u32> {
+pub(super) fn plane_rotation_answer(rc: c_int, rotation: u32) -> Option<u32> {
     if rc == 0 {
         Some(rotation)
     } else if rc == -hbb_common::libc::ENOTSUP {
