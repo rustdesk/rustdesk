@@ -24,6 +24,15 @@
 # sources are CRLF on the windows-11-arm runner; the substitutions below are anchor-free and
 # therefore CRLF-safe. The calls are GNU sed (`sed -i` without a suffix); the macOS arm64 job
 # puts GNU sed first on PATH because BSD sed rejects them.
+#
+# flutter_3.44_pubspec.lock.diff is a diff against flutter/pubspec.lock holding the entries that
+# resolve differently under Flutter 3.44 with the bumps below: mostly packages the Flutter SDK
+# pins, plus the bumped ones. Every other package keeps following the committed lock, and a
+# change there that the diff no longer fits fails here or at `flutter pub get --enforce-lockfile`
+# instead of resolving live. Moving FLUTTER_WINDOWS_ARM_VERSION, FLUTTER_MACOS_ARM_VERSION or the
+# 3.44 bridge to a release whose SDK pins differ needs a new diff. To regenerate it, with that
+# Flutter on PATH: make the two pubspec.yaml bumps below by hand, run `flutter pub get` in
+# flutter/, and save `git diff flutter/pubspec.lock` to that file.
 set -euo pipefail
 
 readonly NO_MATCHES=0
@@ -86,6 +95,11 @@ validate_patch_inputs() {
   fi
 }
 
+# The lock diff reverses only once applied, so a restored pubspec.lock is not taken as patched.
+has_lock_patch() {
+  sed 's/\r$//' .github/patches/flutter_3.44_pubspec.lock.diff | git apply --reverse --check 2>/dev/null
+}
+
 is_complete_patch_state() {
   has_exact_count "$THEME_MATCHES" 'dialogTheme: DialogThemeData(' flutter/lib/common.dart &&
     has_exact_count "$THEME_MATCHES" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&
@@ -127,7 +141,7 @@ if ! validate_patch_inputs; then
   exit 1
 fi
 
-if is_complete_patch_state; then
+if is_complete_patch_state && has_lock_patch; then
   echo "Flutter 3.44 source patches already applied."
   git --no-pager diff -- flutter/lib/common.dart flutter/pubspec.yaml \
     flutter/lib/common/widgets/dialog.dart
@@ -139,6 +153,10 @@ if ! is_unpatched_state; then
   exit 1
 fi
 
+# The 3.44 lock entries (see the header), first so a diff that no longer fits stops the script
+# before any source is touched. Both sides go in as LF, whatever the checkout made them.
+sed -i 's/\r$//' flutter/pubspec.lock
+sed 's/\r$//' .github/patches/flutter_3.44_pubspec.lock.diff | git apply
 # ThemeData API renames (Flutter 3.27+):
 sed -i 's/dialogTheme: DialogTheme(/dialogTheme: DialogThemeData(/g' flutter/lib/common.dart
 sed -i 's/tabBarTheme: const TabBarTheme(/tabBarTheme: const TabBarThemeData(/g' flutter/lib/common.dart

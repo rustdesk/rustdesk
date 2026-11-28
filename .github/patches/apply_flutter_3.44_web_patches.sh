@@ -25,7 +25,7 @@ flutter --version | grep -q "Flutter 3\.44\." || {
 bash .github/patches/apply_flutter_3.44_source_patches.sh
 
 # Populate the pub cache with the 3.44 dependency resolution.
-(cd flutter && flutter pub get)
+(cd flutter && flutter pub get --enforce-lockfile)
 
 # qr_code_scanner 1.0.1 (unmaintained) reads platformViewRegistry from
 # dart:ui, which Flutter 3.44 removed; point it at dart:ui_web instead. The

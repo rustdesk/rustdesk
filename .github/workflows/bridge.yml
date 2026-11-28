@@ -18,6 +18,8 @@ jobs:
       matrix:
         job:
           # Default bridge for every platform still on Flutter 3.24.5 (generated with 3.22.3).
+          # Changing its flutter-version needs .github/patches/flutter_3.22_bridge_pubspec.lock.diff
+          # regenerated (see "Install flutter rust bridge deps").
           - {
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-22.04,
@@ -26,6 +28,8 @@ jobs:
               artifact-name: "bridge-artifact",
             }
           # Dedicated bridge for the Windows and macOS arm64 builds (Flutter 3.44); runs in parallel.
+          # Its lock comes from .github/patches/flutter_3.44_pubspec.lock.diff (see the header of
+          # apply_flutter_3.44_source_patches.sh before changing flutter-version).
           - {
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-22.04,
@@ -91,12 +95,17 @@ jobs:
           if [[ "${{ matrix.job.flutter-version }}" == "3.22.3" ]]; then
             # Default Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.
             sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
+            # The entries Flutter 3.22.3 with that downgrade resolves differently (mostly packages its
+            # SDK pins), as a diff against flutter/pubspec.lock so every other package keeps following
+            # it. To regenerate, with Flutter 3.22.3 on PATH: run the sed above and `flutter pub get`
+            # in flutter/, then save `git diff flutter/pubspec.lock` to it.
+            git apply .github/patches/flutter_3.22_bridge_pubspec.lock.diff
           else
             # Flutter 3.44 bridge for Windows/macOS arm64: match those builds' source/pubspec state so
             # the generated *.freezed.dart compiles against the same Flutter/freezed they resolve.
             bash .github/patches/apply_flutter_3.44_source_patches.sh
           fi
-          pushd flutter && flutter pub get && popd
+          pushd flutter && flutter pub get --enforce-lockfile && popd
 
       - name: Run flutter rust bridge
         run: |
