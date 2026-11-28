@@ -112,7 +112,7 @@ jobs:
           submodules: recursive
 
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@v0
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
 
       - name: Generate SBOM
         run: |
@@ -262,6 +262,8 @@ jobs:
           flutter doctor -v
           flutter precache --windows
           Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          # The `main` release is re-uploaded in place: a new engine needs its hash here.
+          if ((Get-FileHash windows-x64-release.zip -Algorithm SHA256).Hash -ne 'ec8cabf36ee4ff24c8d98de25b00e70781eb03876265aee84d0fe554a110036e') { throw 'windows-x64-release.zip: SHA-256 mismatch' }
           Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
           mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
 
@@ -340,6 +342,7 @@ jobs:
 
           # Download usbmmidd_v2.zip and extract it to ./rustdesk
           Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          if ((Get-FileHash usbmmidd_v2.zip -Algorithm SHA256).Hash -ne '629b51e9944762bae73948171c65d09a79595cf4c771a82ebc003fbba5b24f51') { throw 'usbmmidd_v2.zip: SHA-256 mismatch' }
           Expand-Archive usbmmidd_v2.zip -DestinationPath .
           Remove-Item -Path usbmmidd_v2\Win32 -Recurse
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
@@ -349,12 +352,12 @@ jobs:
           try {
             Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
             Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
-            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums
 
-            # Check and move the files
-            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1.4\.zip$').Matches.Groups[1].Value
+            # Check and move the files. The hashes live here, not in a sha256sums file from the
+            # same release, so replacing the release assets cannot also replace what they are checked against.
+            $checksum_driver = 'c4cf4d3b48c4d9079b243edc43bb1db03b076282bc259c9f49883e9db20fa8b5'
             $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256
-            $checksum_adapter = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
+            $checksum_adapter = 'e90e5d52c8807b4c6293c78a52479338715e0bf396b1b34802777b8c452e6781'
             $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
             if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
                 Write-Output "rustdesk_printer_driver_v4-1.4, checksums match, extract the file."
@@ -675,9 +678,11 @@ jobs:
           cargo build --locked --features inline,vram,hwcodec --release --bins
           mkdir -p ./Release
           mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
-          curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
+          curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/f33df075d9eb2f8d252cb88f1b2c8096e56197ed/bin.win/x32/sciter.dll
+          echo "285f3e6a051a7c61845cd7e4d2120781b6bdf411239f70a85c65b38a52d38f28  ./Release/sciter.dll" | sha256sum -c -
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
           curl -LJ -o ./usbmmidd_v2.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
+          echo "629b51e9944762bae73948171c65d09a79595cf4c771a82ebc003fbba5b24f51  usbmmidd_v2.zip" | sha256sum -c -
           unzip usbmmidd_v2.zip
           # Do not remove x64 files, because the user may run the 32bit version on a 64bit system.
           # Do not remove ./usbmmidd_v2/deviceinstaller64.exe, as x86 exe cannot install and uninstall drivers when running on x64,
@@ -982,6 +987,7 @@ jobs:
         run: |
           pushd /tmp
           wget https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.22.0/apple-codesign-0.22.0-macos-universal.tar.gz
+          echo "7031ee75ca2a55c558071701078517c05d959e012dd87833ac6b4a23c5ff52b9  apple-codesign-0.22.0-macos-universal.tar.gz" | shasum -a 256 -c -
           tar -zxvf apple-codesign-0.22.0-macos-universal.tar.gz
           mv apple-codesign-0.22.0-macos-universal/rcodesign /usr/local/bin
           popd
@@ -1003,6 +1009,7 @@ jobs:
           # NASM 3.x is a complete rewrite with incompatible CLI options and removed features.
           # aom and other multimedia libraries require NASM 2.x for x86/x86_64 assembly.
           wget https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip
+          echo "0d29bcd8a5fc617333f4549c7c1f93d1866a4a0915c40359e0a8585bb1a5aa75  nasm-2.16.03-macosx.zip" | shasum -a 256 -c -
           unzip nasm-2.16.03-macosx.zip
           sudo cp nasm-2.16.03/nasm /usr/local/bin/nasm
           nasm --version
@@ -2124,6 +2131,12 @@ jobs:
             pushd /opt
             # do not use rustup, because memory overflow in qemu
             wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}.tar.gz
+            # From static.rust-lang.org/dist/channel-rust-<version>.toml; a new Rust version or target needs its line.
+            case rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }} in
+              rust-1.75.0-x86_64-unknown-linux-gnu) RUST_SHA256=473978b6f8ff216389f9e89315211c6b683cf95a966196e7914b46e8cf0d74f6 ;;
+              rust-1.75.0-aarch64-unknown-linux-gnu) RUST_SHA256=30828cd904fcfb47f1ac43627c7033c903889ea4aca538f53dcafbb3744a9a73 ;;
+            esac
+            echo "${RUST_SHA256:?no pinned SHA-256 for this Rust tarball}  rust.tar.gz" | sha256sum -c - || exit 1
             tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
             cd rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }} && ./install.sh
             rm -rf rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}
@@ -2166,14 +2179,22 @@ jobs:
             popd
             pushd /opt
             wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            # From flutter_infra_release/releases/releases_linux.json; a new FLUTTER_VERSION needs its line.
+            case ${{ env.FLUTTER_VERSION }} in
+              3.24.5) FLUTTER_SHA256=a7c82f551a9eae018e078f6bb186171e5a77920d35a3d75a61d9a593d0a9e4ae ;;
+            esac
+            echo "${FLUTTER_SHA256:?no pinned SHA-256 for this Flutter tarball}  flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz" | sha256sum -c - || exit 1
             tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
             case ${{ matrix.job.arch }} in
               aarch64)
-                # clone repo and reset to flutter ${{ env.FLUTTER_VERSION }}
+                # clone repo and reset to flutter ${{ env.FLUTTER_VERSION }}, by commit because a tag can be moved
+                case ${{ env.FLUTTER_VERSION }} in
+                  3.24.5) ELINUX_COMMIT=ac5e8387cdeadece7ed747d99da24d02adb354a6 ;;
+                esac
                 git clone https://github.com/sony/flutter-elinux.git || true
                 pushd flutter-elinux
                   git fetch
-                  git reset --hard ${{ env.FLUTTER_VERSION }}
+                  git reset --hard "${ELINUX_COMMIT:?no pinned flutter-elinux commit for this FLUTTER_VERSION}" || exit 1
                   bin/flutter-elinux doctor -v
                   bin/flutter-elinux precache --linux
                 popd
@@ -2484,6 +2505,11 @@ jobs:
               apt-get install -y gcc-8 g++-8
               # bootstrap CMake amd add it to PATH
               git clone --depth 1 https://github.com/kitware/cmake -b "v${{ env.SCITER_ARMV7_CMAKE_VERSION }}" /tmp/cmake
+              # The commit the tag points to, because a tag can be moved.
+              case ${{ env.SCITER_ARMV7_CMAKE_VERSION }} in
+                3.29.7) CMAKE_COMMIT=928571f3c25637ed7d38fb100b3966ce1e2ab51f ;;
+              esac
+              [ "$(git -C /tmp/cmake rev-parse HEAD)" = "${CMAKE_COMMIT:?no pinned CMake commit for this version}" ] || exit 1
               pushd /tmp/cmake
               ./bootstrap --generator='Unix Makefiles' "--prefix=/opt/cmake-${{ env.SCITER_ARMV7_CMAKE_VERSION }}-linux-armhf"
               make -j1 install
@@ -2512,6 +2538,12 @@ jobs:
             pushd /opt
             # do not use rustup, because memory overflow in qemu
             wget --output-document rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}.tar.gz
+            # From static.rust-lang.org/dist/channel-rust-<version>.toml; a new Rust version or target needs its line.
+            case rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }} in
+              rust-1.75.0-x86_64-unknown-linux-gnu) RUST_SHA256=473978b6f8ff216389f9e89315211c6b683cf95a966196e7914b46e8cf0d74f6 ;;
+              rust-1.75.0-armv7-unknown-linux-gnueabihf) RUST_SHA256=bd876a75f72040d96be2fb882770b16b482ac0ab15d7e3ad24e6d25b7c74bcf7 ;;
+            esac
+            echo "${RUST_SHA256:?no pinned SHA-256 for this Rust tarball}  rust.tar.gz" | sha256sum -c - || exit 1
             tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
             pushd rust-${{env.RUST_TOOLCHAIN_VERSION}}-${{ matrix.job.target }}
             ./install.sh
@@ -2520,6 +2552,12 @@ jobs:
             popd
             # install newer nasm for aom
             wget --output-document nasm.deb "http://ftp.us.debian.org/debian/pool/main/n/nasm/nasm_${{ env.SCITER_NASM_DEBVERSION }}_${{ matrix.job.deb_arch }}.deb"
+            # From the Debian bullseye Packages index; this is plain http, so the hash is the only check.
+            case nasm_${{ env.SCITER_NASM_DEBVERSION }}_${{ matrix.job.deb_arch }} in
+              nasm_2.15.05-1_amd64) NASM_SHA256=c860caec653b865d5b83359452d97b11f1b3ba5b18b07cac554cf72550b3bfc9 ;;
+              nasm_2.15.05-1_armhf) NASM_SHA256=b75ac48595c6029e043f72c32024a1d7c5d18a54b57aca2e61a2114c7019a8a6 ;;
+            esac
+            echo "${NASM_SHA256:?no pinned SHA-256 for this nasm package}  nasm.deb" | sha256sum -c - || exit 1
             dpkg -i nasm.deb
             rm -f nasm.deb
           run: |
@@ -2571,7 +2609,12 @@ jobs:
             # make debian package
             mkdir -p ./Release
             mv ./target/release/rustdesk ./Release/rustdesk
-            wget -O ./Release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/${{ matrix.job.sciter_arch }}/libsciter-gtk.so
+            wget -O ./Release/libsciter-gtk.so https://github.com/c-smile/sciter-sdk/raw/f33df075d9eb2f8d252cb88f1b2c8096e56197ed/bin.lnx/${{ matrix.job.sciter_arch }}/libsciter-gtk.so
+            case ${{ matrix.job.sciter_arch }} in
+              x64) SCITER_SHA256=a1682fbf55e004f1862d6ace31b5220121d20906bdbf308d0a9237b451e4db86 ;;
+              arm32) SCITER_SHA256=e68092ef9182ab42c69f0954de5709ccc9266a2e73af47dc1eeab3a5114fe435 ;;
+            esac
+            echo "${SCITER_SHA256:?no pinned SHA-256 for this sciter_arch}  ./Release/libsciter-gtk.so" | sha256sum -c - || exit 1
             export DEB_ARCH=${{ matrix.job.deb_arch }}
             ./build.py --package ./Release
 
@@ -2636,7 +2679,7 @@ jobs:
           # set-up appimage-builder
           # https://github.com/AppImage/AppImageKit/issues/1395
           sudo pip3 install "setuptools_scm<10"
-          sudo pip3 install git+https://github.com/rustdesk-org/appimage-builder.git
+          sudo pip3 install git+https://github.com/rustdesk-org/appimage-builder.git@4ea36c95c6f3e29ff3c35807c1651ba353302f21
           # run appimage-builder
           pushd appimage
           ./build-apprun.sh ${{ matrix.job.arch }}
@@ -2725,7 +2768,8 @@ jobs:
             flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
             # package
             pushd flatpak
-            git clone https://github.com/flathub/shared-modules.git --depth=1
+            git clone https://github.com/flathub/shared-modules.git
+            git -C shared-modules checkout 34add58f536223b780a3c9f077980cdaa51fc81f || exit 1
             flatpak-builder --user --install-deps-from=flathub -y --force-clean --repo=repo ./build ./rustdesk.json
             flatpak build-bundle ./repo rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.flatpak com.rustdesk.RustDesk
 
@@ -2799,6 +2843,8 @@ jobs:
 
           pushd flutter/web
           wget https://github.com/rustdesk/doc.rustdesk.com/releases/download/console/web_deps.tar.gz
+          # The `console` release is re-uploaded in place: new web deps need their hash here.
+          echo "b66011c4fc066b90c46ba0c78884fe5d1a7e5a7fad3dce401300ad893de63818  web_deps.tar.gz" | sha256sum -c -
           tar xzf web_deps.tar.gz
           popd
 
