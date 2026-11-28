@@ -1,5 +1,8 @@
 #[path = "ipc/auth.rs"]
 mod ipc_auth;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "ipc/unix_credentials.rs"]
+pub(crate) mod unix_credentials;
 #[cfg(windows)]
 #[path = "ipc/windows.rs"]
 mod ipc_windows;
@@ -57,7 +60,9 @@ pub(crate) use ipc_auth::ensure_peer_executable_matches_current_by_pid_opt;
 #[cfg(windows)]
 pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use ipc_auth::{active_uid, authorize_service_scoped_ipc_connection};
+use ipc_auth::{
+    active_uid, authorize_service_scoped_ipc_connection, authorize_unix_main_ipc_connection,
+};
 #[cfg(target_os = "macos")]
 use ipc_auth::authorize_user_server_process;
 #[cfg(windows)]
@@ -142,15 +147,13 @@ pub async fn connect_service(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnC
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-pub(crate) async fn connect_trusted_device_service(
+pub(crate) async fn connect_root_service(
     ms_timeout: u64,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
-    let connection = connect_service(ms_timeout)
+    let connection = connect_with_path(ms_timeout, &Config::ipc_path(crate::POSTFIX_SERVICE))
         .await
         .map_err(crate::trusted_devices::authority::Unavailable)?;
-    if connection.peer_uid() != Some(0) {
-        bail!("Trusted-device system service is not an authenticated root peer");
-    }
+    ipc_auth::verify_service_uid(connection.peer_uid())?;
     Ok(connection)
 }
 
@@ -632,6 +635,10 @@ pub(crate) async fn start_with_listener(postfix: &str, mut incoming: Incoming) {
                             continue;
                         }
                     }
+                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                    if postfix.is_empty() && !authorize_unix_main_ipc_connection(&stream) {
+                        continue;
+                    }
                     #[cfg(windows)]
                     if postfix.is_empty() {
                         // Windows main IPC (`postfix == ""`) is authorized here.
@@ -664,6 +671,10 @@ pub(crate) async fn start_with_listener(postfix: &str, mut incoming: Incoming) {
                                     #[cfg(any(target_os = "linux", target_os = "macos"))]
                                     if postfix == crate::POSTFIX_SERVICE {
                                         if matches!(&data, Data::SyncConfig(_)) {
+                                            if let Err(err) = unix_credentials::verify_sync_client(&stream).await {
+                                                ipc_auth::log_rejected_sync_client(err);
+                                                break;
+                                            }
                                             handle(data, &mut stream).await;
                                         } else {
                                             log::warn!(
@@ -1568,13 +1579,15 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
     }
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
+        if postfix == crate::POSTFIX_SERVICE {
+            return connect_root_service(ms_timeout).await;
+        }
         let use_user_main_ipc = USE_USER_MAIN_IPC.with(|use_user_main| use_user_main.get());
         let is_root_main_ipc =
             unsafe { hbb_common::libc::geteuid() == 0 } && postfix.is_empty() && use_user_main_ipc;
         if is_root_main_ipc {
             let uid = user_main_ipc_server_uid()?;
-            let path = Config::ipc_path_for_uid(uid, postfix);
-            return connect_with_path(ms_timeout, &path).await;
+            return unix_credentials::verified_main(ms_timeout, uid).await;
         }
         let path = Config::ipc_path(postfix);
         return connect_with_path(ms_timeout, &path).await;
@@ -1711,6 +1724,36 @@ where
     async fn send_config(&mut self, name: &str, value: String) -> ResultType<()> {
         self.send(&Data::Config((name.to_owned(), Some(value))))
             .await
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(crate) async fn send_takeover_close(&mut self, ms_timeout: u64) -> ResultType<()> {
+        // The listener needs our PID for its executable check before it can reply.
+        self.send(&Data::OnlineStatus(None)).await?;
+        let Some(Data::OnlineStatus(Some(_))) = self.next_timeout(ms_timeout).await? else {
+            bail!("Unexpected status response during main IPC takeover");
+        };
+        self.send(&Data::Close).await
+    }
+
+    #[cfg(any(
+        feature = "hwcodec",
+        all(test, any(target_os = "linux", target_os = "macos"))
+    ))]
+    async fn send_hwcodec_config(
+        &mut self,
+        value: String,
+        readback_timeout_ms: Option<u64>,
+    ) -> ResultType<()> {
+        self.send(&Data::HwCodecConfig(Some(value))).await?;
+        if let Some(ms) = readback_timeout_ms {
+            // The host must resolve this process's executable before it can consume the report.
+            self.send(&Data::HwCodecConfig(None)).await?;
+            let Some(Data::HwCodecConfig(Some(_))) = self.next_timeout(ms).await? else {
+                bail!("Host did not confirm the hardware codec configuration");
+            };
+        }
+        Ok(())
     }
 
     pub async fn next_timeout(&mut self, ms_timeout: u64) -> ResultType<Option<Data>> {
@@ -2287,12 +2330,17 @@ pub fn client_get_hwcodec_config_thread(wait_sec: u64) {
 #[cfg(feature = "hwcodec")]
 #[tokio::main(flavor = "current_thread")]
 pub async fn hwcodec_process() {
+    const IPC_TIMEOUT_MS: u64 = 1_000;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let readback_timeout_ms = crate::platform::is_installed().then_some(IPC_TIMEOUT_MS);
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let readback_timeout_ms = None;
     let s = scrap::hwcodec::check_available_hwcodec();
     for _ in 0..5 {
-        match crate::ipc::connect(1000, "").await {
+        match crate::ipc::connect(IPC_TIMEOUT_MS, "").await {
             Ok(mut conn) => {
                 match conn
-                    .send(&crate::ipc::Data::HwCodecConfig(Some(s.clone())))
+                    .send_hwcodec_config(s.clone(), readback_timeout_ms)
                     .await
                 {
                     Ok(()) => {
@@ -2441,6 +2489,57 @@ pub async fn set_install_option(k: String, v: String) -> ResultType<()> {
 mod test {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn takeover_waits_for_listener_before_sending_close() {
+        const TIMEOUT_MS: u64 = 1_000;
+        let (sender, listener) = tokio::net::UnixStream::pair().unwrap();
+        let mut listener = ConnectionTmpl::new(listener);
+        let sender = tokio::spawn(async move {
+            ConnectionTmpl::new(sender)
+                .send_takeover_close(TIMEOUT_MS)
+                .await
+        });
+        assert!(matches!(
+            listener.next_timeout(TIMEOUT_MS).await.unwrap(),
+            Some(Data::OnlineStatus(None))
+        ));
+        assert!(!sender.is_finished());
+        listener
+            .send(&Data::OnlineStatus(Some((0, false))))
+            .await
+            .unwrap();
+        assert!(matches!(
+            listener.next_timeout(TIMEOUT_MS).await.unwrap(),
+            Some(Data::Close)
+        ));
+        sender.await.unwrap().unwrap();
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn codec_probe_waits_for_host_readback() {
+        const TIMEOUT_MS: u64 = 1_000;
+        let (probe, host) = tokio::net::UnixStream::pair().unwrap();
+        let mut host = ConnectionTmpl::new(host);
+        let probe = tokio::spawn(async move {
+            ConnectionTmpl::new(probe)
+                .send_hwcodec_config("{}".into(), Some(TIMEOUT_MS))
+                .await
+        });
+        assert!(matches!(host.next_timeout(TIMEOUT_MS).await.unwrap(),
+            Some(Data::HwCodecConfig(Some(value))) if value == "{}"));
+        assert!(matches!(
+            host.next_timeout(TIMEOUT_MS).await.unwrap(),
+            Some(Data::HwCodecConfig(None))
+        ));
+        assert!(!probe.is_finished());
+        host.send(&Data::HwCodecConfig(Some("{}".into())))
+            .await
+            .unwrap();
+        probe.await.unwrap().unwrap();
+    }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
