@@ -25,12 +25,14 @@
 # therefore CRLF-safe. The calls are GNU sed (`sed -i` without a suffix); the macOS arm64 job
 # puts GNU sed first on PATH because BSD sed rejects them.
 #
-# flutter_3.44_pubspec.lock.diff holds the lock entries the dependency bumps change, as a diff
-# against flutter/pubspec.lock. Every other package keeps following the committed lock, and a
+# flutter_3.44_pubspec.lock.diff is a diff against flutter/pubspec.lock holding the entries that
+# resolve differently under Flutter 3.44 with the bumps below: mostly packages the Flutter SDK
+# pins, plus the bumped ones. Every other package keeps following the committed lock, and a
 # change there that the diff no longer fits fails here or at `flutter pub get --enforce-lockfile`
-# instead of resolving live. To regenerate it, with Flutter 3.44 on PATH: make the two
-# pubspec.yaml bumps below by hand, run `flutter pub get` in flutter/, and save
-# `git diff flutter/pubspec.lock` to that file.
+# instead of resolving live. Moving FLUTTER_WINDOWS_ARM_VERSION, FLUTTER_MACOS_ARM_VERSION or the
+# 3.44 bridge to a release whose SDK pins differ needs a new diff. To regenerate it, with that
+# Flutter on PATH: make the two pubspec.yaml bumps below by hand, run `flutter pub get` in
+# flutter/, and save `git diff flutter/pubspec.lock` to that file.
 set -euo pipefail
 
 readonly NO_MATCHES=0
@@ -146,6 +148,10 @@ if ! is_unpatched_state; then
   exit 1
 fi
 
+# The 3.44 lock entries (see the header), first so a diff that no longer fits stops the script
+# before any source is touched. Both sides go in as LF, whatever the checkout made them.
+sed -i 's/\r$//' flutter/pubspec.lock
+sed 's/\r$//' .github/patches/flutter_3.44_pubspec.lock.diff | git apply
 # ThemeData API renames (Flutter 3.27+):
 sed -i 's/dialogTheme: DialogTheme(/dialogTheme: DialogThemeData(/g' flutter/lib/common.dart
 sed -i 's/tabBarTheme: const TabBarTheme(/tabBarTheme: const TabBarThemeData(/g' flutter/lib/common.dart
@@ -156,9 +162,6 @@ sed -i '/static ThemeData darkTheme = ThemeData(/,/scrollbarTheme: scrollbarThem
 # Dependency bumps required by the newer Dart/Flutter:
 sed -i 's/extended_text: 14.0.0/extended_text: 15.0.2/' flutter/pubspec.yaml
 sed -i 's/google_fonts: \^6.2.1/google_fonts: ^8.1.0/' flutter/pubspec.yaml
-# Their lock entries (see the header). Both sides go in as LF, whatever the checkout made them.
-sed -i 's/\r$//' flutter/pubspec.lock
-sed 's/\r$//' .github/patches/flutter_3.44_pubspec.lock.diff | git apply
 # DialogTextField keeps the caret when a desktop field regains focus (see the header):
 sed -i 's/inputFormatters: inputFormatters,/inputFormatters: inputFormatters,\
                 selectAllOnFocus: isDesktop ? false : null,/' flutter/lib/common/widgets/dialog.dart

@@ -28,6 +28,9 @@ env:
   SCITER_ARMV7_CMAKE_VERSION: "3.29.7"
   SCITER_NASM_DEBVERSION: "2.15.05-1"
   LLVM_VERSION: "15.0.6"
+  # The builds below hold pub packages to flutter/pubspec.lock (`flutter pub get --enforce-lockfile`),
+  # the 3.44 ones through .github/patches/flutter_3.44_pubspec.lock.diff. A Flutter release whose SDK
+  # pins other package versions fails that check until the lock or the diff is regenerated with it.
   FLUTTER_VERSION: "3.24.5"
   ANDROID_FLUTTER_VERSION: "3.24.5"
   # Windows arm64 only: the first stable Flutter to ship a native arm64 Windows Dart SDK +
