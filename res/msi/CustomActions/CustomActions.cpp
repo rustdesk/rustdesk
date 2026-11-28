@@ -221,6 +221,35 @@ LExit:
 // But I do not find the alternate functions.
 // https://github.com/heim-rs/heim/issues/105#issuecomment-683647573
 typedef NTSTATUS(NTAPI *pfnNtQueryInformationProcess)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG);
+static bool TerminateProcessAndWait(HANDLE process)
+{
+    constexpr DWORD processExitTimeoutMs = 5000;
+    const DWORD pid = GetProcessId(process);
+    if (WaitForSingleObject(process, 0) == WAIT_OBJECT_0)
+        return true;
+
+    WcaLog(LOGMSG_STANDARD, "Requesting process termination: pid=%lu", pid);
+    if (!TerminateProcess(process, 0))
+    {
+        const DWORD error = GetLastError();
+        if (WaitForSingleObject(process, 0) == WAIT_OBJECT_0)
+            return true;
+        WcaLog(LOGMSG_STANDARD, "TerminateProcess failed: pid=%lu, error=%lu", pid, error);
+        return false;
+    }
+
+    const DWORD result = WaitForSingleObject(process, processExitTimeoutMs);
+    if (result != WAIT_OBJECT_0)
+    {
+        const DWORD error = result == WAIT_FAILED ? GetLastError() : ERROR_TIMEOUT;
+        WcaLog(LOGMSG_STANDARD, "Failed to confirm process exit: pid=%lu, wait_result=%lu, timeout_ms=%lu, error=%lu",
+            pid, result, processExitTimeoutMs, error);
+        return false;
+    }
+    WcaLog(LOGMSG_STANDARD, "Confirmed process exit: pid=%lu", pid);
+    return true;
+}
+
 bool TerminateProcessIfNotContainsParam(pfnNtQueryInformationProcess NtQueryInformationProcess, HANDLE process, LPCWSTR excludeParam)
 {
     bool processClosed = false;
@@ -252,9 +281,7 @@ bool TerminateProcessIfNotContainsParam(pfnNtQueryInformationProcess NtQueryInfo
                         {
                             if (wcsstr(commandLine, excludeParam) == NULL)
                             {
-                                WcaLog(LOGMSG_STANDARD, "Terminate process : %ls", commandLine);
-                                TerminateProcess(process, 0);
-                                processClosed = true;
+                                processClosed = TerminateProcessAndWait(process);
                             }
                         }
                         free(commandLine);
@@ -302,14 +329,13 @@ bool TerminateProcessesByNameW(LPCWSTR processName, LPCWSTR excludeParam)
             {
                 if (lstrcmpiW(processName, processEntry.szExeFile) == 0)
                 {
-                    HANDLE process = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processEntry.th32ProcessID);
+                    HANDLE process = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | SYNCHRONIZE, FALSE, processEntry.th32ProcessID);
                     if (process != NULL)
                     {
                         if (NtQueryInformationProcess == NULL)
                         {
                             WcaLog(LOGMSG_STANDARD, "Terminate process : %ls, while NtQueryInformationProcess is NULL", processName);
-                            TerminateProcess(process, 0);
-                            processClosed = true;
+                            processClosed = TerminateProcessAndWait(process);
                         }
                         else
                         {
@@ -320,10 +346,18 @@ bool TerminateProcessesByNameW(LPCWSTR processName, LPCWSTR excludeParam)
                         }
                         CloseHandle(process);
                     }
+                    else
+                    {
+                        WcaLog(LOGMSG_STANDARD, "OpenProcess before termination failed: name=%ls, pid=%lu, error=%lu", processName, processEntry.th32ProcessID, GetLastError());
+                    }
                 }
             } while (Process32NextW(snapshot, &processEntry));
         }
         CloseHandle(snapshot);
+    }
+    else
+    {
+        WcaLog(LOGMSG_STANDARD, "CreateToolhelp32Snapshot failed before termination: error=%lu", GetLastError());
     }
     if (hntdll != NULL)
     {

@@ -641,7 +641,7 @@ pub(crate) fn authorize_windows_main_ipc_connection(stream: &Connection, postfix
     }
     if let Err(err) = ensure_peer_executable_matches_current_by_pid_opt(peer_pid, postfix) {
         log::warn!(
-            "Rejected unauthorized connection on ipc channel due to executable mismatch: postfix={}, peer_pid={:?}, err={}",
+            "Rejected IPC connection: executable verification failed: postfix={}, peer_pid={:?}, err={}",
             postfix,
             peer_pid,
             err
